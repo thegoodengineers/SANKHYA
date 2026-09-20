@@ -111,6 +111,10 @@ struct TreeNode {
 /// bound FATHOMS on that bound - so the error has to be small enough that widening
 /// can_prune()'s margin by it does not stop the search closing.
 constexpr double kMiqpNodeTolerance = 1e-10;
+/// How far below the next multiple of the objective step a relaxation bound may sit and
+/// still be rounded up to it (#221), in units of the step: an LP bound carries the
+/// simplex's tolerance, and 1e-6 of a step is well above it and well below one step.
+constexpr double kObjectiveIntegralitySlack = 1e-6;
 
 /// Iteration cap for one node QP. Condat-Vu has no warm start, so every node pays a cold
 /// solve; this keeps a single pathological node from consuming the whole time limit while
@@ -351,9 +355,11 @@ class BranchAndBound {
     // Pruning too little costs nodes; pruning too much loses the optimum silently.
     const double margin =
         quadratic_ ? std::max(absolute_gap_target_, kMiqpNodeTolerance) : absolute_gap_target_;
-    if (pool_complete_) return bound >= pool_cutoff() - margin;
+    // Rounded up to the next value an integer solution can take (#221) before the test.
+    const double rounded = integral_bound(bound);
+    if (pool_complete_) return rounded >= pool_cutoff() - margin;
     if (!have_incumbent_) return false;
-    return bound >= incumbent_internal_ - margin;
+    return rounded >= incumbent_internal_ - margin;
   }
 
   /// What a node must beat to matter when the search is filling the pool (#225): the worst
@@ -400,6 +406,29 @@ class BranchAndBound {
 
   [[nodiscard]] double reported(double internal) const {
     return sense_ * internal + original_.objective_offset;
+  }
+
+  // ---- Objective integrality (#221) -------------------------------------------------------
+
+  /// The step every node optimum's internal objective is a multiple of, or 0 when nothing
+  /// is known. Set once by detect_objective_integrality(): from the costs directly when every
+  /// column with a cost is integer with an integer cost, or through the one row that defines
+  /// a single continuous objective column from integer columns. A relaxation bound may then
+  /// be rounded up to the next multiple: the node's integer optimum cannot lie in between.
+  double objective_step_ = 0.0;
+  void detect_objective_integrality();
+
+  /// A relaxation bound rounded up to the next value an integer solution can take, in
+  /// minimise space excluding the offset. Wolsey (1998) sec. 7.3 calls the reason a node
+  /// with a bound of 14.3 and an incumbent of 15 is finished "bounding with integrality":
+  /// the true optimum of the node is an integer and no integer lies in (14.3, 15). The slack
+  /// keeps a bound that is a multiple of the step to rounding error from being pushed a
+  /// whole step up: an LP bound of 14 + 1e-9 stays 14.
+  [[nodiscard]] double integral_bound(double bound) const {
+    if (objective_step_ <= 0.0 || !std::isfinite(bound)) return bound;
+    const double units = bound / objective_step_;
+    const double slack = std::max(kObjectiveIntegralitySlack, 1e-9 * std::fabs(units));
+    return objective_step_ * std::ceil(units - slack);
   }
 
   // ---- Conflict analysis (branch_and_bound_conflicts.cpp, #292) -------------------------

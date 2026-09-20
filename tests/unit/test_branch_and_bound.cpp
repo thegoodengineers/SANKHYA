@@ -938,4 +938,78 @@ TEST(RootCuts, NoCutsWhenDisabled) {
   Solution sol = solve(model, opts);
   EXPECT_EQ(sol.status, SolveStatus::kOptimal);
 }
+
+// ---- Objective integrality (#221) ----------------------------------------------------------
+
+namespace {
+// The helpers above live in an anonymous namespace that closed before the RootCuts tests;
+// this one reopens it for the same reason. min x1 + x2 with 2 x1 + 2 x2 >= 3 on integers in
+// [0, 5]: the root LP is (1.5, 0) with a bound of 1.5, the integer optimum is 2, and the
+// bound of every node the tree opens without knowing the objective is integral stays at
+// 1.5 until both columns are fixed. With the step known, 1.5 rounds to 2 and the incumbent
+// the root dive finds is proved at once.
+Model make_integral_objective_model() {
+  return make_milp({{2.0, 2.0}}, {3.0}, {kInfinity}, {1.0, 1.0}, {5.0, 5.0}, {true, true});
+}
+
+// The same feasible set with the objective carried by a continuous column z that one row
+// defines from the integer columns: min z, z - x1 - x2 >= 0. The row bounds z from below
+// by an integer-valued expression, so every node optimum is integral and the step is 1.
+Model make_defined_objective_model() {
+  return make_milp({{2.0, 2.0, 0.0}, {-1.0, -1.0, 1.0}}, {3.0, 0.0}, {kInfinity, kInfinity},
+                   {0.0, 0.0, 1.0}, {5.0, 5.0, kInfinity}, {true, true, false});
+}
+
+// A negative control: the defining row also carries a continuous column with a fractional
+// coefficient, so nothing is known and the search must not round.
+Model make_non_integral_objective_model() {
+  return make_milp({{2.0, 2.0, 0.0, 0.0}, {-1.0, -1.0, 1.0, -0.5}, {0.0, 0.0, 0.0, 1.0}},
+                   {3.0, 0.0, 0.0}, {kInfinity, kInfinity, 1.0}, {0.0, 0.0, 1.0, 0.0},
+                   {5.0, 5.0, kInfinity, 1.0}, {true, true, false, false});
+}
+}  // namespace
+
+TEST(ObjectiveIntegrality, RoundsTheBoundAndProvesTheIncumbentAtTheRoot) {
+  const Model model = make_integral_objective_model();
+  Options on = mip_options();
+  Options off = mip_options();
+  off.set_bool("mip_objective_integrality", false);
+  const Solution with = solve(model, on);
+  const Solution without = solve(model, off);
+  ASSERT_EQ(with.status, SolveStatus::kOptimal) << with.message;
+  ASSERT_EQ(without.status, SolveStatus::kOptimal) << without.message;
+  EXPECT_NEAR(with.objective, 2.0, 1e-9);
+  EXPECT_NEAR(without.objective, 2.0, 1e-9);
+  EXPECT_NEAR(with.dual_bound, 2.0, 1e-9) << "the rounded bound is the proof";
+  EXPECT_LT(with.nodes, without.nodes) << "rounding fathomed nothing";
+}
+
+TEST(ObjectiveIntegrality, SeesThroughAColumnDefinedByRowsFromIntegerColumns) {
+  const Model model = make_defined_objective_model();
+  Options on = mip_options();
+  Options off = mip_options();
+  off.set_bool("mip_objective_integrality", false);
+  const Solution with = solve(model, on);
+  const Solution without = solve(model, off);
+  ASSERT_EQ(with.status, SolveStatus::kOptimal) << with.message;
+  ASSERT_EQ(without.status, SolveStatus::kOptimal) << without.message;
+  EXPECT_NEAR(with.objective, 2.0, 1e-9);
+  EXPECT_NEAR(without.objective, 2.0, 1e-9);
+  EXPECT_NEAR(with.dual_bound, 2.0, 1e-9);
+  EXPECT_LT(with.nodes, without.nodes);
+}
+
+TEST(ObjectiveIntegrality, LeavesAFractionalObjectiveAlone) {
+  // z >= x1 + x2 + 0.5 w with w continuous in [0, 1] at no cost: the optimum is 1.5 and a
+  // search that rounded bounds to integers would prove 2 and be wrong.
+  const Model model = make_non_integral_objective_model();
+  Options on = mip_options();
+  Options off = mip_options();
+  off.set_bool("mip_objective_integrality", false);
+  const Solution with = solve(model, on);
+  const Solution without = solve(model, off);
+  ASSERT_EQ(with.status, SolveStatus::kOptimal) << with.message;
+  EXPECT_NEAR(with.objective, without.objective, 1e-9);
+  EXPECT_EQ(with.nodes, without.nodes) << "the search rounded a bound it had no right to";
+}
 }  // namespace sankhya

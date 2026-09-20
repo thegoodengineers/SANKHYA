@@ -55,6 +55,10 @@ Model knapsack(int columns, int seed) {
 Options base_options() {
   Options o;
   o.set_bool("log_to_console", false);
+  // These fixtures need a tree that is still open when the node limit hits; with the
+  // objective known to be integral (#221) the knapsacks close at the root and nothing is
+  // written to resume from.
+  o.set_bool("mip_objective_integrality", false);
   return o;
 }
 

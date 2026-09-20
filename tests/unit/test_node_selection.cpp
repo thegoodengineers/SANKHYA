@@ -118,9 +118,17 @@ TEST(NodeSelection, TheHybridFollowsBestBoundOnceTheDiveIsOver) {
   // The hybrid is a dive followed by best-bound, so on a model whose dive ends at the root
   // the two agree. This is what makes the default a considered choice rather than a fourth
   // policy: it differs from best-bound only in how it reaches the first incumbent.
+  // Without objective integrality (#221): its rounding fathoms nodes inside the dive, so
+  // the dive no longer ends at the root and the two policies then explore trees that differ
+  // by where the dive stopped (322 against 297 nodes here), which is the dive's length and
+  // not the policy. The property this test states is about the policy.
   const Model model = correlated_knapsack(18);
-  const Solution hybrid = solve(model, with_policy("hybrid"));
-  const Solution best_bound = solve(model, with_policy("best-bound"));
+  Options hybrid_options = with_policy("hybrid");
+  Options best_bound_options = with_policy("best-bound");
+  hybrid_options.set_bool("mip_objective_integrality", false);
+  best_bound_options.set_bool("mip_objective_integrality", false);
+  const Solution hybrid = solve(model, hybrid_options);
+  const Solution best_bound = solve(model, best_bound_options);
   ASSERT_EQ(hybrid.status, SolveStatus::kOptimal);
   EXPECT_NEAR(hybrid.objective, best_bound.objective, 1e-9);
   EXPECT_EQ(hybrid.nodes, best_bound.nodes);

@@ -159,6 +159,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"hybrid", "best-bound", "depth-first", "best-estimate"}});
+    s.push_back({"mip_objective_integrality",
+                 OptionType::Bool,
+                 true,
+                 "Round every relaxation bound up to the next value an integer solution can "
+                 "take when the objective is known to be integral (#221): every costed column "
+                 "integer with an integer cost, or one continuous objective column bounded "
+                 "only by rows built from integer columns with integer coefficients. Off is "
+                 "for the A/B; the rounding is exact and changes no answer.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_node_engine",
                  OptionType::String,
                  std::string("dual"),

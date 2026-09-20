@@ -51,8 +51,114 @@
 
 namespace sankhya::mip {
 
+// THE OBJECTIVE IS INTEGRAL MORE OFTEN THAN IT LOOKS (#221). On the 30-instance MIPLIB set,
+// four of the six instances that hold the published optimum without proving it have an
+// objective that every integer solution evaluates to an integer: noswot's costs are
+// integers on integer columns; b-ball, opt1217 and rlp1 minimise one continuous column that
+// a single row defines from integer columns with integer coefficients. Their bounds sat at
+// 14 against an incumbent of 15 (rlp1), -43 against -41 (noswot): a bound that no integer
+// solution can attain is one the search may round, and nothing here knew the objective was
+// integral. Both patterns are detected once, and every relaxation bound is rounded up to
+// the next multiple of the step before it is compared to the incumbent, so nodes in
+// (14, 15) are fathomed and a bound above 14 proves 15. Wolsey, "Integer Programming"
+// (1998), sec. 7.3; the defining-row case is what presolve's free-column-singleton
+// substitution would produce if it ran on these models.
+void BranchAndBound::detect_objective_integrality() {
+  objective_step_ = 0.0;
+  if (quadratic_ || !options_.get_bool("mip_objective_integrality")) return;
+  const Index n = original_.num_cols();
+  const auto is_integer_column = [&](Index j) {
+    return original_.col_type[static_cast<std::size_t>(j)] == VarType::kInteger;
+  };
+  const auto integral = [](double v) { return std::fabs(v - std::round(v)) <= 1e-9; };
+  const auto gcd = [](double a, double b) {
+    auto x = static_cast<std::int64_t>(std::llround(std::fabs(a)));
+    auto y = static_cast<std::int64_t>(std::llround(std::fabs(b)));
+    while (y != 0) {
+      const std::int64_t r = x % y;
+      x = y;
+      y = r;
+    }
+    return static_cast<double>(x);
+  };
+
+  // Direct rule: every costed column is integer with an integer cost; the step is their gcd.
+  Index continuous_costed = -1;
+  double step = 0.0;
+  for (Index j = 0; j < n; ++j) {
+    const double cost = original_.col_cost[static_cast<std::size_t>(j)];
+    if (cost == 0.0) continue;
+    if (!is_integer_column(j)) {
+      if (continuous_costed >= 0) return;  // two continuous costed columns: nothing known
+      continuous_costed = j;
+      continue;
+    }
+    if (!integral(cost) || std::fabs(cost) > 1e12) return;
+    step = gcd(step, cost);
+  }
+  if (continuous_costed < 0) {
+    if (step >= 1.0) {
+      objective_step_ = step;
+      logger_.verbose("objective integrality: every costed column is integer, step {:g}",
+                      objective_step_);
+    }
+    return;
+  }
+  // Defining-rows rule: the one continuous costed column carries the whole objective and
+  // every row that bounds it from the side the objective pushes it to (from below when
+  // minimising it, from above when maximising) defines it from integer columns with integer
+  // coefficients and an integer right-hand side, after dividing by its own coefficient in
+  // that row. That is the min-max shape of rlp1 (Z >= each resource's load), opt1217 and
+  // b-ball: the node optimum sets the column to the largest of integer-valued expressions,
+  // or to its own bound, which must be integral or absent too. Rows that bound it from the
+  // other side, or not at all, only restrict the integer columns and do not matter. Then the
+  // node optimum's value of the column is an integer and the objective a multiple of its
+  // cost.
+  if (step != 0.0) return;  // integer columns carry cost as well: mixed, not handled
+  const auto uo = static_cast<std::size_t>(continuous_costed);
+  const double cost = original_.col_cost[uo];
+  for (const double bound : {original_.col_lower[uo], original_.col_upper[uo]}) {
+    if (is_finite_bound(bound) && !integral(bound)) return;
+  }
+  const bool push_down = sense_ * cost > 0.0;
+  const ColumnView column = original_.matrix.column(continuous_costed);
+  if (column.size == 0) return;  // the column is free of every row: its bound is the answer
+  const CsrView by_row(original_.matrix);
+  Index defining_rows = 0;
+  for (Index p = 0; p < column.size; ++p) {
+    const Index row = column.rows[p];
+    const double a_o = column.values[p];
+    if (a_o == 0.0) continue;
+    const auto ur = static_cast<std::size_t>(row);
+    // In terms of x_o alone: a_o x_o + rest is within [row_lower, row_upper]. With a_o > 0
+    // the row's lower bound bounds x_o from below; with a_o < 0 its upper bound does.
+    const double lower_side = (a_o > 0.0) ? original_.row_lower[ur] : original_.row_upper[ur];
+    const double upper_side = (a_o > 0.0) ? original_.row_upper[ur] : original_.row_lower[ur];
+    const double side = push_down ? lower_side : upper_side;
+    if (!is_finite_bound(side)) continue;  // bounds x_o from the other side only
+    if (!integral(side / a_o)) return;
+    const ColumnView entries = by_row.row(row);
+    for (Index q = 0; q < entries.size; ++q) {
+      const Index j = entries.rows[q];
+      if (j == continuous_costed) continue;
+      if (!is_integer_column(j) || !integral(entries.values[q] / a_o)) return;
+    }
+    ++defining_rows;
+  }
+  if (defining_rows == 0 &&
+      !is_finite_bound(push_down ? original_.col_lower[uo] : original_.col_upper[uo])) {
+    return;  // nothing bounds the column from the objective's side: unbounded or unknown
+  }
+  objective_step_ = std::fabs(cost);
+  logger_.verbose(
+      "objective integrality: column {} is bounded by {} row(s) defined from integer "
+      "columns, step {:g}",
+      continuous_costed, defining_rows, objective_step_);
+}
+
 Solution BranchAndBound::run() {
   init_heuristics();
+  detect_objective_integrality();
   global_lower_ = working_.col_lower;
   global_upper_ = working_.col_upper;
   if (options_.get_bool("enable_root_cuts")) {
@@ -166,9 +272,10 @@ Solution BranchAndBound::run() {
                       reporting_bound, nodes_[static_cast<std::size_t>(open_index)].bound);
                 }
               }
+              reporting_bound = integral_bound(reporting_bound);
               p.best_bound =
                   (original_.sense == ObjSense::kMaximize) ? -reporting_bound : reporting_bound;
-              p.gap = have_incumbent_ ? (incumbent_internal_ - open_bound)
+              p.gap = have_incumbent_ ? (incumbent_internal_ - integral_bound(open_bound))
                                       : std::numeric_limits<double>::infinity();
               return p;
             },
@@ -194,7 +301,7 @@ Solution BranchAndBound::run() {
     // Not while filling the pool: meeting the gap target proves the incumbent, not that the
     // pool holds the best alternatives, and pool_complete promises the second.
     if (have_incumbent_ && !pool_complete_) {
-      const double gap = incumbent_internal_ - open_bound;
+      const double gap = incumbent_internal_ - integral_bound(open_bound);
       // gap <= 0 means open_bound already >= the incumbent: every node still in the tree
       // is one can_prune() would fathom the moment it is popped, so nothing open can beat
       // what has already been found. That is proven optimality, not a tolerance being met
@@ -326,7 +433,9 @@ Solution BranchAndBound::run() {
     }
     age_cut_rows(relaxation);
 
-    // Node bound in minimise space, excluding the offset (added back on report).
+    // Node bound in minimise space, excluding the offset (added back on report). Stored and
+    // ordered raw; can_prune() and the gap test round it up to the next value an integer
+    // solution can take (#221), so node selection is the same with or without the rounding.
     const double node_bound = internal_objective(relaxation.col_value);
 
     // THE PSEUDOCOST OBSERVATION (#69): what branching on this node's column bought, per
@@ -438,8 +547,8 @@ Solution BranchAndBound::run() {
     // ---- The node table -------------------------------------------------------------------
     best_open_bound = std::numeric_limits<double>::infinity();
     for (const Index open_index : open_) {
-      best_open_bound =
-          std::min(best_open_bound, nodes_[static_cast<std::size_t>(open_index)].bound);
+      best_open_bound = std::min(
+          best_open_bound, integral_bound(nodes_[static_cast<std::size_t>(open_index)].bound));
     }
     if (!logged_table) {
       logger_.begin_node_table();
@@ -462,8 +571,10 @@ Solution BranchAndBound::run() {
 
   // ---- Report ------------------------------------------------------------------------------
   double final_bound = incumbent_internal_;
+  // The open nodes' bounds, rounded (#221): what they prove is the rounded value.
   for (const Index open_index : open_) {
-    final_bound = std::min(final_bound, nodes_[static_cast<std::size_t>(open_index)].bound);
+    final_bound = std::min(final_bound,
+                           integral_bound(nodes_[static_cast<std::size_t>(open_index)].bound));
   }
 
   if (!have_incumbent_) {
