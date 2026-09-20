@@ -71,6 +71,18 @@ constexpr double kDropTolerance = tol::kZeroDrop;
 /// form quietly loses accuracy over a few hundred iterations.
 constexpr double kUpdatePivotThreshold = 1e-7;
 
+/// A Forrest-Tomlin update is refused when its new diagonal is this small against the
+/// largest term of the sum that produced it (#395; Tomlin 1972, the "loss of significance"
+/// test): the digits the cancellation destroyed cannot be recovered by any later step.
+constexpr double kFtCancellationThreshold = 1e-4;
+/// ... and when the row eta it would file has an entry above this (#395): the eta is
+/// applied on every later solve, and its size is the factor by which each solve's rounding
+/// is amplified. Measured with kFtCancellationThreshold on a 200-row harness (six seeds,
+/// 128 sparse column replacements each, drift against a fresh factorization): unguarded
+/// 2.5e-3; the cancellation test alone 2.1e-5; both, 4.3e-8 against 4.2e-7 for the product
+/// form on the same sequences, at 31 refusals in 768 updates.
+constexpr double kFtRowEtaBound = 1e6;
+
 /// Refactorize once the eta file reaches this many updates, whatever its size. Bounds the
 /// worst-case drift by bounding how long any single factorization is trusted.
 ///
@@ -1281,6 +1293,19 @@ bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha
   const Index s0 = ft_step_of_position_[up];
   const Index q = ft_position_[static_cast<std::size_t>(s0)];
 
+  // THE PIVOT IS ALPHA'S ENTRY AT THE LEAVING POSITION, HERE AS IN THE PRODUCT FORM (#395).
+  // det(B_new)/det(B) = alpha_p, and the Forrest-Tomlin fold realises that same ratio as
+  // new_diagonal / old_diagonal(s0): the test on the new diagonal alone lets a pivot through
+  // whenever the old diagonal is large. The product form's own rule, on the same alpha, is
+  // applied first so both schemes refuse the same pivots.
+  double largest_alpha = 0.0;
+  for (Index i = 0; i < m; ++i) {
+    largest_alpha = std::max(largest_alpha, std::fabs(alpha[static_cast<std::size_t>(i)]));
+  }
+  const double alpha_p = alpha[up];
+  if (!std::isfinite(alpha_p) || !std::isfinite(largest_alpha)) return false;
+  if (std::fabs(alpha_p) < kUpdatePivotThreshold * std::max(1.0, largest_alpha)) return false;
+
   // Recover the column FTRAN would see just after L, i.e. a~ = L^-1 P a (Huangfu & Hall,
   // eq. 11 via #243's alpha), from the fully solved `alpha` the caller already has:
   // work_by_step[s] = alpha[pivot_col_[s]] is what back-substitution through the CURRENT U
@@ -1355,12 +1380,34 @@ bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha
     largest = std::max(largest, std::fabs(spike[static_cast<std::size_t>(touched)]));
   }
   double dot = 0.0;
+  double largest_term = std::fabs(spike[static_cast<std::size_t>(s0)]);
+  double largest_r = 0.0;
   for (Index step : ft_btran_touched_) {
     if (step == s0) continue;
     const double r_value = -old_diagonal_s0 * ft_btran_scratch_[static_cast<std::size_t>(step)];
-    dot += r_value * spike[static_cast<std::size_t>(step)];
+    const double term = r_value * spike[static_cast<std::size_t>(step)];
+    largest_term = std::max(largest_term, std::fabs(term));
+    largest_r = std::max(largest_r, std::fabs(r_value));
+    dot += term;
   }
   const double new_diagonal = spike[static_cast<std::size_t>(s0)] - dot;
+  // CANCELLATION IS THE INSTABILITY, NOT THE PIVOT'S SIZE (#395). The new diagonal is a
+  // sum whose terms r_j * spike_j can be six orders larger than the result: on a 200-row
+  // random basis with sparse entering columns the row eta reached 2e5 by the 17th update and
+  // 6e6 by the 91st, the terms 1.5e5 and 1.5e6 against new diagonals of 1e-2 and 0.35, and
+  // the folded factors drifted from a fresh factorization by 1e-5 and then 3e-2 while the
+  // product form on the same sequence stayed at 6e-8. Tomlin (1972) makes this the
+  // stability test of the method: when the pivot is small against the terms that produced
+  // it, the digits are gone, and the only safe answer is a fresh factorization. The update
+  // is refused - the simplex refactorizes and retries the same pivot on fresh factors.
+  if (std::fabs(new_diagonal) < kFtCancellationThreshold * largest_term) return false;
+  // THE ROW ETA'S SIZE IS THE OTHER HALF OF THE SAME TEST. Every later FTRAN subtracts
+  // r^T y from one entry and every BTRAN adds r times one entry to the rest: entries of 1e7
+  // in r turn the rounding of a solve into an error of 1e-9 on an answer of 1, and the next
+  // fold copies that error into U for good. On the six-seed harness the cancellation test
+  // alone left the drift at 2e-5 and this bound brought it to 4e-8, the product form's own
+  // level, for 31 refusals in 768 updates.
+  if (largest_r > kFtRowEtaBound) return false;
   // Both rejections happen here, before the first write below: a caller that reads false
   // may keep using this instance exactly as it would after update() returning false.
   if (!std::isfinite(new_diagonal)) return false;

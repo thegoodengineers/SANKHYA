@@ -758,9 +758,14 @@ TEST(SparseLuForrestTomlin, SparseEnteringColumnsStackLikeDenseOnes) {
     entering[static_cast<std::size_t>(leaving)] += 6.0;
     std::vector<double> alpha = entering;
     lu.solve(alpha.data());
-    if (!lu.update_forrest_tomlin(leaving, alpha.data())) break;
-    ++applied;
     current = with_column_replaced(current, m, leaving, entering);
+    if (!lu.update_forrest_tomlin(leaving, alpha.data())) {
+      // A refused update is what #395's stability tests are for; the simplex refactorizes
+      // and carries on, and so does this test.
+      ASSERT_TRUE(lu.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
+      continue;
+    }
+    ++applied;
     SparseLu reference;
     ASSERT_TRUE(reference.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
     std::vector<double> rhs(static_cast<std::size_t>(m));
@@ -776,9 +781,77 @@ TEST(SparseLuForrestTomlin, SparseEnteringColumnsStackLikeDenseOnes) {
     reference.solve_transpose(bt.data());
     worst = std::max(worst, max_difference(at, bt));
   }
-  EXPECT_GE(applied, 60) << "the update was rejected too early to test stacking";
+  EXPECT_GE(applied, 60) << "the update was refused too often to test stacking";
   EXPECT_LT(worst, 1e-6) << "sparse entering columns drift from a fresh factorization by "
                          << worst;
+}
+
+TEST(SparseLuForrestTomlin, DriftsNoMoreThanTheProductFormOverAFullEtaFile) {
+  // THE TWO SCHEMES ON THE SAME SEQUENCES, MEASURED THE SAME WAY (#395). 200-row random
+  // bases at 3 percent density, 128 column replacements each a twentieth dense, six seeds;
+  // every sixteenth step the updated factors are solved against a fresh factorization of
+  // the same matrix. A refused update is what the simplex does with one: refactorize and
+  // carry on. Before #395 the Forrest-Tomlin fold drifted to 2.5e-3 on this harness while
+  // the product form stayed at 4.2e-7 - the row eta reached 1e7 and the new diagonal was a
+  // sum of terms six orders larger than itself; with the cancellation test and the eta
+  // bound it is 4.3e-8 for 31 refusals in 768 updates. The bound is a decade above the
+  // product form's own drift on the same sequences, and neither scheme may refuse more
+  // than a tenth of the updates.
+  constexpr Index m = 200;
+  constexpr int kSeeds = 6;
+  constexpr int kUpdates = 128;
+  double worst[2] = {0.0, 0.0};
+  int refused[2] = {0, 0};
+  for (int run = 0; run < 2 * kSeeds; ++run) {
+    const int scheme = run % 2;  // 0: product form, 1: Forrest-Tomlin
+    std::mt19937 rng(static_cast<std::uint32_t>(20260919 + run / 2));
+    std::uniform_real_distribution<double> value(-3.0, 3.0);
+    std::uniform_real_distribution<double> unit(0.0, 1.0);
+    TestMatrix current = random_basis(rng, m, 0.03);
+    SparseLu lu;
+    ASSERT_TRUE(lu.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
+    lu.use_forrest_tomlin(scheme == 1);
+    for (int step = 0; step < kUpdates; ++step) {
+      const Index leaving = static_cast<Index>((step * 7) % m);
+      std::vector<double> entering(static_cast<std::size_t>(m), 0.0);
+      for (Index i = 0; i < m; ++i) {
+        if (unit(rng) < 0.05) entering[static_cast<std::size_t>(i)] = value(rng);
+      }
+      entering[static_cast<std::size_t>(leaving)] += 6.0;
+      std::vector<double> alpha = entering;
+      lu.solve(alpha.data());
+      current = with_column_replaced(current, m, leaving, entering);
+      if (!lu.update(leaving, alpha.data())) {
+        ++refused[scheme];
+        ASSERT_TRUE(lu.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
+        continue;
+      }
+      if (step % 16 != 15) continue;
+      SparseLu reference;
+      ASSERT_TRUE(reference.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
+      std::vector<double> rhs(static_cast<std::size_t>(m));
+      for (double& v : rhs) v = value(rng);
+      std::vector<double> a = rhs;
+      lu.solve(a.data());
+      std::vector<double> b = rhs;
+      reference.solve(b.data());
+      worst[scheme] = std::max(worst[scheme], max_difference(a, b));
+      std::vector<double> at = rhs;
+      lu.solve_transpose(at.data());
+      std::vector<double> bt = rhs;
+      reference.solve_transpose(bt.data());
+      worst[scheme] = std::max(worst[scheme], max_difference(at, bt));
+    }
+  }
+  EXPECT_LT(worst[0], 1e-5) << "the product form itself drifts by " << worst[0];
+  EXPECT_LT(worst[1], 10.0 * std::max(worst[0], 1e-8))
+      << "Forrest-Tomlin drifts by " << worst[1] << " against the product form's " << worst[0];
+  std::cout << "product form drift " << worst[0] << ", Forrest-Tomlin drift " << worst[1]
+            << " with " << refused[1] << " of " << kSeeds * kUpdates << " updates refused"
+            << std::endl;
+  EXPECT_LE(refused[1], kSeeds * kUpdates / 10)
+      << "Forrest-Tomlin refused " << refused[1] << " of " << kSeeds * kUpdates;
+  EXPECT_EQ(refused[0], 0);
 }
 
 TEST(SparseLuForrestTomlin, RejectsAnUnsafePivotInsteadOfDividingByIt) {
