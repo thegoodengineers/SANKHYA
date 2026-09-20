@@ -225,6 +225,8 @@ class InteriorPoint {
   /// slightly inexact direction, which the next iteration's residuals absorb.
   double dual_regularization_ = kDualRegularization;
   Count regularization_raises_ = 0;
+  /// Whether the barrier-exhausted stop has already spent its one extra iteration (#392).
+  bool barrier_retry_used_ = false;
 
   // THE BEST ITERATE IS KEPT. Near the optimum the normal equations lose conditioning and
   // an iteration can drift; when the loop then stalls or hits a limit, the point returned
@@ -1091,7 +1093,13 @@ Solution InteriorPoint::run() {
         iterations, mu_, relative_gap, max_product_, regularized_pivots_);
     if (primal_infeasibility_ <= kIpmTolerance && dual_infeasibility_ <= kIpmTolerance &&
         relative_gap <= kIpmGap && max_product_ <= kIpmComplementarity) {
-      return finish(SolveStatus::kOptimal, {}, iterations, timer.elapsed_seconds());
+      return finish(SolveStatus::kOptimal,
+                    barrier_retry_used_
+                        ? fmt::format("converged at a relative gap of {:.1e} one step after "
+                                      "the barrier vanished (#392)",
+                                      relative_gap)
+                        : std::string{},
+                    iterations, timer.elapsed_seconds());
     }
     if (iterations >= kMaxIterations || limits_.iterations_exhausted(iterations)) {
       restore_best();
@@ -1196,11 +1204,43 @@ Solution InteriorPoint::run() {
           relative_gap <= kBarrierExhaustedSlack * kIpmGap &&
           max_product_ <= kBarrierExhaustedSlack * kIpmComplementarity;
       if (regularized_now >= spike_threshold && nearly_converged) {
-        return finish(SolveStatus::kOptimal,
-                      fmt::format("converged at a relative gap of {:.1e} when the barrier "
-                                  "vanished: {} of {} pivots regularized in one factorization",
-                                  relative_gap, regularized_now, m_),
-                      iterations, timer.elapsed_seconds());
+        // ONE MORE STEP ON A STRONGER DIAGONAL BEFORE THE STOP (#392). The iterate here is
+        // within a decade of every tolerance, but on the 20,000-row staircase its worst
+        // complementarity product was 1.9e-6 against the 1e-6 the independent verifier
+        // accepts, and the stop above handed it back as it stood: the status guard then
+        // reported a feasible point rather than a proof. The factorization that spiked is
+        // rank deficient at working precision, but #389's recovery showed that a diagonal
+        // raised by kRegularizationRaise makes the factor well defined at the price of a
+        // slightly inexact direction - and one such step is exactly what a nearly converged
+        // iterate needs to bring its worst products down to the mean. It is taken once: the
+        // regularization is raised, the normal equations refactorized, and the loop falls
+        // through to the predictor-corrector below. The next visit to this block, whatever
+        // the step did, restores the best iterate seen and stops; the merit that chooses it
+        // includes the worst relative product, so a step that made things worse costs one
+        // iteration and nothing else.
+        bool one_more_step = false;
+        if (!barrier_retry_used_ && regularization_raises_ < kMaxRegularizationRaises) {
+          barrier_retry_used_ = true;
+          dual_regularization_ *= kRegularizationRaise;
+          ++regularization_raises_;
+          logger_.verbose(
+              "interior point: the barrier vanished at iteration {} ({} of {} pivots "
+              "regularized); regularization raised to {:.1e} for one more step",
+              iterations, regularized_now, m_, dual_regularization_);
+          one_more_step = factorize();
+        }
+        if (!one_more_step) {
+          restore_best();
+          residuals();
+          const double best_gap =
+              mu_ * static_cast<double>(bound_count_) / (1.0 + std::fabs(objective_));
+          return finish(
+              SolveStatus::kOptimal,
+              fmt::format("converged at a relative gap of {:.1e} when the barrier "
+                          "vanished: {} of {} pivots regularized in one factorization",
+                          best_gap, regularized_now, m_),
+              iterations, timer.elapsed_seconds());
+        }
       }
     }
 

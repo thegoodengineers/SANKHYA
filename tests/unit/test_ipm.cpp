@@ -249,6 +249,30 @@ TEST(InteriorPoint, ANonFiniteNewtonDirectionIsRecoveredByRaisingTheRegularizati
   EXPECT_NEAR(ipm.objective, simplex.objective, 1e-6 * std::fabs(simplex.objective));
 }
 
+TEST(InteriorPoint, TheBarrierExhaustedStopTakesOneMoreStepAndProvesTheAnswer) {
+  // The 3,000-row staircase (data/scale/README.md) converges to a relative gap of 2.6e-9 and
+  // then its factorization regularizes 297 of 2,722 pivots in one step: the barrier is gone
+  // and the stop of #209 hands the iterate back as it stands. Its worst complementarity
+  // product sat above the 1e-6 the independent verifier accepts, so the status guard reported
+  // a feasible point rather than a proof, on this model and on the 20,000-row member (#392).
+  // One more step on a diagonal raised by kRegularizationRaise brings the worst products to
+  // the mean (relative gap 1.3e-11 here); the analytic optimum is 10329 by construction.
+  Model model;
+  const std::string path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+       "data/scale/staircase-3000-seed7.mps.gz")
+          .string();
+  const io::ReadResult read = io::read_model(path, &model);
+  ASSERT_TRUE(read.ok) << path << ": " << read.error;
+  Options options = with_algorithm("ipm");
+  options.set_bool("crossover", false);
+  const Solution ipm = solve(model, options);
+  ASSERT_EQ(ipm.status, SolveStatus::kOptimal) << ipm.message;
+  EXPECT_NE(ipm.message.find("barrier vanished"), std::string::npos)
+      << "the barrier-exhausted stop was not the path taken: " << ipm.message;
+  EXPECT_NEAR(ipm.objective, 10329.0, 1e-6 * 10329.0);
+}
+
 TEST(InteriorPoint, ReportsRatherThanClaimsOnAnInfeasibleModel) {
   // x >= 5 and x <= 1: the method cannot certify infeasibility and must not say optimal.
   const Model model =
