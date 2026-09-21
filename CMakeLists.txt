@@ -184,11 +184,13 @@ set(SANKHYA_CORE_SOURCES
   src/core/model.cpp
   src/core/resource_limits.cpp
   src/core/solve.cpp
+  src/core/deterministic_mode.cpp
   src/core/engine_selection.cpp
   src/solver_engine/solver_engine.cpp
   src/solver_engine/solver_registry.cpp
   src/solver_engine/builtin_engines.cpp
   src/solver_engine/solver_selector.cpp
+  src/solver_engine/solver_engine_dispatch.cpp
   src/io/line_reader.cpp
   src/io/lp_reader.cpp
   src/io/mps_bounds.cpp
@@ -204,6 +206,7 @@ set(SANKHYA_CORE_SOURCES
   src/la/sparse.cpp
   src/simplex/dense_lu.cpp
   src/mip/branch_and_bound.cpp
+  src/mip/components.cpp
   src/mip/branch_and_bound_node.cpp
   src/mip/combinatorial_cuts.cpp
   src/mip/cuts.cpp

@@ -46,11 +46,29 @@ struct EngineCapabilities {
   bool supports_basis = false;
   bool supports_certificates = false;
   bool supports_interrupt = false;
+  // Whether THIS WRAPPER's solve() itself removes clock-dependent decisions and repeats
+  // itself under options.deterministic=true, WITHOUT relying on solve()'s dispatcher to have
+  // done it upstream. src/core/deterministic_mode.hpp (apply_deterministic_mode) is the one
+  // rewrite that makes this true; a wrapper earns this flag by calling it itself, on the
+  // options it hands to its underlying algorithm, before that call (#297 review, A2). Every
+  // built-in engine (src/solver_engine/builtin_engines.cpp) does exactly that and sets this
+  // true. A future engine that does NOT call apply_deterministic_mode itself - or one for
+  // which no rewrite would suffice - must leave this false rather than borrow the guarantee
+  // from a dispatcher it was not reached through.
   bool supports_deterministic_mode = false;
 
   /// Whether `problem_class` is one of the classes this engine accepts.
   [[nodiscard]] bool accepts(ProblemClass problem_class) const;
 };
+
+/// The Solution a SolverEngine returns when handed a model outside its capabilities() - the
+/// truth, per ENGINEERING_RULES.md, rather than a plausible answer to a different problem.
+/// Every built-in engine (src/solver_engine/builtin_engines.cpp) uses this; it is exported so
+/// a THIRD-PARTY engine implementing this interface gets the same status/message convention
+/// for free rather than having to invent one (#297: "adding a new solver should primarily
+/// require: implement engine, register engine, declare capabilities" - not this).
+[[nodiscard]] Solution unsupported_class_result(const std::string& engine_name,
+                                                const Model& model);
 
 /// A pluggable optimization engine (#297).
 ///

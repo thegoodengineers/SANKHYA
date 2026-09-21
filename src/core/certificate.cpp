@@ -13,6 +13,8 @@
 #include "sankhya/sparse.hpp"
 #include "sankhya/tolerances.hpp"
 
+#include "util/profiler.hpp"
+
 namespace sankhya {
 namespace {
 
@@ -215,6 +217,37 @@ bool ray_proves_unbounded(const Model& model, const std::vector<double>& d, std:
                            "blocks the direction",
                            improvement));
   return true;
+}
+
+void verify_and_keep_certificate(Solution* solution, const Model& model, Logger& logger) {
+  ProfileScope timed(logger.profiler(), "verification");  // #285
+  std::string why;
+  if (solution->status == SolveStatus::kInfeasible && !solution->farkas_dual.empty()) {
+    if (farkas_proves_infeasible(model, solution->farkas_dual, &why)) {
+      solution->message += fmt::format("; proof: {}", why);
+      return;
+    }
+    std::vector<double> flipped = solution->farkas_dual;
+    for (double& value : flipped) value = -value;
+    if (farkas_proves_infeasible(model, flipped, &why)) {
+      solution->farkas_dual = std::move(flipped);
+      solution->message += fmt::format("; proof: {}", why);
+      return;
+    }
+    logger.verbose("the infeasibility certificate did not check out and was dropped: {}", why);
+    solution->farkas_dual.clear();
+    solution->message += "; no machine-checkable certificate accompanies this verdict";
+    return;
+  }
+  if (solution->status == SolveStatus::kUnbounded && !solution->primal_ray.empty()) {
+    if (ray_proves_unbounded(model, solution->primal_ray, &why)) {
+      solution->message += fmt::format("; proof: {}", why);
+      return;
+    }
+    logger.verbose("the unboundedness ray did not check out and was dropped: {}", why);
+    solution->primal_ray.clear();
+    solution->message += "; no machine-checkable certificate accompanies this verdict";
+  }
 }
 
 }  // namespace sankhya

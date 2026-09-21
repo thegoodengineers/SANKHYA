@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "solver_engine/solver_engine.hpp"
 
+#include <fmt/format.h>
+
 namespace sankhya::engine {
 
 ProblemClass classify(const Model& model) {
@@ -34,6 +36,16 @@ bool EngineCapabilities::accepts(ProblemClass problem_class) const {
 
 bool SolverEngine::supports(const Model& model) const {
   return capabilities().accepts(classify(model));
+}
+
+Solution unsupported_class_result(const std::string& engine_name, const Model& model) {
+  Solution solution;
+  solution.allocate_for(model);
+  solution.status = SolveStatus::kNotSolved;
+  solution.algorithm = "none";
+  solution.message =
+      fmt::format("{} does not support {} models", engine_name, to_string(classify(model)));
+  return solution;
 }
 
 }  // namespace sankhya::engine
