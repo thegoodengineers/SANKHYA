@@ -295,6 +295,32 @@ TEST(ParallelTree, ANodeLimitCountsTheWholeSearchAndLeavesAValidBound) {
   }
 }
 
+TEST(ParallelTree, ALimitedSearchReportsTheSameRoundedBoundAsTheSequentialOne) {
+  // With integer costs on integer columns every integer optimum is an integer, and the
+  // sequential search reports its bound rounded up to one (#221). The parallel search must
+  // too, or a 4-thread run reports 13.28 where the 1-thread run on the same tree says 14.
+  std::mt19937 rng(2221);
+  int limited = 0;
+  for (int trial = 0; trial < 60; ++trial) {
+    const Model model = random_integer_program(rng, trial % 2 == 0);
+    const Enumerated truth = enumerate(model);
+    if (!truth.feasible) continue;
+    Options options = on_threads(4);
+    options.set_int("node_limit", 4);
+    const Solution stopped = solve(model, options);
+    if (stopped.status == SolveStatus::kOptimal || !std::isfinite(stopped.dual_bound)) continue;
+    ++limited;
+    EXPECT_EQ(stopped.dual_bound, std::round(stopped.dual_bound))
+        << "trial " << trial << ": an unrounded bound " << stopped.dual_bound;
+    const bool maximize = model.sense == ObjSense::kMaximize;
+    EXPECT_TRUE(maximize ? stopped.dual_bound >= truth.best - 1e-9
+                         : stopped.dual_bound <= truth.best + 1e-9)
+        << "trial " << trial << ": the bound " << stopped.dual_bound << " passes the optimum "
+        << truth.best;
+  }
+  EXPECT_GT(limited, 5);
+}
+
 TEST(ParallelTree, ATimeLimitStopsEveryWorkerPromptly) {
   const Model model = market_split(4, 40, 11);
   Options limited = on_threads(4);

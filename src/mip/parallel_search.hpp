@@ -106,6 +106,13 @@ class SharedSearch {
   void add_residual(double bound, bool gap_met);
   [[nodiscard]] double residual();
   [[nodiscard]] bool gap_met();
+  /// The objective step of #221, as the workers detected it; 0 when none is known.
+  void set_objective_step(double step) {
+    objective_step_.store(step, std::memory_order_relaxed);
+  }
+  [[nodiscard]] double objective_step() const {
+    return objective_step_.load(std::memory_order_relaxed);
+  }
   std::atomic<Count> subtrees{0};
   std::atomic<Count> donations{0};
 
@@ -158,6 +165,7 @@ class SharedSearch {
   bool gap_met_ = false;
 
   std::atomic<Count> nodes_{0};
+  std::atomic<double> objective_step_{0.0};
 
   std::mutex pseudocost_mutex_;
   Pseudocosts pseudocosts_;

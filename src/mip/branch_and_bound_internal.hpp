@@ -119,6 +119,16 @@ constexpr double kMiqpNodeTolerance = 1e-10;
 /// simplex's tolerance, and 1e-6 of a step is well above it and well below one step.
 constexpr double kObjectiveIntegralitySlack = 1e-6;
 
+/// `bound` rounded up to the next multiple of `step` (#221), or unchanged when the step is
+/// unknown (0). BranchAndBound::integral_bound below and the parallel driver (#222) both use
+/// it, so a bound means the same thing whichever of them reports it.
+[[nodiscard]] inline double round_up_to_step(double bound, double step) {
+  if (step <= 0.0 || !std::isfinite(bound)) return bound;
+  const double units = bound / step;
+  const double slack = std::max(kObjectiveIntegralitySlack, 1e-9 * std::fabs(units));
+  return step * std::ceil(units - slack);
+}
+
 /// Iteration cap for one node QP. Condat-Vu has no warm start, so every node pays a cold
 /// solve; this keeps a single pathological node from consuming the whole time limit while
 /// still being generous enough to reach kMiqpNodeTolerance on the node sizes this handles.
@@ -450,10 +460,7 @@ class BranchAndBound {
   /// keeps a bound that is a multiple of the step to rounding error from being pushed a
   /// whole step up: an LP bound of 14 + 1e-9 stays 14.
   [[nodiscard]] double integral_bound(double bound) const {
-    if (objective_step_ <= 0.0 || !std::isfinite(bound)) return bound;
-    const double units = bound / objective_step_;
-    const double slack = std::max(kObjectiveIntegralitySlack, 1e-9 * std::fabs(units));
-    return objective_step_ * std::ceil(units - slack);
+    return round_up_to_step(bound, objective_step_);
   }
 
   // ---- Conflict analysis (branch_and_bound_conflicts.cpp, #292) -------------------------

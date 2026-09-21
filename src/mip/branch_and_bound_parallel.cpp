@@ -343,10 +343,12 @@ void BranchAndBound::leave_shared(bool limit_hit, LimitReason why, bool gap_targ
     (void)shared_->add_nodes(nodes_explored_ - nodes_reported_);
     nodes_reported_ = nodes_explored_;
   }
+  // The same objective step in every worker: it is a property of the model (#221).
+  shared_->set_objective_step(objective_step_);
   if (!open_.empty()) {
     double bound = std::numeric_limits<double>::infinity();
     for (const Index index : open_) {
-      bound = std::min(bound, nodes_[static_cast<std::size_t>(index)].bound);
+      bound = std::min(bound, integral_bound(nodes_[static_cast<std::size_t>(index)].bound));
     }
     shared_->add_residual(bound, gap_target_met);
   }
@@ -515,7 +517,10 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
 
   const LimitReason why = shared.reason();
   const bool stopped = why != LimitReason::kNone;
-  const double residual = std::min(shared.residual(), shared.queued_bound());
+  // Subtrees still queued carry raw node bounds; they are rounded with the step the workers
+  // found, as the sequential search rounds every bound it reports (#221).
+  const double residual = std::min(
+      shared.residual(), round_up_to_step(shared.queued_bound(), shared.objective_step()));
   double best = std::numeric_limits<double>::infinity();
   std::vector<double> best_x;
   const bool found = shared.incumbent(&best, &best_x);
