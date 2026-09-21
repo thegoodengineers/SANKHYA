@@ -459,10 +459,12 @@ runs the branch and bound on N worker threads. Each worker runs the ordinary seq
 search on one subtree at a time, with its own working model and node LPs. A subtree is a
 chain of bound changes from the root, so giving one away copies a few dozen numbers. The
 workers share the incumbent (every worker prunes against the best point anyone found), the
-node count (so `node_limit` covers the whole search), one solution pool, the pseudocosts, a
-queue of subtrees and a stop flag. A worker with more than two open nodes gives the
-smallest-bound ones away whenever another worker is idle and the queue is empty, never its two
-newest nodes, which its dive is about to take.
+node count (so `node_limit` covers the whole search), one solution pool, the pseudocosts
+(exchanged every 20 nodes), the node scaling (computed once), a queue of subtrees and a stop
+flag. A worker with at least eight open nodes gives the smallest-bound ones away whenever
+another worker is idle and the queue is empty, never its two newest nodes, which its dive is
+about to take. Each worker sets OpenMP's thread count to one when it starts: the count is per
+thread, and a new thread would otherwise fork a full team in every column loop.
 
 The answer does not depend on the thread count; the tree explored does. A subtree that stops
 early (a limit, or its own gap test) hands back the smallest bound among its open nodes, the
