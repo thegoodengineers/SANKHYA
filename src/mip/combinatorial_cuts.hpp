@@ -21,8 +21,9 @@
 //   combined with multipliers 1/2 and rounded down: floor(sum a_i / 2) x <= floor(sum b_i /
 //   2). Valid because floor(u'A) x <= u'A x for x >= 0 and the left side is an integer. The
 //   parity argument is exactly what a unit-coefficient covering row needs. Separation is
-//   NP-hard too; single rows and pairs of rows sharing a column are tried, which is the
-//   bounded neighbourhood the PR states.
+//   NP-hard too; single rows, pairs of rows sharing a column, and the row sets a Gaussian
+//   elimination over GF(2) finds (Koster, Zymolka & Kutschka, Algorithmica 55, 2009) are
+//   tried, the last being what reaches an odd cycle of three or more rows.
 //
 // VALIDITY IS BY CONSTRUCTION AND CHECKED BY ENUMERATION. tests/unit/test_combinatorial_cuts
 // enumerates every integer point of small random models and asserts no generated cut removes
@@ -41,6 +42,7 @@ struct CombinatorialCutStats {
   int conflict_edges = 0;  ///< pairs found in conflict (capped, see the definition)
   bool conflict_graph_capped = false;
   int candidate_row_sets = 0;  ///< row sets tried for {0,1/2}
+  int mod2_row_sets = 0;       ///< of those, found by the elimination over GF(2)
 };
 
 /// Clique cuts violated at `solution.col_value`, from the conflict graph of the binaries.
@@ -53,7 +55,8 @@ struct CombinatorialCutStats {
                                                     CombinatorialCutStats* stats = nullptr);
 
 /// {0,1/2}-CG cuts violated at `solution.col_value`, from the pure-integer rows with integer
-/// data, one row or two rows sharing a column at a time.
+/// data: single rows, pairs sharing a column, and sets of any size found by Gaussian
+/// elimination over GF(2) on the rows with slack below one.
 [[nodiscard]] std::vector<Cut> generate_zero_half_cuts(const Model& model,
                                                        const Solution& solution,
                                                        const std::vector<double>& col_lower,

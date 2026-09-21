@@ -123,16 +123,84 @@ TEST(CliqueCuts, AKnapsackRowGivesConflictsOnlyWhereTheyAreReal) {
   EXPECT_EQ(stats.conflict_edges, 1);
 }
 
-TEST(ZeroHalfCuts, PairsAloneCannotReachTheTriangleAndClaimNothingFalse) {
-  // The triangle x0 + x1 <= 1, x1 + x2 <= 1, x0 + x2 <= 1 has the {0,1/2} cut x0 + x1 + x2 <= 1
-  // only from ALL THREE rows at 1/2. This generator tries single rows and pairs, so it cannot
-  // reach that cut - the bounded neighbourhood the PR states - and the test holds it to the
-  // weaker promise: whatever it does return removes no integer point.
+TEST(ZeroHalfCuts, TheTriangleCutNeedsAllThreeRowsAndIsFound) {
+  // x0 + x1 <= 1, x1 + x2 <= 1, x0 + x2 <= 1 has the {0,1/2} cut x0 + x1 + x2 <= 1 only from
+  // ALL THREE rows at 1/2; no single row or pair gives it. The elimination over GF(2) does.
   const Model m = integer_model({{1, 1, 0}, {0, 1, 1}, {1, 0, 1}}, {-kInf, -kInf, -kInf},
                                 {1, 1, 1}, {0, 0, 0}, {1, 1, 1});
+  CombinatorialCutStats stats;
   const std::vector<Cut> cuts =
-      generate_zero_half_cuts(m, at({0.5, 0.5, 0.5}), m.col_lower, m.col_upper);
-  for (const Cut& cut : cuts) EXPECT_TRUE(removed_point(cut, integer_points(m)).empty());
+      generate_zero_half_cuts(m, at({0.5, 0.5, 0.5}), m.col_lower, m.col_upper, &stats);
+  EXPECT_GE(stats.mod2_row_sets, 1);
+  bool found = false;
+  for (const Cut& cut : cuts) {
+    EXPECT_TRUE(removed_point(cut, integer_points(m)).empty());
+    found = found || (cut.coeff == std::vector<double>{1.0, 1.0, 1.0} && cut.rhs == 1.0);
+  }
+  EXPECT_TRUE(found) << "the odd-cycle cut x0 + x1 + x2 <= 1";
+}
+
+TEST(ZeroHalfCuts, AFiveCycleNeedsFiveRowsAndIsFound) {
+  // The 5-cycle x_i + x_{i+1} <= 1 at x = 1/2 everywhere: the cut sum x <= 2 is violated by
+  // one half and needs all five rows.
+  std::vector<std::vector<double>> a(5, std::vector<double>(5, 0.0));
+  for (std::size_t i = 0; i < 5; ++i) {
+    a[i][i] = 1.0;
+    a[i][(i + 1) % 5] = 1.0;
+  }
+  const Model m = integer_model(a, std::vector<double>(5, -kInf), std::vector<double>(5, 1.0),
+                                std::vector<double>(5, 0.0), std::vector<double>(5, 1.0));
+  const std::vector<Cut> cuts =
+      generate_zero_half_cuts(m, at({0.5, 0.5, 0.5, 0.5, 0.5}), m.col_lower, m.col_upper);
+  bool found = false;
+  for (const Cut& cut : cuts) {
+    EXPECT_TRUE(removed_point(cut, integer_points(m)).empty());
+    found = found || (cut.coeff == std::vector<double>(5, 1.0) && cut.rhs == 2.0);
+  }
+  EXPECT_TRUE(found) << "the odd-cycle cut sum x <= 2";
+}
+
+TEST(ZeroHalfCuts, OddCycleCutsOnRandomGraphsRemoveNoStableSet) {
+  // Stable-set and vertex-cover rows on random graphs, the structure odd-cycle cuts exist for,
+  // at random fractional points. Every cut is checked against every integer point.
+  std::mt19937 rng(3581);
+  std::uniform_real_distribution<double> point(0.2, 0.8);
+  int cuts_seen = 0;
+  int wide_sets = 0;
+  for (int trial = 0; trial < 300; ++trial) {
+    const std::size_t n = 5 + static_cast<std::size_t>(trial % 4);
+    const bool cover = trial % 2 == 1;
+    std::vector<std::vector<double>> a;
+    std::uniform_int_distribution<std::size_t> vertex(0, n - 1);
+    for (std::size_t e = 0; e < n + 3; ++e) {
+      const std::size_t u = vertex(rng);
+      const std::size_t v = vertex(rng);
+      if (u == v) continue;
+      std::vector<double> row(n, 0.0);
+      row[u] = row[v] = 1.0;
+      a.push_back(row);
+    }
+    if (a.size() < 3) continue;
+    const std::size_t rows = a.size();
+    const Model m = integer_model(a, std::vector<double>(rows, cover ? 1.0 : -kInf),
+                                  std::vector<double>(rows, cover ? kInf : 1.0),
+                                  std::vector<double>(n, 0.0), std::vector<double>(n, 1.0));
+    const std::vector<std::vector<double>> points = integer_points(m);
+    for (int probe = 0; probe < 3; ++probe) {
+      std::vector<double> x(n);
+      for (std::size_t j = 0; j < n; ++j) x[j] = point(rng);
+      CombinatorialCutStats stats;
+      for (const Cut& cut :
+           generate_zero_half_cuts(m, at(x), m.col_lower, m.col_upper, &stats)) {
+        ++cuts_seen;
+        ASSERT_TRUE(removed_point(cut, points).empty())
+            << "trial " << trial << ": a {0,1/2} cut removes a feasible point";
+      }
+      wide_sets += stats.mod2_row_sets;
+    }
+  }
+  EXPECT_GT(cuts_seen, 100);
+  EXPECT_GT(wide_sets, 50) << "the elimination must actually have found row sets";
 }
 
 TEST(ZeroHalfCuts, AnOddRightHandSideRoundsDown) {
