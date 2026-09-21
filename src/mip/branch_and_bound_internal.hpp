@@ -224,6 +224,8 @@ class BranchAndBound {
   /// the reason in `why`.
   bool sync_with_shared(LimitReason* why);
   void donate_open_nodes();
+  /// Merge what this worker observed into the shared pseudocosts and take the merged ones.
+  void sync_pseudocosts();
   /// At the end of run(): what this subtree leaves open, and the pseudocosts it learned.
   void leave_shared(bool limit_hit, LimitReason why, bool gap_target_met);
 
@@ -626,6 +628,11 @@ class BranchAndBound {
   SharedSearch* shared_ = nullptr;
   const SubtreeSpec* seed_ = nullptr;
   Count nodes_reported_ = 0;
+  /// Open nodes a worker must hold before it gives any away (#222).
+  static constexpr std::size_t kMinOpenToDonate = 8;
+  /// Nodes between pseudocost exchanges with the other workers (#222).
+  static constexpr Count kPseudocostSyncNodes = 20;
+  Count next_pseudocost_sync_ = 0;
   std::vector<double> pseudo_start_down_sum_;
   std::vector<double> pseudo_start_up_sum_;
   std::vector<Count> pseudo_start_down_count_;

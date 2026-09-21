@@ -118,6 +118,16 @@ class SharedSearch {
     std::vector<Count> up_count;
   };
   [[nodiscard]] Pseudocosts pseudocosts();
+
+  /// The node scaling, computed once by the driver before any worker starts and read-only
+  /// after, so it needs no lock.
+  void set_scaling(NodeScaling scaling) {
+    scaling_ = std::move(scaling);
+    has_scaling_ = true;
+  }
+  [[nodiscard]] const NodeScaling* scaling() const {
+    return has_scaling_ ? &scaling_ : nullptr;
+  }
   /// Add what a worker observed on top of the snapshot it started from.
   void merge_pseudocosts(const Pseudocosts& start, const Pseudocosts& end);
 
@@ -151,6 +161,9 @@ class SharedSearch {
 
   std::mutex pseudocost_mutex_;
   Pseudocosts pseudocosts_;
+
+  NodeScaling scaling_;
+  bool has_scaling_ = false;
 };
 
 /// How many tree workers `mip_threads` asks for on this model: 1 when it asks for one, and

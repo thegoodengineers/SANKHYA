@@ -15,6 +15,7 @@
 
 #include "branch_and_bound_internal.hpp"
 #include "parallel_search.hpp"
+#include "util/threads.hpp"
 
 namespace sankhya::mip {
 
@@ -210,22 +211,25 @@ void BranchAndBound::plant_seed() {
   // enter() walks it exactly as it walks any node's ancestry. Only the last is open.
   Index parent = 0;
   for (std::size_t k = 0; k < seed_->chain.size(); ++k) {
-    TreeNode node;
+    // Built in place, never copied: a copy of a node with an empty basis is what GCC's
+    // -Wnull-dereference misreads under -fsanitize=thread.
+    TreeNode& node = nodes_.emplace_back();
     node.parent = parent;
     node.change = seed_->chain[k];
     node.has_change = true;
     node.bound = seed_->bound;
     node.estimate = seed_->estimate;
     node.depth = static_cast<Index>(k + 1);
-    nodes_.push_back(node);
     parent = static_cast<Index>(nodes_.size() - 1);
   }
   TreeNode& leaf = nodes_.back();
   leaf.depth = seed_->depth;
   leaf.fraction = seed_->fraction;
   // A basis is only a basis of the same rows; the seed's is dropped if they differ.
-  if (static_cast<Index>(seed_->warm.row_status.size()) == working_.num_rows()) {
-    leaf.warm = seed_->warm;
+  if (!seed_->warm.row_status.empty() &&
+      static_cast<Index>(seed_->warm.row_status.size()) == working_.num_rows()) {
+    leaf.warm.col_status.assign(seed_->warm.col_status.begin(), seed_->warm.col_status.end());
+    leaf.warm.row_status.assign(seed_->warm.row_status.begin(), seed_->warm.row_status.end());
   }
   open_.push_back(parent);
 
@@ -258,6 +262,15 @@ bool BranchAndBound::sync_with_shared(LimitReason* why) {
       return false;
     }
   }
+  // Pseudocosts both ways, every few nodes (#222). Reliability branching strong-branches on a
+  // column until it has eight observations, and those observations are made wherever the
+  // column's children are solved - often in another worker. Merged only when a subtree
+  // ended, a long-lived subtree would keep strong-branching on columns the others had long
+  // since priced.
+  if (nodes_explored_ >= next_pseudocost_sync_) {
+    next_pseudocost_sync_ = nodes_explored_ + kPseudocostSyncNodes;
+    sync_pseudocosts();
+  }
   // Another worker's incumbent prunes here as if this worker had found it.
   if (shared_->best() < incumbent_internal_ - 1e-12) {
     double objective = 0.0;
@@ -268,8 +281,24 @@ bool BranchAndBound::sync_with_shared(LimitReason* why) {
       incumbent_x_ = std::move(x);
     }
   }
-  if (shared_->hungry() && open_.size() > 2) donate_open_nodes();
+  // A backlog worth splitting, not merely two children: every subtree given away pays for a
+  // model copy and a cold start, and a two-node subtree does not repay it.
+  if (shared_->hungry() && open_.size() >= kMinOpenToDonate) donate_open_nodes();
   return true;
+}
+
+void BranchAndBound::sync_pseudocosts() {
+  const SharedSearch::Pseudocosts start{pseudo_start_down_sum_, pseudo_start_up_sum_,
+                                        pseudo_start_down_count_, pseudo_start_up_count_};
+  const SharedSearch::Pseudocosts end{pseudo_down_sum_, pseudo_up_sum_, pseudo_down_count_,
+                                      pseudo_up_count_};
+  shared_->merge_pseudocosts(start, end);
+  const SharedSearch::Pseudocosts merged = shared_->pseudocosts();
+  if (merged.down_sum.size() != pseudo_down_sum_.size()) return;
+  pseudo_down_sum_ = pseudo_start_down_sum_ = merged.down_sum;
+  pseudo_up_sum_ = pseudo_start_up_sum_ = merged.up_sum;
+  pseudo_down_count_ = pseudo_start_down_count_ = merged.down_count;
+  pseudo_up_count_ = pseudo_start_up_count_ = merged.up_count;
 }
 
 void BranchAndBound::donate_open_nodes() {
@@ -322,11 +351,7 @@ void BranchAndBound::leave_shared(bool limit_hit, LimitReason why, bool gap_targ
     shared_->add_residual(bound, gap_target_met);
   }
   if (limit_hit && why != LimitReason::kNone) shared_->stop(why);
-  SharedSearch::Pseudocosts start{pseudo_start_down_sum_, pseudo_start_up_sum_,
-                                  pseudo_start_down_count_, pseudo_start_up_count_};
-  const SharedSearch::Pseudocosts end{pseudo_down_sum_, pseudo_up_sum_, pseudo_down_count_,
-                                      pseudo_up_count_};
-  shared_->merge_pseudocosts(start, end);
+  sync_pseudocosts();
 }
 
 // =========================================================================================
@@ -362,6 +387,15 @@ void run_worker(const Model& model, const Options& options, SharedSearch* shared
                 SolveControl* stop_signal, const Timer& clock, double time_limit,
                 Solution* root_answer) {
   Logger silent(nullptr);
+  // OpenMP's thread count is per thread, and a new thread starts at the runtime's default of
+  // one per core, not at what solve() set on the calling thread. Without this every column
+  // loop in every worker forked a team of eight: on f2gap40400 one worker took 17 s where the
+  // same search on the calling thread takes 2.
+  {
+    Options loops = options;
+    loops.set_int("threads", 1);
+    apply_thread_option(loops, silent);
+  }
   SubtreeSpec spec;
   while (shared->take(&spec)) {
     try {
@@ -420,6 +454,11 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   const bool has_time_limit = std::isfinite(time_limit) && time_limit >= 0.0;
 
   logger.info("Branch and bound: parallel tree search on {} threads (#222)", threads);
+  {
+    Options quiet = options;
+    quiet.set_bool("log_to_console", false);
+    shared.set_scaling(build_node_scaling(model, quiet));
+  }
   SubtreeSpec root;
   root.is_root = true;
   shared.push(std::move(root));

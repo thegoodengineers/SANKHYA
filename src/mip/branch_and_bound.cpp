@@ -180,7 +180,11 @@ Solution BranchAndBound::run() {
   // Once, here, and not once per node (#76). Built from working_ before any branching has
   // touched its bounds, though it would not matter if it had: only the matrix, the cost and
   // the row bounds feed the multipliers, and branching changes none of them.
-  scaling_ = build_node_scaling(working_, node_options_);
+  // A parallel worker (#222) takes the scaling the driver computed once: the matrix is the
+  // same in every subtree, so it is not rebuilt for each one.
+  scaling_ = shared_ != nullptr && shared_->scaling() != nullptr
+                 ? *shared_->scaling()
+                 : build_node_scaling(working_, node_options_);
   probe_options_ = node_options_;
   probe_options_.set_int("iteration_limit", tol::kStrongBranchingIterations);
 
