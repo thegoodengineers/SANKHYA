@@ -597,6 +597,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  1.0,
                  1e6,
                  {}});
+    s.push_back({"mip_threads",
+                 OptionType::Int,
+                 std::int64_t{1},
+                 "MILP: worker threads for the branch-and-bound tree (#222); each runs its own "
+                 "node LPs on subtrees the others give away, sharing the incumbent, the node "
+                 "count and the pool. 1 (default) is the sequential search; 0 means one per "
+                 "hardware core. The objective and status do not depend on it, the tree "
+                 "explored does. Ignored, with a note, for an MIQP, with pool_complete, with a "
+                 "checkpoint or resume, and in deterministic mode.",
+                 0.0,
+                 256.0,
+                 {}});
     s.push_back({"pool_diversity",
                  OptionType::Bool,
                  false,

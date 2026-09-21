@@ -54,6 +54,7 @@ add_executable(sankhya_tests
   unit/test_heuristics.cpp
   unit/test_combinatorial_cuts.cpp
   unit/test_checkpoint.cpp
+  unit/test_parallel_tree.cpp
   unit/test_profiler.cpp
   unit/test_expression.cpp
   unit/test_nonlinear_model.cpp

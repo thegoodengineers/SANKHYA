@@ -22,6 +22,8 @@
 
 #include "simplex/primal_simplex.hpp"
 
+#include "parallel_search.hpp"
+
 namespace sankhya::mip {
 
 void BranchAndBound::enter(Index node_index) {
@@ -507,13 +509,19 @@ bool BranchAndBound::offer_incumbent(const std::vector<double>& x) {
   }
 
   const double objective = internal_objective(x);
-  // Feasible, so it is a plan whether or not it improves: the pool keeps it (#225).
-  pool_.offer(objective, x);
+  // Feasible, so it is a plan whether or not it improves: the pool keeps it (#225). In a
+  // parallel search there is one pool for all the workers (#222).
+  if (shared_ != nullptr) {
+    shared_->offer_to_pool(objective, x);
+  } else {
+    pool_.offer(objective, x);
+  }
   if (have_incumbent_ && objective >= incumbent_internal_ - 1e-12) return false;
 
   have_incumbent_ = true;
   incumbent_internal_ = objective;
   incumbent_x_ = x;
+  if (shared_ != nullptr) shared_->publish(objective, x);
   return true;
 }
 

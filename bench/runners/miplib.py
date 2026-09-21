@@ -76,6 +76,9 @@ CSV_COLUMNS = [
     "machine",
     "timestamp_utc",
     "solver_options",
+    # Tree worker threads (#222): mip_threads from the options, 1 when it is not given. Last,
+    # so a reader of the older CSVs that indexes columns by position still reads them.
+    "threads",
 ]
 
 
@@ -214,6 +217,8 @@ def main() -> int:
                              "recorded in the CSV so a run with a non-default option is "
                              "distinguishable from the default at the same commit")
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--threads", type=int, default=None,
+                        help="tree worker threads, the same as --solver-option mip_threads=N")
     args = parser.parse_args()
 
     binary = find_binary(args.binary)
@@ -234,7 +239,14 @@ def main() -> int:
     machine = f"{platform.system()}-{platform.machine()}"
     stamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
+    if args.threads is not None:
+        args.solver_option.append(f"mip_threads={args.threads}")
     solver_options = " ".join(args.solver_option)
+    threads = 1
+    for option in args.solver_option:
+        key, _, value = option.partition("=")
+        if key.strip() == "mip_threads":
+            threads = int(value)
     print(f"commit   {commit}   machine {machine}   time limit {args.time_limit:g}s"
           + (f"   options {solver_options}" if solver_options else ""))
     print()
@@ -293,6 +305,7 @@ def main() -> int:
             "solver_seconds": blob.get("solver_seconds", ""),
             "git_commit": commit,
             "solver_options": solver_options,
+            "threads": threads,
             "machine": machine,
             "timestamp_utc": stamp,
         })

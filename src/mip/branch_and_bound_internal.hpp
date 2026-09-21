@@ -47,6 +47,9 @@
 
 namespace sankhya::mip {
 
+class SharedSearch;
+struct SubtreeSpec;
+
 /// One tightened bound, recorded so entering a node can be undone rather than rebuilt.
 struct DomainChange {
   Index column = -1;
@@ -203,7 +206,27 @@ class BranchAndBound {
 
   Solution run();
 
+  /// Run as one worker of the parallel search (#222): share the incumbent, the node count,
+  /// the pool and the pseudocosts through `shared`, and start from `seed` - a subtree some
+  /// other worker gave away - instead of the root when it is not null.
+  void attach(SharedSearch* shared, const SubtreeSpec* seed) {
+    shared_ = shared;
+    seed_ = seed;
+  }
+
  private:
+  // ---- Parallel tree search (branch_and_bound_parallel.cpp, #222) ----------------------
+
+  /// Put the seed's chain into nodes_ and its last node into open_.
+  void plant_seed();
+  /// Once per node, at the top of the loop: take a better incumbent from the other workers,
+  /// count nodes, give nodes away to an idle worker. False when the search must stop, with
+  /// the reason in `why`.
+  bool sync_with_shared(LimitReason* why);
+  void donate_open_nodes();
+  /// At the end of run(): what this subtree leaves open, and the pseudocosts it learned.
+  void leave_shared(bool limit_hit, LimitReason why, bool gap_target_met);
+
   /// Apply a node's whole domain, walking from the node to the root.
   void enter(Index node_index);
   /// Restore the domain saved by the last enter().
@@ -599,6 +622,14 @@ class BranchAndBound {
   static constexpr int kConflictMinimizeChecks = 32;
   static constexpr Count kConflictChecksPerNode = 8;
   static constexpr Count kConflictChecksBase = 2000;
+  /// The parallel search this worker belongs to, or null (#222).
+  SharedSearch* shared_ = nullptr;
+  const SubtreeSpec* seed_ = nullptr;
+  Count nodes_reported_ = 0;
+  std::vector<double> pseudo_start_down_sum_;
+  std::vector<double> pseudo_start_up_sum_;
+  std::vector<Count> pseudo_start_down_count_;
+  std::vector<Count> pseudo_start_up_count_;
   Timer timer_;
 };
 

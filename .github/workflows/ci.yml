@@ -21,6 +21,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  thread-sanitizer:
+    # The parallel tree search (#222) under ThreadSanitizer: a data race there shows up as a
+    # wrong bound once a month, not as a crash. OpenMP is off in this build because libgomp
+    # is not instrumented and TSan cannot see its synchronisation.
+    name: TSan (MILP tree)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build zlib1g-dev
+
+      - name: Configure
+        run: |
+          cmake -G Ninja -B build             -DCMAKE_BUILD_TYPE=RelWithDebInfo             -DSANKHYA_TSAN=ON             -DSANKHYA_WITH_OPENMP=OFF             -DSANKHYA_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -j --target sankhya_tests
+
+      - name: MILP tests under ThreadSanitizer
+        env:
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+        run: >-
+          ./build/tests/sankhya_tests
+          --gtest_filter='ParallelTree.*:BranchAndBound*.*:SolutionPool*.*:NodeSelection*.*:ResourceLimits.*'
+
   build-and-test:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
