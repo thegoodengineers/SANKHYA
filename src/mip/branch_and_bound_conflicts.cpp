@@ -23,12 +23,19 @@ namespace sankhya::mip {
 void BranchAndBound::init_conflicts() {
   conflicts_enabled_ = options_.get_bool("conflict_analysis");
   conflict_minimize_ = options_.get_bool("conflict_minimize");
+  const std::string use = options_.get_string("conflict_use");
+  conflict_use_ = use == "none"    ? ConflictUse::kNone
+                  : use == "prune" ? ConflictUse::kPrune
+                                   : ConflictUse::kPropagate;
   conflict_max_size_ = static_cast<std::size_t>(options_.get_int("conflict_max_size"));
   conflicts_ = ConflictStore(
       conflicts_enabled_ ? static_cast<std::size_t>(options_.get_int("conflict_max")) : 0);
 }
 
 bool BranchAndBound::propagate_conflicts(bool* changed) {
+  // conflict_use (#292's ablation): the search may ignore what it learned, or use it only to
+  // prune. The analysis's own checks always read the store; that only shortens conflicts.
+  if (!analysing_ && conflict_use_ == ConflictUse::kNone) return true;
   for (ConflictStore::Entry& entry : conflicts_.entries()) {
     const ConflictVerdict verdict = check_conflict(entry.literals, working_.col_lower,
                                                    working_.col_upper, integrality_tolerance_);
@@ -41,6 +48,7 @@ bool BranchAndBound::propagate_conflicts(bool* changed) {
       if (!analysing_) conflict_pruned_ = true;
       return false;
     }
+    if (!analysing_ && conflict_use_ == ConflictUse::kPrune) continue;
     // Every other literal holds, so this one must be false: an integer bound one step past it.
     const ConflictLiteral bound =
         negation(entry.literals[static_cast<std::size_t>(verdict.implied)]);

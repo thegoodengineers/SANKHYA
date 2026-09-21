@@ -586,6 +586,9 @@ class BranchAndBound {
   /// search is inside an analysis (whose trial propagations must not count as uses).
   bool conflicts_enabled_ = false;
   bool conflict_minimize_ = true;
+  /// conflict_use: what the search does with a learned conflict (#292's ablation).
+  enum class ConflictUse { kNone, kPrune, kPropagate };
+  ConflictUse conflict_use_ = ConflictUse::kPropagate;
   std::size_t conflict_max_size_ = 0;
   ConflictStore conflicts_;
   ConflictStats conflict_stats_;

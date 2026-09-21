@@ -477,6 +477,56 @@ TEST(Conflict, ANodeLimitLeavesAValidBound) {
   EXPECT_GT(limited, 3);
 }
 
+TEST(Conflict, EachUseSettingDoesWhatItSaysAndKeepsTheOptimum) {
+  // The ablation's arms (#292): none learns but uses nothing, prune never fixes a bound,
+  // propagate does both. All three must still agree with enumeration.
+  std::mt19937 rng(2922);
+  std::int64_t learned_none = 0;
+  std::int64_t used_none = 0;
+  std::int64_t tightened_prune = 0;
+  std::int64_t used_propagate = 0;
+  for (int trial = 0; trial < 150; ++trial) {
+    const Model model = random_integer_program(rng, trial % 2 == 0);
+    const std::vector<std::vector<double>> points = feasible_points(model);
+    double best = 0.0;
+    if (!points.empty()) {
+      const bool maximize = model.sense == ObjSense::kMaximize;
+      best = objective_of(model, points.front());
+      for (const std::vector<double>& x : points) {
+        best = maximize ? std::max(best, objective_of(model, x))
+                        : std::min(best, objective_of(model, x));
+      }
+    }
+    for (const char* use : {"none", "prune", "propagate"}) {
+      testing::TempFile out("", ".json");
+      Options options = searching(true, out.path());
+      options.set_string("conflict_use", use);
+      const Solution solved = solve(model, options);
+      if (points.empty()) {
+        EXPECT_EQ(solved.status, SolveStatus::kInfeasible) << use << " trial " << trial;
+      } else {
+        ASSERT_EQ(solved.status, SolveStatus::kOptimal) << use << " trial " << trial;
+        EXPECT_NEAR(solved.objective, best, 1e-7) << use << " trial " << trial;
+      }
+      const nlohmann::json report = read_json(out.path());
+      const auto pruned = report["nodes_pruned"].get<std::int64_t>();
+      const auto tightened = report["tightenings"].get<std::int64_t>();
+      if (std::string(use) == "none") {
+        learned_none += report["learned"].get<std::int64_t>();
+        used_none += pruned + tightened;
+      } else if (std::string(use) == "prune") {
+        tightened_prune += tightened;
+      } else {
+        used_propagate += pruned + tightened;
+      }
+    }
+  }
+  EXPECT_GT(learned_none, 50) << "none still learns";
+  EXPECT_EQ(used_none, 0) << "none uses nothing";
+  EXPECT_EQ(tightened_prune, 0) << "prune fixes no bound";
+  EXPECT_GT(used_propagate, 5);
+}
+
 TEST(Conflict, AResumedSearchWithConflictsOnReachesTheEnumeratedOptimum) {
   // The checkpoint (#287) saves the open nodes, not the conflicts, so a resumed search learns
   // afresh from nodes whose ancestry it rebuilt. The optimum must not notice.

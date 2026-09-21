@@ -570,6 +570,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"conflict_use",
+         OptionType::String,
+         std::string("propagate"),
+         "MILP: what the search does with a learned conflict (#292): propagate (default; "
+         "prune a node whose decisions contain it, and fix the one undecided literal "
+         "false), prune (only the first), or none (learn and store, use nothing: the "
+         "analysis's cost alone, for the ablation).",
+         0.0,
+         0.0,
+         {"propagate", "prune", "none"}});
     s.push_back({"conflict_max",
                  OptionType::Int,
                  std::int64_t{10000},
