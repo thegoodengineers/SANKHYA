@@ -185,6 +185,10 @@ set(SANKHYA_CORE_SOURCES
   src/core/resource_limits.cpp
   src/core/solve.cpp
   src/core/engine_selection.cpp
+  src/solver_engine/solver_engine.cpp
+  src/solver_engine/solver_registry.cpp
+  src/solver_engine/builtin_engines.cpp
+  src/solver_engine/solver_selector.cpp
   src/io/line_reader.cpp
   src/io/lp_reader.cpp
   src/io/mps_bounds.cpp
