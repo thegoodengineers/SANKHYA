@@ -50,6 +50,11 @@ Model tiny_lp() {
   model.matrix.add_entry(0, 0, 1.0);
   model.matrix.add_entry(0, 1, 1.0);
   model.matrix.finalize();
+  // Model::fingerprint() (used by solve()'s deterministic-mode logging) reads the Hessian
+  // unconditionally, even for a pure LP - an empty one still has to be finalized, matching
+  // the convention tests/unit/test_miqp.cpp already follows.
+  model.hessian.reset(2, 2);
+  model.hessian.finalize();
   return model;
 }
 
@@ -68,6 +73,8 @@ Model tiny_milp() {
   model.matrix.reset(1, 1);
   model.matrix.add_entry(0, 0, 2.0);
   model.matrix.finalize();
+  model.hessian.reset(1, 1);
+  model.hessian.finalize();
   return model;
 }
 
