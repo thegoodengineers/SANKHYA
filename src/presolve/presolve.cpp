@@ -238,6 +238,7 @@ void log_presolve_report(const Solution::PresolveReport& report, Logger& logger)
   line("free column singletons", report.free_column_singletons);
   line("doubleton equations", report.doubleton_equations);
   line("dual fixed columns", report.dual_fixed_columns);
+  line("parallel rows", report.parallel_rows);
   line("integer bounds rounded", report.integer_bounds_rounded);
   // Declines are reported for the same reason the reductions are: a model that came back
   // barely smaller than it went in is explained by these, not by the counts above.
@@ -257,6 +258,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   const Index n = model.num_cols();
   const double feasibility = options.get_double("primal_feasibility_tolerance");
   const bool dual_fixing = options.get_bool("presolve_dual_fixing");
+  const bool parallel_rows = options.get_bool("presolve_parallel_rows");
 
   Timer presolve_clock;
   Workspace work;
@@ -954,6 +956,106 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       }
     }
 
+    // PARALLEL ROWS (#412; Andersen & Andersen 1995, sec. 5). Two live rows whose entries
+    // are proportional say the same thing twice. The later row's bounds, divided by the
+    // scale (and swapped when it is negative), tighten the earlier row's, and the later row
+    // goes; postsolve hands its dual back to it when the bound that binds was its own. Rows
+    // are bucketed by their live column pattern so only rows that could be parallel are
+    // compared, and compared exactly enough: every coefficient must match its scaled
+    // counterpart to a relative 1e-9. Crossed bounds after a merge are not declared
+    // infeasible here; the two rows are simply left as they are for the engine to refuse.
+    if (parallel_rows && !result.proved_infeasible) {
+      constexpr double kParallelRowTolerance = 1e-9;
+      constexpr double kInf = std::numeric_limits<double>::infinity();
+      std::unordered_map<std::size_t, std::vector<Index>> buckets;
+      std::vector<std::pair<Index, double>> live_row;
+      std::vector<std::pair<Index, double>> live_kept;
+      const auto live_entries = [&](Index row, std::vector<std::pair<Index, double>>* out) {
+        out->clear();
+        for (const auto& [column, coefficient] : work.rows[static_cast<std::size_t>(row)]) {
+          if (work.col_dead[static_cast<std::size_t>(column)]) continue;
+          if (std::fabs(coefficient) <= tol::kZeroDrop) continue;
+          out->emplace_back(column, coefficient);
+        }
+        std::sort(out->begin(), out->end());
+        // A column listed twice (fill-in can do that) is one entry with the summed value.
+        std::size_t write = 0;
+        for (std::size_t read = 0; read < out->size(); ++read) {
+          if (write > 0 && (*out)[write - 1].first == (*out)[read].first) {
+            (*out)[write - 1].second += (*out)[read].second;
+          } else {
+            (*out)[write++] = (*out)[read];
+          }
+        }
+        out->resize(write);
+      };
+      for (Index row = 0; row < m; ++row) {
+        const auto r = static_cast<std::size_t>(row);
+        if (work.row_dead[r] || work.row_count[r] < 2) continue;
+        live_entries(row, &live_row);
+        if (live_row.size() < 2) continue;
+        std::size_t key = live_row.size();
+        for (const auto& [column, coefficient] : live_row) {
+          (void)coefficient;
+          key = key * 1000003u + static_cast<std::size_t>(column);
+        }
+        std::vector<Index>& bucket = buckets[key];
+        bool merged = false;
+        for (const Index kept : bucket) {
+          const auto kr = static_cast<std::size_t>(kept);
+          if (work.row_dead[kr]) continue;
+          live_entries(kept, &live_kept);
+          if (live_kept.size() != live_row.size()) continue;
+          const double scale = live_row[0].second / live_kept[0].second;
+          bool proportional = std::isfinite(scale) && scale != 0.0;
+          for (std::size_t q = 0; q < live_row.size() && proportional; ++q) {
+            if (live_row[q].first != live_kept[q].first) {
+              proportional = false;
+              break;
+            }
+            const double expected = scale * live_kept[q].second;
+            proportional = std::fabs(live_row[q].second - expected) <=
+                           kParallelRowTolerance * std::max({1.0, std::fabs(live_row[q].second),
+                                                             std::fabs(expected)});
+          }
+          if (!proportional) continue;
+          // This row's bounds in the kept row's units: divided by the scale, and swapped
+          // when the scale is negative.
+          const double lo = work.row_lower[r];
+          const double hi = work.row_upper[r];
+          double scaled_lower = -kInf;
+          double scaled_upper = kInf;
+          if (scale > 0.0) {
+            if (finite(lo)) scaled_lower = lo / scale;
+            if (finite(hi)) scaled_upper = hi / scale;
+          } else {
+            if (finite(hi)) scaled_lower = hi / scale;
+            if (finite(lo)) scaled_upper = lo / scale;
+          }
+          const double new_lower = std::max(work.row_lower[kr], scaled_lower);
+          const double new_upper = std::min(work.row_upper[kr], scaled_upper);
+          if (new_lower > new_upper + feasibility) break;  // crossed: the engine's to refuse
+          Record record;
+          record.kind = Record::Kind::kParallelRow;
+          record.index = row;
+          record.partner_row = kept;
+          record.scale = scale;
+          record.row_lower = lo;
+          record.row_upper = hi;
+          record.lower_from_removed = scaled_lower > work.row_lower[kr];
+          record.upper_from_removed = scaled_upper < work.row_upper[kr];
+          work.row_lower[kr] = new_lower;
+          work.row_upper[kr] = new_upper;
+          result.records.push_back(record);
+          kill_row(&work, row);
+          changed = true;
+          merged = true;
+          break;
+        }
+        if (!merged) bucket.push_back(row);
+      }
+    }
+
     if (!changed) {
       reached_fixed_point = true;
       break;
@@ -1124,6 +1226,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       case Record::Kind::kFixedColumn: ++report.fixed_columns; break;
       case Record::Kind::kEmptyColumn: ++report.empty_columns; break;
       case Record::Kind::kDualFixedColumn: ++report.dual_fixed_columns; break;
+      case Record::Kind::kParallelRow: ++report.parallel_rows; break;
       case Record::Kind::kFreeColumnSingleton: ++report.free_column_singletons; break;
       case Record::Kind::kDoubletonEquation: ++report.doubleton_equations; break;
       case Record::Kind::kForcingRow: break;
@@ -1248,6 +1351,7 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
       case Record::Kind::kSingletonRow:
       case Record::Kind::kFreeColumnSingleton:
       case Record::Kind::kDoubletonEquation:
+      case Record::Kind::kParallelRow:
         row_removed_at[static_cast<std::size_t>(rec.index)] = p;
         break;
       default: break;
@@ -1409,6 +1513,42 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   for (std::size_t idx = result.records.size(); idx-- > 0;) {
     const Record& record = result.records[idx];
     switch (record.kind) {
+      case Record::Kind::kParallelRow: {
+        // The kept row carries the merged bounds; when the bound that binds was the removed
+        // row's, the dual belongs to the removed row: a_removed = scale * a_kept, so
+        // y_removed = y_kept / scale prices the same columns, and the kept row goes slack.
+        // With a negative scale the removed row's OTHER bound is the one in use. Before the
+        // reduced duals are mapped in, the kept row's status is unknown and nothing moves;
+        // this case is replayed again after the mapping, where it decides.
+        const auto removed = static_cast<std::size_t>(record.index);
+        const auto kept = static_cast<std::size_t>(record.partner_row);
+        solution.row_dual[removed] = 0.0;
+        solution.row_status[removed] = BasisStatus::kBasic;
+        const BasisStatus kept_status = solution.row_status[kept];
+        const bool moves =
+            (kept_status == BasisStatus::kAtLower && record.lower_from_removed) ||
+            (kept_status == BasisStatus::kAtUpper && record.upper_from_removed);
+        if (moves && record.scale != 0.0) {
+          solution.row_dual[removed] = solution.row_dual[kept] / record.scale;
+          solution.row_dual[kept] = 0.0;
+          const bool at_lower = kept_status == BasisStatus::kAtLower;
+          solution.row_status[removed] = (at_lower == (record.scale > 0.0))
+                                             ? BasisStatus::kAtLower
+                                             : BasisStatus::kAtUpper;
+          solution.row_status[kept] = BasisStatus::kBasic;
+        }
+        // The same transfer for a Farkas certificate: a positive weight uses a row's lower
+        // bound, a negative one its upper, and the weight follows the bound to its owner.
+        if (!solution.farkas_dual.empty() && record.scale != 0.0) {
+          double& weight = solution.farkas_dual[kept];
+          if ((weight > 0.0 && record.lower_from_removed) ||
+              (weight < 0.0 && record.upper_from_removed)) {
+            solution.farkas_dual[removed] = weight / record.scale;
+            weight = 0.0;
+          }
+        }
+        break;
+      }
       case Record::Kind::kDualFixedColumn: {
         // At a bound of the ORIGINAL box when the value is one, which is what dual fixing
         // chose; basic when a singleton row or an integer rounding had moved the bound

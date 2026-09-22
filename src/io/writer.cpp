@@ -480,6 +480,7 @@ bool write_stats_json(const std::string& path, const Model& model, const Solutio
           {"free_column_singletons", report.free_column_singletons},
           {"doubleton_equations", report.doubleton_equations},
           {"dual_fixed_columns", report.dual_fixed_columns},
+          {"parallel_rows", report.parallel_rows},
           {"integer_bounds_rounded", report.integer_bounds_rounded},
           {"bounds_tightened", report.bounds_tightened}}},
         {"declined",

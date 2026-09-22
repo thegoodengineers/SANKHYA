@@ -63,6 +63,12 @@ struct Record {
     /// in this row - which is the fill-in step: every OTHER row containing the eliminated
     /// column has its coefficient on `partner_column` adjusted and its bounds shifted.
     kDoubletonEquation,
+    /// Parallel rows (#412; Andersen & Andersen 1995): a row that is a scalar multiple of an
+    /// earlier live row, `a_k = scale * a_i`. Its bounds, divided by the scale (and swapped
+    /// when the scale is negative), tighten the kept row `partner_row`, and the row goes. The
+    /// two flags say which of the kept row's bounds came from the removed row, because that
+    /// is where the dual belongs when that bound binds.
+    kParallelRow,
   };
 
   Kind kind = Kind::kEmptyRow;
@@ -85,6 +91,11 @@ struct Record {
   /// partner - the whole point of a free SINGLETON is that nothing else shares the row.
   Index partner_column = -1;
   double partner_coefficient = 0.0;
+  // ---- kParallelRow only -----------------------------------------------------------------
+  Index partner_row = -1;           ///< the row kept, whose bounds absorbed this one's
+  double scale = 0.0;               ///< a_removed = scale * a_kept
+  bool lower_from_removed = false;  ///< the kept row's lower bound is this row's, scaled
+  bool upper_from_removed = false;  ///< the kept row's upper bound is this row's, scaled
   /// The eliminated column's OWN cost at the moment it was eliminated - not
   /// Model::col_cost[column], which is wrong whenever an EARLIER reduction already folded
   /// something into it (it was a `keep` survivor of a still-earlier doubleton, say). Needed

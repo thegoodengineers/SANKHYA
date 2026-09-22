@@ -387,6 +387,7 @@ class Solution {
     Count free_column_singletons = 0;
     Count doubleton_equations = 0;
     Count dual_fixed_columns = 0;  ///< #412: fixed at a bound by cost and row signs alone
+    Count parallel_rows = 0;       ///< #412: a scalar multiple of another row, merged into it
     Count bounds_tightened = 0;
     Count integer_bounds_rounded = 0;
 

@@ -264,6 +264,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"presolve_parallel_rows",
+                 OptionType::Bool,
+                 false,
+                 "Merge parallel rows in presolve (#412; Andersen and Andersen 1995): a row "
+                 "that is a scalar multiple of an earlier one has its bounds, scaled, folded "
+                 "into that row's and is removed; postsolve gives its dual back to it when the "
+                 "bound that binds was its own. Rows whose merged bounds would cross are left "
+                 "alone for the engine to refuse. Only read when presolve is on. OFF until the "
+                 "Netlib and MIPLIB re-runs on main say what it changes.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"tree_cut_depth",
                  OptionType::Int,
                  std::int64_t{0},
