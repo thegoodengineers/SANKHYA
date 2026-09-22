@@ -35,28 +35,38 @@ Options with_policy(const char* policy) {
 /// and the relaxation cannot tell the good packings from the bad ones. Deterministic weights
 /// rather than a random generator, so the tree is the same on every machine.
 ///
-/// At 18 columns this costs about a tenth of a second and a few hundred nodes - enough tree
-/// for the policies to disagree about, little enough for a unit test.
-Model correlated_knapsack(int columns) {
+/// At 18 columns and one row this costs about a tenth of a second and a few hundred nodes -
+/// enough tree for the policies to disagree about, little enough for a unit test. With more
+/// rows (each with its own weights, the first row's weights setting the values) the
+/// relaxation has several fractional columns at a node, which is what the best-estimate
+/// policy's pseudocost sum needs to order the tree differently from best-bound.
+Model correlated_knapsack(int columns, int rows = 1) {
   Model model;
   const auto n = static_cast<Index>(columns);
+  const auto m = static_cast<Index>(rows);
   model.sense = ObjSense::kMaximize;
   model.col_cost.resize(static_cast<std::size_t>(n));
   model.col_lower.assign(static_cast<std::size_t>(n), 0.0);
   model.col_upper.assign(static_cast<std::size_t>(n), 1.0);
   model.col_type.assign(static_cast<std::size_t>(n), VarType::kInteger);
-  model.matrix.reset(1, n);
-  double total = 0.0;
+  model.matrix.reset(m, n);
+  std::vector<double> total(static_cast<std::size_t>(m), 0.0);
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
-    const double weight = 20.0 + static_cast<double>((j * 37) % 51);
-    model.col_cost[u] = weight + 10.0;
-    model.matrix.add_entry(0, j, weight);
-    total += weight;
+    for (Index r = 0; r < m; ++r) {
+      const double weight = 20.0 + static_cast<double>((j * 37 + r * 29) % 51);
+      if (r == 0) model.col_cost[u] = weight + 10.0;
+      model.matrix.add_entry(r, j, weight);
+      total[static_cast<std::size_t>(r)] += weight;
+    }
   }
   model.matrix.finalize();
-  model.row_lower = {-kInfinity};
-  model.row_upper = {std::floor(total / 2.0)};
+  model.row_lower.assign(static_cast<std::size_t>(m), -kInfinity);
+  model.row_upper.resize(static_cast<std::size_t>(m));
+  for (Index r = 0; r < m; ++r) {
+    model.row_upper[static_cast<std::size_t>(r)] =
+        std::floor(total[static_cast<std::size_t>(r)] / 2.0);
+  }
   model.hessian.reset(n, n);
   model.hessian.finalize();
   EXPECT_EQ(model.validate(), "");
@@ -80,10 +90,17 @@ TEST(NodeSelection, EveryPolicyReachesTheSameOptimum) {
 
 TEST(NodeSelection, ThePoliciesExploreDifferentTrees) {
   // If they did not, there would be no framework here - only four names for one policy.
-  // Measured on this model: best-bound 579 nodes, depth-first 641, best-estimate 737. The
+  // Measured on this model: best-bound 467 nodes, depth-first 1801, best-estimate 517. The
   // test asserts they differ rather than pinning those numbers, which any change to
   // branching or pruning would move without anything being wrong.
-  const Model model = correlated_knapsack(18);
+  //
+  // Three rows, not one. On the single-row knapsack every node has one fractional column,
+  // so the estimate is the bound plus one term and best-estimate orders the tree exactly as
+  // best-bound does; it used to differ there (579 against 737) only because the root dive's
+  // fixed bounds were still in the working model while the root's strong branching ran,
+  // which #414 stopped. With several fractional columns per node the estimate is a real sum
+  // and the two policies part ways on their own merits.
+  const Model model = correlated_knapsack(16, 3);
   const Solution best_bound = solve(model, with_policy("best-bound"));
   const Solution depth_first = solve(model, with_policy("depth-first"));
   const Solution best_estimate = solve(model, with_policy("best-estimate"));

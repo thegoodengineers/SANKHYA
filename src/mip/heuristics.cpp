@@ -257,4 +257,171 @@ std::vector<double> feasibility_pump(const Model& model,
   return {};
 }
 
+const char* to_string(DiveRule rule) {
+  switch (rule) {
+    case DiveRule::kFractional: return "fractional diving";
+    case DiveRule::kCoefficient: return "coefficient diving";
+    case DiveRule::kVectorLength: return "vector length diving";
+    case DiveRule::kGuided: return "guided diving";
+  }
+  return "diving";
+}
+
+DiveChoice choose_dive_column(const Model& model, const Locks& locks,
+                              const std::vector<Index>& integer_columns,
+                              const std::vector<double>& x, DiveRule rule,
+                              const std::vector<double>& incumbent,
+                              double integrality_tolerance) {
+  DiveChoice best;
+  if (rule == DiveRule::kGuided && incumbent.size() != x.size()) return best;
+  double best_score = std::numeric_limits<double>::infinity();
+  const double sense = model.sense_multiplier();
+  for (const Index j : integer_columns) {
+    const auto u = static_cast<std::size_t>(j);
+    const double v = x[u];
+    const double nearest = std::round(v);
+    const double fraction = std::fabs(v - nearest);
+    if (fraction <= integrality_tolerance) continue;
+    const double down = std::floor(v);
+    const double up = std::ceil(v);
+    bool round_up = nearest > v;
+    double score = fraction;
+    switch (rule) {
+      case DiveRule::kFractional:
+        // The least fractional column, to its nearest integer: the rule the root dive has
+        // always used (#25) - lock in what the relaxation already nearly agrees on.
+        break;
+      case DiveRule::kCoefficient: {
+        // Achterberg 2007, sec. 9.2.2: the direction fewer rows object to, and among the
+        // columns the one with the fewest objections, ties broken by fractionality.
+        const int up_locks = locks.up[u];
+        const int down_locks = locks.down[u];
+        round_up = up_locks < down_locks || (up_locks == down_locks && round_up);
+        score = static_cast<double>(round_up ? up_locks : down_locks) + fraction;
+        break;
+      }
+      case DiveRule::kVectorLength: {
+        // Achterberg 2007, sec. 9.2.4: round against the objective (up when the cost is
+        // non-negative in minimise space), and prefer the column whose objective increase
+        // is spread over the most rows - on a covering model one such fix satisfies many.
+        const double cost = sense * model.col_cost[u];
+        round_up = cost >= 0.0;
+        const double increase = round_up ? (up - v) * cost : (v - down) * (-cost);
+        score = increase / static_cast<double>(model.matrix.column(j).size + 1);
+        break;
+      }
+      case DiveRule::kGuided: {
+        // Achterberg 2007, sec. 9.2.3: towards the incumbent, the closest column first.
+        const double target = incumbent[u];
+        round_up = target >= up;
+        score = std::fabs(v - target);
+        break;
+      }
+    }
+    // Strictly better only, so the lowest index wins a tie and a rerun makes the same dive.
+    if (score < best_score) {
+      best_score = score;
+      best.column = j;
+      best.value = clamp_to(round_up ? up : down, model.col_lower[u], model.col_upper[u]);
+    }
+  }
+  return best;
+}
+
+bool rens_submodel(const Model& model, const std::vector<Index>& integer_columns,
+                   const std::vector<double>& relaxation, double min_fixed_fraction,
+                   double tolerance, Model* out, Count* fixed) {
+  *fixed = 0;
+  Count integral = 0;
+  for (const Index j : integer_columns) {
+    const auto u = static_cast<std::size_t>(j);
+    if (std::fabs(relaxation[u] - std::round(relaxation[u])) <= tolerance) ++integral;
+  }
+  if (integer_columns.empty() ||
+      static_cast<double>(integral) <
+          min_fixed_fraction * static_cast<double>(integer_columns.size())) {
+    return false;
+  }
+  *out = model;
+  for (const Index j : integer_columns) {
+    const auto u = static_cast<std::size_t>(j);
+    const double v = relaxation[u];
+    const double nearest = std::round(v);
+    if (std::fabs(v - nearest) <= tolerance) {
+      const double value = clamp_to(nearest, model.col_lower[u], model.col_upper[u]);
+      out->col_lower[u] = value;
+      out->col_upper[u] = value;
+    } else {
+      // The two integers around the value, inside the column's own bounds.
+      const double low = std::floor(v);
+      const double high = std::ceil(v);
+      out->col_lower[u] =
+          is_finite_bound(model.col_lower[u]) ? std::max(model.col_lower[u], low) : low;
+      out->col_upper[u] =
+          is_finite_bound(model.col_upper[u]) ? std::min(model.col_upper[u], high) : high;
+    }
+  }
+  *fixed = integral;
+  return true;
+}
+
+namespace {
+/// auto follows the master switch; on and off decide alone.
+bool resolve_switch(const Options& options, const char* name, bool master) {
+  const std::string& value = options.get_string(name);
+  return value == "on" || (value == "auto" && master);
+}
+}  // namespace
+
+HeuristicSchedule HeuristicSchedule::from(const Options& options) {
+  HeuristicSchedule s;
+  const bool master = options.get_bool("mip_heuristics");
+  s.lock_rounding = resolve_switch(options, "mip_heur_lock_rounding", master);
+  s.repair = resolve_switch(options, "mip_heur_repair", master);
+  s.pump = resolve_switch(options, "mip_heur_pump", master);
+  s.rins = resolve_switch(options, "mip_heur_rins", master);
+  s.rens = resolve_switch(options, "mip_heur_rens", master);
+  s.dive[static_cast<std::size_t>(DiveRule::kFractional)] =
+      resolve_switch(options, "mip_heur_dive_fractional", master);
+  s.dive[static_cast<std::size_t>(DiveRule::kCoefficient)] =
+      resolve_switch(options, "mip_heur_dive_coefficient", master);
+  s.dive[static_cast<std::size_t>(DiveRule::kVectorLength)] =
+      resolve_switch(options, "mip_heur_dive_vector_length", master);
+  s.dive[static_cast<std::size_t>(DiveRule::kGuided)] =
+      resolve_switch(options, "mip_heur_dive_guided", master);
+  s.dive_backtrack = options.get_bool("mip_dive_backtrack");
+  s.rins_frequency = options.get_int("mip_rins_frequency");
+  s.rins_nodes = options.get_int("mip_rins_nodes");
+  s.rens_nodes = options.get_int("mip_rens_nodes");
+  s.dive_frequency = options.get_int("mip_dive_frequency");
+  s.dive_lp_resolves = static_cast<int>(options.get_int("mip_dive_lp_resolves"));
+  s.pump_rounds = static_cast<int>(options.get_int("mip_pump_rounds"));
+  s.seconds_budgets = !options.get_bool("deterministic");
+  return s;
+}
+
+bool HeuristicSchedule::any_optional() const {
+  return lock_rounding || repair || pump || rins || rens ||
+         dive[static_cast<std::size_t>(DiveRule::kCoefficient)] ||
+         dive[static_cast<std::size_t>(DiveRule::kVectorLength)] ||
+         dive[static_cast<std::size_t>(DiveRule::kGuided)];
+}
+
+std::string HeuristicSchedule::names() const {
+  std::string out = "rounding";
+  const auto add = [&out](bool on, const char* name) {
+    if (!on) return;
+    out += ", ";
+    out += name;
+  };
+  add(lock_rounding, "lock rounding");
+  add(repair, "repair");
+  for (std::size_t r = 0; r < kDiveRules; ++r)
+    add(dive[r], to_string(static_cast<DiveRule>(r)));
+  add(pump, "feasibility pump");
+  add(rins, "RINS");
+  add(rens, "RENS");
+  return out;
+}
+
 }  // namespace sankhya::mip

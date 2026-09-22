@@ -30,21 +30,32 @@ inline constexpr double kMipRelativeGap = 1e-4;
 /// MIP termination: stop when (incumbent - dual bound) falls below this in absolute terms.
 inline constexpr double kMipAbsoluteGap = 1e-6;
 
-/// Diving heuristic (root node only): maximum integer columns fixed in one dive before it
-/// gives up. Bounds the heuristic's own cost independently of instance size - Achterberg,
+/// Diving heuristics (#25, #414): maximum integer columns fixed in one dive before it gives
+/// up. Bounds the heuristic's own cost independently of instance size - Achterberg,
 /// "Constraint Integer Programming" (thesis, 2007), ch. 6, notes a dive's payoff is
 /// concentrated in its first handful of fixes, so capping it well short of the full integer
 /// column count keeps a dive on a large MILP from itself becoming the expensive part of
-/// solving the root node.
+/// solving the node it runs at.
 inline constexpr int kDivingMaxDepth = 50;
 
-/// Diving heuristic (root node only): maximum LP re-solves in one dive. In this
-/// implementation every fixed column costs exactly one re-solve, so this moves together
-/// with kDivingMaxDepth today - kept as its own constant because the two bound different
-/// things (how much of the box the dive may fix vs. how much simplex work it may spend
-/// doing so), and a future dive that backtracks or retries would resolve LPs without fixing
-/// a new column.
+/// Diving heuristics: maximum LP re-solves in one dive, the default of mip_dive_lp_resolves.
+/// Without a backtrack every fixed column costs exactly one re-solve, so this moves together
+/// with kDivingMaxDepth - kept as its own constant because the two bound different things
+/// (how much of the box the dive may fix vs. how much simplex work it may spend doing so),
+/// and a dive that backtracks (mip_dive_backtrack, #414) re-solves without fixing a new
+/// column.
 inline constexpr int kDivingMaxLpResolves = 50;
+
+/// Sub-MIP heuristics (RINS #290, RENS #414): the least fraction of the integer columns the
+/// sub-model must fix for the neighbourhood to be one. Below it the sub-MIP is nearly the
+/// whole model, and the search would be paying for a second search; Danna, Rothberg and
+/// Le Pape (2005) and Berthold (2014) both stop at a half.
+inline constexpr double kSubMipMinFixedFraction = 0.5;
+
+/// Sub-MIP heuristics: the share of the main search's nodes so far that its sub-MIPs may
+/// have spent in total, and, when the solve is not deterministic, the share of the remaining
+/// time one sub-MIP may take. A heuristic that out-spends the search it serves is not one.
+inline constexpr double kSubMipBudgetShare = 0.1;
 
 /// Reliability branching (#69; Achterberg, Koch & Martin, "Branching rules revisited",
 /// Operations Research Letters 33 (2005), 42-54). A column's pseudocost in a direction is

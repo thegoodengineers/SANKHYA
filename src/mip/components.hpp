@@ -31,11 +31,14 @@ namespace sankhya::mip {
 /// calls into) already reads for the same purpose; this does not add a new option or change
 /// what any of them do.
 struct MilpComponents {
-  std::string node_selection;       ///< NodeSelector: mip_node_selection (#293)
-  std::string branching;            ///< BranchingStrategy: mip_branching (#69)
-  std::string relaxation_engine;    ///< RelaxationEngine: mip_node_engine, the node LP (#65)
-  bool cuts_enabled = false;        ///< CutManager: enable_root_cuts (#221, #358)
-  bool heuristics_enabled = false;  ///< HeuristicManager: mip_heuristics (#290)
+  std::string node_selection;     ///< NodeSelector: mip_node_selection (#293)
+  std::string branching;          ///< BranchingStrategy: mip_branching (#69)
+  std::string relaxation_engine;  ///< RelaxationEngine: mip_node_engine, the node LP (#65)
+  bool cuts_enabled = false;      ///< CutManager: enable_root_cuts (#221, #358)
+  /// HeuristicManager: anything beyond rounding and the fractional root dive is on, from
+  /// mip_heuristics and the per-heuristic mip_heur_* switches resolved together (#290, #414)
+  bool heuristics_enabled = false;
+  std::string heuristics;  ///< the heuristics that run, by name, rounding first (#414)
   bool conflict_analysis_enabled = false;  ///< ConflictManager: conflict_analysis (#292)
 };
 

@@ -56,6 +56,21 @@ std::vector<Index> all_columns(const Model& m) {
   return cols;
 }
 
+/// Every per-heuristic switch (#414), so a test can force the lot on by name.
+constexpr const char* kEverySwitch[] = {"mip_heur_lock_rounding",
+                                        "mip_heur_repair",
+                                        "mip_heur_pump",
+                                        "mip_heur_rins",
+                                        "mip_heur_rens",
+                                        "mip_heur_dive_fractional",
+                                        "mip_heur_dive_coefficient",
+                                        "mip_heur_dive_vector_length",
+                                        "mip_heur_dive_guided"};
+
+constexpr std::size_t rule_index(DiveRule rule) {
+  return static_cast<std::size_t>(rule);
+}
+
 /// Independent of everything under test: integral, inside the box, every row satisfied.
 bool feasible(const Model& m, const std::vector<double>& x) {
   if (x.size() != static_cast<std::size_t>(m.num_cols())) return false;
@@ -249,13 +264,22 @@ TEST(Heuristics, TheSearchWithEveryHeuristicForcedOnAgreesWithBruteForce) {
       any = true;
     }
 
-    for (const bool heuristics : {true, false}) {
+    // Three arms: the master switch on, off, and every switch forced on by name with the
+    // dives at every node, the backtrack and RENS (#414), so every path is exercised.
+    for (int arm = 0; arm < 3; ++arm) {
+      const bool heuristics = arm != 1;
       Options options;
       options.set_bool("log_to_console", false);
       options.set_bool("presolve", false);
-      options.set_bool("mip_heuristics", heuristics);
+      options.set_bool("mip_heuristics", arm == 0);
       options.set_int("mip_rins_frequency", 1);
       options.set_int("mip_pump_rounds", 30);
+      if (arm == 2) {
+        for (const char* name : kEverySwitch) options.set_string(name, "on");
+        options.set_int("mip_dive_frequency", 1);
+        options.set_bool("mip_dive_backtrack", true);
+        options.set_int("mip_rens_nodes", 3);
+      }
       const Solution solved = solve(m, options);
       ++compared;
       if (!any) {
@@ -271,8 +295,163 @@ TEST(Heuristics, TheSearchWithEveryHeuristicForcedOnAgreesWithBruteForce) {
       EXPECT_TRUE(feasible(m, solved.col_value)) << "trial " << trial;
     }
   }
-  EXPECT_EQ(compared, 240);
+  EXPECT_EQ(compared, 360);
   EXPECT_LT(infeasible, compared);
+}
+
+TEST(Heuristics, EachDiveRulePicksTheColumnItIsNamedFor) {
+  // Three columns in [0, 1]. Row 0: x0 + x1 <= 1 locks both UP; row 1: x0 + x2 >= 0 locks
+  // both DOWN. So x0 has one lock each way and sits in two rows; x1 and x2 in one each.
+  const Model m =
+      integer_model({{1, 1, 0}, {1, 0, 1}}, {-kInf, 0.0}, {1.0, kInf}, {1, 1, 1}, 0.0, 1.0);
+  const Locks locks = compute_locks(m);
+  const std::vector<Index> cols = all_columns(m);
+  const std::vector<double> none;
+
+  // Fractional: the least fractional column, to its nearest integer.
+  DiveChoice c =
+      choose_dive_column(m, locks, cols, {0.3, 0.45, 0.9}, DiveRule::kFractional, none, 1e-6);
+  EXPECT_EQ(c.column, 2);
+  EXPECT_EQ(c.value, 1.0);
+
+  // Coefficient: the fewest locks in the rounding direction, then fractionality. x1 is free
+  // to go down (score 0.4), x2 free to go UP (score 0.3), x0 locked both ways (score 1.5).
+  c = choose_dive_column(m, locks, cols, {0.5, 0.6, 0.7}, DiveRule::kCoefficient, none, 1e-6);
+  EXPECT_EQ(c.column, 2);
+  EXPECT_EQ(c.value, 1.0) << "rounded the way no row locks";
+
+  // Vector length: unit costs, so rounding up costs 0.5 everywhere; x0's cost is spread
+  // over two rows, the others' over one, so x0 wins.
+  c = choose_dive_column(m, locks, cols, {0.5, 0.5, 0.5}, DiveRule::kVectorLength, none, 1e-6);
+  EXPECT_EQ(c.column, 0);
+  EXPECT_EQ(c.value, 1.0) << "against a non-negative cost the rounding goes up";
+
+  // Guided: towards the incumbent, the closest column first - and nothing without one.
+  c = choose_dive_column(m, locks, cols, {0.4, 0.3, 0.9}, DiveRule::kGuided, {0.0, 1.0, 1.0},
+                         1e-6);
+  EXPECT_EQ(c.column, 2);
+  EXPECT_EQ(c.value, 1.0);
+  c = choose_dive_column(m, locks, cols, {0.4, 0.3, 0.9}, DiveRule::kGuided, none, 1e-6);
+  EXPECT_EQ(c.column, -1);
+
+  // An integral point is nothing to fix, under every rule.
+  for (const DiveRule rule : {DiveRule::kFractional, DiveRule::kCoefficient,
+                              DiveRule::kVectorLength, DiveRule::kGuided}) {
+    c = choose_dive_column(m, locks, cols, {1.0, 0.0, 1.0}, rule, {1.0, 0.0, 1.0}, 1e-6);
+    EXPECT_EQ(c.column, -1) << to_string(rule);
+  }
+}
+
+TEST(Heuristics, RensFixesTheIntegralColumnsAndBoxesTheRest) {
+  const Model m = integer_model({{1, 1, 1, 1}}, {-kInf}, {9.0}, {1, 1, 1, 1}, 0.0, 5.0);
+  Model sub;
+  Count fixed = 0;
+  ASSERT_TRUE(rens_submodel(m, all_columns(m), {1.0, 0.0, 2.6, 3.0}, 0.5, 1e-6, &sub, &fixed));
+  EXPECT_EQ(fixed, 3);
+  EXPECT_EQ(sub.col_lower[0], 1.0);
+  EXPECT_EQ(sub.col_upper[0], 1.0);
+  EXPECT_EQ(sub.col_upper[1], 0.0);
+  EXPECT_EQ(sub.col_lower[2], 2.0) << "the fractional column is boxed to its two roundings";
+  EXPECT_EQ(sub.col_upper[2], 3.0);
+  EXPECT_EQ(sub.col_lower[3], 3.0);
+  EXPECT_EQ(sub.col_upper[3], 3.0);
+  EXPECT_FALSE(rens_submodel(m, all_columns(m), {0.5, 0.5, 0.5, 2.0}, 0.5, 1e-6, &sub, &fixed))
+      << "one integral column of four is below the half the box needs";
+}
+
+TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
+  // Defaults: rounding and the fractional dive only, exactly what the benchmark CSVs ran.
+  Options defaults;
+  HeuristicSchedule s = HeuristicSchedule::from(defaults);
+  EXPECT_TRUE(s.dive[rule_index(DiveRule::kFractional)]);
+  EXPECT_FALSE(s.lock_rounding);
+  EXPECT_FALSE(s.repair);
+  EXPECT_FALSE(s.pump);
+  EXPECT_FALSE(s.rins);
+  EXPECT_FALSE(s.rens);
+  EXPECT_FALSE(s.dive[rule_index(DiveRule::kCoefficient)]);
+  EXPECT_FALSE(s.dive[rule_index(DiveRule::kVectorLength)]);
+  EXPECT_FALSE(s.dive[rule_index(DiveRule::kGuided)]);
+  EXPECT_FALSE(s.dive_backtrack);
+  EXPECT_FALSE(s.any_optional());
+  EXPECT_EQ(s.names(), "rounding, fractional diving");
+  EXPECT_TRUE(s.seconds_budgets);
+
+  // The master switch turns every auto on; an explicit off wins over it.
+  Options all;
+  all.set_bool("mip_heuristics", true);
+  s = HeuristicSchedule::from(all);
+  EXPECT_TRUE(s.lock_rounding && s.repair && s.pump && s.rins && s.rens);
+  for (std::size_t r = 0; r < kDiveRules; ++r) EXPECT_TRUE(s.dive[r]) << r;
+  EXPECT_TRUE(s.any_optional());
+  all.set_string("mip_heur_rins", "off");
+  s = HeuristicSchedule::from(all);
+  EXPECT_FALSE(s.rins);
+  EXPECT_TRUE(s.rens);
+
+  // One heuristic on by name, the master off: the one-heuristic A/B.
+  Options one;
+  one.set_string("mip_heur_rens", "on");
+  s = HeuristicSchedule::from(one);
+  EXPECT_TRUE(s.rens);
+  EXPECT_FALSE(s.rins);
+  EXPECT_TRUE(s.any_optional());
+  EXPECT_EQ(s.names(), "rounding, fractional diving, RENS");
+  one.set_string("mip_heur_dive_fractional", "off");
+  s = HeuristicSchedule::from(one);
+  EXPECT_FALSE(s.dive[rule_index(DiveRule::kFractional)]);
+  EXPECT_EQ(s.names(), "rounding, RENS");
+
+  // Deterministic drops the budgets in seconds and keeps the counted ones.
+  one.set_bool("deterministic", true);
+  s = HeuristicSchedule::from(one);
+  EXPECT_FALSE(s.seconds_budgets);
+}
+
+TEST(Heuristics, DeterministicRunsRepeatWithEveryHeuristicOn) {
+  // Under deterministic=true the sub-MIP heuristics lose their budget in seconds and keep
+  // only the counted ones, so two runs must agree to the bit: same status, objective, node
+  // count and point. A covering / packing model with enough columns for RINS, RENS and the
+  // dives to have something to do.
+  std::mt19937 rng(414);
+  std::uniform_int_distribution<int> coefficient(0, 4);
+  std::uniform_int_distribution<int> cost_value(1, 9);
+  const std::size_t n = 14;
+  std::vector<std::vector<double>> rows(5, std::vector<double>(n));
+  std::vector<double> lower(5, -kInf);
+  std::vector<double> upper(5, kInf);
+  for (std::size_t i = 0; i < 5; ++i) {
+    double sum = 0.0;
+    for (std::size_t j = 0; j < n; ++j) {
+      rows[i][j] = coefficient(rng);
+      sum += rows[i][j];
+    }
+    if (i % 2 == 0) {
+      lower[i] = std::floor(sum / 3.0);
+    } else {
+      upper[i] = std::ceil(sum / 2.0);
+    }
+  }
+  std::vector<double> cost(n);
+  for (double& c : cost) c = cost_value(rng);
+  const Model m = integer_model(rows, lower, upper, cost, 0.0, 1.0);
+
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_bool("deterministic", true);
+  for (const char* name : kEverySwitch) options.set_string(name, "on");
+  options.set_int("mip_dive_frequency", 1);
+  options.set_bool("mip_dive_backtrack", true);
+  options.set_int("mip_rins_frequency", 1);
+  options.set_int("mip_rens_nodes", 5);
+  const Solution first = solve(m, options);
+  const Solution second = solve(m, options);
+  ASSERT_EQ(first.status, SolveStatus::kOptimal) << first.message;
+  ASSERT_EQ(second.status, first.status);
+  EXPECT_EQ(second.objective, first.objective);
+  EXPECT_EQ(second.nodes, first.nodes);
+  EXPECT_EQ(second.col_value, first.col_value);
+  EXPECT_TRUE(feasible(m, first.col_value));
 }
 
 }  // namespace

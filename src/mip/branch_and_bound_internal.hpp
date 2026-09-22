@@ -291,23 +291,28 @@ class BranchAndBound {
   /// with a lot of structure it finds the incumbent that makes every later bound useful.
   void try_rounding(const std::vector<double>& x);
 
-  /// Root-node diving heuristic: repeatedly fix the LEAST-fractional integer column to its
-  /// nearest integer and re-solve, until the point is integral, an LP goes infeasible, or
-  /// the budget in tolerances.hpp runs out. See the definition for the citation and the
-  /// reasoning behind fixing the LEAST rather than the MOST fractional column.
-  void dive_from_root(const std::vector<double>& start_x);
-
   /// Accept a candidate if it is integral, feasible and better than the incumbent.
   bool offer_incumbent(const std::vector<double>& x);
 
-  // ---- Primal heuristics (#290), in branch_and_bound_heuristics.cpp ---------------------
+  // ---- Primal heuristics (#290, #414), in branch_and_bound_heuristics.cpp ---------------
   void init_heuristics();
   /// Offer a heuristic's candidate and count it against that heuristic.
   bool offer_from(std::size_t slot, const std::vector<double>& x);
-  /// Rounding (every node), lock rounding (every node), repair (root) and RINS (scheduled).
+  /// Rounding (every node), lock rounding (every node), repair and RENS (root) and RINS
+  /// (scheduled), each on its own switch in schedule_.
   void run_node_heuristics(Index node_index, const Solution& relaxation);
-  /// The root dive, counted.
-  void run_root_dive(const std::vector<double>& x);
+  /// The diving family: every enabled rule, at the root and every mip_dive_frequency nodes.
+  /// Each dive's fixes are undone before the next starts; current_warm_ is the caller's to
+  /// restore. Requires the node's bounds to be entered.
+  void run_dives(Index node_index, const std::vector<double>& x);
+  /// One dive under `rule`, counted against `slot`: fix the column the rule picks to the
+  /// integer it picks, re-solve, repeat until the point is integral, an LP dead-ends (once
+  /// backtracked if mip_dive_backtrack is set) or the budget runs out. Leaves working_'s
+  /// bounds as it found them.
+  void dive(std::size_t slot, DiveRule rule, const std::vector<double>& start_x);
+  /// Restore the bounds saved_ holds beyond `mark` and drop those entries: leave() for the
+  /// tail of the stack only.
+  void unwind_to(std::size_t mark);
   /// The feasibility pump at the root, only when nothing else found an incumbent.
   void run_root_pump(const Solution& relaxation);
   void report_heuristics();
@@ -563,13 +568,10 @@ class BranchAndBound {
   /// Bounds saved by the current enter(), restored by leave().
   std::vector<DomainChange> saved_;
 
-  // Primal heuristics (#290).
+  // Primal heuristics (#290, #414): which run and with what budgets, resolved once.
   std::vector<HeuristicStats> heuristic_stats_;
   Locks locks_;
-  bool heuristics_on_ = true;
-  Count rins_frequency_ = 0;
-  Count rins_nodes_ = 0;
-  int pump_rounds_ = 0;
+  HeuristicSchedule schedule_;
   Count clique_cuts_generated_ = 0;     ///< #358, before the filter
   Count zero_half_cuts_generated_ = 0;  ///< #358, before the filter
   std::string checkpoint_path_;

@@ -613,66 +613,7 @@ void BranchAndBound::try_rounding(const std::vector<double>& x) {
   }
 }
 
-// Achterberg, "Constraint Integer Programming" (thesis, 2007), ch. 6: a diving heuristic
-// commits to a fractional variable's rounded value, re-solves the LP relaxation with that
-// bound fixed, and repeats - a single, greedy descent toward an integral point rather than a
-// search. Its value is concentrated at the root: an early incumbent is what lets can_prune()
-// start fathoming nodes from the very first branch, instead of only after the tree has found
-// one on its own. tolerances.hpp bounds both how deep the dive may go and how many LP
-// re-solves it may spend, so it cannot itself dominate the cost of the node it runs at.
-//
-// LEAST-fractional, not most: most_fractional() (used for branching, above) picks the column
-// the relaxation is LEAST sure of, because that is where a split actually separates the
-// search space. Diving wants the opposite bias - lock in what the relaxation already agrees
-// on, disturb the point as little as possible, and let the next re-solve reveal whether that
-// choice was consistent with everything else. Committing to the MOST fractional column first
-// would be the branching heuristic wearing a diving heuristic's clothes.
-void BranchAndBound::dive_from_root(const std::vector<double>& start_x) {
-  if (integer_columns_.empty()) return;
-  std::vector<double> x = start_x;
-  int depth = 0;
-  int lp_resolves = 0;
-
-  while (depth < tol::kDivingMaxDepth && lp_resolves < tol::kDivingMaxLpResolves) {
-    Index target = -1;
-    double least_score = std::numeric_limits<double>::infinity();
-    for (const Index j : integer_columns_) {
-      const double score = fractionality(x[static_cast<std::size_t>(j)]);
-      if (score <= integrality_tolerance_) continue;  // already integral: nothing to fix here
-      if (score < least_score) {
-        least_score = score;
-        target = j;
-      }
-    }
-    if (target < 0) {
-      // Every integer column is within tolerance: an integral point. Diving finds a
-      // candidate, it does not get to assert it is one - offer_incumbent() re-checks
-      // feasibility and integrality against the ORIGINAL model exactly as it does for
-      // try_rounding() or a node whose relaxation happened to be integral.
-      if (offer_incumbent(x)) {
-        logger_.verbose(
-            "diving heuristic found an incumbent at {:.10g} after {} LP re-solve(s)",
-            reported(incumbent_internal_), lp_resolves);
-      }
-      return;
-    }
-
-    const auto u = static_cast<std::size_t>(target);
-    tighten_lower(u, std::round(x[u]));
-    tighten_upper(u, std::round(x[u]));
-    ++depth;
-
-    const Solution probe = solve_node();
-    ++lp_resolves;
-    if (probe.status != SolveStatus::kOptimal) return;  // dive dead-ends: infeasible or worse
-    x = probe.col_value;
-    // The next probe fixes one more column of THIS point, so this basis is its warm start.
-    current_warm_ = basis_of(probe);
-  }
-  // Budget exhausted without reaching an integral point. Not a failure to report: every
-  // bound fixed above lives on the same saved_ stack propagate() uses, so the caller's
-  // ordinary leave() undoes it along with everything else from this node, and the real
-  // search tree below is exactly as if this function had never run.
-}
+// The diving heuristics (#25, #414) are in branch_and_bound_heuristics.cpp, beside the
+// schedule that decides when each rule runs.
 
 }  // namespace sankhya::mip
