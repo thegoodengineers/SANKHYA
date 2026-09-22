@@ -29,7 +29,7 @@ statement, what is different, the evidence, how to use it, and the team, on one 
 | 1 | Foundations: model, options, sparse linear algebra, CI | **done** |
 | 2 | MPS/LP readers, revised primal simplex, CLI | **done** |
 | 3 | Verification spine: rational oracle, independent checker, Netlib harness | **done** |
-| 4 | Restarted PDHG — **CPU done**, its answer finished by the interior point by default since #229; CUDA backend on `main` (`src/gpu/`, #329 to #373), measured by #390 on an RTX 5050 (`bench/results/gpu-a4f02b1.csv`, `docs/BENCHMARKS.md` section 1g): slower than the CPU up to 5,000 x 5,000, 1.63x faster at 10,000 x 10,000 at 1e-4, PDHG alone on synthetic KKT LPs | done, measured on one card |
+| 4 | Restarted PDHG - **CPU done**, its answer finished by the interior point by default since #229; CUDA backend on `main` (`src/gpu/`, #329 to #373), measured by #390 on an RTX 5050 (`bench/results/gpu-a4f02b1.csv`, `docs/BENCHMARKS.md` section 1g): slower than the CPU up to 5,000 x 5,000, 1.63x faster at 10,000 x 10,000 at 1e-4, PDHG alone on synthetic KKT LPs | done, measured on one card |
 | 5 | Branch & bound → MILP | **done** (MIPLIB benchmarked; root cuts landed in #159 and are off by default, see below) |
 | 6–10 | Performance, branch & cut, IPM/QP, robustness, packaging | convex QP **done** (Phase 8, `src/qp/`); interior point **done, opt-in** (`src/ipm/`, no basis); robustness sweep **done** (`bench/runners/robustness.py`); root cuts **done, off by default** (#159, `src/mip/cuts.cpp`); machine-checkable certificates for infeasible and unbounded models **done** (#192, `src/core/certificate.cpp`, checked by `tools/verify_solution.py`); MIP gap targets **done** (#188); packaging **done** apart from the human items on #73 |
 
