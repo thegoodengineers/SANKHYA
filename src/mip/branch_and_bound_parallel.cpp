@@ -380,6 +380,12 @@ int parallel_threads(const Model& model, const Options& options, Logger& logger)
     logger.info("mip_threads={} ignored: {}; searching on one thread", threads, declined);
     return 1;
   }
+  if (!options.get_string("conflict_out").empty()) {
+    logger.info(
+        "mip_threads={}: conflict_out is not written by the parallel search; each worker's "
+        "conflicts stay its own",
+        threads);
+  }
   return threads;
 }
 
@@ -431,6 +437,40 @@ void run_worker(const Model& model, const Options& options, SharedSearch* shared
   shared->worker_exited();
 }
 
+/// Joins the workers on every way out of the driver. The caller's progress callback runs on
+/// the driver thread and may throw, and so may a thread's creation; an exception unwinding
+/// past a joinable std::thread is std::terminate, not a status. On that path the workers are
+/// told to stop first, so the join is short.
+class WorkerJoiner {
+ public:
+  WorkerJoiner(std::vector<std::thread>* workers, SharedSearch* shared,
+               SolveControl* stop_signal)
+      : workers_(workers), shared_(shared), stop_signal_(stop_signal) {}
+  WorkerJoiner(const WorkerJoiner&) = delete;
+  WorkerJoiner& operator=(const WorkerJoiner&) = delete;
+  ~WorkerJoiner() {
+    if (joined_) return;
+    shared_->stop(LimitReason::kInterrupt);
+    stop_signal_->interrupt();
+    join();
+  }
+  void join() {
+    for (std::thread& worker : *workers_) {
+      if (worker.joinable()) worker.join();
+    }
+    joined_ = true;
+  }
+
+ private:
+  std::vector<std::thread>* workers_;
+  SharedSearch* shared_;
+  SolveControl* stop_signal_;
+  bool joined_ = false;
+};
+
+/// The sequential search writes a node line every 20 nodes; the driver keeps the cadence.
+constexpr Count kNodesPerProgressLine = 20;
+
 }  // namespace
 
 Solution solve_branch_and_bound_parallel(const Model& model, const Options& options,
@@ -471,20 +511,43 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   Solution root_answer;
   std::vector<std::thread> workers;
   workers.reserve(static_cast<std::size_t>(threads));
+  WorkerJoiner joiner(&workers, &shared, &stop_signal);
   for (int t = 0; t < threads; ++t) {
     workers.emplace_back(run_worker, std::cref(model), std::cref(options), &shared,
                          &stop_signal, std::cref(clock), has_time_limit ? time_limit : -1.0,
                          &root_answer);
   }
+  // What this thread can see is the incumbent and the queue. The workers' open lists, and
+  // so the bound and the gap, are theirs alone until they leave, and both are reported as
+  // UNKNOWN - the weakest bound and an infinite gap, the sequential search's own convention
+  // for "none yet" - never as a zero a reader would take for a closed gap (#289).
+  const double unknown_bound = model.sense == ObjSense::kMaximize ? kInfinity : -kInfinity;
+  Count last_logged = 0;
+  bool logged_table = false;
   while (!shared.wait_until_done(std::chrono::milliseconds(50))) {
+    const Count nodes = shared.nodes();
+    const double best = shared.best();
+    const double incumbent_report = std::isfinite(best) ? reported(best) : kInfinity;
+    const auto queued = static_cast<Count>(shared.queued());
+    if (nodes > 0 && (last_logged == 0 || nodes >= last_logged + kNodesPerProgressLine)) {
+      if (!logged_table) {
+        logger.begin_node_table();
+        logged_table = true;
+      }
+      logger.node(nodes, queued, incumbent_report, unknown_bound, kInfinity,
+                  clock.elapsed_seconds());
+      last_logged = nodes;
+    }
     bool interrupt = control != nullptr && control->interruption_requested();
     if (!interrupt && control != nullptr && control->progress_callback &&
         control->callback_due()) {
       Progress progress;
       progress.phase = Progress::Phase::kTree;
-      progress.nodes = shared.nodes();
-      const double best = shared.best();
-      progress.objective = std::isfinite(best) ? reported(best) : kInfinity;
+      progress.nodes = nodes;
+      progress.open_nodes = queued;
+      progress.objective = incumbent_report;
+      progress.best_bound = unknown_bound;
+      progress.gap = kInfinity;
       progress.elapsed_seconds = clock.elapsed_seconds();
       if (control->progress_callback(progress) != 0) {
         control->interrupt();
@@ -496,7 +559,7 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
       stop_signal.interrupt();
     }
   }
-  for (std::thread& worker : workers) worker.join();
+  joiner.join();
   if (const std::exception_ptr error = shared.exception(); error) std::rethrow_exception(error);
 
   if (shared.failed()) {

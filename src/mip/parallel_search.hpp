@@ -8,9 +8,10 @@
 // dozen numbers and nothing else. What the workers share is exactly what the issue names: the
 // incumbent (so every worker prunes against the best point anyone found), the node count (so
 // node_limit means the whole search), the queue of subtrees waiting for a worker, and the stop
-// flag. A worker with more than two open nodes gives some away whenever another is idle and
-// the queue is empty, which is how the root's subtree fans out to the other threads at the
-// start and how the load stays level later.
+// flag. A worker with at least eight open nodes (kMinOpenToDonate) gives its smallest-bound
+// ones away, never its two newest, whenever another is idle and the queue is empty, which is
+// how the root's subtree fans out to the other threads at the start and how the load stays
+// level later.
 //
 // WHY THE ANSWER CANNOT DEPEND ON THE THREADS. A subtree is closed by the same code that
 // closes the sequential tree, and a subtree that stops early (a limit, or its own gap test)
@@ -18,6 +19,12 @@
 // subtree closed or stopped within the gap target, and the reported bound is the smallest of
 // everything left open anywhere, so no thread's early exit can turn into a claim. The tree a
 // run explores does vary with timing; the objective and the status do not.
+//
+// THE SCHEME HAS A NAME. This is the subtree-parallel branch and bound of Ralphs, Shinano,
+// Berthold and Koch, "Parallel Solvers for Mixed Integer Linear Optimization", in Hamadi and
+// Sais (eds.), Handbook of Parallel Constraint Reasoning, Springer, 2018: each worker owns a
+// subtree, the incumbent and the bound are the shared state, and idle workers are fed by
+// taking work from the busy ones. docs/PROVENANCE.md carries the row.
 #pragma once
 
 #include <atomic>
@@ -66,6 +73,11 @@ class SharedSearch {
            queued_.load(std::memory_order_relaxed) == 0 && !stopped();
   }
   [[nodiscard]] int idle() const noexcept { return idle_.load(std::memory_order_relaxed); }
+  /// Subtrees waiting for a worker: what the driver can report as open, since the workers'
+  /// own open lists are theirs alone until they leave.
+  [[nodiscard]] std::size_t queued() const noexcept {
+    return queued_.load(std::memory_order_relaxed);
+  }
   /// Every worker has left take() for good.
   [[nodiscard]] bool wait_until_done(std::chrono::milliseconds timeout);
   void worker_exited();

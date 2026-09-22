@@ -605,7 +605,9 @@ const std::vector<OptionSpec>& Options::registry() {
                  "count and the pool. 1 (default) is the sequential search; 0 means one per "
                  "hardware core. The objective and status do not depend on it, the tree "
                  "explored does. Ignored, with a note, for an MIQP, with pool_complete, with a "
-                 "checkpoint or resume, and in deterministic mode.",
+                 "checkpoint or resume, and in deterministic mode. node_limit may be overshot "
+                 "by at most one node per worker (each counts a node after exploring it), "
+                 "and conflict_out is not written.",
                  0.0,
                  256.0,
                  {}});
