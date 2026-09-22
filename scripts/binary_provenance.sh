@@ -1,5 +1,10 @@
+#!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # Is the binary about to be demonstrated the one this tree builds?
+#
+# Sourced by the demos and by scripts/preflight.sh for the functions below; run directly it
+# answers the same question for one binary, which is the form to reach for before a
+# demonstration:  scripts/binary_provenance.sh build/sankhya.exe
 #
 # WHY THIS EXISTS. demo/run_sih_demo.sh, demo/run_demo.sh and scripts/preflight.sh all take
 # the first binary they find, and `build/` is first on that list. A `build/` left from an
@@ -39,3 +44,18 @@ sankhya_binary_staleness() {
   [ "$binary_commit" = "$head_commit" ] && return 0
   printf '%s %s\n' "$binary_commit" "$head_commit"
 }
+
+# Executed rather than sourced: report on the binary named, and exit non-zero when it is
+# from another commit, so this can gate a script that wants to stop rather than warn.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  binary="${1:-build/sankhya.exe}"
+  [ -x "$binary" ] || { printf 'not executable: %s\n' "$binary" >&2; exit 2; }
+  staleness="$(sankhya_binary_staleness "$binary")"
+  if [ -z "$staleness" ]; then
+    printf '%s is built from this checkout (%s)\n' "$binary" "$(sankhya_repo_commit)"
+    exit 0
+  fi
+  printf '%s was linked at %s; this tree is at %s\n' \
+    "$binary" "${staleness% *}" "${staleness#* }" >&2
+  exit 1
+fi
