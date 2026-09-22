@@ -271,12 +271,16 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"mip_heuristics",
                  OptionType::Bool,
                  false,
-                 "Run the primal heuristics #290 added: lock rounding at every node, a "
-                 "repair search at the root, the feasibility pump at the root when nothing "
-                 "else found an incumbent, and RINS on mip_rins_frequency. Rounding and the "
-                 "root dive run either way. Every candidate is checked against the original "
-                 "model before it can become the incumbent. OFF until the MIPLIB A/B on main, "
-                 "alone on the machine, says what it buys; a default is a measurement here.",
+                 "The master switch for the primal heuristics (#290, #414): every heuristic "
+                 "whose own mip_heur_* option is auto follows it. On, that is lock rounding "
+                 "at every node, a repair search and RENS at the root, the feasibility pump "
+                 "at the root when nothing else found an incumbent, RINS on "
+                 "mip_rins_frequency, and the coefficient, vector length and guided dives "
+                 "beside the fractional one. Rounding at every node and the fractional root "
+                 "dive run either way. Every candidate is checked against the original model "
+                 "before it can become the incumbent. OFF until the per-heuristic MIPLIB A/B "
+                 "on main, alone on the machine, says which earn their place; a default is a "
+                 "measurement here.",
                  0.0,
                  0.0,
                  {}});
@@ -301,6 +305,133 @@ const std::vector<OptionSpec>& Options::registry() {
                  std::int64_t{20},
                  "Rounds of the feasibility pump at the root (#290); 0 turns it off.",
                  0.0,
+                 kNoLimit,
+                 {}});
+    // One switch per heuristic (#414), so a measurement can run exactly one of them: auto
+    // follows mip_heuristics, on and off decide alone. The fractional dive is the one
+    // heuristic on by default, because it is the root dive every benchmark CSV was
+    // measured with; the others are off until their own A/B on main says otherwise.
+    s.push_back({"mip_heur_lock_rounding",
+                 OptionType::String,
+                 std::string("auto"),
+                 "Lock rounding at every node (#290, #414; Achterberg 2007, sec. 9.1): each "
+                 "fractional integer column rounded the way no row can object to. auto "
+                 "follows mip_heuristics; on and off decide alone, which is what a "
+                 "one-heuristic A/B sets.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_heur_repair",
+                 OptionType::String,
+                 std::string("auto"),
+                 "The repair search at the root when there is no incumbent (#290, #414): "
+                 "one-unit shifts of integer columns against the worst violated row, at "
+                 "most four per integer column plus ten, and 10,000 in all. auto follows "
+                 "mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_heur_pump",
+                 OptionType::String,
+                 std::string("auto"),
+                 "The feasibility pump at the root when nothing else found an incumbent "
+                 "(#290, #414; Fischetti, Glover and Lodi 2005), for mip_pump_rounds rounds. "
+                 "auto follows mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_heur_rins",
+                 OptionType::String,
+                 std::string("auto"),
+                 "RINS every mip_rins_frequency nodes once there is an incumbent (#290, "
+                 "#414; Danna, Rothberg and Le Pape 2005): the sub-MIP over the columns on "
+                 "which the relaxation and the incumbent disagree, capped by mip_rins_nodes. "
+                 "auto follows mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_heur_rens",
+                 OptionType::String,
+                 std::string("auto"),
+                 "RENS once at the root (#414; Berthold 2014): every integer column the "
+                 "root relaxation already has integral is fixed there, every other is boxed "
+                 "to the two integers around its value, and that sub-MIP is searched for at "
+                 "most mip_rens_nodes nodes - the best of every rounding of the relaxation "
+                 "at once. Skipped when fewer than half the integer columns are integral. "
+                 "auto follows mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_heur_dive_fractional",
+                 OptionType::String,
+                 std::string("on"),
+                 "The fractional dive (#25, #414; Achterberg 2007, sec. 9.2): fix the least "
+                 "fractional integer column to its nearest integer, re-solve, repeat, at "
+                 "the root and every mip_dive_frequency nodes. ON by default: it is the "
+                 "root dive every benchmark CSV was measured with.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_heur_dive_coefficient",
+                 OptionType::String,
+                 std::string("auto"),
+                 "Coefficient diving (#414; Achterberg 2007, sec. 9.2): the column with the "
+                 "fewest row locks in its rounding direction is fixed first, ties by "
+                 "fractionality. auto follows mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_heur_dive_vector_length",
+                 OptionType::String,
+                 std::string("auto"),
+                 "Vector length diving (#414; Achterberg 2007, sec. 9.2): the column whose "
+                 "rounding costs the least objective per row it appears in, rounded the way "
+                 "the objective resists - the rule built for covering models. auto follows "
+                 "mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_heur_dive_guided",
+                 OptionType::String,
+                 std::string("auto"),
+                 "Guided diving (#414; Achterberg 2007, sec. 9.2): fix the column closest "
+                 "to the incumbent's value to that value; it needs an incumbent and does "
+                 "nothing before one exists. auto follows mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_dive_backtrack",
+                 OptionType::Bool,
+                 false,
+                 "When a dive's fix makes the LP infeasible, undo it once and fix the "
+                 "column the other way before giving up (#414; Achterberg 2007, sec. 9.2, "
+                 "the one-level backtrack). OFF by default so the fractional dive stays what "
+                 "the benchmark CSVs measured.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"mip_dive_frequency",
+                 OptionType::Int,
+                 std::int64_t{0},
+                 "Run the enabled dives every this many nodes below the root as well "
+                 "(#414); 0 dives at the root only, which is what every benchmark CSV was "
+                 "measured with.",
+                 0.0,
+                 kNoLimit,
+                 {}});
+    s.push_back({"mip_dive_lp_resolves",
+                 OptionType::Int,
+                 std::int64_t{tol::kDivingMaxLpResolves},
+                 "LP re-solves one dive may spend before it gives up (#414); the cap on "
+                 "columns fixed per dive stays in tolerances.hpp.",
+                 1.0,
+                 kNoLimit,
+                 {}});
+    s.push_back({"mip_rens_nodes",
+                 OptionType::Int,
+                 std::int64_t{500},
+                 "Node limit of the RENS sub-MIP (#414).",
+                 1.0,
                  kNoLimit,
                  {}});
     s.push_back({"checkpoint",

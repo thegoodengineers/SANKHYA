@@ -29,6 +29,19 @@ if [ -z "$BIN" ]; then
   exit 1
 fi
 
+# The same guard run_sih_demo.sh carries, for the same reason: `build/` is first on the list
+# above and a stale one answers as its own commit without saying so.
+# shellcheck source=../scripts/binary_provenance.sh
+[ -f "$REPO/scripts/binary_provenance.sh" ] && . "$REPO/scripts/binary_provenance.sh"
+if command -v sankhya_binary_staleness >/dev/null 2>&1; then
+  STALE="$(sankhya_binary_staleness "$BIN")"
+  if [ -n "$STALE" ]; then
+    printf '\n\033[1;33m%s\033[0m\n' "The binary is not built from this checkout."
+    printf '  %s was linked at %s; this tree is at %s. Rebuild before reading the numbers.\n\n' \
+      "$BIN" "${STALE% *}" "${STALE#* }"
+  fi
+fi
+
 PYTHON="${PYTHON:-python3}"
 command -v "$PYTHON" >/dev/null 2>&1 || PYTHON=python
 

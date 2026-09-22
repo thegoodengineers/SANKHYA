@@ -494,23 +494,25 @@ Solution BranchAndBound::run() {
       continue;
     }
 
-    // The children start from THIS relaxation's basis, captured before the dive and the
+    // The children start from THIS relaxation's basis, captured before the dives and the
     // strong-branching probes can replace current_warm_ with the bases of their own solves.
     const WarmStart children_warm = basis_of(relaxation);
     current_warm_ = children_warm;
 
-    // Diving (#25): root only. node_index == 0 identifies the root directly - it is the
-    // one node present in open_ before anything else can be pushed there, so the first
-    // pass through this loop body is always processing it. Every bound the dive fixes
-    // lives on the same saved_ stack propagate() already pushed onto for this node, so the
-    // leave() below - already here for the branching case - undoes diving's fixes too.
-    if (node_index == 0) {
+    // Diving (#25, #414): at the root, and every mip_dive_frequency nodes when that is set.
+    // node_index == 0 identifies the root directly - it is the one node present in open_
+    // before anything else can be pushed there, so the first pass through this loop body
+    // is always processing it. Every dive fixes bounds on the same saved_ stack propagate()
+    // pushed onto for this node and unwinds them itself before returning, so the branching
+    // decision below sees the node's own domain.
+    {
       ProfileScope timed(logger_.profiler(), "heuristics", ProfileMode::kDetailed);
-      run_root_dive(relaxation.col_value);
+      run_dives(node_index, relaxation.col_value);
       current_warm_ = children_warm;
-      // The feasibility pump only when rounding, repair and the dive all came back empty:
-      // its value is an incumbent where there is none, and it costs LP solves.
-      run_root_pump(relaxation);
+      // The feasibility pump only at the root, and only when rounding, repair and the dives
+      // all came back empty: its value is an incumbent where there is none, and it costs
+      // LP solves.
+      if (node_index == 0) run_root_pump(relaxation);
     }
 
     // The branching decision, with the node's bounds still entered: strong branching

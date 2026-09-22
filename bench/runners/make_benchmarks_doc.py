@@ -939,6 +939,84 @@ def cuts_ab_paragraph() -> str:
             f"{moved_text}. " + verdict + tree_text + gap_text)
 
 
+def heuristics_ab_paragraph(baseline: list[dict]) -> str:
+    """The per-heuristic A/B (#414), computed from `miplib-heur-<leg>.csv` beside the
+    baseline the section already reports, one leg per heuristic switch, read only when the
+    leg carries the baseline's own commit stamp - a leg from another commit or a modified
+    tree is named and skipped, never compared. bench/runners/miplib_heuristics_ab.py writes
+    the legs and prints the same table."""
+    legs = sorted(RESULTS_DIR.glob("miplib-heur-*.csv"))
+    if not legs:
+        return ("**Per-heuristic A/B (#414):** not measured on this checkout (no "
+                "`bench/results/miplib-heur-*.csv`).")
+    base = {r["instance"]: r for r in baseline}
+    commit = baseline[0].get("git_commit", "") if baseline else ""
+
+    def nodes(row: dict) -> int:
+        try:
+            return int(row.get("nodes") or 0)
+        except ValueError:
+            return 0
+
+    def distance(row: dict) -> float | None:
+        ours = as_float(row, "our_objective")
+        published = as_float(row, "published_objective")
+        if ours is None or published is None or not math.isfinite(ours):
+            return None
+        return abs(ours - published) / max(1.0, abs(published))
+
+    matched0 = sum(int(r.get("matched_published") or 0) for r in baseline)
+    proved0 = sum(int(r.get("proved_optimal") or 0) for r in baseline)
+    lines = ["| leg | option | matched | proved | incumbent better | incumbent worse | "
+             "nodes | instances moved |", "|---|---|---:|---:|---:|---:|---:|---|"]
+    skipped = []
+    earners = []
+    for path in legs:
+        leg = path.stem[len("miplib-heur-"):]
+        rows = read_csv(path)
+        stamps = sorted({r.get("git_commit", "") for r in rows})
+        if not rows or stamps != [commit] or commit.endswith("-dirty") or not commit:
+            skipped.append(f"`{path.name}` (stamps {stamps})")
+            continue
+        table = {r["instance"]: r for r in rows}
+        common = [n for n in base if n in table]
+        matched = sum(int(table[n].get("matched_published") or 0) for n in common)
+        proved = sum(int(table[n].get("proved_optimal") or 0) for n in common)
+        better, worse = [], []
+        for n in common:
+            d0, d1 = distance(base[n]), distance(table[n])
+            if d0 is None and d1 is None:
+                continue
+            if d1 is None or (d0 is not None and d1 > d0 + 1e-9):
+                worse.append(n)
+            elif d0 is None or d1 < d0 - 1e-9:
+                better.append(n)
+        same = [n for n in common if base[n]["status"] == table[n]["status"]]
+        nodes_base = sum(nodes(base[n]) for n in same)
+        ratio = (sum(nodes(table[n]) for n in same) / nodes_base) if nodes_base else float("nan")
+        option = (rows[0].get("solver_options") or "").strip() or "-"
+        moved = "; ".join([f"+`{n}`" for n in better] + [f"-`{n}`" for n in worse]) or "none"
+        lines.append(f"| {leg} | `{option}` | {matched} | {proved} | {len(better)} | "
+                     f"{len(worse)} | {ratio:.3f}x | {moved} |")
+        if (matched > matched0 or proved > proved0) and matched >= matched0 and \
+                proved >= proved0 and not worse:
+            earners.append(leg)
+    head = (f"**Per-heuristic A/B (#414)**, each leg one switch on against the baseline "
+            f"above (`{commit}`, {len(base)} instances, the same time limit; baseline "
+            f"{matched0} matched, {proved0} proved). *Incumbent better* counts instances whose "
+            f"final objective moved closer to the published optimum, *worse* the ones that "
+            f"moved away or lost their point; *nodes* is the leg's node count over the "
+            f"baseline's on the instances that end with the same status.")
+    verdict = (f" Legs that gain a match or a proof without losing one or worsening an "
+               f"incumbent: {', '.join(earners)}." if earners else
+               " No leg gains a match or a proof without losing one or worsening an "
+               "incumbent, which is why every switch stays off.")
+    skip_text = (" Not compared, because not one measurement with the baseline: "
+                 + ", ".join(skipped) + ".") if skipped else ""
+    body = chr(10).join(lines) if len(lines) > 2 else ""
+    return head + verdict + skip_text + (chr(10) + chr(10) + body if body else "")
+
+
 def proved_convention_note(rows: list[dict]) -> str:
     """Name the rows whose `proved` value would change on a rerun, or say none would.
 
@@ -1560,6 +1638,8 @@ def milp_section(path: Path | None) -> str:
         "exactly the thing cuts are meant to improve.",
         "",
         cuts_ab_paragraph(),
+        "",
+        heuristics_ab_paragraph(rows),
         "",
         "**The time limit decides some of these, not the solver.** A row that stops at the limit "
         "with a small gap says \"needs more time than we gave it\", not \"cannot\"; which side of "

@@ -54,6 +54,24 @@ if ! "$BIN" version >/dev/null 2>&1; then
   exit 1
 fi
 
+# IS IT THIS TREE'S BINARY? The loop above takes the first binary it finds, and a `build/`
+# from an older commit runs perfectly while answering as that commit's solver. Said here,
+# once, above the first result, rather than left for the audience to infer from a screen of
+# failures - see scripts/binary_provenance.sh for the run that cost six of nine instances.
+# Not fatal: a judge who pointed SANKHYA_BIN at a binary on purpose is entitled to run it.
+# shellcheck source=../scripts/binary_provenance.sh
+[ -f "$REPO/scripts/binary_provenance.sh" ] && . "$REPO/scripts/binary_provenance.sh"
+if command -v sankhya_binary_staleness >/dev/null 2>&1; then
+  STALE="$(sankhya_binary_staleness "$BIN")"
+  if [ -n "$STALE" ]; then
+    printf '\n\033[1;33m%s\033[0m\n' "The binary is not built from this checkout."
+    printf '  %s was linked at %s; this tree is at %s.\n' \
+      "$BIN" "${STALE% *}" "${STALE#* }"
+    printf '  Every number below is that commit answering, not this one. Rebuild first:\n'
+    printf '    scripts/configure.sh build Release && cmake --build build -j\n\n'
+  fi
+fi
+
 PYTHON="${PYTHON:-python3}"
 command -v "$PYTHON" >/dev/null 2>&1 || PYTHON=python
 

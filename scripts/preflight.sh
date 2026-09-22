@@ -125,7 +125,23 @@ if [ -x build/sankhya.exe ] || [ -x build/sankhya ]; then
   BIN="build/sankhya.exe"
   [ -x "$BIN" ] || BIN="build/sankhya"
   if "$BIN" version >/dev/null 2>&1; then
-    pass "binary executes       $BIN"
+    # AND IS IT THIS TREE'S? A binary that runs is not the same claim as a binary that
+    # answers for the code in front of you; the report below is the one place both are
+    # checked before a demonstration. See scripts/binary_provenance.sh.
+    # shellcheck source=binary_provenance.sh
+    [ -f "$(dirname "$0")/binary_provenance.sh" ] && . "$(dirname "$0")/binary_provenance.sh"
+    STALE=""
+    command -v sankhya_binary_staleness >/dev/null 2>&1 &&
+      STALE="$(sankhya_binary_staleness "$BIN")"
+    if [ -n "$STALE" ]; then
+      degrade "the binary in build/ is from another commit" \
+        "it was linked at ${STALE% *} and this tree is at ${STALE#* }, so every number it
+           produces belongs to that commit. It runs, which is why nothing else notices.
+           Rebuild before demonstrating or benchmarking: scripts/reproduce.sh, or
+           cmake --build build -j."
+    else
+      pass "binary executes       $BIN"
+    fi
   else
     # DEGRADED rather than BLOCKER, deliberately. This is a property of the binary sitting in
     # the tree right now, and the usual next step - rebuilding - is exactly what fixes it.
