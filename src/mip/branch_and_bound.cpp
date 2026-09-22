@@ -48,6 +48,7 @@
 #include "simplex/primal_simplex.hpp"
 
 #include "branch_and_bound_internal.hpp"
+#include "parallel_search.hpp"
 
 namespace sankhya::mip {
 
@@ -179,7 +180,11 @@ Solution BranchAndBound::run() {
   // Once, here, and not once per node (#76). Built from working_ before any branching has
   // touched its bounds, though it would not matter if it had: only the matrix, the cost and
   // the row bounds feed the multipliers, and branching changes none of them.
-  scaling_ = build_node_scaling(working_, node_options_);
+  // A parallel worker (#222) takes the scaling the driver computed once: the matrix is the
+  // same in every subtree, so it is not rebuilt for each one.
+  scaling_ = shared_ != nullptr && shared_->scaling() != nullptr
+                 ? *shared_->scaling()
+                 : build_node_scaling(working_, node_options_);
   probe_options_ = node_options_;
   probe_options_.set_int("iteration_limit", tol::kStrongBranchingIterations);
 
@@ -195,7 +200,11 @@ Solution BranchAndBound::run() {
   TreeNode root;
   root.bound = -std::numeric_limits<double>::infinity();
   nodes_.push_back(root);
-  open_.push_back(0);
+  if (seed_ != nullptr) {
+    plant_seed();  // a subtree given away by another worker (#222); the root is not open
+  } else {
+    open_.push_back(0);
+  }
 
   // RESUME (#287): replace the fresh root with the open nodes of a saved search. Everything
   // is validated before a single node is touched, and a checkpoint that does not belong to
@@ -241,6 +250,19 @@ Solution BranchAndBound::run() {
       solution.message = limits_.describe(why, timer_.elapsed_seconds(), 0,
                                           static_cast<std::int64_t>(nodes_explored_));
       break;
+    }
+
+    // Another worker's incumbent, the shared node count and stop flag, and giving nodes to
+    // an idle worker (#222). Nothing to do in a sequential search.
+    if (shared_ != nullptr) {
+      LimitReason why = LimitReason::kNone;
+      if (!sync_with_shared(&why)) {
+        limit_hit = true;
+        solution.status = status_for(why);
+        solution.stopped_by = why;
+        solution.message = fmt::format("the parallel search stopped: {}", to_string(why));
+        break;
+      }
     }
 
     // ALGORITHMIC OPEN BOUND: compute unconditionally when there is an incumbent so that
@@ -388,6 +410,10 @@ Solution BranchAndBound::run() {
                                 ? LimitReason::kTime
                                 : LimitReason::kInterrupt;
       best_available_point = std::move(relaxation);
+      // THE NODE IS STILL OPEN. It was taken off the list to be solved and was not, so its
+      // inherited bound is part of what the search can still say; leaving it out reported
+      // the next-best bound instead, and with nothing else open, no bound at all (#222).
+      open_.push_back(node_index);
       break;
     }
     if (relaxation.status != SolveStatus::kOptimal) {
@@ -415,6 +441,7 @@ Solution BranchAndBound::run() {
               : fmt::format("node LP returned {} at node {}", to_string(relaxation.status),
                             nodes_explored_);
       if (!out_of_iterations) return solution;
+      open_.push_back(node_index);  // still open, as above
       break;
     }
 
@@ -568,6 +595,7 @@ Solution BranchAndBound::run() {
   report_conflicts();
   // A search stopped by a limit is exactly the one worth resuming (#287).
   if (limit_hit && !open_.empty()) save_checkpoint();
+  if (shared_ != nullptr) leave_shared(limit_hit, solution.stopped_by, gap_target_met);
 
   // ---- Report ------------------------------------------------------------------------------
   double final_bound = incumbent_internal_;
@@ -723,9 +751,16 @@ Solution solve_branch_and_bound(const Model& model, const Options& options, Logg
   // from the first.
   Model tightened = model;
   const RowTightening effect = tighten_integral_rows(&tightened, logger);
+  const Model& searched = effect.rows_tightened > 0 ? tightened : model;
 
-  BranchAndBound search(effect.rows_tightened > 0 ? tightened : model, options, logger,
-                        control);
+  // PARALLEL TREE SEARCH (#222), when asked for and when the model is one it takes: a MILP,
+  // not a pool_complete search (whose pruning reads the pool's cutoff at every node), and
+  // not in deterministic mode (the tree a parallel search explores depends on timing).
+  const int threads = parallel_threads(searched, options, logger);
+  if (threads > 1)
+    return solve_branch_and_bound_parallel(searched, options, logger, control, threads);
+
+  BranchAndBound search(searched, options, logger, control);
   return search.run();
 }
 

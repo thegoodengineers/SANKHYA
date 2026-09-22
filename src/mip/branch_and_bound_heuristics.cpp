@@ -119,6 +119,10 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
         // and progress stream would otherwise be written over the search's.
         sub.set_string("profile_out", "");
         sub.set_string("progress_out", "");
+        // A sub-MIP is one worker's business (#222): it must not start a parallel search of
+        // its own inside a tree worker, and its conflicts are not the search's to export.
+        sub.set_int("mip_threads", 1);
+        sub.set_string("conflict_out", "");
         if (limits_.has_time_limit()) {
           sub.set_double(
               "time_limit",

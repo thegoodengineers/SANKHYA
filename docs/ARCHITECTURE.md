@@ -182,7 +182,7 @@ it describes.
 - **Parallelism** — the column loops in pricing and in the sparse products are
   embarrassingly parallel and deterministic (no cross-thread reductions); the tree search is
   the larger prize and the harder one, because a race on the incumbent can fathom a node
-  that should have been explored (#57).
+  that should have been explored (#57). It is `mip_threads` since #222; section 12.
 
 ## 6. Toolchain, as tested
 
@@ -451,3 +451,29 @@ writes them and their statistics as JSON for diagnostics, with the `columns` fie
 column count of the model the indices belong to, so a reader cannot quietly read them as the
 original model's. The log's `Conflicts:` line and the profiler's `conflict analysis` region
 report their cost.
+
+## 12. Parallel tree search
+
+`mip_threads=N` (#222, `src/mip/parallel_search.hpp`, `src/mip/branch_and_bound_parallel.cpp`)
+runs the branch and bound on N worker threads. Each worker runs the ordinary sequential
+search on one subtree at a time, with its own working model and node LPs. A subtree is a
+chain of bound changes from the root, so giving one away copies a few dozen numbers. The
+workers share the incumbent (every worker prunes against the best point anyone found), the
+node count (so `node_limit` covers the whole search), one solution pool, the pseudocosts
+(exchanged every 20 nodes), the node scaling (computed once), a queue of subtrees and a stop
+flag. A worker with at least eight open nodes gives the smallest-bound ones away whenever
+another worker is idle and the queue is empty, never its two newest nodes, which its dive is
+about to take. Each worker sets OpenMP's thread count to one when it starts: the count is per
+thread, and a new thread would otherwise fork a full team in every column loop.
+
+The answer does not depend on the thread count; the tree explored does. A subtree that stops
+early (a limit, or its own gap test) hands back the smallest bound among its open nodes, the
+reported bound is the smallest of everything left open anywhere, and optimality is claimed only
+when every subtree closed or met the gap target. The caller's progress callback is called from
+the calling thread only, and its interrupt is forwarded to the workers.
+
+Not taken, with a note in the log: an MIQP (QP node relaxations), `pool_complete` (its pruning
+reads the pool at every node), a checkpoint or resume (the file holds one search's tree) and
+`deterministic=true` (the tree varies with timing). `node_limit` can be overshot by at most one
+node per worker, because each counts a node before it checks. Root cuts, if enabled, are the
+root worker's own rows; other workers do not see them.
