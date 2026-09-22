@@ -42,6 +42,7 @@
 #include <string>
 #include <vector>
 
+#include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 
 namespace sankhya {
@@ -62,5 +63,18 @@ namespace sankhya {
 /// the objective does not strictly improve along it.
 [[nodiscard]] bool ray_proves_unbounded(const Model& model, const std::vector<double>& d,
                                         std::string* why = nullptr);
+
+/// Keep `solution`'s certificate only if it proves what its status claims, against the
+/// ORIGINAL `model` - the check solve() has always applied (#191), exported (#297 review) so
+/// a SolverEngine wrapper that produces a certificate (the simplex family) can apply the
+/// identical check without solve()'s dispatcher.
+///
+/// The engines compute these on a scaled model, under perturbed bounds, from factors that may
+/// have drifted, and a Farkas vector's SIGN depends on which bound the leaving variable
+/// crossed. Rather than derive the convention and hope, both signs are tried and the proof is
+/// checked here; a candidate that does not prove the claim is dropped and the message says
+/// so. An unproven certificate published as a proof would be worse than the empty field this
+/// project already uses to mean "no proof was produced".
+void verify_and_keep_certificate(Solution* solution, const Model& model, Logger& logger);
 
 }  // namespace sankhya

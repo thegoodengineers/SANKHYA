@@ -192,5 +192,41 @@ TEST(EngineSelection, LargeModelWithoutGpuStaysOnCpuPdhg) {
   EXPECT_FALSE(s.use_gpu);
 }
 
+// solve()'s own explicit-algorithm validation for LP is now DERIVED from
+// SolverRegistry::builtin() (src/core/solve.cpp: registered_lp_algorithms(), #297 full
+// integration) rather than a hand-maintained string list; this pins the end-to-end contract
+// a direct C++/C-API/Python caller sees (the CLI's own option parser rejects an unknown
+// value earlier and independently, so this path is reached only by callers who build
+// Options directly, exactly as this test does).
+TEST(EngineSelection, AnUnregisteredAlgorithmIsRefusedWithTheRegistryDerivedList) {
+  Model m = shaped_lp(4, 6, 12);
+  Options o = auto_options();
+  o.set_string("algorithm", "not-an-engine");
+  const Solution s = solve(m, o);
+  EXPECT_EQ(s.status, SolveStatus::kNotSolved);
+  EXPECT_EQ(s.algorithm, "none");
+  EXPECT_NE(s.message.find("not-an-engine"), std::string::npos) << s.message;
+  for (const char* expected : {"auto", "simplex", "dual-simplex", "pdhg", "ipm"}) {
+    EXPECT_NE(s.message.find(expected), std::string::npos)
+        << expected << " missing from: " << s.message;
+  }
+  // "pdhg-gpu" is a real, separately registered engine but deliberately not a literal
+  // `algorithm=` value (#297 review): GPU eligibility is decided underneath algorithm=pdhg,
+  // not through a second name for it.
+  EXPECT_EQ(s.message.find("pdhg-gpu"), std::string::npos) << s.message;
+}
+
+// algorithm=pdhg-gpu is refused the same way any other unregistered-as-a-literal-LP-value
+// name is, for the reason above - not because the engine does not exist (it does, and is
+// reachable directly through the registry: tests/unit/test_solver_engine.cpp), but because
+// solve()'s own `algorithm` contract never exposed it as a name to ask for by itself.
+TEST(EngineSelection, AlgorithmPdhgGpuIsNotAcceptedAsALiteralValueBySolve) {
+  Model m = shaped_lp(4, 6, 12);
+  Options o = auto_options();
+  o.set_string("algorithm", "pdhg-gpu");
+  const Solution s = solve(m, o);
+  EXPECT_EQ(s.status, SolveStatus::kNotSolved);
+}
+
 }  // namespace
 }  // namespace sankhya

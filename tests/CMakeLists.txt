@@ -36,6 +36,7 @@ add_executable(sankhya_tests
   unit/test_ipm.cpp
   unit/test_crossover.cpp
   unit/test_engine_selection.cpp
+  unit/test_solver_engine.cpp
   unit/test_warm_start.cpp
   unit/test_writer.cpp
   unit/test_iis.cpp
@@ -48,6 +49,7 @@ add_executable(sankhya_tests
   unit/test_qp.cpp
   unit/test_convexity_sparse.cpp
   unit/test_branch_and_bound.cpp
+  unit/test_mip_components.cpp
   unit/test_node_selection.cpp
   unit/test_solution_pool.cpp
   unit/test_conflict.cpp

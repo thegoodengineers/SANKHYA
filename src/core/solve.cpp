@@ -10,6 +10,26 @@
 // unimplemented path reports the truth rather than a plausible zero - and in particular a MILP
 // is NOT quietly handed to the simplex and its fractional relaxation reported as optimal, which
 // is the single most damaging thing this dispatcher could do.
+//
+// THE PIPELINE, AND WHERE #297'S REGISTRY PARTICIPATES IN IT (full integration). One
+// authoritative pipeline runs every solve, in this order: validate (Model::validate()) ->
+// apply_deterministic_mode -> classify -> [WHICH ENGINE: engine::select() /
+// SolverRegistry::builtin().candidates(), src/solver_engine/solver_selector.cpp - the ONE
+// place that decision is made; this file no longer re-derives it] -> presolve -> [HOW TO RUN
+// IT: the chosen engine's underlying solve_*() free function, called directly, with the
+// polish/fallback/warm-start/node-scaling choreography below - orchestration that belongs
+// above any one engine's own contract, not inside it] -> postsolve ->
+// verify_and_keep_certificate -> reconcile_status_with_measurement / ranging / IIS ->
+// Solution. Presolve, postsolve, certificate verification, resource limits, profiling and
+// logging stay centralized HERE, exactly as before #297 - the registry supplies WHICH engine,
+// this file still owns everything else, and there is one pipeline, not two.
+//
+// A SolverEngine's OWN solve() (src/solver_engine/builtin_engines.cpp) is a second, complete,
+// independently-tested entry point for a caller who wants the engine directly rather than
+// through this pipeline (src/solver_engine/solver_engine_dispatch.hpp): it re-applies
+// apply_deterministic_mode and certificate verification itself (the same shared functions
+// this file calls, not a re-derived copy) precisely because it does NOT go through this
+// pipeline and so cannot assume this file already did.
 
 #include <algorithm>
 #include <cmath>
@@ -17,21 +37,25 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #ifdef SANKHYA_ENABLE_CUDA
 #include "gpu/device.hpp"
 #include "gpu/gpu_memory.hpp"
 #include "gpu/multi_device.hpp"
 #include "gpu/pdhg_gpu.hpp"
+#include "gpu/pdhg_gpu_guard.hpp"
 #include "gpu/pdhg_multi_gpu.hpp"
 #endif
 
 #include <fmt/format.h>
 
+#include "core/deterministic_mode.hpp"
 #include "core/engine_selection.hpp"
 #include "core/iis.hpp"
 #include "core/resource_limits.hpp"
 #include "core/status_guard.hpp"
+#include "mip/components.hpp"
 #include "presolve/presolve.hpp"
 #include "sankhya/certificate.hpp"
 #include "sankhya/io.hpp"
@@ -47,6 +71,8 @@
 #include "sankhya/version.hpp"
 #include "simplex/crossover.hpp"
 #include "simplex/ranging.hpp"
+#include "solver_engine/solver_registry.hpp"
+#include "solver_engine/solver_selector.hpp"
 #include "util/profiler.hpp"
 #include "util/threads.hpp"
 
@@ -75,6 +101,28 @@ const char* class_name(ProblemClass c) {
     case ProblemClass::kMiqp: return "MIQP";
   }
   return "unknown";
+}
+
+/// The `algorithm` values solve() itself accepts for an LP, besides "auto" - every registered
+/// engine (src/solver_engine/builtin_engines.cpp) that takes an LP and is not a GPU variant
+/// (#297 full integration). GPU PDHG is reached only through "auto" (when eligible) or
+/// algorithm=pdhg combined with --gpu, never by its own registered name "pdhg-gpu": #297's
+/// own selector example has the user say algorithm=pdhg and hardware eligibility decide the
+/// CPU/CUDA backend underneath, not a second user-facing name for it - so "pdhg-gpu" is
+/// deliberately excluded here even though it IS a real, separately registered, separately
+/// testable engine (src/solver_engine/solver_selector.cpp reaches it directly). This list is
+/// DERIVED from the registry - adding a new LP engine there extends what solve() accepts
+/// without an edit here - rather than a second, hand-maintained copy of engine names.
+std::vector<std::string> registered_lp_algorithms() {
+  std::vector<std::string> names;
+  const engine::SolverRegistry& registry = engine::SolverRegistry::builtin();
+  for (const std::string& name : registry.names()) {
+    const engine::SolverEngine* found = registry.find(name);
+    if (found != nullptr && found->capabilities().lp && !found->capabilities().supports_gpu) {
+      names.push_back(name);
+    }
+  }
+  return names;
 }
 
 }  // namespace
@@ -178,44 +226,9 @@ void record_why_it_stopped(Solution* solution) {
   }
 }
 
-/// Keep a certificate only if it proves what the status claims, against the ORIGINAL model.
-///
-/// The engines compute these on a scaled model, under perturbed bounds, from factors that may
-/// have drifted, and a Farkas vector's SIGN depends on which bound the leaving variable
-/// crossed. Rather than derive the convention and hope, both signs are tried and the proof is
-/// checked here; a candidate that does not prove the claim is dropped and the message says
-/// so. An unproven certificate published as a proof would be worse than the empty field this
-/// project already uses to mean "no proof was produced" (#191).
-void keep_only_a_proved_certificate(Solution* solution, const Model& model, Logger& logger) {
-  ProfileScope timed(logger.profiler(), "verification");  // #285
-  std::string why;
-  if (solution->status == SolveStatus::kInfeasible && !solution->farkas_dual.empty()) {
-    if (farkas_proves_infeasible(model, solution->farkas_dual, &why)) {
-      solution->message += fmt::format("; proof: {}", why);
-      return;
-    }
-    std::vector<double> flipped = solution->farkas_dual;
-    for (double& value : flipped) value = -value;
-    if (farkas_proves_infeasible(model, flipped, &why)) {
-      solution->farkas_dual = std::move(flipped);
-      solution->message += fmt::format("; proof: {}", why);
-      return;
-    }
-    logger.verbose("the infeasibility certificate did not check out and was dropped: {}", why);
-    solution->farkas_dual.clear();
-    solution->message += "; no machine-checkable certificate accompanies this verdict";
-    return;
-  }
-  if (solution->status == SolveStatus::kUnbounded && !solution->primal_ray.empty()) {
-    if (ray_proves_unbounded(model, solution->primal_ray, &why)) {
-      solution->message += fmt::format("; proof: {}", why);
-      return;
-    }
-    logger.verbose("the unboundedness ray did not check out and was dropped: {}", why);
-    solution->primal_ray.clear();
-    solution->message += "; no machine-checkable certificate accompanies this verdict";
-  }
-}
+// verify_and_keep_certificate (#191) now lives in src/core/certificate.{hpp,cpp} as public
+// API, shared with the SolverEngine wrappers that can produce a certificate (#297 review,
+// certificate support) so a caller reaching simplex through either path gets the same check.
 
 /// PDHG's answer, finished by the interior point (#229).
 ///
@@ -399,69 +412,9 @@ void reconcile_status_with_measurement(Solution* solution, const Options& option
   }
 }
 
-/// The value the termination options carry when nothing is to stop the solve on the clock.
-constexpr double kNoWallClockLimit = std::numeric_limits<double>::max();
-
-/// The options a deterministic solve actually runs with (#288).
-///
-/// WHAT DETERMINISTIC MODE IS. Every decision the solver makes is a function of the model and
-/// the options, except the ones that ask the clock: how much time is left decides when a
-/// solve stops, how long the polish may run, and how the time limit is split between a
-/// first-order pass and its finish. Those answers differ between two runs on one machine and
-/// between two machines, so a run that ends on any of them is not reproducible. This turns
-/// each of them into its deterministic counterpart, once, before any engine sees the options.
-///
-/// WHAT IT IS NOT. It does not make floating-point arithmetic associative, and it makes no
-/// claim about a different compiler, a different CPU or a different build of this project.
-/// The guarantee is: same build, same machine, same model, same options, same numbers.
-///
-/// A time limit is REFUSED rather than quietly ignored. A caller who asked for both
-/// determinism and a deadline has asked for two things that cannot both hold, and the one
-/// thing worse than picking for them is picking silently.
-[[nodiscard]] Options apply_deterministic_mode(const Options& requested, Logger& logger) {
-  if (!requested.get_bool("deterministic")) return requested;
-
-  const Options defaults;
-  Options effective = requested;
-
-  const double time_limit = requested.get_double("time_limit");
-  if (time_limit != defaults.get_double("time_limit")) {
-    logger.warning(
-        "deterministic: time_limit={:g}s is refused - a solve that stops on the clock "
-        "returns a different answer on a slower machine. Use iteration_limit or node_limit, "
-        "which count the same on every machine",
-        time_limit);
-    effective.set_double("time_limit", defaults.get_double("time_limit"));
-  }
-
-  const double polish_seconds = requested.get_double("polish_max_seconds");
-  if (polish_seconds != defaults.get_double("polish_max_seconds")) {
-    logger.warning(
-        "deterministic: polish_max_seconds={:g} is refused; the polish is bounded by "
-        "polish_max_factor_nonzeros, which is a property of the model rather than of the "
-        "machine",
-        polish_seconds);
-  }
-  // Even at its default the seconds budget would decide whether the polish finishes, so it
-  // goes entirely, set to the same no-limit sentinel the termination options use. What
-  // bounds the polish afterwards is polish_max_factor_nonzeros, a property of the model.
-  effective.set_double("polish_max_seconds", kNoWallClockLimit);
-
-  const std::int64_t threads = requested.get_int("threads");
-  if (threads == defaults.get_int("threads")) {
-    effective.set_int("threads", 1);
-  } else {
-    // The measurement in #57 says the column loops are bit-identical at 1 and 8 threads, and
-    // a caller who set threads has read that. Saying so here is the difference between
-    // relying on the claim and relying on it knowingly.
-    logger.warning(
-        "deterministic: running on {} threads; reproducibility then rests on the parallel "
-        "reductions being order-independent, which #57 measured but this mode does not "
-        "re-check",
-        threads);
-  }
-  return effective;
-}
+// apply_deterministic_mode (#288) now lives in src/core/deterministic_mode.{hpp,cpp}, shared
+// with the SolverEngine wrappers (#297 review, deterministic execution context) so a caller
+// reaching an engine through either solve() or the registry gets the same guarantee.
 
 namespace {
 Solution solve_unguarded(const Model& model, const Options& options, SolveControl* control,
@@ -666,7 +619,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       }
       proof.farkas_dual = reduced.farkas_dual;
       proof.presolve_report = reduced.report;
-      keep_only_a_proved_certificate(&proof, model, logger);
+      verify_and_keep_certificate(&proof, model, logger);
       proof.solve_seconds = timer.elapsed_seconds();
       *proved = true;
       return proof;
@@ -704,73 +657,59 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // vertex, produces no basis, and on the small instances we benchmark today the simplex
     // is both faster and exact. It is selected explicitly, and it becomes the automatic
     // choice only once there is evidence for a crossover point to switch on.
-    // ENGINE SELECTION (#284): "auto" is a rule-based decision from the model's shape,
-    // made in engine_selection.cpp and carried on the answer as engine_rule/engine_reason.
-    // The paragraph above is the measurement behind the default rule; the other rules
-    // name theirs in the reason.
+    // ENGINE SELECTION (#284, #297 full integration): "auto" is a rule-based decision from
+    // the model's shape, made in engine_selection.cpp and carried on the answer as
+    // engine_rule/engine_reason. The paragraph above is the measurement behind the default
+    // rule; the other rules name theirs in the reason. WHICH engine to run - "auto"'s rule
+    // table, an explicit name validated against the registry, and the hardware-aware CPU/GPU
+    // PDHG choice (#281, #282, #383) - is decided in exactly one place now,
+    // engine::select() (src/solver_engine/solver_selector.cpp), which this dispatcher and a
+    // caller going through the registry directly both call; there is no second copy of that
+    // decision here. HOW to run the chosen engine - the PDHG-to-IPM polish, the
+    // IPM-to-dual-simplex fallback, warm-start basis handling and node-scaling reuse below -
+    // stays here, in solve()'s own orchestration: those are decisions ABOVE any one engine,
+    // not part of any engine's own contract (#297 review: "solve() retains orchestration
+    // responsibilities that legitimately belong above an engine").
+    if (requested != "auto") {
+      const std::vector<std::string> accepted = registered_lp_algorithms();
+      if (std::find(accepted.begin(), accepted.end(), requested) == accepted.end()) {
+        solution.status = SolveStatus::kNotSolved;
+        solution.algorithm = "none";
+        std::string list = "auto";
+        for (const std::string& name : accepted) list += ", " + name;
+        solution.message =
+            fmt::format("algorithm '{}' is not an engine; {} are available", requested, list);
+        logger.warning("{}", solution.message);
+        solution.solve_seconds = timer.elapsed_seconds();
+        return solution;
+      }
+    }
     const bool warm_given = control != nullptr && control->has_starting_basis();
-    // Probe the device once, before engine selection, so the selector can name it in the
-    // reason and set use_gpu. Only done for auto-selection to avoid the CUDA runtime init
-    // cost when the caller named an algorithm explicitly.
-    bool gpu_avail = false;
-    std::string gpu_desc;
-#ifdef SANKHYA_ENABLE_CUDA
-    if (requested == "auto") gpu_avail = gpu::device_available(&gpu_desc);
-#endif
-    const EngineSelection chosen =
-        select_engine(model, options, warm_given, gpu_avail, gpu_desc);
+    const engine::EngineChoice chosen =
+        engine::select(engine::SolverRegistry::builtin(), model, options, logger, warm_given);
+    if (chosen.engine == nullptr) {
+      // Not reachable for a `requested` value the check above already accepted; kept as an
+      // honest report rather than an assumption for "auto", per ENGINEERING_RULES.md - an
+      // unimplemented path reports the truth rather than a plausible answer.
+      solution.status = SolveStatus::kNotSolved;
+      solution.algorithm = "none";
+      solution.message = chosen.reason;
+      logger.warning("{}", solution.message);
+      solution.solve_seconds = timer.elapsed_seconds();
+      return solution;
+    }
     if (requested == "auto")
-      logger.info("Engine selection: {} - {}", chosen.algorithm, chosen.reason);
-    const bool want_pdhg = chosen.algorithm == "pdhg";
-    const bool want_ipm = chosen.algorithm == "ipm";
-    const bool want_dual = chosen.algorithm == "dual-simplex";
-
-    // Architecture and VRAM checks (#281, #282): before committing to GPU PDHG verify that
-    // the device meets the minimum compiled architecture and that the model fits in VRAM.
-    // Both variables live inside the ifdef so the CPU-only build does not see them as unused.
+      logger.info("Engine selection: {} - {}", chosen.engine->name(), chosen.reason);
+    const bool want_pdhg =
+        chosen.engine->name() == "pdhg" || chosen.engine->name() == "pdhg-gpu";
+    const bool want_ipm = chosen.engine->name() == "ipm";
+    const bool want_dual = chosen.engine->name() == "dual-simplex";
 #ifdef SANKHYA_ENABLE_CUDA
-    bool use_gpu_pdhg = chosen.use_gpu || options.get_bool("gpu");
-    if (use_gpu_pdhg && want_pdhg && options.get_bool("deterministic")) {
-      logger.warning(
-          "GPU PDHG: deterministic=true is incompatible with atomicAdd reductions (#383); "
-          "falling back to CPU PDHG");
-      use_gpu_pdhg = false;
-    }
-    if (use_gpu_pdhg && want_pdhg) {
-      int cap_major = 0, cap_minor = 0;
-      if (gpu::device_compute_capability(&cap_major, &cap_minor)) {
-        if (!gpu::is_supported_compute_capability(cap_major, cap_minor)) {
-          logger.warning(
-              "GPU PDHG: device compute {}.{} is below the minimum compiled architecture "
-              "({}.{}); falling back to CPU PDHG",
-              cap_major, cap_minor, gpu::kMinComputeArch / 10, gpu::kMinComputeArch % 10);
-          use_gpu_pdhg = false;
-        }
-      }
-    }
-    if (use_gpu_pdhg && want_pdhg) {
-      std::size_t free_bytes = 0, total_bytes = 0;
-      if (gpu::device_free_memory(&free_bytes, &total_bytes)) {
-        // Uses pre-presolve `model` dimensions: conservative (overestimates), safe.
-        const std::size_t required = gpu::estimate_pdhg_gpu_memory(
-            model.num_rows(), model.num_cols(), model.num_nonzeros());
-        const std::size_t reserve = gpu::vram_reserve(total_bytes);
-        logger.info(
-            "GPU PDHG memory: required {:.0f} MiB, available {:.0f} MiB, reserve {:.0f} MiB",
-            static_cast<double>(required) / 1048576.0,
-            static_cast<double>(free_bytes) / 1048576.0,
-            static_cast<double>(reserve) / 1048576.0);
-        if (required + reserve > free_bytes) {
-          logger.warning(
-              "GPU PDHG: estimated {:.0f} MiB + {:.0f} MiB reserve exceeds {:.0f} MiB free "
-              "VRAM; falling back to CPU PDHG",
-              static_cast<double>(required) / 1048576.0,
-              static_cast<double>(reserve) / 1048576.0,
-              static_cast<double>(free_bytes) / 1048576.0);
-          use_gpu_pdhg = false;
-        }
-      }
-    }
+    // The compute-capability, VRAM and deterministic-mode gates (#281, #282, #383) already
+    // ran inside engine::select() (gpu::gpu_pdhg_is_safe, src/gpu/pdhg_gpu_guard.cu, #297
+    // review A1) before it could choose "pdhg-gpu"; this is just that choice, named, so the
+    // CPU-only build does not see it as unused.
+    const bool use_gpu_pdhg = chosen.engine->name() == "pdhg-gpu";
 #endif
 
     // One place runs the engine on whichever model - reduced or original - is being solved,
@@ -833,9 +772,10 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           // the dual simplex is the measured default; at or above it the dual simplex is
           // the engine that already lost at that size, and the first-order method is the
           // one that reaches the optimum there (scale-e134aeb.csv, 20,000 and 100,000 rows).
-          // Judged on the model as given (chosen.rows), not on the presolved target: the
-          // rule table was applied to the original shape and the fallback follows it.
-          const bool large = chosen.rows >= kDualSimplexRowLimit;
+          // Judged on the model as given (model.num_rows(), which is what engine::select()
+          // handed to select_engine() too), not on the presolved target: the rule table was
+          // applied to the original shape and the fallback follows it.
+          const bool large = model.num_rows() >= kDualSimplexRowLimit;
           const char* engine_name = large ? "PDHG" : "the dual simplex";
           logger.warning("the interior point declined ({}); falling back to {}",
                          interior.message, engine_name);
@@ -862,18 +802,6 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       return want_dual ? solve_dual_simplex(target, engine_options, logger, control)
                        : solve_primal_simplex(target, engine_options, logger, control);
     };
-    if (requested != "auto" && requested != "simplex" && requested != "pdhg" &&
-        requested != "dual-simplex" && requested != "ipm") {
-      solution.status = SolveStatus::kNotSolved;
-      solution.algorithm = "none";
-      solution.message = fmt::format(
-          "algorithm '{}' is not an engine; auto, simplex, dual-simplex, pdhg and ipm "
-          "are available",
-          requested);
-      logger.warning("{}", solution.message);
-      solution.solve_seconds = timer.elapsed_seconds();
-      return solution;
-    }
 
     if (options.get_bool("gpu") && !want_pdhg) {
       // --gpu is only supported with --algorithm pdhg (issue #17). For all other engines
@@ -892,7 +820,12 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // feasible); `algorithm=simplex` restarts the primal (cost edits keep it primal
     // feasible). A basis the engine cannot seed is reported by it and the solve runs cold.
     const bool warm_requested = control != nullptr && control->has_starting_basis();
-    if (warm_requested && !want_pdhg && !want_ipm) {
+    // Whether the CHOSEN engine can start from a basis at all is a capability, not a
+    // hand-maintained "every engine except these two" list (#297 full integration, central
+    // configuration validation): today this is exactly !want_pdhg && !want_ipm since only
+    // the two simplex engines declare supports_warm_start, but it now reads that from the
+    // engine itself and stays correct as engines are added or removed without an edit here.
+    if (warm_requested && chosen.engine->capabilities().supports_warm_start) {
       WarmStart warm;
       warm.col_status = control->start_col_status;
       warm.row_status = control->start_row_status;
@@ -933,7 +866,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     reconcile_status_with_measurement(&solution, options, logger, /*check_dual=*/true);
     refuse_a_non_finite_answer(&solution, logger);
     record_why_it_stopped(&solution);
-    keep_only_a_proved_certificate(&solution, model, logger);
+    verify_and_keep_certificate(&solution, model, logger);
     // Sensitivity ranging runs on the ORIGINAL model after postsolve so the vectors are
     // full-size and the basis is expressed in terms of original column and row indices.
     detail::compute_ranging(model, options, logger, solution);
@@ -947,6 +880,32 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
   }
 
   if (problem_class == ProblemClass::kMilp) {
+    // Discovery through the registry (#297 full integration), NOT selection by `algorithm`:
+    // this class has always ignored that option (there being one engine to consult it for),
+    // and still does (#297 review, B2) - registry.candidates() answers only "does a
+    // registered engine exist for this class", the same question engine::select()'s
+    // "only-candidate" rule answers for a caller going through the registry directly
+    // (src/solver_engine/solver_selector.cpp), without engine::select()'s algorithm-name
+    // check, which WOULD wrongly refuse a MILP whenever `algorithm` happens to be set to an
+    // LP-only engine's name (harmless today since solve() never read it for this class, but
+    // exactly the silent-change B2 forbids).
+    if (engine::SolverRegistry::builtin().candidates(model).empty()) {
+      solution.status = SolveStatus::kNotSolved;
+      solution.algorithm = "none";
+      solution.message = "no registered engine supports MILP models";
+      logger.warning("{}", solution.message);
+      solution.solve_seconds = timer.elapsed_seconds();
+      return solution;
+    }
+    {
+      const mip::MilpComponents parts = mip::describe_components(options);
+      logger.info(
+          "MILP composition: node selection {}, branching {}, relaxation engine {}, cuts {}, "
+          "heuristics {}, conflict analysis {}",
+          parts.node_selection, parts.branching, parts.relaxation_engine,
+          parts.cuts_enabled ? "on" : "off", parts.heuristics_enabled ? "on" : "off",
+          parts.conflict_analysis_enabled ? "on" : "off");
+    }
     solution = with_presolve(
         [&](const Model& target) {
           return mip::solve_branch_and_bound(target, with_the_time_that_is_left(options),
@@ -974,6 +933,15 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
   }
 
   if (problem_class == ProblemClass::kQp) {
+    // Discovery, not selection - see the identical comment in the MILP branch above.
+    if (engine::SolverRegistry::builtin().candidates(model).empty()) {
+      solution.status = SolveStatus::kNotSolved;
+      solution.algorithm = "none";
+      solution.message = "no registered engine supports QP models";
+      logger.warning("{}", solution.message);
+      solution.solve_seconds = timer.elapsed_seconds();
+      return solution;
+    }
     solution = with_presolve(
         [&](const Model& target) {
           return qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger,
@@ -1009,6 +977,25 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // rather than the quantity recompute_quality() measures. Integrality and primal
     // feasibility are what distinguish an MIQP answer from its relaxation, and both are
     // checked.
+    //
+    // Discovery, not selection - see the identical comment in the MILP branch above.
+    if (engine::SolverRegistry::builtin().candidates(model).empty()) {
+      solution.status = SolveStatus::kNotSolved;
+      solution.algorithm = "none";
+      solution.message = "no registered engine supports MIQP models";
+      logger.warning("{}", solution.message);
+      solution.solve_seconds = timer.elapsed_seconds();
+      return solution;
+    }
+    {
+      const mip::MilpComponents parts = mip::describe_components(options);
+      logger.info(
+          "MILP composition: node selection {}, branching {}, relaxation engine {}, cuts {}, "
+          "heuristics {}, conflict analysis {}",
+          parts.node_selection, parts.branching, parts.relaxation_engine,
+          parts.cuts_enabled ? "on" : "off", parts.heuristics_enabled ? "on" : "off",
+          parts.conflict_analysis_enabled ? "on" : "off");
+    }
     solution = with_presolve(
         [&](const Model& target) {
           return mip::solve_branch_and_bound(target, with_the_time_that_is_left(options),
