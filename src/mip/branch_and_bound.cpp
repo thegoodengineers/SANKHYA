@@ -714,6 +714,10 @@ Solution BranchAndBound::run() {
         "Combinatorial cut candidates (#358): {} clique, {} zero-half, before the filter",
         clique_cuts_generated_, zero_half_cuts_generated_);
   }
+  if (flow_cover_cuts_generated_ > 0) {
+    logger_.info("Flow cover cut candidates (#419): {} ({} lifted), before the filter",
+                 flow_cover_cuts_generated_, flow_cover_cuts_lifted_);
+  }
   if (Profiler* profiler = logger_.profiler(); profiler != nullptr) {
     profiler->count("nodes pruned", static_cast<std::int64_t>(nodes_pruned_));
     profiler->count("warm-started node LPs", static_cast<std::int64_t>(warm_node_solves_));

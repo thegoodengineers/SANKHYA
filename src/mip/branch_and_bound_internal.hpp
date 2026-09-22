@@ -570,8 +570,11 @@ class BranchAndBound {
   Count rins_frequency_ = 0;
   Count rins_nodes_ = 0;
   int pump_rounds_ = 0;
-  Count clique_cuts_generated_ = 0;     ///< #358, before the filter
-  Count zero_half_cuts_generated_ = 0;  ///< #358, before the filter
+  Count clique_cuts_generated_ = 0;      ///< #358, before the filter
+  Count zero_half_cuts_generated_ = 0;   ///< #358, before the filter
+  Count flow_cover_cuts_generated_ = 0;  ///< #419, before the filter
+  Count flow_cover_cuts_lifted_ =
+      0;  ///< #419, of those, at least one leftover column folded in
   std::string checkpoint_path_;
   Count checkpoint_nodes_ = 0;
   Count last_checkpoint_at_ = -1;

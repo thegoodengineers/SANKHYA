@@ -386,6 +386,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  {}});
     s.push_back(
+        {"enable_flow_cover_cuts",
+         OptionType::Bool,
+         false,
+         "Include flow cover cuts from fixed-charge rows - a continuous flow variable "
+         "switched on by a binary through a variable upper bound - in the cut rounds (#419). "
+         "Only read when enable_root_cuts is set. OFF by default pending the MIPLIB 30 A/B "
+         "measurement at the commit docs/BENCHMARKS.md records; exists so the family can be "
+         "measured on its own against MIR, which the fixed-charge row structure defeats.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
         {"enable_root_cuts",
          OptionType::Bool,
          false,
