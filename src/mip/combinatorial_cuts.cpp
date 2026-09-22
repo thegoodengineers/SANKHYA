@@ -5,6 +5,7 @@
 #include "combinatorial_cuts.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -196,7 +197,7 @@ struct Bits {
   void for_each(F&& visit) const {
     for (std::size_t w = 0; w < words.size(); ++w) {
       for (std::uint64_t word = words[w]; word != 0; word &= word - 1) {
-        visit(w * 64 + static_cast<std::size_t>(__builtin_ctzll(word)));
+        visit(w * 64 + static_cast<std::size_t>(std::countr_zero(word)));
       }
     }
   }
