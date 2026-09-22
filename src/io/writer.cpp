@@ -414,6 +414,7 @@ bool write_stats_json(const std::string& path, const Model& model, const Solutio
       {"restarts", solution.restarts},
       {"reduced_cost_fixings", solution.reduced_cost_fixings},
       {"objective_branches", solution.objective_branches},
+      {"symmetry_generators", solution.symmetry_generators},
       {"root_bound", json_number(solution.root_bound)},
       {"root_bound_after_cuts", json_number(solution.root_bound_after_cuts)},
       {"polish_iterations", solution.polish_iterations},

@@ -348,6 +348,10 @@ class BranchAndBound {
   void append_objective_row();
   /// c x at `x`, in the model's own units: what the objective row measures.
   [[nodiscard]] double objective_row_value(const std::vector<double>& x) const;
+  // ---- Formulation symmetry (#413), in branch_and_bound.cpp ------------------------------
+  /// Detect the model's symmetry and append the generators' ordering rows to working_,
+  /// once, at the root, before any cut row.
+  void append_symmetry_rows();
   // ---- Checkpoint and resume (#287), in branch_and_bound_checkpoint.cpp -----------------
   /// The search as it stands between nodes.
   [[nodiscard]] TreeCheckpoint make_checkpoint() const;
@@ -610,6 +614,8 @@ class BranchAndBound {
   std::vector<BasisStatus> root_status_;
   double fixing_incumbent_ = std::numeric_limits<double>::infinity();  ///< last pass used
   Count reduced_cost_fixings_ = 0;  ///< bounds moved over the search, reported
+  Count symmetry_generators_ = 0;   ///< #413: verified generators the detection found
+  Count symmetry_rows_ = 0;         ///< #413: ordering rows appended for them
   Count fixed_since_root_ = 0;      ///< integer columns fixed since the root was processed
   Count restarts_ = 0;
   Count restarts_allowed_ = 0;

@@ -59,6 +59,7 @@ add_executable(sankhya_tests
   unit/test_flow_cover_cuts.cpp
   unit/test_presolve_dual_fixing.cpp
   unit/test_presolve_dominated_columns.cpp
+  unit/test_symmetry.cpp
   unit/test_cut_selection.cpp
   unit/test_presolve_parallel_rows.cpp
   unit/test_dual_steepest_edge.cpp

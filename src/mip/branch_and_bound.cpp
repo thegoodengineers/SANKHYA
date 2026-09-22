@@ -33,6 +33,7 @@
 #include "cuts.hpp"
 #include "mir_cuts.hpp"
 #include "solution_pool.hpp"
+#include "symmetry.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -191,6 +192,52 @@ double BranchAndBound::objective_row_value(const std::vector<double>& x) const {
   return value;
 }
 
+// FORMULATION SYMMETRY (#413). A permutation of columns and rows that leaves the model
+// unchanged maps every feasible point to one of the same objective, so a search that
+// explores every point of an orbit does the same work as many times as the orbit is large -
+// enlight8's 99,188 nodes at 60 s are that signature. The first slice is detection and one
+// row per generator: for a generator whose first moved column is i, mapping it to k, the
+// row x_i <= x_k holds for the lexicographically smallest point of every orbit (Liberti
+// 2012), so at least one optimum survives; appended to working_ at the root, before any
+// cut row, the way the cut rows are. Orbital fixing in the tree is the second slice. Every
+// generator was verified entry by entry against original_ before it reached here, which is
+// what makes the rows safe whatever the search found.
+void BranchAndBound::append_symmetry_rows() {
+  const SymmetryGroup group = detect_symmetry(
+      original_, static_cast<Count>(options_.get_int("mip_symmetry_search_limit")));
+  symmetry_generators_ = static_cast<Count>(group.generators.size());
+  logger_.info(
+      "Symmetry (#413): {} generator(s), {} orbit(s) of more than one column, the largest "
+      "{} column(s); {} search node(s), {} refinement round(s){}",
+      group.generators.size(), group.nontrivial_orbits, group.largest_orbit, group.search_nodes,
+      group.refinements,
+      group.budget_exhausted ? " (stopped at mip_symmetry_search_limit)" : "");
+  const std::vector<std::pair<Index, Index>> pairs = ordering_rows(group);
+  if (pairs.empty()) return;
+  const Index old_rows = working_.num_rows();
+  const Index cols = working_.num_cols();
+  const auto added = static_cast<Index>(pairs.size());
+  SparseMatrix matrix(old_rows + added, cols);
+  for (Index j = 0; j < cols; ++j) {
+    const ColumnView view = working_.matrix.column(j);
+    for (Index k = 0; k < view.size; ++k) matrix.add_entry(view.rows[k], j, view.values[k]);
+  }
+  for (Index k = 0; k < added; ++k) {
+    matrix.add_entry(old_rows + k, pairs[static_cast<std::size_t>(k)].first, 1.0);
+    matrix.add_entry(old_rows + k, pairs[static_cast<std::size_t>(k)].second, -1.0);
+  }
+  matrix.finalize();
+  working_.matrix = std::move(matrix);
+  working_.resize_rows(old_rows + added);
+  for (Index k = 0; k < added; ++k) {
+    working_.row_lower[static_cast<std::size_t>(old_rows + k)] = -kInfinity;
+    working_.row_upper[static_cast<std::size_t>(old_rows + k)] = 0.0;
+  }
+  symmetry_rows_ = added;
+  logger_.info("Symmetry (#413): {} ordering row(s) x_i <= x_k appended for the generators",
+               added);
+}
+
 Solution BranchAndBound::run() {
   init_heuristics();
   detect_objective_integrality();
@@ -223,6 +270,13 @@ Solution BranchAndBound::run() {
     solution.status = SolveStatus::kModelError;
     solution.message = problem;
     return solution;
+  }
+  // Formulation symmetry (#413): only in a search that owns its working model - a parallel
+  // worker shares the driver's scaling, whose row count the appended rows would not match -
+  // and not for a quadratic objective, whose Hessian the detection does not read.
+  if (options_.get_bool("mip_symmetry") && !quadratic_ && shared_ == nullptr &&
+      seed_ == nullptr) {
+    append_symmetry_rows();
   }
 
   // Once, here, and not once per node (#76). Built from working_ before any branching has
@@ -746,6 +800,7 @@ Solution BranchAndBound::run() {
     solution.restarts = restarts_;
     solution.reduced_cost_fixings = reduced_cost_fixings_;
     solution.objective_branches = objective_branches_;
+    solution.symmetry_generators = symmetry_generators_;
     solution.solve_seconds = timer_.elapsed_seconds();
     report_root(&solution);
     return solution;
@@ -756,6 +811,7 @@ Solution BranchAndBound::run() {
   solution.restarts = restarts_;
   solution.reduced_cost_fixings = reduced_cost_fixings_;
   solution.objective_branches = objective_branches_;
+  solution.symmetry_generators = symmetry_generators_;
   solution.solve_seconds = timer_.elapsed_seconds();
   report_root(&solution);
 

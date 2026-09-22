@@ -518,6 +518,9 @@ class Solution {
   /// Nodes split on the objective row rather than on a column (#418); zero unless
   /// mip_objective_branching is on and the objective was found to be integral.
   Count objective_branches = 0;
+  /// Formulation symmetry generators the search found and added ordering rows for (#413);
+  /// zero unless mip_symmetry is on.
+  Count symmetry_generators = 0;
   /// The root LP relaxation's objective before and after the root cut round (#221), in
   /// the model's own sense and units; NaN when no branch-and-cut ran. The share of the
   /// integrality gap the cuts closed is (after - before) / (objective - before), which the

@@ -554,6 +554,29 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"mip_symmetry",
+                 OptionType::Bool,
+                 false,
+                 "Formulation symmetry (#413; Margot 2010; Liberti 2012): detect the "
+                 "permutations of columns and rows that leave the model unchanged, by "
+                 "colour refinement and individualisation on the model's coloured bipartite "
+                 "graph, and append one ordering row x_i <= x_k per generator found, where i "
+                 "is the generator's first moved column and k its image. The rows hold for "
+                 "the lexicographically smallest point of every orbit, so an optimum "
+                 "survives them; every generator is verified against the model entry by "
+                 "entry before it is used. One search only; not for a quadratic objective. "
+                 "OFF until the MIPLIB A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"mip_symmetry_search_limit",
+                 OptionType::Int,
+                 std::int64_t{1000},
+                 "Individualisations the symmetry search may perform (#413) before it stops "
+                 "with the generators found so far, which are exact whatever the budget.",
+                 0.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"checkpoint",
                  OptionType::String,
                  std::string(""),
