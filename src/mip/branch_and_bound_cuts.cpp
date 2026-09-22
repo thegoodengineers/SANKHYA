@@ -184,6 +184,9 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
         working_, initial_relaxation, global_lower_, global_upper_, &flow_stats);
     flow_cover_cuts_generated_ += static_cast<Count>(flow_covers.size());
     flow_cover_cuts_lifted_ += static_cast<Count>(flow_stats.lifted_cuts);
+    flow_cover_cuts_aggregated_ += static_cast<Count>(flow_stats.aggregated_cuts);
+    flow_cover_deepest_aggregation_ =
+        std::max(flow_cover_deepest_aggregation_, static_cast<Count>(flow_stats.deepest));
     candidates.insert(candidates.end(), flow_covers.begin(), flow_covers.end());
   }
 
@@ -226,6 +229,9 @@ void BranchAndBound::tree_cut_round(Index depth, Solution* relaxation) {
         working_, *relaxation, global_lower_, global_upper_, &flow_stats);
     flow_cover_cuts_generated_ += static_cast<Count>(flow_covers.size());
     flow_cover_cuts_lifted_ += static_cast<Count>(flow_stats.lifted_cuts);
+    flow_cover_cuts_aggregated_ += static_cast<Count>(flow_stats.aggregated_cuts);
+    flow_cover_deepest_aggregation_ =
+        std::max(flow_cover_deepest_aggregation_, static_cast<Count>(flow_stats.deepest));
     candidates.insert(candidates.end(), flow_covers.begin(), flow_covers.end());
   }
   if (candidates.empty()) return;

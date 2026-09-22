@@ -715,8 +715,11 @@ Solution BranchAndBound::run() {
         clique_cuts_generated_, zero_half_cuts_generated_);
   }
   if (flow_cover_cuts_generated_ > 0) {
-    logger_.info("Flow cover cut candidates (#419): {} ({} lifted), before the filter",
-                 flow_cover_cuts_generated_, flow_cover_cuts_lifted_);
+    logger_.info(
+        "Flow cover cut candidates (#419): {} ({} lifted, {} needed row aggregation, deepest "
+        "{}), before the filter",
+        flow_cover_cuts_generated_, flow_cover_cuts_lifted_, flow_cover_cuts_aggregated_,
+        flow_cover_deepest_aggregation_);
   }
   if (Profiler* profiler = logger_.profiler(); profiler != nullptr) {
     profiler->count("nodes pruned", static_cast<std::int64_t>(nodes_pruned_));

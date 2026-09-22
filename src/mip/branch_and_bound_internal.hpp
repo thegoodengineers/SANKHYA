@@ -575,6 +575,8 @@ class BranchAndBound {
   Count flow_cover_cuts_generated_ = 0;  ///< #419, before the filter
   Count flow_cover_cuts_lifted_ =
       0;  ///< #419, of those, at least one leftover column folded in
+  Count flow_cover_cuts_aggregated_ = 0;  ///< #419, of those, needed single-node aggregation
+  Count flow_cover_deepest_aggregation_ = 0;  ///< #419, deepest aggregation seen this solve
   std::string checkpoint_path_;
   Count checkpoint_nodes_ = 0;
   Count last_checkpoint_at_ = -1;

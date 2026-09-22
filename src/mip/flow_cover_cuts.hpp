@@ -46,14 +46,31 @@
 // the added term is ~0 and the cut's measured violation does not drop - which lets the cut
 // carry the leftover column's coefficients without weakening the round's separation.
 //
-// AGGREGATION AND SINGLE-NODE RELAXATION. #419 scopes multi-row aggregation to "only as far
-// as the architecture justifies": this generator is one-row separation, exactly the interface
-// mir_cuts.cpp already exposes (Model, Solution, global bounds, Stats out-param), with the one
-// piece of row-crossing structure the theorem itself needs - locating each flow column's own
-// variable-upper-bound row - handled the same way mir_cuts.cpp scans rows_of(model). A single-
-// node relaxation that aggregates several capacity rows around one implied network node is the
-// natural next step the issue names, and is left for a follow-up once this family has a
-// measurement to build on.
+// AGGREGATION AND SINGLE-NODE RELAXATION. A capacity row rarely arrives already in the clean
+// single-node shape: a shared flow variable (an arc between two implied network nodes) often
+// makes one side's row carry a column that is not itself a qualifying flow term - the other
+// node's own capacity or balance row, seen from this row, looks like a foreign column. When a
+// row has exactly one such DISQUALIFYING column (anything that is not a positive coefficient on
+// a continuous column with its own variable upper bound), it is eliminated by adding a multiple
+// of another, not-yet-used row that contains it and has a finite bound on the side the
+// multiplier's sign needs - the same elimination mir_cuts.cpp's aggregation uses (Marchand &
+// Wolsey 2001, sec. 3), retargeted here at whichever column blocks the flow-cover shape rather
+// than at a continuous column sitting inside its bounds. Eliminating that column folds the
+// other row's flow terms into this one, which is exactly a SINGLE-NODE FLOW RELAXATION: the
+// two rows' arcs now share one budget, the way they would around one implied node once the
+// arc between them is balanced out. The result is checked again; if it is now a clean flow
+// row, separation is tried on it, and if it still has a disqualifying column, elimination is
+// tried again up to a small depth (3, "small" per the issue's own wording - MIR uses 6 for a
+// different reason, discharging continuous slack rather than reaching a shape at all). Every
+// intermediate aggregate is a genuine valid inequality (a non-negative combination of two valid
+// "<=" rows, exactly as mir_cuts.cpp's aggregate_row is), so the flow cover theorem applies to
+// it unchanged; only the columns it is separated over change with depth. The best cut over
+// every depth tried (0 = the row alone) is kept, mirroring generate_mir_cuts.
+//
+// A row that is ALREADY a clean flow row is not aggregated further: growing an already-valid
+// flow set by merging in a second, already-qualifying row (rather than eliminating a blocking
+// column) is a further extension the issue's own "only as far as the architecture justifies"
+// leaves for a follow-up, once this one has a measurement to build on.
 #pragma once
 
 #include <vector>
@@ -69,6 +86,9 @@ struct FlowCoverStats {
   int lifted_cuts = 0;     ///< of those, at least one leftover column was folded in
   int lifted_terms = 0;    ///< leftover (x_j, y_j) pairs folded into some cut
   int vub_rows_found = 0;  ///< columns for which a variable-upper-bound row was located
+  int aggregated_cuts =
+      0;            ///< of the cuts returned, how many needed row aggregation (depth > 0)
+  int deepest = 0;  ///< the deepest aggregation (rows eliminated) that won, over all cuts
 };
 
 /// Flow cover cuts from the model's capacity rows at `solution`, valid under `col_lower` /
