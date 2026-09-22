@@ -1098,6 +1098,8 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.polish_iterations = reduced.polish_iterations;
   solution.nodes = reduced.nodes;
   solution.cuts_applied = reduced.cuts_applied;
+  solution.restarts = reduced.restarts;
+  solution.reduced_cost_fixings = reduced.reduced_cost_fixings;
   // The root bounds are objective values of the reduced model, whose objective_offset
   // carries the constant the removed columns contributed, so they are already in the
   // original model's units (#221).

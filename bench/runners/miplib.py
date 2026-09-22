@@ -79,6 +79,10 @@ CSV_COLUMNS = [
     # Tree worker threads (#222): mip_threads from the options, 1 when it is not given. Last,
     # so a reader of the older CSVs that indexes columns by position still reads them.
     "threads",
+    # Restarts and reduced-cost fixings (#418), after threads for the same reason; blank in
+    # every CSV written before them.
+    "restarts",
+    "reduced_cost_fixings",
 ]
 
 
@@ -187,6 +191,8 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             "integer_columns": model.get("integer_columns", ""),
             "nodes": effort.get("nodes", ""),
             "cuts_applied": effort.get("cuts_applied", ""),
+            "restarts": effort.get("restarts", ""),
+            "reduced_cost_fixings": effort.get("reduced_cost_fixings", ""),
             "root_bound": as_number(effort.get("root_bound")),
             "root_bound_after_cuts": as_number(effort.get("root_bound_after_cuts")),
             "solver_seconds": effort.get("solve_seconds", ""),
@@ -306,6 +312,8 @@ def main() -> int:
             "git_commit": commit,
             "solver_options": solver_options,
             "threads": threads,
+            "restarts": blob.get("restarts", ""),
+            "reduced_cost_fixings": blob.get("reduced_cost_fixings", ""),
             "machine": machine,
             "timestamp_utc": stamp,
         })

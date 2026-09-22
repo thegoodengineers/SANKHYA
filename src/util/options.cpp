@@ -434,6 +434,50 @@ const std::vector<OptionSpec>& Options::registry() {
                  1.0,
                  kNoLimit,
                  {}});
+    s.push_back({"mip_reduced_cost_fixing",
+                 OptionType::Bool,
+                 false,
+                 "Tighten, for the whole tree, the bounds of integer columns the root "
+                 "relaxation's reduced costs and the incumbent rule out (#418; Nemhauser and "
+                 "Wolsey 1988; Achterberg 2007, ch. 7): a column nonbasic at a bound at the "
+                 "root pays its reduced cost per unit it moves, so the units that would cost "
+                 "more than the incumbent's distance from the root bound are cut off. Re-run "
+                 "between nodes whenever the incumbent improves. Not while the solution pool "
+                 "asks for alternatives (pool_complete or pool_gap), which fixing would "
+                 "remove. OFF until the MIPLIB A/B on main says what it buys.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"mip_restarts",
+                 OptionType::Int,
+                 std::int64_t{0},
+                 "Most times the search may throw its tree away and re-solve the root on the "
+                 "bounds reduced-cost fixing tightened (#418; Achterberg 2007, ch. 10; "
+                 "Achterberg and Wunderling 2013). A restart happens when at least "
+                 "mip_restart_fraction of the integer columns have been fixed since the root "
+                 "was last processed and at most mip_restart_node_limit nodes have been "
+                 "explored; pseudocosts, cut rows, conflicts and the incumbent are kept. Needs "
+                 "mip_reduced_cost_fixing, and one search: a parallel tree does not restart. "
+                 "0 is off, which is the default until the MIPLIB A/B on main.",
+                 0.0,
+                 kNoLimit,
+                 {}});
+    s.push_back({"mip_restart_fraction",
+                 OptionType::Double,
+                 0.1,
+                 "Share of the integer columns that must be fixed since the root was last "
+                 "processed before a restart (#418).",
+                 0.0,
+                 1.0,
+                 {}});
+    s.push_back({"mip_restart_node_limit",
+                 OptionType::Int,
+                 std::int64_t{1000},
+                 "No restart after this many nodes have been explored (#418): a tree that "
+                 "deep has invested more than a restart could return.",
+                 0.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"checkpoint",
                  OptionType::String,
                  std::string(""),

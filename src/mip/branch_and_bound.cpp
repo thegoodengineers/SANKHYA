@@ -160,6 +160,11 @@ void BranchAndBound::detect_objective_integrality() {
 Solution BranchAndBound::run() {
   init_heuristics();
   detect_objective_integrality();
+  // Reduced-cost fixing and restarts (#418), both off unless asked for.
+  reduced_cost_fixing_ = options_.get_bool("mip_reduced_cost_fixing");
+  restarts_allowed_ = reduced_cost_fixing_ ? options_.get_int("mip_restarts") : 0;
+  restart_fraction_ = options_.get_double("mip_restart_fraction");
+  restart_node_limit_ = options_.get_int("mip_restart_node_limit");
   global_lower_ = working_.col_lower;
   global_upper_ = working_.col_upper;
   if (options_.get_bool("enable_root_cuts")) {
@@ -353,6 +358,15 @@ Solution BranchAndBound::run() {
       }
     }
 
+    // Reduced-cost fixing and restarts (#418), between nodes, where working_'s bounds are the
+    // global bounds: whenever the incumbent has improved, tighten what the root's reduced
+    // costs now rule out; and if that fixed enough of the integer columns, throw the tree
+    // away and re-solve the root on the tightened bounds.
+    if (fix_by_reduced_cost() > 0 && restart_due()) {
+      restart_search();
+      continue;
+    }
+
     // Which node to take next is the configured policy's decision (#293), and only the
     // order it decides: the tree, the bounds and the incumbent test are the same either way.
     const Index node_index = take_next_open_node(dive);
@@ -451,7 +465,15 @@ Solution BranchAndBound::run() {
       root_bound_internal_ = internal_objective(relaxation.col_value);
       root_bound_after_cuts_internal_ = root_bound_internal_;
     }
-    if (node_index == 0 && options_.get_bool("enable_root_cuts")) root_cut_round(&relaxation);
+    // The root cut round runs on the first root only: a restarted root (#418) keeps the cut
+    // rows the first one added, and the cut machinery's root bookkeeping is built for one
+    // root.
+    if (node_index == 0 && restarts_ == 0 && options_.get_bool("enable_root_cuts")) {
+      root_cut_round(&relaxation);
+    }
+    // The root relaxation after cuts is what reduced-cost fixing (#418) reasons from: its
+    // reduced costs bound what every integer solution must pay to move a column.
+    if (node_index == 0) remember_root_relaxation(relaxation);
     // Cuts below the root (#221): shallow nodes only, on the global bounds, kept for the
     // whole tree. The node's bound is taken after the round, so a cut that moved it
     // counts for pruning and for the pseudocosts alike.
@@ -655,6 +677,8 @@ Solution BranchAndBound::run() {
     solution.absolute_gap = kInfinity;
     solution.relative_gap = kInfinity;
     solution.nodes = nodes_explored_;
+    solution.restarts = restarts_;
+    solution.reduced_cost_fixings = reduced_cost_fixings_;
     solution.solve_seconds = timer_.elapsed_seconds();
     report_root(&solution);
     return solution;
@@ -662,6 +686,8 @@ Solution BranchAndBound::run() {
 
   solution.col_value = incumbent_x_;
   solution.nodes = nodes_explored_;
+  solution.restarts = restarts_;
+  solution.reduced_cost_fixings = reduced_cost_fixings_;
   solution.solve_seconds = timer_.elapsed_seconds();
   report_root(&solution);
 

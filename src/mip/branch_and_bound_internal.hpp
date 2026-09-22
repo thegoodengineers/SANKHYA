@@ -316,6 +316,17 @@ class BranchAndBound {
   /// The feasibility pump at the root, only when nothing else found an incumbent.
   void run_root_pump(const Solution& relaxation);
   void report_heuristics();
+  // ---- Reduced-cost fixing and restarts (#418), in branch_and_bound_restart.cpp ---------
+  /// Keep the root relaxation's reduced costs and basis: the material fixing works from.
+  void remember_root_relaxation(const Solution& relaxation);
+  /// Tighten, for the whole tree, the integer bounds the root reduced costs and the
+  /// incumbent rule out. Between nodes only (no node entered); a no-op until the incumbent
+  /// has improved since the last pass. Returns the bounds moved.
+  Count fix_by_reduced_cost();
+  /// Enough fixed since the root was last processed, within the restart budget.
+  [[nodiscard]] bool restart_due() const;
+  /// Discard the tree and start again from the root on the tightened bounds.
+  void restart_search();
   // ---- Checkpoint and resume (#287), in branch_and_bound_checkpoint.cpp -----------------
   /// The search as it stands between nodes.
   [[nodiscard]] TreeCheckpoint make_checkpoint() const;
@@ -572,6 +583,17 @@ class BranchAndBound {
   std::vector<HeuristicStats> heuristic_stats_;
   Locks locks_;
   HeuristicSchedule schedule_;
+  // Reduced-cost fixing and restarts (#418).
+  bool reduced_cost_fixing_ = false;
+  std::vector<double> root_reduced_;  ///< the root relaxation's reduced costs, minimise space
+  std::vector<BasisStatus> root_status_;
+  double fixing_incumbent_ = std::numeric_limits<double>::infinity();  ///< last pass used
+  Count reduced_cost_fixings_ = 0;  ///< bounds moved over the search, reported
+  Count fixed_since_root_ = 0;      ///< integer columns fixed since the root was processed
+  Count restarts_ = 0;
+  Count restarts_allowed_ = 0;
+  double restart_fraction_ = 0.0;
+  Count restart_node_limit_ = 0;
   Count clique_cuts_generated_ = 0;     ///< #358, before the filter
   Count zero_half_cuts_generated_ = 0;  ///< #358, before the filter
   std::string checkpoint_path_;

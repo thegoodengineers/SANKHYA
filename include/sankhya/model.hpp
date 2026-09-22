@@ -507,6 +507,11 @@ class Solution {
   Count iterations = 0;  ///< simplex/IPM/PDHG iterations
   Count nodes = 0;       ///< branch-and-cut nodes
   Count cuts_applied = 0;
+  /// Times the branch and bound threw its tree away and re-solved the root (#418), and
+  /// the integer bounds reduced-cost fixing tightened over the search; zero unless
+  /// mip_restarts / mip_reduced_cost_fixing asked for them.
+  Count restarts = 0;
+  Count reduced_cost_fixings = 0;
   /// The root LP relaxation's objective before and after the root cut round (#221), in
   /// the model's own sense and units; NaN when no branch-and-cut ran. The share of the
   /// integrality gap the cuts closed is (after - before) / (objective - before), which the
