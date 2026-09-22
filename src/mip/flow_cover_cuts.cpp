@@ -304,6 +304,75 @@ std::optional<CoverResult> best_cover_in_order(const std::vector<FlowTerm>& term
   return best;
 }
 
+/// The violation of an ARBITRARY candidate cover (not necessarily a prefix of some ordering),
+/// or nullopt when it is not a valid cover (excess <= 0) or fails the same dynamism/violation
+/// gate best_cover_in_order applies. Used by the local-search step below, which needs to score
+/// covers no single ordering's prefixes can reach.
+std::optional<CoverResult> evaluate_cover(const std::vector<FlowTerm>& terms,
+                                          const std::vector<std::size_t>& members, double b) {
+  double capacity = 0.0;
+  double z = 0.0;
+  for (const std::size_t m : members) {
+    capacity += terms[m].effective_capacity;
+    z += terms[m].z_star;
+  }
+  const double excess = capacity - b;
+  if (excess <= kMinExcess) return std::nullopt;
+  double lhs = z;
+  double max_abs = 1.0;
+  double min_abs = 1.0;
+  for (const std::size_t m : members) {
+    const double slack = terms[m].effective_capacity - excess;
+    if (slack > tol::kZeroDrop) {
+      lhs += slack * (1.0 - terms[m].y_star);
+      max_abs = std::max(max_abs, slack);
+      min_abs = std::min(min_abs, slack);
+    }
+  }
+  if (max_abs / min_abs > kMaxDynamism) return std::nullopt;
+  const double violation = (lhs - b) / std::max(1.0, std::fabs(b));
+  if (violation <= kMinViolation) return std::nullopt;
+  return CoverResult{members, excess, violation};
+}
+
+/// How many full add/remove passes the local search below may make. Exact separation of the
+/// flow cover polytope is NP-hard (the violation of a candidate depends on its own excess,
+/// which is a function of the whole set, not additive per item, so it is not a textbook
+/// knapsack DP); this is a bounded, deterministic improvement step over the three orderings'
+/// prefixes, not a claim of optimality.
+constexpr int kMaxLocalSearchPasses = 2;
+
+/// Starting from `best` (a prefix cover from some ordering), try flipping one item's
+/// membership at a time - in a fixed, deterministic column order - keeping the flip only when
+/// it strictly improves the violation and is still a valid cover. Up to kMaxLocalSearchPasses
+/// full sweeps, stopping early once a sweep makes no improvement. This reaches covers no
+/// single ordering's prefixes can (a middling-capacity item swapped in for a low-violation
+/// one already in the prefix, for instance), at a bounded, small extra cost.
+CoverResult local_search_improve(const std::vector<FlowTerm>& terms, CoverResult best,
+                                 double b) {
+  std::vector<char> in_cover(terms.size(), 0);
+  for (const std::size_t m : best.members) in_cover[m] = 1;
+  for (int pass = 0; pass < kMaxLocalSearchPasses; ++pass) {
+    bool improved = false;
+    for (std::size_t j = 0; j < terms.size(); ++j) {
+      std::vector<char> trial = in_cover;
+      trial[j] = trial[j] != 0 ? 0 : 1;
+      std::vector<std::size_t> members;
+      for (std::size_t k = 0; k < terms.size(); ++k) {
+        if (trial[k] != 0) members.push_back(k);
+      }
+      std::optional<CoverResult> candidate = evaluate_cover(terms, members, b);
+      if (candidate && candidate->violation > best.violation) {
+        best = *candidate;
+        in_cover = trial;
+        improved = true;
+      }
+    }
+    if (!improved) break;
+  }
+  return best;
+}
+
 }  // namespace
 
 std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& solution,
@@ -385,6 +454,7 @@ std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& so
                 cover = std::move(result);
               }
             }
+            if (cover) cover = local_search_improve(terms, *cover, rhs);
             if (cover && cover->violation > best_violation) {
               if (std::optional<BuiltCut> candidate = build_cut(n, terms, *cover, rhs)) {
                 best = std::move(candidate);
