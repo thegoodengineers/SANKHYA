@@ -188,9 +188,21 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   add_combinatorial_cuts(initial_relaxation, &candidates);
 
   auto filtered = filter_and_deduplicate_cuts(working_, initial_relaxation, candidates);
-  std::vector<Cut> accepted;
-  for (const auto& fc : filtered) {
-    if (fc.reason == CutFilterReason::kAccepted) accepted.push_back(fc.cut);
+  std::vector<Cut> passing;
+  for (auto& fc : filtered) {
+    if (fc.reason == CutFilterReason::kAccepted) passing.push_back(std::move(fc.cut));
+  }
+  // Selection (#415): of everything that passed, the best cut_max_per_round by score, none
+  // nearly parallel to another taken; the rest wait for the tree rounds, where the LP
+  // point has moved. Adding every violated cut was measured to cost nodes, not save them.
+  const std::size_t passed = passing.size();
+  CutSelection chosen = select_cuts(working_, initial_relaxation.col_value, std::move(passing),
+                                    cut_max_per_round_, cut_max_parallelism_);
+  std::vector<Cut> accepted = std::move(chosen.selected);
+  waiting_cuts_ = std::move(chosen.deferred);
+  if (passed > accepted.size()) {
+    logger_.verbose("root cut selection: {} of {} taken, {} waiting for a tree round",
+                    accepted.size(), passed, waiting_cuts_.size());
   }
   if (accepted.empty()) return;
 
@@ -220,15 +232,24 @@ void BranchAndBound::tree_cut_round(Index depth, Solution* relaxation) {
   std::vector<Cut> candidates =
       generate_mir_cuts(working_, *relaxation, global_lower_, global_upper_);
   add_combinatorial_cuts(*relaxation, &candidates);
+  // The cuts an earlier round left waiting (#415) are candidates again: the filter re-tests
+  // their violation at THIS node's point, and the selection below scores them afresh.
+  candidates.insert(candidates.end(), waiting_cuts_.begin(), waiting_cuts_.end());
+  waiting_cuts_.clear();
   if (candidates.empty()) return;
   auto filtered = filter_and_deduplicate_cuts(working_, *relaxation, candidates);
-  std::vector<Cut> accepted;
+  std::vector<Cut> passing;
   for (auto& fc : filtered) {
     if (fc.reason != CutFilterReason::kAccepted) continue;
     if (is_pooled_duplicate(fc.cut)) continue;
-    accepted.push_back(std::move(fc.cut));
-    if (static_cast<Index>(accepted.size()) >= tree_cut_rows_per_round_) break;
+    passing.push_back(std::move(fc.cut));
   }
+  // Selection (#415): the best few by score, none nearly parallel to another taken, the
+  // tree round's own cap; what is not taken waits for the next round.
+  CutSelection chosen = select_cuts(working_, relaxation->col_value, std::move(passing),
+                                    tree_cut_rows_per_round_, cut_max_parallelism_);
+  std::vector<Cut> accepted = std::move(chosen.selected);
+  waiting_cuts_ = std::move(chosen.deferred);
   if (accepted.empty()) return;
   ++tree_cut_rounds_;
 

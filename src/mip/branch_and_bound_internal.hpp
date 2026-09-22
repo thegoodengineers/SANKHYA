@@ -25,6 +25,7 @@
 
 #include "checkpoint.hpp"
 #include "conflict.hpp"
+#include "cut_selection.hpp"
 #include "cuts.hpp"
 #include "flow_cover_cuts.hpp"
 #include "heuristics.hpp"
@@ -625,6 +626,12 @@ class BranchAndBound {
   /// appended so far starting at working_ row first_cut_row_, and their ageing state.
   Index tree_cut_depth_ = 0;
   Index tree_cut_rows_per_round_ = 20;
+  /// Cut selection (#415): the root round's cap, the parallelism above which a cut waits,
+  /// and the cuts that passed a round's filter but were not taken, offered again at the
+  /// next round where the LP point has moved.
+  Index cut_max_per_round_ = 30;
+  double cut_max_parallelism_ = tol::kCutMaxParallelism;
+  std::vector<Cut> waiting_cuts_;
   std::vector<double> global_lower_;
   std::vector<double> global_upper_;
   Index first_cut_row_ = -1;

@@ -260,6 +260,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/branch_and_bound_heuristics.cpp
   src/mip/branch_and_bound_restart.cpp
   src/mip/flow_cover_cuts.cpp
+  src/mip/cut_selection.cpp
   src/mip/checkpoint.cpp
   src/mip/solution_pool.cpp
   src/mip/conflict.cpp

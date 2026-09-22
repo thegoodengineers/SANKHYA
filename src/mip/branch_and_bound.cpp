@@ -170,6 +170,8 @@ Solution BranchAndBound::run() {
   if (options_.get_bool("enable_root_cuts")) {
     tree_cut_depth_ = static_cast<Index>(options_.get_int("tree_cut_depth"));
     tree_cut_rows_per_round_ = static_cast<Index>(options_.get_int("tree_cut_rows_per_round"));
+    cut_max_per_round_ = static_cast<Index>(options_.get_int("cut_max_per_round"));
+    cut_max_parallelism_ = options_.get_double("cut_max_parallelism");
   }
   Solution solution;
   solution.allocate_for(original_);

@@ -281,6 +281,26 @@ const std::vector<OptionSpec>& Options::registry() {
                  1.0,
                  100000.0,
                  {}});
+    s.push_back({"cut_max_per_round",
+                 OptionType::Int,
+                 std::int64_t{30},
+                 "Most cuts the root cut round may add (#415; Wesselmann and Suhl 2012): "
+                 "every candidate that passes the filter is scored by efficacy, objective "
+                 "parallelism and integer support, the best are taken in that order, and "
+                 "the rest wait for a later round rather than being dropped. The tree "
+                 "rounds keep their own cap, tree_cut_rows_per_round.",
+                 1.0,
+                 100000.0,
+                 {}});
+    s.push_back({"cut_max_parallelism",
+                 OptionType::Double,
+                 tol::kCutMaxParallelism,
+                 "A cut whose normal has a cosine above this with a cut already taken in "
+                 "the same round says nearly the same thing and waits for a later round "
+                 "(#415). 1 turns the test off.",
+                 0.0,
+                 1.0,
+                 {}});
     s.push_back({"mip_heuristics",
                  OptionType::Bool,
                  false,

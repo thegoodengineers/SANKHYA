@@ -217,4 +217,21 @@ inline constexpr double kCutNoiseRelative = 1e-14;
 /// or barely violated are safely rejected to save LP solves.
 inline constexpr double kCutViolationTolerance = 1e-5;
 
+/// Cut selection (#415; Wesselmann & Suhl, "Implementing cutting plane management and
+/// selection techniques", 2012; Achterberg 2007, ch. 8). A cut's score is the weighted sum
+/// of its efficacy (the Euclidean distance from the LP point to its hyperplane), its
+/// parallelism to the objective and the share of its support on integer columns; the
+/// weights are Wesselmann and Suhl's defaults, efficacy first and the other two as
+/// tie-breakers.
+inline constexpr double kCutSelectionEfficacyWeight = 1.0;
+inline constexpr double kCutSelectionObjectiveWeight = 0.1;
+inline constexpr double kCutSelectionIntegerSupportWeight = 0.1;
+
+/// Two cuts whose normals have a cosine above this say nearly the same thing; the second
+/// adds a row and no information and is deferred to a later round instead.
+inline constexpr double kCutMaxParallelism = 0.9;
+
+/// Cuts a round may keep waiting for a later round after selection; the best by score stay.
+inline constexpr int kCutWaitingLimit = 500;
+
 }  // namespace sankhya::tol
