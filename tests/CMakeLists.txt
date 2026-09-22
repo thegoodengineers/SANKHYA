@@ -55,6 +55,7 @@ add_executable(sankhya_tests
   unit/test_conflict.cpp
   unit/test_heuristics.cpp
   unit/test_restarts.cpp
+  unit/test_flow_cover_cuts.cpp
   unit/test_combinatorial_cuts.cpp
   unit/test_checkpoint.cpp
   unit/test_parallel_tree.cpp

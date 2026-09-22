@@ -560,6 +560,19 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"enable_flow_cover_cuts",
+                 OptionType::Bool,
+                 false,
+                 "Include flow cover cuts in the cut rounds (#419; Padberg, Van Roy and "
+                 "Wolsey 1985): on a row whose inflows are switched by binaries through "
+                 "variable-upper-bound rows x <= u y, the cover of switched arcs whose "
+                 "capacity exceeds what the row takes gives sum x_j + (u_j - lambda)^+ "
+                 "(1 - y_j) <= b plus the outflows, the family built for the fixed-charge "
+                 "models MIR is weak on. Unlifted. Only read when enable_root_cuts is set; "
+                 "OFF until the MIPLIB A/B on main says what it buys.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back(
         {"enable_root_cuts",
          OptionType::Bool,

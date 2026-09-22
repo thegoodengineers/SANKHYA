@@ -26,6 +26,7 @@
 #include "checkpoint.hpp"
 #include "conflict.hpp"
 #include "cuts.hpp"
+#include "flow_cover_cuts.hpp"
 #include "heuristics.hpp"
 #include "solution_pool.hpp"
 

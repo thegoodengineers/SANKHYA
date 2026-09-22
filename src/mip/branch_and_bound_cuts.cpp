@@ -136,6 +136,18 @@ void BranchAndBound::add_combinatorial_cuts(const Solution& relaxation,
     logger_.verbose("clique cuts: the conflict graph stopped at {} edges (the cap)",
                     stats.conflict_edges);
   }
+  // Flow cover cuts (#419): the family for rows whose inflows are switched by binaries
+  // through variable-upper-bound rows, read under the GLOBAL bounds like the two above.
+  if (options_.get_bool("enable_flow_cover_cuts")) {
+    FlowCoverStats flow;
+    std::vector<Cut> covers =
+        generate_flow_cover_cuts(working_, relaxation, global_lower_, global_upper_, &flow);
+    if (flow.flow_rows > 0) {
+      logger_.verbose("flow cover cuts: {} switched row side(s), {} cover(s), {} cut(s)",
+                      flow.flow_rows, flow.covers, flow.cuts);
+    }
+    candidates->insert(candidates->end(), covers.begin(), covers.end());
+  }
 }
 
 bool BranchAndBound::is_pooled_duplicate(const Cut& cut) const {
