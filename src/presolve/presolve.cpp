@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -259,6 +260,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   const double feasibility = options.get_double("primal_feasibility_tolerance");
   const bool dual_fixing = options.get_bool("presolve_dual_fixing");
   const bool parallel_rows = options.get_bool("presolve_parallel_rows");
+  const bool dominated_columns = options.get_bool("presolve_dominated_columns");
 
   Timer presolve_clock;
   Workspace work;
@@ -624,6 +626,133 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         kill_row(&work, row);
         changed = true;
         continue;
+      }
+    }
+
+    // --- dominated columns (#412; Gamrath et al. 2015, sec. 3) ------------------------
+    // Column j DOMINATES column k when, in minimise space, c_j <= c_k and in every live row
+    // they share j's entry is at least as helpful as k's: no larger in a row bounded above
+    // only, no smaller in a row bounded below only, equal in a row bounded on both sides.
+    // Then any feasible point can move activity from k onto j - lower x_k by d and raise
+    // x_j by d - without breaking a row or paying more. Two fixings follow, each only with
+    // room for the move: if u_j is infinite, x_k can always go down to a finite l_k, so
+    // some optimum has x_k = l_k; if l_k is infinite, x_j can always go up to a finite u_j,
+    // so some optimum has x_j = u_j. The move must keep integrality: d = x_k - l_k is
+    // integral when k is integer, so raising an integer j needs k integer (the first
+    // fixing); d = u_j - x_j is integral when j is integer, so lowering an integer k needs
+    // j integer (the second). Pairs are found by bucketing the columns on their live row
+    // support, so only columns on exactly the same rows are compared - the general
+    // subset case is left to a later slice - and a bucket is searched pairwise up to a
+    // cap, since a model with thousands of identical-pattern columns would otherwise
+    // spend its presolve here. Columns touched by doubleton fill-in are skipped: their
+    // live entries are patched, and the comparison reads the original ones.
+    if (dominated_columns && !result.proved_infeasible) {
+      constexpr std::size_t kBucketCap = 64;
+      std::map<std::vector<Index>, std::vector<Index>> buckets;
+      for (Index j = 0; j < n; ++j) {
+        const auto u = static_cast<std::size_t>(j);
+        if (work.col_dead[u] || work.quadratic_col[u] || work.col_count[u] < 1) continue;
+        if (!work.extra_row_delta[u].empty() || !work.extra_new_rows[u].empty()) continue;
+        std::vector<Index> support;
+        const ColumnView view = model.matrix.column(j);
+        for (Index k = 0; k < view.size; ++k) {
+          if (work.row_dead[static_cast<std::size_t>(view.rows[k])]) continue;
+          if (std::fabs(view.values[k]) <= tol::kZeroDrop) continue;
+          support.push_back(view.rows[k]);
+        }
+        if (support.empty()) continue;
+        std::vector<Index>& bucket = buckets[support];
+        if (bucket.size() < kBucketCap) bucket.push_back(j);
+      }
+      // Whether `a` dominates `b`: costs, then every shared live row.
+      const auto dominates = [&](Index a, Index b) {
+        const auto ua = static_cast<std::size_t>(a);
+        const auto ub = static_cast<std::size_t>(b);
+        const double sense = model.sense_multiplier();
+        if (sense * work.col_cost[ua] > sense * work.col_cost[ub]) return false;
+        const ColumnView va = model.matrix.column(a);
+        const ColumnView vb = model.matrix.column(b);
+        Index ka = 0;
+        Index kb = 0;
+        while (ka < va.size && kb < vb.size) {
+          const auto r = static_cast<std::size_t>(va.rows[ka]);
+          const bool live_a = !work.row_dead[r] && std::fabs(va.values[ka]) > tol::kZeroDrop;
+          const bool live_b = !work.row_dead[static_cast<std::size_t>(vb.rows[kb])] &&
+                              std::fabs(vb.values[kb]) > tol::kZeroDrop;
+          if (!live_a) {
+            ++ka;
+            continue;
+          }
+          if (!live_b) {
+            ++kb;
+            continue;
+          }
+          if (va.rows[ka] != vb.rows[kb]) return false;  // supports differ after all
+          const bool has_lower = finite(work.row_lower[r]);
+          const bool has_upper = finite(work.row_upper[r]);
+          const double coefficient_a = va.values[ka];
+          const double coefficient_b = vb.values[kb];
+          if (has_lower && has_upper) {
+            if (coefficient_a != coefficient_b) return false;
+          } else if (has_upper) {
+            if (coefficient_a > coefficient_b) return false;
+          } else if (has_lower) {
+            if (coefficient_a < coefficient_b) return false;
+          }
+          ++ka;
+          ++kb;
+        }
+        return true;
+      };
+      // The fixing a dominating column `a` over a dominated column `b` allows, if any:
+      // returns the column fixed and its value through the out-parameters.
+      const auto fixing = [&](Index a, Index b, Index* fixed, double* value) {
+        const auto ua = static_cast<std::size_t>(a);
+        const auto ub = static_cast<std::size_t>(b);
+        const bool a_integer = model.col_type[ua] == VarType::kInteger;
+        const bool b_integer = model.col_type[ub] == VarType::kInteger;
+        if (!finite(work.col_upper[ua]) && finite(work.col_lower[ub]) &&
+            (!a_integer || b_integer)) {
+          *fixed = b;
+          *value = work.col_lower[ub];
+          return true;
+        }
+        if (!finite(work.col_lower[ub]) && finite(work.col_upper[ua]) &&
+            (!b_integer || a_integer)) {
+          *fixed = a;
+          *value = work.col_upper[ua];
+          return true;
+        }
+        return false;
+      };
+      for (const auto& [support, bucket] : buckets) {
+        (void)support;
+        for (std::size_t p = 0; p < bucket.size(); ++p) {
+          const Index a = bucket[p];
+          if (work.col_dead[static_cast<std::size_t>(a)]) continue;
+          for (std::size_t q = p + 1; q < bucket.size(); ++q) {
+            const Index b = bucket[q];
+            if (work.col_dead[static_cast<std::size_t>(a)]) break;
+            if (work.col_dead[static_cast<std::size_t>(b)]) continue;
+            Index fixed = -1;
+            double value = std::numeric_limits<double>::quiet_NaN();
+            bool found = false;
+            if (dominates(a, b) && fixing(a, b, &fixed, &value)) found = true;
+            if (!found && dominates(b, a) && fixing(b, a, &fixed, &value)) found = true;
+            if (!found) continue;
+            const auto uf = static_cast<std::size_t>(fixed);
+            Record record;
+            record.kind = Record::Kind::kDominatedColumn;
+            record.index = fixed;
+            record.value = value;
+            record.partner_column = fixed == a ? b : a;
+            result.records.push_back(record);
+            work.col_lower[uf] = value;
+            work.col_upper[uf] = value;
+            fold_fixed_column(&work, fixed, value);
+            changed = true;
+          }
+        }
       }
     }
 
@@ -1133,7 +1262,8 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   for (const Record& record : result.records) {
     if (record.kind == Record::Kind::kFixedColumn ||
         record.kind == Record::Kind::kEmptyColumn ||
-        record.kind == Record::Kind::kDualFixedColumn) {
+        record.kind == Record::Kind::kDualFixedColumn ||
+        record.kind == Record::Kind::kDominatedColumn) {
       reduced.objective_offset +=
           work.col_cost[static_cast<std::size_t>(record.index)] * record.value;
     }
@@ -1227,6 +1357,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       case Record::Kind::kEmptyColumn: ++report.empty_columns; break;
       case Record::Kind::kDualFixedColumn: ++report.dual_fixed_columns; break;
       case Record::Kind::kParallelRow: ++report.parallel_rows; break;
+      case Record::Kind::kDominatedColumn: ++report.dominated_columns; break;
       case Record::Kind::kFreeColumnSingleton: ++report.free_column_singletons; break;
       case Record::Kind::kDoubletonEquation: ++report.doubleton_equations; break;
       case Record::Kind::kForcingRow: break;
@@ -1325,7 +1456,8 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     switch (rec.kind) {
       case Record::Kind::kFixedColumn:
       case Record::Kind::kEmptyColumn:
-      case Record::Kind::kDualFixedColumn: removed = rec.index; break;
+      case Record::Kind::kDualFixedColumn:
+      case Record::Kind::kDominatedColumn: removed = rec.index; break;
       case Record::Kind::kFreeColumnSingleton:
       case Record::Kind::kDoubletonEquation: removed = rec.column; break;
       default: break;
@@ -1550,10 +1682,12 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
         }
         break;
       }
-      case Record::Kind::kDualFixedColumn: {
+      case Record::Kind::kDualFixedColumn:
+      case Record::Kind::kDominatedColumn: {
         // At a bound of the ORIGINAL box when the value is one, which is what dual fixing
-        // chose; basic when a singleton row or an integer rounding had moved the bound
-        // inside the box first, in which case the pricing below hands the row its dual.
+        // and the dominated-column fixing chose; basic when a singleton row or an integer
+        // rounding had moved the bound inside the box first, in which case the pricing
+        // below hands the row its dual.
         const auto c = static_cast<std::size_t>(record.index);
         solution.col_value[c] = record.value;
         if (record.value == original.col_lower[c]) {

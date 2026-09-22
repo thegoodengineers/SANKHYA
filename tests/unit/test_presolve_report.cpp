@@ -125,10 +125,10 @@ TEST(PresolveReport, TheCountsNameTheReductionsThatFired) {
   EXPECT_GE(report.empty_columns, 1) << "column 3 is in no row";
   // The total of what fired cannot exceed the records postsolve will replay, because the
   // counts come from those records.
-  const Count named = report.empty_rows + report.redundant_rows + report.singleton_rows +
-                      report.fixed_columns + report.empty_columns +
-                      report.free_column_singletons + report.doubleton_equations +
-                      report.dual_fixed_columns + report.parallel_rows;
+  const Count named =
+      report.empty_rows + report.redundant_rows + report.singleton_rows + report.fixed_columns +
+      report.empty_columns + report.free_column_singletons + report.doubleton_equations +
+      report.dual_fixed_columns + report.parallel_rows + report.dominated_columns;
   EXPECT_EQ(named, static_cast<Count>(reduce(model).records.size()));
 }
 

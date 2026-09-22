@@ -280,6 +280,22 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"presolve_dominated_columns",
+                 OptionType::Bool,
+                 false,
+                 "Dominated columns in presolve (#412; Gamrath et al. 2015; Achterberg et "
+                 "al. 2020): when two columns share their rows and one is at least as cheap "
+                 "and, row by row, at least as helpful, activity can move from the dominated "
+                 "column onto the dominating one without breaking a row or paying more, so "
+                 "one of the two is fixed at a bound some optimum uses - the dominated one "
+                 "at its lower bound when the dominating one is unbounded above, the "
+                 "dominating one at its upper bound when the dominated one is unbounded "
+                 "below. Replayed by postsolve as a column nonbasic at that bound. Only read "
+                 "when presolve is on. OFF until the Netlib and MIPLIB re-runs on main say "
+                 "what it changes.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"tree_cut_depth",
                  OptionType::Int,
                  std::int64_t{0},

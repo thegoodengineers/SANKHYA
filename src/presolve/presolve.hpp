@@ -51,6 +51,15 @@ struct Record {
     /// other bound, which some optimum uses; `value` is that bound. Replayed as a column
     /// nonbasic at that bound, not as a fixed one, because the original box is not a point.
     kDualFixedColumn,
+    /// Dominated column (#412; Gamrath et al. 2015, sec. 3; Achterberg et al. 2020, sec. 4):
+    /// two columns on the same rows where one is at least as cheap and, row by row, at least
+    /// as helpful, so any feasible point can shift activity from the dominated column onto
+    /// the dominating one without breaking a row or paying more. With room to shift into
+    /// (the dominating column's upper bound infinite) the dominated column is fixed at its
+    /// lower bound; with room to shift from (the dominated column's lower bound infinite)
+    /// the dominating column is fixed at its upper bound. `value` is that bound and
+    /// `partner_column` the other column of the pair. Replayed exactly like kDualFixedColumn.
+    kDominatedColumn,
     kSingletonRow,  ///< one entry; became a bound on that column, the row is now implied
     kForcingRow,    ///< the row bound is only reachable with every variable at one bound
     /// A free (unbounded) column appearing in exactly one row. That row can always absorb
