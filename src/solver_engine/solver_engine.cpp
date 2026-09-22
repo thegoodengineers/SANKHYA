@@ -38,6 +38,12 @@ bool SolverEngine::supports(const Model& model) const {
   return capabilities().accepts(classify(model));
 }
 
+Solution SolverEngine::solve(const Model& model, const Options& options, Logger& logger,
+                             SolveControl* control) const {
+  if (!supports(model)) return unsupported_class_result(name(), model);
+  return solve_verified(model, options, logger, control);
+}
+
 Solution unsupported_class_result(const std::string& engine_name, const Model& model) {
   Solution solution;
   solution.allocate_for(model);

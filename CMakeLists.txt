@@ -196,6 +196,7 @@ set(SANKHYA_CORE_SOURCES
   src/core/resource_limits.cpp
   src/core/solve.cpp
   src/core/deterministic_mode.cpp
+  src/core/presolve_pipeline.cpp
   src/core/engine_selection.cpp
   src/solver_engine/solver_engine.cpp
   src/solver_engine/solver_registry.cpp

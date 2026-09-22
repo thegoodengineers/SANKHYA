@@ -101,12 +101,30 @@ class SolverEngine {
   /// called.
   [[nodiscard]] virtual bool supports(const Model& model) const;
 
-  /// Solve `model`. The caller is responsible for classifying the model and choosing an
-  /// engine that supports() it; an engine handed a class outside its capabilities returns a
-  /// Solution with status kNotSolved and a message naming why, rather than guessing.
-  [[nodiscard]] virtual Solution solve(const Model& model, const Options& options,
-                                       Logger& logger,
-                                       SolveControl* control = nullptr) const = 0;
+  /// Solve `model`: the safe, gated entry point. A TEMPLATE METHOD, not virtual - checks
+  /// supports(model) once, here, in one place for every engine, and returns
+  /// unsupported_class_result() rather than calling solve_verified() when it fails. An
+  /// engine handed a class outside its capabilities gets a Solution with status kNotSolved
+  /// and a message naming why, rather than guessing.
+  [[nodiscard]] Solution solve(const Model& model, const Options& options, Logger& logger,
+                               SolveControl* control = nullptr) const;
+
+  /// Solve `model`, trusting that supports() was already checked and passed - possibly
+  /// against a DIFFERENT, EARLIER model that presolve then reduced `model` from. Presolve
+  /// can legitimately change what classify() reports (fixing every integer column removes
+  /// the columns classify() would have read, degenerating a MILP into what looks like an
+  /// LP) without that meaning this stopped being the right engine to run - solve()'s own
+  /// dispatcher (src/core/solve.cpp) has never re-classified a presolved model before
+  /// running the engine it already chose, and this is how a caller who did that choosing
+  /// itself (src/solver_engine/solver_engine_dispatch.cpp's engine::solve(), through
+  /// select() and run_with_presolve) gets the same freedom.
+  ///
+  /// NEVER call this directly unless you have already confirmed, on the model whose CLASS
+  /// this engine was chosen for, that supports() held - solve() above is the safe default
+  /// entry point, and every built-in engine implements ITS ALGORITHM here, not the gate.
+  [[nodiscard]] virtual Solution solve_verified(const Model& model, const Options& options,
+                                                Logger& logger,
+                                                SolveControl* control) const = 0;
 };
 
 }  // namespace sankhya::engine

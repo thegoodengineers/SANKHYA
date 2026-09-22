@@ -123,8 +123,8 @@ class FakeSimplexEngine final : public SolverEngine {
     caps.lp = true;
     return caps;
   }
-  [[nodiscard]] Solution solve(const Model& model, const Options&, Logger&,
-                               SolveControl*) const override {
+  [[nodiscard]] Solution solve_verified(const Model& model, const Options&, Logger&,
+                                        SolveControl*) const override {
     Solution solution;
     solution.allocate_for(model);
     solution.status = SolveStatus::kNotSolved;
@@ -446,6 +446,67 @@ TEST(RegistryDispatch, AnUnservableRequestComesBackAsNotSolvedRatherThanAnEngine
   const Solution solution = solve(SolverRegistry::builtin(), tiny_milp(), options, logger);
   EXPECT_EQ(solution.status, SolveStatus::kNotSolved);
   EXPECT_FALSE(solution.message.empty());
+}
+
+// Presolve, resource limits and the out-of-memory guard are shared with solve() through
+// run_with_presolve/ResourceLimits/run_engine_guarded (#297 full integration); this proves
+// presolve genuinely ran inside engine::solve() - not just that the answer happens to
+// match - by checking the reduction it reports, on afiro (known to reduce: the CLI reports
+// "27 -> 25 rows" with presolve on).
+TEST(RegistryDispatch, PresolveGenuinelyRunsInsideEngineSolveAndMatchesSolve) {
+  const Model model = afiro();
+  Logger logger(nullptr);
+  const Solution via_registry =
+      solve(SolverRegistry::builtin(), model, quiet_options(), logger);
+  ASSERT_EQ(via_registry.status, SolveStatus::kOptimal) << via_registry.message;
+  EXPECT_TRUE(via_registry.presolve_report.ran);
+  EXPECT_GT(via_registry.presolve_report.original_rows,
+            via_registry.presolve_report.reduced_rows)
+      << "presolve does not appear to have reduced afiro through engine::solve()";
+
+  const Solution via_dispatcher = sankhya::solve(model, quiet_options());
+  ASSERT_EQ(via_dispatcher.status, SolveStatus::kOptimal) << via_dispatcher.message;
+  EXPECT_NEAR(via_registry.objective, via_dispatcher.objective, 1e-6);
+  EXPECT_EQ(via_registry.presolve_report.original_rows,
+            via_dispatcher.presolve_report.original_rows);
+  EXPECT_EQ(via_registry.presolve_report.reduced_rows,
+            via_dispatcher.presolve_report.reduced_rows);
+}
+
+// The bug this regression pins: presolve fixing tiny_milp()'s one integer column to its
+// optimum leaves a reduced model with no integer columns at all, which classify() reports
+// as LP - a class BranchAndBoundEngine does not declare in its capabilities(). Before
+// SolverEngine::solve_verified() existed, run_with_presolve's inner call went through the
+// GATED solve(), which re-derived supports() from that reduced model and wrongly refused
+// "branch-and-bound does not support LP models", even though select() had already, and
+// correctly, chosen branch-and-bound for the ORIGINAL, pre-presolve MILP.
+TEST(RegistryDispatch, ADegenerateMilpAfterPresolveStillReachesBranchAndBound) {
+  Logger logger(nullptr);
+  const Solution solution =
+      solve(SolverRegistry::builtin(), tiny_milp(), quiet_options(), logger);
+  ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
+  EXPECT_EQ(solution.algorithm, "branch-and-bound");
+  EXPECT_NEAR(solution.objective, -2.0, 1e-9);
+}
+
+// solve_verified()'s own contract, directly: mip::solve_branch_and_bound genuinely accepts
+// a model with no integrality at all (single LP solve, per its own header comment) - calling
+// solve_verified() on one bypasses BranchAndBoundEngine's class gate exactly as
+// engine::solve() now relies on it doing for a presolve-degenerated MILP above. The GATED
+// solve() would refuse this same model; solve_verified() must not.
+TEST(SolverEngine, SolveVerifiedRunsBranchAndBoundOnAPlainLpBypassingTheClassGate) {
+  const SolverEngine* bnb = SolverRegistry::builtin().find("branch-and-bound");
+  ASSERT_NE(bnb, nullptr);
+  const Model lp = tiny_lp();
+  ASSERT_FALSE(bnb->supports(lp));
+  Logger logger(nullptr);
+
+  const Solution gated = bnb->solve(lp, quiet_options(), logger);
+  EXPECT_EQ(gated.status, SolveStatus::kNotSolved);
+
+  const Solution trusted = bnb->solve_verified(lp, quiet_options(), logger, nullptr);
+  EXPECT_EQ(trusted.status, SolveStatus::kOptimal) << trusted.message;
+  EXPECT_NEAR(trusted.objective, -4.0, 1e-6);
 }
 
 // =========================================================================================

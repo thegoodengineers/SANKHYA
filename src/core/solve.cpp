@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -56,12 +57,11 @@
 #include "core/deterministic_mode.hpp"
 #include "core/engine_selection.hpp"
 #include "core/iis.hpp"
+#include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
 #include "core/status_guard.hpp"
 #include "mip/components.hpp"
-#include "presolve/presolve.hpp"
 #include "sankhya/certificate.hpp"
-#include "sankhya/io.hpp"
 #include "sankhya/ipm.hpp"
 #include "sankhya/logging.hpp"
 #include "sankhya/mip.hpp"
@@ -567,92 +567,16 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
   // correct for all four classes.
   //
   // `proved` comes back true when presolve settled the model on its own; the caller then has
-  // a complete Solution and returns it.
-  const auto with_presolve = [&](auto&& engine, bool* proved) -> Solution {
-    *proved = false;
-    // A COMPLETE SOLUTION POOL AND PRESOLVE ASK FOR DIFFERENT THINGS (#301 meeting #225).
-    // pool_complete promises the k best integer assignments OF THE MODEL THE CALLER HANDED
-    // OVER. Presolve's column removals are optimality arguments as much as feasibility ones -
-    // an empty column is parked at the bound its cost prefers, a free singleton is
-    // substituted at the end of its interval - so the assignments they settle are exactly the
-    // alternatives the pool was asked to enumerate. Keeping both would report "the four best
-    // plans" for a model with columns already spent. The complete pool wins, and says so.
-    const bool mixed_integer =
-        problem_class == ProblemClass::kMilp || problem_class == ProblemClass::kMiqp;
-    if (mixed_integer && options.get_bool("presolve") && options.get_bool("pool_complete")) {
-      const char* why =
-          "pool_complete enumerates the best assignments of the model as given, and presolve "
-          "settles some of those columns before the search sees them";
-      logger.info("Presolve skipped: {}", why);
-      Solution skipped = engine(model);
-      skipped.presolve_report.skipped_because = why;
-      return skipped;
-    }
-    if (!options.get_bool("presolve")) {
-      if (!options.get_string("write_presolved").empty()) {
-        logger.warning(
-            "write_presolved: presolve is off, so there is no presolved model to write; "
-            "nothing was written");
-      }
-      // ran stays false, and the reason is the option rather than a decision made here, so
-      // skipped_because is left empty (#286).
-      ProfileScope timed(logger.profiler(), "engine");
-      return engine(model);
-    }
-
-    const presolve::Result reduced = [&] {
-      ProfileScope timed(logger.profiler(), "presolve");
-      return presolve::presolve(model, options, logger);
-    }();
-    if (reduced.proved_infeasible) {
-      Solution proof;
-      proof.allocate_for(model);
-      proof.status = SolveStatus::kInfeasible;
-      proof.algorithm = "presolve";
-      // The same bound convention the engines use for an infeasible verdict (#299): the
-      // worst value the objective can take, on the model's own sense.
-      proof.dual_bound = model.sense == ObjSense::kMaximize ? -kInfinity : kInfinity;
-      // Presolve's proof is a small Farkas argument over the rows it used (#253), handed
-      // over as a candidate and checked here against the ORIGINAL model exactly as an
-      // engine's certificate is; one that does not hold (a contradiction that needed
-      // integrality rounding, say) is dropped and the message says so.
-      proof.message = reduced.message + "; proved by presolve";
-      if (problem_class == ProblemClass::kMilp || problem_class == ProblemClass::kMiqp) {
-        // The branch and bound's convention for "nothing was found", which presolve's proof
-        // has to match now that it can settle a MILP: the worst representable objective and
-        // infinite gaps. Leaving them at zero would print `gap 0.00e+00` beside a model that
-        // has no point at all, and a gap of zero reads as a closed search.
-        const double nothing_found =
-            model.sense == ObjSense::kMaximize ? -kInfinity : kInfinity;
-        proof.objective = nothing_found;
-        proof.absolute_gap = kInfinity;
-        proof.relative_gap = kInfinity;
-      }
-      proof.farkas_dual = reduced.farkas_dual;
-      proof.presolve_report = reduced.report;
-      verify_and_keep_certificate(&proof, model, logger);
-      proof.solve_seconds = timer.elapsed_seconds();
-      *proved = true;
-      return proof;
-    }
-
-    // Dump the presolved model when --option write_presolved=<path> is set.
-    const std::string presolved_path = options.get_string("write_presolved");
-    if (!presolved_path.empty()) {
-      std::string write_error;
-      if (!io::write_model(presolved_path, reduced.model, &write_error)) {
-        logger.warning("write_presolved: {}", write_error);
-      } else {
-        logger.info("Presolved model written to {}", presolved_path);
-      }
-    }
-
-    Solution inner = [&] {
-      ProfileScope timed(logger.profiler(), "engine");
-      return engine(reduced.model);
-    }();
-    ProfileScope timed(logger.profiler(), "postsolve");
-    return presolve::postsolve(reduced, model, inner);
+  // a complete Solution and returns it. The actual pipeline (#301) is shared with
+  // engine::solve() (src/solver_engine/solver_engine_dispatch.cpp) through
+  // run_with_presolve (src/core/presolve_pipeline.cpp, #297 full integration) - this is a
+  // thin adapter that keeps the call sites below unchanged, not a second copy of the logic.
+  const auto with_presolve = [&](auto&& run_engine, bool* proved) -> Solution {
+    const std::function<Solution(const Model&)> run_engine_fn = run_engine;
+    PresolveOutcome outcome =
+        run_with_presolve(model, options, logger, timer, problem_class, run_engine_fn);
+    *proved = outcome.proved;
+    return std::move(outcome.solution);
   };
   bool presolve_proved_it = false;
 

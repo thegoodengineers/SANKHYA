@@ -22,17 +22,23 @@ namespace sankhya::engine {
 ///     calling the same Model::validate());
 ///   - a model no registered engine can take, or an `algorithm` the registry refuses (see
 ///     select()), comes back as kNotSolved naming why;
-///   - otherwise the chosen engine's Solution is returned after the two status guards
-///     solve() applies to every engine's answer (src/core/status_guard.hpp): the reported
-///     status is reconciled with the measured point, and a claimed point with a non-finite
-///     objective is a numerical error, not an answer.
+///   - otherwise the chosen engine runs under the SAME presolve/postsolve pipeline
+///     (run_with_presolve, src/core/presolve_pipeline.cpp), the same resource-limit
+///     remaining-time narrowing (ResourceLimits, src/core/resource_limits.hpp) and the same
+///     out-of-memory guard (run_engine_guarded, src/core/status_guard.hpp) solve() itself
+///     uses - one implementation of each, called from both places, not a second copy - and
+///     the returned Solution passes through the same two status guards solve() applies to
+///     every engine's answer: the reported status is reconciled with the measured point, and
+///     a claimed point with a non-finite objective is a numerical error, not an answer.
 ///
-/// What this does NOT do, deliberately: presolve, postsolve, resource-limit remaining-time
-/// budgeting, ranging, or IIS. Per #297's own Motivation section those stay "shared
-/// infrastructure" and remain centralized in solve.cpp; duplicating them here would be
-/// exactly the kind of parallel infrastructure #297 warns against, and solve() itself remains
-/// the entry point for a caller who wants them. This function's contract is deliberately
-/// narrower and more literal: the engine's own answer, guarded but not presolved.
+/// What this does NOT do, deliberately: ranging, IIS, or the LP-specific choreography that
+/// only exists because solve()'s LP branch may run a SECOND engine after the first declines
+/// or to polish the first's answer (PDHG-to-IPM polish, IPM-to-dual-simplex fallback,
+/// node-scaling reuse across warm-started node solves). That choreography is orchestration
+/// ABOVE a single engine's own contract - it exists because solve() may choose to run more
+/// than one engine for one request, which is not this function's job: select() already chose
+/// the one engine to run, and running it honestly, under the same shared infrastructure
+/// solve() itself provides, is the whole contract here.
 [[nodiscard]] Solution solve(const SolverRegistry& registry, const Model& model,
                              const Options& options, Logger& logger,
                              SolveControl* control = nullptr, bool warm_start = false);

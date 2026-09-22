@@ -60,9 +60,8 @@ class RevisedPrimalSimplexEngine final : public SolverEngine {
   // src/simplex/primal_simplex.cpp), so without this the declared supports_warm_start
   // capability above would be exactly the kind of claim A2 refused to make: true in name,
   // never enforced by this wrapper's own solve() (#297 full integration).
-  [[nodiscard]] Solution solve(const Model& model, const Options& options, Logger& logger,
-                               SolveControl* control) const override {
-    if (!supports(model)) return unsupported_class_result(name(), model);
+  [[nodiscard]] Solution solve_verified(const Model& model, const Options& options,
+                                        Logger& logger, SolveControl* control) const override {
     const Options effective = apply_deterministic_mode(options, logger);
     Solution solution;
     if (control != nullptr && control->has_starting_basis() &&
@@ -103,10 +102,10 @@ class DualSimplexEngine final : public SolverEngine {
     return caps;
   }
 
-  // See RevisedPrimalSimplexEngine::solve() above for why this cannot just forward `control`.
-  [[nodiscard]] Solution solve(const Model& model, const Options& options, Logger& logger,
-                               SolveControl* control) const override {
-    if (!supports(model)) return unsupported_class_result(name(), model);
+  // See RevisedPrimalSimplexEngine::solve_verified() above for why this cannot just forward
+  // `control`.
+  [[nodiscard]] Solution solve_verified(const Model& model, const Options& options,
+                                        Logger& logger, SolveControl* control) const override {
     const Options effective = apply_deterministic_mode(options, logger);
     Solution solution;
     if (control != nullptr && control->has_starting_basis() &&
@@ -142,9 +141,8 @@ class PdhgEngine final : public SolverEngine {
     return caps;
   }
 
-  [[nodiscard]] Solution solve(const Model& model, const Options& options, Logger& logger,
-                               SolveControl* control) const override {
-    if (!supports(model)) return unsupported_class_result(name(), model);
+  [[nodiscard]] Solution solve_verified(const Model& model, const Options& options,
+                                        Logger& logger, SolveControl* control) const override {
     const Options effective = apply_deterministic_mode(options, logger);
     return pdhg::solve_pdhg(model, effective, logger, control);
   }
@@ -178,9 +176,8 @@ class PdhgCudaEngine final : public SolverEngine {
   // through the shared gpu::gpu_pdhg_is_safe (src/gpu/pdhg_gpu_guard.cu) - so calling this
   // engine directly cannot bypass any of them (#297 review, A1). A refusal falls back to CPU
   // PDHG, the same outcome solve.cpp's own dispatcher reaches in the same situation.
-  [[nodiscard]] Solution solve(const Model& model, const Options& options, Logger& logger,
-                               SolveControl* control) const override {
-    if (!supports(model)) return unsupported_class_result(name(), model);
+  [[nodiscard]] Solution solve_verified(const Model& model, const Options& options,
+                                        Logger& logger, SolveControl* control) const override {
     const Options effective = apply_deterministic_mode(options, logger);
     if (!gpu::gpu_pdhg_is_safe(model, effective, logger)) {
       return pdhg::solve_pdhg(model, effective, logger, control);
@@ -210,9 +207,8 @@ class IpmEngine final : public SolverEngine {
     return caps;
   }
 
-  [[nodiscard]] Solution solve(const Model& model, const Options& options, Logger& logger,
-                               SolveControl* control) const override {
-    if (!supports(model)) return unsupported_class_result(name(), model);
+  [[nodiscard]] Solution solve_verified(const Model& model, const Options& options,
+                                        Logger& logger, SolveControl* control) const override {
     const Options effective = apply_deterministic_mode(options, logger);
     return ipm::solve_ipm(model, effective, logger, control);
   }
@@ -235,9 +231,8 @@ class ConvexQpEngine final : public SolverEngine {
     return caps;
   }
 
-  [[nodiscard]] Solution solve(const Model& model, const Options& options, Logger& logger,
-                               SolveControl* control) const override {
-    if (!supports(model)) return unsupported_class_result(name(), model);
+  [[nodiscard]] Solution solve_verified(const Model& model, const Options& options,
+                                        Logger& logger, SolveControl* control) const override {
     const Options effective = apply_deterministic_mode(options, logger);
     return qp::solve_convex_qp(model, effective, logger, control);
   }
@@ -267,9 +262,8 @@ class BranchAndBoundEngine final : public SolverEngine {
   // each as its own file/option, unrewritten) before running it, so the composition is
   // genuinely part of this engine's real execution path rather than a document only
   // describing it (src/mip/components.hpp).
-  [[nodiscard]] Solution solve(const Model& model, const Options& options, Logger& logger,
-                               SolveControl* control) const override {
-    if (!supports(model)) return unsupported_class_result(name(), model);
+  [[nodiscard]] Solution solve_verified(const Model& model, const Options& options,
+                                        Logger& logger, SolveControl* control) const override {
     const Options effective = apply_deterministic_mode(options, logger);
     const mip::MilpComponents parts = mip::describe_components(effective);
     logger.info(
