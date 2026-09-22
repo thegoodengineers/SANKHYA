@@ -1867,9 +1867,9 @@ of Beale and Kuhn.
   The comparison in section 4 uses solver-internal time on both sides for that reason.
 - The failures in section 1b are real and are not going to be quietly dropped from a later
   edition of this file. Each one carries the issue tracking it.
-- One engine named in PS26119 is not measured on this page at all: there is no GPU backend
-  on `main` - the CUDA backend is PR #274, open, not yet built or measured on a GPU
-  (#16-#19). The interior-point method (`algorithm=ipm`, #56) is opt-in and produces no
+- One engine named in PS26119 is not measured on this page at all: the CUDA backend for
+  PDHG is on `main` (`src/gpu/`) and compiles in CI, but it has not run on a card, so there
+  is no GPU row here and none is claimed until #19's CSV exists. The interior-point method (`algorithm=ipm`, #56) is opt-in and produces no
   basis, so it is not the engine behind any Netlib or MIPLIB table above - sections 1f to
   1f.3 are the exception, where it appears beside the others: since the AMD ordering (#193)
   it reaches 5,000 rows on the random shape and 20,000 on the staircase, and solves the

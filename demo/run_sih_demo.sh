@@ -658,10 +658,12 @@ cat <<'GAPS' | fill_gaps
                         No MIR cuts, and none below the root. Branch and bound itself has
                         reliability branching (#69) and warm-starts every node LP in the
                         dual simplex (#65).
-    GPU acceleration    NOT ON MAIN. The first-order method it needs exists and runs on CPU;
-                        the CUDA backend is PR #274, open, not yet built or measured on a
-                        GPU (issues #16-#19). --gpu today prints a warning and
-                        falls back to CPU. We are not claiming a speed-up we have not measured.
+    GPU acceleration    ON MAIN, NOT YET MEASURED. The CUDA port of the first-order engine
+                        (src/gpu/, #329 to #373) is on main and compiles in CI. It has not
+                        run on a card, so there is no GPU number and no speed-up is claimed
+                        until #19's CSV exists. --gpu on a build without CUDA warns and runs
+                        on the CPU; on a CUDA build it falls back to the CPU when the device
+                        fails its checks.
     Scale               Section 2.5 above solves one 5000 x 5000 instance, which is the
                         largest thing here by two orders of magnitude and is checked against
                         an optimum known by construction - but ONE generated instance is a

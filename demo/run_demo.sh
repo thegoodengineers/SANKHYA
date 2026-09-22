@@ -125,11 +125,12 @@ sed -n '/| instance |/,/^$/p' docs/BENCHMARKS.md | head -14 | sed 's/^/    /'
 rule "Where we are honest about the gaps"
 cat <<'NOTES'
     - These are the small end of Netlib. Nothing here supports a claim about large models.
-    - Against HiGHS we agree on the objective on all 8 instances and are roughly 2x
-      slower on the median - 2.4x measured on commit 498bed3. We publish that rather
-      than hide it: the problem statement asks us to compare, not to win, and HiGHS is
-      a decade of specialist work. demo/run_sih_demo.sh section 5 re-measures the
-      comparison live, rather than quoting this line.
-    - The GPU backend is not written. The first-order engine it needs is, and runs on CPU.
+    - Against HiGHS we agree on the objective on every committed instance and are slower:
+      about twice its time on the 50-instance medium tier (docs/BENCHMARKS.md section 4).
+      We publish that rather than hide it: the problem statement asks us to compare, not
+      to win, and HiGHS is a decade of specialist work. demo/run_sih_demo.sh section 5
+      re-measures the comparison live, rather than quoting this line.
+    - The CUDA backend is on main and compiles in CI; it has not run on a card, so no GPU
+      number is claimed (#19). The first-order engine it ports runs on the CPU.
 NOTES
 echo

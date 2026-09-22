@@ -55,7 +55,7 @@ That seam is what makes a new engine a bounded piece of work: it has to produce 
 | `src/io/` | MPS (fixed and free, RANGES, negative-UP convention, MARKER blocks, gzip) and LP readers, the `.sol` writer and the `--stats` JSON writer | core | 2.2k |
 | `src/presolve/` | reductions (empty/fixed/singleton rows and columns, redundant rows, free-column singletons, doubleton equations, integer bound rounding) and the postsolve stack that reconstructs the primal and the DUAL of the original model | core, la | 1.8k |
 | `src/simplex/` | `simplex_core.hpp` — the state the two simplex loops share (basis, factors, pricing weights, perturbation, warm start); `primal_simplex.cpp` — bounded-variable revised primal simplex, composite phase 1, Devex pricing, textbook and Harris ratio tests, bound perturbation, basis repair; `dual_simplex.cpp` — bounded dual simplex, bound-flipping ratio test, dual Devex, artificial bounds, cost perturbation, hand-over to the primal loop; `dense_lu` — a dense reference used by tests | core, la | 3.2k |
-| `src/pdhg/` | restarted PDHG (PDLP-style), CPU; the GPU backend hangs off this path (`src/gpu/`, behind `SANKHYA_ENABLE_CUDA`, PR #274) | core, la | 0.7k |
+| `src/pdhg/` | restarted PDHG (PDLP-style), CPU; the CUDA backend hangs off this path (`src/gpu/`, behind `SANKHYA_ENABLE_CUDA`, on `main` since #329 and not yet measured on a card, #19) | core, la | 0.7k |
 | `src/ipm/` | Mehrotra predictor-corrector interior-point method on the normal equations, over the sparse LDLᵀ in `src/la/ldl.cpp`; no basis | core, la | 0.5k |
 | `src/qp/` | convexity check (Cholesky of the Hessian), Condat–Vũ first-order convex QP | core, la | 0.5k |
 | `src/mip/` | branch and bound: propagation, root diving, reliability branching with strong branching, warm-started dual node LPs, MIQP nodes through the QP engine; root cuts are PR #159 | core, simplex, qp | 1.3k |
@@ -301,8 +301,10 @@ a bound only if a node proved one: an unevaluated root proves nothing.
 
 **Not implemented, and not pretended.** There is no memory limit and no GPU memory limit. Peak
 resident memory is not portably queryable from this binary, and `docs/PS26119_COVERAGE.md`
-says so rather than the option table carrying a knob that does nothing. The CUDA backend is
-not on `main`, so nothing here claims anything about device memory or kernel termination.
+says so rather than the option table carrying a knob that does nothing. The CUDA backend
+estimates whether the model fits in the device's memory before it starts and falls back to
+the CPU when it does not (#370); that estimate is the one device-memory claim made, and
+kernel termination is not a limit this section enforces.
 
 ## 9. Nonlinear models: the representation, before any engine
 
