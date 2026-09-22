@@ -380,6 +380,10 @@ uses that in every later node's propagation. It is OFF by default, and the secon
 commit that is not on `main`, so its CSVs are not committed (the #256 rule, as in #340) and
 what follows is an observation until the same runner is repeated on `main` as a bench PR.
 
+`conflict_use` (#406) separates learning from use for that measurement: `none` learns and
+uses nothing (the analysis's cost alone), `prune` only prunes, `propagate` (the default) also
+fixes bounds; with `conflict_minimize` these are the five arms of the ablation #292 asks for.
+
 - **Nothing moved that must not move.** 14 of 30 reach the published optimum and 9 of 30 prove
   it, in BOTH legs. No instance changed status, no matched or proved verdict moved, and no
   feasible point was lost: the same 28 solutions pass independent verification either way
