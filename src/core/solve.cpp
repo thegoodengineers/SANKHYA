@@ -38,6 +38,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <new>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -276,7 +277,14 @@ void polish_with_the_interior_point(Solution* first, const Model& model, const O
   logger.info("Polish: handing PDHG's point to the interior point, {} iterations at most",
               polish.get_int("iteration_limit"));
   const ipm::WarmStart warm{first->col_value, first->row_dual, first->col_dual};
-  Solution polished = ipm::solve_ipm(model, polish, logger, control, &warm);
+  // A polish that runs out of memory declines like one past its factor cap (#437): PDHG's
+  // answer stands, and the message below says what the interior point reported.
+  Solution polished = run_declining_on_out_of_memory(
+      [&] {
+        if (interior_point_out_of_memory_for_testing()) throw std::bad_alloc();
+        return ipm::solve_ipm(model, polish, logger, control, &warm);
+      },
+      "ipm", timer, logger);
 
   const auto worst = [](const Solution& s) {
     return std::max(s.primal_infeasibility_scaled, s.dual_infeasibility_scaled);
@@ -399,7 +407,7 @@ void reconcile_status_with_measurement(Solution* solution, const Options& option
 
 namespace {
 Solution solve_unguarded(const Model& model, const Options& options, SolveControl* control,
-                         Logger& logger, const Timer& timer);
+                         Logger& logger, const Timer& timer, std::string* engine_ran);
 
 /// The profile of a finished solve: the table into the log, and the JSON to profile_out when
 /// one is named (#285). A profile that cannot be written is a warning - the solve it
@@ -477,14 +485,17 @@ Solution solve(const Model& model, const Options& requested_options, SolveContro
 
   // The whole dispatch runs under the out-of-memory guard (#246): an engine that exhausts
   // the machine comes back as a status with the engine named, not as an aborted process.
+  // The name is read when the guard fires (#437): under `auto` the dispatch below records
+  // which engine it chose, and later which one it fell back to, so the answer names the
+  // engine that actually ran out rather than "solver".
   const std::string engine = options.get_string("algorithm");
+  std::string engine_ran = engine == "auto" ? "solver" : engine;
   Solution solved;
   {
     ProfileScope whole(logger.profiler(), "solve");
     solved = run_engine_guarded(
-        [&] { return solve_unguarded(model, options, control, logger, timer); },
-        engine == "auto" ? std::string_view("solver") : std::string_view(engine), timer,
-        logger);
+        [&] { return solve_unguarded(model, options, control, logger, timer, &engine_ran); },
+        [&] { return engine_ran; }, timer, logger);
   }
   if (profile_mode != ProfileMode::kOff) {
     report_profile(profiler, options, solved, logger);
@@ -493,9 +504,14 @@ Solution solve(const Model& model, const Options& requested_options, SolveContro
   return solved;
 }
 
+bool& interior_point_out_of_memory_for_testing() {
+  static bool on = false;
+  return on;
+}
+
 namespace {
 Solution solve_unguarded(const Model& model, const Options& options, SolveControl* control,
-                         Logger& logger, const Timer& timer) {
+                         Logger& logger, const Timer& timer, std::string* engine_ran) {
   Solution solution;
   solution.allocate_for(model);
 
@@ -637,6 +653,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     }
     if (requested == "auto")
       logger.info("Engine selection: {} - {}", chosen.engine->name(), chosen.reason);
+    *engine_ran = chosen.engine->name();
     const bool want_pdhg =
         chosen.engine->name() == "pdhg" || chosen.engine->name() == "pdhg-gpu";
     const bool want_ipm = chosen.engine->name() == "ipm";
@@ -702,14 +719,14 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         return first;
       }
       if (want_ipm) {
-        // #437: the rule table sends large models here, and a normal-equations factor is
-        // where this project actually runs out of memory. The guard belongs HERE and not
-        // only at the dispatch level, because the fallback below tests a RETURNED status -
-        // a std::bad_alloc unwinds straight past it, and the recovery this function already
-        // implements could never fire on the one failure the comment below names first.
-        Solution interior = run_engine_guarded(
-            [&] { return ipm::solve_ipm(target, engine_options, logger, control); },
-            "interior point", timer, logger);
+        // Under its own memory guard (#437), so an exhausted factor comes back as the
+        // declined status the fallback below tests instead of unwinding past it.
+        Solution interior = run_declining_on_out_of_memory(
+            [&] {
+              if (interior_point_out_of_memory_for_testing()) throw std::bad_alloc();
+              return ipm::solve_ipm(target, engine_options, logger, control);
+            },
+            "ipm", timer, logger);
         // From the interior point's answer to a vertex (#219), when asked: the basis the
         // rest of the pipeline wants, at the cost of a few pivots from an optimal point.
         // The crossover runs on what the budget has left too, which is why it is handed
@@ -737,6 +754,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           // applied to the original shape and the fallback follows it.
           const bool large = model.num_rows() >= kDualSimplexRowLimit;
           const char* engine_name = large ? "PDHG" : "the dual simplex";
+          *engine_ran = large ? "pdhg" : "dual-simplex";
           logger.warning("the interior point declined ({}); falling back to {}",
                          interior.message, engine_name);
           Solution fallback;
@@ -867,6 +885,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           parts.cuts_enabled ? "on" : "off", parts.heuristics_enabled ? "on" : "off",
           parts.conflict_analysis_enabled ? "on" : "off");
     }
+    *engine_ran = "branch-and-bound";
     solution = with_presolve(
         [&](const Model& target) {
           return mip::solve_branch_and_bound(target, with_the_time_that_is_left(options),
@@ -904,6 +923,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       solution.solve_seconds = timer.elapsed_seconds();
       return solution;
     }
+    *engine_ran = "convex-qp";
     solution = with_presolve(
         [&](const Model& target) {
           return qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger,
@@ -959,6 +979,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           parts.cuts_enabled ? "on" : "off", parts.heuristics_enabled ? "on" : "off",
           parts.conflict_analysis_enabled ? "on" : "off");
     }
+    *engine_ran = "branch-and-bound";
     solution = with_presolve(
         [&](const Model& target) {
           return mip::solve_branch_and_bound(target, with_the_time_that_is_left(options),

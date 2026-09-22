@@ -116,8 +116,9 @@ cap for a caller who wants one.
    nonzeros, the interior point with crossover above either, PDHG from 100,000 rows, and a
    starting basis always the dual simplex; every threshold names its CSV, the answer carries
    the rule and the reason, and an interior point that declines - a factor beyond its budget, or a
-   set-up past `ipm_setup_share` of the time limit (#357) - falls back to PDHG at or above the
-   row limit and to the dual simplex below it, on the time that is left.
+   set-up past `ipm_setup_share` of the time limit (#357), or a factor that exhausts the
+   machine's memory (#437, caught inside the recovery rather than past it) - falls back to
+   PDHG at or above the row limit and to the dual simplex below it, on the time that is left.
 3. **Presolve** (LP path). Reductions are recorded on a stack. The reduced model is scaled
    (Ruiz then Pock–Chambolle) inside the simplex entry point; the scaled and unscaled
    attempts share one time budget.

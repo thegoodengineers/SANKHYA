@@ -11,6 +11,8 @@
 #include <new>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 
 #include <fmt/format.h>
 
@@ -35,6 +37,33 @@ void reconcile_status_with_measurement(Solution* solution, const Options& option
 /// src/core/solve.cpp; declared here so the registry's own entry point applies both.
 void refuse_a_non_finite_answer(Solution* solution, Logger& logger);
 
+/// The answer for an engine that ran out of memory (#246): a numerical error whose message
+/// names the engine, so a reader knows which budget to lower. Shared by both guards below.
+inline Solution out_of_memory_answer(std::string_view engine, const Timer& timer) {
+  Solution solution;
+  solution.status = SolveStatus::kNumericalError;
+  solution.algorithm = std::string(engine);
+  solution.message = fmt::format(
+      "the solve ran out of memory inside the {} after {:.1f}s; the model is larger than "
+      "this machine can hold for that engine - lower its size budget, add memory, or use "
+      "another engine",
+      engine, timer.elapsed_seconds());
+  solution.solve_seconds = timer.elapsed_seconds();
+  return solution;
+}
+
+/// The engine's name for the guards' messages: a string, or a callable returning one, read
+/// AT THE CATCH (#437) - solve() learns which engine it is running only after `auto` has
+/// selected, and the answer must name the engine that actually ran out, not "solver".
+template <typename Name>
+std::string engine_name_at_the_catch(Name&& name) {
+  if constexpr (std::is_invocable_v<Name>) {
+    return std::string(name());
+  } else {
+    return std::string(std::string_view(name));
+  }
+}
+
 /// Run an engine and turn an out-of-memory condition into a status (#246).
 ///
 /// Every other failure in this project is a SolveStatus with a message and a stats blob; a
@@ -48,24 +77,47 @@ void refuse_a_non_finite_answer(Solution* solution, Logger& logger);
 ///
 /// Declared here, beside the other guard, so a test can throw through it directly rather
 /// than only through an engine that happens to exhaust memory today.
-template <typename Body>
-Solution run_engine_guarded(Body&& body, std::string_view engine, const Timer& timer,
-                            Logger& logger) {
+template <typename Body, typename Name>
+Solution run_engine_guarded(Body&& body, Name&& engine, const Timer& timer, Logger& logger) {
   try {
     return body();
   } catch (const std::bad_alloc&) {
-    Solution solution;
-    solution.status = SolveStatus::kNumericalError;
-    solution.algorithm = std::string(engine);
-    solution.message = fmt::format(
-        "the solve ran out of memory inside the {} after {:.1f}s; the model is larger than "
-        "this machine can hold for that engine - lower its size budget, add memory, or use "
-        "another engine",
-        engine, timer.elapsed_seconds());
-    solution.solve_seconds = timer.elapsed_seconds();
+    Solution solution =
+        out_of_memory_answer(engine_name_at_the_catch(std::forward<Name>(engine)), timer);
     logger.error("{}", solution.message);
     return solution;
   }
 }
+
+/// Run an engine that is allowed to DECLINE on memory (#437): the same answer as the guard
+/// above, returned to the caller as a status it can act on rather than thrown past it.
+///
+/// The interior point is the engine `auto`'s rule table sends large models to, and the one
+/// that factorizes, so it is the one that meets the machine's memory. solve() already runs
+/// another engine when it declines with a numerical error or no answer; but an exhausted
+/// factor did not return, it threw, and the outer guard turned the recovery the comment
+/// promised into the failure it was written to prevent (chromaticindex1024-7: `auto` reports
+/// numerical_error after 77 s where PDHG alone is optimal in 6). This guard sits INSIDE the
+/// recovery: the engine's memory failure comes back as the declined status the fallback
+/// tests, with the message kept, and the outer guard stays the last resort for whatever
+/// runs last. The rule this decides: an engine that another engine can still stand in for
+/// declines on memory; the engine that runs last ends the solve.
+template <typename Body>
+Solution run_declining_on_out_of_memory(Body&& body, std::string_view engine,
+                                        const Timer& timer, Logger& logger) {
+  try {
+    return body();
+  } catch (const std::bad_alloc&) {
+    Solution solution = out_of_memory_answer(engine, timer);
+    logger.warning("{}; declined, so another engine can run", solution.message);
+    return solution;
+  }
+}
+
+/// Test seam (#437): while true, solve()'s interior-point attempts - the selected engine
+/// and PDHG's polish - throw std::bad_alloc before the engine runs, so the recovery can be
+/// tested through solve() itself without a model that exhausts the machine. Defined in
+/// src/core/solve.cpp; read in one place per attempt; never set outside a test.
+bool& interior_point_out_of_memory_for_testing();
 
 }  // namespace sankhya

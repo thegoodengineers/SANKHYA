@@ -718,5 +718,50 @@ TEST(SolveStatusGuard, AnOutOfMemoryEngineComesBackAsAStatusNotADeadProcess) {
   EXPECT_EQ(passed.message, "fine");
 }
 
+TEST(SolveStatusGuard, TheGuardNamesTheEngineThatWasRunningWhenMemoryRanOut) {
+  // #437: under `auto` the outer guard used to stamp "solver" on the answer, which is what
+  // made the failure class unreadable from a CSV. The name is a callable read at the catch,
+  // so what the dispatch recorded after selecting - or after falling back - is what the
+  // answer says.
+  Logger logger(nullptr);
+  Timer timer;
+  std::string running = "solver";
+  const Solution solution = run_engine_guarded(
+      [&]() -> Solution {
+        running = "pdhg";
+        throw std::bad_alloc();
+      },
+      [&] { return running; }, timer, logger);
+  EXPECT_EQ(solution.status, SolveStatus::kNumericalError);
+  EXPECT_EQ(solution.algorithm, "pdhg");
+  EXPECT_NE(solution.message.find("ran out of memory inside the pdhg"), std::string::npos)
+      << solution.message;
+}
+
+TEST(SolveStatusGuard, AnEngineThatMayDeclineComesBackAsAStatusTheFallbackCanSee) {
+  // #437: the declining guard returns the same answer as the terminal one - a numerical
+  // error with the engine named and the memory message kept - but to its caller, which is
+  // what lets solve()'s interior-point fallback act on it.
+  Logger logger(nullptr);
+  Timer timer;
+  const Solution declined = run_declining_on_out_of_memory(
+      []() -> Solution { throw std::bad_alloc(); }, "ipm", timer, logger);
+  EXPECT_EQ(declined.status, SolveStatus::kNumericalError);
+  EXPECT_EQ(declined.algorithm, "ipm");
+  EXPECT_NE(declined.message.find("ran out of memory inside the ipm"), std::string::npos)
+      << declined.message;
+
+  const Solution passed = run_declining_on_out_of_memory(
+      []() -> Solution {
+        Solution s;
+        s.status = SolveStatus::kOptimal;
+        s.message = "fine";
+        return s;
+      },
+      "ipm", timer, logger);
+  EXPECT_EQ(passed.status, SolveStatus::kOptimal);
+  EXPECT_EQ(passed.message, "fine");
+}
+
 }  // namespace
 }  // namespace sankhya

@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "core/engine_selection.hpp"
+#include "core/status_guard.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 
@@ -177,6 +178,83 @@ TEST(EngineSelection, AnOrderingPastItsShareOfTheTimeLimitIsADeclineNotATimeLimi
   EXPECT_EQ(recovered.status, SolveStatus::kOptimal) << recovered.message;
   EXPECT_NE(recovered.message.find("fell back to PDHG"), std::string::npos)
       << recovered.message;
+}
+
+/// Sets the #437 seam for one test and clears it on the way out, whatever the test did.
+struct InteriorPointOutOfMemory {
+  InteriorPointOutOfMemory() { interior_point_out_of_memory_for_testing() = true; }
+  ~InteriorPointOutOfMemory() { interior_point_out_of_memory_for_testing() = false; }
+  InteriorPointOutOfMemory(const InteriorPointOutOfMemory&) = delete;
+  InteriorPointOutOfMemory& operator=(const InteriorPointOutOfMemory&) = delete;
+};
+
+TEST(EngineSelection, AnInteriorPointThatRunsOutOfMemoryAboveTheRowLimitFallsBackToPdhg) {
+  // #437: the one decline the comment in solve() names first - a factor beyond the
+  // machine - did not return, it threw, and the outer memory guard turned the recovery
+  // into a numerical_error stamped "solver" (chromaticindex1024-7 under `auto`, where PDHG
+  // alone is optimal in six seconds). The interior point now runs under its own guard, so
+  // the throw is the declined status the fallback tests; the polish that follows PDHG is
+  // the interior point too and throws as well here, and PDHG's answer stands.
+  const InteriorPointOutOfMemory seam;
+  Model m = shaped_lp(kDualSimplexRowLimit, 200, 2 * kDualSimplexRowLimit);
+  Options o = auto_options();
+  o.set_bool("presolve", false);
+  const Solution s = solve(m, o);
+  EXPECT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_EQ(s.engine_rule, "size:ipm");
+  EXPECT_NE(s.algorithm.find("pdhg"), std::string::npos) << s.algorithm;
+  EXPECT_NE(s.message.find("ran out of memory inside the ipm"), std::string::npos) << s.message;
+  EXPECT_NE(s.message.find("fell back to PDHG"), std::string::npos) << s.message;
+}
+
+TEST(EngineSelection,
+     AnInteriorPointThatRunsOutOfMemoryBelowTheRowLimitFallsBackToTheDualSimplex) {
+  const InteriorPointOutOfMemory seam;
+  Model m = shaped_lp(50, 2100, kIpmNonzeroFloor + 1);
+  Options o = auto_options();
+  o.set_bool("presolve", false);
+  const Solution s = solve(m, o);
+  EXPECT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_EQ(s.engine_rule, "density:ipm");
+  EXPECT_NE(s.algorithm.find("simplex"), std::string::npos) << s.algorithm;
+  EXPECT_NE(s.message.find("ran out of memory inside the ipm"), std::string::npos) << s.message;
+  EXPECT_NE(s.message.find("fell back to the dual simplex"), std::string::npos) << s.message;
+}
+
+TEST(EngineSelection, AnExplicitInteriorPointThatRunsOutOfMemoryIsReportedAsItCameBack) {
+  // algorithm=ipm asked for that engine and no other: the memory failure is the answer,
+  // as it was under the outer guard, with the engine named and the message kept.
+  const InteriorPointOutOfMemory seam;
+  Model m = shaped_lp(50, 2100, kIpmNonzeroFloor + 1);
+  Options o = auto_options();
+  o.set_bool("presolve", false);
+  o.set_string("algorithm", "ipm");
+  const Solution s = solve(m, o);
+  EXPECT_EQ(s.status, SolveStatus::kNumericalError) << s.message;
+  EXPECT_EQ(s.algorithm, "ipm");
+  EXPECT_NE(s.message.find("ran out of memory inside the ipm"), std::string::npos) << s.message;
+  EXPECT_EQ(s.message.find("fell back"), std::string::npos) << s.message;
+}
+
+TEST(EngineSelection, APolishThatRunsOutOfMemoryLeavesPdhgsAnswerStanding) {
+  // An explicit PDHG whose interior-point polish exhausts memory keeps the first-order
+  // answer, the way a polish past its factor cap does; the solve does not end there.
+  const InteriorPointOutOfMemory seam;
+  Model m = shaped_lp(50, 2100, kIpmNonzeroFloor + 1);
+  // Costs that pull every column to its upper bound against the rows, so three iterations
+  // stop PDHG short with a point and the polish is reached rather than skipped as optimal.
+  for (double& c : m.col_cost) c = -1.0;
+  Options o = auto_options();
+  o.set_bool("presolve", false);
+  o.set_string("algorithm", "pdhg");
+  o.set_bool("pdhg_polish", true);
+  o.set_int("iteration_limit", 3);
+  const Solution s = solve(m, o);
+  EXPECT_NE(s.status, SolveStatus::kNumericalError) << s.message;
+  EXPECT_NE(s.algorithm.find("pdhg"), std::string::npos) << s.algorithm;
+  EXPECT_EQ(s.algorithm.find("+ipm"), std::string::npos) << s.algorithm;
+  EXPECT_NE(s.message.find("ran out of memory inside the ipm"), std::string::npos) << s.message;
+  EXPECT_NE(s.message.find("did not improve"), std::string::npos) << s.message;
 }
 
 TEST(EngineSelection, LargeModelWithGpuAvailableGoesToCudaPdhg) {
