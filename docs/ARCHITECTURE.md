@@ -174,9 +174,11 @@ it describes.
   landed in #159 (`src/mip/cuts.cpp`) and single-row MIR cuts in #221
   (`src/mip/mir_cuts.cpp`), appended as rows of the working model before the search
   starts; the answer reports the root bound before and after the round. `enable_root_cuts`
-  is false by measurement: the three-way A/B at `5e78399` (off, root round, root plus
-  tree rounds) proves the same 9 of 30, saves nodes, and costs one published match at the
-  time limit; `docs/BENCHMARKS.md` section 2 carries the numbers.
+  is false by measurement: the three-way A/B at `078cb24` (`docs/BENCHMARKS.md` section 2)
+  has the off leg at 14 of 30 reached and 9 proved, the root round at 13 and 9 (one match
+  lost at the time limit, nodes 1.049x) and root plus tree rounds at 14 and 10
+  (`neos-3611689-kaihu` proved, nodes 0.920x). The tree leg is the first to gain a proof
+  without losing one; whether it becomes the default is #221's open decision.
 - **Parallelism** — the column loops in pricing and in the sparse products are
   embarrassingly parallel and deterministic (no cross-thread reductions); the tree search is
   the larger prize and the harder one, because a race on the incumbent can fathom a node
