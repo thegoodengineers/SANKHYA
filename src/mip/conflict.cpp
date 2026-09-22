@@ -197,13 +197,15 @@ void ConflictStore::evict() {
   evicted_ += static_cast<std::int64_t>(count);
 }
 
-std::string conflicts_to_json(const ConflictStore& store, const ConflictStats& stats) {
+std::string conflicts_to_json(const ConflictStore& store, const ConflictStats& stats,
+                              Index columns) {
   std::string out = "{\n";
   out += fmt::format(
-      "  \"detected\": {},\n  \"learned\": {},\n  \"rejected\": {},\n  \"too_long\": {},\n"
+      "  \"columns\": {},\n  \"detected\": {},\n  \"learned\": {},\n  \"rejected\": {},\n"
+      "  \"too_long\": {},\n"
       "  \"minimized\": {},\n  \"duplicates\": {},\n  \"evicted\": {},\n  \"checks\": {},\n"
       "  \"nodes_pruned\": {},\n  \"tightenings\": {},\n  \"seconds\": {:.6f},\n",
-      stats.detected, stats.learned, stats.rejected, stats.too_long, stats.minimized,
+      columns, stats.detected, stats.learned, stats.rejected, stats.too_long, stats.minimized,
       store.duplicates(), store.evicted(), stats.checks, stats.nodes_pruned, stats.tightenings,
       stats.seconds);
   out += "  \"conflicts\": [";

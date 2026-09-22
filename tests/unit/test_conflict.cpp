@@ -10,12 +10,14 @@
 // optimum and then prove the wrong answer; this is the test that says none did.
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <random>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -24,6 +26,7 @@
 #include "mip/conflict.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/solve_control.hpp"
 #include "support/temp_file.hpp"
 
 namespace sankhya {
@@ -299,6 +302,29 @@ std::vector<std::vector<double>> feasible_points(const Model& model) {
   return points;
 }
 
+/// Is the point integral and inside every row and bound of the model?
+bool point_is_feasible(const Model& model, const std::vector<double>& x) {
+  if (x.size() != static_cast<std::size_t>(model.num_cols())) return false;
+  const auto m = static_cast<std::size_t>(model.num_rows());
+  std::vector<double> activity(m, 0.0);
+  for (std::size_t j = 0; j < x.size(); ++j) {
+    if (x[j] < model.col_lower[j] - 1e-6 || x[j] > model.col_upper[j] + 1e-6) return false;
+    if (model.col_type[j] == VarType::kInteger && std::fabs(x[j] - std::round(x[j])) > 1e-6) {
+      return false;
+    }
+    const ColumnView column = model.matrix.column(static_cast<Index>(j));
+    for (Index k = 0; k < column.size; ++k) {
+      activity[static_cast<std::size_t>(column.rows[k])] += column.values[k] * x[j];
+    }
+  }
+  for (std::size_t i = 0; i < m; ++i) {
+    if (activity[i] < model.row_lower[i] - 1e-6 || activity[i] > model.row_upper[i] + 1e-6) {
+      return false;
+    }
+  }
+  return true;
+}
+
 double objective_of(const Model& model, const std::vector<double>& x) {
   double value = 0.0;
   for (std::size_t j = 0; j < x.size(); ++j) value += model.col_cost[j] * x[j];
@@ -319,6 +345,24 @@ nlohmann::json read_json(const std::string& path) {
   std::stringstream text;
   text << in.rdbuf();
   return nlohmann::json::parse(text.str());
+}
+
+/// The check the whole subsystem stands on: no conflict the search wrote out may hold at a
+/// point the model calls feasible, whatever ended the search.
+void expect_no_conflict_holds(const nlohmann::json& report,
+                              const std::vector<std::vector<double>>& points) {
+  for (const nlohmann::json& conflict : report["conflicts"]) {
+    for (const std::vector<double>& x : points) {
+      bool all_hold = true;
+      for (const nlohmann::json& literal : conflict["literals"]) {
+        const double value = x[literal[0].get<std::size_t>()];
+        const double bound = literal[2].get<double>();
+        all_hold = all_hold && (literal[1].get<std::string>() == "<=" ? value <= bound + 1e-9
+                                                                      : value >= bound - 1e-9);
+      }
+      ASSERT_FALSE(all_hold) << "conflict " << conflict.dump() << " holds at a feasible point";
+    }
+  }
 }
 
 TEST(Conflict, NoLearnedConflictHoldsAtAnyFeasiblePointAndTheOptimumIsUnchanged) {
@@ -424,6 +468,11 @@ TEST(Conflict, ANodeLimitLeavesAValidBound) {
         << to_string(solved.status);
     EXPECT_LE(solved.dual_bound, best + 1e-7)
         << "trial " << trial << ": a bound past the optimum";
+    // kFeasible is the limited search that stopped holding an incumbent: it must be one.
+    if (solved.status == SolveStatus::kFeasible) {
+      EXPECT_TRUE(point_is_feasible(model, solved.col_value))
+          << "trial " << trial << ": " << solved.message;
+    }
   }
   EXPECT_GT(limited, 3);
 }
@@ -457,6 +506,204 @@ TEST(Conflict, AResumedSearchWithConflictsOnReachesTheEnumeratedOptimum) {
     ++resumed;
   }
   EXPECT_GT(resumed, 5);
+}
+
+// =========================================================================================
+// Resource limits, determinism and presolve
+// =========================================================================================
+
+TEST(Conflict, ATimeLimitStopsTheSearchCleanlyAndLearnsNothingFromTheStop) {
+  // #289: `time_limit=0` is a budget of zero seconds, not an absent limit, so this is a stop
+  // that does not depend on how fast the machine is. What must hold afterwards is what holds
+  // after any stop: the reported bound still bounds the true optimum, and the conflicts the
+  // search DID learn - each from a node proved infeasible before the stop - are still sound.
+  // Nothing may be learned from the stop itself.
+  std::mt19937 rng(2920);
+  int stopped = 0;
+  for (int trial = 0; trial < 60; ++trial) {
+    const Model model = random_integer_program(rng, false);
+    const std::vector<std::vector<double>> points = feasible_points(model);
+    if (points.empty()) continue;
+    double best = objective_of(model, points.front());
+    for (const std::vector<double>& x : points) best = std::min(best, objective_of(model, x));
+
+    testing::TempFile out("", ".json");
+    Options options = searching(true, out.path());
+    options.set_double("time_limit", 0.0);
+    const Solution solved = solve(model, options);
+    EXPECT_LE(solved.dual_bound, best + 1e-7) << "trial " << trial
+                                              << ": a bound past the "
+                                                 "optimum after a stop";
+    if (solved.status == SolveStatus::kTimeLimit) ++stopped;
+    // kFeasible is the status that means an incumbent was in hand when the limit fell; a
+    // bare kTimeLimit carries the last relaxation, or says plainly that it carries nothing.
+    if (solved.status == SolveStatus::kFeasible) {
+      EXPECT_TRUE(point_is_feasible(model, solved.col_value))
+          << "trial " << trial << ": " << solved.message;
+    }
+    const nlohmann::json report = read_json(out.path());
+    expect_no_conflict_holds(report, points);
+    EXPECT_LE(report["learned"].get<std::int64_t>(), report["detected"].get<std::int64_t>())
+        << "trial " << trial << ": the stop itself is not an infeasibility";
+  }
+  EXPECT_GT(stopped, 5) << "the zero budget was meant to stop the search";
+}
+
+TEST(Conflict, AnInterruptStopsTheSearchCleanlyWithConflictsOn) {
+  // A market-split instance (Cornuejols and Dawande): equality rows over binaries whose
+  // relaxation is useless, so the search runs long enough to be interrupted mid-tree. Too
+  // large to enumerate, so what is checked here is the clean exit rather than the conflicts:
+  // the status, a point that is genuinely feasible, and a bound that does not claim more
+  // than the point.
+  std::mt19937 rng(2921);
+  Model model;
+  const int rows = 4;
+  const int cols = 40;
+  model.col_lower.assign(static_cast<std::size_t>(cols), 0.0);
+  model.col_upper.assign(static_cast<std::size_t>(cols), 1.0);
+  model.col_type.assign(static_cast<std::size_t>(cols), VarType::kInteger);
+  model.col_cost.assign(static_cast<std::size_t>(cols), 1.0);
+  model.matrix.reset(rows, cols);
+  std::uniform_int_distribution<int> coefficient(0, 99);
+  for (int i = 0; i < rows; ++i) {
+    double total = 0.0;
+    for (int j = 0; j < cols; ++j) {
+      const double a = coefficient(rng);
+      model.matrix.add_entry(i, j, a);
+      total += a;
+    }
+    model.row_lower.push_back(std::floor(total / 2.0));
+    model.row_upper.push_back(std::floor(total / 2.0));
+  }
+  model.matrix.finalize();
+  model.hessian.reset(cols, cols);
+  model.hessian.finalize();
+
+  testing::TempFile out("", ".json");
+  SolveControl control;
+  int callbacks = 0;
+  control.progress_callback = [&](const Progress&) {
+    if (++callbacks == 1) std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    return callbacks >= 2 ? 1 : 0;
+  };
+  const Solution solved = solve(model, searching(true, out.path()), &control);
+  EXPECT_EQ(solved.status, SolveStatus::kInterrupted) << solved.message;
+  EXPECT_GT(solved.nodes, 0);
+  ASSERT_TRUE(claims_a_point(solved)) << "an interrupted search still has a point to show";
+  EXPECT_EQ(solved.col_value.size(), static_cast<std::size_t>(model.num_cols()));
+  // The report is still written, and the analysis never ran away with the search: its work
+  // budget is counted in verification calls per explored node.
+  const nlohmann::json report = read_json(out.path());
+  EXPECT_LE(report["learned"].get<std::int64_t>(), report["detected"].get<std::int64_t>());
+  EXPECT_EQ(report["columns"].get<Index>(), model.num_cols());
+}
+
+TEST(Conflict, UnderDeterministicModeTwoRunsLearnTheSameConflicts) {
+  // #288 asks that no decision depend on the clock. The analysis has a budget in verification
+  // calls rather than in seconds for exactly this, and the store's eviction is a total order,
+  // so two runs under `deterministic=true` must write byte-identical reports.
+  std::mt19937 rng(2922);
+  int compared = 0;
+  for (int trial = 0; trial < 40; ++trial) {
+    const Model model = random_integer_program(rng, trial % 2 == 0);
+    testing::TempFile first("", ".json");
+    testing::TempFile second("", ".json");
+    Options options = searching(true, first.path());
+    options.set_bool("deterministic", true);
+    const Solution a = solve(model, options);
+    options.set_string("conflict_out", second.path());
+    const Solution b = solve(model, options);
+    ASSERT_TRUE(a.status == SolveStatus::kOptimal || a.status == SolveStatus::kInfeasible)
+        << to_string(a.status) << ": " << a.message;
+    EXPECT_EQ(a.status, b.status);
+    EXPECT_EQ(a.nodes, b.nodes) << "trial " << trial;
+    EXPECT_EQ(a.objective, b.objective) << "trial " << trial;
+    nlohmann::json x = read_json(first.path());
+    nlohmann::json y = read_json(second.path());
+    x.erase("seconds");  // the one field that is a clock reading
+    y.erase("seconds");
+    EXPECT_EQ(x, y) << "trial " << trial;
+    if (!x["conflicts"].empty()) ++compared;
+  }
+  EXPECT_GT(compared, 5);
+}
+
+/// The model with an extra integer column fixed at one, carried by row 0 whose bounds move
+/// with it, so the feasible points of the original are exactly this model's with that column
+/// dropped. Presolve removes a fixed column, which is what makes the index question real.
+Model with_a_fixed_column(const Model& model) {
+  const auto n = static_cast<std::size_t>(model.num_cols());
+  const auto m = static_cast<std::size_t>(model.num_rows());
+  Model out;
+  out.sense = model.sense;
+  out.col_lower.push_back(1.0);
+  out.col_upper.push_back(1.0);
+  out.col_type.push_back(VarType::kInteger);
+  out.col_cost.push_back(0.0);
+  out.col_lower.insert(out.col_lower.end(), model.col_lower.begin(), model.col_lower.end());
+  out.col_upper.insert(out.col_upper.end(), model.col_upper.begin(), model.col_upper.end());
+  out.col_type.insert(out.col_type.end(), model.col_type.begin(), model.col_type.end());
+  out.col_cost.insert(out.col_cost.end(), model.col_cost.begin(), model.col_cost.end());
+  out.matrix.reset(static_cast<Index>(m), static_cast<Index>(n + 1));
+  out.matrix.add_entry(0, 0, 1.0);
+  for (std::size_t j = 0; j < n; ++j) {
+    const ColumnView column = model.matrix.column(static_cast<Index>(j));
+    for (Index k = 0; k < column.size; ++k) {
+      out.matrix.add_entry(column.rows[k], static_cast<Index>(j + 1), column.values[k]);
+    }
+  }
+  out.matrix.finalize();
+  out.row_lower = model.row_lower;
+  out.row_upper = model.row_upper;
+  if (out.row_lower[0] > -kInfinity) out.row_lower[0] += 1.0;
+  if (out.row_upper[0] < kInfinity) out.row_upper[0] += 1.0;
+  out.hessian.reset(static_cast<Index>(n + 1), static_cast<Index>(n + 1));
+  out.hessian.finalize();
+  return out;
+}
+
+TEST(Conflict, WithPresolveOnTheConflictsAreInThePresolvedModelsIndices) {
+  // Conflicts live in the indices of the model the SEARCH ran on, which is the presolved
+  // model when presolve ran, and they are never mapped back: they are solver metadata, not
+  // part of the answer. The export says which model it is talking about by writing that
+  // model's column count, and this is the test that the count moves when presolve removes a
+  // column - and that the answer, which IS mapped back, is the enumerated optimum either way.
+  std::mt19937 rng(2923);
+  int shrunk = 0;
+  for (int trial = 0; trial < 60; ++trial) {
+    const Model base = random_integer_program(rng, trial % 2 == 1);
+    const std::vector<std::vector<double>> points = feasible_points(base);
+    if (points.empty()) continue;
+    const bool maximize = base.sense == ObjSense::kMaximize;
+    double best = objective_of(base, points.front());
+    for (const std::vector<double>& x : points) {
+      best = maximize ? std::max(best, objective_of(base, x))
+                      : std::min(best, objective_of(base, x));
+    }
+    const Model model = with_a_fixed_column(base);
+
+    testing::TempFile out("", ".json");
+    Options options = searching(true, out.path());
+    options.set_bool("presolve", true);
+    const Solution solved = solve(model, options);
+    ASSERT_EQ(solved.status, SolveStatus::kOptimal)
+        << "trial " << trial << ": " << solved.message;
+    EXPECT_NEAR(solved.objective, best, 1e-7) << "trial " << trial;
+    EXPECT_EQ(solved.col_value.size(), static_cast<std::size_t>(model.num_cols()))
+        << "postsolve must hand back the original model's columns";
+
+    const nlohmann::json report = read_json(out.path());
+    const auto columns = report["columns"].get<Index>();
+    EXPECT_LE(columns, model.num_cols());
+    if (columns < model.num_cols() && !report["conflicts"].empty()) ++shrunk;
+    for (const nlohmann::json& conflict : report["conflicts"]) {
+      for (const nlohmann::json& literal : conflict["literals"]) {
+        EXPECT_LT(literal[0].get<Index>(), columns)
+            << "a literal outside the model the search ran on";
+      }
+    }
+  }
+  EXPECT_GT(shrunk, 3) << "presolve was meant to remove the fixed column and shift the rest";
 }
 
 }  // namespace

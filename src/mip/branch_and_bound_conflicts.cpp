@@ -219,7 +219,7 @@ void BranchAndBound::report_conflicts() {
     logger_.warning("conflict_out: cannot open {} for writing", path);
     return;
   }
-  const std::string text = conflicts_to_json(conflicts_, conflict_stats_);
+  const std::string text = conflicts_to_json(conflicts_, conflict_stats_, working_.num_cols());
   const bool written = std::fwrite(text.data(), 1, text.size(), out) == text.size();
   if (std::fclose(out) != 0 || !written) {
     logger_.warning("conflict_out: writing {} failed", path);

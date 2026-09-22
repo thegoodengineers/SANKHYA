@@ -186,8 +186,11 @@ struct ConflictStats {
 };
 
 /// The store and the statistics as JSON, for conflict_out. Literals are in the indices of
-/// the model the search ran on (presolved, if presolve ran).
+/// the model the search ran on (presolved, if presolve ran), which is why `columns` - that
+/// model's column count - is written out with them: a reader whose own model has a different
+/// number of columns is holding indices that are not its own, and the export says so rather
+/// than leaving the indices to be misread as the original model's.
 [[nodiscard]] std::string conflicts_to_json(const ConflictStore& store,
-                                            const ConflictStats& stats);
+                                            const ConflictStats& stats, Index columns);
 
 }  // namespace sankhya::mip
