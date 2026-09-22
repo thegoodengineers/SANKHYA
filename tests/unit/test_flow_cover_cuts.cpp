@@ -177,7 +177,7 @@ TEST(FlowCoverCuts, TheCheckerRejectsADeliberatelyInvalidCut) {
   const std::vector<double> a{1, 1, 1, 1};
   const std::vector<double> capacity{6, 5, 4, 3};
   Cut invalid;
-  invalid.coeff = {1, 1, 1, 0, -1, 0, 0};
+  invalid.coeff = {1, 1, 1, 0, -1, 0, 0, 0};
   invalid.rhs = 8.0;  // tightened by 1 from the true x0+x1+x2-y0<=9
   // At y=(1,1,1,0), the budget (10) binds before the combined capacity (6+5+4=15) does, so
   // the worst-case continuous point reaches x0+x1+x2=10 exactly; with y0=1 the lhs is 10-1=9,
