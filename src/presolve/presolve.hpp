@@ -112,6 +112,11 @@ struct Record {
   /// substitution always has a zero reduced cost of its own in the ORIGINAL problem, which
   /// pins the row's dual to eliminated_cost / coefficient (minus any fill-in terms).
   double eliminated_cost = 0.0;
+  /// kFreeColumnSingleton only: the column was not free in the model but IMPLIED free by
+  /// its one row (#412): the bounds the row's activity range puts on it lie inside its own
+  /// box, so the box never binds and the substitution is the free one. Replayed identically;
+  /// counted separately in the report.
+  bool implied_free = false;
 };
 
 /// The reduced problem plus everything needed to get back.

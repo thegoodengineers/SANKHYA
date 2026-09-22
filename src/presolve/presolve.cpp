@@ -261,6 +261,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   const bool dual_fixing = options.get_bool("presolve_dual_fixing");
   const bool parallel_rows = options.get_bool("presolve_parallel_rows");
   const bool dominated_columns = options.get_bool("presolve_dominated_columns");
+  const bool implied_free = options.get_bool("presolve_implied_free");
 
   Timer presolve_clock;
   Workspace work;
@@ -543,9 +544,84 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       // (row target - the rest) / a, which has no reason to be an integer, and an integer
       // column handed back fractional is exactly the failure the branch and bound exists to
       // prevent - the search never sees the column to branch on it.
+      // IMPLIED FREE (#412; Andersen & Andersen 1995, sec. 6): the same substitution for a
+      // column whose box is never binding. With x_j the only live column of row r not yet
+      // accounted for, r's bounds and the activity range of its OTHER columns put bounds on
+      // x_j: for a > 0, (rl - rest_max) / a <= x_j <= (ru - rest_min) / a, the reverse for
+      // a < 0. If that interval lies inside [l_j, u_j], any point of the row's range gives
+      // an x_j inside its box, so the box constrains nothing and the column is free for
+      // every purpose the argument above needs: the value postsolve recovers, (target -
+      // rest) / a with target in [rl, ru] and rest in its range, is inside the box by the
+      // same arithmetic. Compared without slack, so a floating-point tie declines rather
+      // than admits; later reductions only narrow the other columns, which only narrows
+      // the interval. Off unless presolve_implied_free asks for it.
+      const auto implied_free_singleton = [&](Index column) -> bool {
+        if (!implied_free) return false;
+        const auto uc = static_cast<std::size_t>(column);
+        if (work.col_count[uc] != 1) return false;
+        Index row = -1;
+        double a = 0.0;
+        const ColumnView view = model.matrix.column(column);
+        for (Index k = 0; k < view.size; ++k) {
+          const auto rr = static_cast<std::size_t>(view.rows[k]);
+          if (work.row_dead[rr]) continue;
+          row = view.rows[k];
+          a = view.values[k];
+          const auto found = work.extra_row_delta[uc].find(row);
+          if (found != work.extra_row_delta[uc].end()) a += found->second;
+          break;
+        }
+        if (row < 0) {
+          for (const Index candidate : work.extra_new_rows[uc]) {
+            if (work.row_dead[static_cast<std::size_t>(candidate)]) continue;
+            row = candidate;
+            a = work.extra_row_delta[uc].at(candidate);
+            break;
+          }
+        }
+        if (row < 0 || std::fabs(a) < tol::kZeroDrop) return false;
+        const auto r = static_cast<std::size_t>(row);
+        // The activity range of the row's OTHER live columns, the pattern activity_bounds()
+        // uses with x_j left out.
+        ActivityBounds rest;
+        for (const auto& [other, coefficient] : work.rows[r]) {
+          if (other == column) continue;
+          const auto ou = static_cast<std::size_t>(other);
+          if (work.col_dead[ou]) continue;
+          const double c_low = coefficient > 0.0 ? work.col_lower[ou] : work.col_upper[ou];
+          const double c_high = coefficient > 0.0 ? work.col_upper[ou] : work.col_lower[ou];
+          if (finite(c_low)) {
+            rest.lower += coefficient * c_low;
+          } else {
+            rest.lower_finite = false;
+          }
+          if (finite(c_high)) {
+            rest.upper += coefficient * c_high;
+          } else {
+            rest.upper_finite = false;
+          }
+        }
+        const double rl = work.row_lower[r];
+        const double ru = work.row_upper[r];
+        double implied_lower = -kInfinity;
+        double implied_upper = kInfinity;
+        if (a > 0.0) {
+          if (finite(rl) && rest.upper_finite) implied_lower = (rl - rest.upper) / a;
+          if (finite(ru) && rest.lower_finite) implied_upper = (ru - rest.lower) / a;
+        } else {
+          if (finite(ru) && rest.lower_finite) implied_lower = (ru - rest.lower) / a;
+          if (finite(rl) && rest.upper_finite) implied_upper = (rl - rest.upper) / a;
+        }
+        const double lo = work.col_lower[uc];
+        const double up = work.col_upper[uc];
+        const bool lower_inside = !finite(lo) || (finite(implied_lower) && implied_lower >= lo);
+        const bool upper_inside = !finite(up) || (finite(implied_upper) && implied_upper <= up);
+        return lower_inside && upper_inside;
+      };
+      const bool free_in_the_model = !finite(work.col_lower[u]) && !finite(work.col_upper[u]);
+      const bool implied_free_here = !free_in_the_model && implied_free_singleton(j);
       if (work.col_count[u] == 1 && !work.quadratic_col[u] &&
-          model.col_type[u] != VarType::kInteger && !finite(work.col_lower[u]) &&
-          !finite(work.col_upper[u])) {
+          model.col_type[u] != VarType::kInteger && (free_in_the_model || implied_free_here)) {
         // The live row's coefficient is read from `original` and then patched by
         // extra_row_delta[j] - a doubleton's fill-in can have adjusted it already, and using
         // the ORIGINAL, stale value here computes a substitution formula for the WRONG row
@@ -607,6 +683,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         record.coefficient = a;
         record.substituted_rhs = target;
         record.eliminated_cost = cj;
+        record.implied_free = implied_free_here;
         result.records.push_back(record);
 
         // Fold x_j's cost into every other live column sharing the row, and shift the
@@ -1358,7 +1435,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       case Record::Kind::kDualFixedColumn: ++report.dual_fixed_columns; break;
       case Record::Kind::kParallelRow: ++report.parallel_rows; break;
       case Record::Kind::kDominatedColumn: ++report.dominated_columns; break;
-      case Record::Kind::kFreeColumnSingleton: ++report.free_column_singletons; break;
+      case Record::Kind::kFreeColumnSingleton:
+        ++report.free_column_singletons;
+        if (record.implied_free) ++report.implied_free_column_singletons;
+        break;
       case Record::Kind::kDoubletonEquation: ++report.doubleton_equations; break;
       case Record::Kind::kForcingRow: break;
     }
@@ -2292,7 +2372,14 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
 
       const double d = reduced_cost_of(record.column);
       const double signed_d = sense * d;
-      const bool needs_price = (!at_lower && !at_upper) ||
+      // AN IMPLIED-FREE COLUMN (#412) IS PRICED AS IF IT WERE FREE, whatever bound it lands
+      // on. The fold gave every other column of the row the cost c_j * a_i / a, which is what
+      // the engine optimised against; those costs are the original ones only under this row's
+      // dual d / a, so leaving the row at zero because x_j happens to sit admissibly at a
+      // bound makes every other column's reduced cost wrong by exactly the fold. A free
+      // column never sits at a bound, so the test below was never asked this question
+      // before; the fuzz sweep with the reduction on asked it on its first run.
+      const bool needs_price = record.implied_free || (!at_lower && !at_upper) ||
                                (at_lower && !at_upper && signed_d < -tol::kDualFeasibility) ||
                                (at_upper && !at_lower && signed_d > tol::kDualFeasibility);
       if (!needs_price) {

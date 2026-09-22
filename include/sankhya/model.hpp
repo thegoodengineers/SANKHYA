@@ -389,6 +389,9 @@ class Solution {
     Count dual_fixed_columns = 0;  ///< #412: fixed at a bound by cost and row signs alone
     Count parallel_rows = 0;       ///< #412: a scalar multiple of another row, merged into it
     Count dominated_columns = 0;   ///< #412: fixed at a bound because another column dominates
+    /// #412: the free_column_singletons whose column was implied free by its row rather than
+    /// free in the model; a subset of that count, not an addition to it.
+    Count implied_free_column_singletons = 0;
     Count bounds_tightened = 0;
     Count integer_bounds_rounded = 0;
 

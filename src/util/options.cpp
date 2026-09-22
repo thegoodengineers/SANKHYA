@@ -296,6 +296,19 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"presolve_implied_free",
+                 OptionType::Bool,
+                 false,
+                 "Implied-free column substitution in presolve (#412; Andersen and Andersen "
+                 "1995, sec. 6): a continuous column that appears in one row and whose box "
+                 "is never binding - the bounds that row's activity range puts on it lie "
+                 "inside the box - is substituted away with its row, exactly as a free column "
+                 "singleton is; the recovered value lies in the box by construction. Not for "
+                 "an integer column. Only read when presolve is on. OFF until the Netlib and "
+                 "MIPLIB re-runs on main say what it changes.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"tree_cut_depth",
                  OptionType::Int,
                  std::int64_t{0},
