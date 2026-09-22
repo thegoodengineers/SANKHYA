@@ -120,6 +120,18 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_latest_result.py
 
+      - name: Every results CSV is stamped with a commit on main (#433)
+        # A benchmark run on a PR branch is stamped with a commit that dies at the squash
+        # merge, and then scripts/reproduce.sh cannot tie the published number to a build.
+        # bench/runners/check_result_stamps.py walks bench/results/*.csv and fails on any
+        # stamp that is not an ancestor of main and not listed with its squash merge in
+        # bench/results/squash-stamps.txt. fetch-depth: 0 above is what makes the ancestry
+        # question answerable.
+        if: matrix.name == 'Release'
+        run: |
+          python3 bench/runners/test_check_result_stamps.py
+          python3 bench/runners/check_result_stamps.py --base origin/main
+
       # Every other check in this job is a unit test. Without this step the command line
       # itself - argument handling, file loading, the writers, the exit codes - is covered
       # by nothing and could break completely while CI stayed green. This runs the pipeline

@@ -1,0 +1,20 @@
+# Results CSVs stamped with a commit that main's history does not contain (#433).
+#
+# A run made on a PR branch is stamped with that branch's commit, and a squash merge leaves
+# that commit behind: on a fresh clone the stamp does not resolve. The CSV keeps the commit
+# it was really produced on - re-stamping it with a commit it was not run on would be
+# worse - and this file records the squash merge that carried it to main, so the number can
+# still be tied to a build. bench/runners/check_result_stamps.py accepts a stamp listed here
+# when its squash commit is an ancestor of main. One line per stamp:
+#
+#   <branch-commit> <squash-commit-on-main> <note>
+#
+# Prefer a run on a main commit for anything new; this list is for what already exists.
+# Only stamps the docs cite are listed; the older uncited CSVs whose branches are gone are
+# reported by the checker as warnings and left as the history they are.
+a4f02b1 335f8a5 gpu-a4f02b1.csv, run on the #390 branch; 335f8a5 is its squash merge
+dcfcb08 335f8a5 gpu-dcfcb08.csv, run on the #390 branch; 335f8a5 is its squash merge
+fb72ab4 82dee32 gpu-fb72ab4.csv, run on the #424 branch; 82dee32 is its squash merge
+ca64dd5 6bec31e mittelmann-ca64dd5.csv, run on the #169 branch; 6bec31e is its squash merge
+0cd08cf 6bec31e netlib-0cd08cf-threads1.csv and -threads8.csv, netlib-full-0cd08cf.csv, run on the #169 branch; 6bec31e is its squash merge
+59ac6e3 6bec31e netlib-59ac6e3-largest.csv, netlib-full-59ac6e3.csv, -ipm.csv, robustness-59ac6e3.csv, run on the #169 branch; 6bec31e is its squash merge

@@ -5,7 +5,10 @@
 
 This file is generated from the CSVs in `bench/results/`, so it cannot drift from the
 evidence. Every number below came out of a run that recorded the instance sha256, the git
-commit and the machine tag alongside it.
+commit and the machine tag alongside it. CI checks that every CSV's commit is on `main`
+(`bench/runners/check_result_stamps.py`, #433); a run made on a branch and carried to `main`
+by a squash merge keeps the commit it was produced on and is listed with that squash merge
+in `bench/results/squash-stamps.txt`, so the number still ties back to a build.
 
 Times in sections 1a-1c, 1f and 2 are wall-clock, measured around the whole process, so they
 include reading the model and writing the outputs. That makes them slightly pessimistic and
