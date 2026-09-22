@@ -123,9 +123,11 @@ void BranchAndBound::restart_search() {
   nodes_.clear();
   open_.clear();
   saved_.clear();
-  TreeNode root;
-  root.bound = -std::numeric_limits<double>::infinity();
-  nodes_.push_back(root);
+  // Built in place rather than copied in: GCC 13 at -O2 reports a null dereference inside
+  // the copy of a node whose warm-start vectors are empty, a false positive -Werror turns
+  // into a failed build.
+  nodes_.emplace_back();
+  nodes_.back().bound = -std::numeric_limits<double>::infinity();
   open_.push_back(0);
   current_warm_ = WarmStart{};  // the slack basis: the new root is solved from scratch
   deepest_node_ = 0;
