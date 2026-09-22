@@ -137,6 +137,10 @@ const std::vector<OptionSpec>& Options::registry() {
                  "no basis and does not certify infeasibility or unboundedness).",
                  0.0,
                  0.0,
+                 // "auto" plus SolverRegistry::algorithm_names() (src/solver_engine), which
+                 // this table cannot ask without src/util depending on the engines; the test
+                 // OptionsAndRegistry.AlgorithmChoicesAreAutoPlusTheRegistrysAlgorithmNames
+                 // fails the moment the two disagree (#297).
                  {"auto", "simplex", "dual-simplex", "pdhg", "ipm"}});
     s.push_back({"mip_branching",
                  OptionType::String,

@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
@@ -21,6 +22,7 @@
 #include "sankhya/solve_control.hpp"
 
 #include "solver_engine/builtin_engines.hpp"
+#include "solver_engine/engine_listing.hpp"
 #include "solver_engine/solver_engine.hpp"
 #include "solver_engine/solver_engine_dispatch.hpp"
 #include "solver_engine/solver_registry.hpp"
@@ -444,6 +446,84 @@ TEST(RegistryDispatch, AnUnservableRequestComesBackAsNotSolvedRatherThanAnEngine
   const Solution solution = solve(SolverRegistry::builtin(), tiny_milp(), options, logger);
   EXPECT_EQ(solution.status, SolveStatus::kNotSolved);
   EXPECT_FALSE(solution.message.empty());
+}
+
+// =========================================================================================
+// One list of engines (#297): the option table, the dispatcher and the listing agree
+// =========================================================================================
+
+TEST(OptionsAndRegistry, AlgorithmChoicesAreAutoPlusTheRegistrysAlgorithmNames) {
+  // src/util/options.cpp cannot ask the registry which names `algorithm` takes without the
+  // option layer depending on the engines, so it carries the list and this test holds it to
+  // SolverRegistry::algorithm_names(), the predicate solve() and `sankhya engines` use.
+  const OptionSpec* spec = Options::find_spec("algorithm");
+  ASSERT_NE(spec, nullptr);
+  std::vector<std::string> expected = SolverRegistry::builtin().algorithm_names();
+  expected.insert(expected.begin(), "auto");
+  std::vector<std::string> choices = spec->choices;
+  std::sort(expected.begin(), expected.end());
+  std::sort(choices.begin(), choices.end());
+  EXPECT_EQ(choices, expected);
+  // The GPU engine is never a name the option takes; it is reached through pdhg or auto.
+  EXPECT_EQ(std::find(choices.begin(), choices.end(), "pdhg-gpu"), choices.end());
+}
+
+TEST(EngineListing, JsonNamesEveryRegisteredEngineWithTheFlagsItDeclares) {
+  const SolverRegistry& registry = SolverRegistry::builtin();
+  const nlohmann::json doc = nlohmann::json::parse(format_engines_json(registry));
+  ASSERT_TRUE(doc.contains("engines"));
+  const std::vector<std::string> algorithm_names = registry.algorithm_names();
+  std::vector<std::string> listed;
+  for (const nlohmann::json& row : doc["engines"]) {
+    const auto name = row["name"].get<std::string>();
+    listed.push_back(name);
+    const SolverEngine* engine = registry.find(name);
+    ASSERT_NE(engine, nullptr) << name;
+    const EngineCapabilities caps = engine->capabilities();
+    EXPECT_EQ(row["classes"]["LP"].get<bool>(), caps.lp) << name;
+    EXPECT_EQ(row["classes"]["MILP"].get<bool>(), caps.milp) << name;
+    EXPECT_EQ(row["classes"]["QP"].get<bool>(), caps.qp) << name;
+    EXPECT_EQ(row["classes"]["MIQP"].get<bool>(), caps.miqp) << name;
+    EXPECT_EQ(row["capabilities"]["basis"].get<bool>(), caps.supports_basis) << name;
+    EXPECT_EQ(row["capabilities"]["warm_start"].get<bool>(), caps.supports_warm_start) << name;
+    EXPECT_EQ(row["selectable_by_algorithm"].get<bool>(),
+              std::find(algorithm_names.begin(), algorithm_names.end(), name) !=
+                  algorithm_names.end())
+        << name;
+    EXPECT_FALSE(row["summary"].get<std::string>().empty()) << name << " has no summary";
+    EXPECT_FALSE(row["source"].get<std::string>().empty()) << name << " has no source";
+  }
+  std::vector<std::string> names = registry.names();
+  std::sort(names.begin(), names.end());
+  std::sort(listed.begin(), listed.end());
+  EXPECT_EQ(listed, names);
+  // The text listing carries the same names; a reader without a JSON parser sees them all.
+  const std::string text = format_engines_text(registry);
+  for (const std::string& name : names) {
+    EXPECT_NE(text.find(name), std::string::npos) << name;
+  }
+#ifndef SANKHYA_ENABLE_CUDA
+  // A CPU build says which engine the source tree has that this binary does not.
+  EXPECT_EQ(doc["not_in_this_build"].size(), 1U);
+  EXPECT_EQ(doc["not_in_this_build"][0].get<std::string>(), "pdhg-gpu");
+  EXPECT_NE(text.find("not in this build"), std::string::npos);
+#endif
+}
+
+TEST(SolveDispatch, AnLpEngineAskedForOnAMilpIsSaidOnTheAnswerNotDroppedSilently) {
+  // The engine choice is unchanged (the MILP branch never read `algorithm`, see the test
+  // above); what changes is that the answer now says the option chose nothing.
+  Options options = quiet_options();
+  options.set_string("algorithm", "ipm");
+  const Solution said = solve(tiny_milp(), options);
+  ASSERT_EQ(said.status, SolveStatus::kOptimal) << said.message;
+  EXPECT_NEAR(said.objective, -2.0, 1e-9);
+  EXPECT_EQ(said.algorithm, "branch-and-bound");
+  EXPECT_NE(said.message.find("algorithm=ipm"), std::string::npos) << said.message;
+  EXPECT_NE(said.message.find("branch-and-bound ran"), std::string::npos) << said.message;
+  const Solution quiet = solve(tiny_milp(), quiet_options());
+  ASSERT_EQ(quiet.status, SolveStatus::kOptimal) << quiet.message;
+  EXPECT_EQ(quiet.message.find("algorithm="), std::string::npos) << quiet.message;
 }
 
 }  // namespace

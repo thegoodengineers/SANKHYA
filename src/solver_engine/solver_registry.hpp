@@ -55,6 +55,14 @@ class SolverRegistry {
   /// Every registered engine that supports() `model`, in registration order.
   [[nodiscard]] std::vector<const SolverEngine*> candidates(const Model& model) const;
 
+  /// The names the `algorithm` option accepts besides "auto": every registered engine that
+  /// takes an LP and is not a GPU variant, in registration order. GPU PDHG is reached
+  /// through algorithm=pdhg with gpu=true, or through auto, never by its own name. This is
+  /// the one predicate: solve() derives what it accepts from it, `sankhya engines` reports
+  /// it, and the option table's choices list is held to it by a test
+  /// (tests/unit/test_solver_engine.cpp), since src/util cannot ask the engines itself.
+  [[nodiscard]] std::vector<std::string> algorithm_names() const;
+
   /// The registry with every engine src/solver_engine/builtin_engines.cpp knows how to
   /// build, registered once on first use.
   [[nodiscard]] static const SolverRegistry& builtin();

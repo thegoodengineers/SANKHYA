@@ -182,6 +182,7 @@ the count is not typed here, because a typed count goes stale the day a test is 
 ```bash
 ./build/sankhya version
 ./build/sankhya options
+./build/sankhya engines
 ./build/sankhya info  demo/crude_blend.mps
 ./build/sankhya solve demo/crude_blend.mps --write-sol blend.sol --stats blend.json
 ./build/sankhya solve demo/crude_blend.mps --progress-out progress.jsonl
@@ -204,6 +205,11 @@ before the solve.
 ./build/sankhya diagnose demo/crude_blend.mps
 ./build/sankhya diagnose model.mps --format json
 ```
+
+`sankhya engines` lists every engine in the build: the classes it solves, how it is reached
+(`algorithm=<name>`, `algorithm=pdhg` with `--gpu`, or the problem class alone), what its
+answer carries, and where it lives; `--format json` for a script. Every flag is read from
+the engine's own declaration (#297), so the list cannot say something the solver does not do.
 
 `solve` returns a meaningful exit code: `0` optimal, `1` a limit or a proven
 infeasible/unbounded model, `3` the file could not be read, `5` a numerical or model error.

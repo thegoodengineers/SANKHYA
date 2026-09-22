@@ -155,6 +155,23 @@ it describes.
 
 ## 5. Where the next engines plug in
 
+**The engine registry** (#297, `src/solver_engine/`). Every engine is a `SolverEngine`: a
+name, the classes it accepts, what its answer carries (a basis, row duals, a certificate,
+a warm start taken, an interrupt honoured, a deterministic mode kept) and a sentence on
+what it is, registered once in `builtin_engines.cpp` as a thin wrapper over the existing
+`solve_*()` function. `solve()` asks the registry which LP engine runs (`engine::select()`,
+the rule table of #284) and whether it takes a starting basis, and the model's class is
+decided in one place, `engine::classify`, for the dispatcher and the registry alike.
+`sankhya engines` prints the table, `--format json` for scripts, with every flag read from
+the engine rather than typed beside it. The names `algorithm` accepts are the registry's
+`algorithm_names()`; the option table's own list is held to them by a test, since the
+option layer cannot ask the engines without depending on them. When `algorithm` names an
+LP engine for a MILP, QP or MIQP, the class's engine runs and the log and the answer's
+message say so rather than the request being dropped silently. Adding an engine is a
+wrapper and a registration line in `builtin_engines.cpp` and a branch in `solve()` for how
+to run it; `solve()` refuses a registered engine it has no branch for rather than running
+another under its name (#402).
+
 - **Interior-point method** (#56) — built: `src/ipm/` is one branch of the LP dispatcher
   over the sparse LDLᵀ in `src/la/ldl.cpp` (#70). On its own it produces a `Solution` without
   a basis, which the status guard and the verifier handle as they do for PDHG; by default

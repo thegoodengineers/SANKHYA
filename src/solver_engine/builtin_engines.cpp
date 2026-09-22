@@ -36,6 +36,11 @@ namespace {
 class RevisedPrimalSimplexEngine final : public SolverEngine {
  public:
   [[nodiscard]] std::string name() const override { return "simplex"; }
+  [[nodiscard]] std::string summary() const override {
+    return "Revised primal simplex, bounded variables, composite phase 1, no big-M; the "
+           "hand-over engine when a basis needs repair";
+  }
+  [[nodiscard]] std::string source() const override { return "src/simplex/primal_simplex.cpp"; }
 
   [[nodiscard]] EngineCapabilities capabilities() const override {
     EngineCapabilities caps;
@@ -79,6 +84,12 @@ class RevisedPrimalSimplexEngine final : public SolverEngine {
 class DualSimplexEngine final : public SolverEngine {
  public:
   [[nodiscard]] std::string name() const override { return "dual-simplex"; }
+  [[nodiscard]] std::string summary() const override {
+    return "Revised dual simplex with the bound-flipping ratio test and devex pricing; the "
+           "automatic choice below 20,000 rows and 100,000 nonzeros, and the branch and "
+           "bound's node engine";
+  }
+  [[nodiscard]] std::string source() const override { return "src/simplex/dual_simplex.cpp"; }
 
   [[nodiscard]] EngineCapabilities capabilities() const override {
     EngineCapabilities caps;
@@ -116,6 +127,11 @@ class DualSimplexEngine final : public SolverEngine {
 class PdhgEngine final : public SolverEngine {
  public:
   [[nodiscard]] std::string name() const override { return "pdhg"; }
+  [[nodiscard]] std::string summary() const override {
+    return "Restarted primal-dual hybrid gradient, first order, its answer finished by the "
+           "interior point; the automatic choice from 100,000 rows";
+  }
+  [[nodiscard]] std::string source() const override { return "src/pdhg/pdhg.cpp"; }
 
   [[nodiscard]] EngineCapabilities capabilities() const override {
     EngineCapabilities caps;
@@ -138,6 +154,11 @@ class PdhgEngine final : public SolverEngine {
 class PdhgCudaEngine final : public SolverEngine {
  public:
   [[nodiscard]] std::string name() const override { return "pdhg-gpu"; }
+  [[nodiscard]] std::string summary() const override {
+    return "Restarted PDHG on a CUDA device with the CPU engine as the fallback; reached "
+           "through algorithm=pdhg with gpu=true, or auto";
+  }
+  [[nodiscard]] std::string source() const override { return "src/gpu/pdhg_gpu.cu"; }
 
   [[nodiscard]] EngineCapabilities capabilities() const override {
     EngineCapabilities caps;
@@ -172,6 +193,12 @@ class PdhgCudaEngine final : public SolverEngine {
 class IpmEngine final : public SolverEngine {
  public:
   [[nodiscard]] std::string name() const override { return "ipm"; }
+  [[nodiscard]] std::string summary() const override {
+    return "Mehrotra predictor-corrector interior point on the normal equations over a sparse "
+           "LDL^T, pushed to a vertex by crossover; the automatic choice from 20,000 rows or "
+           "100,000 nonzeros";
+  }
+  [[nodiscard]] std::string source() const override { return "src/ipm/ipm.cpp"; }
 
   [[nodiscard]] EngineCapabilities capabilities() const override {
     EngineCapabilities caps;
@@ -194,6 +221,11 @@ class IpmEngine final : public SolverEngine {
 class ConvexQpEngine final : public SolverEngine {
  public:
   [[nodiscard]] std::string name() const override { return "convex-qp"; }
+  [[nodiscard]] std::string summary() const override {
+    return "Condat-Vu primal-dual splitting for a convex quadratic objective; a Hessian it "
+           "cannot prove convex is refused, never solved to a local point";
+  }
+  [[nodiscard]] std::string source() const override { return "src/qp/qp_condat_vu.cpp"; }
 
   [[nodiscard]] EngineCapabilities capabilities() const override {
     EngineCapabilities caps;
@@ -214,6 +246,12 @@ class ConvexQpEngine final : public SolverEngine {
 class BranchAndBoundEngine final : public SolverEngine {
  public:
   [[nodiscard]] std::string name() const override { return "branch-and-bound"; }
+  [[nodiscard]] std::string summary() const override {
+    return "Branch and bound with reliability branching, propagation, cut rounds and "
+           "heuristics; node LPs on the warm-started dual simplex, QP relaxations for an MIQP, "
+           "mip_threads workers";
+  }
+  [[nodiscard]] std::string source() const override { return "src/mip/branch_and_bound.cpp"; }
 
   [[nodiscard]] EngineCapabilities capabilities() const override {
     EngineCapabilities caps;

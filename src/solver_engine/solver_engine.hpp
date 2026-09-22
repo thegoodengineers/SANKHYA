@@ -88,6 +88,13 @@ class SolverEngine {
 
   [[nodiscard]] virtual EngineCapabilities capabilities() const = 0;
 
+  /// One sentence on what the engine is and when the dispatcher picks it, for
+  /// `sankhya engines` (src/solver_engine/engine_listing.hpp); empty when it has nothing to
+  /// say. Description only: nothing reads it to make a decision.
+  [[nodiscard]] virtual std::string summary() const { return {}; }
+  /// Where the algorithm lives, as a path under the repository root, for the same listing.
+  [[nodiscard]] virtual std::string source() const { return {}; }
+
   /// True when this engine is willing to attempt `model`. The default implementation checks
   /// only the problem class against `capabilities()`; an engine with a narrower contract
   /// (say, one that refuses a non-convex Hessian) may override to say so before solve() is

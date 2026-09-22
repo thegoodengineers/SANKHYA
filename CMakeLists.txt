@@ -202,6 +202,7 @@ set(SANKHYA_CORE_SOURCES
   src/solver_engine/builtin_engines.cpp
   src/solver_engine/solver_selector.cpp
   src/solver_engine/solver_engine_dispatch.cpp
+  src/solver_engine/engine_listing.cpp
   src/io/line_reader.cpp
   src/io/lp_reader.cpp
   src/io/mps_bounds.cpp

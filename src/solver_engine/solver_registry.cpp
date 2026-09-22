@@ -40,6 +40,15 @@ std::vector<const SolverEngine*> SolverRegistry::candidates(const Model& model) 
   return result;
 }
 
+std::vector<std::string> SolverRegistry::algorithm_names() const {
+  std::vector<std::string> result;
+  for (const auto& engine : engines_) {
+    const EngineCapabilities caps = engine->capabilities();
+    if (caps.lp && !caps.supports_gpu) result.push_back(engine->name());
+  }
+  return result;
+}
+
 const SolverRegistry& SolverRegistry::builtin() {
   static const SolverRegistry registry = [] {
     SolverRegistry built;

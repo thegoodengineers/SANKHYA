@@ -26,9 +26,10 @@
 // logging stay centralized HERE, exactly as before #297 - the registry supplies WHICH engine,
 // this file still owns everything else, and there is one pipeline, not two.
 //
-// A SolverEngine's OWN solve() (src/solver_engine/builtin_engines.cpp) is a second, complete,
-// independently-tested entry point for a caller who wants the engine directly rather than
-// through this pipeline (src/solver_engine/solver_engine_dispatch.hpp): it re-applies
+// A SolverEngine's OWN solve() (src/solver_engine/builtin_engines.cpp) is a second, narrower
+// entry point for a caller who wants the engine directly rather than through this pipeline
+// (src/solver_engine/solver_engine_dispatch.hpp: the same status guards, no presolve, limits
+// or polish). It re-applies
 // apply_deterministic_mode and certificate verification itself (the same shared functions
 // this file calls, not a re-derived copy) precisely because it does NOT go through this
 // pipeline and so cannot assume this file already did.
@@ -83,27 +84,10 @@
 namespace sankhya {
 namespace {
 
-/// The problem class, decided from the model rather than from a user assertion.
-enum class ProblemClass { kLp, kMilp, kQp, kMiqp };
-
-ProblemClass classify(const Model& model) {
-  const bool integral = model.has_integrality();
-  const bool quadratic = model.has_quadratic_objective();
-  if (integral && quadratic) return ProblemClass::kMiqp;
-  if (integral) return ProblemClass::kMilp;
-  if (quadratic) return ProblemClass::kQp;
-  return ProblemClass::kLp;
-}
-
-const char* class_name(ProblemClass c) {
-  switch (c) {
-    case ProblemClass::kLp: return "LP";
-    case ProblemClass::kMilp: return "MILP";
-    case ProblemClass::kQp: return "QP";
-    case ProblemClass::kMiqp: return "MIQP";
-  }
-  return "unknown";
-}
+/// The problem class is decided from the model by the engine layer
+/// (src/solver_engine/solver_engine.hpp), once, for this dispatcher and the registry alike.
+using engine::classify;
+using engine::ProblemClass;
 
 /// The `algorithm` values solve() itself accepts for an LP, besides "auto" - every registered
 /// engine (src/solver_engine/builtin_engines.cpp) that takes an LP and is not a GPU variant
@@ -114,17 +98,12 @@ const char* class_name(ProblemClass c) {
 /// deliberately excluded here even though it IS a real, separately registered, separately
 /// testable engine (src/solver_engine/solver_selector.cpp reaches it directly). This list is
 /// DERIVED from the registry - adding a new LP engine there extends what solve() accepts
-/// without an edit here - rather than a second, hand-maintained copy of engine names.
+/// without an edit here - rather than a second, hand-maintained copy of engine names.; the
+/// predicate is SolverRegistry::algorithm_names(), which `sankhya engines` and the option
+/// table's test read too. An engine accepted here still needs a branch below that knows
+/// how to run it, or solve() refuses it by name rather than running another in its place.
 std::vector<std::string> registered_lp_algorithms() {
-  std::vector<std::string> names;
-  const engine::SolverRegistry& registry = engine::SolverRegistry::builtin();
-  for (const std::string& name : registry.names()) {
-    const engine::SolverEngine* found = registry.find(name);
-    if (found != nullptr && found->capabilities().lp && !found->capabilities().supports_gpu) {
-      names.push_back(name);
-    }
-  }
-  return names;
+  return engine::SolverRegistry::builtin().algorithm_names();
 }
 
 }  // namespace
@@ -541,7 +520,37 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
   logger.info("Model {}: {} rows, {} columns, {} nonzeros, {} integer columns",
               model.name.empty() ? std::string("(unnamed)") : model.name, model.num_rows(),
               model.num_cols(), model.num_nonzeros(), model.num_integer_columns());
-  logger.info("Problem class: {}", class_name(problem_class));
+  logger.info("Problem class: {}", engine::to_string(problem_class));
+
+  // AN LP ENGINE ASKED FOR ON ANOTHER CLASS IS SAID, NOT DROPPED (#297). The MILP, QP and
+  // MIQP branches have never read `algorithm`: the class has one engine, so there is nothing
+  // to select. A caller who set it anyway used to get no sign of that. The note goes to the
+  // log now and onto the answer's message once the class's own engine has run; the engine
+  // choice itself is unchanged.
+  std::string engine_note;
+  if (problem_class != ProblemClass::kLp) {
+    const std::string requested = options.get_string("algorithm");
+    if (requested != "auto") {
+      const engine::SolverEngine* named = engine::SolverRegistry::builtin().find(requested);
+      const char* runs = problem_class == ProblemClass::kQp ? "convex-qp" : "branch-and-bound";
+      if (named == nullptr) {
+        engine_note =
+            fmt::format("algorithm={} is not an engine; {} ran, as the {} class decides",
+                        requested, runs, engine::to_string(problem_class));
+      } else if (!named->capabilities().accepts(problem_class)) {
+        engine_note = fmt::format(
+            "algorithm={} names an engine that does not take a {} model; {} ran, as the class "
+            "decides, and the option chose nothing",
+            requested, engine::to_string(problem_class), runs);
+      }
+      if (!engine_note.empty()) logger.warning("{}", engine_note);
+    }
+  }
+  const auto say_which_engine_ran = [&engine_note](Solution* answer) {
+    if (engine_note.empty()) return;
+    answer->message =
+        answer->message.empty() ? engine_note : answer->message + "; " + engine_note;
+  };
 
   // PRESOLVE RUNS HERE, not inside an engine, and for EVERY class (#301). The reductions are
   // properties of the model, so every engine gets them, and - more importantly - postsolve
@@ -886,6 +895,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     reconcile_status_with_measurement(&solution, options, logger, /*check_dual=*/true);
     refuse_a_non_finite_answer(&solution, logger);
     record_why_it_stopped(&solution);
+    say_which_engine_ran(&solution);
     verify_and_keep_certificate(&solution, model, logger);
     // Sensitivity ranging runs on the ORIGINAL model after postsolve so the vectors are
     // full-size and the basis is expressed in terms of original column and row indices.
@@ -944,6 +954,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // convention comes with kInfeasible or a limit and no values.
     refuse_a_non_finite_answer(&solution, logger);
     record_why_it_stopped(&solution);
+    say_which_engine_ran(&solution);
     logger.info("Result: {}  objective {:.10g}  bound {:.10g}  {} nodes  {:.3f}s",
                 to_string(solution.status), solution.objective, solution.dual_bound,
                 solution.nodes, solution.solve_seconds);
@@ -979,6 +990,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     reconcile_status_with_measurement(&solution, options, logger, /*check_dual=*/false);
     refuse_a_non_finite_answer(&solution, logger);
     record_why_it_stopped(&solution);
+    say_which_engine_ran(&solution);
     logger.info("Result: {}  objective {:.10g}  {} iterations  {:.3f}s",
                 to_string(solution.status), solution.objective, solution.iterations,
                 solution.solve_seconds);
@@ -1030,6 +1042,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     reconcile_status_with_measurement(&solution, options, logger, /*check_dual=*/false);
     refuse_a_non_finite_answer(&solution, logger);
     record_why_it_stopped(&solution);
+    say_which_engine_ran(&solution);
     logger.info("Result: {}  objective {:.10g}  bound {:.10g}  {} nodes  {:.3f}s",
                 to_string(solution.status), solution.objective, solution.dual_bound,
                 solution.nodes, solution.solve_seconds);
@@ -1041,7 +1054,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
   solution.status = SolveStatus::kNotSolved;
   solution.algorithm = "none";
   solution.message =
-      fmt::format("no engine is implemented for {} yet", class_name(problem_class));
+      fmt::format("no engine is implemented for {} yet", engine::to_string(problem_class));
   logger.warning("{}", solution.message);
 
   solution.solve_seconds = timer.elapsed_seconds();

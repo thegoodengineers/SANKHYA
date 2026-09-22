@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SANKHYA - command line front end.
 //
-// Subcommands: version, options, info, solve. The generic --option name=value passthrough
-// reaches every entry in the registry, so a knob added in src/util/options.cpp is reachable
-// from the command line without touching this file.
+// Subcommands: version, options, engines, info, diagnose, solve. The generic --option
+// name=value passthrough reaches every entry in the registry, so a knob added in
+// src/util/options.cpp is reachable from the command line without touching this file.
 //
 // `solve` returns a meaningful exit code rather than always zero: the benchmark runners in
 // bench/ branch on it, and a script that has to grep stdout to find out whether the solve
@@ -20,6 +20,8 @@
 #include <CLI/CLI.hpp>
 
 #include "diagnose/diagnose.hpp"
+#include "solver_engine/engine_listing.hpp"
+#include "solver_engine/solver_registry.hpp"
 
 #include "sankhya/io.hpp"
 #include "sankhya/logging.hpp"
@@ -203,6 +205,12 @@ int main(int argc, char** argv) {
 
   CLI::App* options_cmd = app.add_subcommand("options", "List every solver option");
 
+  CLI::App* engines_cmd = app.add_subcommand(
+      "engines",
+      "List every engine: the classes it solves, how it is reached, what it returns");
+  std::string engines_format = "text";
+  engines_cmd->add_option("--format", engines_format, "text (default) or json");
+
   CLI::App* solve_cmd = app.add_subcommand("solve", "Solve a model file");
   std::string model_path;
   solve_cmd->add_option("file", model_path, "Model file (.mps, .lp)")->required();
@@ -250,6 +258,18 @@ int main(int argc, char** argv) {
 
   if (options_cmd->parsed()) {
     print_option_table();
+    return 0;
+  }
+
+  if (engines_cmd->parsed()) {
+    if (engines_format != "text" && engines_format != "json") {
+      fmt::print(stderr, "error: --format expects text or json, got '{}'\n", engines_format);
+      return 2;
+    }
+    const sankhya::engine::SolverRegistry& registry =
+        sankhya::engine::SolverRegistry::builtin();
+    fmt::print("{}", engines_format == "json" ? sankhya::engine::format_engines_json(registry)
+                                              : sankhya::engine::format_engines_text(registry));
     return 0;
   }
 
