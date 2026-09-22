@@ -372,13 +372,44 @@ than guessed.
 
 `conflict_analysis` (#292, `src/mip/conflict.hpp`, `src/mip/branch_and_bound_conflicts.cpp`)
 learns, from each node proved infeasible, which of its branching decisions were to blame, and
-uses that in every later node's propagation. It is OFF by default. The one A/B run so far
-(the 30-instance MIPLIB set at 60 s, from a working tree before the commit, so an observation
-and not a citable benchmark) reached and proved the same 14 and 9 with it on and off, saved
-nodes on three of the proved instances (supportcase16 91 against 127, supportcase14 102
-against 124, flugpl 437 against 469) and cost throughput where infeasible nodes are cheap and
-many (enlight8 explored 23,040 nodes against 49,918). A clean A/B on `main` decides whether it
-turns on.
+uses that in every later node's propagation. It is OFF by default, and the clean A/B that
+decides that is now on disk: `bench/results/miplib-6c405f8-conflict-off.csv` and
+`miplib-6c405f8-conflict-on.csv`, the 30-instance MIPLIB set at 60 s, one commit, one machine,
+`conflict_analysis` the only difference.
+
+- **Nothing moved that must not move.** 14 of 30 reach the published optimum and 9 of 30 prove
+  it, in BOTH legs. No instance changed status, no matched or proved verdict moved, and no
+  feasible point was lost: the same 28 solutions pass independent verification either way
+  (`enlight8` and `enlight_hard` end at the limit with no incumbent in both legs).
+- **Where the search finishes, conflicts make it smaller.** Over the nine proved instances the
+  node count goes from 2,285 to 2,204 (0.965x) in 6.13 s against 5.67 s. Six are identical and
+  the whole movement is three instances: `supportcase16` 87 nodes against 123, `supportcase14`
+  102 against 115, `flugpl` 437 against 469.
+- **Where it does not finish, conflicts cost throughput.** The 21 instances stopped by the time
+  limit explore 1,900,912 nodes with conflicts on against 2,026,885 without (0.938x) - in the
+  SAME wall clock, so that is nodes not reached, not search saved. `enlight8` is the extreme at
+  0.373x: 46,704 nodes against 125,200, with 37.4 s of the 60 s budget spent inside the
+  analysis itself. Of the three incumbents that moved at the limit, two improved
+  (`timtab1` 1,149,285 against 1,217,806, `neos-5140963-mincio` 14,900 against 15,226) and one
+  worsened (`gen-ip054` 6,870.87 against 6,859.87).
+
+This CONFIRMS the pre-merge observation rather than revising it. That observation, made on a
+working tree before #381 and never citable, named four instances and this run reproduces every
+one in the same direction: `supportcase16` 91 against 127 then, 87 against 123 now;
+`supportcase14` 102 against 124 then, 102 against 115 now; `flugpl` 437 against 469 in both;
+`enlight8` fewer nodes in the same budget, 23,040 against 49,918 then and 46,704 against
+125,200 now. The default stays OFF: the measured benefit is 81 nodes over the
+nine instances that finish and no verdict either way, against up to 62 percent of a time
+budget on an instance whose infeasible nodes are cheap and many. The option is there for the
+instances that behave like `supportcase16`, and the default follows the measurement, as it does
+for the cut families.
+
+Conflict quality on three of them, from `conflict_out` at the same limit: `supportcase16`
+analysed 37 infeasible nodes, learned 35 (2 not proved from the global bounds), mean size 1.5,
+450 bounds tightened, 0.007 s; `flugpl` analysed and learned 146, mean size 3.7, 15 nodes
+pruned and 713 bounds tightened, 0.005 s; `enlight8` learned 6,783, mean size 7.3, 3,212 nodes
+pruned and 615,775 bounds tightened, 37.4 s. Short conflicts that tighten bounds are what pays;
+long ones on an instance that produces thousands of them are what does not.
 
 - **What is learned.** A set of bound literals `x_j <= v` / `x_j >= v` on integer columns,
   taken from the node's branching decisions, that the rows and the GLOBAL column bounds cannot
@@ -409,5 +440,7 @@ turns on.
 
 Conflicts live in the indices of the model the search runs on, which is the presolved model
 when presolve ran; they are solver metadata and are not mapped back. `conflict_out=<path>`
-writes them and their statistics as JSON for diagnostics, and the log's `Conflicts:` line and
-the profiler's `conflict analysis` region report their cost.
+writes them and their statistics as JSON for diagnostics, with the `columns` field naming the
+column count of the model the indices belong to, so a reader cannot quietly read them as the
+original model's. The log's `Conflicts:` line and the profiler's `conflict analysis` region
+report their cost.
