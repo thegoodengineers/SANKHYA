@@ -36,6 +36,7 @@
 
 #include "branch_and_bound_internal.hpp"
 #include "combinatorial_cuts.hpp"
+#include "flow_cover_cuts.hpp"
 #include "mir_cuts.hpp"
 
 namespace sankhya::mip {
@@ -174,6 +175,20 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   // unit-coefficient covering and packing rows MIR cannot separate. Derived under the
   // GLOBAL bounds, so they hold at every node.
   add_combinatorial_cuts(initial_relaxation, &candidates);
+  // Flow cover cuts (#419): the family built for the fixed-charge / single-node flow rows -
+  // a continuous flow variable switched on by a binary through a variable upper bound - that
+  // MIR is weak on because the bound that matters lives in a separate row.
+  if (options_.get_bool("enable_flow_cover_cuts")) {
+    FlowCoverStats flow_stats;
+    std::vector<Cut> flow_covers = generate_flow_cover_cuts(
+        working_, initial_relaxation, global_lower_, global_upper_, &flow_stats);
+    flow_cover_cuts_generated_ += static_cast<Count>(flow_covers.size());
+    flow_cover_cuts_lifted_ += static_cast<Count>(flow_stats.lifted_cuts);
+    flow_cover_cuts_aggregated_ += static_cast<Count>(flow_stats.aggregated_cuts);
+    flow_cover_deepest_aggregation_ =
+        std::max(flow_cover_deepest_aggregation_, static_cast<Count>(flow_stats.deepest));
+    candidates.insert(candidates.end(), flow_covers.begin(), flow_covers.end());
+  }
 
   auto filtered = filter_and_deduplicate_cuts(working_, initial_relaxation, candidates);
   std::vector<Cut> accepted;
@@ -208,6 +223,17 @@ void BranchAndBound::tree_cut_round(Index depth, Solution* relaxation) {
   std::vector<Cut> candidates =
       generate_mir_cuts(working_, *relaxation, global_lower_, global_upper_);
   add_combinatorial_cuts(*relaxation, &candidates);
+  if (options_.get_bool("enable_flow_cover_cuts")) {
+    FlowCoverStats flow_stats;
+    std::vector<Cut> flow_covers = generate_flow_cover_cuts(
+        working_, *relaxation, global_lower_, global_upper_, &flow_stats);
+    flow_cover_cuts_generated_ += static_cast<Count>(flow_covers.size());
+    flow_cover_cuts_lifted_ += static_cast<Count>(flow_stats.lifted_cuts);
+    flow_cover_cuts_aggregated_ += static_cast<Count>(flow_stats.aggregated_cuts);
+    flow_cover_deepest_aggregation_ =
+        std::max(flow_cover_deepest_aggregation_, static_cast<Count>(flow_stats.deepest));
+    candidates.insert(candidates.end(), flow_covers.begin(), flow_covers.end());
+  }
   if (candidates.empty()) return;
   auto filtered = filter_and_deduplicate_cuts(working_, *relaxation, candidates);
   std::vector<Cut> accepted;
