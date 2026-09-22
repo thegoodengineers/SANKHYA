@@ -386,6 +386,7 @@ class Solution {
     Count empty_columns = 0;
     Count free_column_singletons = 0;
     Count doubleton_equations = 0;
+    Count dual_fixed_columns = 0;  ///< #412: fixed at a bound by cost and row signs alone
     Count bounds_tightened = 0;
     Count integer_bounds_rounded = 0;
 

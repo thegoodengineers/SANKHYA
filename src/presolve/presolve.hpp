@@ -45,6 +45,12 @@ struct Record {
     kRedundantRow,  ///< bounds cannot bind given the column bounds; dual is 0
     kFixedColumn,   ///< lower == upper; the value is known and folded into the row bounds
     kEmptyColumn,  ///< no entries and a finite best value; parked at the bound the cost prefers
+    /// Dual fixing (#412; Andersen & Andersen 1995, Achterberg et al. 2020): a column whose
+    /// every entry can only push its row away from a finite bound, so moving it one way never
+    /// helps feasibility, and whose cost never rewards that way either. It is fixed at the
+    /// other bound, which some optimum uses; `value` is that bound. Replayed as a column
+    /// nonbasic at that bound, not as a fixed one, because the original box is not a point.
+    kDualFixedColumn,
     kSingletonRow,  ///< one entry; became a bound on that column, the row is now implied
     kForcingRow,    ///< the row bound is only reachable with every variable at one bound
     /// A free (unbounded) column appearing in exactly one row. That row can always absorb

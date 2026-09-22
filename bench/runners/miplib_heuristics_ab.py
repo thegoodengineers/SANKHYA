@@ -52,6 +52,15 @@ LEGS: dict[str, list[str]] = {
     "dive-backtrack": ["mip_dive_backtrack=true"],
     "dive-tree": ["mip_dive_frequency=50"],
     "all": ["mip_heuristics=true"],
+    # The same seam serves the search-side switches that arrived after #414 (#418, #412):
+    # each is one option against the defaults, read by the same table.
+    "reduced-cost-fixing": ["mip_reduced_cost_fixing=true"],
+    "restarts": ["mip_reduced_cost_fixing=true", "mip_restarts=1"],
+    "dual-fixing": ["presolve_dual_fixing=true"],
+    # The flow cover family (#419) only runs under the root cut round, so its reading is the
+    # pair of legs below against each other, both also against the defaults.
+    "root-cuts": ["enable_root_cuts=true"],
+    "flow-covers": ["enable_root_cuts=true", "enable_flow_cover_cuts=true"],
 }
 
 

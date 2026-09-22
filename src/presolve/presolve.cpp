@@ -237,6 +237,7 @@ void log_presolve_report(const Solution::PresolveReport& report, Logger& logger)
   line("empty columns", report.empty_columns);
   line("free column singletons", report.free_column_singletons);
   line("doubleton equations", report.doubleton_equations);
+  line("dual fixed columns", report.dual_fixed_columns);
   line("integer bounds rounded", report.integer_bounds_rounded);
   // Declines are reported for the same reason the reductions are: a model that came back
   // barely smaller than it went in is explained by these, not by the counts above.
@@ -255,6 +256,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   const Index m = model.num_rows();
   const Index n = model.num_cols();
   const double feasibility = options.get_double("primal_feasibility_tolerance");
+  const bool dual_fixing = options.get_bool("presolve_dual_fixing");
 
   Timer presolve_clock;
   Workspace work;
@@ -454,6 +456,67 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         work.col_dead[u] = true;
         changed = true;
         continue;
+      }
+
+      // DUAL FIXING (#412; Andersen & Andersen 1995; Achterberg et al. 2020, sec. 4). If every
+      // live entry of the column can only push its row away from a finite bound when the
+      // column moves up - a positive coefficient in a row with no finite lower bound, a
+      // negative one in a row with no finite upper bound - then moving up never helps
+      // feasibility, and if the cost never rewards it either (at least zero in minimise
+      // space) some optimum has the column at its lower bound: any feasible point can be
+      // moved down to it without breaking a row (down lowers only activities bounded above
+      // and raises only ones bounded below) and without paying more. Symmetric for moving
+      // down. Only with a finite bound to land on, never on a column carrying curvature, and
+      // an integer column's bounds are already integral here. The entries are the column's
+      // live ones: the original entries adjusted by any doubleton fill-in, plus the rows the
+      // fill-in added it to, exactly as fold_fixed_column() walks them.
+      if (dual_fixing && !work.quadratic_col[u] && work.col_count[u] > 0) {
+        bool up_helps = false;
+        bool down_helps = false;
+        const auto& deltas = work.extra_row_delta[u];
+        const auto consider = [&](Index row, double coefficient) {
+          const auto r = static_cast<std::size_t>(row);
+          if (work.row_dead[r] || std::fabs(coefficient) <= tol::kZeroDrop) return;
+          const bool has_lower = finite(work.row_lower[r]);
+          const bool has_upper = finite(work.row_upper[r]);
+          if (coefficient > 0.0) {
+            if (has_lower) up_helps = true;
+            if (has_upper) down_helps = true;
+          } else {
+            if (has_upper) up_helps = true;
+            if (has_lower) down_helps = true;
+          }
+        };
+        const ColumnView view = model.matrix.column(j);
+        for (Index k = 0; k < view.size; ++k) {
+          double coefficient = view.values[k];
+          const auto found = deltas.find(view.rows[k]);
+          if (found != deltas.end()) coefficient += found->second;
+          consider(view.rows[k], coefficient);
+        }
+        for (const Index row : work.extra_new_rows[u]) {
+          const auto found = deltas.find(row);
+          if (found != deltas.end()) consider(row, found->second);
+        }
+        const double cost = model.sense_multiplier() * work.col_cost[u];
+        double value = std::numeric_limits<double>::quiet_NaN();
+        if (!up_helps && cost >= 0.0 && finite(work.col_lower[u])) {
+          value = work.col_lower[u];
+        } else if (!down_helps && cost <= 0.0 && finite(work.col_upper[u])) {
+          value = work.col_upper[u];
+        }
+        if (std::isfinite(value)) {
+          Record record;
+          record.kind = Record::Kind::kDualFixedColumn;
+          record.index = j;
+          record.value = value;
+          result.records.push_back(record);
+          work.col_lower[u] = value;
+          work.col_upper[u] = value;
+          fold_fixed_column(&work, j, value);
+          changed = true;
+          continue;
+        }
       }
 
       // Free column singleton (issue #92; Andersen & Andersen 1995). A column with no bound
@@ -967,7 +1030,8 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   // post-fold cost the removed value actually paid.
   for (const Record& record : result.records) {
     if (record.kind == Record::Kind::kFixedColumn ||
-        record.kind == Record::Kind::kEmptyColumn) {
+        record.kind == Record::Kind::kEmptyColumn ||
+        record.kind == Record::Kind::kDualFixedColumn) {
       reduced.objective_offset +=
           work.col_cost[static_cast<std::size_t>(record.index)] * record.value;
     }
@@ -1059,6 +1123,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       case Record::Kind::kSingletonRow: ++report.singleton_rows; break;
       case Record::Kind::kFixedColumn: ++report.fixed_columns; break;
       case Record::Kind::kEmptyColumn: ++report.empty_columns; break;
+      case Record::Kind::kDualFixedColumn: ++report.dual_fixed_columns; break;
       case Record::Kind::kFreeColumnSingleton: ++report.free_column_singletons; break;
       case Record::Kind::kDoubletonEquation: ++report.doubleton_equations; break;
       case Record::Kind::kForcingRow: break;
@@ -1155,7 +1220,8 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     Index removed = -1;
     switch (rec.kind) {
       case Record::Kind::kFixedColumn:
-      case Record::Kind::kEmptyColumn: removed = rec.index; break;
+      case Record::Kind::kEmptyColumn:
+      case Record::Kind::kDualFixedColumn: removed = rec.index; break;
       case Record::Kind::kFreeColumnSingleton:
       case Record::Kind::kDoubletonEquation: removed = rec.column; break;
       default: break;
@@ -1343,6 +1409,21 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   for (std::size_t idx = result.records.size(); idx-- > 0;) {
     const Record& record = result.records[idx];
     switch (record.kind) {
+      case Record::Kind::kDualFixedColumn: {
+        // At a bound of the ORIGINAL box when the value is one, which is what dual fixing
+        // chose; basic when a singleton row or an integer rounding had moved the bound
+        // inside the box first, in which case the pricing below hands the row its dual.
+        const auto c = static_cast<std::size_t>(record.index);
+        solution.col_value[c] = record.value;
+        if (record.value == original.col_lower[c]) {
+          solution.col_status[c] = BasisStatus::kAtLower;
+        } else if (record.value == original.col_upper[c]) {
+          solution.col_status[c] = BasisStatus::kAtUpper;
+        } else {
+          solution.col_status[c] = BasisStatus::kBasic;
+        }
+        break;
+      }
       case Record::Kind::kFixedColumn:
       case Record::Kind::kEmptyColumn:
         solution.col_value[static_cast<std::size_t>(record.index)] = record.value;

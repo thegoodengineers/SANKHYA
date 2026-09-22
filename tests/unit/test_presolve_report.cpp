@@ -127,7 +127,8 @@ TEST(PresolveReport, TheCountsNameTheReductionsThatFired) {
   // counts come from those records.
   const Count named = report.empty_rows + report.redundant_rows + report.singleton_rows +
                       report.fixed_columns + report.empty_columns +
-                      report.free_column_singletons + report.doubleton_equations;
+                      report.free_column_singletons + report.doubleton_equations +
+                      report.dual_fixed_columns;
   EXPECT_EQ(named, static_cast<Count>(reduce(model).records.size()));
 }
 

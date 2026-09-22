@@ -251,6 +251,19 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"presolve_dual_fixing",
+                 OptionType::Bool,
+                 false,
+                 "Dual fixing in presolve (#412; Andersen and Andersen 1995; Achterberg et "
+                 "al. 2020): a column whose every entry can only push its row away from a "
+                 "finite bound when the column moves one way, and whose cost never rewards "
+                 "that way, is fixed at the other bound, which some optimum uses. Replayed "
+                 "by postsolve as a column nonbasic at that bound and re-measured against "
+                 "the original model like every reduction. Only read when presolve is on. "
+                 "OFF until the Netlib and MIPLIB re-runs on main say what it changes.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"tree_cut_depth",
                  OptionType::Int,
                  std::int64_t{0},
