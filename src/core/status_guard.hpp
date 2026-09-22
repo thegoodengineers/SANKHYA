@@ -30,6 +30,11 @@ namespace sankhya {
 void reconcile_status_with_measurement(Solution* solution, const Options& options,
                                        Logger& logger, bool check_dual);
 
+/// Downgrade a claimed point whose objective is not finite to a numerical error, and leave a
+/// limited search that found nothing alone (#289). Defined beside the guard above in
+/// src/core/solve.cpp; declared here so the registry's own entry point applies both.
+void refuse_a_non_finite_answer(Solution* solution, Logger& logger);
+
 /// Run an engine and turn an out-of-memory condition into a status (#246).
 ///
 /// Every other failure in this project is a SolveStatus with a message and a stats blob; a

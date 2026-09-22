@@ -64,8 +64,11 @@ EngineChoice select(const SolverRegistry& registry, const Model& model, const Op
         should_use_gpu_pdhg(registry, model, options, options.get_bool("gpu"), logger)) {
       named = registry.find("pdhg-gpu");
     }
-    return EngineChoice{named, "requested",
-                        fmt::format("engine '{}' was requested", requested)};
+    // The rule and the reason come from select_engine(), as they did before the registry,
+    // so an explicit request reads the same to a caller and in the stats JSON as it always
+    // has: "algorithm=X was asked for (rows, columns, nonzeros)".
+    const EngineSelection asked = select_engine(model, options, warm_start);
+    return EngineChoice{named, asked.rule, asked.reason};
   }
 
   if (problem_class == ProblemClass::kLp) {

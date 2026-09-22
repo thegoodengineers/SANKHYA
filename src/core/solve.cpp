@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SANKHYA - the solve() dispatcher.
 //
-// THIS FILE IS THE SEAM. Every engine registers here and nowhere else:
-//   Phase 2  primal revised simplex  -> LP            [registered]
+// THIS FILE IS THE SEAM. Every engine is dispatched from here and nowhere else; since #297
+// the engines are REGISTERED in src/solver_engine/builtin_engines.cpp and the registry's
+// selector picks the LP engine, while this file decides how to run it:
+//   Phase 2  primal revised simplex  -> LP
 //   Phase 4  restarted PDHG          -> LP, large and sparse
 //   Phase 5  branch and cut          -> MILP
 //   Phase 8  Mehrotra IPM, convex QP -> LP and QP
@@ -676,7 +678,9 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         solution.status = SolveStatus::kNotSolved;
         solution.algorithm = "none";
         std::string list = "auto";
-        for (const std::string& name : accepted) list += ", " + name;
+        for (std::size_t k = 0; k < accepted.size(); ++k) {
+          list += (k + 1 == accepted.size() ? " and " : ", ") + accepted[k];
+        }
         solution.message =
             fmt::format("algorithm '{}' is not an engine; {} are available", requested, list);
         logger.warning("{}", solution.message);
@@ -704,6 +708,22 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         chosen.engine->name() == "pdhg" || chosen.engine->name() == "pdhg-gpu";
     const bool want_ipm = chosen.engine->name() == "ipm";
     const bool want_dual = chosen.engine->name() == "dual-simplex";
+    const bool want_primal = chosen.engine->name() == "simplex";
+    if (!want_pdhg && !want_ipm && !want_dual && !want_primal) {
+      // registered_lp_algorithms() admits every registered CPU LP engine, and the dispatch
+      // below runs four of them by name with the primal simplex as its last branch. An engine
+      // registered without a branch here must not fall through to the primal under its own
+      // name: that would be a different engine, reported as the one asked for.
+      solution.status = SolveStatus::kNotSolved;
+      solution.algorithm = "none";
+      solution.message = fmt::format(
+          "engine '{}' is registered but solve() has no dispatch for it; it needs a branch "
+          "beside the simplex, pdhg and ipm ones",
+          chosen.engine->name());
+      logger.warning("{}", solution.message);
+      solution.solve_seconds = timer.elapsed_seconds();
+      return solution;
+    }
 #ifdef SANKHYA_ENABLE_CUDA
     // The compute-capability, VRAM and deterministic-mode gates (#281, #282, #383) already
     // ran inside engine::select() (gpu::gpu_pdhg_is_safe, src/gpu/pdhg_gpu_guard.cu, #297

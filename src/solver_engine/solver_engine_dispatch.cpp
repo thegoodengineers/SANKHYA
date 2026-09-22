@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "solver_engine/solver_engine_dispatch.hpp"
 
+#include "core/status_guard.hpp"
+#include "solver_engine/solver_engine.hpp"
 #include "solver_engine/solver_selector.hpp"
 
 namespace sankhya::engine {
@@ -25,7 +27,15 @@ Solution solve(const SolverRegistry& registry, const Model& model, const Options
     return solution;
   }
 
-  return choice.engine->solve(model, options, logger, control);
+  Solution answer = choice.engine->solve(model, options, logger, control);
+  // The two guards solve() applies to every engine's answer (src/core/status_guard.hpp): an
+  // engine's own "optimal" is reconciled with the measured point, and a claimed point with a
+  // non-finite objective is a numerical error, not an answer. The dual check is the LP one,
+  // as in solve(): a branch-and-bound incumbent's reduced costs belong to its node.
+  reconcile_status_with_measurement(&answer, options, logger,
+                                    /*check_dual=*/classify(model) == ProblemClass::kLp);
+  refuse_a_non_finite_answer(&answer, logger);
+  return answer;
 }
 
 }  // namespace sankhya::engine

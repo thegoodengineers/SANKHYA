@@ -120,6 +120,7 @@ class PdhgEngine final : public SolverEngine {
   [[nodiscard]] EngineCapabilities capabilities() const override {
     EngineCapabilities caps;
     caps.lp = true;
+    caps.supports_duals = true;  // row duals and reduced costs come with the point
     caps.supports_interrupt = true;
     caps.supports_deterministic_mode = true;
     return caps;
@@ -176,6 +177,7 @@ class IpmEngine final : public SolverEngine {
     EngineCapabilities caps;
     caps.lp = true;
     caps.supports_duals = true;
+    caps.supports_basis = true;  // through crossover (#219), which is on by default
     caps.supports_interrupt = true;
     caps.supports_deterministic_mode = true;
     return caps;

@@ -113,6 +113,12 @@ TEST(EngineSelection, TheAnswerCarriesTheRuleAndTheReason) {
   explicit_primal.set_string("algorithm", "simplex");
   const Solution p = solve(m, explicit_primal);
   EXPECT_EQ(p.engine_rule, "requested");
+  // The sentence the stats writer serializes for an explicit request, unchanged by the
+  // registry (#297): it names the option and the shape, as select_engine() always has.
+  EXPECT_NE(p.engine_reason.find("algorithm=simplex was asked for (4 rows, 6 columns, 12 "
+                                 "nonzeros)"),
+            std::string::npos)
+      << p.engine_reason;
 }
 
 TEST(EngineSelection, AnInteriorPointThatDeclinesAboveTheRowLimitFallsBackToPdhg) {
