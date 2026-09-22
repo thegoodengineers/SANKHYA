@@ -257,6 +257,19 @@ class BranchAndBound {
   /// permanently shrinking the tree's domain and discarding feasible integer points - the
   /// search then proves that the second-best answer is optimal, which looks completely
   /// correct from outside.
+  /// The working bound a change names: a column's, or, for an index at or past the column
+  /// count, a row's in the [A | -I] convention - the objective row's, under objective
+  /// branching (#418). enter(), leave() and the dives' unwind all go through this.
+  double& bound_of(const DomainChange& change) {
+    const Index n = original_.num_cols();
+    if (change.column >= n) {
+      const auto r = static_cast<std::size_t>(change.column - n);
+      return change.is_upper ? working_.row_upper[r] : working_.row_lower[r];
+    }
+    const auto u = static_cast<std::size_t>(change.column);
+    return change.is_upper ? working_.col_upper[u] : working_.col_lower[u];
+  }
+
   void tighten_lower(std::size_t column, double value) {
     saved_.push_back(
         DomainChange{static_cast<Index>(column), false, working_.col_lower[column]});
@@ -329,6 +342,12 @@ class BranchAndBound {
   [[nodiscard]] bool restart_due() const;
   /// Discard the tree and start again from the root on the tightened bounds.
   void restart_search();
+  // ---- Objective branching (#418), in branch_and_bound.cpp -------------------------------
+  /// Append the objective as a free row of working_, once, before any cut row, so a node
+  /// can bound it; sets objective_row_.
+  void append_objective_row();
+  /// c x at `x`, in the model's own units: what the objective row measures.
+  [[nodiscard]] double objective_row_value(const std::vector<double>& x) const;
   // ---- Checkpoint and resume (#287), in branch_and_bound_checkpoint.cpp -----------------
   /// The search as it stands between nodes.
   [[nodiscard]] TreeCheckpoint make_checkpoint() const;
@@ -596,6 +615,10 @@ class BranchAndBound {
   Count restarts_allowed_ = 0;
   double restart_fraction_ = 0.0;
   Count restart_node_limit_ = 0;
+  /// Objective branching (#418): the objective's row of working_ once appended, or -1, and
+  /// how many nodes branched on it.
+  Index objective_row_ = -1;
+  Count objective_branches_ = 0;
   Count clique_cuts_generated_ = 0;     ///< #358, before the filter
   Count zero_half_cuts_generated_ = 0;  ///< #358, before the filter
   std::string checkpoint_path_;

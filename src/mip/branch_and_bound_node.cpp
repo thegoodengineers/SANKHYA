@@ -33,20 +33,14 @@ void BranchAndBound::enter(Index node_index) {
   for (Index walk = node_index; walk >= 0;) {
     const TreeNode& node = nodes_[static_cast<std::size_t>(walk)];
     if (node.has_change) {
-      const auto u = static_cast<std::size_t>(node.change.column);
-      DomainChange previous{
-          node.change.column, node.change.is_upper,
-          node.change.is_upper ? working_.col_upper[u] : working_.col_lower[u]};
-      if (node.change.is_upper) {
-        working_.col_upper[u] = std::min(working_.col_upper[u], node.change.value);
-      } else {
-        working_.col_lower[u] = std::max(working_.col_lower[u], node.change.value);
-      }
+      // An index past the columns is a ROW bound in the [A | -I] convention: the objective
+      // row's, under objective branching (#418). Columns and rows tighten the same way.
+      double& bound = bound_of(node.change);
+      DomainChange previous{node.change.column, node.change.is_upper, bound};
+      bound = node.change.is_upper ? std::min(bound, node.change.value)
+                                   : std::max(bound, node.change.value);
       // Only record a restore entry if the bound actually moved.
-      if (previous.value !=
-          (node.change.is_upper ? working_.col_upper[u] : working_.col_lower[u])) {
-        saved_.push_back(previous);
-      }
+      if (previous.value != bound) saved_.push_back(previous);
     }
     walk = node.parent;
   }
@@ -54,14 +48,7 @@ void BranchAndBound::enter(Index node_index) {
 
 void BranchAndBound::leave() {
   // Undo in reverse so a column touched twice returns to its original value.
-  for (auto it = saved_.rbegin(); it != saved_.rend(); ++it) {
-    const auto u = static_cast<std::size_t>(it->column);
-    if (it->is_upper) {
-      working_.col_upper[u] = it->value;
-    } else {
-      working_.col_lower[u] = it->value;
-    }
-  }
+  for (auto it = saved_.rbegin(); it != saved_.rend(); ++it) bound_of(*it) = it->value;
   saved_.clear();
 }
 

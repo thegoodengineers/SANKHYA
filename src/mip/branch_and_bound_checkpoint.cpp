@@ -94,8 +94,11 @@ std::string BranchAndBound::restore_checkpoint(const std::string& path) {
   if (!sized) return "the checkpoint's per-column arrays do not match the model's columns";
   for (const CheckpointNode& node : c.open) {
     for (const CheckpointChange& change : node.domain) {
-      if (change.column < 0 || change.column >= original_.num_cols() ||
-          !std::isfinite(change.value)) {
+      // A column, or, under objective branching (#418), the objective row's logical index
+      // past the columns - which exists only once the row has been appended to working_.
+      const Index highest =
+          original_.num_cols() + (objective_row_ >= 0 ? working_.num_rows() : 0);
+      if (change.column < 0 || change.column >= highest || !std::isfinite(change.value)) {
         return fmt::format(
             "an open node branches on column {} with value {}, which this model "
             "does not have",

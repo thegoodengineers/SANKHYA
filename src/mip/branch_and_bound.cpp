@@ -160,6 +160,37 @@ void BranchAndBound::detect_objective_integrality() {
       continuous_costed, defining_rows, objective_step_);
 }
 
+// OBJECTIVE BRANCHING (#418) needs the objective as a row a node can bound: appended once at
+// the root, free on both sides, before any cut row so the cut pool's row arithmetic is
+// untouched. The coefficients are the model's own costs, so the row measures c x in the
+// model's units and the step #398 detected applies to it directly.
+void BranchAndBound::append_objective_row() {
+  const Index old_rows = working_.num_rows();
+  const Index cols = working_.num_cols();
+  SparseMatrix matrix(old_rows + 1, cols);
+  for (Index j = 0; j < cols; ++j) {
+    const ColumnView view = working_.matrix.column(j);
+    for (Index k = 0; k < view.size; ++k) matrix.add_entry(view.rows[k], j, view.values[k]);
+    const double cost = original_.col_cost[static_cast<std::size_t>(j)];
+    if (std::fabs(cost) > tol::kZeroDrop) matrix.add_entry(old_rows, j, cost);
+  }
+  matrix.finalize();
+  working_.matrix = std::move(matrix);
+  working_.resize_rows(old_rows + 1);
+  working_.row_lower[static_cast<std::size_t>(old_rows)] = -kInfinity;
+  working_.row_upper[static_cast<std::size_t>(old_rows)] = kInfinity;
+  objective_row_ = old_rows;
+}
+
+double BranchAndBound::objective_row_value(const std::vector<double>& x) const {
+  double value = 0.0;
+  for (Index j = 0; j < original_.num_cols(); ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    value += original_.col_cost[u] * x[u];
+  }
+  return value;
+}
+
 Solution BranchAndBound::run() {
   init_heuristics();
   detect_objective_integrality();
@@ -168,6 +199,13 @@ Solution BranchAndBound::run() {
   restarts_allowed_ = reduced_cost_fixing_ ? options_.get_int("mip_restarts") : 0;
   restart_fraction_ = options_.get_double("mip_restart_fraction");
   restart_node_limit_ = options_.get_int("mip_restart_node_limit");
+  // Objective branching (#418): only with a known step, and only in a search that owns its
+  // working model - a parallel worker shares the driver's scaling, whose row count the
+  // appended row would not match.
+  if (options_.get_bool("mip_objective_branching") && objective_step_ > 0.0 && !quadratic_ &&
+      shared_ == nullptr && seed_ == nullptr) {
+    append_objective_row();
+  }
   global_lower_ = working_.col_lower;
   global_upper_ = working_.col_upper;
   if (options_.get_bool("enable_root_cuts")) {
@@ -561,12 +599,35 @@ Solution BranchAndBound::run() {
       return solution;
     }
 
-    const double value = relaxation.col_value[static_cast<std::size_t>(branch_column)];
-    const double floor_value = std::floor(value);
-    leave();
-
     // Two children: x <= floor(v) and x >= floor(v) + 1. Together they cover every integer
     // point, so nothing is lost.
+    const double value = relaxation.col_value[static_cast<std::size_t>(branch_column)];
+    const double floor_value = std::floor(value);
+    DomainChange down_change{branch_column, true, floor_value};
+    DomainChange up_change{branch_column, false, floor_value + 1.0};
+    double down_fraction = value - floor_value;
+    double up_fraction = floor_value + 1.0 - value;
+
+    // OBJECTIVE BRANCHING (#418): with the objective a row of the model and its step known,
+    // a relaxation whose objective sits strictly between two attainable values is split on
+    // that row instead - c x at most the value below, c x at least the value above. Every
+    // integer point is on one side, and the up child leaves the plateau by construction.
+    // The children carry no fractionality, so no pseudocost is recorded for them.
+    if (objective_row_ >= 0) {
+      const double units = objective_row_value(relaxation.col_value) / objective_step_;
+      const double below = std::floor(units);
+      if (units - below > kObjectiveIntegralitySlack &&
+          below + 1.0 - units > kObjectiveIntegralitySlack) {
+        const Index logical = original_.num_cols() + objective_row_;
+        down_change = DomainChange{logical, true, objective_step_ * below};
+        up_change = DomainChange{logical, false, objective_step_ * (below + 1.0)};
+        down_fraction = 0.0;
+        up_fraction = 0.0;
+        ++objective_branches_;
+      }
+    }
+    leave();
+
     // Both children inherit the parent's estimate: it is a property of the relaxation they
     // were branched from, and the branched column's own contribution is the one term the
     // branch is about to settle.
@@ -575,21 +636,21 @@ Solution BranchAndBound::run() {
     TreeNode down;
     down.parent = node_index;
     down.has_change = true;
-    down.change = DomainChange{branch_column, true, floor_value};
+    down.change = down_change;
     down.bound = node_bound;
     down.depth = node.depth + 1;
     down.warm = children_warm;
-    down.fraction = value - floor_value;
+    down.fraction = down_fraction;
     down.estimate = child_estimate;
 
     TreeNode up;
     up.parent = node_index;
     up.has_change = true;
-    up.change = DomainChange{branch_column, false, floor_value + 1.0};
+    up.change = up_change;
     up.bound = node_bound;
     up.depth = node.depth + 1;
     up.warm = children_warm;
-    up.fraction = floor_value + 1.0 - value;
+    up.fraction = up_fraction;
     up.estimate = child_estimate;
 
     nodes_.push_back(down);
@@ -684,6 +745,7 @@ Solution BranchAndBound::run() {
     solution.nodes = nodes_explored_;
     solution.restarts = restarts_;
     solution.reduced_cost_fixings = reduced_cost_fixings_;
+    solution.objective_branches = objective_branches_;
     solution.solve_seconds = timer_.elapsed_seconds();
     report_root(&solution);
     return solution;
@@ -693,6 +755,7 @@ Solution BranchAndBound::run() {
   solution.nodes = nodes_explored_;
   solution.restarts = restarts_;
   solution.reduced_cost_fixings = reduced_cost_fixings_;
+  solution.objective_branches = objective_branches_;
   solution.solve_seconds = timer_.elapsed_seconds();
   report_root(&solution);
 
@@ -742,6 +805,10 @@ Solution BranchAndBound::run() {
                solution.nodes, solution.solve_seconds);
   logger_.info("Nodes pruned {}, tree {} node(s) at exit", nodes_pruned_, open_.size());
   report_heuristics();
+  if (objective_branches_ > 0) {
+    logger_.info("Objective branching (#418): {} node(s) split on the objective row",
+                 objective_branches_);
+  }
   if (clique_cuts_generated_ + zero_half_cuts_generated_ > 0) {
     logger_.info(
         "Combinatorial cut candidates (#358): {} clique, {} zero-half, before the filter",

@@ -229,13 +229,7 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
 void BranchAndBound::unwind_to(std::size_t mark) {
   // In reverse, so a column tightened twice returns to what it was before the first.
   while (saved_.size() > mark) {
-    const DomainChange& change = saved_.back();
-    const auto u = static_cast<std::size_t>(change.column);
-    if (change.is_upper) {
-      working_.col_upper[u] = change.value;
-    } else {
-      working_.col_lower[u] = change.value;
-    }
+    bound_of(saved_.back()) = saved_.back().value;
     saved_.pop_back();
   }
 }

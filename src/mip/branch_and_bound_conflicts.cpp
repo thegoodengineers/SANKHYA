@@ -84,6 +84,13 @@ void BranchAndBound::analyze_conflict(Index node_index, ConflictSource source,
   for (Index walk = node_index; walk >= 0;) {
     const TreeNode& node = nodes_[static_cast<std::size_t>(walk)];
     if (node.has_change) {
+      // A conflict's literals are column bounds. A chain that holds an objective-row
+      // decision (#418, a logical index past the columns) is not analysed: the row bound
+      // is a consequence of the columns, not a literal the constraint could carry.
+      if (node.change.column >= original_.num_cols()) {
+        --conflict_stats_.detected;
+        return;
+      }
       chain.push_back(
           ConflictLiteral{node.change.column, node.change.is_upper, node.change.value});
     }

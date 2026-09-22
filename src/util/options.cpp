@@ -527,6 +527,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  kNoLimit,
                  {}});
+    s.push_back({"mip_objective_branching",
+                 OptionType::Bool,
+                 false,
+                 "Branch on the objective row when the objective is integral (#418): at a node "
+                 "whose relaxation value is not a multiple of the objective's step, the two "
+                 "children bound the objective row by the multiples on either side instead of "
+                 "splitting a column. Needs the integral-objective detection (#398) to have "
+                 "found a step; one search only. Off until the MIPLIB A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"checkpoint",
                  OptionType::String,
                  std::string(""),
