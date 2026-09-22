@@ -1354,7 +1354,11 @@ std::optional<Solution> Simplex::prepare(const WarmStart* warm, const Timer& tim
   // the rule again.
   const std::string pricing = options_.get_string("pricing");
   devex_ = pricing != "dantzig";
-  if (pricing != "devex" && pricing != "dantzig" && !pricing.empty()) {
+  // The dual's own rule (#411): dual steepest edge keeps the primal on devex, since the
+  // choice names the dual's leaving-row norm, which the primal never prices on.
+  dual_steepest_edge_ = pricing == "dual-steepest-edge";
+  if (pricing != "devex" && pricing != "dantzig" && pricing != "dual-steepest-edge" &&
+      !pricing.empty()) {
     logger_.warning("pricing '{}' is not recognised; using devex", pricing);
     devex_ = true;
   }

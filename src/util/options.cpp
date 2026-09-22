@@ -193,10 +193,14 @@ const std::vector<OptionSpec>& Options::registry() {
                  "that failure class was removed by #144 and #147, and re-measured on the "
                  "medium tier devex solves the same 49 instances in a third fewer "
                  "iterations and a third less time (#66). Dantzig is kept so the "
-                 "comparison can be regenerated.",
+                 "comparison can be regenerated. dual-steepest-edge (#411; Forrest and "
+                 "Goldfarb 1992) keeps the primal on devex and prices the DUAL's leaving row "
+                 "by the exact norm of its row of the basis inverse, maintained by an update "
+                 "that costs one FTRAN more per pivot; the norms start exact on a warm basis "
+                 "of up to 2,000 rows and at 1 beyond that. Not the default until its A/B.",
                  0.0,
                  0.0,
-                 {"devex", "dantzig"}});
+                 {"devex", "dantzig", "dual-steepest-edge"}});
     s.push_back({"basis_update",
                  OptionType::String,
                  std::string("product-form"),

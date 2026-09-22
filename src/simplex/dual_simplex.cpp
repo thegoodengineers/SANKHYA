@@ -10,7 +10,27 @@
 //     implementation", PhD thesis, Universitaet Paderborn - the artificial-bound treatment
 //     of dual infeasibility (sec. 4.5) and the practical shape of the whole algorithm.
 //   Forrest, J.J. and Goldfarb, D. (1992), "Steepest-edge simplex algorithms for linear
-//     programming", Mathematical Programming 57, 341-374 - the dual devex weights.
+//     programming", Mathematical Programming 57, 341-374 - the dual devex weights, and the
+//     exact dual steepest-edge update below (#411; Koberstein 2005, ch. 5, for the
+//     practical form).
+//
+// DUAL STEEPEST EDGE (#411). The leaving row r is the basic variable furthest outside its
+// bounds, measured against how far the duals must move to fix it: the dual step along
+// rho_r = e_r^T B^-1 changes the duals by t rho_r, so the honest measure of row r's
+// infeasibility is delta_r^2 / ||rho_r||^2. Devex approximates ||rho_r||^2 with a reference
+// framework and resets it when it drifts; steepest edge maintains it exactly. After a pivot
+// on (r, q) with alpha = B^-1 a_q the new inverse's rows are
+//     rho_r'  =  rho_r / alpha_r,            rho_i'  =  rho_i - (alpha_i / alpha_r) rho_r,
+// so, writing w_i = ||rho_i||^2 and tau = B^-1 rho_r (one extra FTRAN, the cross term
+// rho_i . rho_r = e_i^T B^-1 rho_r = tau_i),
+//     w_r'  =  w_r / alpha_r^2,
+//     w_i'  =  w_i  -  2 (alpha_i / alpha_r) tau_i  +  (alpha_i / alpha_r)^2 w_r,
+// with w_r taken as the norm the BTRAN of this very iteration produced, rho_r . rho_r, so a
+// drift in the stored weight is corrected at the row that just left rather than carried.
+// The weights start exact: 1 on the slack basis, and one BTRAN per row on a warm basis up to
+// kDualSteepestEdgeExactInitRows rows (beyond that, 1, which is Devex's start too). A
+// weight that comes back non-positive or non-finite sends every weight back to the exact
+// start rather than pricing on a lie.
 //
 // WHY A SECOND METHOD. The primal simplex keeps a primal feasible point and improves the
 // objective; the dual keeps every reduced cost sign-admissible and reduces the primal
@@ -226,6 +246,29 @@ void Simplex::remove_artificial_bounds() {
 void Simplex::reset_dual_weights() {
   dual_weight_.assign(static_cast<std::size_t>(m_), 1.0);
   ++dual_weight_resets_;
+  // Steepest edge starts from the truth where that is affordable (#411): the slack basis
+  // has every row norm at 1 already, and a warm basis gets one BTRAN per row up to the cap.
+  if (dual_steepest_edge_ && warm_started_ && m_ <= tol::kDualSteepestEdgeExactInitRows) {
+    compute_exact_dual_weights();
+  }
+}
+
+void Simplex::compute_exact_dual_weights() {
+  dual_weight_ = exact_dual_weights_for_testing();
+}
+
+std::vector<double> Simplex::exact_dual_weights_for_testing() {
+  std::vector<double> weights(static_cast<std::size_t>(m_), 1.0);
+  std::vector<double> row(static_cast<std::size_t>(m_), 0.0);
+  for (Index slot = 0; slot < m_; ++slot) {
+    std::fill(row.begin(), row.end(), 0.0);
+    row[static_cast<std::size_t>(slot)] = 1.0;
+    lu_.solve_transpose(row.data());  // e_slot^T B^-1
+    double norm2 = 0.0;
+    for (const double v : row) norm2 += v * v;
+    weights[static_cast<std::size_t>(slot)] = norm2;
+  }
+  return weights;
 }
 
 Index Simplex::choose_leaving_row() const {
@@ -345,6 +388,43 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
 void Simplex::update_dual_weights(Index leaving_slot, double pivot) {
   if (std::fabs(pivot) < tol::kZeroDrop) return;
   const auto r = static_cast<std::size_t>(leaving_slot);
+  if (dual_steepest_edge_) {
+    // EXACT STEEPEST EDGE (#411); the derivation is in the file comment. rho_ is still
+    // e_r^T B^-1 from this iteration's BTRAN and alpha_ is B^-1 a_q from its FTRAN, both
+    // off the same factors, and the basis has not changed yet. w_r is read off rho itself
+    // so the row that leaves corrects any drift in its stored weight.
+    double weight_r = 0.0;
+    for (const double v : rho_) weight_r += v * v;
+    tau_ = rho_;
+    lu_.solve(tau_.data());  // tau = B^-1 rho_r: the cross terms rho_i . rho_r
+    const double inverse_pivot = 1.0 / pivot;
+    bool healthy = std::isfinite(weight_r) && weight_r > 0.0;
+    for (Index slot = 0; slot < m_ && healthy; ++slot) {
+      const auto s = static_cast<std::size_t>(slot);
+      if (s == r) continue;
+      const double a = alpha_[s];
+      if (a == 0.0) continue;
+      const double ratio = a * inverse_pivot;
+      const double w = dual_weight_[s] - 2.0 * ratio * tau_[s] + ratio * ratio * weight_r;
+      if (!std::isfinite(w)) {
+        healthy = false;
+        break;
+      }
+      dual_weight_[s] = std::max(w, tol::kDualSteepestEdgeWeightFloor);
+    }
+    if (healthy) {
+      const double w = weight_r * inverse_pivot * inverse_pivot;
+      healthy = std::isfinite(w);
+      if (healthy) dual_weight_[r] = std::max(w, tol::kDualSteepestEdgeWeightFloor);
+    }
+    if (!healthy) {
+      // A weight that is not a number is not a weight: back to Devex's start of 1 for
+      // every row, counted as a reset, rather than pricing on it.
+      dual_weight_.assign(static_cast<std::size_t>(m_), 1.0);
+      ++dual_weight_resets_;
+    }
+    return;
+  }
   const double weight_r = dual_weight_[r];
   const double inverse_pivot = 1.0 / pivot;
   double largest = 1.0;

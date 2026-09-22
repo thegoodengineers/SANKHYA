@@ -59,6 +59,7 @@ add_executable(sankhya_tests
   unit/test_presolve_dual_fixing.cpp
   unit/test_cut_selection.cpp
   unit/test_presolve_parallel_rows.cpp
+  unit/test_dual_steepest_edge.cpp
   unit/test_combinatorial_cuts.cpp
   unit/test_checkpoint.cpp
   unit/test_parallel_tree.cpp

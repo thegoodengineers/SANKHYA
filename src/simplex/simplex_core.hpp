@@ -194,6 +194,13 @@ class Simplex {
   /// The dual simplex (#65), from the slack basis or from `warm`; hands over to the primal
   /// loop when the dual cannot finish honestly (artificial bounds active, or a stall).
   Solution run_dual(const WarmStart* warm = nullptr);
+  /// The dual pricing weights as the loop maintains them (#411), and the same weights
+  /// recomputed exactly from the current factors, for the test that holds the steepest-edge
+  /// update to the truth it approximates in exact arithmetic. Meaningful after run_dual().
+  [[nodiscard]] const std::vector<double>& dual_weights_for_testing() const {
+    return dual_weight_;
+  }
+  [[nodiscard]] std::vector<double> exact_dual_weights_for_testing();
   /// The primal push of a crossover (#343, simplex_push.cpp): install `warm` (the basis
   /// guessed off an interior point), start every nonbasic variable at the interior point's
   /// value (`interior_x` over the columns, `interior_activity` over the rows), push each to a
@@ -248,6 +255,9 @@ class Simplex {
   [[nodiscard]] DualRatioResult dual_ratio_test(Index leaving_slot,
                                                 bool leaving_to_upper) const;
   void reset_dual_weights();
+  /// Dual steepest edge (#411): every weight set to the exact squared norm of its row of
+  /// B^-1, one BTRAN per row. The slack basis has them all at 1 without the solves.
+  void compute_exact_dual_weights();
   /// Dual devex: fold the pivot into the row weights, from alpha_ (the entering column).
   void update_dual_weights(Index leaving_slot, double pivot);
 
@@ -573,7 +583,10 @@ class Simplex {
   // to sit at is given an ARTIFICIAL one so that it can. Those bounds are bookkept here and
   // removed before any answer is reported: a point at an artificial bound is a point of a
   // different problem, and the primal loop finishes from that basis instead.
-  std::vector<double> dual_weight_;  ///< dual devex weight per basic slot
+  std::vector<double> dual_weight_;  ///< dual devex weight per basic slot, or the exact
+                                     ///< steepest-edge norm under pricing=dual-steepest-edge
+  bool dual_steepest_edge_ = false;  ///< #411: the exact update, one FTRAN more per pivot
+  std::vector<double> tau_;          ///< B^-1 rho, the steepest-edge update's cross term
   std::vector<double> pivot_row_;    ///< row r of B^-1 [A | -I] over every column
   /// THE PIVOT ROW, ROW-WISE (#243). pivot_row_[k] = rho . a_k is a gather over every
   /// nonbasic column, O(nnz(A)) per iteration however sparse rho is. When rho is sparse -

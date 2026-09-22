@@ -161,6 +161,13 @@ inline constexpr double kDualPivotRelativeFloor = 1e-7;
 /// Reduced cost must beat this in magnitude to be an eligible entering candidate.
 inline constexpr double kDualPricing = 1e-7;
 
+/// Dual steepest edge (#411; Forrest & Goldfarb 1992): a warm basis with at most this many
+/// rows starts from the exact row norms of B^-1, one BTRAN per row; a larger one starts at
+/// 1, as Devex does, and the update takes it from there. The floor keeps a weight that
+/// rounding drove to zero or below from turning a pricing score infinite.
+inline constexpr int kDualSteepestEdgeExactInitRows = 2000;
+inline constexpr double kDualSteepestEdgeWeightFloor = 1e-4;
+
 /// Number of consecutive degenerate iterations after which the primal simplex switches to
 /// Bland's rule. Bland's rule is provably non-cycling but prices badly, so it is a fallback
 /// and not the default (Chvatal, "Linear Programming", ch. 3).
