@@ -374,10 +374,11 @@ than guessed.
 
 `conflict_analysis` (#292, `src/mip/conflict.hpp`, `src/mip/branch_and_bound_conflicts.cpp`)
 learns, from each node proved infeasible, which of its branching decisions were to blame, and
-uses that in every later node's propagation. It is OFF by default, and the clean A/B that
-decides that is now on disk: `bench/results/miplib-6c405f8-conflict-off.csv` and
-`miplib-6c405f8-conflict-on.csv`, the 30-instance MIPLIB set at 60 s, one commit, one machine,
-`conflict_analysis` the only difference.
+uses that in every later node's propagation. It is OFF by default, and the second A/B run
+(#405) says why: the 30-instance MIPLIB set at 60 s, one commit, one machine,
+`conflict_analysis` the only difference. It was run on the closeout branch at `6c405f8`, a
+commit that is not on `main`, so its CSVs are not committed (the #256 rule, as in #340) and
+what follows is an observation until the same runner is repeated on `main` as a bench PR.
 
 - **Nothing moved that must not move.** 14 of 30 reach the published optimum and 9 of 30 prove
   it, in BOTH legs. No instance changed status, no matched or proved verdict moved, and no

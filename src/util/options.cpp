@@ -554,9 +554,9 @@ const std::vector<OptionSpec>& Options::registry() {
                  "MILP: learn from every node proved infeasible which of its branching "
                  "decisions were to blame, and prune later nodes that repeat them (#292). A "
                  "conflict is stored only after it is proved again from the global bounds. Off "
-                 "by measurement: the A/B at 60 s on the 30 MIPLIB instances at 6c405f8 "
-                 "(bench/results/miplib-6c405f8-conflict-{off,on}.csv) reaches and proves the "
-                 "same 14 and 9 either way, takes the node count to 0.965x on the nine "
+                 "by measurement: the A/B at 60 s on the 30 MIPLIB instances (#405, run on a "
+                 "branch commit, so not committed until repeated on main) reaches and proves "
+                 "the same 14 and 9 either way, takes the node count to 0.965x on the nine "
                  "instances that finish, and to 0.938x in the same wall clock on the 21 that "
                  "do not - nodes not reached, not search saved.",
                  0.0,
