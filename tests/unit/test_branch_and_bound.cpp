@@ -157,8 +157,10 @@ TEST(RootCuts, TheRootBoundBeforeAndAfterCutsIsReported) {
   opt_presolved.set_bool("presolve", true);
   const Solution presolved = solve(model, opt_presolved);
   ASSERT_EQ(presolved.status, SolveStatus::kOptimal);
-  EXPECT_EQ(presolved.cut_filter_report.empty(), presolved.cuts_applied == 0)
-      << presolved.cut_filter_report;
+  // A root round that ran always leaves a line (an empty candidate set reads "no
+  // candidates"), whatever the search then applied: on this model presolve leaves the
+  // knapsack in a shape where nothing is taken, and the report says so instead of vanishing.
+  EXPECT_FALSE(presolved.cut_filter_report.empty()) << "postsolve dropped the report";
   EXPECT_DOUBLE_EQ(on.root_bound, off.root_bound) << "the root LP is the same either way";
   EXPECT_GE(on.root_bound_after_cuts, on.root_bound - 1e-9);
   EXPECT_LE(on.root_bound_after_cuts, on.objective + 1e-9);
