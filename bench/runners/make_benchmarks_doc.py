@@ -2333,8 +2333,10 @@ GPU_CARDS = ("l4", "l40s", "a100", "h100", "h200", "v100")
 
 def gpu_datacenter_table(path: Path) -> str:
     """The datacenter runner's CSV (#488) as a table: one row per instance, mode and
-    tolerance, the median wall of its repeats with their spread, and the forced-count pair
-    (iteration_limit set) that isolates the per-iteration ratio."""
+    tolerance; the solver's own clock from the last repeat beside the median WALL of the
+    repeats (process start-up and, on the card, context creation included) with their
+    spread; and the forced-count pair (iteration_limit set) that isolates the
+    per-iteration ratio from the iteration count."""
     rows = read_csv(path)
     if not rows:
         return "The CSV is empty.\n"
@@ -2342,13 +2344,13 @@ def gpu_datacenter_table(path: Path) -> str:
     out = [f"`{path.name}` - {first.get('gpu', '?')}, solver at `{first.get('git_commit', '?')}`, "
            f"{first.get('machine', '?')}, {first.get('repeats', '?')} repeats per cell:\n",
            "| instance | mode | tol | forced iterations | status | objective | iterations "
-           "| median wall (s) | spread (s) |",
-           "|---|---|---:|---:|---|---:|---:|---:|---:|"]
+           "| solver (s) | median wall (s) | spread (s) |",
+           "|---|---|---:|---:|---|---:|---:|---:|---:|---:|"]
     for r in rows:
         out.append(f"| `{r.get('instance', '')}` | {r.get('mode', '')} | {r.get('tol', '')} "
                    f"| {r.get('iteration_limit', '') or '-'} | {r.get('status', '')} "
                    f"| {r.get('objective', '')} | {r.get('iterations', '')} "
-                   f"| {r.get('wall_median_s', '')} | {r.get('wall_spread_s', '')} |")
+                   f"| {r.get('seconds', '')} | {r.get('wall_median_s', '')} | {r.get('wall_spread_s', '')} |")
     return "\n".join(out) + "\n"
 
 

@@ -444,7 +444,79 @@ Everything above 1g.3 is one laptop card. A rented card (E2E Networks TIR) runs 
 runners from a fresh clone at a `main` commit; the CPU column in each table is that
 machine's own CPU, so a ratio here is card against host, not card against the laptop.
 
-No datacenter card has been measured yet. The three runners write `gpu-<card>-<sha>.csv`, `gpu-real-<card>-<sha>.csv` and `gpu-datacenter-<card>-<sha>.csv`; commit them and this section fills itself.
+**L4**
+
+The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, medians of repeats with their min-max):
+
+Source CSV: `bench/results/gpu-l4-fdc89c5.csv`  
+Commit `fdc89c5` · machine `Linux-x86_64`
+
+Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named; a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
+
+Each cell is the median of 5 solves; `[min–max]` shows the spread from run-to-run variance (thermal state, clock boost on the laptop GPU).
+
+| rows×cols | CPU 1e-4 (s) | GPU 1e-4 (s) | speedup | CPU 1e-8 (s) | GPU 1e-8 (s) | speedup |
+|----------:|-------------:|-------------:|--------:|-------------:|-------------:|--------:|
+| 200×200 | 0.043 [0.043–0.044] | 0.663 [0.407–1.738] | 0.07× | 0.091 [0.090–0.092] | 0.723 [0.622–0.796] | 0.13× |
+| 500×500 | 0.178 [0.171–0.182] | 0.832 [0.542–3.330] | 0.21× | 0.228 [0.226–0.229] | 1.327 [1.287–2.707] | 0.17× |
+| 1000×1000 | 0.064 [0.063–0.064] | 0.267 [0.240–0.373] | 0.24× | 0.064 [0.063–0.066] | 0.270 [0.244–0.364] | 0.24× |
+| 2000×2000 | 1.025 [1.014–1.034] | 1.449 [1.264–1.795] | 0.71× | 1.028 [1.019–1.063] | 1.302 [1.260–2.244] | 0.79× |
+| 5000×5000 | 0.890 [0.879–0.905] | 0.434 [0.429–0.562] | **2.05×** | 0.884 [0.870–0.904] | 0.501 [0.457–0.540] | **1.77×** |
+| 10000×10000 | 2.854 [2.829–3.001] | 0.678 [0.610–0.799] | **4.21×** | 2.906 [2.856–2.928] | 0.745 [0.644–0.779] | **3.90×** |
+
+GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM).  
+Instances are synthetic KKT LPs with ~5 nonzeros per column (seed 42).
+
+#### 1e-8 ceiling — sizes PDHG does not drive to project standard
+
+Project standard: absolute primal ≤ 1e-7, dual ≤ 1e-7, gap ≤ 1e-8.  
+`feasible` means the solver met the *requested* 1e-8 tolerance but not all three project-standard thresholds. These are not dropped from the table.
+
+| rows×cols | engine | achieved primal | achieved dual |
+|----------:|--------|----------------:|--------------:|
+| 200×200 | GPU | 3.378e-08 | 2.481e-16 |
+| 500×500 | CPU | 7.220e-08 | 0.000e+00 |
+| 500×500 | GPU | 9.665e-08 | 7.241e-15 |
+| 1000×1000 | CPU | 8.748e-08 | 0.000e+00 |
+| 2000×2000 | CPU | 9.897e-08 | 0.000e+00 |
+| 2000×2000 | GPU | 6.291e-08 | 2.167e-17 |
+
+On non-synthetic instances (`bench/runners/gpu_real_instances.py`):
+
+Source CSV: `bench/results/gpu-real-l4-fdc89c5.csv`  
+Commit `fdc89c5` · machine `Linux-x86_64`  
+GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM)
+
+Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance. Report the result whichever way it goes.
+
+| instance | rows | CPU 1e-4 (s) | GPU 1e-4 (s) | speedup | CPU 1e-8 (s) | GPU 1e-8 (s) | speedup |
+|----------|-----:|-------------:|-------------:|--------:|-------------:|-------------:|--------:|
+| `brazil3` | 14646 | 37.829 | 5.843 | 6.47× | 91.143 | 10.987 | 8.30× |
+| `chromaticindex1024-7` | 67583 | 1.114 | 0.395 | 2.82× | 1.109 | 0.382 | 2.91× |
+| `refinery_year` | 779640 | 300.411 | 300.477 | 1.00× | 300.441 | 300.458 | 1.00× |
+
+The datacenter runner (`bench/runners/gpu_datacenter.py`, #488):
+
+`gpu-datacenter-l4-fdc89c5.csv` - NVIDIA L4 (compute 8.9, 22478 MiB VRAM), solver at `fdc89c5`, Linux-x86_64, 3 repeats per cell:
+
+| instance | mode | tol | forced iterations | status | objective | iterations | solver (s) | median wall (s) | spread (s) |
+|---|---|---:|---:|---|---:|---:|---:|---:|---:|
+| `chromaticindex1024-7` | cpu-16t | 0.0001 | - | feasible | 3.0000000022999487 | 480 | 1.103508 | 1.445666 | 0.129435 |
+| `chromaticindex1024-7` | gpu | 0.0001 | - | feasible | 3.0000000012276438 | 440 | 0.438591 | 0.853233 | 0.022590 |
+| `chromaticindex1024-7` | cpu-16t | 1e-06 | - | feasible | 3.0000000022999487 | 480 | 1.130150 | 1.417274 | 0.266043 |
+| `chromaticindex1024-7` | gpu | 1e-06 | - | feasible | 3.000000000165927 | 480 | 0.369944 | 0.825440 | 0.117898 |
+| `chromaticindex1024-7` | cpu-16t | 1e-08 | - | feasible | 3.0000000022999487 | 480 | 1.037373 | 1.502796 | 0.054597 |
+| `chromaticindex1024-7` | gpu | 1e-08 | - | feasible | 3.0000000005021317 | 440 | 0.379603 | 0.834822 | 0.111375 |
+| `chromaticindex1024-7` | cpu-16t | 1e-08 | 2000 | feasible | 3.0000000022999487 | 480 | 1.034538 | 1.445967 | 0.082200 |
+| `chromaticindex1024-7` | gpu | 1e-08 | 2000 | feasible | 3.0000000006988623 | 440 | 0.370927 | 0.847714 | 0.072507 |
+| `brazil3` | cpu-16t | 0.0001 | - | feasible | 1.999998811677631 | 80800 | 33.762208 | 34.172888 | 0.326525 |
+| `brazil3` | gpu | 0.0001 | - | feasible | 2.0000010287786005 | 58000 | 4.610044 | 5.553975 | 3.634450 |
+| `brazil3` | cpu-16t | 1e-06 | - | feasible | 2.0000000851361506 | 101600 | 42.906782 | 43.094890 | 0.681074 |
+| `brazil3` | gpu | 1e-06 | - | feasible | 1.9999995978437894 | 91320 | 7.212001 | 10.508593 | 4.449151 |
+| `brazil3` | cpu-16t | 1e-08 | - | feasible | 1.9999999975461507 | 194240 | 80.629251 | 79.984344 | 1.851811 |
+| `brazil3` | gpu | 1e-08 | - | feasible | 1.9999996940528124 | 129000 | 10.044387 | 10.431059 | 3.828625 |
+| `brazil3` | cpu-16t | 1e-08 | 2000 | iteration_limit | 0.0 | 2000 | 0.846638 | 1.165236 | 0.048787 |
+| `brazil3` | gpu | 1e-08 | 2000 | iteration_limit | 0.0 | 2000 | 0.315572 | 0.688317 | 0.193310 |
 
 ---
 
