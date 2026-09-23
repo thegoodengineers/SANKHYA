@@ -46,13 +46,45 @@ struct CrossoverGuess {
 /// into a basis guess with exactly m basic entries.
 [[nodiscard]] CrossoverGuess crossover_guess(const Model& model, const Solution& interior);
 
-/// Push `interior` (an optimal interior-point answer to `model`) to an optimal vertex with the
-/// dual simplex warm-started from crossover_guess(). Returns the simplex's vertex when it
-/// reaches `optimal`, with the pivot count in the message and `iterations` summed; otherwise
-/// returns `interior` unchanged apart from a note saying why the vertex was not reached.
-/// `timer` is the solve's clock: the pivots get what the time limit has left.
+/// Push `interior` (an interior-point answer to `model`) to an optimal vertex with the
+/// simplex warm-started from crossover_guess(). Returns the simplex's vertex when it reaches
+/// `optimal`, with the pivot count in the message and `iterations` summed; otherwise returns
+/// `interior` unchanged apart from a note saying why the vertex was not reached. `timer` is
+/// the solve's clock: the pivots get what the time limit has left.
+///
+/// An optimal `interior` is always a start. One that is not optimal is a start only when
+/// crossover_from_nonoptimal is on and crossover_start_is_usable() says so (#474); anything
+/// else comes back unchanged, and a numerical error comes back without the best iterate the
+/// interior point attached for this purpose (withdraw_attached_point()).
 [[nodiscard]] Solution crossover_to_vertex(const Model& model, Solution interior,
                                            const Options& options, Logger& logger,
                                            SolveControl* control, const Timer& timer);
+
+/// Whether a NON-optimal interior-point answer is a usable crossover start (#474): its status
+/// is feasible, time_limit, iteration_limit or numerical_error (the last with the best
+/// iterate attached), its point is finite and of the model's size, and its scaled primal and
+/// dual infeasibility are both at most tol::kCrossoverStartInfeasibility. An interrupted
+/// solve is never one: the caller asked it to stop.
+[[nodiscard]] bool crossover_start_is_usable(const Model& model, const Solution& interior);
+
+/// The interior point's answer followed by crossover when the options ask for it: always
+/// from an optimal answer under `crossover`, and also from a non-optimal one under
+/// `crossover_from_nonoptimal` (#474). The one place solve() and the registry's ipm engine
+/// decide this, so the two cannot drift.
+[[nodiscard]] Solution crossover_when_wanted(const Model& model, Solution interior,
+                                             const Options& options, Logger& logger,
+                                             SolveControl* control, const Timer& timer);
+
+/// The options the interior point runs under when a crossover from a non-optimal answer may
+/// follow (#474): with crossover_from_nonoptimal on and a finite time limit, the interior
+/// point stops at (1 - crossover_time_reserve) of it, so that a time-limited answer still
+/// leaves the pivots some time. Otherwise `options` unchanged.
+[[nodiscard]] Options interior_point_options_before_crossover(const Options& options);
+
+/// A numerical error carries no point (#200), but with crossover_from_nonoptimal the interior
+/// point attaches its best iterate to one so the crossover can start from it. Whatever does
+/// not use it withdraws it here: the vectors go back to zero, as a numerical error's are, and
+/// the measured quality is recomputed. Any other status is left alone.
+void withdraw_attached_point(const Model& model, Solution* solution);
 
 }  // namespace sankhya

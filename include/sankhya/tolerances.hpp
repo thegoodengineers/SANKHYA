@@ -197,6 +197,18 @@ inline constexpr double kHarrisRelaxation = 0.1 * kPrimalFeasibility;
 /// PDHG results are reported at BOTH of these, separately, never blended
 /// (ENGINEERING_RULES.md).
 inline constexpr double kPdhgLoose = 1e-4;
+
+/// Crossover from an interior point that is NOT optimal (#474, crossover_from_nonoptimal):
+/// the largest scaled primal and dual infeasibility (Solution::*_infeasibility_scaled) a
+/// feasible, time-limited, iteration-limited or numerically failed interior point may carry
+/// and still be handed to the simplex as a starting point. The push itself refuses a point
+/// whose guessed basis reproduces it worse than 1e3 times the primal tolerance
+/// (simplex_push.cpp), which is this same 1e-4; the dual side is held to the same number so
+/// "small primal and dual infeasibility" is one figure, the loose level PDHG reports at and
+/// the verifier's ceiling for a stated infeasibility (#461). It only chooses where the
+/// simplex starts: the vertex it returns is judged at kPrimalFeasibility and
+/// kDualFeasibility like any other.
+inline constexpr double kCrossoverStartInfeasibility = 1e-4;
 inline constexpr double kPdhgTight = 1e-8;
 
 // ---------------------------------------------------------------------------------------

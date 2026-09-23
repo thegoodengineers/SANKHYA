@@ -735,21 +735,25 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       if (want_ipm) {
         // Under its own memory guard (#437), so an exhausted factor comes back as the
         // declined status the fallback below tests instead of unwinding past it.
+        // With crossover_from_nonoptimal the interior point stops a little short of the
+        // limit so a time-limited answer can still be crossed over (#474); otherwise these are
+        // engine_options unchanged.
+        const Options interior_options =
+            interior_point_options_before_crossover(engine_options);
         Solution interior = run_declining_on_out_of_memory(
             [&] {
               if (interior_point_out_of_memory_for_testing()) throw std::bad_alloc();
-              return ipm::solve_ipm(target, engine_options, logger, control);
+              return ipm::solve_ipm(target, interior_options, logger, control);
             },
             "ipm", timer, logger);
         // From the interior point's answer to a vertex (#219), when asked: the basis the
-        // rest of the pipeline wants, at the cost of a few pivots from an optimal point.
+        // rest of the pipeline wants, at the cost of a few pivots from an optimal point -
+        // and, under crossover_from_nonoptimal, from a feasible or stopped one (#474).
         // The crossover runs on what the budget has left too, which is why it is handed
         // engine_options rather than the caller's (#289).
-        if (engine_options.get_bool("crossover") && interior.status == SolveStatus::kOptimal) {
-          interior =
-              crossover_to_vertex(target, std::move(interior),
+        interior =
+            crossover_when_wanted(target, std::move(interior),
                                   with_the_time_that_is_left(options), logger, control, timer);
-        }
         // A SELECTED interior point that declines - a factor beyond its budget, a
         // numerical failure, no answer at all - is not the end of the solve: the selector
         // chose it from the model's shape, and the shape can lie (a dense model can be

@@ -781,7 +781,29 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
     }
   }
 
-  if (!have_point) {
+  // THE BEST ITERATE, ATTACHED TO A NUMERICAL ERROR FOR THE CROSSOVER (#474). A numerical
+  // error claims no point (#200), and without crossover_from_nonoptimal its vectors stay zero.
+  // With it, the best finite iterate the loop kept is written into them so the crossover can
+  // start from it; the status stays numerical_error, and crossover_when_wanted() zeroes the
+  // vectors again unless the simplex turns them into a vertex it proves. Never for a polish
+  // (a warm start), whose caller keeps its own first-order answer instead.
+  bool attach_best = false;
+  if (!have_point && status == SolveStatus::kNumericalError && warm_ == nullptr &&
+      options_.get_bool("crossover") && options_.get_bool("crossover_from_nonoptimal") &&
+      !best_.x.empty()) {
+    restore_best();
+    const auto finite = [](const std::vector<double>& v) {
+      return std::all_of(v.begin(), v.end(), [](double x) { return std::isfinite(x); });
+    };
+    attach_best = finite(x_) && finite(y_) && finite(zl_) && finite(zu_);
+    if (attach_best) {
+      solution.message += fmt::format(
+          "; the best iterate (merit {:.1e}) is attached for crossover_from_nonoptimal, and "
+          "is not claimed as a point",
+          best_.merit);
+    }
+  }
+  if (!have_point && !attach_best) {
     solution.recompute_quality(model_);
     solution.dual_bound = model_.sense == ObjSense::kMaximize ? kInfinity : -kInfinity;
     return solution;

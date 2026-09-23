@@ -823,6 +823,30 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"crossover_from_nonoptimal",
+         OptionType::Bool,
+         false,
+         "Also run the crossover when the interior point stops short of optimal (#474): "
+         "on `feasible`, on time_limit or iteration_limit, and on the best iterate it "
+         "kept after a numerical error, provided that point's scaled primal and dual "
+         "infeasibility are both at most 1e-4. The simplex finishes from the guessed "
+         "basis and only its vertex, measured by the status guard, can be reported "
+         "optimal; a start the pivots cannot finish leaves the interior point's answer "
+         "as it was. Needs crossover=true. Off until an A/B on main (brazil3: feasible "
+         "in 1.4 s, then 300 s of dual simplex from scratch).",
+         0.0,
+         0.0,
+         {}});
+    s.push_back({"crossover_time_reserve",
+                 OptionType::Double,
+                 0.1,
+                 "With crossover_from_nonoptimal on and a finite time limit, the share of the "
+                 "limit held back from the interior point so that a time-limited answer still "
+                 "leaves the crossover some time (#474). No effect otherwise.",
+                 0.0,
+                 0.9,
+                 {}});
     s.push_back({"dual_feasibility_tolerance",
                  OptionType::Double,
                  tol::kDualFeasibility,

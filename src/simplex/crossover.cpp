@@ -223,12 +223,111 @@ CrossoverGuess crossover_guess(const Model& model, const Solution& interior) {
   return guess;
 }
 
+// CROSSOVER FROM AN INTERIOR POINT THAT IS NOT OPTIMAL (#474). Megiddo's construction
+// (Megiddo, "On finding primal- and dual-optimal bases", ORSA J. Computing 3(1), 1991) and
+// its implementation by Bixby and Saltzman ("Recovering an optimal LP basis from an interior
+// point solution", Operations Research Letters 15, 1994) start from an optimal pair, and so
+// did this file: the gate was `status == optimal`. But the pivoting half does not need the
+// start to be optimal, only to be a point: the push walks every superbasic variable to a
+// bound while keeping the point feasible, and the primal simplex that follows is a complete
+// method from any feasible basis. A start that is merely feasible costs more pivots, never a
+// wrong answer, because nothing the start says is trusted - the simplex proves its own
+// vertex, and the status guard in solve() measures that vertex like every other claim. On
+// brazil3 the interior point is `feasible` in 1.4 s and the dual simplex then spent 300 s
+// from scratch; this lets the simplex start where the interior point stopped. Off by default
+// (crossover_from_nonoptimal) until an A/B on main.
+bool crossover_start_is_usable(const Model& model, const Solution& interior) {
+  switch (interior.status) {
+    case SolveStatus::kFeasible:
+    case SolveStatus::kTimeLimit:
+    case SolveStatus::kIterationLimit:
+    case SolveStatus::kNumericalError: break;
+    default: return false;
+  }
+  const auto n = static_cast<std::size_t>(model.num_cols());
+  const auto m = static_cast<std::size_t>(model.num_rows());
+  if (interior.col_value.size() != n || interior.row_activity.size() != m ||
+      interior.col_dual.size() != n || interior.row_dual.size() != m) {
+    return false;
+  }
+  const auto finite = [](const std::vector<double>& v) {
+    return std::all_of(v.begin(), v.end(), [](double x) { return std::isfinite(x); });
+  };
+  if (!finite(interior.col_value) || !finite(interior.row_activity) ||
+      !finite(interior.col_dual) || !finite(interior.row_dual)) {
+    return false;
+  }
+  // A numerical error's vectors are all zero unless the interior point attached its best
+  // iterate; a zero vector is not a point anyone computed, whatever it measures.
+  if (interior.status == SolveStatus::kNumericalError &&
+      std::all_of(interior.col_value.begin(), interior.col_value.end(),
+                  [](double x) { return x == 0.0; })) {
+    return false;
+  }
+  return interior.primal_infeasibility_scaled <= tol::kCrossoverStartInfeasibility &&
+         interior.dual_infeasibility_scaled <= tol::kCrossoverStartInfeasibility;
+}
+
+void withdraw_attached_point(const Model& model, Solution* solution) {
+  if (solution->status != SolveStatus::kNumericalError) return;
+  std::fill(solution->col_value.begin(), solution->col_value.end(), 0.0);
+  std::fill(solution->row_activity.begin(), solution->row_activity.end(), 0.0);
+  std::fill(solution->col_dual.begin(), solution->col_dual.end(), 0.0);
+  std::fill(solution->row_dual.begin(), solution->row_dual.end(), 0.0);
+  solution->recompute_quality(model);
+}
+
+Options interior_point_options_before_crossover(const Options& options) {
+  if (!options.get_bool("crossover") || !options.get_bool("crossover_from_nonoptimal")) {
+    return options;
+  }
+  const double time_limit = options.get_double("time_limit");
+  if (!(time_limit > 0.0) || !std::isfinite(time_limit) || time_limit >= 1e300) return options;
+  Options narrowed = options;
+  narrowed.set_double("time_limit",
+                      time_limit * (1.0 - options.get_double("crossover_time_reserve")));
+  return narrowed;
+}
+
+Solution crossover_when_wanted(const Model& model, Solution interior, const Options& options,
+                               Logger& logger, SolveControl* control, const Timer& timer) {
+  const bool wanted =
+      options.get_bool("crossover") && (interior.status == SolveStatus::kOptimal ||
+                                        options.get_bool("crossover_from_nonoptimal"));
+  if (!wanted) {
+    withdraw_attached_point(model, &interior);
+    return interior;
+  }
+  return crossover_to_vertex(model, std::move(interior), options, logger, control, timer);
+}
+
 Solution crossover_to_vertex(const Model& model, Solution interior, const Options& options,
                              Logger& logger, SolveControl* control, const Timer& timer) {
-  if (interior.status != SolveStatus::kOptimal) return interior;
+  const bool from_optimal = interior.status == SolveStatus::kOptimal;
+  if (!from_optimal) {
+    if (!options.get_bool("crossover_from_nonoptimal") ||
+        !crossover_start_is_usable(model, interior)) {
+      if (options.get_bool("crossover_from_nonoptimal") &&
+          interior.status != SolveStatus::kInterrupted) {
+        interior.message += fmt::format(
+            "; crossover not attempted from this {} answer: its scaled infeasibility "
+            "{:.1e} / {:.1e} is above {:.0e}, or it holds no finite point",
+            to_string(interior.status), interior.primal_infeasibility_scaled,
+            interior.dual_infeasibility_scaled, tol::kCrossoverStartInfeasibility);
+      }
+      withdraw_attached_point(model, &interior);
+      return interior;
+    }
+    logger.info(
+        "Crossover from an interior point that ended {} (#474): scaled infeasibility {:.2e} / "
+        "{:.2e}",
+        to_string(interior.status), interior.primal_infeasibility_scaled,
+        interior.dual_infeasibility_scaled);
+  }
   const CrossoverGuess guess = crossover_guess(model, interior);
   if (guess.basic != model.num_rows()) {
     interior.message += "; crossover skipped: no basis guess could be built";
+    withdraw_attached_point(model, &interior);
     return interior;
   }
 
@@ -239,6 +338,7 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
     const double remaining = time_limit - timer.elapsed_seconds();
     if (remaining <= 0.0) {
       interior.message += "; no time left for crossover, the interior point's answer stands";
+      withdraw_attached_point(model, &interior);
       return interior;
     }
     pivots.set_double("time_limit", remaining);
@@ -264,6 +364,7 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
         to_string(vertex.status), vertex.iterations, pivot_clock.elapsed_seconds());
     logger.warning("Crossover: {} after {} pivots; keeping the interior point's answer",
                    to_string(vertex.status), vertex.iterations);
+    withdraw_attached_point(model, &interior);
     return interior;
   }
   const Count pivot_count = vertex.iterations;
@@ -271,8 +372,11 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
   vertex.algorithm = interior.algorithm + "+crossover";
   const std::string note = fmt::format(
       "crossover: {} pivots from the interior point's basis guess in {:.2f}s, after {} "
-      "interior point iterations",
-      pivot_count, pivot_clock.elapsed_seconds(), interior.iterations);
+      "interior point iterations{}",
+      pivot_count, pivot_clock.elapsed_seconds(), interior.iterations,
+      from_optimal ? std::string{}
+                   : fmt::format(" that ended {} (crossover_from_nonoptimal, #474: {})",
+                                 to_string(interior.status), interior.message));
   vertex.message = vertex.message.empty() ? note : vertex.message + "; " + note;
   logger.info("Crossover: optimal vertex after {} pivots in {:.2f}s", pivot_count,
               pivot_clock.elapsed_seconds());

@@ -218,11 +218,10 @@ class IpmEngine final : public SolverEngine {
                                         Logger& logger, SolveControl* control) const override {
     const Timer timer;
     const Options effective = apply_deterministic_mode(options, logger);
-    Solution interior = ipm::solve_ipm(model, effective, logger, control);
-    if (effective.get_bool("crossover") && interior.status == SolveStatus::kOptimal) {
-      return crossover_to_vertex(model, std::move(interior), effective, logger, control, timer);
-    }
-    return interior;
+    Solution interior = ipm::solve_ipm(
+        model, interior_point_options_before_crossover(effective), logger, control);
+    // The same decision solve() makes, in the same function (#474).
+    return crossover_when_wanted(model, std::move(interior), effective, logger, control, timer);
   }
 };
 

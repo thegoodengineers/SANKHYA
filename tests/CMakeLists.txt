@@ -35,6 +35,7 @@ add_executable(sankhya_tests
   unit/test_ldl.cpp
   unit/test_ipm.cpp
   unit/test_crossover.cpp
+  unit/test_crossover_nonoptimal.cpp
   unit/test_engine_selection.cpp
   unit/test_solver_engine.cpp
   unit/test_solver_engine_conformance.cpp
