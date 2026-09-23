@@ -799,7 +799,7 @@ once as a dedicated parametric simplex would; the tool's docstring says what tha
 | 1.0666666666666669 | 159.5555555555556 | optimal | no basis change (objective still moves linearly) |
 | 5.0 | 348.017837837838 | optimal | entered: AL, MU; left: BN |
 
-**`crude-blend-THRUPUT`** - `bench/results/parametric-crude-blend-THRUPUT-887b173.csv`, solver at `887b173-dirty`, Windows-AMD64, 3 breakpoint(s):
+**`crude-blend-THRUPUT`** - `bench/results/parametric-crude-blend-THRUPUT-887b173.csv`, solver at `887b173`, Windows-AMD64, 3 breakpoint(s):
 
 | parameter | objective | status | what changed at this point |
 |---:|---:|---|---|

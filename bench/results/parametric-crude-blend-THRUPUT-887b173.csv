@@ -1,4 +1,4 @@
 parameter,objective,status,change,git_commit,machine,instance_sha256
-100.0,173.12499999999983,optimal,initial basis,887b173-dirty,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
-107.81351351351357,214.14594594594607,optimal,no basis change (objective still moves linearly),887b173-dirty,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
-200.0,214.14594594594604,optimal,no basis change (objective still moves linearly),887b173-dirty,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+100.0,173.12499999999983,optimal,initial basis,887b173,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+107.81351351351357,214.14594594594607,optimal,no basis change (objective still moves linearly),887b173,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+200.0,214.14594594594604,optimal,no basis change (objective still moves linearly),887b173,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
