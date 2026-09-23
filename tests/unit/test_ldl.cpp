@@ -298,7 +298,7 @@ TEST(SparseLdl, ADeadlineStopsTheAssemblyOfTheNormalEquationsToo) {
   // #232: the polish's clock reached the ordering (#197) and not the step before it. On the
   // random scale family at 500,000 rows, forming A Theta A^T took 90 s against a budget of
   // 30, all of it before analyze() could consult the deadline. So the assembly takes the
-  // same deadline, checked every 256 rows: with one that fires it returns false at once,
+  // same deadline, asked as it works (#468): with one that fires it returns false at once,
   // and with one that never fires it returns true and produces exactly what it produces
   // with no deadline at all.
   std::mt19937_64 rng(232);

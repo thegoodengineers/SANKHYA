@@ -59,6 +59,21 @@ class SparseMatrix {
   /// ignores overflowed() sees a matrix with no entries rather than one with wrapped offsets.
   void finalize(double drop_tol = tol::kZeroDrop);
 
+  /// Replace the contents with a matrix ALREADY in compressed-column form and freeze it:
+  /// `starts` has num_cols + 1 offsets, and within every column the row indices are strictly
+  /// increasing (no duplicates). The vectors are moved in; nothing is sorted, summed or
+  /// dropped. A producer that emits column by column in row order (the normal equations,
+  /// #468) uses this instead of add_entry() + finalize(), which would hold every entry
+  /// three times over - triplets, a scratch copy and the result - and spend an
+  /// uninterruptible pass sorting what was already sorted. More entries than the nonzero
+  /// limit leave the matrix empty and overflowed(), as finalize() does; so does
+  /// `overflowed` = true, for a producer that stopped emitting at the limit rather than hold
+  /// what it could not store. The ordering is the caller's contract, checked by assertions
+  /// in a debug build.
+  void assign_columns(Index num_rows, Index num_cols, std::vector<Index> starts,
+                      std::vector<Index> row_indices, std::vector<double> values,
+                      bool overflowed = false);
+
   /// True when more entries were offered than the nonzero limit allows (#305).
   ///
   /// Sticky: it survives finalize() and is cleared only by reset(). Model::validate() reports

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <utility>
 
 namespace sankhya {
 
@@ -162,6 +163,37 @@ void SparseMatrix::finalize(double drop_tol) {
   build_rows_.shrink_to_fit();
   build_cols_.shrink_to_fit();
   build_values_.shrink_to_fit();
+  frozen_ = true;
+}
+
+void SparseMatrix::assign_columns(Index num_rows, Index num_cols, std::vector<Index> starts,
+                                  std::vector<Index> row_indices, std::vector<double> values,
+                                  bool overflowed) {
+  reset(num_rows, num_cols);
+  assert(starts.size() == static_cast<std::size_t>(num_cols) + 1);
+  assert(row_indices.size() == values.size());
+  if (overflowed || values.size() > static_cast<std::size_t>(nonzero_limit_) ||
+      !nonzero_count_fits(values.size())) {
+    overflowed_ = true;
+    column_starts_.assign(static_cast<std::size_t>(num_cols_) + 1, 0);
+    frozen_ = true;
+    return;
+  }
+#ifndef NDEBUG
+  assert(starts.front() == 0 && static_cast<std::size_t>(starts.back()) == values.size());
+  for (Index j = 0; j < num_cols; ++j) {
+    const auto begin = static_cast<std::size_t>(starts[static_cast<std::size_t>(j)]);
+    const auto end = static_cast<std::size_t>(starts[static_cast<std::size_t>(j) + 1]);
+    assert(begin <= end);
+    for (std::size_t k = begin; k < end; ++k) {
+      assert(row_indices[k] >= 0 && row_indices[k] < num_rows);
+      assert(k == begin || row_indices[k - 1] < row_indices[k]);
+    }
+  }
+#endif
+  column_starts_ = std::move(starts);
+  row_indices_ = std::move(row_indices);
+  values_ = std::move(values);
   frozen_ = true;
 }
 

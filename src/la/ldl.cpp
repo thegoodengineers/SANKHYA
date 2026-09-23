@@ -12,6 +12,37 @@
 #include "sankhya/tolerances.hpp"
 
 namespace sankhya {
+namespace {
+
+/// A deadline asked in proportion to the work done rather than once per row or column
+/// (#468). Every O(nnz) pass over a matrix - the assembly of the normal equations, the
+/// set-up of the ordering's graph, the permuted pattern, the elimination tree, the refresh of
+/// the values before a factorization - costs what its rows or columns hold, and one dense
+/// row or column makes a fixed count of them an unbounded amount of work. The caller adds
+/// what each step did; the predicate is asked once the total passes kWorkPerCheck, about
+/// sixty-five thousand operations, which is tens of microseconds and so far below any time
+/// limit a caller can set, and far above the cost of reading a clock. The first call always
+/// asks, so a deadline that has already passed is seen before any work is done. Without a
+/// predicate it never stops and changes nothing.
+class DeadlineByWork {
+ public:
+  explicit DeadlineByWork(const SparseLdl::ShouldStop& should_stop)
+      : should_stop_(should_stop) {}
+
+  [[nodiscard]] bool expired(std::size_t done) {
+    work_ += done;
+    if (work_ < kWorkPerCheck || !should_stop_) return false;
+    work_ = 0;
+    return should_stop_();
+  }
+
+ private:
+  static constexpr std::size_t kWorkPerCheck = std::size_t{1} << 16;
+  const SparseLdl::ShouldStop& should_stop_;
+  std::size_t work_ = kWorkPerCheck;
+};
+
+}  // namespace
 
 // -----------------------------------------------------------------------------------------
 // Ordering: approximate minimum degree on the quotient graph (Amestoy, Davis & Duff 1996)
@@ -60,8 +91,13 @@ bool SparseLdl::minimum_degree(const SparseMatrix& lower, const ShouldStop& shou
   std::vector<std::vector<Index>> adjacent(un);
   std::vector<std::vector<Index>> elements(un);
   std::vector<std::vector<Index>> members(un);
+  // The graph is built from every entry before the first elimination step, so the deadline
+  // is asked here too (#468): on Linf_520c's 474-million-entry normal equations this set-up
+  // is the step that ran forty seconds past the limit after the assembly had finished.
+  DeadlineByWork deadline(should_stop);
   for (Index c = 0; c < n; ++c) {
     const ColumnView column = lower.column(c);
+    if (deadline.expired(static_cast<std::size_t>(column.size) + 1)) return false;
     for (Index p = 0; p < column.size; ++p) {
       const Index r = column.rows[p];
       if (r <= c) continue;  // the strict lower triangle defines the graph
@@ -76,6 +112,7 @@ bool SparseLdl::minimum_degree(const SparseMatrix& lower, const ShouldStop& shou
   // capacity and overcounts nothing.
   std::size_t live = 0;
   for (auto& list : adjacent) {
+    if (deadline.expired(list.size() + 1)) return false;
     std::sort(list.begin(), list.end());
     list.erase(std::unique(list.begin(), list.end()), list.end());
     live += list.size();
@@ -228,11 +265,14 @@ bool SparseLdl::minimum_degree(const SparseMatrix& lower, const ShouldStop& shou
 // The up-looking factorization consumes row k of the lower triangle, which is column k of
 // the upper one. Each original entry (r, c), r >= c, lands in permuted column max(pr, pc)
 // at permuted row min(pr, pc). Duplicates from the caller are summed.
-void SparseLdl::build_permuted_pattern(const SparseMatrix& lower) {
+bool SparseLdl::build_permuted_pattern(const SparseMatrix& lower,
+                                       const ShouldStop& should_stop) {
   const Index n = n_;
+  DeadlineByWork deadline(should_stop);
   std::vector<std::vector<std::pair<Index, double>>> columns(static_cast<std::size_t>(n));
   for (Index c = 0; c < n; ++c) {
     const ColumnView column = lower.column(c);
+    if (deadline.expired(static_cast<std::size_t>(column.size) + 1)) return false;
     for (Index p = 0; p < column.size; ++p) {
       const Index r = column.rows[p];
       if (r < c) continue;
@@ -248,6 +288,7 @@ void SparseLdl::build_permuted_pattern(const SparseMatrix& lower) {
   a_values_.clear();
   for (Index k = 0; k < n; ++k) {
     auto& column = columns[static_cast<std::size_t>(k)];
+    if (deadline.expired(column.size() + 1)) return false;
     std::sort(column.begin(), column.end(),
               [](const auto& x, const auto& y) { return x.first < y.first; });
     for (std::size_t p = 0; p < column.size(); ++p) {
@@ -260,6 +301,7 @@ void SparseLdl::build_permuted_pattern(const SparseMatrix& lower) {
     }
     a_starts_[static_cast<std::size_t>(k) + 1] = static_cast<Index>(a_rows_.size());
   }
+  return true;
 }
 
 // -----------------------------------------------------------------------------------------
@@ -269,11 +311,15 @@ void SparseLdl::build_permuted_pattern(const SparseMatrix& lower) {
 // parent[j] is the smallest i > j with L(i, j) != 0. Computed by walking, for each column k
 // and each entry A(i, k) with i < k, from i up through the tree built so far until a root,
 // which becomes a child of k; `ancestor` compresses the paths so the walk stays near-linear.
-void SparseLdl::elimination_tree() {
+bool SparseLdl::elimination_tree(const ShouldStop& should_stop) {
   const Index n = n_;
+  DeadlineByWork deadline(should_stop);
   parent_.assign(static_cast<std::size_t>(n), -1);
   std::vector<Index> ancestor(static_cast<std::size_t>(n), -1);
   for (Index k = 0; k < n; ++k) {
+    const Index entries =
+        a_starts_[static_cast<std::size_t>(k) + 1] - a_starts_[static_cast<std::size_t>(k)];
+    if (deadline.expired(static_cast<std::size_t>(entries) + 1)) return false;
     for (Index p = a_starts_[static_cast<std::size_t>(k)];
          p < a_starts_[static_cast<std::size_t>(k) + 1]; ++p) {
       Index i = a_rows_[static_cast<std::size_t>(p)];
@@ -288,6 +334,7 @@ void SparseLdl::elimination_tree() {
       }
     }
   }
+  return true;
 }
 
 // -----------------------------------------------------------------------------------------
@@ -323,16 +370,22 @@ bool SparseLdl::symbolic_pattern(const ShouldStop& should_stop) {
     }
   };
 
+  // Both passes are asked by the entries they visit (#468), not every 256 rows: a row of L
+  // under catastrophic fill holds most of the matrix's dimension.
   std::vector<std::size_t> count(un, 0);
   std::size_t total = 0;
+  DeadlineByWork deadline(should_stop);
+  std::size_t visited = 0;
   for (Index k = 0; k < n; ++k) {
-    if (should_stop && (k & 255) == 0 && should_stop()) {
+    if (deadline.expired(visited + 1)) {
       stopped_early_ = true;
       return false;
     }
+    visited = 0;
     walk(k, [&](Index i) {
       ++count[static_cast<std::size_t>(i)];
       ++total;
+      ++visited;
     });
     // The caller's budget for the factor, consulted as the count grows so that a factor ten
     // times too large is refused after a tenth of the work, not after all of it.
@@ -365,10 +418,21 @@ bool SparseLdl::symbolic_pattern(const ShouldStop& should_stop) {
   l_rows_.assign(total, 0);
   std::vector<Index> next(l_starts_.begin(), l_starts_.end() - 1);
   std::fill(mark.begin(), mark.end(), -1);
+  visited = 0;
   for (Index k = 0; k < n; ++k) {
+    // The filling pass costs what the counting pass did, so it answers to the deadline too;
+    // what it abandons is dropped with the rest of the analysis.
+    if (deadline.expired(visited + 1)) {
+      stopped_early_ = true;
+      l_starts_.clear();
+      l_rows_.clear();
+      return false;
+    }
+    visited = 0;
     // Rows are visited in increasing k, so every column's row list comes out sorted.
     walk(k, [&](Index i) {
       l_rows_[static_cast<std::size_t>(next[static_cast<std::size_t>(i)]++)] = k;
+      ++visited;
     });
   }
   l_values_.assign(total, 0.0);
@@ -394,8 +458,12 @@ bool SparseLdl::analyze(const SparseMatrix& lower, const ShouldStop& should_stop
     stopped_early_ = !ordering_too_large_;
     return false;
   }
-  build_permuted_pattern(lower);
-  elimination_tree();
+  // The two passes between the ordering and the pattern are O(nnz) each and were not asked
+  // at all (#468); on a matrix of hundreds of millions of entries each is minutes of work.
+  if (!build_permuted_pattern(lower, should_stop) || !elimination_tree(should_stop)) {
+    stopped_early_ = true;
+    return false;
+  }
   if (!symbolic_pattern(should_stop)) return false;
   analyzed_ = true;
   return true;
@@ -419,8 +487,15 @@ bool SparseLdl::factorize(const SparseMatrix& lower, double regularization,
   // Refresh the permuted values. The pattern may be a subset of the analyzed one; an entry
   // outside it means the caller changed the structure, which is a contract violation.
   std::fill(a_values_.begin(), a_values_.end(), 0.0);
+  // The refresh visits every entry with a binary search each, so it is asked by work like
+  // the passes of the analysis (#468).
+  DeadlineByWork deadline(should_stop);
   for (Index c = 0; c < n; ++c) {
     const ColumnView column = lower.column(c);
+    if (deadline.expired(static_cast<std::size_t>(column.size) + 1)) {
+      stopped_early_ = true;
+      return false;
+    }
     for (Index p = 0; p < column.size; ++p) {
       const Index r = column.rows[p];
       if (r < c) continue;
@@ -690,16 +765,37 @@ bool normal_equations_lower(const SparseMatrix& a, const std::vector<double>& th
   const Index m = a.num_rows();
   const Index n = a.num_cols();
   const bool have_shift = static_cast<Index>(row_shift.size()) == m;
+  // THE DEADLINE IS ASKED BY WORK DONE, NOT BY ROWS PASSED (#468). A row of the product costs
+  // the sum of the lengths of the columns it touches, and a column that meets every row makes
+  // that the whole height of the matrix: on Linf_520c (93,326 rows) the product has 474
+  // million lower-triangle entries, and a check every 256 rows is a check every 24 million
+  // multiply-adds and pushes into vectors that were by then swapping. So the multiply-adds
+  // and the entries emitted are counted (DeadlineByWork above), and the interval between two
+  // looks at the clock is bounded however the work is spread over the rows. Row 0 is always
+  // asked, as before.
+  DeadlineByWork deadline(should_stop);
   // Row-wise access to A, once.
   const CsrView by_row(a);
   std::vector<double> accumulator(static_cast<std::size_t>(m), 0.0);
   std::vector<Index> mark(static_cast<std::size_t>(m), -1);
   std::vector<Index> touched;
-  out->reset(m, m);
+  // THE RESULT IS WRITTEN IN COMPRESSED FORM AS IT IS PRODUCED (#468). Column i of the lower
+  // triangle is exactly the sorted `touched` list of row i, so there is nothing for
+  // SparseMatrix::finalize() to sort or sum. Going through add_entry() and finalize() held
+  // every entry three times (16 bytes of triplet, 12 of scratch, 12 of result) and ended in
+  // a pass no deadline could reach: on Linf_520c under a 90 s limit the loop above was done
+  // in time and finalize() then ran to 279 s. The entries, their order and their values are
+  // the ones finalize(0.0) produced - it dropped nothing at a drop tolerance of zero.
+  const Index limit = out->nonzero_limit();
+  std::vector<Index> starts(static_cast<std::size_t>(m) + 1, 0);
+  std::vector<Index> rows;
+  std::vector<double> values;
+  bool overflowed = false;
   for (Index i = 0; i < m; ++i) {
-    // Every 256 rows: a row of the product costs the sum of its columns' lengths, so the
-    // check is amortised over thousands of multiply-adds and never decides arithmetic.
-    if (should_stop && (i & 255) == 0 && should_stop()) return false;
+    if (deadline.expired(1)) {
+      out->reset(m, m);
+      return false;
+    }
     touched.clear();
     // M(r, i) for r >= i: sum over columns j in row i of theta_j a_ij a_rj.
     const ColumnView row = by_row.row(i);
@@ -720,6 +816,10 @@ bool normal_equations_lower(const SparseMatrix& a, const std::vector<double>& th
         }
         accumulator[ur] += scale * column.values[q];
       }
+      if (deadline.expired(static_cast<std::size_t>(column.size))) {
+        out->reset(m, m);
+        return false;
+      }
     }
     if (mark[static_cast<std::size_t>(i)] != i) {
       mark[static_cast<std::size_t>(i)] = i;
@@ -729,11 +829,26 @@ bool normal_equations_lower(const SparseMatrix& a, const std::vector<double>& th
     accumulator[static_cast<std::size_t>(i)] +=
         delta + (have_shift ? row_shift[static_cast<std::size_t>(i)] : 0.0);
     std::sort(touched.begin(), touched.end());
-    for (const Index r : touched) {
-      out->add_entry(r, i, accumulator[static_cast<std::size_t>(r)]);
+    // Past the nonzero limit the offsets would wrap (#305): stop storing, keep the flag, and
+    // hand back the same empty, overflowed matrix finalize() made of an oversized build.
+    if (!overflowed && touched.size() > static_cast<std::size_t>(limit) - values.size()) {
+      overflowed = true;
+      std::vector<Index>().swap(rows);
+      std::vector<double>().swap(values);
+    }
+    if (!overflowed) {
+      for (const Index r : touched) {
+        rows.push_back(r);
+        values.push_back(accumulator[static_cast<std::size_t>(r)]);
+      }
+    }
+    starts[static_cast<std::size_t>(i) + 1] = static_cast<Index>(values.size());
+    if (deadline.expired(touched.size())) {
+      out->reset(m, m);
+      return false;
     }
   }
-  out->finalize(0.0);
+  out->assign_columns(m, m, std::move(starts), std::move(rows), std::move(values), overflowed);
   return true;
 }
 
