@@ -311,6 +311,13 @@ void polish_with_the_interior_point(Solution* first, const Model& model, const O
   }
   polished.polish_iterations = polished.iterations;
   polished.iterations += first->iterations;
+  // The first-order phase's KKT crossings (#486) belong to the merged answer.
+  polished.kkt_1e4_seconds = first->kkt_1e4_seconds;
+  polished.kkt_1e6_seconds = first->kkt_1e6_seconds;
+  polished.kkt_1e8_seconds = first->kkt_1e8_seconds;
+  polished.kkt_1e4_iterations = first->kkt_1e4_iterations;
+  polished.kkt_1e6_iterations = first->kkt_1e6_iterations;
+  polished.kkt_1e8_iterations = first->kkt_1e8_iterations;
   polished.algorithm = first->algorithm + "+ipm";  // "pdhg-cpu+ipm"
   polished.message =
       fmt::format("{}; polished by the interior point in {} iterations{}", first->message,

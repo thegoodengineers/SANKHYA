@@ -1478,6 +1478,12 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.nodes = reduced.nodes;
   solution.cuts_applied = reduced.cuts_applied;
   solution.cut_filter_report = reduced.cut_filter_report;
+  solution.kkt_1e4_seconds = reduced.kkt_1e4_seconds;
+  solution.kkt_1e6_seconds = reduced.kkt_1e6_seconds;
+  solution.kkt_1e8_seconds = reduced.kkt_1e8_seconds;
+  solution.kkt_1e4_iterations = reduced.kkt_1e4_iterations;
+  solution.kkt_1e6_iterations = reduced.kkt_1e6_iterations;
+  solution.kkt_1e8_iterations = reduced.kkt_1e8_iterations;
   solution.restarts = reduced.restarts;
   solution.reduced_cost_fixings = reduced.reduced_cost_fixings;
   solution.objective_branches = reduced.objective_branches;

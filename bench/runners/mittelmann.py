@@ -45,6 +45,7 @@ CSV_COLUMNS = [
     "our_objective", "highs_objective", "relative_difference", "independently_verified",
     "verifier_message", "passed", "wall_seconds", "solver_seconds", "iterations", "algorithm",
     "time_limit", "git_commit", "machine", "timestamp_utc", "solver_options",
+    "kkt_1e4_seconds", "kkt_1e6_seconds", "kkt_1e8_seconds",
 ]
 
 
@@ -122,6 +123,10 @@ def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
             "iterations": effort.get("iterations", ""), "solver_seconds": effort.get("solve_seconds", ""),
             "algorithm": result.get("algorithm", ""), "wall_seconds": wall, "verified": "",
             "verifier_message": "",
+            # First crossings of the relative KKT error in the first-order phase (#486);
+            # "nan" from the writer where a level was never reached, blank for other engines.
+            **{k: effort.get(k, "") for k in ("kkt_1e4_seconds", "kkt_1e6_seconds",
+                                            "kkt_1e8_seconds")},
         }
         if verify and sol_path.exists() and flat["status"] in ("optimal", "feasible"):
             check = subprocess.run([sys.executable, str(VERIFIER), str(mps), str(sol_path)],
@@ -202,6 +207,8 @@ def main() -> int:
             "iterations": flat.get("iterations", ""), "algorithm": flat.get("algorithm", ""),
             "time_limit": args.time_limit, "git_commit": commit, "machine": machine,
             "timestamp_utc": timestamp, "solver_options": solver_options,
+            **{k: flat.get(k, "") for k in ("kkt_1e4_seconds", "kkt_1e6_seconds",
+                                          "kkt_1e8_seconds")},
         })
         ours_text = f"{ours:.12e}" if isinstance(ours, (int, float)) else "-"
         highs_text = (f"{highs_value:.12e}" if highs_value is not None else (highs_status or "-"))

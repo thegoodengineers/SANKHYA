@@ -186,6 +186,14 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   double restart_kkt = std::numeric_limits<double>::infinity();
 
   Residuals best;
+  // FIRST CROSSINGS OF THE RELATIVE KKT ERROR (#486), at the levels published PDLP figures
+  // and Mittelmann's feasibility page are quoted at, so one run yields the three times a
+  // comparison needs instead of three runs at three tolerances.
+  constexpr double kKktLevels[3] = {1e-4, 1e-6, 1e-8};
+  double kkt_seconds[3] = {std::numeric_limits<double>::quiet_NaN(),
+                           std::numeric_limits<double>::quiet_NaN(),
+                           std::numeric_limits<double>::quiet_NaN()};
+  Count kkt_iterations[3] = {-1, -1, -1};
   best.primal = best.dual = best.gap = std::numeric_limits<double>::infinity();
   std::vector<double> best_x = x;
   std::vector<double> best_y = y;
@@ -377,6 +385,12 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     }
 
     const Residuals& better = *chosen;
+    for (int level = 0; level < 3; ++level) {
+      if (kkt_iterations[level] < 0 && better.worst() <= kKktLevels[level]) {
+        kkt_iterations[level] = iteration;
+        kkt_seconds[level] = timer.elapsed_seconds();
+      }
+    }
     if (better.worst() < best.worst()) {
       best = better;
       best_x = *chosen_x;
@@ -502,6 +516,12 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
 
   solution.iterations = iteration;
   solution.solve_seconds = timer.elapsed_seconds();
+  solution.kkt_1e4_seconds = kkt_seconds[0];
+  solution.kkt_1e6_seconds = kkt_seconds[1];
+  solution.kkt_1e8_seconds = kkt_seconds[2];
+  solution.kkt_1e4_iterations = kkt_iterations[0];
+  solution.kkt_1e6_iterations = kkt_iterations[1];
+  solution.kkt_1e8_iterations = kkt_iterations[2];
 
   // kOptimal is a claim that this point would survive tools/verify_solution.py, which
   // measures ABSOLUTE feasibility against the tolerances in tolerances.hpp. Meeting the
@@ -563,6 +583,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
               solution.solve_seconds);
   logger.info("Relative residuals: primal {:.3e}, dual {:.3e}, gap {:.3e}",
               final_residuals.primal, final_residuals.dual, final_residuals.gap);
+  const auto crossing = [&](int level) {
+    return kkt_iterations[level] < 0 ? std::string("never")
+                                     : fmt::format("{:.3f}s at iteration {}",
+                                                   kkt_seconds[level], kkt_iterations[level]);
+  };
+  logger.info("Relative KKT error first at or under 1e-4: {}; 1e-6: {}; 1e-8: {} (#486)",
+              crossing(0), crossing(1), crossing(2));
   if (!solution.message.empty()) logger.info("{}", solution.message);
   return solution;
 }

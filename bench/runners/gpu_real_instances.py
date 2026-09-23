@@ -38,6 +38,7 @@ CSV_COLUMNS = [
     "instance", "rows", "cols", "nnz", "algorithm", "tolerance",
     "status", "objective", "iterations", "seconds", "wall_seconds",
     "reached_tolerance", "primal_residual", "dual_residual",
+    "kkt_1e4_seconds", "kkt_1e6_seconds", "kkt_1e8_seconds",
     "git_commit", "machine", "gpu", "timestamp_utc",
 ]
 
@@ -106,6 +107,9 @@ def run_solve(binary: Path, mps: Path, algorithm: str, tolerance: float,
             "wall": seconds,
             "primal_residual": primal.group(1) if primal else "",
             "dual_residual": dual.group(1) if dual else "",
+            "kkt_1e4_seconds": blob.get("effort", {}).get("kkt_1e4_seconds", ""),
+            "kkt_1e6_seconds": blob.get("effort", {}).get("kkt_1e6_seconds", ""),
+            "kkt_1e8_seconds": blob.get("effort", {}).get("kkt_1e8_seconds", ""),
         }
 
 
@@ -205,6 +209,9 @@ def main() -> int:
                         "reached_tolerance": int(result["status"] in ("optimal", "feasible")),
                         "primal_residual": result.get("primal_residual", ""),
                         "dual_residual": result.get("dual_residual", ""),
+                        "kkt_1e4_seconds": result.get("kkt_1e4_seconds", ""),
+                        "kkt_1e6_seconds": result.get("kkt_1e6_seconds", ""),
+                        "kkt_1e8_seconds": result.get("kkt_1e8_seconds", ""),
                         "git_commit": commit, "machine": machine, "gpu": gpu,
                         "timestamp_utc": timestamp,
                     })
@@ -242,6 +249,9 @@ def main() -> int:
                     "reached_tolerance": int(result["status"] in ("optimal", "feasible")),
                     "primal_residual": result.get("primal_residual", ""),
                     "dual_residual": result.get("dual_residual", ""),
+                    "kkt_1e4_seconds": result.get("kkt_1e4_seconds", ""),
+                    "kkt_1e6_seconds": result.get("kkt_1e6_seconds", ""),
+                    "kkt_1e8_seconds": result.get("kkt_1e8_seconds", ""),
                     "git_commit": commit, "machine": machine, "gpu": gpu,
                     "timestamp_utc": timestamp,
                 })

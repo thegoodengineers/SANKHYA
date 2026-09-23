@@ -378,6 +378,19 @@ Commit `4177ae6` · machine `Windows-AMD64` · 9 instances, the ones committed t
 
 A ratio above 1 means restarts saved iterations on that instance.
 
+
+**The relative KKT error, and the three crossing times (#486).** Every PDHG run records
+`kkt_1e4_seconds`, `kkt_1e6_seconds` and `kkt_1e8_seconds` in the stats JSON and, where a
+runner carries them, in its CSV: the solver clock at which the relative KKT error first
+came at or under that level, measured at the engine's evaluation interval. The error is
+the PDLP definition, `max(||Ax - proj(Ax)|| / (1 + ||b||), ||c - A'y - z|| / (1 + ||c||),
+|c'x - b'y| / (1 + |c'x| + |b'y|))` in the 2-norm on the unscaled model
+(`src/pdhg/pdhg_evaluate.hpp`), which is the measurement published PDLP and cuPDLP figures
+use and the one Mittelmann's LP feasibility page is quoted at (1e-6, no basis). A crossing
+is what a first-order method reaches at a relative tolerance; it is NOT an optimal basis and
+NOT the project's absolute standard, which is what `optimal` in the status column means and
+what the verifier checks. `nan` in a crossing column means the level was never reached in
+that run.
 ---
 
 ### 1g. GPU PDHG crossover — when the GPU wins

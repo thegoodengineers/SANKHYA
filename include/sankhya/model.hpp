@@ -517,6 +517,20 @@ class Solution {
   /// `gomory 12: 3 accepted, 9 insufficient_violation; mir 4: 4 too_dense`. Empty for an
   /// LP, or when no root round ran.
   std::string cut_filter_report;
+  /// PDHG only (#486): the solver clock at which the RELATIVE KKT error - the largest of
+  /// the relative primal residual, the relative dual residual and the relative gap, in the
+  /// PDLP definitions (src/pdhg/pdhg_evaluate.hpp) - first came at or under 1e-4, 1e-6
+  /// and 1e-8 in this run, and the iteration it happened at; NaN and -1 where it never
+  /// did. Measured at the evaluation interval, so each is an upper bound within one
+  /// interval. This is the measurement published PDLP figures use and the Mittelmann
+  /// feasibility page's 1e-6 standard; it is NOT the project's absolute standard, and a
+  /// crossing here is not an optimality claim.
+  double kkt_1e4_seconds = std::numeric_limits<double>::quiet_NaN();
+  double kkt_1e6_seconds = std::numeric_limits<double>::quiet_NaN();
+  double kkt_1e8_seconds = std::numeric_limits<double>::quiet_NaN();
+  Count kkt_1e4_iterations = -1;
+  Count kkt_1e6_iterations = -1;
+  Count kkt_1e8_iterations = -1;
   /// Times the branch and bound threw its tree away and re-solved the root (#418), and
   /// the integer bounds reduced-cost fixing tightened over the search; zero unless
   /// mip_restarts / mip_reduced_cost_fixing asked for them.
