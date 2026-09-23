@@ -50,8 +50,11 @@ def build_repository(repo: Path) -> dict[str, str]:
     shas["branch"] = commit(repo, "side-work")
     git(repo, "checkout", "-q", "main")
     shas["main2"] = commit(repo, "two")
-    # The squash merge: the branch's content arrives on main as a fresh commit.
-    git(repo, "merge", "--squash", "-q", "side")
+    # The squash merge, done by hand so it needs no merge machinery on the runner (git
+    # merge --squash exits 128 on the CI image): the branch's file arrives on main as a
+    # fresh commit with no second parent, which is exactly what a squash merge leaves.
+    git(repo, "checkout", "-q", "side", "--", "side-work")
+    git(repo, "add", "side-work")
     git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "squash of side")
     shas["squash"] = git(repo, "rev-parse", "--short=7", "HEAD")
     git(repo, "branch", "-q", "-D", "side")  # the branch commit is now orphaned, as after a PR
