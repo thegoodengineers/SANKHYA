@@ -9,6 +9,11 @@ build-*/
 # instance sha256 and reference.json records the upstream readme hash.
 data/miplib/
 data/qplib/
+# Netlib's infeasible collection (#529) is fetched by bench/runners/fetch_netlib_infeasible.py;
+# the manifest (reference.json, with the sha256 of every file and its source URL) is
+# committed, the decoded MPS files are not.
+data/netlib-infeasible/*.mps
+data/netlib-infeasible/*.partial
 __pycache__/
 .venv/
 compile_commands.json

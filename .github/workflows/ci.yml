@@ -120,6 +120,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_latest_result.py
 
+      - name: Netlib infeasible set parsing and pass criterion (#529)
+        # Pure Python, no network: the readme table parser, the certificate read out of a
+        # .sol file, and the rule that `infeasible` without a verified Farkas certificate is
+        # not a pass.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_netlib_infeasible.py
+
       - name: Results CSVs are stamped from the binary, not the tree (#433)
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_stamp.py

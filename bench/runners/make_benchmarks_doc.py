@@ -1890,6 +1890,101 @@ def robustness_section(path: Path | None) -> str:
     return chr(10).join(out)
 
 
+INFEASIBLE_ENGINES = ("simplex", "dual-simplex", "pdhg", "ipm")
+
+
+def infeasible_section(path: Path | None, engines: dict[str, Path | None]) -> str:
+    """Netlib's infeasible collection (#529): passed only on a certificate the verifier accepts.
+
+    The pass criterion is not the status string. A row passes when the status is
+    `infeasible`, the .sol file carries a Farkas certificate with a nonzero multiplier, and
+    tools/verify_solution.py re-derives the contradiction from the MPS with its own parser.
+    Every row that falls short is named with the runner's `failure_reason`, grouped, and kept
+    in the table. `engines` holds the per-engine option runs, summarised one line each.
+    """
+    if path is None:
+        return chr(10).join([
+            "Not yet run at this commit. Reproduce with:",
+            "",
+            "```",
+            "python bench/runners/fetch_netlib_infeasible.py",
+            "python bench/runners/netlib_infeasible.py --time-limit 60",
+            "python bench/runners/netlib_infeasible.py --time-limit 60 "
+            "--solver-option algorithm=simplex   # and dual-simplex, pdhg",
+            "```",
+            "",
+        ])
+    rows = read_csv(path)
+    if not rows:
+        return "No infeasible-set results recorded yet." + chr(10)
+    commit = rows[0].get("git_commit", "unknown")
+    machine = rows[0].get("machine", "unknown")
+    limit = as_float(rows[0], "time_limit")
+    passed = [r for r in rows if r.get("passed") == "1"]
+    failed = [r for r in rows if r.get("passed") != "1"]
+    out = [
+        f"Source CSV: `bench/results/{path.name}`  ",
+        f"Commit `{commit}` · machine `{machine}` · time limit "
+        f"{'-' if limit is None else f'{limit:g}'} s per instance",
+        "",
+        *([f"**This run is stamped `{commit}`: it came from a modified tree and is not "
+           f"evidence.** Re-run on a clean checkout of a `main` commit.", ""]
+          if "-dirty" in commit else []),
+        f"**{len(passed)} of {len(rows)}** reported `infeasible` **and** wrote a Farkas "
+        f"certificate that `tools/verify_solution.py` accepted. A status of `infeasible` "
+        f"without a certificate is not counted: the verifier has nothing to check, so the "
+        f"verdict is unproven.",
+        "",
+    ]
+    if failed:
+        grouped: dict[str, list[str]] = {}
+        for row in failed:
+            reason = row.get("failure_reason") or row.get("status") or "unknown"
+            grouped.setdefault(reason, []).append(row["instance"])
+        out += [f"**{len(failed)} not passed**, every one named with its cause:", "",
+                "| why | count | instances |", "|---|---:|---|"]
+        for reason, names in sorted(grouped.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            out.append(f"| {reason} | {len(names)} | {', '.join(sorted(names))} |")
+        out.append("")
+    else:
+        out += ["Every instance in the collection passed.", ""]
+    out += ["| instance | rows | cols | status | engine | certificate | multipliers | "
+            "time (s) | verified | the solver's message |",
+            "|---|---:|---:|---|---|---|---:|---:|:--:|---|"]
+    for row in sorted(rows, key=lambda r: r["instance"]):
+        seconds = as_float(row, "wall_seconds")
+        mark = {"1": "yes", "0": "**NO**"}.get(str(row.get("independently_verified", "")), "-")
+        message = (row.get("message") or "").replace("|", "/")[:120]
+        out.append(f"| `{row['instance']}` | {row.get('rows', '')} | {row.get('columns', '')} "
+                   f"| {row.get('status', '')} | {row.get('algorithm', '')} "
+                   f"| {row.get('certificate') or '-'} "
+                   f"| {row.get('certificate_multipliers', '')} "
+                   f"| {'-' if seconds is None else f'{seconds:.3f}'} | {mark} | {message} |")
+    out.append("")
+    present = [(engine, p) for engine, p in engines.items() if p is not None]
+    if present:
+        out += ["Per engine, each from its own option run:", ""]
+        for engine, engine_path in present:
+            engine_rows = read_csv(engine_path)
+            causes: dict[str, list[str]] = {}
+            for row in engine_rows:
+                if row.get("passed") != "1":
+                    reason = row.get("failure_reason") or row.get("status") or "unknown"
+                    causes.setdefault(reason, []).append(row["instance"])
+            ok = len(engine_rows) - sum(len(names) for names in causes.values())
+            named = "; ".join(f"{reason}: {', '.join(sorted(names))}"
+                              for reason, names in sorted(causes.items(),
+                                                          key=lambda kv: (-len(kv[1]), kv[0])))
+            out.append(f"- `algorithm={engine}` (`{engine_path.name}`): **{ok} of "
+                       f"{len(engine_rows)}**" + (f"; not passed, by cause: {named}" if named
+                                                  else ""))
+        out.append("")
+    else:
+        out += ["No per-engine option run is committed yet (`--solver-option "
+                "algorithm=simplex`, `dual-simplex`, `pdhg`).", ""]
+    return chr(10).join(out)
+
+
 def gpu_section(path: Path | None) -> str:
     """CPU vs GPU PDHG crossover: at what size does the GPU backend beat the CPU (#19)."""
     if path is None:
@@ -2117,6 +2212,12 @@ def main() -> int:
     compare_medium_csv = newest("compare-highs-medium-*.csv")
     compare_csv = compare_medium_csv or compare_small_csv or newest("compare-highs-*.csv")
     robustness_csv = newest("robustness-*.csv")
+    # The default run only; the per-engine runs carry `algorithm=` in solver_options, which
+    # latest() skips and newest_option_run() picks (#529).
+    infeasible_csv = newest("netlib-infeasible-*.csv")
+    infeasible_engine_csvs = {engine: newest_option_run("netlib-infeasible-*.csv",
+                                                        f"algorithm={engine}")
+                              for engine in INFEASIBLE_ENGINES}
     scale_csv = newest("scale-[0-9a-f]*.csv")
     per_iteration_csv = newest("scale-iterations-*.csv")
     staircase_csv = newest("scale-staircase-*.csv")
@@ -2281,6 +2382,14 @@ that, and both run in CI:
   arithmetic with no rounding error anywhere, and the floating-point simplex is compared
   against it. See `docs/PROVENANCE.md` for the citations.
 
+### 3a. Netlib's infeasible set - a verdict is only as good as its certificate
+
+Chinneck's collection of infeasible LPs (`netlib.org/lp/infeas`, fetched and hashed by
+`bench/runners/fetch_netlib_infeasible.py`). Every instance is infeasible, so the status
+alone proves nothing; a pass needs the Farkas certificate the solver wrote to survive
+`tools/verify_solution.py` (`bench/runners/netlib_infeasible.py`).
+
+{infeasible_section(infeasible_csv, infeasible_engine_csvs)}
 ---
 
 ## 4. Comparison against an established solver
