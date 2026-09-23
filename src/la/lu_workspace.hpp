@@ -57,6 +57,38 @@ struct SparseLu::Workspace {
   /// to sweep all m rows for every column of every step - the other half of #210.
   std::vector<Index> old_rows;
 
+  // ---- the singleton fast path (#463) ---------------------------------------------------
+  // Suhl & Suhl (1990) keep the active submatrix both row-wise and column-wise so that a
+  // column-singleton pivot, which has no multipliers and changes no value anywhere, can take
+  // its U row from the row copy and never open the columns it crosses. Koberstein (2005,
+  // sec. 5.3) describes the same pass. The general update below reads every such column in
+  // full to find one coefficient and write the rest back unchanged, which on a basis with
+  // one dense column is (column length) work per pivot row that crosses it: 36.8 s for one
+  // factorization of bdry2 (#463).
+
+  /// Values parallel to row_cols, valid for row i only while row_values_valid[i] is set.
+  /// A row stays valid for as long as no elimination step has changed one of its values:
+  /// the only thing that does is being a multiplier row of a step whose pivot row has other
+  /// columns, and that step clears the flag. While valid, row_cols[i] is also EXACT - no
+  /// stale entry (those come from cancellation, which only touches multiplier rows), no
+  /// duplicate (those come from fill, likewise) - so row i's entry in an active column j is
+  /// in column j's storage with exactly the value held here.
+  std::vector<std::vector<double>> row_values;
+  std::vector<char> row_values_valid;
+
+  /// max |a_ij| over the ACTIVE rows of column j, for the threshold test, valid while
+  /// col_max_valid[j] is set. Recomputed whenever the column is rewritten, kept across the
+  /// retirement of a row whose entry was strictly smaller than it (the maximum of what
+  /// remains is then unchanged, exactly), dropped otherwise. max is exact in floating point
+  /// whatever the order, so the cached value is the value a rescan would produce.
+  std::vector<double> col_max;
+  std::vector<char> col_max_valid;
+
+  /// Off when the input repeats a row within a column (never the case for a basis taken
+  /// from CSC storage), or when the reference elimination is asked for: every decision is
+  /// then taken from the column storage exactly as before #463.
+  bool fast = false;
+
   void init(Index dimension) {
     m = dimension;
     const auto u = static_cast<std::size_t>(dimension);
@@ -70,6 +102,10 @@ struct SparseLu::Workspace {
     acc.assign(u, 0.0);
     acc_present.assign(u, 0);
     column_seen.assign(u, 0);
+    row_values.assign(u, {});
+    row_values_valid.assign(u, 1);
+    col_max.assign(u, 0.0);
+    col_max_valid.assign(u, 0);
   }
 };
 

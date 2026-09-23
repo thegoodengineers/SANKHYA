@@ -8,6 +8,9 @@
 //     bases", ORSA Journal on Computing 2 (1990) - the threshold-stability compromise and
 //     the bounded candidate search used here.
 //   Duff, Erisman & Reid, "Direct Methods for Sparse Matrices" (2nd ed., 2017), ch. 7-8.
+//   Koberstein, "The dual simplex method, techniques for a fast and stable implementation",
+//     PhD thesis, Paderborn (2005), sec. 5.3 - with Suhl & Suhl, the row-wise copy that lets
+//     a column-singleton pivot skip the columns it crosses (#463, lu_eliminate.cpp).
 //
 // WHY THIS EXISTS. Phase 2's DenseLu rebuilds and refactorizes an m x m dense array on
 // EVERY pivot: O(m^2) memory traffic and O(m^3) flops per iteration. At m = 800 that is
@@ -266,6 +269,18 @@ class SparseLu {
   [[nodiscard]] double smallest_pivot() const noexcept { return smallest_pivot_; }
   [[nodiscard]] double largest_pivot() const noexcept { return largest_pivot_; }
 
+  /// Factorize with the elimination as it was before the singleton fast path (#463): every
+  /// pivot opens every column its row crosses, every threshold test rescans its column. The
+  /// fast path is built to choose the same pivots in the same order and do the same
+  /// arithmetic, and this is what the tests hold it to - pivot sequence, factor sizes and
+  /// solves compared bit for bit. Tests only, like solve_reference(). Sticky.
+  void use_reference_elimination(bool on) noexcept { reference_elimination_ = on; }
+
+  /// The pivot sequence of the last factorize(): step k eliminated row pivot_rows()[k]
+  /// against basis position pivot_columns()[k]. For the tests above.
+  [[nodiscard]] const std::vector<Index>& pivot_rows() const noexcept { return pivot_row_; }
+  [[nodiscard]] const std::vector<Index>& pivot_columns() const noexcept { return pivot_col_; }
+
  private:
   /// Scratch state for the elimination, discarded once the factors are built. Kept out of
   /// the class proper so that a factorized SparseLu carries only what the solves need.
@@ -276,6 +291,7 @@ class SparseLu {
 
   Index m_ = 0;
   bool stopped_early_ = false;  ///< the last failure was a deadline, not a singular basis
+  bool reference_elimination_ = false;  ///< see use_reference_elimination()
 
   // ---- the factors --------------------------------------------------------------------
   // Indexed by elimination step k, not by row or column. pivot_row_[k] and pivot_col_[k]

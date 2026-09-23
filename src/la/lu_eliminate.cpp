@@ -25,6 +25,12 @@ constexpr Index kCandidateBudget = 4;
 /// refactorization trigger, and they carry no information.
 constexpr double kDropTolerance = tol::kZeroDrop;
 
+/// The singleton fast path (#463) leaves a retired row's entry in a column's storage and
+/// compacts once the dead entries outnumber the live ones by this much. A storage bound, not
+/// a numerical tolerance: it never changes which entries are live, only when the dead ones
+/// are swept, and small enough that a short column is swept almost every time.
+constexpr Index kCompactionSlack = 8;
+
 /// Rows or columns of the active submatrix grouped by count, as intrusive doubly linked
 /// lists: one node per index, one list per count, every index in at most one list. Moving
 /// an index between counts is O(1) and leaves nothing behind, so the pivot search walks
@@ -132,6 +138,37 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
     row_lists.place(i, count);
   };
 
+  // ---- commit a step's factors ------------------------------------------------------------
+  const auto commit_step = [&] {
+    for (std::size_t t = 0; t < w.mult_rows.size(); ++t) {
+      l_rows_.push_back(w.mult_rows[t]);
+      l_values_.push_back(w.mult_values[t]);
+    }
+    l_start_.push_back(static_cast<Index>(l_rows_.size()));
+
+    for (std::size_t t = 0; t < w.u_cols.size(); ++t) {
+      u_steps_.push_back(w.u_cols[t]);  // still a COLUMN here; translated in factorize()
+      u_values_.push_back(w.u_vals[t]);
+    }
+    u_start_.push_back(static_cast<Index>(u_steps_.size()));
+  };
+
+  // max |a_ij| over the active rows of column j, from the cache when it holds (#463).
+  const auto active_column_max = [&](Index j) {
+    const auto uj = static_cast<std::size_t>(j);
+    if (w.fast && w.col_max_valid[uj] != 0) return w.col_max[uj];
+    double column_max = 0.0;
+    for (std::size_t t = 0; t < w.col_rows[uj].size(); ++t) {
+      if (w.row_active[static_cast<std::size_t>(w.col_rows[uj][t])] == 0) continue;
+      column_max = std::max(column_max, std::fabs(w.col_values[uj][t]));
+    }
+    if (w.fast) {
+      w.col_max[uj] = column_max;
+      w.col_max_valid[uj] = 1;
+    }
+    return column_max;
+  };
+
   for (Index step = 0; step < m; ++step) {
     // ASKED BEFORE EVERY PIVOT, as the LDL^T asks before every elimination step (#197): on
     // Mittelmann's bdry2 one factorization of a 376,500-row basis ran for minutes, and the
@@ -162,11 +199,7 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
         assert(w.col_active[uj] != 0 && w.col_count[uj] == count && "a stale list entry");
         ++examined;
 
-        double column_max = 0.0;
-        for (std::size_t t = 0; t < w.col_rows[uj].size(); ++t) {
-          if (w.row_active[static_cast<std::size_t>(w.col_rows[uj][t])] == 0) continue;
-          column_max = std::max(column_max, std::fabs(w.col_values[uj][t]));
-        }
+        const double column_max = active_column_max(j);
         if (column_max < pivot_tolerance) continue;
 
         for (std::size_t t = 0; t < w.col_rows[uj].size(); ++t) {
@@ -195,7 +228,8 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
         assert(w.row_active[ui] != 0 && w.row_count[ui] == count && "a stale list entry");
         ++examined;
 
-        for (const Index j : w.row_cols[ui]) {
+        for (std::size_t p = 0; p < w.row_cols[ui].size(); ++p) {
+          const Index j = w.row_cols[ui][p];
           const auto uj = static_cast<std::size_t>(j);
           if (w.col_active[uj] == 0) continue;
           const Index cost = (count - 1) * (w.col_count[uj] - 1);
@@ -204,14 +238,27 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
           double column_max = 0.0;
           double value = 0.0;
           bool found = false;
-          for (std::size_t t = 0; t < w.col_rows[uj].size(); ++t) {
-            const Index r = w.col_rows[uj][t];
-            if (w.row_active[static_cast<std::size_t>(r)] == 0) continue;
-            const double v = w.col_values[uj][t];
-            column_max = std::max(column_max, std::fabs(v));
-            if (r == i) {
-              value = v;
-              found = true;
+          if (w.fast && w.row_values_valid[ui] != 0 && w.col_max_valid[uj] != 0) {
+            // A valid row's pattern is exact and its values current (lu_workspace.hpp), and
+            // the cached maximum is the one the scan below would compute: the same test on
+            // the same numbers, without reading a column that may hold 100,000 entries.
+            column_max = w.col_max[uj];
+            value = w.row_values[ui][p];
+            found = true;
+          } else {
+            for (std::size_t t = 0; t < w.col_rows[uj].size(); ++t) {
+              const Index r = w.col_rows[uj][t];
+              if (w.row_active[static_cast<std::size_t>(r)] == 0) continue;
+              const double v = w.col_values[uj][t];
+              column_max = std::max(column_max, std::fabs(v));
+              if (r == i) {
+                value = v;
+                found = true;
+              }
+            }
+            if (w.fast) {
+              w.col_max[uj] = column_max;
+              w.col_max_valid[uj] = 1;
             }
           }
           if (!found) continue;  // the row pattern was stale
@@ -350,6 +397,62 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
     // Every row that had an entry in the pivot column loses it.
     for (const Index i : w.mult_rows) --w.row_count[static_cast<std::size_t>(i)];
 
+    w.u_cols.clear();
+    w.u_vals.clear();
+
+    // ---- a column singleton: take the U row from the row copy (#463) ---------------------
+    // Suhl & Suhl (1990); Koberstein (2005), sec. 5.3. No multipliers means no other row
+    // changes: each column the pivot row crosses loses one entry and nothing else. The
+    // general update below would scatter every one of those columns to find that entry and
+    // gather it back unchanged - the whole of a dense column for every pivot row that
+    // crosses it. Here the entry comes from the row copy, which is exact for a row no step
+    // has updated (lu_workspace.hpp), and the retired row's entry is left in the column's
+    // storage as a dead entry that every reader already skips (they all test row_active).
+    //
+    // Why this is the SAME factorization and not merely an equivalent one: the columns are
+    // visited in row_cols order, which for a valid row is the deduplicated order the general
+    // path uses; each gets the same count decrement and the same rebucketing, in the same
+    // order, and the same U entry. A dead entry changes no scan's result and the relative
+    // order of a column's live entries is never disturbed, so every later tie is broken the
+    // same way. The tests hold it to that bit for bit (test_sparse_lu_singletons.cpp).
+    if (w.fast && w.mult_rows.empty() && w.row_values_valid[pivot_r] != 0) {
+      const std::vector<Index>& row_columns = w.row_cols[pivot_r];
+      const std::vector<double>& row_values = w.row_values[pivot_r];
+      for (std::size_t p = 0; p < row_columns.size(); ++p) {
+        const Index j = row_columns[p];
+        const auto uj = static_cast<std::size_t>(j);
+        if (w.col_active[uj] == 0) continue;
+        const double value = row_values[p];
+        --w.col_count[uj];
+        w.u_cols.push_back(j);
+        w.u_vals.push_back(value);
+        // The maximum over what remains is unchanged when the entry leaving was strictly
+        // below it; an entry at the maximum may have been the only one there.
+        if (w.col_max_valid[uj] != 0 && !(std::fabs(value) < w.col_max[uj])) {
+          w.col_max_valid[uj] = 0;
+        }
+        // Dead entries are dropped once they are half the storage, keeping the live ones in
+        // order: amortised O(1) per retired entry, and no scan ever reads more than twice
+        // the live entries plus kCompactionSlack.
+        std::vector<Index>& rows = w.col_rows[uj];
+        std::vector<double>& values = w.col_values[uj];
+        if (static_cast<Index>(rows.size()) > 2 * w.col_count[uj] + kCompactionSlack) {
+          std::size_t kept = 0;
+          for (std::size_t t = 0; t < rows.size(); ++t) {
+            if (w.row_active[static_cast<std::size_t>(rows[t])] == 0) continue;
+            rows[kept] = rows[t];
+            values[kept] = values[t];
+            ++kept;
+          }
+          rows.resize(kept);
+          values.resize(kept);
+        }
+        rebucket_column(j);
+      }
+      commit_step();
+      continue;
+    }
+
     // Deduplicate the pivot row's active columns before touching any counts. See the note
     // on pivot_row_columns: a stale pattern can name the same column twice, and visiting it
     // twice would double-decrement col_count and emit two U entries for one coefficient.
@@ -370,8 +473,10 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
     // has confirmed the entry is really there.
 
     // ---- update the remaining columns ----------------------------------------------------
-    w.u_cols.clear();
-    w.u_vals.clear();
+    // Every multiplier row's values change below, so its row copy stops being exact.
+    if (w.fast && !w.pivot_row_columns.empty()) {
+      for (const Index i : w.mult_rows) w.row_values_valid[static_cast<std::size_t>(i)] = 0;
+    }
 
     for (const Index j : w.pivot_row_columns) {
       const auto uj = static_cast<std::size_t>(j);
@@ -431,9 +536,11 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
         }
       }
 
-      // Gather back, dropping exact cancellations.
+      // Gather back, dropping exact cancellations. The column's new maximum is taken on the
+      // way, since every live entry passes through here.
       rows.clear();
       values.clear();
+      double column_max = 0.0;
       for (std::size_t t = 0; t < w.mult_rows.size(); ++t) {
         const auto ui = static_cast<std::size_t>(w.mult_rows[t]);
         if (w.acc_present[ui] == 0) continue;
@@ -447,6 +554,7 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
         }
         rows.push_back(w.mult_rows[t]);
         values.push_back(value);
+        column_max = std::max(column_max, std::fabs(value));
       }
       // Whatever remains in the accumulator belongs to rows the pivot column did not touch:
       // rows of the column's old pattern, which the scatter recorded.
@@ -455,8 +563,13 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
         if (w.acc_present[ui] == 0) continue;
         rows.push_back(i);
         values.push_back(w.acc[ui]);
+        column_max = std::max(column_max, std::fabs(w.acc[ui]));
         w.acc[ui] = 0.0;
         w.acc_present[ui] = 0;
+      }
+      if (w.fast) {
+        w.col_max[uj] = column_max;
+        w.col_max_valid[uj] = 1;
       }
 
       rebucket_column(j);
@@ -464,18 +577,7 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
 
     for (const Index i : w.mult_rows) rebucket_row(i);
 
-    // ---- commit the step's factors -------------------------------------------------------
-    for (std::size_t t = 0; t < w.mult_rows.size(); ++t) {
-      l_rows_.push_back(w.mult_rows[t]);
-      l_values_.push_back(w.mult_values[t]);
-    }
-    l_start_.push_back(static_cast<Index>(l_rows_.size()));
-
-    for (std::size_t t = 0; t < w.u_cols.size(); ++t) {
-      u_steps_.push_back(w.u_cols[t]);  // still a COLUMN here; translated in factorize()
-      u_values_.push_back(w.u_vals[t]);
-    }
-    u_start_.push_back(static_cast<Index>(u_steps_.size()));
+    commit_step();
   }
 
   if (smallest_pivot_ == std::numeric_limits<double>::max()) smallest_pivot_ = 0.0;

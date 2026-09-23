@@ -136,7 +136,12 @@ bool SparseLu::factorize(const std::vector<LuColumn>& columns, Index m, double p
 
   Workspace w;
   w.init(m);
+  w.fast = !reference_elimination_;
 
+  // The row-wise value copy the singleton fast path reads (#463, lu_workspace.hpp). A row
+  // named twice in one column is merged by the general update (the last value wins), which
+  // the row copy cannot reproduce, so such an input takes the reference path throughout.
+  std::vector<Index> last_column_of_row(static_cast<std::size_t>(m), -1);
   for (Index j = 0; j < m; ++j) {
     const LuColumn& column = columns[static_cast<std::size_t>(j)];
     const auto uj = static_cast<std::size_t>(j);
@@ -145,11 +150,15 @@ bool SparseLu::factorize(const std::vector<LuColumn>& columns, Index m, double p
       const double value = column.values[k];
       if (row < 0 || row >= m) return false;
       if (value == 0.0) continue;
+      const auto ur = static_cast<std::size_t>(row);
+      if (last_column_of_row[ur] == j) w.fast = false;
+      last_column_of_row[ur] = j;
       w.col_rows[uj].push_back(row);
       w.col_values[uj].push_back(value);
-      w.row_cols[static_cast<std::size_t>(row)].push_back(j);
+      w.row_cols[ur].push_back(j);
+      w.row_values[ur].push_back(value);
       ++w.col_count[uj];
-      ++w.row_count[static_cast<std::size_t>(row)];
+      ++w.row_count[ur];
     }
   }
 
