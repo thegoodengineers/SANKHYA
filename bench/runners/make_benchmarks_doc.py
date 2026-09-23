@@ -953,6 +953,128 @@ def cuts_ab_paragraph() -> str:
             f"{moved_text}. " + verdict + tree_text + gap_text)
 
 
+def flow_cover_ab_paragraph() -> str:
+    """The flow cover A/B (#419), computed from its six CSVs rather than typed.
+
+    #419 named a shape none of the existing cut families separates - a continuous flow
+    variable switched on by a binary through a variable upper bound - and asked for at least
+    one of three MIPLIB instances (ran12x21, ran13x13, k16x240b) to reach its published
+    optimum. Three strengthening layers were tried in turn on the family that separates it
+    (`flow_cover_cuts.cpp`): one-row separation, a single-node flow relaxation (small
+    multi-row aggregation), and a bounded local search over the cover choice. Each was
+    measured against its OWN same-commit baseline, exactly so a run-to-run timing shift in
+    the 60s wall-clock budget never gets attributed to the code by accident - and one of them
+    (the local search) did shift, which is why this function checks for that rather than
+    trusting the on-leg's raw numbers.
+
+    Reading straight off the CSVs, rather than typing the numbers into prose, is what keeps
+    this section from silently going stale the way a hand-edited paragraph in
+    docs/BENCHMARKS.md would (that file is entirely generated output; see the module
+    docstring) - the failure this function exists to prevent.
+    """
+    rounds = [
+        ("one-row separation", "miplib-419-cuts-baseline.csv", "miplib-419-flow-cover-on.csv"),
+        ("a single-node flow relaxation (small multi-row aggregation)",
+         "miplib-419-aggregation-baseline.csv", "miplib-419-aggregation-on.csv"),
+        ("a bounded local search over the cover choice",
+         "miplib-419-localsearch-baseline.csv", "miplib-419-localsearch-on.csv"),
+    ]
+    target_instances = ["ran12x21", "ran13x13", "k16x240b"]
+
+    def tally(table: dict) -> tuple[int, int]:
+        matched = sum(int(r.get("matched_published") or 0) for r in table.values())
+        proved = sum(1 for r in table.values() if int(r.get("proved_optimal") or 0))
+        return matched, proved
+
+    # (label, commit, base table, on table, base filename, on filename)
+    legs: list[tuple[str, str, dict, dict, str, str]] = []
+    for label, base_name, on_name in rounds:
+        base_path = RESULTS_DIR / base_name
+        on_path = RESULTS_DIR / on_name
+        if not base_path.exists() or not on_path.exists():
+            continue
+        base = {r["instance"]: r for r in read_csv(base_path)}
+        on = {r["instance"]: r for r in read_csv(on_path)}
+        common = [n for n in base if n in on]
+        if not common:
+            continue
+        stamps = sorted({r.get("git_commit", "") for r in list(base.values()) + list(on.values())})
+        if len(stamps) != 1 or not stamps[0] or stamps[0].endswith("-dirty"):
+            continue  # a mixed-commit or dirty-tree pair is not one measurement; skip
+        legs.append((label, stamps[0], base, on, base_name, on_name))
+
+    if not legs:
+        return ("**Flow cover cuts (#419):** not measured on this checkout (no "
+                "`bench/results/miplib-419-*.csv`).")
+
+    intro = (
+        "**Flow cover cuts (#419).** `ran12x21`, `ran13x13` and `k16x240b` share a "
+        "fixed-charge / single-node flow row structure - a continuous flow variable switched "
+        "on by a binary through a variable upper bound - that none of the other cut families "
+        "separates. Three strengthenings of the family that separates it were tried in turn, "
+        "each measured against its own same-commit baseline:")
+
+    def target_row(table: dict, name: str) -> dict:
+        return table.get(name, {})
+
+    round_paragraphs = []
+    for label, commit, base, on, base_name, on_name in legs:
+        common = [n for n in base if n in on]
+        matched_base, proved_base = tally(base)
+        matched_on, proved_on = tally(on)
+        target_text = "; ".join(
+            f"`{n}` {target_row(base, n).get('our_objective', '-')} -> "
+            f"{target_row(on, n).get('our_objective', '-')} (published "
+            f"{target_row(base, n).get('published_objective', '-')})"
+            for n in target_instances if n in base and n in on)
+        round_paragraphs.append(
+            f"**{label}** (`bench/results/{base_name}` and `bench/results/{on_name}`, both at "
+            f"`{commit}`, {len(common)} instances, `enable_root_cuts=true` in both legs, 60s, "
+            f"`mip_threads=1`): {matched_on} of {len(on)} reach the published optimum and "
+            f"{proved_on} prove it, against {matched_base} and {proved_base} with the family "
+            f"off. On the three instances #419 names: {target_text}.")
+
+    # Whether ANY leg's ON run matched one of the three target instances - the acceptance
+    # criterion itself, checked rather than asserted.
+    any_target_matched = any(
+        int(target_row(on, n).get("matched_published") or 0)
+        for _, _, _, on, _, _ in legs for n in target_instances if n in on)
+
+    # A noise check for the baselines: since every baseline leg runs with the family OFF, they
+    # should behave identically; any instance whose matched_published flag differs between two
+    # baseline legs is run-to-run timing variance in the 60s budget, not a code effect, and is
+    # named here instead of silently trusted.
+    baseline_matches: dict[str, set[str]] = {}
+    for label, _, base, _, _, _ in legs:
+        for name, row in base.items():
+            baseline_matches.setdefault(name, set())
+            if int(row.get("matched_published") or 0):
+                baseline_matches[name].add(label)
+    noisy = sorted(n for n, labels in baseline_matches.items()
+                   if 0 < len(labels) < len(legs))
+    noisy_text = "; ".join(
+        f"`{n}` matched in {len(baseline_matches[n])} of {len(legs)} baseline legs"
+        for n in noisy)
+    noise_text = (
+        f" The baselines are not perfectly repeatable at this 60s budget: {noisy_text} - "
+        f"ordinary run-to-run timing variance (reliability branching and the primal "
+        f"heuristics both make timing-sensitive choices), not a code effect. Any single "
+        f"round's apparent gain or loss of a MATCHED instance OTHER than the three #419 names "
+        f"should be read against this."
+    ) if noisy else ""
+
+    verdict = (
+        "**None of the three reached its published optimum in any leg run for #419** - the "
+        "acceptance criterion is not met, so `enable_flow_cover_cuts` stays off by default, "
+        "the same \"measurement, not caution\" reasoning `enable_root_cuts` already carries."
+        if not any_target_matched else
+        "**At least one of the three target instances reached its published optimum** in the "
+        "legs above - see which round and which instance in the text.")
+
+    return (intro + chr(10) + chr(10)
+            + (chr(10) + chr(10)).join(round_paragraphs) + noise_text + " " + verdict)
+
+
 def heuristics_ab_paragraph(baseline: list[dict]) -> str:
     """The per-heuristic A/B (#414), computed from `miplib-heur-<leg>.csv` beside the
     baseline the section already reports, one leg per heuristic switch, read only when the
@@ -1653,6 +1775,8 @@ def milp_section(path: Path | None) -> str:
         "exactly the thing cuts are meant to improve.",
         "",
         cuts_ab_paragraph(),
+        "",
+        flow_cover_ab_paragraph(),
         "",
         heuristics_ab_paragraph(rows),
         "",
