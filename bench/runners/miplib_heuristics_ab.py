@@ -31,6 +31,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import stamp  # noqa: E402  (#433, #589: the CSV names the commit the BINARY was built from)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 RUNNER = REPO_ROOT / "bench" / "runners" / "miplib.py"
@@ -189,7 +192,14 @@ def main() -> int:
                              "-dirty and are not evidence)")
     args = parser.parse_args()
 
-    commit = git("rev-parse", "--short", "HEAD")
+    # The legs run bench/runners/miplib.py, which solves with the bindings' located binary;
+    # the stamp is that binary's commit, not HEAD (#433, #589).
+    sys.path.insert(0, str(REPO_ROOT / "bindings" / "python"))
+    import sankhya  # noqa: E402
+    try:
+        commit = stamp.stamp(sankhya.locate_executable())
+    except sankhya.SankhyaError as error:
+        raise SystemExit(str(error))
     if args.summary:
         return summary(commit)
     if not tree_is_clean() and not args.allow_dirty:

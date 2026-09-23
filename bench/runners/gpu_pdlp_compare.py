@@ -32,6 +32,9 @@ import tempfile
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import stamp  # noqa: E402  (#433, #589: the CSV names the commit the BINARY was built from)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 MITTELMANN_DIR = REPO_ROOT / "data" / "mittelmann"
@@ -97,17 +100,6 @@ print(json.dumps({
     "wall_seconds": elapsed,
 }))
 """
-
-
-def git_commit() -> str:
-    r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT,
-                       capture_output=True, text=True, check=False)
-    commit = r.stdout.strip() or "unknown"
-    status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
-                            cwd=REPO_ROOT, capture_output=True, text=True, check=False)
-    if status.stdout.strip():
-        commit += "-dirty"
-    return commit
 
 
 def gpu_description(binary: Path) -> str:
@@ -221,7 +213,7 @@ def main() -> int:
     if not args.pdlp_only and args.binary is None:
         parser.error("--binary is required unless --pdlp-only is set")
 
-    commit = git_commit()
+    commit = stamp.stamp(args.binary)
     machine = f"{platform.system()}-{platform.machine()}"
     gpu = gpu_description(args.binary) if args.binary else "pdlp-only"
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
