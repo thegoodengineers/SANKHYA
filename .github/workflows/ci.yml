@@ -443,7 +443,10 @@ jobs:
           ldd build/sankhya
           echo
           echo "=== nothing below may name a solver ==="
-          if ldd build/sankhya | grep -Ei 'cbc|clp|highs|scip|soplex|glpk|lpsolve|osqp|ortools|gurobi|cplex|xpress'; then
+          # Library names only (the first field): the load addresses on the right are hex,
+          # and a run whose linux-vdso landed at 0x00007f843cbcd000 matched 'cbc' and failed
+          # a PR that touched no C++ at all.
+          if ldd build/sankhya | awk '{print $1}' | grep -Ei 'cbc|clp|highs|scip|soplex|glpk|lpsolve|osqp|ortools|gurobi|cplex|xpress'; then
             echo "FAIL: a solver library is linked into the binary"
             exit 1
           fi
