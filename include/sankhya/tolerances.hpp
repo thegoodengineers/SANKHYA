@@ -128,6 +128,16 @@ inline constexpr double kDualityGap = 1e-9;
 /// bound, a product of 1.1e-06 that only crossover (#219) removes.
 inline constexpr double kComplementarity = 1e-6;
 
+/// The in-process KKT check of the engine race (#476, src/core/kkt_check.cpp) makes the
+/// independent verifier's checks, and these are the two of its thresholds that are not
+/// already above: the reduced costs must match c - A^T y, and the reported row activities
+/// the recomputed ones, to kVerifierConsistency (the reduced costs relative to their terms,
+/// the activities absolutely, as tools/verify_solution.py does); the reported objective must
+/// match the recomputed one to kVerifierObjective relative. Copied, not tuned: an answer the
+/// race accepts has to be one the verifier would accept.
+inline constexpr double kVerifierConsistency = 1e-6;
+inline constexpr double kVerifierObjective = 1e-9;
+
 // ---------------------------------------------------------------------------------------
 // Linear algebra
 // ---------------------------------------------------------------------------------------

@@ -56,6 +56,7 @@
 #include <fmt/format.h>
 
 #include "core/deterministic_mode.hpp"
+#include "core/engine_race.hpp"
 #include "core/engine_selection.hpp"
 #include "core/iis.hpp"
 #include "core/presolve_pipeline.hpp"
@@ -830,7 +831,15 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // configuration validation): today this is exactly !want_pdhg && !want_ipm since only
     // the two simplex engines declare supports_warm_start, but it now reads that from the
     // engine itself and stays correct as engines are added or removed without an edit here.
-    if (warm_requested && chosen.engine->capabilities().supports_warm_start) {
+    // THE ENGINE RACE (#476), when asked for under auto: every LP engine at once, and the first
+    // answer that passes an in-process check against this model wins. It runs its own
+    // presolve and postsolve per engine, so what comes back is already in the model's terms.
+    const bool race = requested == "auto" && engine_race_applies(options, warm_requested);
+    bool race_accepted = false;
+    if (race) {
+      solution = run_engine_race(model, options, control, logger, timer, chosen.engine->name(),
+                                 engine_ran, &race_accepted);
+    } else if (warm_requested && chosen.engine->capabilities().supports_warm_start) {
       WarmStart warm;
       warm.col_status = control->start_col_status;
       warm.row_status = control->start_row_status;
@@ -860,8 +869,15 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     }
     // The decision travels on the answer, whichever path produced it (postsolve builds a
     // fresh Solution, so this is set after the engine ran, not before).
-    solution.engine_rule = chosen.rule;
-    solution.engine_reason = chosen.reason;
+    solution.engine_rule = race ? "race" : chosen.rule;
+    solution.engine_reason =
+        race
+            ? fmt::format("engine_race: {}; the rule table would have chosen {} ({})",
+                          race_accepted
+                              ? *engine_ran + "'s answer passed its check first"
+                              : "no answer passed its check, " + *engine_ran + "'s is reported",
+                          chosen.engine->name(), chosen.reason)
+            : chosen.reason;
     if (presolve_proved_it) {
       logger.info("Result: {} (proved during presolve)  {:.3f}s", to_string(solution.status),
                   solution.solve_seconds);

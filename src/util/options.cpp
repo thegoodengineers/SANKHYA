@@ -888,6 +888,22 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.9,
                  {}});
+    s.push_back({"engine_race",
+                 OptionType::Bool,
+                 false,
+                 "Under algorithm=auto, run the dual simplex, the interior point (with "
+                 "crossover) and PDHG at once instead of choosing one by rule (#476). An "
+                 "answer wins only after an in-process check against the original model at "
+                 "the project tolerances passes - the KKT conditions tools/verify_solution.py "
+                 "checks for an optimum, the Farkas certificate for an infeasibility - and a "
+                 "rejected answer neither wins nor stops the others; the first accepted one "
+                 "cancels the rest. With none accepted, the rule table's engine's answer is "
+                 "reported. Deterministic mode, or one core, runs them one after another in "
+                 "that fixed order. The answer's message carries every engine's outcome. Off "
+                 "until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"dual_feasibility_tolerance",
                  OptionType::Double,
                  tol::kDualFeasibility,

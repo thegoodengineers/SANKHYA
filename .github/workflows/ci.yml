@@ -22,8 +22,8 @@ concurrency:
 
 jobs:
   thread-sanitizer:
-    # The parallel tree search (#222) under ThreadSanitizer: a data race there shows up as a
-    # wrong bound once a month, not as a crash. OpenMP is off in this build because libgomp
+    # The parallel tree search (#222) and the engine race (#476) under ThreadSanitizer: a data
+    # race there shows up as a wrong bound or a wrong winner once a month, not as a crash. OpenMP is off in this build because libgomp
     # is not instrumented and TSan cannot see its synchronisation.
     name: TSan (MILP tree)
     runs-on: ubuntu-latest
@@ -49,7 +49,7 @@ jobs:
           TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
         run: >-
           ./build/tests/sankhya_tests
-          --gtest_filter='ParallelTree.*:BranchAndBound*.*:SolutionPool*.*:NodeSelection*.*:ResourceLimits.*:EngineConcurrency.*'
+          --gtest_filter='ParallelTree.*:BranchAndBound*.*:SolutionPool*.*:NodeSelection*.*:ResourceLimits.*:EngineConcurrency.*:EngineRace.*'
 
   build-and-test:
     name: ${{ matrix.name }}
