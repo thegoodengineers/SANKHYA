@@ -25,7 +25,7 @@ propagate_bounds(const Model& model,
                  const std::vector<double>& col_ub,
                  const Options& options)
 {
-    if (!options.get_bool("gpu_domain_prop") || !device_available()) {
+    if (!options.get_bool("gpu_domain_prop") || !device_available(nullptr)) {
         return {col_lb, col_ub, false};
     }
 

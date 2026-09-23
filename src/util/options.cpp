@@ -742,9 +742,11 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Bool,
                  false,
                  "Run activity-based bound propagation on the GPU at each MIP node (#510). "
-                 "One CUDA thread per constraint row; atomic min/max on the column-bound "
-                 "arrays; iterated to convergence or a fixed round limit. "
-                 "Default OFF; enable after a clean A/B on main. "
+                 "CURRENTLY A STUB: the kernel is not written and propagate_bounds() returns "
+                 "the input bounds unchanged, so the search behaves exactly as with the option "
+                 "off. The design is one CUDA thread per constraint row, atomic min/max on the "
+                 "column-bound arrays, iterated to convergence or a round limit. Default OFF; "
+                 "it earns a default by a clean A/B on main once the kernel exists. "
                  "Reference: Sofranac, Gleixner & Pokutta, arXiv:2009.07785.",
                  0.0,
                  0.0,
