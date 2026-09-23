@@ -35,6 +35,9 @@ import time
 from statistics import median, quantiles
 from typing import Any
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import stamp  # noqa: E402  (#433: the CSV names the commit the BINARY was built from)
+
 RESULTS_DIR = pathlib.Path(__file__).parent.parent / "results"
 
 
@@ -100,9 +103,10 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
-    git_commit = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
-    ).stdout.strip()
+    # The commit the binary reports through `sankhya version`, with -dirty from the tree;
+    # HEAD alone names whatever is checked out when the runner starts, which on a rented
+    # card is not necessarily what was built (#433).
+    git_commit = stamp.stamp(args.binary)
     machine = subprocess.run(
         ["uname", "-n"], capture_output=True, text=True
     ).stdout.strip()
