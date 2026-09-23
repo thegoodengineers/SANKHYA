@@ -23,12 +23,20 @@ namespace sankhya::io {
 struct ReadResult {
   bool ok = false;
   std::string error;  ///< "path:line: message", empty when ok
+  /// The file was understood and refused for what it contains (a construct this solver does
+  /// not accept), not for how it is written. The other MPS dialect would refuse it for the
+  /// same reason, so the auto-detecting reader reports this diagnosis alone instead of
+  /// retrying and appending a tokenizer error from the wrong dialect.
+  bool refused = false;
 
   [[nodiscard]] explicit operator bool() const noexcept { return ok; }
 
-  static ReadResult success() { return ReadResult{true, {}}; }
+  static ReadResult success() { return ReadResult{true, {}, false}; }
   static ReadResult failure(std::string message) {
-    return ReadResult{false, std::move(message)};
+    return ReadResult{false, std::move(message), false};
+  }
+  static ReadResult refusal(std::string message) {
+    return ReadResult{false, std::move(message), true};
   }
 };
 

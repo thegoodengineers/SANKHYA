@@ -123,6 +123,48 @@ directory, none of it is real MRPL data.
 
 ---
 
+## Crude blending with a volume discount — `demo/crude_blend_discount_qp.mps` (refused)
+
+The price-impact instance above with one sign changed: Bonny Light comes with a volume
+discount, its delivered price falling by 0.020 $/bbl for every kbbl/day lifted, so the
+spend on it is `base·x − 0.5·0.020·x²` and the margin *gains* `0.5·0.020·BN²`. In the QPS
+convention that is `Q_BN,BN = +0.020`, and under `OBJSENSE MAXIMIZE` the matrix the
+convexity test looks at, `−Q = diag(0.012, −0.020, 0.016)`, has a negative eigenvalue. The
+objective is neither concave nor convex, the problem has local optima at corners of the
+feasible set, and nothing in a printed answer distinguishes one of them from the global
+optimum.
+
+SANKHYA refuses the file (`model_error`, exit code 5) with the pivot that proves it, rather
+than reporting whichever local point an iteration reached as optimal. It is in this
+directory to make that stated position demonstrable: `demo/run_sih_demo.sh` section 3 runs
+it. The slope is invented, like the rest of the instance.
+
+---
+
+## The Haverly pooling problem — `demo/pooling_haverly.mps` (not read)
+
+### Source
+
+Haverly, C.A. (1978). "Studies of the behavior of recursion for the pooling problem."
+*ACM SIGMAP Bulletin*, 25, 19–28. Case 1.
+
+Two crudes, A (3 % sulphur, $6) and B (1 %, $16), are mixed in one pool of unknown quality
+`Q` and then blended with a direct stream C (2 %, $10) into two products: X sells at $9 with
+at most 2.5 % sulphur and demand 100, Y at $15 with at most 1.5 % and demand 200. The pool
+quality is a decision variable, and the sulphur it carries into a product is `Q` times the
+flow — a bilinear term in a constraint, which is what makes pooling non-convex. The
+published global optimum is a profit of 400; the local optimum of 100 that recursion
+finds from a poor start is the classic trap the paper is about.
+
+The bilinear terms are written in `QCMATRIX` sections, the CPLEX/Gurobi QPS extension for
+quadratic constraints, one per row with the full symmetric matrix listed. SANKHYA reads a
+quadratic *objective* only: the file is refused at read time, by name, with a message
+saying why — not skipped, which would solve the linear remainder and report it as this
+model. `demo/run_sih_demo.sh` section 3 shows the refusal. The data are the paper’s; the
+file is a transcription, not real MRPL data.
+
+---
+
 ## Refinery scheduling — not currently represented
 
 ### Source

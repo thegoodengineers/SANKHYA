@@ -49,7 +49,7 @@ way an issue body is not, and every status here was checked against a specific c
 
 | domain | status |
 |---|---|
-| crude blending | **done** — `demo/crude_blend.mps` (LP) and `demo/crude_blend_qp.mps` (QP, price impact) |
+| crude blending | **done** — `demo/crude_blend.mps` (LP) and `demo/crude_blend_qp.mps` (QP, price impact); the non-convex twin `demo/crude_blend_discount_qp.mps` and the pooling model `demo/pooling_haverly.mps` are refused by name, which the demo shows |
 | refinery scheduling | **done** — `demo/blend_milp.mps` |
 | power system dispatch | **done** — `data/casestudies/power_dispatch.mps`, unit commitment, settled by exhaustive oracle |
 | transportation / supply chain | **done** — `data/casestudies/supply_chain.mps` |

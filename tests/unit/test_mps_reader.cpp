@@ -1047,5 +1047,34 @@ TEST(MpsReader, AColumnNamedQuadobjIsStillJustAColumn) {
   EXPECT_FALSE(model.has_quadratic_objective());
 }
 
+TEST(MpsReader, AQuadraticConstraintSectionIsRefusedByName) {
+  // QCMATRIX <row> is the CPLEX/Gurobi QPS extension for a quadratic CONSTRAINT - the
+  // bilinear pool-quality term of a pooling model (Haverly 1978) is written this way. The
+  // solver reads a quadratic objective only, and the two wrong answers are (a) skipping the
+  // section, which solves a different model, and (b) rejecting the file as a malformed
+  // BOUNDS line, which is what happened before the keyword was known. The refusal must
+  // name the section and say why.
+  const std::string error = parse_expecting_failure(
+      "NAME          POOL\n"
+      "ROWS\n"
+      " N  COST\n"
+      " E  QUAL\n"
+      "COLUMNS\n"
+      "    X         COST         1.0   QUAL         1.0\n"
+      "    Q         COST         0.0\n"
+      "RHS\n"
+      "    RHS       QUAL         0.0\n"
+      "QCMATRIX   QUAL\n"
+      "    X         Q           -0.5\n"
+      "    Q         X           -0.5\n"
+      "ENDATA\n");
+  EXPECT_NE(error.find("QCMATRIX"), std::string::npos) << error;
+  EXPECT_NE(error.find("quadratic constraints"), std::string::npos) << error;
+  EXPECT_EQ(error.find("bound type"), std::string::npos) << error;
+  // ... and alone: the auto reader must not retry the other dialect and append its
+  // tokenizer error to a verdict that was about the file, not the layout.
+  EXPECT_EQ(error.find("also failed"), std::string::npos) << error;
+}
+
 }  // namespace
 }  // namespace sankhya

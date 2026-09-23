@@ -554,6 +554,19 @@ ReadResult MpsParser::parse(const std::string& path) {
     if (tok_.empty()) continue;
 
     if (!indented) {
+      // A quadratic CONSTRAINT section - QCMATRIX <row>, the CPLEX/Gurobi QPS extension that
+      // carries the bilinear terms of a pooling model - is recognised so that it can be
+      // refused BY NAME. Before this the header fell through to whatever section preceded
+      // it and the file was rejected as a malformed BOUNDS line, which said nothing about
+      // why. Reading the objective and dropping the constraint is not an option either: it
+      // would be a different model, solved and reported as this one.
+      if (to_upper(tok_[0]) == "QCMATRIX") {
+        error = reader_.error_at(
+            "QCMATRIX section: quadratic constraints are not supported. This solver reads a "
+            "quadratic OBJECTIVE only (QUADOBJ); a model with bilinear constraints, such as "
+            "a pooling problem, is refused rather than read with those terms dropped");
+        return ReadResult::refusal(error);
+      }
       Section next = Section::kNone;
       if (section_from_keyword(tok_[0], &next)) {
         if (next == Section::kEnd) {
@@ -676,6 +689,10 @@ ReadResult read_mps(const std::string& path, Model* model, MpsFormat format,
     if (format_used != nullptr) *format_used = MpsFormat::kFree;
     return free_result;
   }
+  // A refusal is a verdict on the file, not on the dialect: the fixed-format reader would
+  // reach the same section and refuse it for the same reason, or fail earlier on a line the
+  // free tokenizer read correctly, and either way its error would only obscure this one.
+  if (free_result.refused) return free_result;
 
   MpsParser fixed_parser(model, MpsFormat::kFixed);
   const ReadResult fixed_result = fixed_parser.parse(path);

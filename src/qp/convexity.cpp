@@ -28,6 +28,16 @@ constexpr Index kDenseReferenceLimit = 2000;
 /// fixed tolerance.
 constexpr double kPivotSlackFactor = 1e-10;
 
+/// "column 1 (BN)" when the model names its columns, "column 1" otherwise. A refusal is read
+/// by the person who wrote the file, and they know the column by its name, not its index.
+[[nodiscard]] std::string column_label(const Model& model, Index j) {
+  const auto uj = static_cast<std::size_t>(j);
+  if (uj < model.col_names.size() && !model.col_names[uj].empty()) {
+    return fmt::format("column {} ({})", j, model.col_names[uj]);
+  }
+  return fmt::format("column {}", j);
+}
+
 /// Q in MINIMIZATION sense, as the lower triangle of a symmetric matrix.
 ///
 /// The engines minimise sense * (c'x + 0.5 x'Qx), so the Hessian they actually see is
@@ -98,9 +108,9 @@ ConvexityResult check_convexity_dense(const Model& model) {
     if (d < -kPivotSlackFactor * std::max(1.0, largest_diagonal)) {
       result.verdict = Convexity::kIndefinite;
       result.detail = fmt::format(
-          "the Hessian diagonal for column {} is {:.6g} in minimization sense; e^T Q e < 0 "
+          "the Hessian diagonal for {} is {:.6g} in minimization sense; e^T Q e < 0 "
           "makes the objective non-convex along that column alone",
-          i, d);
+          column_label(model, i), d);
       return result;
     }
   }
@@ -124,9 +134,9 @@ ConvexityResult check_convexity_dense(const Model& model) {
     if (pivot < -slack) {
       result.verdict = Convexity::kIndefinite;
       result.detail = fmt::format(
-          "LDL^T reached a pivot of {:.6g} at column {}; a negative pivot exhibits a "
+          "LDL^T reached a pivot of {:.6g} at {}; a negative pivot exhibits a "
           "direction in which the objective curves downward, so the model is non-convex",
-          pivot, j);
+          pivot, column_label(model, j));
       return result;
     }
     if (pivot <= slack) {
@@ -146,10 +156,10 @@ ConvexityResult check_convexity_dense(const Model& model) {
         if (std::fabs(sum) > slack) {
           result.verdict = Convexity::kIndefinite;
           result.detail = fmt::format(
-              "column {} has a zero pivot but entry ({}, {}) of the remaining Schur "
+              "{} has a zero pivot but entry ({}, {}) of the remaining Schur "
               "complement is {:.6g}; a positive semidefinite matrix cannot carry a nonzero "
               "beside a zero pivot, so the objective has a direction of negative curvature",
-              j, i, j, sum);
+              column_label(model, j), i, j, sum);
           return result;
         }
         l[ui * un + uj] = 0.0;
@@ -196,9 +206,9 @@ ConvexityResult check_convexity(const Model& model) {
     case SemidefiniteReport::Verdict::kIndefinite:
       result.verdict = Convexity::kIndefinite;
       result.detail = fmt::format(
-          "sparse LDL^T reached {:.6g} at column {} in minimization sense; that exhibits a "
+          "sparse LDL^T reached {:.6g} at {} in minimization sense; that exhibits a "
           "direction in which the objective curves downward, so the model is non-convex",
-          report.pivot, report.column);
+          report.pivot, column_label(model, report.column));
       return result;
     case SemidefiniteReport::Verdict::kUndecided: break;
   }

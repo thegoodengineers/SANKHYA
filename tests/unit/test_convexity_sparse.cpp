@@ -254,5 +254,18 @@ TEST(SparseConvexity, ALargeSparseConvexQpReachesTheEngineInsteadOfBeingRefused)
       << solution.message;
 }
 
+TEST(SparseConvexity, TheRefusalNamesTheColumn) {
+  // A refusal is read by the person who wrote the file, and they know the concave column as
+  // BN, not as index 1. Q = diag(0.012, -0.020): BN is the direction of negative curvature.
+  Model model = hessian_only(2, {{0, 0, 0.012}, {1, 1, -0.020}});
+  model.col_names = {"AL", "BN"};
+  const ConvexityResult sparse = check_convexity(model);
+  const ConvexityResult dense = check_convexity_dense(model);
+  ASSERT_EQ(sparse.verdict, Convexity::kIndefinite) << sparse.detail;
+  ASSERT_EQ(dense.verdict, Convexity::kIndefinite) << dense.detail;
+  EXPECT_NE(sparse.detail.find("column 1 (BN)"), std::string::npos) << sparse.detail;
+  EXPECT_NE(dense.detail.find("column 1 (BN)"), std::string::npos) << dense.detail;
+}
+
 }  // namespace
 }  // namespace sankhya::qp

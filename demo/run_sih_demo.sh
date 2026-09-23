@@ -340,6 +340,57 @@ done
 
 # -------------------------------------------------------------------------------------------
 echo
+echo "--- The QP we refuse: demo/crude_blend_discount_qp.mps ------------------------------"
+echo
+cat <<"DISCOUNT"
+    The price-impact QP above is convex because every price RISES with the volume lifted.
+    Change one word of the story - Bonny Light comes with a volume DISCOUNT, its price
+    falling as more is taken - and the same file with one sign flipped in QUADOBJ is no
+    longer convex: the margin curves upward along BN, the objective has local optima at
+    corners of the feasible set, and an iteration that stops at one of them would print it
+    as the optimum. Nothing in the printed answer distinguishes that point from the global
+    one. Stated position: SANKHYA does not report a local optimum as a global one. The
+    Hessian is factorized (LDL^T, src/qp/convexity.cpp) before any iteration runs, and a
+    negative pivot is a certificate of non-convexity, not a warning to be overridden:
+DISCOUNT
+echo
+rc=0
+"$BIN" solve demo/crude_blend_discount_qp.mps --option log_to_console=false \
+  --write-sol "$WORK/discount.sol" >"$WORK/discount.out" 2>&1 || rc=$?
+echo "    status   $(sed -n "s/^status  *//p" "$WORK/discount.out")   (exit code $rc)"
+echo "    message"
+sed -n "s/^message  *//p" "$WORK/discount.out" | fold -s -w 84 | sed "s/^/             /"
+echo
+echo "    The .sol file the run wrote says the same, so nothing downstream can mistake it:"
+grep -E "^(status|certificate) " "$WORK/discount.sol" | sed "s/^/        /"
+if [ "$rc" -ne 5 ] || ! grep -q "^status  *model_error" "$WORK/discount.out"; then
+  echo "    THE REFUSAL DID NOT HAPPEN - a non-convex QP was solved. See src/qp/convexity.cpp."
+  exit 1
+fi
+echo
+cat <<"POOLING"
+    The pooling problem itself - Haverly (1978), demo/pooling_haverly.mps, where the pool
+    quality is a variable and the sulphur it carries into a product is quality TIMES flow -
+    is bilinear in its CONSTRAINTS, and outside the class this solver reads at all. Its
+    QCMATRIX sections are refused at read time, by name, rather than read with the
+    bilinear terms dropped, which would solve a linear model and report it as this one:
+POOLING
+echo
+rc=0
+"$BIN" solve demo/pooling_haverly.mps --option log_to_console=false >"$WORK/pooling.out" 2>&1 || rc=$?
+sed "s|$REPO/||" "$WORK/pooling.out" | fold -s -w 84 | sed "s/^/        /"
+echo "        (exit code $rc)"
+if [ "$rc" -ne 3 ] || ! grep -q "QCMATRIX" "$WORK/pooling.out"; then
+  echo "    THE REFUSAL DID NOT HAPPEN - a pooling model was read. See src/io/mps_reader.cpp."
+  exit 1
+fi
+echo
+echo "    What would change this: a global solver for non-convex QP and bilinear programs -"
+echo "    spatial branch and bound over McCormick relaxations - is the MINLP layer the roadmap"
+echo "    has not attempted (docs/PS26119_COVERAGE.md). Until it exists, the refusal stands."
+
+# -------------------------------------------------------------------------------------------
+echo
 echo "--- What a planner actually reads: the shadow prices on the blend ------------------"
 echo
 echo "The dual value on a constraint is the marginal worth of relaxing it by one unit. It is"
