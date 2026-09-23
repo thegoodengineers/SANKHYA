@@ -288,6 +288,7 @@ set(SANKHYA_CORE_SOURCES
   src/simplex/simplex_push.cpp
   src/simplex/ranging.cpp
   src/util/logging.cpp
+  src/util/memory.cpp
   src/util/options.cpp
   src/util/profiler.cpp
   src/util/version.cpp)

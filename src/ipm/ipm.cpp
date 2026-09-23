@@ -26,6 +26,7 @@
 // never a claim it cannot prove. Both are stated in the option's description.
 
 #include "sankhya/ipm.hpp"
+#include "util/memory.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -1025,11 +1026,20 @@ Solution InteriorPoint::run() {
   }
   max_factor_nonzeros_ = options_.get_int(warm_ != nullptr ? "polish_max_factor_nonzeros"
                                                            : "ipm_max_factor_nonzeros");
+  // 0 means "sized from this machine" (#576): the constants these options shipped with
+  // were the 7.7 GB laptop's, and on a 96 GB node they abandoned orderings with 86 GB
+  // free. The polish keeps its own explicit cap.
+  if (warm_ == nullptr && max_factor_nonzeros_ == 0) {
+    max_factor_nonzeros_ =
+        static_cast<std::int64_t>(auto_factor_budget(physical_memory_bytes()));
+  }
   // The ordering's own budget (#246): the one phase that can run the machine out of memory
   // before it can say how large the factor would be.
   const std::int64_t ordering_entries = options_.get_int("ipm_max_ordering_entries");
   ldl_.set_ordering_budget(ordering_entries < 0 ? static_cast<std::size_t>(-1)
-                                                : static_cast<std::size_t>(ordering_entries));
+                           : ordering_entries == 0
+                               ? auto_ordering_budget(physical_memory_bytes())
+                               : static_cast<std::size_t>(ordering_entries));
   run_clock_ = &timer;
   ordering_declined_ = false;
   ordering_deadline_ = std::numeric_limits<double>::infinity();
