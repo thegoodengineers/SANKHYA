@@ -29,7 +29,9 @@ propagate_bounds(const Model& model,
         return {col_lb, col_ub, false};
     }
 
-    // TODO(#510): launch propagation kernel.
+    // TODO(#510): launch propagation kernel. Until then the model is unread; -Werror under
+  // nvcc says so unless told otherwise.
+  (void)model;
     //   1. Copy CSC matrix A, col_lb, col_ub to device.
     //   2. Launch act_bounds_kernel<<<nrows/256+1, 256>>> to fill d_act_min, d_act_max.
     //   3. Launch tighten_kernel<<<ncols/256+1, 256>>> for each col using atomicMin/Max.
