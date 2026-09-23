@@ -51,19 +51,22 @@ import sankhya
 __all__ = ["SANKHYA"]
 
 # What CVXPY's Solution.status may hold, and how SANKHYA's fuller vocabulary maps onto it.
-# cvxpy.settings has no "feasible but not proven optimal" word either, same gap PuLP has;
-# INFEASIBLE_OR_UNBOUNDED is the closest honest word CVXPY offers for that case, since (like
-# an unproven limit) it says a claim was not established without asserting the wrong one.
+# cvxpy.settings has no "feasible but not proven optimal" word, the same gap PuLP has, but
+# it does have USER_LIMIT: the solver stopped short of a proof and a point may be available.
+# That is what a `feasible` answer and every limit status are. INFEASIBLE_OR_UNBOUNDED is
+# NOT an honest stand-in for them: it asserts a verdict about the problem that a feasible
+# point contradicts, and a caller who branches on it would treat a solvable model as
+# unsolvable. It is used only where the solver itself said infeasible_or_unbounded.
 _STATUS_TO_CVXPY = {
     "optimal": cp.settings.OPTIMAL,
     "infeasible": cp.settings.INFEASIBLE,
     "unbounded": cp.settings.UNBOUNDED,
     "infeasible_or_unbounded": cp.settings.INFEASIBLE_OR_UNBOUNDED,
-    "feasible": cp.settings.INFEASIBLE_OR_UNBOUNDED,
-    "iteration_limit": cp.settings.INFEASIBLE_OR_UNBOUNDED,
-    "time_limit": cp.settings.INFEASIBLE_OR_UNBOUNDED,
-    "node_limit": cp.settings.INFEASIBLE_OR_UNBOUNDED,
-    "interrupted": cp.settings.INFEASIBLE_OR_UNBOUNDED,
+    "feasible": cp.settings.USER_LIMIT,
+    "iteration_limit": cp.settings.USER_LIMIT,
+    "time_limit": cp.settings.USER_LIMIT,
+    "node_limit": cp.settings.USER_LIMIT,
+    "interrupted": cp.settings.USER_LIMIT,
     "model_error": cp.settings.SOLVER_ERROR,
     "numerical_error": cp.settings.SOLVER_ERROR,
     "not_solved": cp.settings.SOLVER_ERROR,
