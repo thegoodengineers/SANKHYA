@@ -55,6 +55,8 @@ MITTELMANN_INSTANCES = ["chromaticindex1024-7", "brazil3"]
 # to set termination tolerances (PDLP ignores MPSolverParameters knobs).
 PDLP_RUNNER_SCRIPT = r"""
 import sys, time, json
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import stamp  # noqa: E402  (#433: stamps from the binary)
 try:
     from ortools.linear_solver.python import model_builder as mb
 except ImportError:
@@ -73,8 +75,11 @@ except Exception as exc:
     print(json.dumps({"error": f"import_from_mps_file failed: {exc}"}))
     sys.exit(1)
 
-solver = mb.ModelSolver("PDLP")
-if solver is None:
+# model_builder.Solver since ortools 9.7, ModelSolver before it; the constructor never
+# returns None - availability is solver_is_supported().
+solver_class = getattr(mb, "Solver", None) or getattr(mb, "ModelSolver")
+solver = solver_class("PDLP")
+if not solver.solver_is_supported():
     print(json.dumps({"error": "PDLP not available in this ortools build"}))
     sys.exit(1)
 
@@ -99,15 +104,11 @@ print(json.dumps({
 """
 
 
-def git_commit() -> str:
-    r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT,
-                       capture_output=True, text=True, check=False)
-    commit = r.stdout.strip() or "unknown"
-    status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
-                            cwd=REPO_ROOT, capture_output=True, text=True, check=False)
-    if status.stdout.strip():
-        commit += "-dirty"
-    return commit
+def git_commit(binary=None) -> str:
+    """The commit this CSV is stamped with: the binary's own, read from `sankhya version`,
+    with `-dirty` from the tree; HEAD only when no binary answers (#433,
+    bench/runners/stamp.py)."""
+    return stamp.stamp(binary)
 
 
 def gpu_description(binary: Path) -> str:
@@ -221,7 +222,7 @@ def main() -> int:
     if not args.pdlp_only and args.binary is None:
         parser.error("--binary is required unless --pdlp-only is set")
 
-    commit = git_commit()
+    commit = git_commit(args.binary)
     machine = f"{platform.system()}-{platform.machine()}"
     gpu = gpu_description(args.binary) if args.binary else "pdlp-only"
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
