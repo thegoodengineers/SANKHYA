@@ -79,6 +79,13 @@ typedef struct sankhya_solution sankhya_solution;
 /** Version string, e.g. "0.1.0 (abc1234, Release)". Never NULL. */
 const char* sankhya_version(void);
 
+/** The canonical repository, "thegoodengineers/SANKHYA". The name is a common Sanskrit
+ *  word and other projects use it, so every artefact names this one (#538). Never NULL. */
+const char* sankhya_repository(void);
+
+/** The canonical repository's URL, "https://github.com/thegoodengineers/SANKHYA". Never NULL. */
+const char* sankhya_repository_url(void);
+
 /**
  * Human-readable reason for the most recent failing call ON THIS THREAD.
  *

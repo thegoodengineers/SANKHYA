@@ -38,6 +38,9 @@ struct SolutionHandle {
 TEST(CApi, ReportsAVersionAndAnInfinity) {
   ASSERT_NE(sankhya_version(), nullptr);
   EXPECT_FALSE(std::string(sankhya_version()).empty());
+  // The canonical identity through the C API (#538), pinned like the C++ one.
+  EXPECT_STREQ(sankhya_repository(), "thegoodengineers/SANKHYA");
+  EXPECT_STREQ(sankhya_repository_url(), "https://github.com/thegoodengineers/SANKHYA");
   EXPECT_TRUE(std::isinf(sankhya_infinity()));
   EXPECT_GT(sankhya_infinity(), 0.0);
 }

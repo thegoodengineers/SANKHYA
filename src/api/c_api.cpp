@@ -160,6 +160,14 @@ const char* sankhya_version(void) {
   return version.c_str();
 }
 
+const char* sankhya_repository(void) {
+  return sankhya::repository();
+}
+
+const char* sankhya_repository_url(void) {
+  return sankhya::repository_url();
+}
+
 const char* sankhya_last_error(void) {
   return g_error.c_str();
 }

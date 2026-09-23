@@ -6,6 +6,10 @@ Smart India Hackathon 2026 · Mangalore Refinery and Petrochemicals Limited (MRP
 Canonical repository: [`thegoodengineers/SANKHYA`](https://github.com/thegoodengineers/SANKHYA),
 first commit 25 August 2026. The name is a common Sanskrit word and other projects use it;
 this one prints its repository in `sankhya version` and in every solution file it writes.
+It is a Smart India Hackathon team entry, and the competition requires the solver to be
+built by the registered team alone, so outside pull requests and issue assignments cannot
+be accepted; reading it, running the benchmarks, and reporting a number that does not
+reproduce are welcome.
 
 **Indigenous optimization solver — LP, MILP, convex QP, written from mathematical
 foundations. Its first-order engine is built for the GPU, and the CUDA port of it is on
