@@ -702,7 +702,14 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         return first;
       }
       if (want_ipm) {
-        Solution interior = ipm::solve_ipm(target, engine_options, logger, control);
+        // #437: the rule table sends large models here, and a normal-equations factor is
+        // where this project actually runs out of memory. The guard belongs HERE and not
+        // only at the dispatch level, because the fallback below tests a RETURNED status -
+        // a std::bad_alloc unwinds straight past it, and the recovery this function already
+        // implements could never fire on the one failure the comment below names first.
+        Solution interior = run_engine_guarded(
+            [&] { return ipm::solve_ipm(target, engine_options, logger, control); },
+            "interior point", timer, logger);
         // From the interior point's answer to a vertex (#219), when asked: the basis the
         // rest of the pipeline wants, at the cost of a few pivots from an optimal point.
         // The crossover runs on what the budget has left too, which is why it is handed
