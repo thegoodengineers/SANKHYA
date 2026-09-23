@@ -423,6 +423,37 @@ def full_section(path: Path | None) -> str:
 KENNINGTON_ENGINES = ("dual-simplex", "simplex", "pdhg", "ipm")
 
 
+def parametric_section() -> str:
+    """Section 3b (#522): every `parametric-<curve>-<sha>.csv` in bench/results, the newest
+    per curve by git history, rendered as it was written - the breakpoints tools/parametric.py
+    found and the basis change at each. Nothing here is typed in: the tables are the CSVs."""
+    results = Path(__file__).resolve().parents[1] / "results"
+    curves: dict[str, Path] = {}
+    for path in sorted(results.glob("parametric-*-*.csv")):
+        curve = path.name[len("parametric-"):].rsplit("-", 1)[0]
+        chosen = newest(f"parametric-{curve}-*.csv")
+        if chosen is not None:
+            curves[curve] = chosen
+    if not curves:
+        return ("No parametric sweep has been committed yet. `python tools/parametric.py "
+                "model.mps --cost COLUMN --from A --to B --out bench/results/parametric-<curve>-<sha>.csv` "
+                "writes one.\n")
+    out: list[str] = []
+    for curve, path in curves.items():
+        rows = read_csv(path)
+        stamp = (rows[0].get("git_commit") or "no stamp") if rows else "empty"
+        machine = (rows[0].get("machine") or "machine not recorded") if rows else ""
+        out.append(f"**`{curve}`** - `bench/results/{path.name}`, solver at `{stamp}`, {machine}, "
+                   f"{len(rows)} breakpoint(s):\n")
+        out.append("| parameter | objective | status | what changed at this point |")
+        out.append("|---:|---:|---|---|")
+        for row in rows:
+            out.append(f"| {row.get('parameter', '')} | {row.get('objective', '')} | "
+                       f"{row.get('status', '')} | {row.get('change', '')} |")
+        out.append("")
+    return "\n".join(out) + "\n"
+
+
 def kennington_section(path: Path | None, engines: dict[str, Path | None]) -> str:
     """The sixteen Kennington LPs (#530), under the rules of the Netlib full set.
 
@@ -2524,6 +2555,17 @@ alone proves nothing; a pass needs the Farkas certificate the solver wrote to su
 `tools/verify_solution.py` (`bench/runners/netlib_infeasible.py`).
 
 {infeasible_section(infeasible_csv, infeasible_engine_csvs)}
+### 3b. Parametric LP - the optimal value as a function of one coefficient
+
+`tools/parametric.py` walks one cost or one right-hand side across a range: from the optimal
+basis at the start it reads the ranging interval (#220) to find where that basis stops being
+optimal, jumps there, warm-starts (#218) from the basis it is leaving, and records the
+objective and the basis change at every breakpoint. Each reported point is a fresh optimum
+re-solved and checked by `tools/test_parametric.py` through the verifier's own MPS reader,
+not a value extrapolated from ranging. It re-solves at each breakpoint rather than pivoting
+once as a dedicated parametric simplex would; the tool's docstring says what that costs.
+
+{parametric_section()}
 ---
 
 ## 4. Comparison against an established solver

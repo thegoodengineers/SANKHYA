@@ -1,4 +1,0 @@
-parameter,objective,status,change
-100.0,173.12499999999983,optimal,initial basis
-107.81351351351357,214.14594594594607,optimal,no basis change (objective still moves linearly)
-200.0,214.14594594594604,optimal,no basis change (objective still moves linearly)

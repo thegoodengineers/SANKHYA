@@ -179,13 +179,36 @@ def _rebuild(sankhya, source):
     return model
 
 
-def write_csv(rows: list[dict], path: Path | None) -> None:
+def provenance(model_path: Path) -> dict:
+    """What every CSV under bench/results carries beside its numbers: the commit the
+    solver was built from, the machine, and the sha256 of the instance (ENGINEERING_RULES,
+    evidence rules). The library reports no commit of its own, so the stamp is read from
+    the CLI built beside it, through bench/runners/stamp.py (#433)."""
+    import hashlib
+    import platform
+    import sankhya
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bench" / "runners"))
+    import stamp  # noqa: E402
+    digest = hashlib.sha256()
+    with open(model_path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    try:
+        commit = stamp.stamp(sankhya.locate_executable())
+    except Exception:  # no CLI beside the library: say so rather than guess from the tree
+        commit = "unknown"
+    return {"git_commit": commit, "machine": f"{platform.system()}-{platform.machine()}",
+            "instance_sha256": digest.hexdigest()}
+
+
+def write_csv(rows: list[dict], path: Path | None, stamp_columns: dict | None = None) -> None:
     handle = open(path, "w", newline="", encoding="utf-8") if path else sys.stdout
+    extra = stamp_columns or {}
     try:
         writer = csv.DictWriter(handle, fieldnames=["parameter", "objective", "status",
-                                                     "change"])
+                                                     "change", *extra.keys()])
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows({**row, **extra} for row in rows)
     finally:
         if path:
             handle.close()
@@ -218,7 +241,7 @@ def main() -> int:
         rows = sweep_row(args.model, args.row, args.side, args.from_value, args.to_value,
                          options)
 
-    write_csv(rows, args.out)
+    write_csv(rows, args.out, provenance(args.model))
     if args.out:
         print(f"wrote {len(rows)} breakpoint(s) to {args.out}")
     return 0

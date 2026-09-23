@@ -781,57 +781,32 @@ python bench/runners/netlib_infeasible.py --time-limit 60
 python bench/runners/netlib_infeasible.py --time-limit 60 --solver-option algorithm=simplex   # and dual-simplex, pdhg
 ```
 
-### 3b. Parametric LP — the objective as a function of one coefficient (#522)
+### 3b. Parametric LP - the optimal value as a function of one coefficient
 
-`tools/parametric.py` walks a cost or a right-hand side across a range, jumping between
-breakpoints using the ranging deltas from #220 and warm-starting (#218) from the basis that
-was optimal at the point being left. Every reported point is a fresh, independently
-re-solved optimum, not a value carried forward from ranging's own linear estimate — see the
-tool's docstring for how this differs from a dedicated parametric simplex, and
-`tools/test_parametric.py` for the independent-resolve check that runs in CI.
+`tools/parametric.py` walks one cost or one right-hand side across a range: from the optimal
+basis at the start it reads the ranging interval (#220) to find where that basis stops being
+optimal, jumps there, warm-starts (#218) from the basis it is leaving, and records the
+objective and the basis change at every breakpoint. Each reported point is a fresh optimum
+re-solved and checked by `tools/test_parametric.py` through the verifier's own MPS reader,
+not a value extrapolated from ranging. It re-solves at each breakpoint rather than pivoting
+once as a dedicated parametric simplex would; the tool's docstring says what that costs.
 
-No refinery case study (#517) exists in this repository yet, so `demo/crude_blend.mps`
-stands in below — a small MAX-sense crude-blending LP (Arab Light / Bonny Light / Murban
-into a diesel pool, throughput and sulphur constrained) already used elsewhere in this repo
-as the worked example closest in spirit to MRPL's actual planning problem.
+**`crude-blend-AL`** - `bench/results/parametric-crude-blend-AL-887b173.csv`, solver at `887b173-dirty`, Windows-AMD64, 3 breakpoint(s):
 
-**Sweeping Arab Light's margin from 0 to 5 $/bbl** (`--cost AL --from 0.0 --to 5.0`):
+| parameter | objective | status | what changed at this point |
+|---:|---:|---|---|
+| 0.0 | 148.88888888888894 | optimal | initial basis |
+| 1.0666666666666669 | 159.5555555555556 | optimal | no basis change (objective still moves linearly) |
+| 5.0 | 348.017837837838 | optimal | entered: AL, MU; left: BN |
 
-```
-parameter                objective  status   change
-0.0                148.88888888888894  optimal  initial basis
-1.0666666666666669 159.5555555555556   optimal  no basis change (objective still moves linearly)
-5.0                348.017837837838    optimal  entered: AL, MU; left: BN
-```
+**`crude-blend-THRUPUT`** - `bench/results/parametric-crude-blend-THRUPUT-887b173.csv`, solver at `887b173-dirty`, Windows-AMD64, 3 breakpoint(s):
 
-Below AL's ranging-derived breakpoint at margin ≈1.0667, the current basis stays optimal and
-the objective moves linearly with the coefficient, exactly as ranging (#220) predicts; past
-it, Arab Light and Murban become attractive enough to enter the basis and Bonny Light leaves
-— a genuine basis change, independently confirmed by a from-scratch re-solve at each
-endpoint (`tools/test_parametric.py::test_cost_sweep_breakpoints_match_independent_resolves`).
-Full CSV: `bench/results/parametric-crude-blend-AL-90c3df1.csv`.
+| parameter | objective | status | what changed at this point |
+|---:|---:|---|---|
+| 100.0 | 173.12499999999983 | optimal | initial basis |
+| 107.81351351351357 | 214.14594594594607 | optimal | no basis change (objective still moves linearly) |
+| 200.0 | 214.14594594594604 | optimal | no basis change (objective still moves linearly) |
 
-**Sweeping the CDU throughput cap from 100 to 200 kbbl/day**
-(`--row THRUPUT --side upper --from 100 --to 200`):
-
-```
-parameter           objective            status   change
-100.0                173.12499999999983  optimal  initial basis
-107.81351351351357   214.14594594594607  optimal  no basis change (objective still moves linearly)
-200.0                214.14594594594604  optimal  no basis change (objective still moves linearly)
-```
-
-Throughput capacity is worth expanding up to ≈107.8 kbbl/day, after which the sulphur and
-diesel-pool constraints bind instead and additional crude-processing capacity adds nothing —
-the answer to "what if we revamped the CDU" a planner would actually ask. Full CSV:
-`bench/results/parametric-crude-blend-THRUPUT-90c3df1.csv`.
-
-Reproduce either curve with:
-
-```
-python tools/parametric.py demo/crude_blend.mps --cost AL --from 0.0 --to 5.0
-python tools/parametric.py demo/crude_blend.mps --row THRUPUT --side upper --from 100 --to 200
-```
 
 ---
 
