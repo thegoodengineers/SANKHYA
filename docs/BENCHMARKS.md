@@ -736,6 +736,21 @@ that, and both run in CI:
   arithmetic with no rounding error anywhere, and the floating-point simplex is compared
   against it. See `docs/PROVENANCE.md` for the citations.
 
+### 3a. Netlib's infeasible set - a verdict is only as good as its certificate
+
+Chinneck's collection of infeasible LPs (`netlib.org/lp/infeas`, fetched and hashed by
+`bench/runners/fetch_netlib_infeasible.py`). Every instance is infeasible, so the status
+alone proves nothing; a pass needs the Farkas certificate the solver wrote to survive
+`tools/verify_solution.py` (`bench/runners/netlib_infeasible.py`).
+
+Not yet run at this commit. Reproduce with:
+
+```
+python bench/runners/fetch_netlib_infeasible.py
+python bench/runners/netlib_infeasible.py --time-limit 60
+python bench/runners/netlib_infeasible.py --time-limit 60 --solver-option algorithm=simplex   # and dual-simplex, pdhg
+```
+
 ---
 
 ## 4. Comparison against an established solver
