@@ -807,6 +807,20 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"qp_halpern",
+                 OptionType::Bool,
+                 false,
+                 "Halpern restarts and PID primal weight for the first-order QP engine "
+                 "on CPU and GPU (#493): the Halpern anchor term added to the "
+                 "Condat-Vu step; Q x computed once per outer iteration (SpMV or "
+                 "cuSPARSE on GPU); PID controller updates sigma each restart. "
+                 "CURRENTLY A STUB: qp_halpern_step() returns false immediately. "
+                 "Default OFF; enable after Maros-Meszaros A/B once implemented. "
+                 "References: Lu & Yang PDQP, arXiv:2311.07710; "
+                 "HPR-QP, arXiv:2507.02470; PDHCG-II, arXiv:2602.23967.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"ranging",
                  OptionType::Bool,
                  false,
