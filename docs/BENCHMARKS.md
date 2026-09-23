@@ -253,42 +253,20 @@ Coverage: this run used **89 of the 89 instances** Netlib publishes an optimal v
 - worst relative error against a published optimum: **5.79e-07**
 - **failed: `80bau3b`, `dfl001`, `e226`, `ganges`, `greenbea`, `greenbeb`, `nesm`, `pilot`, `scrs8`** — kept in the table on purpose
 
-**`pilot87` passes this table (1.2e-07 against Netlib's own README value) and is further from the truth than that (#548).** Netlib's published README value for `pilot87` is itself off: Koch's exact rational recomputation (ZIB-Report 03-05, 2003; *Operations Research Letters* 32, 2004) and an independent 1e-12 solve tabulated by Hager both give 301.71034733311..., not the README's 301.71072827. Against Koch's value, our answer (301.71069145891846, `bench/results/netlib-full-adb37bb.csv`) is **1.14e-6 relative** away - inside the README's own error, so the table above genuinely passes, but it is not the 1e-6 pass against the true optimum it looks like.
-
-Reproduced at `d709281` (`./build/sankhya solve data/netlib/pilot87.mps`, default options, 84.6s, `simplex-dual+primal`) and independently re-checked (`tools/verify_solution.py`, which shares no code with the solver):
-
-    primal_infeasibility               3.830e-12   (essentially exact)
-    dual_infeasibility                 6.786e-08   (under the 1e-7 tolerance - "optimal" is correct by policy)
-    complementarity_violation          6.781e-15   (essentially exact)
-    residual_before/after refinement   6.440e-06 -> 7.907e-14  (2 refinement steps)
-
-    verify_solution.py:
-      dual feasibility (columns)  worst 6.786e-08 (6.786e-08 relative) on CPCSU04
-      strong duality               primal 3.017106914589e+02  dual 3.017103757082e+02
-                                    gap 3.158e-04 (relative 1.047e-06),
-                                    3.267e-04 of it from per-item violations accepted above
-
-The verifier's own gap accounting names the cause directly: essentially the ENTIRE 3.158e-04
-absolute gap (matching the issue's 3.4e-4 to the same order) is attributed to accepted
-per-item violations, and the dual-feasibility check's worst offender is a single column,
-`CPCSU04`, violated by 6.786e-08 - the same number as the solver's own reported
-`dual_infeasibility`. So this is attribution #3 from the issue's own list: **a dual that is
-not quite feasible**, not a slightly-infeasible primal basis (primal residual is 12 orders of
-magnitude under tolerance) and not a relaxed-tolerance unscaled retry (none ran; this is the
-direct scaled solve, `dual` handing to `primal` partway through per the algorithm field, and
-finishing cleanly). `CPCSU04`'s reduced-cost violation sits at 6.8e-8, comfortably under the
-project's 1e-7 dual feasibility tolerance, so nothing downstream -
-`reconcile_status_with_measurement` in `src/core/solve.cpp`, the independent verifier - has
-any measured reason to doubt this vertex. What turns a 6.8e-8 violation on ONE column into a
-3.4e-4 objective gap is `pilot87`'s own scale: it is a badly-conditioned model (large
-coefficient and bound magnitudes throughout, the same family of instance `grow7`'s
-doubled-precision-defeating scale documents elsewhere in this project) where an absolute
-reduced-cost tolerance is not the same statement as a relative one on a large-magnitude
-column - but the vertex CHOICE this basis represents (an LP optimum is defined by which
-vertex, not only by how feasible it is) is not something a tolerance on the current vertex's
-own residuals can see past.
-
-**Not fixed here, and not attempted as a tolerance change**: tightening `dual_feasibility_tolerance` globally to chase this one instance is exactly the move CLAUDE.md's evidence rules warn against ("do not 'fix' it by loosening a tolerance without... numerical justification") in the other direction - a blind *tightening* with no measurement of what it costs elsewhere would be the same mistake, and could just as easily turn a currently-correct `optimal` on some other instance into a spurious `feasible` for the same reason `CPCSU04` is accepted here. The honest fix is the one the issue itself names: **#521** (exact rational LP via iterative refinement) removes this entire class of error by construction. `verify_solution.py` already checks the duality gap - step 3's question is answered: it does check it, relative to the objective, and this instance still passes because the *reduced-cost* violation the gap is built from is itself within tolerance.
+**`pilot87` passes this table and is 1.1e-6 from the exact optimum (#548).** The table
+grades against Netlib's own readme value, 301.71072827; Koch's exact rational
+recomputation (ZIB-Report 03-05, 2003) gives 301.710347333, and ours, 301.71069146, is
+1.2e-7 from the readme and 1.1e-6 from the exact value. Reproduced on `main` at
+`d709281` (`sankhya solve data/netlib/pilot87.mps`, default options, `simplex-dual+primal`)
+and re-checked by `tools/verify_solution.py`, which shares no code with the solver: primal
+infeasibility 3.8e-12, complementarity 6.8e-15, and one column, `CPCSU04`, with a
+reduced-cost violation of 6.786e-08 - under the 1e-7 dual feasibility tolerance, so the
+status is `optimal` by policy - which the verifier's gap accounting names as the source of
+essentially the whole 3.2e-4 absolute duality gap. So the attribution is a dual that is
+not quite feasible on a badly scaled model, not an infeasible primal basis and not a
+relaxed unscaled retry (none ran). Not fixed here: tightening the dual tolerance to chase
+one instance is the move the evidence rules forbid without a numerical justification,
+and #548 stays open for a scale-aware reduced-cost test.
 
 ### 1d. Beyond Netlib — Mittelmann's LP set
 

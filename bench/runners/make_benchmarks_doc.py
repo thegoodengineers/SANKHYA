@@ -1751,6 +1751,21 @@ makes them the easier half of the library by construction; this is the number Ph
 ">= 95% of Netlib" exit criterion is measured against, and the one the README quotes.
 
 {full_section(full_csv)}
+**`pilot87` passes this table and is 1.1e-6 from the exact optimum (#548).** The table
+grades against Netlib's own readme value, 301.71072827; Koch's exact rational
+recomputation (ZIB-Report 03-05, 2003) gives 301.710347333, and ours, 301.71069146, is
+1.2e-7 from the readme and 1.1e-6 from the exact value. Reproduced on `main` at
+`d709281` (`sankhya solve data/netlib/pilot87.mps`, default options, `simplex-dual+primal`)
+and re-checked by `tools/verify_solution.py`, which shares no code with the solver: primal
+infeasibility 3.8e-12, complementarity 6.8e-15, and one column, `CPCSU04`, with a
+reduced-cost violation of 6.786e-08 - under the 1e-7 dual feasibility tolerance, so the
+status is `optimal` by policy - which the verifier's gap accounting names as the source of
+essentially the whole 3.2e-4 absolute duality gap. So the attribution is a dual that is
+not quite feasible on a badly scaled model, not an infeasible primal basis and not a
+relaxed unscaled retry (none ran). Not fixed here: tightening the dual tolerance to chase
+one instance is the move the evidence rules forbid without a numerical justification,
+and #548 stays open for a scale-aware reduced-cost test.
+
 ### 1d. Beyond Netlib — Mittelmann's LP set
 
 Netlib's largest instance has about 6,000 rows. PS26119 asks about "thousands to millions
