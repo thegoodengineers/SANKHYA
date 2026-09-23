@@ -75,6 +75,7 @@ Solution solve(const SolverRegistry& registry, const Model& model, const Options
   reconcile_status_with_measurement(&answer, options, logger,
                                     /*check_dual=*/problem_class == ProblemClass::kLp);
   refuse_a_non_finite_answer(&answer, logger);
+  record_why_it_stopped(&answer);
   return answer;
 }
 

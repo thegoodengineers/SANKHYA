@@ -28,8 +28,8 @@
 //
 // A SolverEngine's OWN solve() (src/solver_engine/builtin_engines.cpp) is a second, narrower
 // entry point for a caller who wants the engine directly rather than through this pipeline
-// (src/solver_engine/solver_engine_dispatch.hpp: the same status guards, no presolve, limits
-// or polish). It re-applies
+// (src/solver_engine/solver_engine_dispatch.hpp: the same presolve pipeline, resource limits,
+// out-of-memory guard and status guards; no polish, fallback, ranging or IIS). It re-applies
 // apply_deterministic_mode and certificate verification itself (the same shared functions
 // this file calls, not a re-derived copy) precisely because it does NOT go through this
 // pipeline and so cannot assume this file already did.
@@ -532,7 +532,18 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     return narrowed;
   };
 
-  const ProblemClass problem_class = classify(model);
+  // Classification and engine selection are timed as their own regions (#297), so the
+  // dispatch layer's cost is measured beside the engine's rather than assumed negligible;
+  // bench/runners/engine_dispatch.py reads them from profile_out.
+  const ProblemClass problem_class = [&] {
+    const ProfileScope timed(logger.profiler(), "classification");
+    return classify(model);
+  }();
+  // Discovery for the classes with one engine each: is a registered engine there at all.
+  const auto no_registered_engine = [&] {
+    const ProfileScope timed(logger.profiler(), "engine selection");
+    return engine::SolverRegistry::builtin().candidates(model).empty();
+  };
   logger.info("Model {}: {} rows, {} columns, {} nonzeros, {} integer columns",
               model.name.empty() ? std::string("(unnamed)") : model.name, model.num_rows(),
               model.num_cols(), model.num_nonzeros(), model.num_integer_columns());
@@ -638,8 +649,11 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       }
     }
     const bool warm_given = control != nullptr && control->has_starting_basis();
-    const engine::EngineChoice chosen =
-        engine::select(engine::SolverRegistry::builtin(), model, options, logger, warm_given);
+    const engine::EngineChoice chosen = [&] {
+      const ProfileScope timed(logger.profiler(), "engine selection");
+      return engine::select(engine::SolverRegistry::builtin(), model, options, logger,
+                            warm_given);
+    }();
     if (chosen.engine == nullptr) {
       // Not reachable for a `requested` value the check above already accepted; kept as an
       // honest report rather than an assumption for "auto", per ENGINEERING_RULES.md - an
@@ -868,7 +882,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // check, which WOULD wrongly refuse a MILP whenever `algorithm` happens to be set to an
     // LP-only engine's name (harmless today since solve() never read it for this class, but
     // exactly the silent-change B2 forbids).
-    if (engine::SolverRegistry::builtin().candidates(model).empty()) {
+    if (no_registered_engine()) {
       solution.status = SolveStatus::kNotSolved;
       solution.algorithm = "none";
       solution.message = "no registered engine supports MILP models";
@@ -915,7 +929,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
 
   if (problem_class == ProblemClass::kQp) {
     // Discovery, not selection - see the identical comment in the MILP branch above.
-    if (engine::SolverRegistry::builtin().candidates(model).empty()) {
+    if (no_registered_engine()) {
       solution.status = SolveStatus::kNotSolved;
       solution.algorithm = "none";
       solution.message = "no registered engine supports QP models";
@@ -962,7 +976,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // checked.
     //
     // Discovery, not selection - see the identical comment in the MILP branch above.
-    if (engine::SolverRegistry::builtin().candidates(model).empty()) {
+    if (no_registered_engine()) {
       solution.status = SolveStatus::kNotSolved;
       solution.algorithm = "none";
       solution.message = "no registered engine supports MIQP models";

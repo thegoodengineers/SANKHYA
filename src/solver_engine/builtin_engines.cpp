@@ -14,15 +14,18 @@
 #include "solver_engine/builtin_engines.hpp"
 
 #include <memory>
+#include <utility>
 
 #include "sankhya/certificate.hpp"
 #include "sankhya/ipm.hpp"
 #include "sankhya/mip.hpp"
 #include "sankhya/pdhg.hpp"
 #include "sankhya/qp.hpp"
+#include "sankhya/timer.hpp"
 
 #include "core/deterministic_mode.hpp"
 #include "mip/components.hpp"
+#include "simplex/crossover.hpp"
 #include "simplex/primal_simplex.hpp"
 
 #ifdef SANKHYA_ENABLE_CUDA
@@ -207,10 +210,19 @@ class IpmEngine final : public SolverEngine {
     return caps;
   }
 
+  // The crossover is run HERE, as solve()'s LP branch runs it (src/core/solve.cpp), so the
+  // basis declared above is on this wrapper's own answer: ipm::solve_ipm alone returns an
+  // interior point with no basis, and without this the flag would be true only for a caller
+  // who went through solve() (#297, found by test_solver_engine_conformance.cpp).
   [[nodiscard]] Solution solve_verified(const Model& model, const Options& options,
                                         Logger& logger, SolveControl* control) const override {
+    const Timer timer;
     const Options effective = apply_deterministic_mode(options, logger);
-    return ipm::solve_ipm(model, effective, logger, control);
+    Solution interior = ipm::solve_ipm(model, effective, logger, control);
+    if (effective.get_bool("crossover") && interior.status == SolveStatus::kOptimal) {
+      return crossover_to_vertex(model, std::move(interior), effective, logger, control, timer);
+    }
+    return interior;
   }
 };
 
@@ -253,6 +265,10 @@ class BranchAndBoundEngine final : public SolverEngine {
     caps.milp = true;
     caps.miqp = true;
     caps.supports_interrupt = true;
+    // checkpoint/resume are read inside solve_branch_and_bound itself (#287), so this wrapper
+    // honours them by forwarding the options, as solve() does. The parallel tree search
+    // declines them with a note in the log (mip_threads > 1, docs/ARCHITECTURE.md section 12).
+    caps.supports_checkpoint = true;
     caps.supports_deterministic_mode = true;
     return caps;
   }

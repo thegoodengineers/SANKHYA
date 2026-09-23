@@ -3,6 +3,8 @@
 
 #include <fmt/format.h>
 
+#include "core/status_guard.hpp"
+
 namespace sankhya::engine {
 
 ProblemClass classify(const Model& model) {
@@ -41,7 +43,11 @@ bool SolverEngine::supports(const Model& model) const {
 Solution SolverEngine::solve(const Model& model, const Options& options, Logger& logger,
                              SolveControl* control) const {
   if (!supports(model)) return unsupported_class_result(name(), model);
-  return solve_verified(model, options, logger, control);
+  Solution solution = solve_verified(model, options, logger, control);
+  // The one status mapping every engine gets without writing it: which resource ended the
+  // solve, from the status, exactly as solve() records it (#289, #297).
+  record_why_it_stopped(&solution);
+  return solution;
 }
 
 Solution unsupported_class_result(const std::string& engine_name, const Model& model) {

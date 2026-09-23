@@ -547,6 +547,7 @@ TEST(EngineListing, JsonNamesEveryRegisteredEngineWithTheFlagsItDeclares) {
     EXPECT_EQ(row["classes"]["MIQP"].get<bool>(), caps.miqp) << name;
     EXPECT_EQ(row["capabilities"]["basis"].get<bool>(), caps.supports_basis) << name;
     EXPECT_EQ(row["capabilities"]["warm_start"].get<bool>(), caps.supports_warm_start) << name;
+    EXPECT_EQ(row["capabilities"]["checkpoint"].get<bool>(), caps.supports_checkpoint) << name;
     EXPECT_EQ(row["selectable_by_algorithm"].get<bool>(),
               std::find(algorithm_names.begin(), algorithm_names.end(), name) !=
                   algorithm_names.end())

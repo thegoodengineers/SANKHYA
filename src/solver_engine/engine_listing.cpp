@@ -50,9 +50,10 @@ const char* yes(bool value) {
 }  // namespace
 
 std::string format_engines_text(const SolverRegistry& registry) {
-  constexpr const char* kRow = "{:<17} {:<12} {:<38} {:<5} {:<6} {:<5} {:<5} {:<7} {:<8}\n";
+  constexpr const char* kRow =
+      "{:<17} {:<12} {:<38} {:<5} {:<6} {:<5} {:<5} {:<9} {:<10} {:<8}\n";
   std::string out = fmt::format(kRow, "engine", "classes", "reached by", "warm", "basis",
-                                "duals", "certs", "interrupt", "determ.");
+                                "duals", "certs", "interrupt", "checkpoint", "determ.");
   for (const std::string& name : registry.names()) {
     const SolverEngine* engine = registry.find(name);
     if (engine == nullptr) continue;
@@ -60,7 +61,8 @@ std::string format_engines_text(const SolverRegistry& registry) {
     out += fmt::format(kRow, name, classes_of(caps), reached_by(registry, *engine),
                        yes(caps.supports_warm_start), yes(caps.supports_basis),
                        yes(caps.supports_duals), yes(caps.supports_certificates),
-                       yes(caps.supports_interrupt), yes(caps.supports_deterministic_mode));
+                       yes(caps.supports_interrupt), yes(caps.supports_checkpoint),
+                       yes(caps.supports_deterministic_mode));
   }
   out += "\n";
   for (const std::string& name : registry.names()) {
@@ -97,6 +99,7 @@ std::string format_engines_json(const SolverRegistry& registry) {
                            {"basis", caps.supports_basis},
                            {"certificates", caps.supports_certificates},
                            {"interrupt", caps.supports_interrupt},
+                           {"checkpoint", caps.supports_checkpoint},
                            {"deterministic_mode", caps.supports_deterministic_mode}};
     row["summary"] = engine->summary();
     row["source"] = engine->source();

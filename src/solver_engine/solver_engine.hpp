@@ -46,6 +46,12 @@ struct EngineCapabilities {
   bool supports_basis = false;
   bool supports_certificates = false;
   bool supports_interrupt = false;
+  /// Whether the engine writes its state to the `checkpoint` option's file and continues from
+  /// the `resume` option's one (#287). Only the branch and bound does: the saved state is its
+  /// open tree (src/mip/checkpoint.hpp), and the format and the checks on reading it stay
+  /// there. An engine that leaves this false never reads either option, so a checkpoint asked
+  /// of it writes nothing.
+  bool supports_checkpoint = false;
   // Whether THIS WRAPPER's solve() itself removes clock-dependent decisions and repeats
   // itself under options.deterministic=true, WITHOUT relying on solve()'s dispatcher to have
   // done it upstream. src/core/deterministic_mode.hpp (apply_deterministic_mode) is the one
@@ -105,7 +111,9 @@ class SolverEngine {
   /// supports(model) once, here, in one place for every engine, and returns
   /// unsupported_class_result() rather than calling solve_verified() when it fails. An
   /// engine handed a class outside its capabilities gets a Solution with status kNotSolved
-  /// and a message naming why, rather than guessing.
+  /// and a message naming why, rather than guessing. An answer that stopped on a limit or an
+  /// interrupt has Solution::stopped_by filled from its status here, as solve() does, so an
+  /// engine maps its own termination to a SolveStatus and nothing more.
   [[nodiscard]] Solution solve(const Model& model, const Options& options, Logger& logger,
                                SolveControl* control = nullptr) const;
 

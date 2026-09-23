@@ -171,7 +171,9 @@ LP engine for a MILP, QP or MIQP, the class's engine runs and the log and the an
 message say so rather than the request being dropped silently. Adding an engine is a
 wrapper and a registration line in `builtin_engines.cpp` and a branch in `solve()` for how
 to run it; `solve()` refuses a registered engine it has no branch for rather than running
-another under its name (#402).
+another under its name (#402). The contract around an engine - ownership, thread safety,
+status mapping, how each kind of failure surfaces, and what #297 asked for that is not built -
+is section 13; the steps for adding one are `docs/ADDING_AN_ENGINE.md`.
 
 - **Interior-point method** (#56) — built: `src/ipm/` is one branch of the LP dispatcher
   over the sparse LDLᵀ in `src/la/ldl.cpp` (#70). On its own it produces a `Solution` without
@@ -521,3 +523,151 @@ reads the pool at every node), a checkpoint or resume (the file holds one search
 `deterministic=true` (the tree varies with timing). `node_limit` can be overshot by at most one
 node per worker, because each counts a node before it checks. Root cuts, if enabled, are the
 root worker's own rows; other workers do not see them.
+
+## 13. The engine layer: what an engine is promised, and what it promises
+
+Section 5 says where an engine registers. This section is the contract around it (#297):
+who owns what, what may run at the same time, how an engine's ending becomes a status, and
+how each kind of failure reaches the caller. Every sentence here is either read off the code
+in `src/solver_engine/` and `src/core/` or held by a test in
+`tests/unit/test_solver_engine_conformance.cpp`, which runs over whatever
+`SolverRegistry::builtin()` holds, so an engine registered later is held to it without
+anyone adding a test. Adding one step by step is `docs/ADDING_AN_ENGINE.md`.
+
+**Three ways in.** `solve()` (`src/core/solve.cpp`) is the pipeline every caller uses: validate,
+classify, select through the registry, presolve, run, postsolve, certificate check, status
+guards, ranging and IIS, with the LP choreography (PDHG polished by the interior point, the
+interior point falling back to the dual simplex) that runs more than one engine for one
+request. `engine::solve()` (`src/solver_engine/solver_engine_dispatch.hpp`) is the
+registry's own: the same validation, selection, presolve pipeline, resource limits,
+out-of-memory guard and status guards, running exactly the one engine selected, without the
+choreography. `SolverEngine::solve()` is one engine on the model it is handed: the class gate,
+the engine's own answer, and `stopped_by` filled from the status - no presolve and no status
+guard, which is what the caller who reaches for it is asking for.
+
+**Lifecycle.** An engine is constructed once, when the registry is built, and is immutable
+from then on: `name()`, `capabilities()`, `summary()` and `source()` are functions of the type,
+and nothing is stored between solves. There is no configure, initialize or finalize step:
+configuration is the `Options` handed to each call, the algorithm's working state lives in that
+call, and it is released when the call returns. Every stage ends in a `Solution` with a status,
+including the ones that fail - an unsupported class, an unregistered name, an invalid model, an
+exhausted machine.
+
+**Ownership.**
+
+| What | Owned by | How the engine layer holds it |
+|---|---|---|
+| `Model` | the caller | `const Model&`, for the call only; never copied by an engine |
+| the presolved model | `run_with_presolve` (`src/core/presolve_pipeline.cpp`), for the call | handed to the engine as `const Model&`; freed when the call returns |
+| `Options` | the caller | `const Options&`; a wrapper that rewrites them (`apply_deterministic_mode`, the remaining time limit) makes its own copy |
+| `Logger`, and the `Profiler` riding on it | the caller | `Logger&`; the stream is not owned (`include/sankhya/logging.hpp`) |
+| `SolveControl` (interrupt, callback, starting basis) | the caller | an optional pointer, never stored |
+| `Solution`, its vectors, its basis and its certificates (`farkas_dual`, `primal_ray`) | the caller | returned by value; nothing in the layer keeps a reference into it |
+| engine state between solves | nobody | there is none |
+| a checkpoint file | the caller's path | written atomically by the branch and bound (`src/mip/checkpoint.hpp`) |
+| a registered engine | the registry | `shared_ptr<const SolverEngine>`; `find()` and `candidates()` hand out non-owning `const SolverEngine*`, valid while the registry lives - for `builtin()`, the process |
+
+No call transfers ownership, and no pointer the layer hands out is one the caller must free.
+
+**Thread safety.**
+
+- `SolverRegistry::builtin()` is built once by a function-local static, which the language
+  makes thread-safe, and only read afterwards. A registry a caller builds for itself is an
+  ordinary container: fill it, then share it read-only; concurrent `register_engine()` calls
+  are not safe.
+- One engine instance may solve many models, one after another or at the same time, provided
+  each concurrent call has its own `Model`, `Options`, `Logger` and `Solution`. The engines hold
+  no mutable state, and a search of `src/` for mutable statics finds only initialised-once
+  constants (`options.cpp`, `version.cpp`, `solver_registry.cpp`, `c_api.cpp`) and the C API's
+  `thread_local` error string. `EngineConcurrency.EnginesSolvingAtOnceGiveTheAnswersTheyGiveAlone`
+  runs every registered engine on its own thread at once and requires the answers they give
+  alone; CI runs it under ThreadSanitizer.
+- A `Logger` is not synchronised: one per concurrent solve. `SolveControl::interrupt()` is an
+  atomic store and is safe from another thread or a signal handler; two solves that share one
+  `SolveControl` are both interrupted by it.
+- `solve()` applies the `threads` option through `omp_set_num_threads`, which sizes the calling
+  thread's OpenMP regions. Two concurrent `solve()` calls on two threads each size their own;
+  the engines' own `solve()` does not touch it. `mip_threads` starts its workers inside the
+  call and joins them before it returns (section 12).
+
+**Status mapping.** An engine reports its ending as a `SolveStatus` (`include/sankhya/model.hpp`)
+and nothing else is asked of it: `SolverEngine::solve()`, `engine::solve()` and `solve()` all
+fill `Solution::stopped_by` from that status through one function,
+`record_why_it_stopped` (`src/core/status_guard.hpp`), keeping a reason the engine set itself
+(the branch and bound does, because a limit hit with an incumbent reports `kFeasible`).
+
+| The engine ended because | Status | `stopped_by` |
+|---|---|---|
+| an optimum met the project's tolerances (a simplex basis, a KKT test, a closed gap) | `kOptimal` | none |
+| a point met a first-order method's request but not the project's standard, or a limit fell holding a MILP incumbent | `kFeasible` | none, or the limit |
+| infeasible, unbounded, or one of the two without telling which | `kInfeasible`, `kUnbounded`, `kInfeasibleOrUnbounded` | none |
+| the clock, the iteration count, the node count | `kTimeLimit`, `kIterationLimit`, `kNodeLimit` | `kTime`, `kIterations`, `kNodes` |
+| the caller | `kInterrupted` | `kInterrupt` |
+| a number that is not a number, or a factorization that failed | `kNumericalError` | none |
+
+The two guards that downgrade a claim the measured point does not support
+(`reconcile_status_with_measurement`, `refuse_a_non_finite_answer`) run on `solve()` and
+`engine::solve()`, not inside an engine. `EngineResources.*` holds every engine to the limit
+rows of the table through its own `solve()`: a zero iteration or node budget, a zero time
+limit and an interrupt raised before the first safe point.
+
+**How each kind of failure reaches the caller.** Nothing in `src/` throws, and nothing exits
+the process for a solver error; the one `std::abort` is an option name our own code misspells
+in a typed accessor (`src/util/options.cpp`), which is a programming error, not an input.
+
+| Kind | Where it is caught | What the caller sees |
+|---|---|---|
+| configuration: an unknown option, a value of the wrong type, out of range or not among its choices | `Options`, when the value is set from text (the CLI's `--option`, the C API), before any solve starts | refused with the reason (`src/util/options.cpp`) |
+| configuration: an `algorithm` no engine answers to, set in code | `solve()` before any engine; `engine::select()` | `kNotSolved`, the message naming the engines that exist; `EngineChoice::rule` is `unregistered`, `unsupported` or `no-candidate` |
+| configuration: an `algorithm` for a MILP, QP or MIQP that is not the class's engine | `solve()` | the class's engine runs; a warning and a note on the message (#408); `engine::select()` refuses it instead |
+| configuration: a negative limit, `--gpu` without PDHG or without CUDA | option reading (section 8), `solve()` | a warning naming the value; the solve runs without it |
+| model | `Model::validate()`, before any engine | `kModelError` with the reason |
+| numerical | the engine; the non-finite guard | `kNumericalError`, or a claim downgraded by the measurement guard |
+| resource | `ResourceLimits` and `StopController` in every engine (section 8) | a limit status and `stopped_by` |
+| memory | `run_engine_guarded` catching `std::bad_alloc` | `kNumericalError`, the message naming the engine and the budget to lower |
+| backend | the GPU guard (`gpu::gpu_pdhg_is_safe`) | CPU PDHG runs, with the reason in the log |
+
+What this is not: a status per error class. A configuration error and an out-of-memory stop
+are told apart by their message, not by their status, because `SolveStatus` is the frozen
+interface of section 3 and the C API, the bindings and the stats JSON all read it; a caller
+that needs the distinction before running reads `engine::select()`'s rule.
+
+**Capabilities, and the test behind each.** `sankhya engines` prints them from
+`capabilities()` (`--format json` for scripts). A flag set true is one the answer backs, and
+`EngineCapabilities.*` checks each through the engine's own `solve()`: declared duals are a
+finite, non-zero row dual on afiro; a declared basis has one basic entry per row (which is why
+the interior point's wrapper runs the crossover itself, as `solve()` does - without it the
+flag was true only for a caller who went through `solve()`); declared certificates are a Farkas
+vector `farkas_proves_infeasible` accepts; a declared checkpoint stops, resumes and reaches the
+uninterrupted optimum (`EngineCheckpoint.*`), and an engine that does not declare one writes
+nothing to the file it is handed. `supports_checkpoint` is the branch and bound's alone (#287).
+Quadratic constraints and nonlinear models are not flags, because no engine takes either and a
+field that can only be false describes nothing (section 9 is the nonlinear model layer).
+
+**Profiling.** `classification` and `engine selection` are profiler regions under `solve`, beside
+`presolve`, `engine`, `postsolve` and `verification`, so the dispatch layer's cost is measured
+rather than assumed. The first `engine selection` in a process includes building the registry.
+`bench/runners/engine_dispatch.py` reads them from `profile_out` over LP, a generated sparse LP,
+MILP, QP, MIQP and CPU PDHG (CUDA PDHG when the binary has it, and no GPU row when it does not),
+and puts every answer through `tools/verify_solution.py`.
+
+**What #297 asked for that is not here, and why.**
+
+- *No `ExecutionContext` or `SolverInput` type.* The context is three arguments - `Options`, the
+  `Logger` with its profiler, the `SolveControl` - and the input is the `Model` plus the
+  starting basis on the `SolveControl` (#218). Wrapping them in a struct would change every
+  engine's signature for no behaviour.
+- *No per-engine `statistics()` or `configuration()`.* Statistics are the `Solution`'s effort
+  fields and the profiler's counters; configuration is the one option table, whose names, types
+  and choices are checked before a solve starts (`OptionsAndRegistry.*` holds its `algorithm`
+  list to the registry).
+- *No `PDHGBackend` interface.* The CPU engine (`src/pdhg/`) and the CUDA one (`src/gpu/`) are
+  separate files that share the termination test (`src/pdhg/pdhg_evaluate.hpp`) and are chosen
+  by the selector; a backend class over them would be a rewrite of working, measured code.
+- *No relaxation-engine interface inside the branch and bound.* The node relaxation is one
+  function that runs the warm-started dual simplex, the primal simplex (`mip_node_engine`) or,
+  for an MIQP, the convex QP engine (`src/mip/branch_and_bound_internal.hpp`); MIQP reuses the
+  whole tree rather than copying it. `mip::describe_components` reports the composition.
+- *No hardware-context object.* The selector probes the device through `gpu::device_available`
+  and the guard through `gpu::gpu_pdhg_is_safe`; no engine detects hardware on its own.
+- *No dynamic plugins*, which #297 puts out of scope.

@@ -64,6 +64,14 @@ std::string engine_name_at_the_catch(Name&& name) {
   }
 }
 
+/// Fill Solution::stopped_by from the status when the engine named no reason itself (#289):
+/// kTimeLimit is the clock, kIterationLimit the iteration count, kNodeLimit the node count,
+/// kInterrupted the caller. A reason the engine did set is kept - the branch and bound sets
+/// it because a limit hit holding an incumbent reports kFeasible. Defined in
+/// src/core/solve.cpp; declared here so SolverEngine::solve() and the registry's entry point
+/// apply the same mapping solve() does (#297).
+void record_why_it_stopped(Solution* solution);
+
 /// Run an engine and turn an out-of-memory condition into a status (#246).
 ///
 /// Every other failure in this project is a SolveStatus with a message and a stats blob; a
