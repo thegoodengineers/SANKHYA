@@ -99,9 +99,24 @@ def SANKHYA(problem: "cp.Problem", **options: object) -> float:
                     array[flat_index] = values[column]
                 variable.save_value(array)
 
+    else:
+        # No point was reported (a limit before any incumbent, #562): the zeros the
+        # coefficient probing left in the variables are not values anyone computed.
+        for variable in columns:
+            variable.value = None
+
     problem._status = _STATUS_TO_CVXPY.get(result.status, cp.settings.SOLVER_ERROR)
-    problem._value = result.objective if result.claims_a_point else (
-        -np.inf if problem.objective.NAME == "maximize" else np.inf)
+    if result.claims_a_point:
+        problem._value = result.objective
+    elif result.status == "infeasible":
+        # CVXPY's own convention for an infeasible problem: the worst value of the sense.
+        problem._value = -np.inf if problem.objective.NAME == "maximize" else np.inf
+    elif result.status == "unbounded":
+        problem._value = np.inf if problem.objective.NAME == "maximize" else -np.inf
+    else:
+        # A limit or an error with nothing in hand is not a value, and CVXPY reads None as
+        # exactly that; +-inf here would read as a verdict about the problem.
+        problem._value = None
     return problem._value
 
 
