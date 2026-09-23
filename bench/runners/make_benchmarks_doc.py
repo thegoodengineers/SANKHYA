@@ -128,6 +128,10 @@ FAILURE_CLASSES = [
     ("violate dual feasibility", "duals miss feasibility", "#52"),
     ("iteration limit", "hit the iteration limit", None),
     ("time limit", "hit the time limit", None),
+    # Last, so the specific checks above name the cause first. What is left is our own
+    # status check in solve.cpp withdrawing an optimality claim for a reason not listed
+    # above (e.g. complementarity), which otherwise reads as a bare `feasible` (#157, #530).
+    ("engine reported optimal but", "optimality claim withdrawn by our own check", "#157"),
 ]
 
 
@@ -414,6 +418,107 @@ def full_section(path: Path | None) -> str:
             "",
         ])
     return netlib_section(path)
+
+
+KENNINGTON_ENGINES = ("dual-simplex", "simplex", "pdhg", "ipm")
+
+
+def kennington_section(path: Path | None, engines: dict[str, Path | None]) -> str:
+    """The sixteen Kennington LPs (#530), under the rules of the Netlib full set.
+
+    Same CSV as netlib.py, so the same pass rule and the same failure classes: optimal, within
+    1e-6 of the readme's published optimum, and not rejected by tools/verify_solution.py.
+    Every failure is grouped by the solver's own reason and kept in the table. `engines`
+    holds the per-engine option runs, one line each with their failures named.
+    """
+    if path is None:
+        return chr(10).join([
+            "Not yet run at this commit. Reproduce with:",
+            "",
+            "```",
+            "python bench/runners/fetch_kennington.py",
+            "python bench/runners/kennington.py --time-limit 600",
+            "python bench/runners/kennington.py --time-limit 600 "
+            "--solver-option algorithm=pdhg   # and simplex, dual-simplex, ipm",
+            "```",
+            "",
+        ])
+    rows = read_csv(path)
+    if not rows:
+        return "No Kennington results recorded yet." + chr(10)
+    commit = rows[0].get("git_commit", "unknown")
+    machine = rows[0].get("machine", "unknown")
+    passed = [r for r in rows if r.get("passed") == "1"]
+    failed = [r for r in rows if r.get("passed") != "1"]
+    times = [t for t in (as_float(r, "wall_seconds") for r in passed) if t is not None]
+    errors = [e for e in (as_float(r, "relative_gap") for r in passed) if e is not None]
+    out = [
+        f"Source CSV: `bench/results/{path.name}`  ",
+        f"Commit `{commit}` · machine `{machine}` · generated {rows[0].get('timestamp_utc', '')}",
+        "",
+        *([f"**This run is stamped `{commit}`: it came from a modified tree and is not "
+           f"evidence.** Re-run on a clean checkout of a `main` commit.", ""]
+          if "-dirty" in commit else []),
+        f"**{len(passed)} of {len(rows)}** matched the readme's published optimum to a "
+        f"relative 1e-6 **and** passed independent verification. The published values are "
+        f"Vanderbei's ALPO results printed to eight significant figures, so rounding moves "
+        f"them by at most 5e-8 relative, well inside the tolerance.",
+        "",
+        *([f"Coverage: {len(rows)} of the 16 instances in the readme's table; the rest were "
+           f"not run.", ""] if len(rows) < 16 else []),
+        *failure_breakdown(failed),
+        "| instance | rows | cols | status | our objective | published optimum | rel. error |"
+        " iters | time (s) | verified |",
+        "|---|---:|---:|---|---:|---:|---:|---:|---:|:--:|",
+    ]
+    for row in sorted(rows, key=lambda r: r["instance"]):
+        ours = as_float(row, "our_objective")
+        published = as_float(row, "published_objective")
+        error = as_float(row, "relative_gap")
+        seconds = as_float(row, "wall_seconds")
+        mark = {"1": "yes", "0": "**NO**"}.get(row.get("independently_verified", ""), "-")
+        out.append(
+            f"| `{row['instance']}` | {row.get('rows', '')} | {row.get('columns', '')} "
+            f"| {row.get('status', '')} "
+            f"| {'-' if ours is None else f'{ours:.10e}'} "
+            f"| {'-' if published is None else f'{published:.7e}'} "
+            f"| {'-' if error is None else f'{error:.1e}'} "
+            f"| {row.get('iterations', '')} "
+            f"| {'-' if seconds is None else f'{seconds:.3f}'} | {mark} |")
+    out += ["", "**Summary**", ""]
+    if times:
+        out.append(f"- shifted geometric mean solve time over the passed instances (shift "
+                   f"{SHIFT_SECONDS:g}s): **{shifted_geometric_mean(times):.3f}s**")
+    if errors:
+        out.append(f"- worst relative error against a published optimum: "
+                   f"**{max(errors):.2e}**")
+    if failed:
+        out.append("- **failed: " + ", ".join(f"`{r['instance']}`" for r in failed)
+                   + "**, kept in the table on purpose")
+    else:
+        out.append("- no failures on this set")
+    out.append("")
+    present = [(engine, p) for engine, p in engines.items() if p is not None]
+    if present:
+        out += ["Per engine, each from its own option run:", ""]
+        for engine, engine_path in present:
+            engine_rows = read_csv(engine_path)
+            causes: dict[str, list[str]] = {}
+            for row in engine_rows:
+                if row.get("passed") != "1":
+                    causes.setdefault(classify_failure(row), []).append(row["instance"])
+            ok = len(engine_rows) - sum(len(names) for names in causes.values())
+            named = "; ".join(f"{reason}: {', '.join(sorted(names))}"
+                              for reason, names in sorted(causes.items(),
+                                                          key=lambda kv: (-len(kv[1]), kv[0])))
+            out.append(f"- `algorithm={engine}` (`{engine_path.name}`): **{ok} of "
+                       f"{len(engine_rows)}**" + (f"; not passed, by cause: {named}" if named
+                                                  else ""))
+        out.append("")
+    else:
+        out += ["No per-engine option run is committed yet (`--solver-option "
+                "algorithm=dual-simplex`, `simplex`, `pdhg`, `ipm`).", ""]
+    return chr(10).join(out)
 
 
 def mittelmann_section(path: Path | None) -> str:
@@ -2202,6 +2307,12 @@ def main() -> int:
     small_csv = newest("netlib-small-*.csv")
     medium_csv = newest("netlib-medium-*.csv")
     full_csv = newest("netlib-full-*.csv")
+    # The full sixteen when there is such a run, else the small set (#530). Option runs carry
+    # `algorithm=` in solver_options: latest() skips them and newest_option_run() picks them.
+    kennington_csv = newest("kennington-full-*.csv") or newest("kennington-small-*.csv")
+    kennington_engine_csvs = {engine: newest_option_run("kennington-*.csv",
+                                                        f"algorithm={engine}")
+                              for engine in KENNINGTON_ENGINES}
     milp_csv = newest("miplib-*.csv", prefix="miplib")
     milp_long_csv = newest_named("miplib-600s-*.csv")
     pdhg_csv = newest("pdhg-*.csv")
@@ -2304,6 +2415,14 @@ relaxed unscaled retry (none ran). Not fixed here: tightening the dual tolerance
 one instance is the move the evidence rules forbid without a numerical justification,
 and #548 stays open for a scale-aware reduced-cost test.
 
+### 1c.1 The Kennington set - the next rung
+
+The sixteen Kennington LPs (the `cre`, `ken`, `osa` and `pds` families, Carolan et al.,
+Operations Research 38(2), 1990), larger and sparser than the core Netlib set. Fetched and
+hashed by `bench/runners/fetch_kennington.py`, which parses the published optima from the
+directory's own readme; run by `bench/runners/kennington.py` under the full-set rules.
+
+{kennington_section(kennington_csv, kennington_engine_csvs)}
 ### 1d. Beyond Netlib — Mittelmann's LP set
 
 Netlib's largest instance has about 6,000 rows. PS26119 asks about "thousands to millions

@@ -42,3 +42,9 @@ data/maros-meszaros/*.qps
 data/maros-meszaros/*.ZIP
 data/maros-meszaros/*.part
 data/maros-meszaros/00README.QP
+
+# The Kennington LPs (#530) are fetched by bench/runners/fetch_kennington.py; the manifest
+# (reference.json: source URL, sha256 of every download and decoded file, published optima)
+# is committed, the decoded MPS files (173 MB for all sixteen) are not.
+data/kennington/*.mps
+data/kennington/*.partial
