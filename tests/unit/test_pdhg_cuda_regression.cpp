@@ -7,11 +7,14 @@
 //
 //   |obj_cpu - obj_cuda| <= kAgreementTol * max(1, |obj_cpu|, |obj_cuda|)
 //
-// where kAgreementTol = 2e-9.  Tolerance rationale: GPU floating-point execution may
-// reorder operations relative to CPU, producing differences at the 1e-13..1e-15 level
-// (well within the 1e-9 budget); a genuine numerical regression produces much larger
-// divergence and is caught here.  The threshold is documented here, not scattered across
-// individual assertions, so it can be reviewed and tightened in one place.
+// where kAgreementTol = 1e-8, the stopping tolerance both runs are asked for.  Tolerance
+// rationale: the CUDA reductions are not bitwise reproducible (#451), so the two runs do
+// NOT take the same iterates on a real card - stocfor1 on an L4 differed by 1.8e-9 (#456)
+// where the same binary on the CPU differs from itself by 1e-13..1e-15.  Two answers that
+// each stopped at 1e-8 cannot be held to agree tighter than 1e-8; that is the bound, and
+// it is a bound with a reason, not a number fitted to the largest difference seen.  A
+// genuine numerical regression produces divergence orders above it and is caught here.
+// The threshold is documented here, not scattered across individual assertions.
 //
 // When the CUDA backend is not compiled in (gpu=true falls back to pdhg-cpu), the test
 // calls GTEST_SKIP so that "skipped" is distinguishable from "passed" in CI output.
@@ -37,10 +40,10 @@ std::string repository_path(const char* relative) {
       .string();
 }
 
-// Scale-aware objective comparison.  Documented in the file header.
-// 2e-9: stocfor1 on a real L4 GPU produces a 1.8e-9 relative difference due to
-// nondeterministic atomicAdd reductions (#456); 1e-9 was too tight.
-constexpr double kAgreementTol = 2e-9;
+// Scale-aware objective comparison, at the stopping tolerance.  Documented in the file
+// header: on a real card the two trajectories differ (#451, #456), so the agreement the
+// test can honestly demand is the tolerance both runs stopped at.
+constexpr double kAgreementTol = 1e-8;
 
 Options pdhg_regression_options(bool gpu) {
   Options o;
@@ -51,13 +54,11 @@ Options pdhg_regression_options(bool gpu) {
   // different code path.  Disabled here so the comparison is purely between the two
   // first-order engines.
   o.set_bool("pdhg_polish", false);
-  // 1e-8: the tighter of the two project-standard tolerances (ENGINEERING_RULES.md). Note
-  // that kAgreementTol = 1e-9 is TIGHTER than this stopping tolerance, not looser: the two
-  // runs are expected to take the same iterates (same restarts, same step sizes) and differ
-  // only by floating-point reordering inside each mat-vec, so their final objectives should
-  // agree far below the stopping tolerance. If the CUDA path ever takes a different
-  // trajectory (a restart decided differently by a 1-ulp change), this test says so, and
-  // the right response is to understand why, not to loosen kAgreementTol.
+  // 1e-8: the tighter of the two project-standard tolerances (ENGINEERING_RULES.md), and
+  // the bound kAgreementTol is set to.  This file once held the two runs to 1e-9 on the
+  // premise that they take the same iterates; a real L4 showed they do not (#456), because
+  // the device reductions are not bitwise reproducible (#451), and the premise, not the
+  // engine, is what gave way.
   o.set_double("pdhg_tolerance", 1e-8);
   // Netlib small instances need up to ~200k iterations at 1e-4 (adlittle, test_pdhg.cpp).
   // At 1e-8 the count is higher; 1e6 is the budget here.
@@ -78,7 +79,7 @@ const std::vector<const char*> kNetlibInstances = {
 
 // =========================================================================================
 
-TEST(PdhgCudaRegression, NineNetlibInstancesAgreeToOnePart1e9) {
+TEST(PdhgCudaRegression, NineNetlibInstancesAgreeAtTheStoppingTolerance) {
   // --- CUDA availability probe ---
   // Solve the smallest committed instance (afiro) with gpu=true.  If the engine falls back
   // to the CPU path the algorithm field is "pdhg-cpu" and the test skips rather than fails,
@@ -113,15 +114,32 @@ TEST(PdhgCudaRegression, NineNetlibInstancesAgreeToOnePart1e9) {
     const Solution gpu = solve(model, pdhg_regression_options(/*gpu=*/true));
 
     const bool cpu_converged = cpu.status == SolveStatus::kOptimal;
-    // GPU may report kFeasible on real hardware: nondeterministic atomicAdd reductions
-    // can leave complementarity just above threshold (#456).
-    const bool gpu_converged = gpu.status == SolveStatus::kOptimal ||
-                               gpu.status == SolveStatus::kFeasible;
+    // On a real card the GPU may come back `feasible` where the CPU says `optimal`: the
+    // status guard measured its worst complementarity product a hair above 1e-6 (adlittle
+    // on an L4: 1.347e-6, #456), which the nondeterministic reductions explain (#451).  It is
+    // accepted here ONLY through the same objective agreement an optimal answer must pass
+    // below; it is not a free pass, and the log names it.
+    const bool gpu_converged =
+        gpu.status == SolveStatus::kOptimal || gpu.status == SolveStatus::kFeasible;
+    if (gpu.status == SolveStatus::kFeasible) {
+      std::cout << name << ": CUDA reports feasible, not optimal (" << gpu.message
+                << "); held to the objective agreement below\n";
+    }
 
-    // When both engines fail to converge it is a hard instance at 1e-8, not a GPU defect.
-    // Skip without counting as a failure (#456, e.g. share2b hits 1M iterations on both).
+    // Both engines stopped short (share2b hits the 1e6-iteration budget on both at 1e-8):
+    // that is agreement in failure, asserted as such - the GPU must reproduce the CPU's
+    // status, not vanish from the count.
     if (!cpu_converged && !gpu_converged) {
-      std::cout << name << ": both engines did not converge (hard instance) — skipping\n";
+      EXPECT_EQ(cpu.status, gpu.status)
+          << name << ": CPU " << to_string(cpu.status) << " (" << cpu.message << ") but CUDA "
+          << to_string(gpu.status) << " (" << gpu.message << ")";
+      std::cout << name << ": neither engine converged at 1e-8 inside the budget (CPU "
+                << to_string(cpu.status) << ", CUDA " << to_string(gpu.status)
+                << "); agreement in failure\n";
+      if (cpu.status == gpu.status)
+        ++agreed;
+      else
+        ++failed;
       continue;
     }
 
