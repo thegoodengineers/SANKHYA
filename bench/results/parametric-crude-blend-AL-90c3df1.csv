@@ -1,0 +1,4 @@
+parameter,objective,status,change
+0.0,148.88888888888894,optimal,initial basis
+1.0666666666666669,159.5555555555556,optimal,no basis change (objective still moves linearly)
+5.0,348.017837837838,optimal,"entered: AL, MU; left: BN"
