@@ -43,6 +43,7 @@
 #pragma once
 
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "la/lu.hpp"
@@ -136,9 +137,25 @@ struct KnapsackCoverCut {
 ///     sum(coeff[j] * x_j) <= rhs
 ///
 /// The generator guarantees that this cut is mathematically valid. No filtering is applied.
+/// The separator a cut came from (#496). The filter's verdicts are tallied per family, so
+/// "0 root cuts accepted" can be read as which family produced candidates and which
+/// test refused them, rather than guessed at.
+enum class CutFamily {
+  kUnknown,
+  kGomory,
+  kKnapsackCover,
+  kMir,
+  kFlowCover,
+  kClique,
+  kZeroHalf
+};
+
+[[nodiscard]] const char* cut_family_name(CutFamily family) noexcept;
+
 struct Cut {
   std::vector<double> coeff;  ///< per-column coefficient (indexed by model.num_cols())
   double rhs = 0.0;           ///< right-hand side
+  CutFamily family = CutFamily::kUnknown;  ///< which separator built it (#496)
 };
 
 /// Try to generate a Gomory mixed-integer cut from a specific basis row.
@@ -206,6 +223,13 @@ struct FilteredCut {
 /// their original mathematical representation.
 [[nodiscard]] std::vector<FilteredCut> filter_and_deduplicate_cuts(
     const Model& model, const Solution& root_solution, const std::vector<Cut>& candidates);
+
+[[nodiscard]] const char* cut_filter_reason_name(CutFilterReason reason) noexcept;
+
+/// The filter's verdicts per family and reason, in one line a reader and a CSV can carry
+/// (#496): `gomory 12: 3 accepted, 9 insufficient_violation; mir 4: 4 too_dense`. Families
+/// with no candidate are left out; an empty candidate set reads `no candidates`.
+[[nodiscard]] std::string describe_cut_filter(const std::vector<FilteredCut>& filtered);
 
 /// Round the bounds of rows whose activity must be integral.
 ///

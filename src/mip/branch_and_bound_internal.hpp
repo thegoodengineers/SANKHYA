@@ -538,6 +538,7 @@ class BranchAndBound {
   /// The root bounds and the cut counts onto the answer (#221).
   void report_root(Solution* solution) const {
     solution->cuts_applied = root_cuts_applied_ + tree_cuts_applied_;
+    solution->cut_filter_report = cut_filter_report_;
     if (std::isnan(root_bound_internal_)) return;
     solution->root_bound = reported(root_bound_internal_);
     solution->root_bound_after_cuts = reported(root_bound_after_cuts_internal_);
@@ -650,6 +651,7 @@ class BranchAndBound {
   double root_bound_internal_ = std::numeric_limits<double>::quiet_NaN();
   double root_bound_after_cuts_internal_ = std::numeric_limits<double>::quiet_NaN();
   Count root_cuts_applied_ = 0;
+  std::string cut_filter_report_;  ///< the root filter's verdicts per family and reason (#496)
   /// Cut rows below the root (#221): the option-driven depth cap and per-round row cap,
   /// the column bounds every tree cut is built on (valid everywhere), the pool of rows
   /// appended so far starting at working_ row first_cut_row_, and their ageing state.

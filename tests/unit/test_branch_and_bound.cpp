@@ -137,6 +137,8 @@ TEST(RootCuts, TheRootBoundBeforeAndAfterCutsIsReported) {
   const Solution off = solve(model, opt_off);
   ASSERT_EQ(off.status, SolveStatus::kOptimal);
   EXPECT_EQ(off.cuts_applied, 0);
+  EXPECT_TRUE(off.cut_filter_report.empty())
+      << "no root round, no report: " << off.cut_filter_report;
   ASSERT_TRUE(std::isfinite(off.root_bound));
   EXPECT_DOUBLE_EQ(off.root_bound, off.root_bound_after_cuts) << "no cuts, no movement";
   EXPECT_LE(off.root_bound, off.objective + 1e-9);
@@ -144,6 +146,19 @@ TEST(RootCuts, TheRootBoundBeforeAndAfterCutsIsReported) {
   const Solution on = solve(model, opt_on);
   ASSERT_EQ(on.status, SolveStatus::kOptimal);
   EXPECT_GT(on.cuts_applied, 0);
+  // The report names the family that produced the accepted cuts (#496): this is a single
+  // knapsack row, so the cover separator is the one that must have fired.
+  EXPECT_NE(on.cut_filter_report.find("cover"), std::string::npos) << on.cut_filter_report;
+  EXPECT_NE(on.cut_filter_report.find("accepted"), std::string::npos) << on.cut_filter_report;
+
+  // Through presolve and postsolve too: postsolve copies the effort fields one by one and
+  // the first version of this dropped the report there while the log line was right (#496).
+  Options opt_presolved = opt_on;
+  opt_presolved.set_bool("presolve", true);
+  const Solution presolved = solve(model, opt_presolved);
+  ASSERT_EQ(presolved.status, SolveStatus::kOptimal);
+  EXPECT_EQ(presolved.cut_filter_report.empty(), presolved.cuts_applied == 0)
+      << presolved.cut_filter_report;
   EXPECT_DOUBLE_EQ(on.root_bound, off.root_bound) << "the root LP is the same either way";
   EXPECT_GE(on.root_bound_after_cuts, on.root_bound - 1e-9);
   EXPECT_LE(on.root_bound_after_cuts, on.objective + 1e-9);

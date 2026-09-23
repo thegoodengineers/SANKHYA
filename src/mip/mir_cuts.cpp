@@ -156,6 +156,7 @@ std::optional<Cut> separate_from_base(const Model& model, const Solution& soluti
     if (violation <= best_violation) continue;
     // Back to x: y = x - lo  or  y = hi - x, with the constants moved to the right.
     Cut cut;
+    cut.family = CutFamily::kMir;
     cut.coeff.assign(static_cast<std::size_t>(n), 0.0);
     double rhs_x = cut_rhs;
     for (std::size_t k = 0; k < rounded.size(); ++k) {

@@ -1477,6 +1477,7 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.polish_iterations = reduced.polish_iterations;
   solution.nodes = reduced.nodes;
   solution.cuts_applied = reduced.cuts_applied;
+  solution.cut_filter_report = reduced.cut_filter_report;
   solution.restarts = reduced.restarts;
   solution.reduced_cost_fixings = reduced.reduced_cost_fixings;
   solution.objective_branches = reduced.objective_branches;

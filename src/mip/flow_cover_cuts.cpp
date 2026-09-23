@@ -219,6 +219,7 @@ std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& so
 
       // THE INEQUALITY, in the model's own columns, and its two sides at the LP point.
       Cut cut;
+      cut.family = CutFamily::kFlowCover;
       cut.coeff.assign(static_cast<std::size_t>(n), 0.0);
       double rhs = b;
       double lhs_star = 0.0;

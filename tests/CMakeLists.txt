@@ -66,6 +66,7 @@ add_executable(sankhya_tests
   unit/test_symmetry.cpp
   unit/test_presolve_implied_free.cpp
   unit/test_cut_selection.cpp
+  unit/test_cut_filter_report.cpp
   unit/test_presolve_parallel_rows.cpp
   unit/test_dual_steepest_edge.cpp
   unit/test_objective_branching.cpp

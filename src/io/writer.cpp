@@ -412,6 +412,7 @@ bool write_stats_json(const std::string& path, const Model& model, const Solutio
       {"residual_after_refinement", json_number(solution.residual_after_refinement)},
       {"nodes", solution.nodes},
       {"cuts_applied", solution.cuts_applied},
+      {"cut_filter", solution.cut_filter_report},
       {"restarts", solution.restarts},
       {"reduced_cost_fixings", solution.reduced_cost_fixings},
       {"objective_branches", solution.objective_branches},

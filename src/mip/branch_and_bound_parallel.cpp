@@ -577,6 +577,7 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   solution.root_bound = root_answer.root_bound;
   solution.root_bound_after_cuts = root_answer.root_bound_after_cuts;
   solution.cuts_applied = root_answer.cuts_applied;
+  solution.cut_filter_report = root_answer.cut_filter_report;
 
   const LimitReason why = shared.reason();
   const bool stopped = why != LimitReason::kNone;

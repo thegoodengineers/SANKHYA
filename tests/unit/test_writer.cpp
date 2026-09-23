@@ -417,7 +417,8 @@ TEST(StatsWriter, CarriesTheKeysTheBenchmarkRunnersParse) {
   }
 
   ASSERT_TRUE(blob.contains("effort"));
-  for (const char* key : {"iterations", "nodes", "cuts_applied", "solve_seconds"}) {
+  for (const char* key :
+       {"iterations", "nodes", "cuts_applied", "cut_filter", "solve_seconds"}) {
     EXPECT_TRUE(blob["effort"].contains(key)) << "effort." << key;
   }
 }

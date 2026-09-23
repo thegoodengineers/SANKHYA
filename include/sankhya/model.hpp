@@ -513,6 +513,10 @@ class Solution {
   Count iterations = 0;  ///< simplex/IPM/PDHG iterations
   Count nodes = 0;       ///< branch-and-cut nodes
   Count cuts_applied = 0;
+  /// The root cut filter's verdicts per family and reason, one line (#496):
+  /// `gomory 12: 3 accepted, 9 insufficient_violation; mir 4: 4 too_dense`. Empty for an
+  /// LP, or when no root round ran.
+  std::string cut_filter_report;
   /// Times the branch and bound threw its tree away and re-solved the root (#418), and
   /// the integer bounds reduced-cost fixing tightened over the search; zero unless
   /// mip_restarts / mip_reduced_cost_fixing asked for them.

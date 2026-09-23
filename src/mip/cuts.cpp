@@ -4,10 +4,13 @@
 
 #include "cuts.hpp"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "la/lu.hpp"
@@ -758,6 +761,7 @@ std::optional<Cut> compute_gmi_from_tableau(const Model& model,
 
   bool has_nonzero_coeff = false;
   Cut cut;
+  cut.family = CutFamily::kGomory;
   cut.coeff.resize(static_cast<std::size_t>(n), 0.0);
   double rhs = -beta_raw;
   for (Index j = 0; j < n; ++j) {
@@ -927,6 +931,58 @@ std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution)
 // =========================================================================================
 // Cut Filtering and Deduplication
 // =========================================================================================
+
+const char* cut_family_name(CutFamily family) noexcept {
+  switch (family) {
+    case CutFamily::kGomory: return "gomory";
+    case CutFamily::kKnapsackCover: return "cover";
+    case CutFamily::kMir: return "mir";
+    case CutFamily::kFlowCover: return "flow_cover";
+    case CutFamily::kClique: return "clique";
+    case CutFamily::kZeroHalf: return "zero_half";
+    case CutFamily::kUnknown: break;
+  }
+  return "unknown";
+}
+
+const char* cut_filter_reason_name(CutFilterReason reason) noexcept {
+  switch (reason) {
+    case CutFilterReason::kAccepted: return "accepted";
+    case CutFilterReason::kNonfinite: return "nonfinite";
+    case CutFilterReason::kEmptySupport: return "empty_support";
+    case CutFilterReason::kTooDense: return "too_dense";
+    case CutFilterReason::kCoefficientRatio: return "coefficient_ratio";
+    case CutFilterReason::kInsufficientViolation: return "insufficient_violation";
+    case CutFilterReason::kDuplicate: return "duplicate";
+  }
+  return "unknown";
+}
+
+std::string describe_cut_filter(const std::vector<FilteredCut>& filtered) {
+  if (filtered.empty()) return "no candidates";
+  constexpr int kFamilies = 7;
+  constexpr int kReasons = 7;
+  int counts[kFamilies][kReasons] = {};
+  for (const FilteredCut& fc : filtered) {
+    ++counts[static_cast<int>(fc.cut.family)][static_cast<int>(fc.reason)];
+  }
+  std::string out;
+  for (int f = 0; f < kFamilies; ++f) {
+    int total = 0;
+    for (int r = 0; r < kReasons; ++r) total += counts[f][r];
+    if (total == 0) continue;
+    if (!out.empty()) out += "; ";
+    out += fmt::format("{} {}:", cut_family_name(static_cast<CutFamily>(f)), total);
+    bool first = true;
+    for (int r = 0; r < kReasons; ++r) {
+      if (counts[f][r] == 0) continue;
+      out += fmt::format("{} {} {}", first ? "" : ",", counts[f][r],
+                         cut_filter_reason_name(static_cast<CutFilterReason>(r)));
+      first = false;
+    }
+  }
+  return out;
+}
 
 std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
                                                      const Solution& root_solution,

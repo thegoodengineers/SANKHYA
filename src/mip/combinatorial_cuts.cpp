@@ -162,6 +162,7 @@ std::vector<Cut> generate_clique_cuts(const Model& model, const Solution& soluti
     std::sort(clique.begin(), clique.end());
     if (!seen.insert(clique).second) continue;
     Cut cut;
+    cut.family = CutFamily::kClique;
     cut.coeff.assign(un, 0.0);
     for (const Index c : clique) cut.coeff[static_cast<std::size_t>(c)] = 1.0;
     cut.rhs = 1.0;
@@ -441,6 +442,7 @@ std::vector<Cut> generate_zero_half_cuts(const Model& model, const Solution& sol
     if (activity <= rhs + kMinViolation * std::max(1.0, std::fabs(rhs))) continue;
     if (!seen.insert({in_x, rhs}).second) continue;
     Cut cut;
+    cut.family = CutFamily::kZeroHalf;
     cut.coeff.assign(un, 0.0);
     for (const auto& [j, c] : in_x) cut.coeff[static_cast<std::size_t>(j)] = c;
     cut.rhs = rhs;

@@ -166,6 +166,7 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
     auto cover = generate_knapsack_cover_cut(working_, i);
     if (cover.has_value()) {
       Cut cut;
+      cut.family = CutFamily::kKnapsackCover;
       cut.coeff.resize(static_cast<std::size_t>(working_.num_cols()), 0.0);
       for (std::size_t k = 0; k < cover->col_index.size(); ++k) {
         cut.coeff[static_cast<std::size_t>(cover->col_index[k])] = cover->coeff[k];
@@ -188,6 +189,10 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   add_combinatorial_cuts(initial_relaxation, &candidates);
 
   auto filtered = filter_and_deduplicate_cuts(working_, initial_relaxation, candidates);
+  // WHAT THE FILTER DID, per family and reason (#496): the answer to "why 0 root cuts on
+  // opt1217", carried on the Solution into the stats and the MIPLIB CSV.
+  cut_filter_report_ = describe_cut_filter(filtered);
+  logger_.verbose("root cut filter: {}", cut_filter_report_);
   std::vector<Cut> passing;
   for (auto& fc : filtered) {
     if (fc.reason == CutFilterReason::kAccepted) passing.push_back(std::move(fc.cut));
@@ -238,6 +243,7 @@ void BranchAndBound::tree_cut_round(Index depth, Solution* relaxation) {
   waiting_cuts_.clear();
   if (candidates.empty()) return;
   auto filtered = filter_and_deduplicate_cuts(working_, *relaxation, candidates);
+  logger_.verbose("tree cut filter at depth {}: {}", depth, describe_cut_filter(filtered));
   std::vector<Cut> passing;
   for (auto& fc : filtered) {
     if (fc.reason != CutFilterReason::kAccepted) continue;
