@@ -339,43 +339,16 @@ accuracy asked of it - which is why this section reports two tolerances separate
 than one blended number. It is also the engine the GPU work targets, so its CPU behaviour is
 the baseline every GPU claim will be measured against.
 
-Source CSV: `bench/results/pdhg-4177ae6.csv`  
-Commit `4177ae6` · machine `Windows-AMD64` · 9 instances, the ones committed to the repository
+Source CSV: `bench/results/pdhg-threads-5daee10.csv`  
+Commit `5daee10` · machine `Windows-AMD64` · 0 instances, the ones committed to the repository
 
-- **9 of 9** reach `optimal` at a requested 0.0001 with restarts on.
-- **9 of 9** reach `optimal` at a requested 1e-08 with restarts on, **9 of 9** with restarts off.
 
 `optimal` here means what it means everywhere else in this document: the point also survives the project's absolute tolerances, not merely the relative ones the first-order loop converges on. That distinction is the whole of #179 - the loop used to stop on the relative measure and the report then downgraded the point it stopped on, so the engine gave up early and handed back the weaker answer.
 
 **Read the two tolerance columns together, because they are the same run.** Since #179 the loop stops only where the absolute standard is met, so a request looser than that standard no longer stops the solve any earlier - ask for 1e-4 and you get the 1e-8 point, at the 1e-8 cost. That is the honest reading of the identical columns below, and it is a real trade: the old behaviour honoured a loose request and returned a point it then had to label `feasible`. #180 made that the opt-in: `--option pdhg_stop_at_request=true` waives the dual, gap and complementarity halves of the standard - absolute primal feasibility is kept, so `feasible` still means a feasible point - and reports the point as `feasible` unless it meets the full standard anyway. Measured on these instances at 1e-4 it costs 0.85x the iterations (`bench/results/pdhg-stop-at-request-02cd92c.csv`) and turns `share2b` from an iteration limit into a usable point at 807,760. The two tolerance columns stay identical on `adlittle`, `israel` and `sc50b` even with the switch on, because on those the kept primal clause is what binds.
 
-| instance | simplex | PDHG 0.0001: objective / iterations | PDHG 1e-08: objective / iterations |
-|---|---:|---:|---:|
-| `adlittle` | 225494.9632 | 225494.9632 / 192080 | 225494.9632 / 192080 |
-| `afiro` | -464.7531429 | -464.7531428 / 1040 | -464.7531428 / 1040 |
-| `blend` | -30.81214985 | -30.81214988 / 44520 | -30.81214988 / 44520 |
-| `israel` | -896644.8219 | -896644.8219 / 368720 | -896644.8219 / 368720 |
-| `sc105` | -52.20206121 | -52.20206122 / 61440 | -52.20206122 / 61440 |
-| `sc50a` | -64.57507706 | -64.57507705 / 7680 | -64.57507705 / 7680 |
-| `sc50b` | -70 | -69.99999999 / 8360 | -69.99999999 / 8360 |
-| `share2b` | -415.7322407 | -415.7322407 / 1000009 | -415.7322407 / 1000009 |
-| `stocfor1` | -41131.97622 | -41131.97619 / 321000 | -41131.97619 / 321000 |
-
-**Restarts, measured at 1e-08.** The claim that restarting the averaging helps is checked rather than repeated:
-
-| instance | restarts on | restarts off | ratio |
-|---|---:|---:|---:|
-| `adlittle` | 192080 | 207040 | 1.08x |
-| `afiro` | 1040 | 2800 | 2.69x |
-| `blend` | 44520 | 76400 | 1.72x |
-| `israel` | 368720 | 1000005 | 2.71x |
-| `sc105` | 61440 | 291200 | 4.74x |
-| `sc50a` | 7680 | 28280 | 3.68x |
-| `sc50b` | 8360 | 33200 | 3.97x |
-| `share2b` | 1000009 | 1000009 | 1.00x |
-| `stocfor1` | 321000 | 496320 | 1.55x |
-
-A ratio above 1 means restarts saved iterations on that instance.
+| instance | simplex |  |
+|---|---:|
 
 
 **The relative KKT error, and the three crossing times (#486).** Every PDHG run records
@@ -536,7 +509,36 @@ Every CPU column above is one thread. `pdhg_parallel_spmv` (#487) computes A x r
 over the `threads` workers, bitwise the same at any thread count (the test holds it to the
 bit); this is what it buys, per instance, at a fixed iteration count:
 
-Not yet run on `main`. Reproduce with `python bench/runners/pdhg_threads.py --binary build/sankhya --threads 1,2,4,8 --serial`.
+Source CSV: `pdhg-threads-5daee10.csv`  
+Commit `5daee10` · machine `Windows-AMD64` · 2000 iterations per solve, PDHG alone, `pdhg_parallel_spmv=true` except the `serial` rows.
+
+| instance | rows | threads | A x | solver (s) | speed-up over 1 thread |
+|---|---:|---:|---|---:|---:|
+| `kkt_1000x1000` | 1000 | 1 | serial | 0.054 | - |
+| `kkt_1000x1000` | 1000 | 1 | parallel | 0.064 | 1.000x |
+| `kkt_1000x1000` | 1000 | 2 | parallel | 0.162 | 0.396x |
+| `kkt_1000x1000` | 1000 | 4 | parallel | 0.272 | 0.236x |
+| `kkt_1000x1000` | 1000 | 8 | parallel | 0.413 | 0.156x |
+| `kkt_2000x2000` | 2000 | 1 | serial | 0.117 | - |
+| `kkt_2000x2000` | 2000 | 1 | parallel | 0.121 | 1.000x |
+| `kkt_2000x2000` | 2000 | 2 | parallel | 0.192 | 0.633x |
+| `kkt_2000x2000` | 2000 | 4 | parallel | 0.298 | 0.408x |
+| `kkt_2000x2000` | 2000 | 8 | parallel | 0.484 | 0.251x |
+| `kkt_5000x5000` | 5000 | 1 | serial | 0.367 | - |
+| `kkt_5000x5000` | 5000 | 1 | parallel | 0.414 | 1.000x |
+| `kkt_5000x5000` | 5000 | 2 | parallel | 0.508 | 0.816x |
+| `kkt_5000x5000` | 5000 | 4 | parallel | 0.509 | 0.814x |
+| `kkt_5000x5000` | 5000 | 8 | parallel | 0.703 | 0.589x |
+| `kkt_10000x10000` | 10000 | 1 | serial | 0.796 | - |
+| `kkt_10000x10000` | 10000 | 1 | parallel | 0.973 | 1.000x |
+| `kkt_10000x10000` | 10000 | 2 | parallel | 0.970 | 1.003x |
+| `kkt_10000x10000` | 10000 | 4 | parallel | 0.918 | 1.060x |
+| `kkt_10000x10000` | 10000 | 8 | parallel | 1.026 | 0.948x |
+| `refinery_year` | 779640 | 1 | serial | 112.059 | - |
+| `refinery_year` | 779640 | 1 | parallel | 102.912 | 1.000x |
+| `refinery_year` | 779640 | 2 | parallel | 85.705 | 1.201x |
+| `refinery_year` | 779640 | 4 | parallel | 81.997 | 1.255x |
+| `refinery_year` | 779640 | 8 | parallel | 88.361 | 1.165x |
 
 ---
 
