@@ -67,9 +67,11 @@ class _SolutionLoader(SolutionLoader):
     def get_vars(self, vars_to_load=None):
         if self._primals is None:
             raise NoSolutionError("SANKHYA did not report a point for this solve")
+        # A ComponentMap, as Pyomo's own loaders return: VarData is not hashable, so a
+        # dict keyed by it raises the moment the legacy wrapper loads a solution.
         if vars_to_load is None:
-            return dict(self._primals)
-        return {v: self._primals[v] for v in vars_to_load}
+            return ComponentMap(self._primals.items())
+        return ComponentMap((v, self._primals[v]) for v in vars_to_load)
 
     def get_duals(self, cons_to_load=None):
         raise NoSolutionError(
@@ -123,6 +125,20 @@ class SankhyaSolver(SolverBase):
     def solve(self, model, **kwargs) -> Results:
         sankhya_model, variables, columns = _build_model(model)
         options = dict(kwargs)
+        # The legacy path - pyo.SolverFactory("sankhya").solve(model, options={...},
+        # timelimit=...) - stores the caller's options in self.config.solver_options and
+        # the limit in self.config.time_limit, then calls solve(model) with no kwargs.
+        # Read them from there too, explicit kwargs winning, or a node_limit given that way
+        # is silently dropped and the caller gets a full solve they did not ask for.
+        config = getattr(self, "config", None)
+        stored = getattr(config, "solver_options", None)
+        if stored is not None:
+            stored_values = stored.value() if hasattr(stored, "value") else dict(stored)
+            for key, value in dict(stored_values).items():
+                options.setdefault(key, value)
+        stored_limit = getattr(config, "time_limit", None)
+        if stored_limit is not None:
+            options.setdefault("time_limit", stored_limit)
         options.setdefault("log_to_console", False)
         # Pyomo's own generic kwargs are not SANKHYA option names; translated rather than
         # forwarded blind, which would otherwise raise "unknown option" on every solve.
@@ -145,7 +161,11 @@ class SankhyaSolver(SolverBase):
         results.solution_loader = _SolutionLoader(model, primals)
         results.termination_condition = _TERMINATION.get(result.status,
                                                           TerminationCondition.unknown)
-        results.solution_status = _SOLUTION_STATUS.get(result.status, SolutionStatus.noSolution)
+        # A limit that stopped before any point (#562) is not a feasible solution, whatever
+        # the status word maps to when a point exists.
+        results.solution_status = (
+            SolutionStatus.noSolution if primals is None
+            else _SOLUTION_STATUS.get(result.status, SolutionStatus.noSolution))
         results.incumbent_objective = result.objective if result.claims_a_point else None
         results.solver_name = "sankhya"
         results.solver_version = sankhya.version()
