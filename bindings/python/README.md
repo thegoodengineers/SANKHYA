@@ -77,6 +77,32 @@ entry is an error, setting the same cell twice through the API simply overwrites
 Summing would silently double a coefficient, and that is not a change you can see in the
 answer.
 
+## Adapters for other modelling libraries (#536)
+
+Already modelling in PuLP, Pyomo or CVXPY? Change the solver call, not the model:
+
+```python
+import sankhya.adapters.pulp_solver as sankhya_pulp
+problem.solve(sankhya_pulp.SANKHYA(msg=False))
+
+import sankhya.adapters.pyomo_plugin  # registers "sankhya", on import
+pyo.SolverFactory("sankhya").solve(model)
+
+import sankhya.adapters.cvxpy_solver  # registers "SANKHYA", on import
+problem.solve(method="SANKHYA")
+```
+
+Each adapter builds a `sankhya.Model` from the calling library's own in-memory model - not
+by writing an MPS file and reading it back - and is entirely optional: `pulp`, `pyomo` and
+`cvxpy` are never imported by `sankhya` itself, only by the adapter module you import.
+LP and MILP are covered; a QP objective or constraint is refused with a clear message
+rather than silently solved as if it were linear. See the module docstring in each
+`sankhya/adapters/*.py` file for what public interface of that library it targets and why.
+
+```bash
+PYTHONPATH=bindings/python python bindings/python/test_adapters.py
+```
+
 ## Tests
 
 ```bash
