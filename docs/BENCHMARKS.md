@@ -791,7 +791,7 @@ re-solved and checked by `tools/test_parametric.py` through the verifier's own M
 not a value extrapolated from ranging. It re-solves at each breakpoint rather than pivoting
 once as a dedicated parametric simplex would; the tool's docstring says what that costs.
 
-**`crude-blend-AL`** - `bench/results/parametric-crude-blend-AL-887b173.csv`, solver at `887b173-dirty`, Windows-AMD64, 3 breakpoint(s):
+**`crude-blend-AL`** - `bench/results/parametric-crude-blend-AL-887b173.csv`, solver at `887b173`, Windows-AMD64, 3 breakpoint(s):
 
 | parameter | objective | status | what changed at this point |
 |---:|---:|---|---|
