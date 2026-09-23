@@ -32,6 +32,9 @@ import tempfile
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import stamp  # noqa: E402  (#433: stamps from the binary)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 MITTELMANN_DIR = REPO_ROOT / "data" / "mittelmann"
@@ -53,10 +56,9 @@ MITTELMANN_INSTANCES = ["chromaticindex1024-7", "brazil3"]
 # Uses ortools.linear_solver.python.model_builder for MPS loading (the supported
 # Python API path) and SetSolverSpecificParametersAsString with a PDLP text proto
 # to set termination tolerances (PDLP ignores MPSolverParameters knobs).
+
 PDLP_RUNNER_SCRIPT = r"""
 import sys, time, json
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import stamp  # noqa: E402  (#433: stamps from the binary)
 try:
     from ortools.linear_solver.python import model_builder as mb
 except ImportError:
