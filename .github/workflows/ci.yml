@@ -146,6 +146,10 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 tools/test_report.py
 
+      - name: An evidence bundle replays - integrity, verifier, re-solve (#526)
+        if: matrix.name == 'Release'
+        run: python3 tools/test_bundle.py
+
       - name: The Maros-Meszaros fetcher, residuals and doc section pass their tests (#491)
         # Hermetic: no download and no solve. It pins the readme parser that produces every
         # reference objective, and the residual arithmetic every QP success is judged by.
