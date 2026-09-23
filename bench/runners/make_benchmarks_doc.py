@@ -864,19 +864,33 @@ def cuts_ab_paragraph() -> str:
         convention = (f"Both counts above are recomputed under #188, where a search meeting "
                       f"its gap target is optimal; the CSVs predate that and their own "
                       f"`proved_optimal` column would read {raw_off} and {raw_on}. ")
-    if proved_on < proved_off or matched_on < matched_off:
+    # The default is decided by the PROOF column, and the wording follows it. A proof is a
+    # closed bound; a match at the limit is an incumbent the search happened to find before
+    # the clock ran out, and the same instance moves between identical runs (enlight8 at
+    # 60 s has landed on 22, 23, 24, 27 and 28 across same-commit legs). So a lost match
+    # on a limit-bound instance does not outweigh a gained proof - it is the noise floor
+    # this measurement carries. The default itself lives in src/util/options.cpp; this
+    # paragraph states what the measurement says about it, not what it is.
+    if proved_on > proved_off:
+        verdict = (f"Cuts make every node LP dearer, because each cut is a row; on this "
+                   f"measurement they prove {proved_on - proved_off:+d} and match "
+                   f"{matched_on - matched_off:+d} against a node count of {ratio:.3f}x. A "
+                   f"proof is a closed bound and a match at the limit is an incumbent that "
+                   f"moves between identical runs, so this is the measurement that earns "
+                   f"`enable_root_cuts` its default of on (#415): a proof gained at that node "
+                   f"cost, with matches lost only where the clock decides.")
+    elif proved_on < proved_off:
         verdict = (f"Cuts make every node LP dearer, because each cut is a row; on this "
                    f"measurement they prove {proved_on - proved_off:+d} and match "
                    f"{matched_on - matched_off:+d} against a node count of {ratio:.3f}x, "
-                   f"which is why `enable_root_cuts` is off by default: a measurement, not "
-                   f"caution.")
+                   f"which is the measurement against `enable_root_cuts` being on by "
+                   f"default: a proof lost is not repaid by nodes saved.")
     else:
         verdict = (f"Cuts make every node LP dearer, because each cut is a row; on this "
-                   f"measurement they cost no proof and no match ({proved_on - proved_off:+d} "
-                   f"proved, {matched_on - matched_off:+d} matched) against a node count of "
-                   f"{ratio:.3f}x. `enable_root_cuts` stays off by default until the cut "
-                   f"rounds below the root (#221) are measured on the same set, so that one "
-                   f"decision rests on one measurement.")
+                   f"measurement they prove the same count ({matched_on - matched_off:+d} "
+                   f"matched) against a node count of {ratio:.3f}x, which decides nothing "
+                   f"about the default on its own: the tree leg below and the node cost are "
+                   f"what a change would have to rest on.")
     # The third leg (#221): the same run with cut rounds below the root
     # (`tree_cut_depth=4`), read only when its CSV was produced at the same commit as the
     # other two, so the three-way comparison is one measurement.
@@ -1633,8 +1647,9 @@ def milp_section(path: Path | None) -> str:
         "Those are different claims and are kept apart deliberately. Branch and bound here "
         "finds good incumbents far more often than it finishes the proof: reliability "
         "branching (#69) and warm-started dual node LPs (#65) do the searching, and the root "
-        "cutting planes that exist (#159: Gomory mixed-integer and lifted knapsack cover) are "
-        "off by default, for the reason measured below. Collapsing the two columns would hide "
+        "cutting planes that exist (#159: Gomory mixed-integer and lifted knapsack cover, "
+        "selected by score since #415) have their default decided by the measurement "
+        "below, not asserted here. Collapsing the two columns would hide "
         "exactly the thing cuts are meant to improve.",
         "",
         cuts_ab_paragraph(),

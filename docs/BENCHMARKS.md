@@ -261,43 +261,43 @@ instances of that size and name what happens. These are the eight smallest archi
 Mittelmann's LP test set (`bench/runners/fetch_mittelmann.py`, provenance in
 `data/mittelmann/reference.json`).
 
-Source CSV: `bench/results/mittelmann-e134aeb.csv`  
-Commit `e134aeb` · machine `Windows-AMD64` · time limit 300 s per instance, both solvers
+Source CSV: `bench/results/mittelmann-0018254.csv`  
+Commit `0018254` · machine `Windows-AMD64` · time limit 300 s per instance, both solvers
 
-**0 of 8** instances reached `optimal` inside the limit; **0 of 8** also passed the independent verifier and agree with HiGHS. HiGHS, run as a separate process under the same limit, finished **4 of 8**.
+**2 of 8** instances reached `optimal` inside the limit; **2 of 8** also passed the independent verifier and agree with HiGHS. HiGHS, run as a separate process under the same limit, finished **4 of 8**.
 
 These are the smallest archives in Mittelmann's LP directory; against Netlib's largest instance (dfl001, 6,071 rows, 35,632 nonzeros) they range from the same row count with 2.7x the nonzeros (qap15) to 62x the rows and 42x the nonzeros (bdry2). No published optimum exists for them, so there is no pass-against-a-number column: the outcome is the status, the verifier's verdict where a solution was written, and HiGHS's objective where HiGHS finished. `our objective` on a `time_limit` row is the last iterate's value, not a bound, and is printed only so that a later run can be compared with it.
 
 | instance | rows | cols | nonzeros | status | our objective | HiGHS objective | rel. diff | iters | solver time (s) | verified |
 |---|---:|---:|---:|---|---:|---:|---:|---:|---:|:--:|
-| `Linf_520c` | 93326 | 69004 | 566193 | time_limit | 0.100000032 | Time limit reached | - | 2582 | 300.3 | - |
-| `bdry2` | 376500 | 250998 | 1500003 | time_limit | -0.0043 | Time limit reached | - | 256 | 300.8 | - |
-| `brazil3` | 14646 | 23968 | 133184 | time_limit | 2 | 2 | - | 78656 | 300.1 | - |
-| `chromaticindex1024-7` | 67583 | 73728 | 270324 | time_limit | 3 | 3 | - | 5522 | 300.2 | - |
-| `irish-electricity` | 104259 | 61728 | 523257 | time_limit | 882509.4014 | 2546254.563 | - | 53652 | 300.3 | - |
-| `qap15` | 6330 | 22275 | 94950 | time_limit | 1543.844533 | Time limit reached | - | 23949 | 300.0 | - |
-| `rmine15` | 358395 | 42438 | 879732 | time_limit | -7890.58915 | Time limit reached | - | 10466 | 300.5 | - |
-| `supportcase10` | 165684 | 14770 | 555082 | time_limit | 2.56970627 | 3.383923666 | - | 16241 | 300.4 | - |
+| `Linf_520c` | 93326 | 69004 | 566193 | time_limit | 0 | Time limit reached | - | 0 | 303.2 | - |
+| `bdry2` | 376500 | 250998 | 1500003 | time_limit | 0.001999991456 | Time limit reached | - | 21814 | 251.7 | - |
+| `brazil3` | 14646 | 23968 | 133184 | optimal | 2 | 2 | 3.7e-11 | 15 | 2.9 | yes |
+| `chromaticindex1024-7` | 67583 | 73728 | 270324 | optimal | 3 | 3 | 2.6e-12 | 560 | 83.1 | yes |
+| `irish-electricity` | 104259 | 61728 | 523257 | time_limit | 2454384.009 | 2546254.563 | - | 108254 | 240.3 | - |
+| `qap15` | 6330 | 22275 | 94950 | time_limit | 1010.788309 | Time limit reached | - | 62641 | 300.0 | - |
+| `rmine15` | 358395 | 42438 | 879732 | time_limit | -5042.467038 | Time limit reached | - | 37275 | 216.4 | - |
+| `supportcase10` | 165684 | 14770 | 555082 | time_limit | 3.383923431 | 3.383923666 | - | 81117 | 245.2 | - |
 
-**Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `brazil3`, `chromaticindex1024-7`, `irish-electricity`, `qap15`, `rmine15`, `supportcase10`.
+**Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `irish-electricity`, `qap15`, `rmine15`, `supportcase10`.
 
 #### The same eight under each engine
 
-Source CSVs: `bench/results/mittelmann-e134aeb.csv` (dual simplex), `bench/results/mittelmann-pdhg-d24662f.csv` (PDHG), `bench/results/mittelmann-ipm-d24662f.csv` (interior point)  
+Source CSVs: `bench/results/mittelmann-0018254.csv` (dual simplex), `bench/results/mittelmann-pdhg-0018254.csv` (PDHG), `bench/results/mittelmann-ipm-0018254.csv` (interior point)  
 Same 300 s limit per instance and engine; HiGHS is not re-run here.
 
 | instance | dual simplex: status · verified · time (s) | PDHG: status · verified · time (s) | interior point: status · verified · time (s) |
 |---|---|---|---|
-| `Linf_520c` | time_limit · - · 300.3 | time_limit · - · 287.0 | time_limit · - · 367.1 |
-| `bdry2` | time_limit · - · 300.8 | crashed · - · - | crashed · - · - |
-| `brazil3` | time_limit · - · 300.1 | optimal · yes · 126.8 | feasible · yes · 1.4 |
-| `chromaticindex1024-7` | time_limit · - · 300.2 | optimal · yes · 1.2 | crashed · - · - |
-| `irish-electricity` | time_limit · - · 300.3 | time_limit · - · 240.3 | numerical_error · - · 93.6 |
-| `qap15` | time_limit · - · 300.0 | time_limit · - · 240.0 | time_limit · - · 300.0 |
-| `rmine15` | time_limit · - · 300.5 | time_limit · - · 240.3 | time_limit · - · 300.4 |
-| `supportcase10` | time_limit · - · 300.4 | time_limit · - · 275.1 | time_limit · - · 302.1 |
+| `Linf_520c` | time_limit · - · 303.2 | time_limit · - · 447.8 | time_limit · - · 317.6 |
+| `bdry2` | time_limit · - · 251.7 | time_limit · - · 250.3 | numerical_error · - · 68.5 |
+| `brazil3` | optimal · yes · 2.9 | optimal · yes · 87.1 | optimal · yes · 2.9 |
+| `chromaticindex1024-7` | optimal · yes · 83.1 | optimal · yes · 1.5 | numerical_error · - · 37.0 |
+| `irish-electricity` | time_limit · - · 240.3 | time_limit · - · 240.1 | numerical_error · - · 238.3 |
+| `qap15` | time_limit · - · 300.0 | time_limit · - · 216.0 | optimal · yes · 226.0 |
+| `rmine15` | time_limit · - · 216.4 | time_limit · - · 216.4 | not_solved · - · 60.4 |
+| `supportcase10` | time_limit · - · 245.2 | time_limit · - · 251.7 | numerical_error · - · 59.5 |
 
-Finished and verified inside the limit: dual simplex **0 of 8**, PDHG **2 of 8**, interior point **0 of 8**.
+Finished and verified inside the limit: dual simplex **2 of 8**, PDHG **2 of 8**, interior point **2 of 8**.
 
 ### 1e. The first-order engine — PDHG
 
@@ -559,42 +559,42 @@ Commit `078cb24` · machine `Windows-AMD64`
 **14 of 30** instances reached the published optimum. **9 of 30** also PROVED it - closed the bound to within the requested gap target rather than stopping at a node or time limit.
 
 Every row above was counted under the #188 convention: a search that meets the requested gap target reports `optimal`, because the incumbent is within the tolerance that was asked for. Only a node or time limit leaves a row unproved.
-Those are different claims and are kept apart deliberately. Branch and bound here finds good incumbents far more often than it finishes the proof: reliability branching (#69) and warm-started dual node LPs (#65) do the searching, and the root cutting planes that exist (#159: Gomory mixed-integer and lifted knapsack cover) are off by default, for the reason measured below. Collapsing the two columns would hide exactly the thing cuts are meant to improve.
+Those are different claims and are kept apart deliberately. Branch and bound here finds good incumbents far more often than it finishes the proof: reliability branching (#69) and warm-started dual node LPs (#65) do the searching, and the root cutting planes that exist (#159: Gomory mixed-integer and lifted knapsack cover, selected by score since #415) have their default decided by the measurement below, not asserted here. Collapsing the two columns would hide exactly the thing cuts are meant to improve.
 
-**Root cuts, on versus off** (`bench/results/miplib-cuts-off.csv` and `miplib-cuts-on.csv`, both at `078cb24`, 30 instances, the same time limit): with cuts on, 13 of 30 reach the published optimum and 9 prove it, against 14 and 9 with them off. Over the 29 instances that end the same way either way, the cuts take the total node count to 1.049x (per instance from 0.002x to 1.546x). The outcome changed on 1: `ej` time limit -> feasible (stopped at the time limit of 59.9999s after 60.00s, 0 iterations, 71376 nodes). Both runs were recorded under #188, where a search meeting its gap target is optimal, so the counts are the CSVs' own. Instances whose matched or proved verdict differs between the two runs: `neos-3611689-kaihu`: objective 119.0 without cuts and 120.0 with them (matched yes -> no, proved no -> no). Cuts make every node LP dearer, because each cut is a row; on this measurement they prove +0 and match -1 against a node count of 1.049x, which is why `enable_root_cuts` is off by default: a measurement, not caution. **With cut rounds below the root as well** (`miplib-cuts-tree.csv`, `tree_cut_depth=4`, same commit): 14 of 30 reach the published optimum and 10 prove it, +1 proved and +0 matched against cuts off, node count 0.920x over the 28 instances that end the same way; verdicts that moved: `neos-3611689-kaihu`: matched yes -> yes, proved no -> yes.
+**Root cuts, on versus off** (`bench/results/miplib-cuts-off.csv` and `miplib-cuts-on.csv`, both at `0018254`, 30 instances, the same time limit): with cuts on, 13 of 30 reach the published optimum and 10 prove it, against 15 and 9 with them off. Over the 29 instances that end the same way either way, the cuts take the total node count to 1.015x (per instance from 0.308x to 1.207x). The outcome changed on 1: `neos-3611689-kaihu` feasible -> optimal. Both runs were recorded under #188, where a search meeting its gap target is optimal, so the counts are the CSVs' own. Instances whose matched or proved verdict differs between the two runs: `enlight8`: objective 27.0 without cuts and 22.5 with them (matched yes -> no, proved no -> no); `neos-3611689-kaihu`: objective 119.0 without cuts and 119.0 with them (matched yes -> yes, proved no -> yes); `noswot`: objective -41.0 without cuts and -40.0 with them (matched yes -> no, proved no -> no). Cuts make every node LP dearer, because each cut is a row; on this measurement they prove +1 and match -2 against a node count of 1.015x. A proof is a closed bound and a match at the limit is an incumbent that moves between identical runs, so this is the measurement that earns `enable_root_cuts` its default of on (#415): a proof gained at that node cost, with matches lost only where the clock decides. **With cut rounds below the root as well** (`miplib-cuts-tree.csv`, `tree_cut_depth=4`, same commit): 12 of 30 reach the published optimum and 9 prove it, +0 proved and -3 matched against cuts off, node count 0.850x over the 30 instances that end the same way; verdicts that moved: `enlight8`: matched yes -> no, proved no -> no; `neos-3611689-kaihu`: matched yes -> no, proved no -> no; `noswot`: matched yes -> no, proved no -> no.
 
 | instance | root cuts | root gap closed | root + tree cuts |
 |---|---:|---:|---:|
-| `b-ball` | 13 | 26.7% | 13 |
+| `b-ball` | 7 | 26.7% | 7 |
 | `ej` | 0 | 0.0% | 0 |
-| `enlight8` | 14 | 2.1% | 178 |
-| `enlight_hard` | 281 | 10.9% | 796 |
-| `f2gap40400` | 40 | 100.0% | 40 |
-| `flugpl` | 1 | 2.0% | 3 |
+| `enlight8` | 14 | 2.3% | 418 |
+| `enlight_hard` | 30 | 4.0% | 490 |
+| `f2gap40400` | 30 | 90.4% | 44 |
+| `flugpl` | 1 | 2.0% | 2 |
 | `gen-ip016` | 0 | 0.0% | 0 |
 | `gen-ip054` | 1 | 1.0% | 2 |
-| `gr4x6` | 4 | 26.2% | 58 |
-| `gt2` | 13 | 91.9% | 168 |
-| `k16x240b` | 26 | 6.9% | 230 |
+| `gr4x6` | 4 | 26.2% | 49 |
+| `gt2` | 13 | 91.9% | 115 |
+| `k16x240b` | 20 | 6.7% | 192 |
 | `markshare1` | 0 | 0.0% | 0 |
 | `markshare_4_0` | 0 | 0.0% | 0 |
 | `markshare_5_0` | 0 | 0.0% | 0 |
 | `neos-1425699` | 0 | 0.0% | 0 |
-| `neos-3072252-nete` | 211 | 17.4% | 811 |
-| `neos-3611689-kaihu` | 90 | 48.6% | 646 |
-| `neos-5140963-mincio` | 26 | 0.0% | 37 |
-| `neos-5192052-neckar` | 3 | 0.0% | 3 |
+| `neos-3072252-nete` | 30 | 3.3% | 630 |
+| `neos-3611689-kaihu` | 30 | 46.7% | 581 |
+| `neos-5140963-mincio` | 26 | 0.0% | 30 |
+| `neos-5192052-neckar` | 2 | 0.0% | 2 |
 | `neos5` | 0 | 0.0% | 0 |
-| `noswot` | 28 | 0.0% | 55 |
+| `noswot` | 17 | 0.0% | 48 |
 | `opt1217` | 0 | 0.0% | 0 |
-| `p0201` | 35 | 37.8% | 150 |
+| `p0201` | 9 | 37.8% | 58 |
 | `pk1` | 0 | 0.0% | 0 |
-| `ran12x21` | 23 | 2.9% | 188 |
-| `ran13x13` | 23 | 15.0% | 194 |
+| `ran12x21` | 23 | 3.7% | 196 |
+| `ran13x13` | 22 | 15.0% | 196 |
 | `rlp1` | 0 | 0.0% | 0 |
-| `supportcase14` | 8 | 9.4% | 32 |
-| `supportcase16` | 28 | 12.5% | 48 |
-| `timtab1` | 375 | 16.9% | 891 |
+| `supportcase14` | 27 | 9.4% | 107 |
+| `supportcase16` | 30 | 18.8% | 113 |
+| `timtab1` | 30 | 15.3% | 508 |
 
 Root gap closed is (bound after cuts - bound before) / (final objective - bound before) on the cuts-on run, for the 30 of 30 instances whose CSV row carries the column and whose root gap was not already zero.
 
