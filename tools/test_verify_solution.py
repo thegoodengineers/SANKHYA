@@ -334,7 +334,12 @@ def test_qp_optimum_verifies_and_a_wrong_one_does_not() -> None:
         solution = vs.Solution()
         solution.header = {"status": "optimal", "objective": repr(-third)}
         solution.col_value = {"X": third, "Y": third}
-        solution.col_status = {"X": "basic", "Y": "basic"}
+        # The QP engine reports no basis - every status is written `unknown` - and a KKT
+        # point of a QP can have more than m columns strictly inside their bounds, as this
+        # one does (two free columns, one row). Handing the verifier "basic" here asked it
+        # to accept a non-basis, and it rightly refused (#542): what is verified for a QP
+        # is the KKT system, not a simplex basis.
+        solution.col_status = {"X": "unknown", "Y": "unknown"}
         solution.col_dual = {"X": 0.0, "Y": 0.0}
         solution.row_activity = {"R1": 2.0 * third}
         solution.row_dual = {"R1": 0.0}
@@ -351,7 +356,7 @@ def test_qp_optimum_verifies_and_a_wrong_one_does_not() -> None:
         near_miss = vs.Solution()
         near_miss.header = {"status": "optimal", "objective": repr(objective)}
         near_miss.col_value = {"X": 1.0, "Y": 0.5}
-        near_miss.col_status = {"X": "basic", "Y": "basic"}
+        near_miss.col_status = {"X": "unknown", "Y": "unknown"}
         near_miss.col_dual = {"X": 0.0, "Y": 0.0}
         near_miss.row_activity = {"R1": 1.5}
         near_miss.row_dual = {"R1": 0.0}
