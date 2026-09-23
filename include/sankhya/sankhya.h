@@ -83,7 +83,8 @@ const char* sankhya_version(void);
  *  word and other projects use it, so every artefact names this one (#538). Never NULL. */
 const char* sankhya_repository(void);
 
-/** The canonical repository's URL, "https://github.com/thegoodengineers/SANKHYA". Never NULL. */
+/** The canonical repository's URL, "https://github.com/thegoodengineers/SANKHYA". Never NULL.
+ */
 const char* sankhya_repository_url(void);
 
 /**
