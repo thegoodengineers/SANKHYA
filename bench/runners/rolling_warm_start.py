@@ -171,7 +171,10 @@ def main() -> int:
              f"({total_warm_s / max(1e-9, total_cold_s):.3f}x)")
         print(f"  answers agree on {len(rows) - disagreements}/{len(rows)} weeks")
 
-        commit = stamp.stamp()
+        # The commit the BINARY was built from (#433), read from the CLI built beside the
+        # library the bindings load - the library itself reports no commit. HEAD would
+        # name whatever branch is checked out, which is how a branch sha reached a CSV.
+        commit = stamp.stamp(sankhya.locate_executable())
         out = args.out or (RESULTS_DIR / f"rolling-warm-start-{commit}.csv")
         out.parent.mkdir(parents=True, exist_ok=True)
         machine = f"{platform.system()}-{platform.machine()}"
