@@ -8,7 +8,6 @@
 
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
-#include "sankhya/solution.hpp"
 
 namespace sankhya::gpu {
 
