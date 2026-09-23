@@ -120,6 +120,15 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_latest_result.py
 
+      - name: Check CSV stamps are ancestors of HEAD
+        # Every bench/results/*.csv names a git commit in its git_commit column; that commit
+        # must be in this tree's history so `scripts/reproduce.sh` can tie the published
+        # number back to a build on a fresh clone.  PR-branch commits squash-merged to main
+        # are orphaned at merge, so any benchmark run on a branch must be re-run on main
+        # before its CSV lands.  This step catches the process bug before it reaches main.
+        if: matrix.name == 'Release'
+        run: python3 scripts/check_csv_stamps.py
+
       # Every other check in this job is a unit test. Without this step the command line
       # itself - argument handling, file loading, the writers, the exit codes - is covered
       # by nothing and could break completely while CI stayed green. This runs the pipeline
