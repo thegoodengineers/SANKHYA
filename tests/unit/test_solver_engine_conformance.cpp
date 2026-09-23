@@ -230,20 +230,43 @@ TEST(EngineConformance, EveryDeclaredClassHasAtLeastOneEngine) {
 }
 
 TEST(EngineConformance, EveryEngineAnswersEveryClassItDeclaresWithAPointThatMeasuresUp) {
+  // Every check below is EXPECT, or a plain `if` that reports with ADD_FAILURE and CONTINUES
+  // to the next (engine, class) pair, rather than ASSERT. An ASSERT_* failure here would
+  // `return` out of the whole test function - not just this iteration - so one engine failing
+  // one class would silently skip verifying every pair after it. The three checks that stay
+  // as an `if` (rather than a bare EXPECT) are the ones a later line would be unsafe to run
+  // past: measure() below indexes solution.col_value by column and reads model.num_rows()
+  // worth of row_activity, so a point that was never claimed, or came back the wrong size,
+  // must skip the rest of THIS iteration - it must not skip the rest of the test.
   for (const auto& [engine, problem_class] : declared_pairs()) {
     SCOPED_TRACE(label(engine, problem_class));
     const Model model = model_of(problem_class);
-    ASSERT_EQ(classify(model), problem_class);
-    ASSERT_TRUE(engine->supports(model));
+    if (classify(model) != problem_class) {
+      ADD_FAILURE() << "model_of() built a model classify() reads as "
+                    << to_string(classify(model)) << ", not " << to_string(problem_class);
+      continue;
+    }
+    if (!engine->supports(model)) {
+      ADD_FAILURE() << "the engine declares " << to_string(problem_class)
+                    << " but supports() refuses the model built for it";
+      continue;
+    }
     Logger logger(nullptr);
     const Solution solution = engine->solve(model, quiet(), logger);
 
-    ASSERT_TRUE(claims_a_point(solution.status))
-        << to_string(solution.status) << ": " << solution.message;
+    if (!claims_a_point(solution.status)) {
+      ADD_FAILURE() << to_string(solution.status) << ": " << solution.message;
+      continue;
+    }
     EXPECT_FALSE(solution.algorithm.empty());
-    ASSERT_EQ(solution.col_value.size(), static_cast<std::size_t>(model.num_cols()));
-    ASSERT_EQ(solution.row_activity.size(), static_cast<std::size_t>(model.num_rows()));
-    ASSERT_TRUE(std::isfinite(solution.objective));
+    if (solution.col_value.size() != static_cast<std::size_t>(model.num_cols()) ||
+        solution.row_activity.size() != static_cast<std::size_t>(model.num_rows())) {
+      ADD_FAILURE() << "wrong-sized answer: col_value " << solution.col_value.size()
+                    << " (want " << model.num_cols() << "), row_activity "
+                    << solution.row_activity.size() << " (want " << model.num_rows() << ")";
+      continue;
+    }
+    EXPECT_TRUE(std::isfinite(solution.objective));
 
     // The answer's own numbers against this file's measurement of the point it returned.
     const Measured measured = measure(model, solution);
