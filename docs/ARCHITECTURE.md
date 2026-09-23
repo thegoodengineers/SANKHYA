@@ -270,6 +270,20 @@ CUDA kernels are order-dependent and cannot satisfy the bit-for-bit promise. Whe
 `deterministic=true` and the GPU path would otherwise be selected, `solve()` logs a warning
 and falls back to CPU PDHG. `docs/PS26119_COVERAGE.md` says what exists.
 
+**GPU iteration counts vary run to run** (#448). The nondeterministic atomicAdd reductions
+change the rounding in every dot product on every run. PDHG's restart schedule is driven by
+residual ratios computed from those dot products, so different rounding produces different
+restart decisions, which in turn produce different iteration counts. The effect is large
+enough to observe in `bench/results/gpu-*.csv`: the GPU count at 500×500 / 1e-4 has varied
+from 2,400 to well above the CPU count for the same cell across benchmark runs.
+
+Two consequences for reading section 1g of `docs/BENCHMARKS.md`:
+1. The speedup figure in the crossover table is the median of repeated runs, not a single
+   measurement; the `[min–max]` spread beside each cell shows the run-to-run range.
+2. The GPU iteration count at a given (size, tolerance) cannot be compared against the CPU
+   count as evidence of algorithmic equivalence — the two paths walk different numerical
+   trajectories whenever the GPU's non-associative reductions diverge from the CPU's.
+
 ## 8. Resource limits, and what each one means
 
 One place decides what a limit means: `ResourceLimits` in `src/core/resource_limits.hpp`,

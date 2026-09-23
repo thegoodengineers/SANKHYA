@@ -41,7 +41,7 @@ EngineSelection select_engine(const Model& model, const Options& options, bool w
       s.rule = "size:pdhg-gpu";
       s.reason = fmt::format(
           "{}: at {} rows and above the direct factorization is out of reach; GPU PDHG "
-          "selected (device: {}; crossover point will be measured in #19)",
+          "selected (device: {}; crossover measured in docs/BENCHMARKS.md section 1g)",
           shape, kPdhgRowFloor, gpu_device);
     } else {
       s.rule = "size:pdhg";
