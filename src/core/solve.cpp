@@ -59,6 +59,7 @@
 #include "core/engine_race.hpp"
 #include "core/engine_selection.hpp"
 #include "core/iis.hpp"
+#include "core/kkt_check.hpp"
 #include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
 #include "core/status_guard.hpp"
@@ -989,6 +990,27 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // quantity Solution::recompute_quality() tests, and applying the LP dual rule here
     // would reject correct answers. Primal feasibility and the status still have to agree.
     reconcile_status_with_measurement(&solution, options, logger, /*check_dual=*/false);
+    // THE SAME IN-PROCESS KKT GATE THE LP PATH HAS (#590, as #157 for LP): a QP `optimal`
+    // the check cannot back is withdrawn to `feasible` with the failing check in the
+    // message, before it is written. The first Maros-Meszaros run had six answers labelled
+    // optimal that the independent verifier rejected (dpklo1 with a row violated by 77,
+    // stcqp1 and stcqp2 with the duals wrong); this is what stops that label leaving the
+    // solver, whatever the cause behind each one.
+    if (solution.status == SolveStatus::kOptimal) {
+      KktTolerances tolerances;
+      tolerances.primal = options.get_double("primal_feasibility_tolerance");
+      tolerances.dual = options.get_double("dual_feasibility_tolerance");
+      const KktVerdict verdict = check_qp_optimality(model, solution, tolerances);
+      if (!verdict.passed) {
+        solution.status = SolveStatus::kFeasible;
+        solution.message += fmt::format(
+            "{}the in-process KKT check does not back the optimal claim ({}: {}); reported "
+            "as feasible, not optimal (#590)",
+            solution.message.empty() ? "" : "; ", verdict.check, verdict.detail);
+        logger.warning("QP: optimal withdrawn to feasible, {}: {}", verdict.check,
+                       verdict.detail);
+      }
+    }
     refuse_a_non_finite_answer(&solution, logger);
     record_why_it_stopped(&solution);
     say_which_engine_ran(&solution);

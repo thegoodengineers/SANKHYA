@@ -51,4 +51,12 @@ struct KktVerdict {
 [[nodiscard]] KktVerdict check_lp_optimality(const Model& model, const Solution& solution,
                                              const KktTolerances& tolerances = {});
 
+/// The same conditions for a convex QP (#590): the gradient is c + Q x, the objective carries
+/// x'Qx/2, the reduced costs are derived from the gradient and the row duals because the QP
+/// engine reports none, there is no basis to check, and the dual objective is the Dorn dual
+/// (the bound contributions less x'Qx/2), which is what tools/verify_solution.py computes.
+/// An LP is accepted too (Q empty); a model with integer columns is refused with "class".
+[[nodiscard]] KktVerdict check_qp_optimality(const Model& model, const Solution& solution,
+                                             const KktTolerances& tolerances = {});
+
 }  // namespace sankhya

@@ -77,14 +77,29 @@ double nearer_slack(double value, double lower, double upper) {
 
 }  // namespace
 
+KktVerdict check_optimality(const Model& model, const Solution& s,
+                            const KktTolerances& tolerances, bool allow_hessian);
+
 KktVerdict check_lp_optimality(const Model& model, const Solution& s,
                                const KktTolerances& tolerances) {
+  return check_optimality(model, s, tolerances, /*allow_hessian=*/false);
+}
+
+KktVerdict check_qp_optimality(const Model& model, const Solution& s,
+                               const KktTolerances& tolerances) {
+  return check_optimality(model, s, tolerances, /*allow_hessian=*/true);
+}
+
+KktVerdict check_optimality(const Model& model, const Solution& s,
+                            const KktTolerances& tolerances, bool allow_hessian) {
   const Index n = model.num_cols();
   const Index m = model.num_rows();
   const auto un = static_cast<std::size_t>(n);
   const auto um = static_cast<std::size_t>(m);
-  if (model.num_integer_columns() > 0 || model.hessian.num_nonzeros() > 0) {
-    return fail("class", "not an LP: the check covers LP optimality only");
+  const bool quadratic = model.hessian.num_nonzeros() > 0;
+  if (model.num_integer_columns() > 0 || (quadratic && !allow_hessian)) {
+    return fail("class", allow_hessian ? "integer columns: the check covers LP and convex QP"
+                                       : "not an LP: the check covers LP optimality only");
   }
   if (s.status != SolveStatus::kOptimal) {
     return fail("verdict",
@@ -153,6 +168,25 @@ KktVerdict check_lp_optimality(const Model& model, const Solution& s,
   for (Index j = 0; j < n; ++j) {
     objective += model.col_cost[static_cast<std::size_t>(j)] * x[static_cast<std::size_t>(j)];
   }
+  // Q x from the stored lower triangle (each off-diagonal entry stands for two of the
+  // symmetric matrix), and x'Qx/2 into the objective, the convention of Model::hessian.
+  std::vector<double> qx(un, 0.0);
+  if (quadratic) {
+    for (Index j = 0; j < n; ++j) {
+      const ColumnView c = model.hessian.column(j);
+      for (Index k = 0; k < c.size; ++k) {
+        const auto i = static_cast<std::size_t>(c.rows[k]);
+        const auto uj = static_cast<std::size_t>(j);
+        qx[i] += c.values[k] * x[uj];
+        if (i != uj) qx[uj] += c.values[k] * x[i];
+      }
+    }
+    double half_xqx = 0.0;
+    for (Index j = 0; j < n; ++j) {
+      half_xqx += 0.5 * qx[static_cast<std::size_t>(j)] * x[static_cast<std::size_t>(j)];
+    }
+    objective += half_xqx;
+  }
   const double objective_scale = std::max(1.0, std::fabs(objective));
   if (std::fabs(objective - s.objective) > tol::kVerifierObjective * objective_scale) {
     return fail("objective",
@@ -166,10 +200,12 @@ KktVerdict check_lp_optimality(const Model& model, const Solution& s,
     y[static_cast<std::size_t>(i)] = sigma * s.row_dual[static_cast<std::size_t>(i)];
   }
   std::vector<double> column_scale(un, 1.0);
+  std::vector<double> derived_dual(un, 0.0);
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
-    const double cost = sigma * model.col_cost[u];
-    const double d = sigma * s.col_dual[u];
+    // For a QP the gradient of the objective is c + Q x, not c; every condition below is
+    // stated in terms of the gradient, so this one substitution carries them over.
+    const double cost = sigma * (model.col_cost[u] + qx[u]);
     const ColumnView column = model.matrix.column(j);
     double expected = cost;
     double scale = std::max(1.0, std::fabs(cost));
@@ -179,6 +215,11 @@ KktVerdict check_lp_optimality(const Model& model, const Solution& s,
       scale = std::max(scale, std::fabs(term));
     }
     column_scale[u] = scale;
+    // The QP engine carries no basis and reports no reduced costs, so for a QP d is DERIVED
+    // from (model, x, y), the stronger test: the sign and complementarity checks then price
+    // against a vector the solver never chose (the verifier does the same).
+    const double d = quadratic ? expected : sigma * s.col_dual[u];
+    if (quadratic) derived_dual[u] = d;
     const double difference = std::fabs(expected - d);
     if (difference / scale > tol::kVerifierConsistency) {
       return fail("reduced costs",
@@ -219,8 +260,10 @@ KktVerdict check_lp_optimality(const Model& model, const Solution& s,
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
     if (model.col_lower[u] == model.col_upper[u]) continue;
+    // For a QP the multiplier priced here is the derived one, as in the sign check above.
+    const double column_dual = quadratic ? derived_dual[u] : sigma * s.col_dual[u];
     const double product = complementarity(
-        sigma * s.col_dual[u], nearer_slack(x[u], model.col_lower[u], model.col_upper[u]));
+        column_dual, nearer_slack(x[u], model.col_lower[u], model.col_upper[u]));
     if (product > tol::kComplementarity) {
       return fail("complementary slackness",
                   fmt::format("|multiplier| * slack = {:.3e} on column {}", product, j));
@@ -228,42 +271,45 @@ KktVerdict check_lp_optimality(const Model& model, const Solution& s,
   }
 
   // ---- The basis, when every status is known ------------------------------------------
-  const auto known = [](const std::vector<BasisStatus>& v) {
-    return !v.empty() && std::none_of(v.begin(), v.end(),
-                                      [](BasisStatus b) { return b == BasisStatus::kUnknown; });
-  };
-  if (s.col_status.size() == un && s.row_status.size() == um && known(s.col_status) &&
-      (m == 0 || known(s.row_status))) {
-    Index basic = 0;
-    const auto off_bound = [&](BasisStatus status, double value, double lower, double upper) {
-      const double scale = std::max(1.0, std::fabs(value));
-      if (status == BasisStatus::kAtLower && is_finite_bound(lower)) {
-        return std::fabs(value - lower) / scale;
-      }
-      if (status == BasisStatus::kAtUpper && is_finite_bound(upper)) {
-        return std::fabs(value - upper) / scale;
-      }
-      return 0.0;
+  if (!quadratic) {
+    const auto known = [](const std::vector<BasisStatus>& v) {
+      return !v.empty() && std::none_of(v.begin(), v.end(), [](BasisStatus b) {
+        return b == BasisStatus::kUnknown;
+      });
     };
-    double worst = 0.0;
-    for (Index j = 0; j < n; ++j) {
-      const auto u = static_cast<std::size_t>(j);
-      if (s.col_status[u] == BasisStatus::kBasic) ++basic;
-      worst = std::max(
-          worst, off_bound(s.col_status[u], x[u], model.col_lower[u], model.col_upper[u]));
-    }
-    for (Index i = 0; i < m; ++i) {
-      const auto u = static_cast<std::size_t>(i);
-      if (s.row_status[u] == BasisStatus::kBasic) ++basic;
-      worst = std::max(worst, off_bound(s.row_status[u], activity[u], model.row_lower[u],
-                                        model.row_upper[u]));
-    }
-    if (basic != m) {
-      return fail("basis", fmt::format("{} basic entries for {} rows", basic, m));
-    }
-    if (worst > tolerances.primal) {
-      return fail("nonbasic entries on their bounds",
-                  fmt::format("worst distance {:.3e}", worst));
+    if (s.col_status.size() == un && s.row_status.size() == um && known(s.col_status) &&
+        (m == 0 || known(s.row_status))) {
+      Index basic = 0;
+      const auto off_bound = [&](BasisStatus status, double value, double lower, double upper) {
+        const double scale = std::max(1.0, std::fabs(value));
+        if (status == BasisStatus::kAtLower && is_finite_bound(lower)) {
+          return std::fabs(value - lower) / scale;
+        }
+        if (status == BasisStatus::kAtUpper && is_finite_bound(upper)) {
+          return std::fabs(value - upper) / scale;
+        }
+        return 0.0;
+      };
+      double worst = 0.0;
+      for (Index j = 0; j < n; ++j) {
+        const auto u = static_cast<std::size_t>(j);
+        if (s.col_status[u] == BasisStatus::kBasic) ++basic;
+        worst = std::max(
+            worst, off_bound(s.col_status[u], x[u], model.col_lower[u], model.col_upper[u]));
+      }
+      for (Index i = 0; i < m; ++i) {
+        const auto u = static_cast<std::size_t>(i);
+        if (s.row_status[u] == BasisStatus::kBasic) ++basic;
+        worst = std::max(worst, off_bound(s.row_status[u], activity[u], model.row_lower[u],
+                                          model.row_upper[u]));
+      }
+      if (basic != m) {
+        return fail("basis", fmt::format("{} basic entries for {} rows", basic, m));
+      }
+      if (worst > tolerances.primal) {
+        return fail("nonbasic entries on their bounds",
+                    fmt::format("worst distance {:.3e}", worst));
+      }
     }
   }
 
@@ -278,12 +324,23 @@ KktVerdict check_lp_optimality(const Model& model, const Solution& s,
   }
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
-    const double d = sigma * s.col_dual[u];
+    const double d = quadratic ? derived_dual[u] : sigma * s.col_dual[u];
     dual_objective += bound_contribution(d, model.col_lower[u], model.col_upper[u]);
     accounted += share(d, x[u], model.col_lower[u], model.col_upper[u], column_scale[u],
                        tolerances.dual);
   }
   dual_objective = sigma * dual_objective + model.objective_offset;
+  if (quadratic) {
+    // At a KKT point the bound contributions sum to (c + Qx)'x = c'x + x'Qx, which overshoots
+    // the primal objective c'x + x'Qx/2 by exactly x'Qx/2: subtracting it is the Dorn dual
+    // of a convex QP, and it makes the gap a real optimality test rather than an identity
+    // that would fail by a fixed amount on every quadratic instance.
+    double half_xqx = 0.0;
+    for (Index j = 0; j < n; ++j) {
+      half_xqx += 0.5 * qx[static_cast<std::size_t>(j)] * x[static_cast<std::size_t>(j)];
+    }
+    dual_objective -= half_xqx;
+  }
   const double gap = std::fabs(objective - dual_objective);
   if (gap > tolerances.duality_gap * objective_scale + accounted) {
     return fail("strong duality",
