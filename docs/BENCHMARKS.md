@@ -388,6 +388,15 @@ Project standard: absolute primal ≤ 1e-7, dual ≤ 1e-7, gap ≤ 1e-8.
 | 1000×1000 | GPU | 8.565e-08 | 8.532e-16 |
 | 2000×2000 | CPU | 9.897e-08 | 0.000e+00 |
 
+#### 1g.1 GPU on non-synthetic instances
+
+Not yet run. Reproduce with:
+
+```
+python bench/runners/fetch_mittelmann.py
+python bench/runners/gpu_real_instances.py --binary build_gpu/sankhya
+```
+
 ---
 
 ### 1f. Scale — how far up this goes
@@ -691,6 +700,23 @@ At 600 s: **15 of 30** reach the published optimum, **9 of 30** prove it.
 | `timtab1` | feasible · no · no | feasible · no · no · 6.8e-01 | needs an incumbent (#290) |
 
 **Needed time** (proved at 600 s, not at 60 s): none. **Needs a bound** (optimum reached at both limits, proved at neither): `b-ball`, `neos-3611689-kaihu`, `neos5`, `noswot`, `opt1217`, `rlp1`. **Needs an incumbent** (wrong answer even at 600 s): `ej`, `enlight8`, `enlight_hard`, `gen-ip016`, `gen-ip054`, `k16x240b`, `markshare1`, `markshare_4_0`, `markshare_5_0`, `neos-3072252-nete`, `neos-5140963-mincio`, `pk1`, `ran12x21`, `ran13x13`, `timtab1`.
+
+---
+
+## 2b. Maros-Meszaros, the convex QP set
+
+The 138 convex QPs of Maros and Meszaros, *A repository of convex quadratic programming
+problems*, Optimization Methods and Software 11-12 (1999): the set every convex QP paper
+reports. Solved by the default QP engine (Condat-Vu, `src/qp/`) and judged the way the
+published QP benchmark judges it, on primal residual, dual residual and duality gap at 1e-6
+and at 1e-9, as well as against the published objective and by the independent verifier.
+
+Not yet run on `main`. Reproduce with:
+
+```
+python bench/runners/fetch_maros_meszaros.py
+python bench/runners/maros_meszaros.py
+```
 
 ---
 

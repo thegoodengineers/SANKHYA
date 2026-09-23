@@ -30,6 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import latest_result
+import maros_meszaros_doc  # the QP section (#491), kept in its own file
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
@@ -2127,6 +2128,9 @@ def main() -> int:
                        for shape in ("random", "staircase", "refinery")}
     gpu_csv = newest("gpu-*.csv")
     gpu_real_csv = newest("gpu-real-*.csv")
+    # Only a run over the whole set is named maros-meszaros-<sha>.csv; a subset run is
+    # maros-meszaros-partial-<sha>.csv and the prefix filter keeps it out (#491).
+    maros_meszaros_csv = newest("maros-meszaros-*.csv", prefix="maros-meszaros")
 
     # Legacy untagged CSVs predate the tier tag; fall back so an old results directory still
     # generates something rather than failing.
@@ -2248,6 +2252,17 @@ is a harder library: MIPLIB instances are chosen to be difficult for mature solv
 #### The same set at 600 s
 
 {milp_long_section(milp_csv, milp_long_csv)}
+---
+
+## 2b. Maros-Meszaros, the convex QP set
+
+The 138 convex QPs of Maros and Meszaros, *A repository of convex quadratic programming
+problems*, Optimization Methods and Software 11-12 (1999): the set every convex QP paper
+reports. Solved by the default QP engine (Condat-Vu, `src/qp/`) and judged the way the
+published QP benchmark judges it, on primal residual, dual residual and duality gap at 1e-6
+and at 1e-9, as well as against the published objective and by the independent verifier.
+
+{maros_meszaros_doc.section(maros_meszaros_csv)}
 ---
 
 ## 3. Correctness beyond the objective value

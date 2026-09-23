@@ -29,3 +29,11 @@ bench/large/
 data/mittelmann/*.bz2
 data/mittelmann/*.mps
 data/mittelmann/*.part
+
+# Maros-Meszaros convex QP set (#491), fetched by bench/runners/fetch_maros_meszaros.py; the
+# manifest (reference.json) is committed, the readme, the archives and the ~235 MB of
+# extracted QPS files are not.
+data/maros-meszaros/*.qps
+data/maros-meszaros/*.ZIP
+data/maros-meszaros/*.part
+data/maros-meszaros/00README.QP
