@@ -389,7 +389,7 @@ below is where the GPU overtakes the CPU.
 Source CSV: `bench/results/gpu-fb72ab4.csv`  
 Commit `fb72ab4` · machine `Windows-AMD64`
 
-Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named; a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
+Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
 
 | rows×cols | CPU 1e-4 (s) | GPU 1e-4 (s) | speedup | CPU 1e-8 (s) | GPU 1e-8 (s) | speedup |
 |----------:|-------------:|-------------:|--------:|-------------:|-------------:|--------:|
@@ -451,7 +451,7 @@ The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, medians o
 Source CSV: `bench/results/gpu-l4-fdc89c5.csv`  
 Commit `fdc89c5` · machine `Linux-x86_64`
 
-Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named; a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
+Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
 
 Each cell is the median of 5 solves; `[min–max]` shows the spread from run-to-run variance (thermal state, clock boost on the laptop GPU).
 
@@ -517,6 +517,14 @@ The datacenter runner (`bench/runners/gpu_datacenter.py`, #488):
 | `brazil3` | gpu | 1e-08 | - | feasible | 1.9999996940528124 | 129000 | 10.044387 | 10.431059 | 3.828625 |
 | `brazil3` | cpu-16t | 1e-08 | 2000 | iteration_limit | 0.0 | 2000 | 0.846638 | 1.165236 | 0.048787 |
 | `brazil3` | gpu | 1e-08 | 2000 | iteration_limit | 0.0 | 2000 | 0.315572 | 0.688317 | 0.193310 |
+
+#### 1g.4 What the CPU side does with its cores
+
+Every CPU column above is one thread. `pdhg_parallel_spmv` (#487) computes A x row-parallel
+over the `threads` workers, bitwise the same at any thread count (the test holds it to the
+bit); this is what it buys, per instance, at a fixed iteration count:
+
+Not yet run on `main`. Reproduce with `python bench/runners/pdhg_threads.py --binary build/sankhya --threads 1,2,4,8 --serial`.
 
 ---
 

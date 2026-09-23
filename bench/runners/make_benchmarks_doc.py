@@ -2165,7 +2165,7 @@ def gpu_section(path: Path | None) -> str:
         f"Commit `{commit}` · machine `{machine}`",
         "",
         "Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the "
-        "tolerance named; a warm-up GPU solve absorbed CUDA's context creation before the "
+        "tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the "
         "timed ones. The GPU pays a per-iteration launch and transfer cost that a small model "
         "cannot amortise; the crossover is where the parallel products start to pay for it.",
         "",
@@ -2381,6 +2381,31 @@ def gpu_cards_section() -> str:
     return "\n".join(blocks)
 
 
+def pdhg_threads_section(path: Path | None) -> str:
+    """1g.4: CPU PDHG thread scaling with the row-parallel A x (#487), from
+    bench/runners/pdhg_threads.py: a fixed iteration count per instance, so every thread
+    count does the same arithmetic, and the speed-up over one thread of the same product."""
+    if path is None:
+        return ("Not yet run on `main`. Reproduce with `python bench/runners/pdhg_threads.py "
+                "--binary build/sankhya --threads 1,2,4,8 --serial`.\n")
+    rows = read_csv(path)
+    if not rows:
+        return "The CSV is empty.\n"
+    first = rows[0]
+    out = [f"Source CSV: `{path.name}`  \nCommit `{first.get('git_commit', '?')}` · machine "
+           f"`{first.get('machine', '?')}` · {first.get('iterations', '?')} iterations per solve, "
+           "PDHG alone, `pdhg_parallel_spmv=true` except the `serial` rows.\n",
+           "| instance | rows | threads | A x | solver (s) | speed-up over 1 thread |",
+           "|---|---:|---:|---|---:|---:|"]
+    for r in rows:
+        speedup = r.get("speedup_vs_one_thread") or ""
+        out.append(f"| `{r.get('instance', '')}` | {r.get('rows', '')} | {r.get('threads', '')} | "
+                   f"{'parallel' if r.get('parallel_spmv') == '1' else 'serial'} | "
+                   f"{float(r.get('solver_seconds') or 0):.3f} | "
+                   f"{speedup + 'x' if speedup else '-'} |")
+    return "\n".join(out) + "\n"
+
+
 def gpu_pdlp_section(path: Path | None) -> str:
     """GPU PDHG vs OR-Tools PDLP head-to-head (#447)."""
     if path is None:
@@ -2500,6 +2525,7 @@ def main() -> int:
     # so the newest of the two never silently replaces the other (#488).
     gpu_csv = newest("gpu-*.csv", prefix="gpu")
     gpu_real_csv = newest("gpu-real-*.csv", prefix="gpu-real")
+    pdhg_threads_csv = newest("pdhg-threads-*.csv", prefix="pdhg-threads")
     # Only a run over the whole set is named maros-meszaros-<sha>.csv; a subset run is
     # maros-meszaros-partial-<sha>.csv and the prefix filter keeps it out (#491).
     maros_meszaros_csv = newest("maros-meszaros-*.csv", prefix="maros-meszaros")
@@ -2627,6 +2653,13 @@ runners from a fresh clone at a `main` commit; the CPU column in each table is t
 machine's own CPU, so a ratio here is card against host, not card against the laptop.
 
 {gpu_cards_section()}
+#### 1g.4 What the CPU side does with its cores
+
+Every CPU column above is one thread. `pdhg_parallel_spmv` (#487) computes A x row-parallel
+over the `threads` workers, bitwise the same at any thread count (the test holds it to the
+bit); this is what it buys, per instance, at a fixed iteration count:
+
+{pdhg_threads_section(pdhg_threads_csv)}
 ---
 
 ### 1f. Scale — how far up this goes

@@ -1217,6 +1217,20 @@ const std::vector<OptionSpec>& Options::registry() {
                  1e-1,
                  {}});
     s.push_back(
+        {"pdhg_parallel_spmv",
+         OptionType::Bool,
+         false,
+         "Compute PDHG's A x product row-parallel over the `threads` workers (#487): an "
+         "explicit transpose is built once per solve and the product becomes the same "
+         "per-column gather A^T y already uses, so each output entry is written by exactly "
+         "one thread in a fixed static partition and the answer is bitwise identical at any "
+         "thread count. The serial product is a column scatter in a different summation "
+         "order, so the two paths agree to rounding, not to the bit. Off by default until "
+         "the A/B on main; the thread-scaling runner is bench/runners/pdhg_threads.py.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
         {"pdhg_stop_at_request",
          OptionType::Bool,
          false,

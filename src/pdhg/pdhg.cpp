@@ -126,13 +126,30 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
                                     : static_cast<Count>(limits.iteration_limit());
   const bool use_restarts = options.get_bool("pdhg_restart");
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
+  // ROW-PARALLEL A x (#487). The serial product scatters column by column into y and
+  // cannot be split across threads without a reduction; (A^T)^T x through the transpose
+  // is a gather per ROW of A - one output per thread, no reduction, the same static
+  // partition every run - which is the CSR row-parallel product of Saad, *Iterative
+  // Methods for Sparse Linear Systems*, 2nd ed., SIAM 2003, section 3.5, with the
+  // determinism argument of #57. The transpose costs one O(nnz) pass and one copy of the
+  // matrix, paid once per solve.
+  const bool parallel_spmv = options.get_bool("pdhg_parallel_spmv");
+  const SparseMatrix a_transposed = parallel_spmv ? scaling.matrix.transpose() : SparseMatrix{};
+  const auto a_times = [&](const double* v, double* out) {
+    if (parallel_spmv) {
+      a_transposed.transpose_multiply(v, out);
+    } else {
+      scaling.matrix.multiply(v, out);
+    }
+  };
 
   logger.info("Solving LP with restarted PDHG: {} rows, {} columns, {} nonzeros", rows, cols,
               model.num_nonzeros());
   logger.info("Scaled matrix entries in [{:.3e}, {:.3e}], estimated ||A||_2 = {:.4e}",
               scaling.min_abs, scaling.max_abs, spectral_norm);
-  logger.info("Target relative tolerance {:.1e}, restarts {}", tolerance,
-              use_restarts ? "on" : "off");
+  logger.info("Target relative tolerance {:.1e}, restarts {}, A x {}", tolerance,
+              use_restarts ? "on" : "off",
+              parallel_spmv ? "row-parallel over the thread pool (#487)" : "serial");
 
   // ---- Iterates, in SCALED space ----------------------------------------------------------
   const auto n = static_cast<std::size_t>(cols);
@@ -238,7 +255,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     // Dual: y' = prox_{sigma sigma_C}( y + sigma A xbar ) = v - sigma proj_C(v / sigma)
     {
       ProfileScope timed(logger.profiler(), "dual step", ProfileMode::kDetailed);
-      if (rows > 0) scaling.matrix.multiply(extrapolated.data(), a_x.data());
+      if (rows > 0) a_times(extrapolated.data(), a_x.data());
       for (Index i = 0; i < rows; ++i) {
         const auto u = static_cast<std::size_t>(i);
         const double v = y[u] + sigma * a_x[u];
@@ -268,7 +285,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
             x_next[static_cast<std::size_t>(j)] - x[static_cast<std::size_t>(j)];
       }
       std::vector<double> adx(m, 0.0);
-      scaling.matrix.multiply(dx.data(), adx.data());
+      a_times(dx.data(), adx.data());
       for (Index i = 0; i < rows; ++i) {
         const auto u = static_cast<std::size_t>(i);
         interaction += (y_next[u] - y[u]) * adx[u];
