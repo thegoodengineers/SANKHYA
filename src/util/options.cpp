@@ -738,6 +738,17 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back({"gpu_domain_prop",
+                 OptionType::Bool,
+                 false,
+                 "Run activity-based bound propagation on the GPU at each MIP node (#510). "
+                 "One CUDA thread per constraint row; atomic min/max on the column-bound "
+                 "arrays; iterated to convergence or a fixed round limit. "
+                 "Default OFF; enable after a clean A/B on main. "
+                 "Reference: Sofranac, Gleixner & Pokutta, arXiv:2009.07785.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"ranging",
                  OptionType::Bool,
                  false,
