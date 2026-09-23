@@ -42,7 +42,13 @@ Progress = collections.namedtuple("Progress", [
 
 from ._executable import locate as locate_executable
 
-__all__ = ["Model", "Options", "Result", "SankhyaError", "INFINITY", "version", "locate_executable"]
+__all__ = ["Model", "Options", "Result", "SankhyaError", "INFINITY", "version", "locate_executable",
+           "REPOSITORY", "REPOSITORY_URL"]
+
+# The canonical repository (#538). The name SANKHYA is a common Sanskrit word and other
+# projects use it, so the package says which one it is.
+REPOSITORY = "thegoodengineers/SANKHYA"
+REPOSITORY_URL = "https://github.com/thegoodengineers/SANKHYA"
 
 _lib = None
 

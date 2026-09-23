@@ -197,7 +197,11 @@ void print_model_info(const sankhya::Model& model) {
 int main(int argc, char** argv) {
   CLI::App app{"SANKHYA - LP / MILP / QP solver", "sankhya"};
   app.require_subcommand(1);
-  app.set_version_flag("--version", std::string(sankhya::banner()));
+  // The banner stays one line with the commit first in parentheses, because
+  // bench/runners/stamp.py parses it; the repository goes on a line of its own (#538).
+  app.set_version_flag(
+      "--version", fmt::format("{}\nrepository {} {}", sankhya::banner(), sankhya::repository(),
+                               sankhya::repository_url()));
 
   std::vector<std::string> option_assignments;
 
@@ -253,6 +257,7 @@ int main(int argc, char** argv) {
 
   if (version_cmd->parsed()) {
     fmt::print("{}\n", sankhya::banner());
+    fmt::print("repository {} {}\n", sankhya::repository(), sankhya::repository_url());
     return 0;
   }
 

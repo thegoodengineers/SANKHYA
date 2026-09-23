@@ -27,5 +27,11 @@ TEST(Banner, CpuBuildGpuField) {
 }
 #endif
 
+// The canonical identity (#538), pinned so a refactor cannot quietly drop or change it.
+TEST(Banner, CanonicalRepository) {
+  EXPECT_STREQ(repository(), "thegoodengineers/SANKHYA");
+  EXPECT_STREQ(repository_url(), "https://github.com/thegoodengineers/SANKHYA");
+}
+
 }  // namespace
 }  // namespace sankhya

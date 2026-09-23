@@ -59,6 +59,13 @@ const char* cuda_device_description() noexcept {
 #endif
 }
 
+const char* repository() noexcept {
+  return "thegoodengineers/SANKHYA";
+}
+const char* repository_url() noexcept {
+  return "https://github.com/thegoodengineers/SANKHYA";
+}
+
 const char* banner() noexcept {
   static const std::string text = fmt::format(
       "SANKHYA {} ({}, {}, {}, CUDA {}, GPU {})", version_string(), git_commit(), build_type(),

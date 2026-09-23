@@ -32,4 +32,12 @@ namespace sankhya {
 /// One-line banner: name, version, commit, build type, CUDA status.
 [[nodiscard]] const char* banner() noexcept;
 
+/// The canonical repository, "thegoodengineers/SANKHYA". The name SANKHYA is a common
+/// Sanskrit word and other projects use it too, so every artefact a reader may meet out of
+/// context (the CLI's version output, every solution file) names this one (#538).
+[[nodiscard]] const char* repository() noexcept;
+
+/// The canonical repository's URL, "https://github.com/thegoodengineers/SANKHYA".
+[[nodiscard]] const char* repository_url() noexcept;
+
 }  // namespace sankhya

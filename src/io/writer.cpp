@@ -131,6 +131,7 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
 
   fmt::print(out, "# SANKHYA solution file\n");
   fmt::print(out, "# generated-by {}\n", banner());
+  fmt::print(out, "# repository {} {}\n", repository(), repository_url());
   fmt::print(out, "# All numbers carry 17 significant digits and round-trip exactly.\n");
   fmt::print(out, "model {}\n", model.name.empty() ? "(unnamed)" : model.name);
   fmt::print(out, "source {}\n", model.source_path);
