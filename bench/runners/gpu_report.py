@@ -279,7 +279,7 @@ def main() -> int:
         writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
-    print(f"\nwrote {out.relative_to(REPO_ROOT)}")
+    print(f"\nwrote {out}")
     return 0
 
 

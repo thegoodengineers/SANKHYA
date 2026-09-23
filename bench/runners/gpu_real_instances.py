@@ -75,12 +75,12 @@ def as_number(value):
 
 
 def run_solve(binary: Path, mps: Path, algorithm: str, tolerance: float,
-              time_limit: float) -> dict:
+              time_limit: float, extra_options: list[str] | None = None) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         stats = Path(tmp) / "s.json"
         command = [str(binary), "solve", str(mps), "--stats", str(stats),
                    "--time-limit", str(time_limit)]
-        for option in COMMON_OPTIONS + [f"pdhg_tolerance={tolerance:g}"]:
+        for option in COMMON_OPTIONS + [f"pdhg_tolerance={tolerance:g}"] + (extra_options or []):
             command += ["--option", option]
         if algorithm == "pdhg-cuda":
             command += ["--option", "gpu=true"]
@@ -256,7 +256,7 @@ def main() -> int:
         writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
         writer.writeheader()
         writer.writerows(result_rows)
-    print(f"\nwrote {out.relative_to(REPO_ROOT)}")
+    print(f"\nwrote {out}")
     return 0
 
 

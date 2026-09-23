@@ -2328,6 +2328,57 @@ def gpu_real_section(path: Path | None) -> str:
     return chr(10).join(lines)
 
 
+GPU_CARDS = ("l4", "l40s", "a100", "h100", "h200", "v100")
+
+
+def gpu_datacenter_table(path: Path) -> str:
+    """The datacenter runner's CSV (#488) as a table: one row per instance, mode and
+    tolerance, the median wall of its repeats with their spread, and the forced-count pair
+    (iteration_limit set) that isolates the per-iteration ratio."""
+    rows = read_csv(path)
+    if not rows:
+        return "The CSV is empty.\n"
+    first = rows[0]
+    out = [f"`{path.name}` - {first.get('gpu', '?')}, solver at `{first.get('git_commit', '?')}`, "
+           f"{first.get('machine', '?')}, {first.get('repeats', '?')} repeats per cell:\n",
+           "| instance | mode | tol | forced iterations | status | objective | iterations "
+           "| median wall (s) | spread (s) |",
+           "|---|---|---:|---:|---|---:|---:|---:|---:|"]
+    for r in rows:
+        out.append(f"| `{r.get('instance', '')}` | {r.get('mode', '')} | {r.get('tol', '')} "
+                   f"| {r.get('iteration_limit', '') or '-'} | {r.get('status', '')} "
+                   f"| {r.get('objective', '')} | {r.get('iterations', '')} "
+                   f"| {r.get('wall_median_s', '')} | {r.get('wall_spread_s', '')} |")
+    return "\n".join(out) + "\n"
+
+
+def gpu_cards_section() -> str:
+    """1g.3: every datacenter card with committed runs, newest per card by git history."""
+    blocks: list[str] = []
+    for card in GPU_CARDS:
+        crossover = newest(f"gpu-{card}-*.csv")
+        real = newest(f"gpu-real-{card}-*.csv")
+        datacenter = newest(f"gpu-datacenter-{card}-*.csv")
+        if crossover is None and real is None and datacenter is None:
+            continue
+        blocks.append(f"**{card.upper()}**\n")
+        if crossover is not None:
+            blocks.append("The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, "
+                          "medians of repeats with their min-max):\n")
+            blocks.append(gpu_section(crossover))
+        if real is not None:
+            blocks.append("On non-synthetic instances (`bench/runners/gpu_real_instances.py`):\n")
+            blocks.append(gpu_real_section(real))
+        if datacenter is not None:
+            blocks.append("The datacenter runner (`bench/runners/gpu_datacenter.py`, #488):\n")
+            blocks.append(gpu_datacenter_table(datacenter))
+    if not blocks:
+        return ("No datacenter card has been measured yet. The three runners write "
+                "`gpu-<card>-<sha>.csv`, `gpu-real-<card>-<sha>.csv` and "
+                "`gpu-datacenter-<card>-<sha>.csv`; commit them and this section fills itself.\n")
+    return "\n".join(blocks)
+
+
 def gpu_pdlp_section(path: Path | None) -> str:
     """GPU PDHG vs OR-Tools PDLP head-to-head (#447)."""
     if path is None:
@@ -2442,8 +2493,11 @@ def main() -> int:
     # family's evidence - they measure the SELECTOR, not an engine.
     auto_scale_csvs = {shape: newest(f"auto-scale-{shape}-*.csv")
                        for shape in ("random", "staircase", "refinery")}
-    gpu_csv = newest("gpu-*.csv")
-    gpu_real_csv = newest("gpu-real-*.csv")
+    # The laptop card's own runs are the default-named files (gpu-<sha>.csv); a datacenter
+    # card's runs carry the card in the name (gpu-l4-<sha>.csv) and are rendered in 1g.3,
+    # so the newest of the two never silently replaces the other (#488).
+    gpu_csv = newest("gpu-*.csv", prefix="gpu")
+    gpu_real_csv = newest("gpu-real-*.csv", prefix="gpu-real")
     # Only a run over the whole set is named maros-meszaros-<sha>.csv; a subset run is
     # maros-meszaros-partial-<sha>.csv and the prefix filter keeps it out (#491).
     maros_meszaros_csv = newest("maros-meszaros-*.csv", prefix="maros-meszaros")
@@ -2564,6 +2618,13 @@ below is where the GPU overtakes the CPU.
 #### 1g.2 GPU PDHG vs OR-Tools PDLP
 
 {gpu_pdlp_section(gpu_pdlp_csv)}
+#### 1g.3 The same measurements on a datacenter card
+
+Everything above 1g.3 is one laptop card. A rented card (E2E Networks TIR) runs the same
+runners from a fresh clone at a `main` commit; the CPU column in each table is that
+machine's own CPU, so a ratio here is card against host, not card against the laptop.
+
+{gpu_cards_section()}
 ---
 
 ### 1f. Scale — how far up this goes

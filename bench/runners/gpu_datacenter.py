@@ -1,181 +1,164 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-# GPU evidence on a datacenter card (A100 / L4) with full FP64 (#488).
-#
-# Usage (on the rented A100 or L4 with the GPU binary built):
-#   python bench/runners/gpu_datacenter.py --binary build/sankhya \
-#       --card a100 --repeats 5
-#
-# What this runs (per the issue spec):
-#   - Synthetic ladder + refinery-year instances (generate_large_lp.py /
-#     generate_refinery_lp.py)
-#   - Mittelmann instances that PDHG finishes (from fetch_mittelmann.py)
-#   - CPU (multithreaded, --threads N) vs GPU, SAME iteration count forced on
-#     both sides (--iteration-limit K) so the ratio is purely per-iteration
-#   - Then free-running to 1e-4, 1e-6, 1e-8
-#   - HiGHS as a separate process on the same instances (context only)
-#   - Median of --repeats N runs with spread (IQR)
-#
-# Output: bench/results/gpu-datacenter-<card>-<sha>.csv
-# Columns: instance, sha256, objective, reference_objective, abs_gap, rel_gap,
-#          status, wall_time_s, iterations, git_commit, machine, card,
-#          cuda_version, driver_version, mode (cpu|gpu|highs), tol
+"""GPU PDHG on a datacenter card against the same machine's CPU PDHG (#488).
 
+The crossover runner (gpu_report.py) and the real-instance runner (gpu_real_instances.py)
+each measure one card against one host at two tolerances. This one is the protocol for a
+RENTED card, where the question is per-card and the answer has to survive a different host
+CPU: the card is named in the file, every wall time is the median of `--repeats` runs with
+its spread, three tolerances are measured, and one extra pair of runs forces the SAME
+iteration count on both sides so the per-iteration ratio is separated from the
+tolerance-dependent iteration count.
+
+    python bench/runners/gpu_datacenter.py --binary build_gpu/sankhya --card l4 --repeats 3
+
+Output: bench/results/gpu-datacenter-<card>-<sha>.csv, the sha from the binary (#433).
+Columns: instance, instance_sha256, mode (cpu-<N>t | gpu), tol, iteration_limit, status,
+objective, iterations, seconds (the solver's own), wall_median_s, wall_spread_s (max-min of
+the repeats), repeats, git_commit, machine, card, gpu, timestamp_utc.
+
+The default instances are the Mittelmann ones CPU PDHG finishes inside the time limit
+(#446: chromaticindex1024-7, brazil3), read from data/mittelmann after
+fetch_mittelmann.py; pass --instances for anything else. No comparator solver runs here:
+that is gpu_pdlp_compare.py's job.
+"""
 from __future__ import annotations
 
 import argparse
 import csv
+import datetime as dt
 import hashlib
-import json
-import os
-import pathlib
-import subprocess
+import platform
+import statistics
 import sys
-import time
-from statistics import median, quantiles
-from typing import Any
+from pathlib import Path
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import stamp  # noqa: E402  (#433: the CSV names the commit the BINARY was built from)
+from gpu_real_instances import find_mittelmann_mps, gpu_description, run_solve  # noqa: E402
 
-RESULTS_DIR = pathlib.Path(__file__).parent.parent / "results"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RESULTS_DIR = REPO_ROOT / "bench" / "results"
+
+COLUMNS = [
+    "instance", "instance_sha256", "mode", "tol", "iteration_limit", "status", "objective",
+    "iterations", "seconds", "wall_median_s", "wall_spread_s", "repeats", "git_commit",
+    "machine", "card", "gpu", "timestamp_utc",
+]
+
+# Mittelmann instances CPU PDHG already finishes (#446); the rest hit the limit on both sides
+# and would only measure the limit.
+DEFAULT_INSTANCES = ["chromaticindex1024-7", "brazil3"]
 
 
-def sha256_file(path: pathlib.Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 16), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
-def run_sankhya(binary: str, mps: pathlib.Path, extra_args: list[str],
-                repeats: int) -> dict[str, Any]:
-    times = []
-    result: dict[str, Any] = {}
+def repeated(binary: Path, mps: Path, algorithm: str, tol: float, time_limit: float,
+             repeats: int, iteration_limit: int | None, threads: int) -> dict:
+    """`repeats` solves; the answer of the last one, the median and spread of all walls."""
+    walls: list[float] = []
+    last: dict = {}
+    extra = [f"threads={threads}"] if algorithm == "pdhg-cpu" else []
+    if iteration_limit is not None:
+        extra.append(f"iteration_limit={iteration_limit}")
     for _ in range(repeats):
-        t0 = time.perf_counter()
-        proc = subprocess.run(
-            [binary, "solve", str(mps), "--stats", "-", "--json"] + extra_args,
-            capture_output=True,
-            text=True,
-        )
-        elapsed = time.perf_counter() - t0
-        times.append(elapsed)
-        if proc.returncode == 0:
-            try:
-                result = json.loads(proc.stdout)
-            except json.JSONDecodeError:
-                pass
-    result["wall_time_s"] = median(times)
-    result["wall_time_iqr"] = (quantiles(times, n=4)[2] - quantiles(times, n=4)[0]
-                               if len(times) >= 4 else 0.0)
-    return result
+        last = run_solve(binary, mps, algorithm, tol, time_limit, extra_options=extra)
+        walls.append(float(last["wall"]))
+    last["wall_median_s"] = statistics.median(walls)
+    last["wall_spread_s"] = max(walls) - min(walls)
+    return last
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="GPU datacenter benchmark (#488)")
-    parser.add_argument("--binary", required=True, help="path to sankhya binary")
-    parser.add_argument("--card", default="unknown", help="card tag (a100, l4, …)")
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--card", required=True,
+                        help="short card name for the filename: l4, a100, h100, ...")
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--threads", type=int, default=8,
-                        help="CPU thread count for the CPU reference run")
-    parser.add_argument("--tols", default="1e-4,1e-6,1e-8",
-                        help="comma-separated tolerance levels")
-    parser.add_argument("--instances", nargs="+",
-                        help="explicit .mps/.mps.gz paths (default: auto-discover)")
+                        help="CPU thread count for the CPU arm")
+    parser.add_argument("--time-limit", type=float, default=600.0)
+    parser.add_argument("--tols", default="1e-4,1e-6,1e-8")
+    parser.add_argument("--iteration-limit", type=int, default=2000,
+                        help="the forced count for the per-iteration pair; 0 skips it")
+    parser.add_argument("--instances", nargs="+", type=Path,
+                        help="explicit .mps paths (default: the Mittelmann ones PDHG finishes)")
+    parser.add_argument("--out", type=Path)
     args = parser.parse_args()
 
-    tols = [float(t) for t in args.tols.split(",")]
-
-    # Discover instances if not given explicitly
-    instances: list[pathlib.Path] = []
     if args.instances:
-        instances = [pathlib.Path(p) for p in args.instances]
+        instances = list(args.instances)
     else:
-        for d in [pathlib.Path("bench/data/mittelmann"),
-                  pathlib.Path("bench/data/synthetic")]:
-            if d.exists():
-                instances += sorted(d.glob("*.mps")) + sorted(d.glob("*.mps.gz"))
-
+        instances = [p for p in (find_mittelmann_mps(n) for n in DEFAULT_INSTANCES) if p]
     if not instances:
-        print("No instances found. Run fetch_mittelmann.py or pass --instances.",
+        print("no instances: run bench/runners/fetch_mittelmann.py or pass --instances",
               file=sys.stderr)
         return 1
+    tols = [float(t) for t in args.tols.split(",")]
 
-    # The commit the binary reports through `sankhya version`, with -dirty from the tree;
-    # HEAD alone names whatever is checked out when the runner starts, which on a rented
-    # card is not necessarily what was built (#433).
-    git_commit = stamp.stamp(args.binary)
-    machine = subprocess.run(
-        ["uname", "-n"], capture_output=True, text=True
-    ).stdout.strip()
+    commit = stamp.stamp(args.binary)
+    machine = f"{platform.system()}-{platform.machine()}"
+    gpu = gpu_description(args.binary)
+    stamp_utc = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
+    out = args.out or RESULTS_DIR / f"gpu-datacenter-{args.card}-{commit}.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = RESULTS_DIR / f"gpu-datacenter-{args.card}-{git_commit}.csv"
-    fieldnames = [
-        "instance", "sha256", "objective", "reference_objective",
-        "abs_gap", "rel_gap", "status", "wall_time_s", "wall_time_iqr",
-        "iterations", "git_commit", "machine", "card", "mode", "tol",
-    ]
+    print(f"card {args.card}: {gpu}; solver {commit}; {len(instances)} instance(s), "
+          f"{args.repeats} repeat(s), tolerances {args.tols}")
+    print(f"{'instance':>24} {'mode':>8} {'tol':>6} {'iters':>8} {'status':>12} "
+          f"{'median s':>10} {'spread':>8}")
 
-    with open(out_path, "w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+    def emit(mps: Path, digest: str, mode: str, tol: float, iteration_limit: int | None,
+             r: dict) -> dict:
+        row = {
+            "instance": mps.name.split(".")[0],
+            "instance_sha256": digest,
+            "mode": mode,
+            "tol": f"{tol:g}",
+            "iteration_limit": "" if iteration_limit is None else iteration_limit,
+            "status": r["status"],
+            "objective": "" if r["objective"] is None else repr(r["objective"]),
+            "iterations": r["iterations"],
+            "seconds": f"{r['seconds']:.6f}",
+            "wall_median_s": f"{r['wall_median_s']:.6f}",
+            "wall_spread_s": f"{r['wall_spread_s']:.6f}",
+            "repeats": args.repeats,
+            "git_commit": commit,
+            "machine": machine,
+            "card": args.card,
+            "gpu": gpu,
+            "timestamp_utc": stamp_utc,
+        }
+        print(f"{row['instance']:>24} {mode:>8} {row['tol']:>6} {str(r['iterations']):>8} "
+              f"{r['status']:>12} {r['wall_median_s']:>10.3f} {r['wall_spread_s']:>8.3f}")
+        return row
+
+    cpu_mode = f"cpu-{args.threads}t"
+    with out.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=COLUMNS)
         writer.writeheader()
-
         for mps in instances:
             digest = sha256_file(mps)
-            for tol in tols:
-                tol_args = [f"--option", f"primal_feasibility_tolerance={tol}",
-                            "--option", f"dual_feasibility_tolerance={tol}"]
-                # CPU run
-                cpu_res = run_sankhya(
-                    args.binary, mps,
-                    ["--option", f"threads={args.threads}"] + tol_args,
-                    args.repeats,
-                )
-                writer.writerow({
-                    "instance": mps.name,
-                    "sha256": digest,
-                    "objective": cpu_res.get("objective", ""),
-                    "reference_objective": "",
-                    "abs_gap": cpu_res.get("abs_gap", ""),
-                    "rel_gap": cpu_res.get("rel_gap", ""),
-                    "status": cpu_res.get("status", "error"),
-                    "wall_time_s": cpu_res["wall_time_s"],
-                    "wall_time_iqr": cpu_res["wall_time_iqr"],
-                    "iterations": cpu_res.get("iterations", ""),
-                    "git_commit": git_commit,
-                    "machine": machine,
-                    "card": args.card,
-                    "mode": f"cpu-{args.threads}t",
-                    "tol": tol,
-                })
-                # GPU run
-                gpu_res = run_sankhya(
-                    args.binary, mps,
-                    ["--gpu"] + tol_args,
-                    args.repeats,
-                )
-                writer.writerow({
-                    "instance": mps.name,
-                    "sha256": digest,
-                    "objective": gpu_res.get("objective", ""),
-                    "reference_objective": "",
-                    "abs_gap": gpu_res.get("abs_gap", ""),
-                    "rel_gap": gpu_res.get("rel_gap", ""),
-                    "status": gpu_res.get("status", "error"),
-                    "wall_time_s": gpu_res["wall_time_s"],
-                    "wall_time_iqr": gpu_res["wall_time_iqr"],
-                    "iterations": gpu_res.get("iterations", ""),
-                    "git_commit": git_commit,
-                    "machine": machine,
-                    "card": args.card,
-                    "mode": "gpu",
-                    "tol": tol,
-                })
+            # One untimed warm-up on the card so the first measured run is not paying for
+            # context creation and module load (the same as gpu_real_instances.py).
+            run_solve(args.binary, mps, "pdhg-cuda", tols[0], args.time_limit)
+            plan: list[tuple[float, int | None]] = [(tol, None) for tol in tols]
+            if args.iteration_limit > 0:
+                plan.append((tols[-1], args.iteration_limit))
+            for tol, iteration_limit in plan:
+                for algorithm, mode in (("pdhg-cpu", cpu_mode), ("pdhg-cuda", "gpu")):
+                    r = repeated(args.binary, mps, algorithm, tol, args.time_limit,
+                                 args.repeats, iteration_limit, args.threads)
+                    writer.writerow(emit(mps, digest, mode, tol, iteration_limit, r))
+                    handle.flush()
 
-    print(f"Results written to {out_path}")
+    print(f"\nwrote {out}")
     return 0
 
 

@@ -139,6 +139,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--set", dest="instance_set", choices=("small", "full"), default="small")
     parser.add_argument("--force", action="store_true", help="re-download present archives")
+    parser.add_argument("--update-manifest", action="store_true",
+                        help="rewrite data/mittelmann/reference.json when a decoded MPS differs "
+                             "from the committed entry (by default the difference is reported "
+                             "and the tracked file is left alone, so a benchmark run on a "
+                             "fresh clone does not stamp itself -dirty, #488)")
     args = parser.parse_args()
 
     archives = SMALL_SET if args.instance_set == "small" else FULL_SET
@@ -146,12 +151,15 @@ def main() -> int:
     manifest_path = DATA_DIR / "reference.json"
     manifest = {"source": BASE_URL, "benchmark_page": "https://plato.asu.edu/ftp/lpfeas.html",
                 "instance_set": args.instance_set, "instances": {}}
+    previous: dict = {}
     if manifest_path.exists():
         try:
             previous = json.loads(manifest_path.read_text())
-            manifest["instances"] = previous.get("instances", {})
+            manifest["instances"] = dict(previous.get("instances", {}))
         except (OSError, ValueError):
             pass
+    committed = {k: dict(v) for k, v in manifest["instances"].items()}
+    differs: list[str] = []
 
     for archive in archives:
         name = instance_name(archive)
@@ -179,7 +187,7 @@ def main() -> int:
             mps_path.replace(packed)
             emps, _ = fetch_data.build_emps(DATA_DIR)
             fetch_data.decompress(emps, packed, mps_path)
-        manifest["instances"][name] = {
+        entry = {
             "name": name,
             "archive": archive,
             "url": url,
@@ -189,13 +197,31 @@ def main() -> int:
             "mps_sha256": sha256_of(mps_path),
             "in_set": args.instance_set,
         }
+        old = committed.get(name)
+        if old is not None and old.get("mps_sha256") != entry["mps_sha256"]:
+            # The decoded MPS is not the committed one (a different emps build, a different
+            # archive on the server). Say so with both digests: the CSV rows record the
+            # sha they were measured on, and the manifest is only rewritten on request.
+            differs.append(name)
+            print(f"  {name}: decoded MPS sha256 {entry['mps_sha256'][:12]} ({entry['mps_bytes']} B) "
+                  f"differs from the committed manifest {old.get('mps_sha256', '')[:12]} "
+                  f"({old.get('mps_bytes', '?')} B)")
+        manifest["instances"][name] = entry
         print(f"  {name}: {archive_path.stat().st_size / 1e6:.1f} MB compressed, "
               f"{mps_path.stat().st_size / 1e6:.1f} MB MPS")
 
     manifest["instances"] = dict(sorted(manifest["instances"].items()))
-    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                             encoding="utf-8")
-    print(f"wrote {manifest_path} ({len(archives)} instances in set '{args.instance_set}')")
+    unchanged = previous and previous.get("instances") == manifest["instances"] \
+        and previous.get("instance_set") == manifest["instance_set"]
+    if unchanged:
+        print(f"{manifest_path} already records these {len(archives)} instances; not rewritten")
+    elif differs and not args.update_manifest:
+        print(f"{manifest_path} NOT rewritten: {', '.join(differs)} decoded to a different MPS "
+              f"than the committed entry; pass --update-manifest to record the new digests")
+    else:
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                                 encoding="utf-8")
+        print(f"wrote {manifest_path} ({len(archives)} instances in set '{args.instance_set}')")
     return 0
 
 

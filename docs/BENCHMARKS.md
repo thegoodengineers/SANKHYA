@@ -427,6 +427,25 @@ python bench/runners/fetch_mittelmann.py
 python bench/runners/gpu_real_instances.py --binary build_gpu/sankhya
 ```
 
+#### 1g.2 GPU PDHG vs OR-Tools PDLP
+
+Not yet run. Reproduce with (needs GPU card and `pip install ortools`):
+
+```
+python bench/runners/fetch_mittelmann.py
+python bench/runners/gpu_pdlp_compare.py --binary build_gpu/sankhya
+```
+
+See `docs/PROVENANCE.md` row 21 for the OR-Tools provenance judgement call.
+
+#### 1g.3 The same measurements on a datacenter card
+
+Everything above 1g.3 is one laptop card. A rented card (E2E Networks TIR) runs the same
+runners from a fresh clone at a `main` commit; the CPU column in each table is that
+machine's own CPU, so a ratio here is card against host, not card against the laptop.
+
+No datacenter card has been measured yet. The three runners write `gpu-<card>-<sha>.csv`, `gpu-real-<card>-<sha>.csv` and `gpu-datacenter-<card>-<sha>.csv`; commit them and this section fills itself.
+
 ---
 
 ### 1f. Scale — how far up this goes
