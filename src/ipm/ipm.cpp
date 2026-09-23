@@ -121,12 +121,21 @@ class InteriorPoint {
         warm_(warm),
         clock_(clock) {}
 
+  /// The Ruiz factors solve_scaled() built, so residuals() can measure the iterate in
+  /// MODEL space beside the scaled space it iterates in (#582). Null means no scaling.
+  void set_scaling(const Scaling* scaling) { scaling_ = scaling; }
+
   Solution run();
 
  private:
   void build();
   void apply_warm_start();
   void residuals();
+  /// The model-space half of residuals() (#582).
+  void model_space_residuals();
+  /// The ten rows carrying the worst model-space violation, with their scale factors, at
+  /// verbose, for a stop whose model-space residual is above the tolerance (#582).
+  void log_worst_model_rows() const;
   [[nodiscard]] bool direction_is_finite() const;
   [[nodiscard]] bool factorize();
 
@@ -204,6 +213,18 @@ class InteriorPoint {
   std::vector<double> r_b_, r_c_, r_l_, r_u_;
   double primal_infeasibility_ = 0.0;
   double dual_infeasibility_ = 0.0;
+  /// THE SAME MEASUREMENT THE STATUS GUARD MAKES (#582): the largest primal violation in
+  /// model space, each row's over max(1, the largest term of its activity sum) and each
+  /// bound's over max(1, |x|), exactly Solution::recompute_quality's
+  /// primal_infeasibility_scaled. On irish-electricity the scaled residual above read
+  /// 1.2e-8 while this read 1.0e-4: the Ruiz factors on its worst rows are four decades,
+  /// and a residual that is small in the units the loop iterates in is not small in the
+  /// units the model is written in. The loop converges only when both hold.
+  double model_primal_infeasibility_ = 0.0;
+  /// Per row, the model-space relative violation behind model_primal_infeasibility_, for
+  /// the worst-rows table at a stop that does not meet it.
+  std::vector<double> model_row_violation_;
+  const Scaling* scaling_ = nullptr;
   double mu_ = 0.0;
   double max_product_ = 0.0;
   double objective_ = 0.0;
@@ -568,6 +589,81 @@ void InteriorPoint::residuals() {
   primal_infeasibility_ /= 1.0 + x_norm;
   dual_infeasibility_ /= 1.0 + c_norm;
   mu_ = bound_count_ > 0 ? complementarity / static_cast<double>(bound_count_) : 0.0;
+  model_space_residuals();
+}
+
+void InteriorPoint::model_space_residuals() {
+  // The scaled model is Ahat = Dr A Dc, xhat = x / Dc, bhat = Dr b, so a scaled row
+  // residual r is Dr times the model's, a scaled structural bound residual is the model's
+  // over Dc, and a logical's bound is its row's bound. The guard's scale for a row is the
+  // largest |A_ij x_j| in the row - |Ahat_ij xhat_j| / Dr_i here - and for a bound it is
+  // |x_j|. One pass over the matrix, the same cost as the residual itself.
+  const auto dr = [&](Index i) {
+    return scaling_ == nullptr ? 1.0 : scaling_->row[static_cast<std::size_t>(i)];
+  };
+  const auto dc = [&](Index j) {
+    return scaling_ == nullptr ? 1.0 : scaling_->column[static_cast<std::size_t>(j)];
+  };
+  std::vector<double> row_term(static_cast<std::size_t>(m_), 1.0);
+  for (Index j = 0; j < n_; ++j) {
+    const double xj = x_[static_cast<std::size_t>(j)];
+    if (xj == 0.0) continue;
+    const ColumnView column = model_.matrix.column(j);
+    for (Index q = 0; q < column.size; ++q) {
+      const auto r = static_cast<std::size_t>(column.rows[q]);
+      row_term[r] =
+          std::max(row_term[r], std::fabs(column.values[q] * xj) / dr(column.rows[q]));
+    }
+  }
+  model_row_violation_.assign(static_cast<std::size_t>(m_), 0.0);
+  model_primal_infeasibility_ = 0.0;
+  for (Index i = 0; i < m_; ++i) {
+    const auto u = static_cast<std::size_t>(i);
+    const auto k = static_cast<std::size_t>(n_ + i);
+    double violation = std::fabs(r_b_[u]);
+    if (has_lower_[k]) violation = std::max(violation, std::fabs(r_l_[k]));
+    if (has_upper_[k]) violation = std::max(violation, std::fabs(r_u_[k]));
+    model_row_violation_[u] = violation / dr(i) / row_term[u];
+    model_primal_infeasibility_ =
+        std::max(model_primal_infeasibility_, model_row_violation_[u]);
+  }
+  for (Index j = 0; j < n_; ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    if (!has_lower_[u] && !has_upper_[u]) continue;
+    double violation = 0.0;
+    if (has_lower_[u]) violation = std::max(violation, std::fabs(r_l_[u]));
+    if (has_upper_[u]) violation = std::max(violation, std::fabs(r_u_[u]));
+    const double x_model = std::fabs(x_[u] * dc(j));
+    model_primal_infeasibility_ =
+        std::max(model_primal_infeasibility_, violation * dc(j) / std::max(1.0, x_model));
+  }
+}
+
+void InteriorPoint::log_worst_model_rows() const {
+  if (model_row_violation_.empty()) return;
+  std::vector<Index> order(static_cast<std::size_t>(m_));
+  for (Index i = 0; i < m_; ++i) order[static_cast<std::size_t>(i)] = i;
+  const auto worse = [&](Index a, Index b) {
+    return model_row_violation_[static_cast<std::size_t>(a)] >
+           model_row_violation_[static_cast<std::size_t>(b)];
+  };
+  const std::size_t shown = std::min<std::size_t>(10, order.size());
+  std::partial_sort(order.begin(), order.begin() + static_cast<std::ptrdiff_t>(shown),
+                    order.end(), worse);
+  logger_.verbose(
+      "interior point: model-space primal infeasibility {:.3e} against {:.0e}; the worst "
+      "rows (scaled residual | Ruiz row factor | model-space relative violation):",
+      model_primal_infeasibility_, tol::kPrimalFeasibility);
+  for (std::size_t q = 0; q < shown; ++q) {
+    const Index i = order[q];
+    const auto u = static_cast<std::size_t>(i);
+    const double factor = scaling_ == nullptr ? 1.0 : scaling_->row[u];
+    const std::string name = u < model_.row_names.size() && !model_.row_names[u].empty()
+                                 ? model_.row_names[u]
+                                 : fmt::format("row {}", i);
+    logger_.verbose("  {:<24} {:.3e} | {:.3e} | {:.3e}", name, std::fabs(r_b_[u]), factor,
+                    model_row_violation_[u]);
+  }
 }
 
 bool InteriorPoint::factorize() {
@@ -753,6 +849,10 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
   solution.solve_seconds = seconds;
   logger_.info("IPM: {} iterations, {} factorizations, {} regularized pivot(s) in total",
                iterations, factorizations_, regularized_pivots_);
+  if ((status == SolveStatus::kOptimal || status == SolveStatus::kFeasible) &&
+      model_primal_infeasibility_ > tol::kPrimalFeasibility) {
+    log_worst_model_rows();
+  }
   bool have_point = status == SolveStatus::kOptimal || status == SolveStatus::kFeasible ||
                     status == SolveStatus::kIterationLimit ||
                     status == SolveStatus::kTimeLimit || status == SolveStatus::kInterrupted;
@@ -1121,10 +1221,16 @@ Solution InteriorPoint::run() {
         std::max({primal_infeasibility_, dual_infeasibility_, relative_gap, max_product_}));
     logger_.verbose(
         "ipm iteration {}: mu {:.2e}, relative gap {:.2e}, worst relative product {:.2e}, "
-        "regularized pivots so far {}",
-        iterations, mu_, relative_gap, max_product_, regularized_pivots_);
+        "primal {:.2e} scaled / {:.2e} model, regularized pivots so far {}",
+        iterations, mu_, relative_gap, max_product_, primal_infeasibility_,
+        model_primal_infeasibility_, regularized_pivots_);
+    // BOTH SPACES (#582): the scaled residual is what the loop drives down; the model-space
+    // one is what the answer is judged by, and on a badly scaled model they differ by the
+    // Ruiz factors of the worst rows. Optimal is claimed only when the point would pass the
+    // guard's own measurement.
     if (primal_infeasibility_ <= kIpmTolerance && dual_infeasibility_ <= kIpmTolerance &&
-        relative_gap <= kIpmGap && max_product_ <= kIpmComplementarity) {
+        model_primal_infeasibility_ <= tol::kPrimalFeasibility && relative_gap <= kIpmGap &&
+        max_product_ <= kIpmComplementarity) {
       return finish(SolveStatus::kOptimal,
                     barrier_retry_used_
                         ? fmt::format("converged at a relative gap of {:.1e} one step after "
@@ -1276,6 +1382,7 @@ Solution InteriorPoint::run() {
           // reported as what it is, feasible to the slack, with the numbers in the message.
           const bool optimal_here = primal_infeasibility_ <= kIpmTolerance &&
                                     dual_infeasibility_ <= kIpmTolerance &&
+                                    model_primal_infeasibility_ <= tol::kPrimalFeasibility &&
                                     best_gap <= kIpmGap && max_product_ <= kIpmComplementarity;
           return finish(
               optimal_here ? SolveStatus::kOptimal : SolveStatus::kFeasible,
@@ -1285,11 +1392,12 @@ Solution InteriorPoint::run() {
                                 best_gap, regularized_now, m_)
                   : fmt::format("the barrier vanished ({} of {} pivots regularized in one "
                                 "factorization) with the best iterate at relative gap {:.1e} "
-                                "but infeasibility {:.1e} / {:.1e} and worst product {:.1e}, "
-                                "above the {:.0e} tolerance: a feasible point to that slack, "
-                                "not a proof (#576)",
+                                "but infeasibility {:.1e} / {:.1e} scaled, {:.1e} in model "
+                                "space, and worst product {:.1e}, above the {:.0e} tolerance: "
+                                "a feasible point to that slack, not a proof (#576, #582)",
                                 regularized_now, m_, best_gap, primal_infeasibility_,
-                                dual_infeasibility_, max_product_, kIpmTolerance),
+                                dual_infeasibility_, model_primal_infeasibility_, max_product_,
+                                kIpmTolerance),
               iterations, timer.elapsed_seconds());
         }
       }
@@ -1475,6 +1583,7 @@ Solution solve_scaled(const Model& model, const Options& options, Logger& logger
   logger.verbose("interior point: scaled model and warm start ready at {:.2f}s",
                  clock.elapsed_seconds());
   InteriorPoint engine(scaled, options, logger, control, warm, &clock);
+  engine.set_scaling(&scaling);
   Solution solution = engine.run();
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);

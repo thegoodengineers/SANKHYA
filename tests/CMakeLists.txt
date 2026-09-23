@@ -36,6 +36,7 @@ add_executable(sankhya_tests
   unit/test_ldl.cpp
   unit/test_ipm.cpp
   unit/test_ipm_time_limit.cpp
+  unit/test_ipm_scaling.cpp
   unit/test_crossover.cpp
   unit/test_crossover_nonoptimal.cpp
   unit/test_engine_selection.cpp
