@@ -270,12 +270,22 @@ CUDA kernels are order-dependent and cannot satisfy the bit-for-bit promise. Whe
 `deterministic=true` and the GPU path would otherwise be selected, `solve()` logs a warning
 and falls back to CPU PDHG. `docs/PS26119_COVERAGE.md` says what exists.
 
-**GPU iteration counts vary run to run** (#448). The nondeterministic atomicAdd reductions
-change the rounding in every dot product on every run. PDHG's restart schedule is driven by
-residual ratios computed from those dot products, so different rounding produces different
-restart decisions, which in turn produce different iteration counts. The effect is large
-enough to observe in `bench/results/gpu-*.csv`: the GPU count at 500×500 / 1e-4 has varied
-from 2,400 to well above the CPU count for the same cell across benchmark runs.
+**GPU iteration counts vary run to run** (#448, open). The working hypothesis is the
+nondeterministic atomicAdd reductions above: they change the rounding in every dot product
+on every run, PDHG's restart schedule is driven by residual ratios computed from those dot
+products, and a different restart decision is a different iteration count. It is a
+hypothesis, not a finding - #448 asks for the two paths to be instrumented on one instance
+and their traces diffed to the first divergence, and that has not been done. The effect is
+large enough to observe in `bench/results/gpu-*.csv`: the GPU count at 500×500 / 1e-4 has
+varied from 2,400 to well above the CPU count for the same cell across benchmark runs.
+
+One observation in the same CSV is not explained by that hypothesis and stays open with
+#448: on the CPU, the 1e-4 and 1e-8 runs stop at identical iteration counts at 1000, 2000,
+5000 and 10000 rows, while the GPU counts differ between the two tolerances everywhere.
+Either the CPU converges past 1e-8 before it first checks 1e-4 on those instances - and
+then the question is why the GPU does not - or the requested tolerance is not steering CPU
+termination the way it is meant to. Until that is answered, section 1g's GPU crossover is
+a timing comparison between runs that may not be doing the same work.
 
 Two consequences for reading section 1g of `docs/BENCHMARKS.md`:
 1. The speedup figure in the crossover table is the median of repeated runs, not a single
