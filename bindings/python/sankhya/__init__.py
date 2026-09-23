@@ -248,6 +248,13 @@ class Result:
     def _vector(self, function, count: int, what: str) -> list[float]:
         if count == 0:
             return []
+        # A result that claims no point may carry none at all (#505): a branch and bound
+        # stopped by a limit before its first integer point hands back empty vectors, where it
+        # used to hand back the last node's LP relaxation. Asking for zero entries succeeds
+        # exactly when the vector is empty, so that case reads as [] instead of raising on a
+        # buffer size nobody chose.
+        if not self.claims_a_point and function(self._handle, (ctypes.c_double * 1)(), 0) == 0:
+            return []
         buffer = (ctypes.c_double * count)()
         _check(function(self._handle, buffer, count), f"reading {what}")
         return list(buffer)

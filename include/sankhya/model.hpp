@@ -75,16 +75,16 @@ enum class SolveStatus : std::uint8_t {
   /// achieved gap in the message (#188).
   kFeasible,
   kIterationLimit,
-  /// The point in hand when the limit fell. On a MILP with no incumbent yet, that point is
-  /// the last node's LP relaxation - fractional, and said so in the message - because a
-  /// limited search that found nothing still has a point to show, and a caller who wants
-  /// integrality reads integrality_violation (#223).
+  /// The point in hand when the limit fell. On a MILP that is the incumbent, and a search
+  /// that had none reports NO point: empty col_value, the worst representable objective,
+  /// the bound its open nodes still prove (#505). It used to report the last node's LP
+  /// relaxation (#223), which every reader of `objective` took for an incumbent.
   kTimeLimit,
   kNodeLimit,
   kNumericalError,
   kModelError,
   /// Stopped by the caller - a progress callback that returned non-zero, SolveControl::
-  /// interrupt(), or SIGINT on the CLI. Carries a point exactly as kTimeLimit does (#223).
+  /// interrupt(), or SIGINT on the CLI. Carries a point exactly as kTimeLimit does.
   kInterrupted
 };
 
@@ -591,9 +591,10 @@ class Solution {
 /// checker needs both halves.
 ///
 /// The limit states say yes because they normally stop with an iterate or an incumbent in
-/// hand. The one exception is a node limit reached before branch and bound found any integer
-/// point, which reports no objective and infinite gaps rather than a point (see
-/// `src/mip/branch_and_bound.cpp`); that case predates this predicate and is unchanged by it.
+/// hand. The exception is branch and bound stopped by any limit before it found an integer
+/// point: it reports no point, an empty col_value and the worst representable objective (see
+/// `src/mip/branch_and_bound.cpp`, #505). This overload cannot see that; the one taking the
+/// Solution below can, and is the one a writer or a checker should ask.
 ///
 [[nodiscard]] constexpr bool claims_a_point(SolveStatus status) noexcept {
   switch (status) {
@@ -613,8 +614,19 @@ class Solution {
   }
 }
 
+/// The same question asked of the answer itself: a limit status with an empty point and a
+/// non-finite objective is a search that stopped with nothing, and claims no point (#505).
+/// Before this, the .sol writer answered it with a columns block of zeros - a point nothing
+/// had found, which the independent checker then judged.
 [[nodiscard]] inline bool claims_a_point(const Solution& solution) noexcept {
-  return claims_a_point(solution.status);
+  if (!claims_a_point(solution.status)) return false;
+  const bool stopped_on_a_limit = solution.status == SolveStatus::kTimeLimit ||
+                                  solution.status == SolveStatus::kIterationLimit ||
+                                  solution.status == SolveStatus::kNodeLimit ||
+                                  solution.status == SolveStatus::kInterrupted;
+  const bool nothing_found = solution.col_value.empty() && !(solution.objective > -kInfinity &&
+                                                             solution.objective < kInfinity);
+  return !(stopped_on_a_limit && nothing_found);
 }
 
 // =========================================================================================

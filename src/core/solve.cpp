@@ -168,6 +168,15 @@ void refuse_a_non_finite_answer(Solution* solution, Logger& logger) {
     // does to a rejected point too. What stays is the status, the reason and the bound.
     solution->col_value.clear();
     solution->row_activity.clear();
+    // ... and so do the numbers measured on them (#505). Postsolve rebuilds a full vector
+    // from what presolve fixed plus zeros and measures it, so an `ej` stopped with nothing
+    // reported primal_infeasibility 1 - the violation of a point nobody claimed - into the
+    // log, the .sol header and the stats JSON.
+    solution->primal_infeasibility = 0.0;
+    solution->primal_infeasibility_scaled = 0.0;
+    solution->dual_infeasibility = 0.0;
+    solution->dual_infeasibility_scaled = 0.0;
+    solution->integrality_violation = 0.0;
     solution->message +=
         "; no feasible point had been found when the limit stopped the search, so none is "
         "reported (the objective is the worst representable value, not a solution)";

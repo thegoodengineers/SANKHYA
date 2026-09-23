@@ -29,8 +29,8 @@ import sys
 from pathlib import Path
 
 from verify_solution_checks import (STATUSES_ASSERTING_FEASIBILITY, STATUSES_WITH_A_POINT,
-                                    bound_contribution, verify_farkas, verify_iis,
-                                    verify_pool, verify_ray)
+                                    bound_contribution, limit_found_nothing, verify_farkas,
+                                    verify_iis, verify_pool, verify_ray)
 from verify_solution_io import INF
 from verify_solution_mps import Model, parse_mps
 from verify_solution_sol import Solution, parse_sol
@@ -118,6 +118,15 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         report.note("verdict",
                     f"status is {solution.status}, which claims no point; nothing is asserted "
                     "and nothing is checked"
+                    + (f" - {solution.header['message']}" if "message" in solution.header
+                       else ""))
+        return report
+
+    # A LIMIT THAT FOUND NOTHING CLAIMS NOTHING (#505); see limit_found_nothing().
+    if limit_found_nothing(solution):
+        report.note("verdict",
+                    f"status is {solution.status} and no point was found before the limit; "
+                    "nothing is asserted and nothing is checked"
                     + (f" - {solution.header['message']}" if "message" in solution.header
                        else ""))
         return report

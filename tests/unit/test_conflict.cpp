@@ -639,8 +639,15 @@ TEST(Conflict, AnInterruptStopsTheSearchCleanlyWithConflictsOn) {
   const Solution solved = solve(model, searching(true, out.path()), &control);
   EXPECT_EQ(solved.status, SolveStatus::kInterrupted) << solved.message;
   EXPECT_GT(solved.nodes, 0);
-  ASSERT_TRUE(claims_a_point(solved)) << "an interrupted search still has a point to show";
-  EXPECT_EQ(solved.col_value.size(), static_cast<std::size_t>(model.num_cols()));
+  // An interrupted search carries its incumbent or nothing (#505); which one depends on
+  // where the interrupt landed. It used to carry the last node's LP relaxation when it had
+  // no incumbent, which is what this line asserted before.
+  if (claims_a_point(solved)) {
+    EXPECT_EQ(solved.col_value.size(), static_cast<std::size_t>(model.num_cols()));
+  } else {
+    EXPECT_TRUE(solved.col_value.empty());
+    EXPECT_TRUE(std::isinf(solved.objective)) << solved.objective;
+  }
   // The report is still written, and the analysis never ran away with the search: its work
   // budget is counted in verification calls per explored node.
   const nlohmann::json report = read_json(out.path());

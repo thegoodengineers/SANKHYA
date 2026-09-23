@@ -331,7 +331,6 @@ Solution BranchAndBound::run() {
 
   StopController stop(control_, timer_, limits_);
   SolveStatus stop_status;
-  Solution best_available_point;
 
   while (!open_.empty()) {
     // PERIODIC CHECKPOINT (#287), between nodes: no node is entered, so every bound in the
@@ -520,7 +519,6 @@ Solution BranchAndBound::run() {
       solution.stopped_by = relaxation.status == SolveStatus::kTimeLimit
                                 ? LimitReason::kTime
                                 : LimitReason::kInterrupt;
-      best_available_point = std::move(relaxation);
       // THE NODE IS STILL OPEN. It was taken off the list to be solved and was not, so its
       // inherited bound is part of what the search can still say; leaving it out reported
       // the next-best bound instead, and with nothing else open, no bound at all (#222).
@@ -555,8 +553,6 @@ Solution BranchAndBound::run() {
       open_.push_back(node_index);  // still open, as above
       break;
     }
-
-    best_available_point = relaxation;
 
     if (node_index == 0) {
       root_bound_internal_ = internal_objective(relaxation.col_value);
@@ -759,36 +755,38 @@ Solution BranchAndBound::run() {
     const double nothing_found =
         original_.sense == ObjSense::kMaximize ? -kInfinity : kInfinity;
 
-    if (limit_hit && claims_a_point(solution.status) &&
-        !best_available_point.col_value.empty()) {
-      solution.col_value = std::move(best_available_point.col_value);
-      solution.row_activity = std::move(best_available_point.row_activity);
-      solution.row_dual = std::move(best_available_point.row_dual);
-      solution.col_dual = std::move(best_available_point.col_dual);
-      solution.objective = best_available_point.objective;
-      solution.primal_infeasibility = best_available_point.primal_infeasibility;
-      solution.primal_infeasibility_scaled = best_available_point.primal_infeasibility_scaled;
-      solution.dual_infeasibility = best_available_point.dual_infeasibility;
-      solution.dual_infeasibility_scaled = best_available_point.dual_infeasibility_scaled;
-      solution.integrality_violation = best_available_point.integrality_violation;
+    // NO INTEGER POINT WAS FOUND, so there is no point and no objective to report (#505).
+    //
+    // A limit without an incumbent used to report the last node LP (#223), with a message
+    // saying it was fractional. The benchmark runner and every other reader take `objective`
+    // on a MILP for the incumbent's value, and the .sol file for a point: MIPLIB `ej` came
+    // back time_limit with objective 46624.61 on three integer columns, the relaxation of
+    // whatever node the clock stopped, which the independent verifier rejected on
+    // integrality. Under a time limit that point need not even be an LP optimum - the node
+    // LP the clock interrupted is the one that was kept. The message said what it was; the
+    // fields did not, and the fields are what get read. A limited search now carries a
+    // verified incumbent or nothing.
+    //
+    // Nor does it leave the allocated zeros standing in for a point: the worst
+    // representable objective, with empty vectors, is how "nothing found" is said here and
+    // in the parallel search, the dispatcher (refuse_a_non_finite_answer) and postsolve
+    // already read it that way, and claims_a_point() and the .sol writer read an empty
+    // point under a limit as no point (#505). Leaving the objective at its default said
+    // objective 0, bound 0, gap 0 - and a gap of zero means CLOSED, the exact opposite of
+    // what happened: enlight8, enlight_hard, timtab1 and neos-1425699 all came back
+    // `node_limit` with `gap 0.00e+00` beside them before that was fixed.
+    solution.objective = nothing_found;
+    if (limit_hit) {
+      // The dispatcher's non-finite guard does the same and says so in the message; doing it
+      // here too means the engine's own answer, read without the dispatcher, says it as well.
+      solution.col_value.clear();
+      solution.row_activity.clear();
+      solution.primal_infeasibility = 0.0;
+      solution.primal_infeasibility_scaled = 0.0;
+      solution.dual_infeasibility = 0.0;
+      solution.dual_infeasibility_scaled = 0.0;
+      solution.integrality_violation = 0.0;
       solution.iterations = warm_node_iterations_ + cold_node_iterations_;
-      // A LIMIT WITHOUT AN INCUMBENT STILL SHOWS A POINT, and says what it is. `objective`
-      // on a MILP has always meant the incumbent's value; a reader who finds a value here
-      // must not take a fractional relaxation for an integer solution.
-      solution.message += fmt::format(
-          "; no integer feasible point was found, so the point reported is the last LP "
-          "relaxation, fractional by {:.3e}",
-          solution.integrality_violation);
-    } else {
-      // NO POINT WAS FOUND, so there is no objective to report. Leaving these at their
-      // defaults said objective 0, bound 0, gap 0 - and a gap of zero means CLOSED, which is
-      // the exact opposite of what happened. MIPLIB found this: enlight8, enlight_hard,
-      // timtab1 and neos-1425699 all came back `node_limit` with `gap 0.00e+00` beside them.
-      //
-      // The worst representable objective is the honest stand-in for "nothing found": no
-      // feasible point means no bound on the incumbent side at all. The gaps are infinite for
-      // the same reason - unknown, not closed.
-      solution.objective = nothing_found;
     }
     // The BOUND is different, and is real information worth keeping: when a limit stopped
     // the search, the open nodes still prove the optimum is no better than final_bound. Only

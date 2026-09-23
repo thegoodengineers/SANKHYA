@@ -285,7 +285,17 @@ TEST(BranchAndBound, RespectsSolveControlInterruptionWithCallback) {
 
   const Solution s = solve(model, mip_options(), &control);
   EXPECT_EQ(s.status, SolveStatus::kInterrupted);
-  EXPECT_TRUE(claims_a_point(s));
+  // An interrupted search carries its incumbent or nothing (#505). Which of the two depends
+  // on whether the interrupt landed before the first integer point, and that is timing, so
+  // the contract is asserted in whichever form it takes. It used to carry the last node's
+  // LP relaxation when it had no incumbent, and claims_a_point() was true either way.
+  if (claims_a_point(s)) {
+    EXPECT_EQ(s.col_value.size(), static_cast<std::size_t>(model.num_cols()));
+    EXPECT_LE(s.integrality_violation, tol::kIntegrality) << "a point claimed is an incumbent";
+  } else {
+    EXPECT_TRUE(s.col_value.empty());
+    EXPECT_TRUE(std::isinf(s.objective)) << s.objective;
+  }
   EXPECT_EQ(callback_count, 2);
   EXPECT_GT(s.nodes, 0);
   EXPECT_LE(s.nodes, 100);  // node count is bounded

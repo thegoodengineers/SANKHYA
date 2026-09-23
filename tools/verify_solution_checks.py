@@ -343,6 +343,27 @@ STATUSES_WITH_A_POINT = ("optimal", "feasible", "unbounded", "iteration_limit", 
 STATUSES_ASSERTING_FEASIBILITY = ("optimal", "feasible", "unbounded")
 
 
+def limit_found_nothing(solution: Solution) -> bool:
+    """A limit status whose file carries no point, by design (#505).
+
+    Branch and bound stopped by a limit before its first integer point writes its status, its
+    bound and the worst representable objective, and no columns or rows section - the
+    counterpart of claims_a_point(const Solution&) in include/sankhya/model.hpp. It used to
+    write the last node's LP relaxation, which the integrality check rejected (MIPLIB ej), and
+    before that a block of zeros. The stated objective has to be infinite as well as the
+    sections missing, so a file that lost a point it claims to have still fails the structure
+    check.
+    """
+    if solution.status not in STATUSES_WITH_A_POINT:
+        return False
+    if solution.status in STATUSES_ASSERTING_FEASIBILITY:
+        return False
+    if solution.col_value or solution.row_activity:
+        return False
+    stated = solution.header_float("objective")
+    return stated is not None and math.isinf(stated)
+
+
 def verify_pool(model: Model, solution: Solution, report: Report, x: list[float],
                 objective: float, primal_tol: float, integer_tol: float) -> None:
     """The solution pool (#225), checked from what the file says and nothing else.

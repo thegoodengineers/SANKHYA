@@ -350,22 +350,35 @@ TEST(ResourceLimits, ANodeLimitKeepsTheIncumbentAndTheBoundAndTheGap) {
   EXPECT_TRUE(std::isfinite(stopped.relative_gap));
 }
 
-TEST(ResourceLimits, ALimitedSearchWithNoIncumbentSaysWhatThePointIs) {
-  // Under nine nodes this model has no integer point yet. The convention (#223) is to report
-  // the last LP relaxation and say in the message that it is fractional - a limit is not a
-  // reason to return nothing, and it is not a reason to call a fractional point a solution.
-  // The primal heuristics of #290 find an integer point for this model at the root, which
-  // removes the situation this test is about; they are switched off so the search still
-  // reaches its node limit with no incumbent, the case whose reporting is under test.
+TEST(ResourceLimits, ALimitedSearchWithNoIncumbentReportsNoPoint) {
+  // Under nine nodes this model has no integer point yet. The convention was (#223) to
+  // report the last LP relaxation and say in the message that it was fractional; since #505
+  // it is to report nothing - no point, the worst representable objective - because every
+  // reader of `objective` on a MILP takes it for an incumbent's value, and MIPLIB ej came
+  // back time_limit with a fractional objective the verifier rejected. The bound the open
+  // nodes prove is kept. The primal heuristics of #290 find an integer point for this model
+  // at the root, which removes the situation this test is about; they are switched off so
+  // the search still reaches its node limit with no incumbent.
   const Model model = milp_with_a_negative_optimum();
+  const Solution solved = solve(model, quiet());
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+
   Options options = quiet();
   options.set_bool("mip_heuristics", false);
   options.set_int("node_limit", 4);
   const Solution stopped = solve(model, options);
   ASSERT_EQ(stopped.status, SolveStatus::kNodeLimit) << stopped.message;
   EXPECT_EQ(stopped.stopped_by, LimitReason::kNodes);
-  EXPECT_NE(stopped.message.find("fractional"), std::string::npos) << stopped.message;
-  EXPECT_GT(stopped.integrality_violation, 0.0);
+  EXPECT_TRUE(stopped.col_value.empty()) << "a relaxation is not a solution";
+  EXPECT_TRUE(stopped.row_activity.empty());
+  EXPECT_TRUE(std::isinf(stopped.objective) && stopped.objective > 0.0) << stopped.objective;
+  EXPECT_FALSE(claims_a_point(stopped)) << "a limit that found nothing claims no point";
+  EXPECT_EQ(stopped.integrality_violation, 0.0) << "no point, so nothing to be fractional";
+  EXPECT_EQ(stopped.primal_infeasibility, 0.0) << "no point, so nothing to be infeasible";
+  EXPECT_TRUE(std::isinf(stopped.relative_gap));
+  EXPECT_TRUE(std::isfinite(stopped.dual_bound)) << "the open nodes still prove a bound";
+  EXPECT_LE(stopped.dual_bound, solved.objective + 1e-9);
+  EXPECT_NE(stopped.message.find("none is reported"), std::string::npos) << stopped.message;
 }
 
 TEST(ResourceLimits, ANodeLpOutOfIterationsIsALimitAndNotANumericalFailure) {

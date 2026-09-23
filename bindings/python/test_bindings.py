@@ -187,6 +187,26 @@ def test_infeasible_returns_rather_than_raising() -> None:
           "infeasible is returned, not raised", result.status)
 
 
+def test_a_limit_with_no_incumbent_carries_no_point() -> None:
+    # MIPLIB ej (#505): one equality row over three integer columns, no integer point within
+    # 50 nodes without heuristics. The result claims no point, its objective is the worst
+    # representable value, its bound is real, and x is empty rather than a relaxation.
+    model = sankhya.Model()
+    x0 = model.add_column(cost=1.0, lower=1.0, upper=sankhya.INFINITY, integer=True, name="x0")
+    x1 = model.add_column(cost=0.0, upper=sankhya.INFINITY, integer=True, name="x1")
+    x2 = model.add_column(cost=0.0, upper=sankhya.INFINITY, integer=True, name="x2")
+    model.add_row({x0: 31013.0, x1: -41014.0, x2: -51015.0}, lower=0.0, upper=0.0)
+    result = model.solve(log_to_console=False, node_limit=50, mip_heuristics=False)
+    check(result.status == "node_limit", "ej stops at the node limit", result.status)
+    check(not result.claims_a_point, "a limit with no incumbent claims no point",
+          str(result.claims_a_point))
+    check(result.objective == float("inf"), "its objective is the worst representable",
+          str(result.objective))
+    check(1.0 <= result.dual_bound <= 25508.0, "its bound is still a bound",
+          str(result.dual_bound))
+    check(result.x == [], "x is empty, not a relaxation", str(result.x))
+
+
 def test_certificates_reach_python() -> None:
     # #207: the proofs behind `infeasible` and `unbounded` are returned, and each is None
     # (not []) when the solver has no proof to attach. The checks below are the proofs
