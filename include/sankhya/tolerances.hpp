@@ -217,6 +217,13 @@ inline constexpr double kCutNoiseRelative = 1e-14;
 /// or barely violated are safely rejected to save LP solves.
 inline constexpr double kCutViolationTolerance = 1e-5;
 
+/// Presolve, parallel rows (#412; Andersen & Andersen 1995, sec. 5). Two rows are
+/// proportional when every coefficient matches its scaled counterpart to this relative
+/// tolerance, measured against max(1, |a|, |scaled|). Tighter than the pivot drop because a
+/// merge that is even slightly wrong changes the feasible set silently; looser than
+/// machine epsilon because the coefficients arrive through a reader and a scaling pass.
+inline constexpr double kPresolveParallelRowTolerance = 1e-9;
+
 /// Cut selection (#415; Wesselmann & Suhl, "Implementing cutting plane management and
 /// selection techniques", 2012; Achterberg 2007, ch. 8). A cut's score is the weighted sum
 /// of its efficacy (the Euclidean distance from the LP point to its hyperplane), its

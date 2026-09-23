@@ -965,7 +965,6 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
     // counterpart to a relative 1e-9. Crossed bounds after a merge are not declared
     // infeasible here; the two rows are simply left as they are for the engine to refuse.
     if (parallel_rows && !result.proved_infeasible) {
-      constexpr double kParallelRowTolerance = 1e-9;
       constexpr double kInf = std::numeric_limits<double>::infinity();
       std::unordered_map<std::size_t, std::vector<Index>> buckets;
       std::vector<std::pair<Index, double>> live_row;
@@ -1014,9 +1013,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
               break;
             }
             const double expected = scale * live_kept[q].second;
-            proportional = std::fabs(live_row[q].second - expected) <=
-                           kParallelRowTolerance * std::max({1.0, std::fabs(live_row[q].second),
-                                                             std::fabs(expected)});
+            proportional =
+                std::fabs(live_row[q].second - expected) <=
+                tol::kPresolveParallelRowTolerance *
+                    std::max({1.0, std::fabs(live_row[q].second), std::fabs(expected)});
           }
           if (!proportional) continue;
           // This row's bounds in the kept row's units: divided by the scale, and swapped
