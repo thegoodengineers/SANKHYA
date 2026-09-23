@@ -20,7 +20,10 @@ TEST(MilpComponents, DefaultsMatchWhatBranchAndBoundActuallyDefaultsTo) {
   EXPECT_EQ(parts.node_selection, "hybrid");
   EXPECT_EQ(parts.branching, "reliability");
   EXPECT_EQ(parts.relaxation_engine, "dual");
-  EXPECT_FALSE(parts.cuts_enabled);
+  // On by default since the three-way at 0018254 (#415, #221): the root round proves
+  // 10 of 30 where no cuts prove 9, at 1.015x the nodes. This line is the record of
+  // that decision; a run that reverses it must change this expectation on purpose.
+  EXPECT_TRUE(parts.cuts_enabled);
   EXPECT_FALSE(parts.heuristics_enabled);
   EXPECT_EQ(parts.heuristics, "rounding, fractional diving")
       << "the two every benchmark CSV was measured with, and nothing else";

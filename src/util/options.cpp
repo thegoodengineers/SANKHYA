@@ -609,15 +609,19 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back(
         {"enable_root_cuts",
          OptionType::Bool,
-         false,
+         true,
          "Enable root-node cutting planes (Gomory mixed-integer, lifted knapsack cover and, "
-         "since #221, mixed-integer rounding; tree_cut_depth adds rounds below the root). "
-         "OFF by default, and that is a measurement, not caution: on the 30-instance "
-         "MIPLIB set at a 60 s limit at 5e78399 the root round proves the same 9 "
-         "instances, takes the node count to 0.896x (0.835x with tree rounds at depth 4), "
-         "and costs one published match at the limit, neos-3611689-kaihu (119 without "
-         "cuts, 120 with them, both unproved at 60 s). A round that saves nodes without "
-         "proving anything more does not earn the default. See "
+         "since #221, mixed-integer rounding, with cut selection by score since #415; "
+         "tree_cut_depth adds rounds below the root). ON by default since the three-way "
+         "A/B on main at 0018254, alone on the machine: on the 30-instance MIPLIB set at "
+         "a 60 s limit the root round proves 10 where no cuts prove 9 - "
+         "neos-3611689-kaihu, 119 optimal in 57,576 nodes where it stopped feasible at "
+         "the limit without cuts - at 1.012x the nodes and 0.986x the wall time; the two "
+         "matches it does not repeat, enlight8 and noswot, are incumbents found at the "
+         "limit that move between identical runs. Rounds below the root at depth 4 lose "
+         "that proof again (120 feasible at the limit in 35,996 nodes), so tree_cut_depth "
+         "stays 0. Before #415 the same root round cost 1.049x the nodes and lost the "
+         "match; selection is what changed the default. See "
          "bench/results/miplib-cuts-{off,on,tree}.csv and docs/BENCHMARKS.md section 2.",
          0.0,
          0.0,

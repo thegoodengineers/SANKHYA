@@ -16,9 +16,12 @@
 // no matter how large the tree grows.
 //
 // WHAT THIS FILE DOES BY DEFAULT, AND WHAT IT DOES NOT. Reliability branching (#69) is the
-// default rule. The root cutting planes in cuts.hpp (#159) exist and are OFF unless
-// `enable_root_cuts` is set, because they were measured to cost proofs at the benchmark's
-// time limit. There is no node presolve beyond simple propagation and no parallelism. The
+// default rule. The root cutting planes in cuts.hpp (#159) are ON by default since the
+// three-way at 0018254, once cut selection (#415) made the root round prove 10 of 30 where
+// no cuts prove 9 at 1.015x the nodes; before selection the same round cost nodes and a
+// match, and was off. Rounds below the root (tree_cut_depth) lose that proof again and
+// stay opt-in. There is no node presolve beyond simple propagation, and no parallelism
+// unless mip_threads asks for it. The
 // order those arrived in was deliberate: a cut that is very slightly invalid removes the
 // optimum and the search then proves the wrong answer, confidently, so a plain, correct
 // search came first and is what makes each addition checkable.
