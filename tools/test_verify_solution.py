@@ -591,6 +591,47 @@ def test_a_limit_that_understates_its_infeasibility_is_rejected() -> None:
           "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
 
 
+def _one_equality() -> "vs.Model":
+    """x must be exactly 1: the row r0 is an equality, r1 only bounds it."""
+    return _two_row_lp(cost=[1.0], lower=[0.0], upper=[10.0],
+                       rows=[(1.0, 1.0, [1.0]), (0.0, 5.0, [1.0])])
+
+
+def test_a_limit_that_states_a_loose_infeasibility_is_honest_but_not_a_solution() -> None:
+    """#461. x = 1.01 breaks the equality by 1e-2 and the file says so. Every check passes,
+    because the file is honest (#200) - and the report records a loose claim, which main()
+    turns into NOT A SOLUTION rather than VERIFIED."""
+    report = _run(_one_equality(),
+                  _verdict("time_limit", header={"primal_infeasibility": "1e-2",
+                                                 "objective": "1.01"},
+                           columns={"x0": 1.01}, rows={"r0": 1.01, "r1": 1.01}))
+    check(report.failures == 0, "an honest loose limit passes its checks",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
+    check(report.loose_claim is not None and report.loose_claim[0] == "primal_infeasibility",
+          "and records the loose claim", str(report.loose_claim))
+
+
+def test_a_limit_within_the_ceiling_records_no_loose_claim() -> None:
+    """The same shape at 4e-5 outside, stated as 5e-5: honest, within the ceiling, no claim."""
+    report = _run(_one_equality(),
+                  _verdict("time_limit", header={"primal_infeasibility": "5e-5",
+                                                 "objective": "1.00004"},
+                           columns={"x0": 1.00004}, rows={"r0": 1.00004, "r1": 1.00004}))
+    check(report.failures == 0, "an honest tight limit passes",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
+    check(report.loose_claim is None, "and records no loose claim", str(report.loose_claim))
+
+
+def test_an_optimal_status_cannot_launder_through_a_stated_infeasibility() -> None:
+    """optimal asserts feasibility, so the stated 1e-2 changes nothing: still rejected."""
+    report = _run(_one_equality(),
+                  _verdict("optimal", header={"primal_infeasibility": "1e-2",
+                                              "objective": "1.01"},
+                           columns={"x0": 1.01}, rows={"r0": 1.01, "r1": 1.01}))
+    check(report.failures >= 1, "optimal is held to the standard regardless of what it states",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
+
+
 def test_an_optimal_answer_is_still_held_to_feasibility() -> None:
     """The other control. The relaxation above must not have loosened the case that matters:
     `optimal` asserts a feasible point, and an infeasible one is still a failure."""
@@ -817,6 +858,10 @@ def main() -> int:
     test_a_limit_is_checked_on_what_it_claims_not_on_feasibility()
     test_a_limit_that_understates_its_infeasibility_is_rejected()
     test_an_optimal_answer_is_still_held_to_feasibility()
+    print("loose claims: honest, and not a solution (#461)")
+    test_a_limit_that_states_a_loose_infeasibility_is_honest_but_not_a_solution()
+    test_a_limit_within_the_ceiling_records_no_loose_claim()
+    test_an_optimal_status_cannot_launder_through_a_stated_infeasibility()
     print("the solution pool (#225)")
     test_a_valid_pool_verifies()
     test_a_pool_out_of_order_is_rejected()

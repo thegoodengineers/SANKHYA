@@ -41,6 +41,15 @@ DEFAULT_PRIMAL_TOL = 1e-7
 DEFAULT_DUAL_TOL = 1e-7
 DEFAULT_INTEGER_TOL = 1e-6
 DEFAULT_DUALITY_TOL = 1e-9
+# A stated infeasibility above this is a point that is not a solution to the project
+# standard, whatever its status says (#461). Below the ceiling a limit status is checked
+# on its honesty (#200) and that is the end of it. Above it the checks still run, and
+# still pass when the file is honest, but the VERIFIED verdict is withheld: printing it
+# for a point that admits to being 1e-2 outside its rows lets a bad answer launder itself
+# through an honest header, the one hole a tolerance-checking verifier can leave open.
+# PRAMAAN, one of the ten PS26119 entrants audited in September 2026, refuses any
+# certificate declaring a tolerance looser than this same value; the number is theirs.
+LOOSE_CLAIM_CEILING = 1e-4
 
 
 # =========================================================================================
@@ -51,6 +60,8 @@ class Report:
     def __init__(self) -> None:
         self.lines: list[tuple[bool, str, str]] = []
         self.failures = 0
+        # (field, stated value) when the file states an infeasibility above the ceiling.
+        self.loose_claim: tuple[str, float] | None = None
 
     def check(self, ok: bool, name: str, detail: str = "") -> bool:
         self.lines.append((ok, name, detail))
@@ -71,7 +82,8 @@ class Report:
 
 
 def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
-           integer_tol: float, duality_tol: float) -> Report:
+           integer_tol: float, duality_tol: float,
+           loose_claim_ceiling: float = LOOSE_CLAIM_CEILING) -> Report:
     report = Report()
     sigma = -1.0 if model.maximize else 1.0
 
@@ -137,6 +149,18 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
 
     x = [solution.col_value[n] for n in model.col_names]
     asserts_feasibility = solution.status in STATUSES_ASSERTING_FEASIBILITY
+    # The loose-claim gate (#461): a status that claims a point without asserting
+    # feasibility is held to what it states (#200), so a large stated infeasibility
+    # passes the checks below. It is recorded here; main() withholds VERIFIED for it.
+    if not asserts_feasibility and solution.status in STATUSES_WITH_A_POINT:
+        for field in ("primal_infeasibility", "dual_infeasibility"):
+            stated = solution.header_float(field)
+            if stated is not None and stated > loose_claim_ceiling:
+                report.loose_claim = (field, stated)
+                report.note("stated " + field,
+                            f"{stated:.3e} is above the {loose_claim_ceiling:.0e} ceiling: "
+                            "honest, and not a solution to the project standard (#461)")
+                break
 
     def primal_check(worst_relative: float, worst_absolute: float, name: str,
                      detail: str) -> None:
@@ -607,6 +631,10 @@ def main() -> int:
     parser.add_argument("--dual-tolerance", type=float, default=DEFAULT_DUAL_TOL)
     parser.add_argument("--integer-tolerance", type=float, default=DEFAULT_INTEGER_TOL)
     parser.add_argument("--duality-tolerance", type=float, default=DEFAULT_DUALITY_TOL)
+    parser.add_argument("--loose-claim-ceiling", type=float, default=LOOSE_CLAIM_CEILING,
+                        help="a stated infeasibility above this withholds VERIFIED (#461)")
+    parser.add_argument("--allow-loose-claims", action="store_true",
+                        help="accept an honest limit above the ceiling as VERIFIED anyway")
     parser.add_argument("--quiet", action="store_true", help="print only the verdict")
     args = parser.parse_args()
 
@@ -622,7 +650,8 @@ def main() -> int:
         return 2
 
     report = verify(model, solution, args.primal_tolerance, args.dual_tolerance,
-                    args.integer_tolerance, args.duality_tolerance)
+                    args.integer_tolerance, args.duality_tolerance,
+                    loose_claim_ceiling=args.loose_claim_ceiling)
 
     if not args.quiet:
         print(f"model     {args.model}")
@@ -637,6 +666,12 @@ def main() -> int:
         print()
 
     if report.failures == 0:
+        if report.loose_claim and not args.allow_loose_claims:
+            field, stated = report.loose_claim
+            print(f"NOT A SOLUTION: {len(report.lines)} checks passed, and the file states "
+                  f"{field} {stated:.3e}, above the {args.loose_claim_ceiling:.0e} ceiling; "
+                  "verdict withheld (--allow-loose-claims accepts it as an honest limit)")
+            return 3
         print(f"VERIFIED: {len(report.lines)} checks passed")
         return 0
     print(f"REJECTED: {report.failures} of {len(report.lines)} checks failed")
