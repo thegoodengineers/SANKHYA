@@ -49,10 +49,14 @@ def _near(a: float, b: float, tol: float) -> bool:
     return abs(a - b) <= tol * max(1.0, abs(a), abs(b))
 
 
-def _ranging(lower: dict, upper: dict, name: str) -> tuple[float, float] | None:
-    if name not in lower or name not in upper:
+def _ranging(decrease: dict, increase: dict, name: str) -> dict | None:
+    """The .sol ranging pair for `name`: how far the coefficient (a cost for a column, the
+    active bound for a row) may FALL and may RISE before the optimal basis changes. These
+    are distances, as src/io/writer.cpp prints them (`name allow_decrease allow_increase`),
+    not the two ends of an interval; `inf` means no limit in that direction."""
+    if name not in decrease or name not in increase:
         return None
-    return lower[name], upper[name]
+    return {"allow_decrease": decrease[name], "allow_increase": increase[name]}
 
 
 def binding_rows(model: Model, solution: Solution, tol: float) -> list[dict]:
@@ -149,11 +153,12 @@ def render_markdown(report: dict) -> str:
 
     lines.append("## Binding constraints, by shadow price")
     if report["binding_constraints"]:
-        lines.append("| constraint | at | activity | shadow price | ranging |")
+        lines.append("| constraint | at | activity | shadow price | bound may fall / rise by |")
         lines.append("|---|---|---:|---:|---|")
         for row in report["binding_constraints"]:
-            ranging = (f"[{_fmt(row['ranging'][0])}, {_fmt(row['ranging'][1])}]"
-                      if row["ranging"] else "-")
+            ranging = (f"-{_fmt(row['ranging']['allow_decrease'])} / "
+                       f"+{_fmt(row['ranging']['allow_increase'])}"
+                       if row["ranging"] else "-")
             lines.append(f"| {row['name']} | {row['at']} | {_fmt(row['activity'])} | "
                          f"{_fmt(row['shadow_price'])} | {ranging} |")
     else:
@@ -162,11 +167,12 @@ def render_markdown(report: dict) -> str:
 
     lines.append("## Nonbasic variables, by reduced cost")
     if report["nonbasic_variables"]:
-        lines.append("| variable | value | reduced cost | ranging |")
+        lines.append("| variable | value | reduced cost | cost may fall / rise by |")
         lines.append("|---|---:|---:|---|")
         for col in report["nonbasic_variables"]:
-            ranging = (f"[{_fmt(col['ranging'][0])}, {_fmt(col['ranging'][1])}]"
-                      if col["ranging"] else "-")
+            ranging = (f"-{_fmt(col['ranging']['allow_decrease'])} / "
+                       f"+{_fmt(col['ranging']['allow_increase'])}"
+                       if col["ranging"] else "-")
             lines.append(f"| {col['name']} | {_fmt(col['value'])} | "
                          f"{_fmt(col['reduced_cost'])} | {ranging} |")
     else:

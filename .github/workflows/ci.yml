@@ -135,6 +135,10 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 tools/test_verify_solution.py
 
+      - name: The solution report prints only numbers the .sol file holds (#527)
+        if: matrix.name == 'Release'
+        run: python3 tools/test_report.py
+
       - name: The Maros-Meszaros fetcher, residuals and doc section pass their tests (#491)
         # Hermetic: no download and no solve. It pins the readme parser that produces every
         # reference objective, and the residual arithmetic every QP success is judged by.
