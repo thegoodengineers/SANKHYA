@@ -726,15 +726,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  {},
                  {},
                  {}});
-    s.push_back({"gpu_batch_nodes",
-                 OptionType::Bool,
-                 false,
-                 "Bound and score a slab of open B&B nodes in one batched GPU PDHG pass (#520). "
-                 "Default OFF; enable after a clean A/B on main stamps an ancestor of main. "
-                 "No-op when gpu=false or no CUDA device is present.",
-                 0.0,
-                 0.0,
-                 {}});
+    s.push_back(
+        {"gpu_batch_nodes",
+         OptionType::Bool,
+         false,
+         "Bound and score a slab of open B&B nodes in one batched GPU PDHG pass (#520). "
+         "CURRENTLY A STUB: the kernel is not written, solve_batch_nodes() returns an "
+         "empty result and the search runs its sequential node LPs exactly as with the "
+         "option off. Default OFF; it earns a default by a clean A/B on main once the "
+         "kernel exists. No-op when gpu=false or no CUDA device is present.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"ranging",
                  OptionType::Bool,
                  false,

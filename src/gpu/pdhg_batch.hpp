@@ -20,9 +20,9 @@ namespace sankhya::gpu {
 
 /// Result for one LP in the batch.
 struct BatchNodeResult {
-  double dual_bound;   ///< safe dual bound from early-stopped PDHG (#519 guard)
-  int    iterations;
-  bool   pruned;       ///< dual_bound > incumbent
+  double dual_bound;  ///< safe dual bound from early-stopped PDHG (#519 guard)
+  int iterations;
+  bool pruned;  ///< dual_bound > incumbent
 };
 
 /// Solve K node LPs in one batched PDHG pass.
@@ -33,12 +33,10 @@ struct BatchNodeResult {
 ///
 /// Returns an empty vector when `options.get_bool("gpu_batch_nodes")` is false
 /// or no CUDA device is present; the caller falls back to sequential node LP solves.
-[[nodiscard]] std::vector<BatchNodeResult>
-solve_batch_nodes(const Model& model,
-                  int K,
-                  const std::vector<double>& col_lb,  // ncols * K, column-major
-                  const std::vector<double>& col_ub,  // ncols * K, column-major
-                  double incumbent,
-                  const Options& options);
+[[nodiscard]] std::vector<BatchNodeResult> solve_batch_nodes(
+    const Model& model, int K,
+    const std::vector<double>& col_lb,  // ncols * K, column-major
+    const std::vector<double>& col_ub,  // ncols * K, column-major
+    double incumbent, const Options& options);
 
 }  // namespace sankhya::gpu

@@ -35,7 +35,7 @@ solve_batch_nodes(const Model& model,
     if (!options.get_bool("gpu_batch_nodes")) return {};
 
     // Device probe: fall back silently when no CUDA device is present.
-    if (!gpu::device_available()) return {};
+    if (!gpu::device_available(nullptr)) return {};
 
     // TODO(#520): implement batched PDHG kernel.
     //
