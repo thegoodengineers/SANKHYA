@@ -28,8 +28,8 @@
 //
 // A SolverEngine's OWN solve() (src/solver_engine/builtin_engines.cpp) is a second, narrower
 // entry point for a caller who wants the engine directly rather than through this pipeline
-// (src/solver_engine/solver_engine_dispatch.hpp: the same status guards, no presolve, limits
-// or polish). It re-applies
+// (src/solver_engine/solver_engine_dispatch.hpp: the same presolve pipeline, resource limits,
+// out-of-memory guard and status guards; no polish, fallback, ranging or IIS). It re-applies
 // apply_deterministic_mode and certificate verification itself (the same shared functions
 // this file calls, not a re-derived copy) precisely because it does NOT go through this
 // pipeline and so cannot assume this file already did.
@@ -59,6 +59,7 @@
 #include "core/iis.hpp"
 #include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
+#include "core/solve_internal.hpp"
 #include "core/status_guard.hpp"
 #include "mip/components.hpp"
 #include "sankhya/certificate.hpp"
@@ -397,6 +398,75 @@ void reconcile_status_with_measurement(Solution* solution, const Options& option
 // with the SolverEngine wrappers (#297 review, deterministic execution context) so a caller
 // reaching an engine through either solve() or the registry gets the same guarantee.
 
+namespace detail {
+
+Solution run_interior_point_with_fallback(const Model& model, const Model& target,
+                                          const Options& options, const Options& engine_options,
+                                          bool requested_auto, Logger& logger,
+                                          SolveControl* control, const Timer& timer,
+                                          const InteriorPointRunner& run_interior_point) {
+  const ResourceLimits limits(options, logger);
+  const auto with_the_time_that_is_left = [&](const Options& base) -> Options {
+    if (!limits.has_time_limit()) return base;
+    Options narrowed = base;
+    narrowed.set_double("time_limit", limits.remaining_seconds(timer.elapsed_seconds()));
+    return narrowed;
+  };
+
+  // Guarded HERE (#437): see solve_internal.hpp's doc comment for why the guard has to sit
+  // inside this choreography rather than only at the dispatch level.
+  Solution interior = run_engine_guarded(
+      [&] { return run_interior_point(target, engine_options, logger, control); },
+      "interior point", timer, logger);
+  // From the interior point's answer to a vertex (#219), when asked: the basis the
+  // rest of the pipeline wants, at the cost of a few pivots from an optimal point.
+  // The crossover runs on what the budget has left too, which is why it is handed
+  // engine_options rather than the caller's (#289).
+  if (engine_options.get_bool("crossover") && interior.status == SolveStatus::kOptimal) {
+    interior = crossover_to_vertex(target, std::move(interior),
+                                   with_the_time_that_is_left(options), logger, control, timer);
+  }
+  // A SELECTED interior point that declines - a factor beyond its budget, a
+  // numerical failure, no answer at all - is not the end of the solve: the selector
+  // chose it from the model's shape, and the shape can lie (a dense model can be
+  // cheap to pivot on). The dual simplex then runs from scratch on the time that is
+  // left, and the message records the fallback. A limit is not retried: the time
+  // is gone either way. An explicit algorithm=ipm is reported as it came back.
+  const bool declined = interior.status == SolveStatus::kNumericalError ||
+                        interior.status == SolveStatus::kNotSolved;
+  if (requested_auto && declined) {
+    // Which engine takes over follows the same rule table (#356): below the row limit
+    // the dual simplex is the measured default; at or above it the dual simplex is
+    // the engine that already lost at that size, and the first-order method is the
+    // one that reaches the optimum there (scale-e134aeb.csv, 20,000 and 100,000 rows).
+    // Judged on the model as given (model.num_rows(), which is what engine::select()
+    // handed to select_engine() too), not on the presolved target: the rule table was
+    // applied to the original shape and the fallback follows it.
+    const bool large = model.num_rows() >= kDualSimplexRowLimit;
+    const char* engine_name = large ? "PDHG" : "the dual simplex";
+    logger.warning("the interior point declined ({}); falling back to {}", interior.message,
+                   engine_name);
+    Solution fallback;
+    if (large) {
+      Options remaining = with_the_time_that_is_left(options);
+      fallback = pdhg::solve_pdhg(target, remaining, logger, control);
+      polish_with_the_interior_point(&fallback, target, remaining, logger, control, timer);
+    } else {
+      fallback =
+          solve_dual_simplex(target, with_the_time_that_is_left(options), logger, control);
+    }
+    const std::string note = fmt::format(
+        "the interior point declined ({}) and the solve fell back to {}",
+        interior.message.empty() ? std::string(to_string(interior.status)) : interior.message,
+        engine_name);
+    fallback.message = fallback.message.empty() ? note : fallback.message + "; " + note;
+    return fallback;
+  }
+  return interior;
+}
+
+}  // namespace detail
+
 namespace {
 Solution solve_unguarded(const Model& model, const Options& options, SolveControl* control,
                          Logger& logger, const Timer& timer);
@@ -516,7 +586,18 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     return narrowed;
   };
 
-  const ProblemClass problem_class = classify(model);
+  // Classification and engine selection are timed as their own regions (#297), so the
+  // dispatch layer's cost is measured beside the engine's rather than assumed negligible;
+  // bench/runners/engine_dispatch.py reads them from profile_out.
+  const ProblemClass problem_class = [&] {
+    const ProfileScope timed(logger.profiler(), "classification");
+    return classify(model);
+  }();
+  // Discovery for the classes with one engine each: is a registered engine there at all.
+  const auto no_registered_engine = [&] {
+    const ProfileScope timed(logger.profiler(), "engine selection");
+    return engine::SolverRegistry::builtin().candidates(model).empty();
+  };
   logger.info("Model {}: {} rows, {} columns, {} nonzeros, {} integer columns",
               model.name.empty() ? std::string("(unnamed)") : model.name, model.num_rows(),
               model.num_cols(), model.num_nonzeros(), model.num_integer_columns());
@@ -622,8 +703,11 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       }
     }
     const bool warm_given = control != nullptr && control->has_starting_basis();
-    const engine::EngineChoice chosen =
-        engine::select(engine::SolverRegistry::builtin(), model, options, logger, warm_given);
+    const engine::EngineChoice chosen = [&] {
+      const ProfileScope timed(logger.profiler(), "engine selection");
+      return engine::select(engine::SolverRegistry::builtin(), model, options, logger,
+                            warm_given);
+    }();
     if (chosen.engine == nullptr) {
       // Not reachable for a `requested` value the check above already accepted; kept as an
       // honest report rather than an assumption for "auto", per ENGINEERING_RULES.md - an
@@ -702,55 +786,15 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         return first;
       }
       if (want_ipm) {
-        Solution interior = ipm::solve_ipm(target, engine_options, logger, control);
-        // From the interior point's answer to a vertex (#219), when asked: the basis the
-        // rest of the pipeline wants, at the cost of a few pivots from an optimal point.
-        // The crossover runs on what the budget has left too, which is why it is handed
-        // engine_options rather than the caller's (#289).
-        if (engine_options.get_bool("crossover") && interior.status == SolveStatus::kOptimal) {
-          interior =
-              crossover_to_vertex(target, std::move(interior),
-                                  with_the_time_that_is_left(options), logger, control, timer);
-        }
-        // A SELECTED interior point that declines - a factor beyond its budget, a
-        // numerical failure, no answer at all - is not the end of the solve: the selector
-        // chose it from the model's shape, and the shape can lie (a dense model can be
-        // cheap to pivot on). The dual simplex then runs from scratch on the time that is
-        // left, and the message records the fallback. A limit is not retried: the time
-        // is gone either way. An explicit algorithm=ipm is reported as it came back.
-        const bool declined = interior.status == SolveStatus::kNumericalError ||
-                              interior.status == SolveStatus::kNotSolved;
-        if (requested == "auto" && declined) {
-          // Which engine takes over follows the same rule table (#356): below the row limit
-          // the dual simplex is the measured default; at or above it the dual simplex is
-          // the engine that already lost at that size, and the first-order method is the
-          // one that reaches the optimum there (scale-e134aeb.csv, 20,000 and 100,000 rows).
-          // Judged on the model as given (model.num_rows(), which is what engine::select()
-          // handed to select_engine() too), not on the presolved target: the rule table was
-          // applied to the original shape and the fallback follows it.
-          const bool large = model.num_rows() >= kDualSimplexRowLimit;
-          const char* engine_name = large ? "PDHG" : "the dual simplex";
-          logger.warning("the interior point declined ({}); falling back to {}",
-                         interior.message, engine_name);
-          Solution fallback;
-          if (large) {
-            Options remaining = with_the_time_that_is_left(options);
-            fallback = pdhg::solve_pdhg(target, remaining, logger, control);
-            polish_with_the_interior_point(&fallback, target, remaining, logger, control,
-                                           timer);
-          } else {
-            fallback = solve_dual_simplex(target, with_the_time_that_is_left(options), logger,
-                                          control);
-          }
-          const std::string note =
-              fmt::format("the interior point declined ({}) and the solve fell back to {}",
-                          interior.message.empty() ? std::string(to_string(interior.status))
-                                                   : interior.message,
-                          engine_name);
-          fallback.message = fallback.message.empty() ? note : fallback.message + "; " + note;
-          return fallback;
-        }
-        return interior;
+        // The whole decline-and-fallback choreography, including the out-of-memory guard
+        // around the interior-point attempt itself, lives in solve_internal.hpp/detail::
+        // run_interior_point_with_fallback (#437) - see its doc comment for why the guard has
+        // to sit there and not only at the dispatch level.
+        return detail::run_interior_point_with_fallback(
+            model, target, options, engine_options, requested == "auto", logger, control, timer,
+            [](const Model& t, const Options& o, Logger& l, SolveControl* c) {
+              return ipm::solve_ipm(t, o, l, c);
+            });
       }
       return want_dual ? solve_dual_simplex(target, engine_options, logger, control)
                        : solve_primal_simplex(target, engine_options, logger, control);
@@ -843,7 +887,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // check, which WOULD wrongly refuse a MILP whenever `algorithm` happens to be set to an
     // LP-only engine's name (harmless today since solve() never read it for this class, but
     // exactly the silent-change B2 forbids).
-    if (engine::SolverRegistry::builtin().candidates(model).empty()) {
+    if (no_registered_engine()) {
       solution.status = SolveStatus::kNotSolved;
       solution.algorithm = "none";
       solution.message = "no registered engine supports MILP models";
@@ -889,7 +933,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
 
   if (problem_class == ProblemClass::kQp) {
     // Discovery, not selection - see the identical comment in the MILP branch above.
-    if (engine::SolverRegistry::builtin().candidates(model).empty()) {
+    if (no_registered_engine()) {
       solution.status = SolveStatus::kNotSolved;
       solution.algorithm = "none";
       solution.message = "no registered engine supports QP models";
@@ -935,7 +979,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // checked.
     //
     // Discovery, not selection - see the identical comment in the MILP branch above.
-    if (engine::SolverRegistry::builtin().candidates(model).empty()) {
+    if (no_registered_engine()) {
       solution.status = SolveStatus::kNotSolved;
       solution.algorithm = "none";
       solution.message = "no registered engine supports MIQP models";

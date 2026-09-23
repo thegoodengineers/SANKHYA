@@ -3,11 +3,17 @@
 // src/core/engine_selection.hpp is pinned here with a model shaped to fire it, so a
 // changed threshold shows up as a failed test and not as a quietly different default.
 
+#include <new>
+
 #include <gtest/gtest.h>
 
 #include "core/engine_selection.hpp"
+#include "core/solve_internal.hpp"
+#include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/solve_control.hpp"
+#include "sankhya/timer.hpp"
 
 namespace sankhya {
 namespace {
@@ -152,6 +158,36 @@ TEST(EngineSelection, AnInteriorPointThatDeclinesBelowTheRowLimitFallsBackToTheD
   EXPECT_EQ(s.engine_rule, "density:ipm");
   EXPECT_NE(s.algorithm.find("simplex"), std::string::npos) << s.algorithm;
   EXPECT_NE(s.message.find("fell back to the dual simplex"), std::string::npos) << s.message;
+}
+
+TEST(EngineSelection, AnInteriorPointThatThrowsBadAllocFallsBackJustLikeANumericalDecline) {
+  // #437: before this, an interior point that exhausted memory THREW std::bad_alloc instead
+  // of returning a declined Solution, which unwound past this exact fallback and was only
+  // caught by the dispatch-level guard around the whole solve - reported as a terminal
+  // numerical error under the generic name "solver", never reaching the recovery below. The
+  // fix wraps the interior-point attempt in run_engine_guarded INSIDE the choreography
+  // (detail::run_interior_point_with_fallback, src/core/solve_internal.hpp), so a thrown
+  // bad_alloc becomes exactly the kind of declined Solution the two tests above already
+  // prove the fallback recovers from. This test throws through the real call site - not
+  // just through run_engine_guarded in isolation (SolveStatusGuard.
+  // AnOutOfMemoryEngineComesBackAsAStatusNotADeadProcess, tests/unit/test_pdhg.cpp) - to
+  // prove the guard is actually wired into this choreography and not merely available.
+  const Model m = shaped_lp(50, 2100, kIpmNonzeroFloor + 1);
+  Logger logger(nullptr);
+  const Timer timer;
+  const Options options;
+  const Solution fallback = detail::run_interior_point_with_fallback(
+      m, m, options, options, /*requested_auto=*/true, logger, /*control=*/nullptr, timer,
+      [](const Model&, const Options&, Logger&, SolveControl*) -> Solution {
+        throw std::bad_alloc();
+      });
+  EXPECT_EQ(fallback.status, SolveStatus::kOptimal) << fallback.message;
+  EXPECT_NE(fallback.algorithm.find("simplex"), std::string::npos) << fallback.algorithm;
+  EXPECT_NE(fallback.message.find("ran out of memory inside the interior point"),
+            std::string::npos)
+      << fallback.message;
+  EXPECT_NE(fallback.message.find("fell back to the dual simplex"), std::string::npos)
+      << fallback.message;
 }
 
 TEST(EngineSelection, AnOrderingPastItsShareOfTheTimeLimitIsADeclineNotATimeLimit) {
