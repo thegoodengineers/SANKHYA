@@ -754,24 +754,31 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"gpu_pump",
                  OptionType::Bool,
                  false,
-                 "GPU feasibility pump for MIP (#509): PDHG on the device solves each LP "
-                 "projection step; outer loop rounds to integer and repeats until feasible "
-                 "or max iterations reached. Default OFF; enable after A/B on main. "
-                 "References: Fischetti & Lodi, Math. Prog. 104 (2005); "
+                 "GPU feasibility pump for MIP (#509). CURRENTLY A STUB: the kernel is not "
+                 "written and feasibility_pump() returns nothing, so the search behaves "
+                 "exactly as with the option off. The design: PDHG on the device solves each "
+                 "L1 projection LP; the outer loop rounds to integer and repeats until "
+                 "feasible or a round limit. Default OFF; it earns a default by a clean A/B "
+                 "on main once the kernel exists. "
+                 "References: Fischetti, Glover & Lodi, Math. Prog. 104 (2005); "
                  "Mexi et al., arXiv:2307.03466; Corduk et al., arXiv:2510.20499.",
                  0.0,
                  0.0,
                  {}});
-    s.push_back({"gpu_fix_and_prop",
-                 OptionType::Bool,
-                 false,
-                 "GPU fix-and-propagate heuristic for MIP (#509): fixes near-integer columns "
-                 "from the LP relaxation, runs GPU domain propagation to tighten the remaining "
-                 "bounds, then solves the residual LP. Default OFF; enable after A/B on main. "
-                 "Reference: Corduk et al., arXiv:2510.20499.",
-                 0.0,
-                 0.0,
-                 {}});
+    s.push_back(
+        {"gpu_fix_and_prop",
+         OptionType::Bool,
+         false,
+         "GPU fix-and-propagate heuristic for MIP (#509). CURRENTLY A STUB: the kernel "
+         "is not written and fix_and_propagate() returns nothing, so the search behaves "
+         "exactly as with the option off. The design: fix near-integer columns from the "
+         "LP relaxation, run GPU domain propagation (#510) to tighten the rest, solve "
+         "the residual LP. Default OFF; it earns a default by a clean A/B on main once "
+         "the kernel exists. "
+         "Reference: Corduk et al., arXiv:2510.20499.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"ranging",
                  OptionType::Bool,
                  false,
