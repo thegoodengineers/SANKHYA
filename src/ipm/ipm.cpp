@@ -1256,11 +1256,30 @@ Solution InteriorPoint::run() {
           residuals();
           const double best_gap =
               mu_ * static_cast<double>(bound_count_) / (1.0 + std::fabs(objective_));
+          // THE STATUS FOLLOWS THE MEASUREMENT OF THE RESTORED POINT (#576). The test that
+          // brought the loop here allows kBarrierExhaustedSlack on every tolerance, so the
+          // iterate handed back can sit a decade above the feasibility tolerance while its
+          // gap is at rounding. Claiming optimal on the gap alone sent irish-electricity to
+          // the status guard as "converged at a relative gap of 8.6e-15" and came back
+          // numerical_error, because the guard measured what the claim did not. Optimal
+          // only when every tolerance holds on the restored point; otherwise the point is
+          // reported as what it is, feasible to the slack, with the numbers in the message.
+          const bool optimal_here = primal_infeasibility_ <= kIpmTolerance &&
+                                    dual_infeasibility_ <= kIpmTolerance &&
+                                    best_gap <= kIpmGap && max_product_ <= kIpmComplementarity;
           return finish(
-              SolveStatus::kOptimal,
-              fmt::format("converged at a relative gap of {:.1e} when the barrier "
-                          "vanished: {} of {} pivots regularized in one factorization",
-                          best_gap, regularized_now, m_),
+              optimal_here ? SolveStatus::kOptimal : SolveStatus::kFeasible,
+              optimal_here
+                  ? fmt::format("converged at a relative gap of {:.1e} when the barrier "
+                                "vanished: {} of {} pivots regularized in one factorization",
+                                best_gap, regularized_now, m_)
+                  : fmt::format("the barrier vanished ({} of {} pivots regularized in one "
+                                "factorization) with the best iterate at relative gap {:.1e} "
+                                "but infeasibility {:.1e} / {:.1e} and worst product {:.1e}, "
+                                "above the {:.0e} tolerance: a feasible point to that slack, "
+                                "not a proof (#576)",
+                                regularized_now, m_, best_gap, primal_infeasibility_,
+                                dual_infeasibility_, max_product_, kIpmTolerance),
               iterations, timer.elapsed_seconds());
         }
       }
