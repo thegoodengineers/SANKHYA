@@ -821,6 +821,20 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"gpu_cudss_ipm",
+                 OptionType::Bool,
+                 false,
+                 "GPU interior-point method via NVIDIA cuDSS (#489, stretch): normal "
+                 "equations or augmented KKT system factored by cuDSS on the device; "
+                 "Newton iteration logic unchanged on the host; dense-column handling "
+                 "per #467 before the matrix reaches cuDSS. Requires "
+                 "SANKHYA_ENABLE_CUDSS=ON and the cuDSS licence to be verified and "
+                 "recorded in PROVENANCE.md (not yet done). CURRENTLY A STUB: "
+                 "solve_ipm_cudss() returns an empty Solution immediately. Default OFF. "
+                 "Reference: Shin et al., MadIPM GPU IPM, arXiv:2508.16094.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"ranging",
                  OptionType::Bool,
                  false,
