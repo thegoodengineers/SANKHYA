@@ -12,8 +12,6 @@
 //     result copied back to host; Newton step logic unchanged
 //   Dense-column handling follows #467 (dense columns split out before
 //   cuDSS sees the matrix to avoid fill-in blow-up).
-//   Build guard: entire file compiled only when SANKHYA_ENABLE_CUDA and
-//   SANKHYA_ENABLE_CUDSS are both ON.
 //
 // Current state: stub returning an empty Solution. No cuDSS header is
 // included until the licence check is recorded in PROVENANCE.md.
