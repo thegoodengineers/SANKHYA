@@ -42,6 +42,11 @@ arithmetic starts, and a negative pivot is returned as the certificate. Reportin
 optimum as a global one is the single most damaging thing this dispatcher could do, so it
 does not — see the Evidence rules in [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md).
 
+What was built and then demoted, left opt-in or withdrawn - and the number that did it,
+with the CSV it lives in - is collected in [`docs/NEGATIVE-RESULTS.md`](docs/NEGATIVE-RESULTS.md).
+It separates decisions made on a committed measurement from decisions made on a branch
+run that was never repeated on `main`, and keeps every withdrawn claim by name.
+
 Benchmark results against Netlib, headline first: **80 of 89** on the full set — matched
 to the published optimum to a relative 1e-6 *and* passed independent verification —
 measured on `main` at `adb37bb` (`bench/results/netlib-full-adb37bb.csv`, alone on the
