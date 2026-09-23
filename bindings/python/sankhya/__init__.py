@@ -92,7 +92,9 @@ class _LazyInfinity:
     def __float__(self) -> float:
         if _LazyInfinity._value is None:
             _LazyInfinity._value = _infinity()
-        return _LazyInfinity._value
+        # A plain float: __float__ returning a float SUBCLASS (_Infinity) is deprecated in
+        # CPython 3.12 and warns on every float(sankhya.INFINITY).
+        return float.__float__(_LazyInfinity._value)
 
     def __repr__(self) -> str:
         return "sankhya.INFINITY"

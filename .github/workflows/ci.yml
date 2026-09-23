@@ -120,6 +120,10 @@ jobs:
           pip install pulp pyomo cvxpy
           PYTHONPATH=bindings/python python3 bindings/python/test_adapters.py
 
+      - name: Infeasibility repair - the repaired model verifies feasible (#523)
+        if: matrix.name == 'Release'
+        run: PYTHONPATH=bindings/python python3 tools/test_repair_infeasibility.py
+
       - name: Benchmark result selection is deterministic (#255)
         # bench/runners/latest_result.py decides which CSV each tier of docs/BENCHMARKS.md
         # cites; this pins the git-history-then-recorded-timestamp order against mtime, which
