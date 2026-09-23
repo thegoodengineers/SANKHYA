@@ -271,6 +271,21 @@ relaxed unscaled retry (none ran). Not fixed here: tightening the dual tolerance
 one instance is the move the evidence rules forbid without a numerical justification,
 and #548 stays open for a scale-aware reduced-cost test.
 
+### 1c.1 The Kennington set - the next rung
+
+The sixteen Kennington LPs (the `cre`, `ken`, `osa` and `pds` families, Carolan et al.,
+Operations Research 38(2), 1990), larger and sparser than the core Netlib set. Fetched and
+hashed by `bench/runners/fetch_kennington.py`, which parses the published optima from the
+directory's own readme; run by `bench/runners/kennington.py` under the full-set rules.
+
+Not yet run at this commit. Reproduce with:
+
+```
+python bench/runners/fetch_kennington.py
+python bench/runners/kennington.py --time-limit 600
+python bench/runners/kennington.py --time-limit 600 --solver-option algorithm=pdhg   # and simplex, dual-simplex, ipm
+```
+
 ### 1d. Beyond Netlib — Mittelmann's LP set
 
 Netlib's largest instance has about 6,000 rows. PS26119 asks about "thousands to millions
