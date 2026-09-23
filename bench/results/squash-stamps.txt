@@ -18,3 +18,6 @@ fb72ab4 82dee32 gpu-fb72ab4.csv, run on the #424 branch; 82dee32 is its squash m
 ca64dd5 6bec31e mittelmann-ca64dd5.csv, run on the #169 branch; 6bec31e is its squash merge
 0cd08cf 6bec31e netlib-0cd08cf-threads1.csv and -threads8.csv, netlib-full-0cd08cf.csv, run on the #169 branch; 6bec31e is its squash merge
 59ac6e3 6bec31e netlib-59ac6e3-largest.csv, netlib-full-59ac6e3.csv, -ipm.csv, robustness-59ac6e3.csv, run on the #169 branch; 6bec31e is its squash merge
+91b6c08 0bbcb68 miplib-419-cuts-baseline.csv and miplib-419-flow-cover-on.csv, run on the #430 branch; carried to main by the squash merge of #454
+ebafccf 0bbcb68 miplib-419-aggregation-baseline.csv and miplib-419-aggregation-on.csv, run on the #430 branch; carried to main by the squash merge of #454
+8358f75 0bbcb68 miplib-419-localsearch-baseline.csv and miplib-419-localsearch-on.csv, run on the #430 branch; carried to main by the squash merge of #454
