@@ -38,10 +38,11 @@ def check(condition: bool, name: str, detail: str = "") -> None:
 
 
 def run_checker(text: str, *extra: str) -> tuple[int, str]:
+    # The hand-written certificates have no MPS file: their model is the one they state.
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "c.vipr"
         path.write_text(text)
-        return run_checker_on(path, *extra)
+        return run_checker_on(path, "--model-as-written", *extra)
 
 
 def run_checker_on(path: Path, *extra: str) -> tuple[int, str]:
@@ -116,6 +117,29 @@ def hand_written() -> None:
                               "n1 G 2 2 0 2 1 1 { lin 2 0 1 5 0 }")
     code, out = run_checker(MODEL + completed)
     check(code == 1, "a completion needing more than the box gives is rejected")
+    # Without --mps and without --model-as-written, a proof that checks still does not exit 0.
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "c.vipr"
+        path.write_text(MODEL + PROOF)
+        code, out = run_checker_on(path)
+    check(code == 2 and "NOT checked" in out, "no source model: never exit 0", out.strip())
+    # A sol step from an INFEASIBLE point: (0, 1) is worth 1, below the true optimum 2, so
+    # "x + y <= 1" contradicts r0, "no" derives 0 >= 1 from the two, and with an absurd step
+    # the old checker skipped the proof side and let the claim 3 stand.
+    lying = (MODEL.replace("RTP range 2 2", "RTP range 3 3").replace("best 2 0 1 1 1",
+                                                                     "best 1 1 1")
+             + PROOF.replace("DER 6", "DER 8") + "s0 L 1 OBJ { sol } -1\n"
+             + "no G 1 0 { lin 2 10 1 11 -1 } -1\n")
+    code, out = run_checker(lying)
+    check(code == 1 and "sol" in out, "a sol step from an infeasible point is rejected",
+          out.strip())
+    # A final bound that still carries an assumption: n1 holds only under x <= 0.
+    code, out = run_checker(MODEL.replace("RTP range 2 2", "RTP range 3/2 3/2")
+                            + "DER 2\n" + "\n".join(PROOF.splitlines()[1:3]) + "\n")
+    check(code == 1, "a bound under an undischarged assumption is rejected", out.strip())
+    # uns naming a model constraint (c0, index 0) where an assumption must be.
+    code, out = run_checker(MODEL + PROOF.replace("{ uns 6 5 8 7 }", "{ uns 6 0 8 7 }"))
+    check(code == 1, "uns on a non-assumption is rejected", out.strip())
 
 
 # ---- End to end, with the solver --------------------------------------------------------
@@ -258,8 +282,14 @@ def end_to_end() -> None:
         mps.write_text(KNAPSACK.format(sense="MIN", c1=-5, c2=-4, c3=-3, cz=0))
         cert = Path(tmp) / "cuts.vipr"
         log = solve(binary, mps, cert, "enable_root_cuts=true")
-        check(cert.exists() or "not written" in log,
-              "with cuts on, a certificate is either written (no cut applied) or refused")
+        # Either branch can fail: a written certificate must verify against the MPS, and a
+        # refusal must be one the log states.
+        if cert.exists():
+            code, out = run_checker_on(cert, "--mps", str(mps))
+            check(code == 0, "with cuts on, a written certificate verifies", out.strip()[-200:])
+        else:
+            check("not written" in log, "with cuts on, a refusal is stated in the log",
+                  log.strip()[-200:])
 
 
 def main() -> int:

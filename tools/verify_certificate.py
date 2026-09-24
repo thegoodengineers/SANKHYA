@@ -400,9 +400,15 @@ class Checker:
             raise Rejected(f"{where}: {a.name} and {b.name} are not a <= d | >= d + 1 split")
 
     def _check_sol(self, c: Constraint, where: str) -> None:
-        best = self.best_solution_value()
+        # Only an EXACTLY feasible point bounds the optimum. An infeasible one would let a sol
+        # step contradict a true bound, and from a contradiction anything follows, including
+        # a claimed bound the model does not have (review of #639).
+        feasible = [self.objective_of(x) for _, x in self.cert.solutions
+                    if self.solution_violation(x) == 0]
+        best = (max(feasible) if self.cert.maximize else min(feasible)) if feasible else None
         if best is None or c.coefs != self.cert.objective:
-            raise Rejected(f"{where}: sol needs a solution and the objective's coefficients")
+            raise Rejected(f"{where}: sol needs an exactly feasible solution and the "
+                           "objective's coefficients")
         ok = (c.sense == "G" and c.rhs <= best) if self.cert.maximize else \
             (c.sense == "L" and c.rhs >= best)
         if not ok:
@@ -512,6 +518,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="absolute gap accepted as optimal (default: mip_absolute_gap)")
     parser.add_argument("--rel-gap", type=float, default=1e-4,
                         help="relative gap accepted as optimal (default: mip_relative_gap)")
+    parser.add_argument("--model-as-written", action="store_true",
+                        help="accept the model the certificate states without a source file "
+                             "to compare it with; without this or --mps nothing exits 0")
     parser.add_argument("--feas-tol", type=float, default=0.0,
                         help="accept a solution violating the model by at most this much "
                              "(default 0: exact); the bound is always checked exactly")
@@ -531,8 +540,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"derivations checked {verdict.derivations}")
     if verdict.infeasible and cert.rtp == "infeas":
         print("the model is proved infeasible")
+        if args.mps is None:
+            print("model NOT checked against a source file (no --mps)")
         print(f"checker seconds {seconds:.3f}")
-        return 0
+        return 0 if (args.mps is not None or args.model_as_written) else 2
     bound = verdict.proved_bound
     value = verdict.solution_value
     print(f"proved bound {'none' if bound is None else f'{float(bound):.17g}'}")
@@ -553,6 +564,14 @@ def main(argv: list[str] | None = None) -> int:
             status = 2
     tolerated = not exact and verdict.solution_violation <= Fraction(args.feas_tol)
     if not exact and not tolerated:
+        status = 2
+    # Without --mps the proof is checked against whatever VAR/OBJ/CON the file states, which
+    # proves nothing about the model the user meant. Say so, and never exit 0 on it unless
+    # the caller asked for exactly that (review of #639).
+    unchecked = args.mps is None and not args.model_as_written
+    if args.mps is None:
+        print("model NOT checked against a source file (no --mps)")
+    if unchecked and status == 0:
         status = 2
     if status != 0:
         print("BOUND VERIFIED, OPTIMALITY NOT SHOWN")

@@ -3,6 +3,7 @@
 // certificate proves and the references.
 
 #include "certificate_writer.hpp"
+#include "sankhya/tolerances.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -287,8 +288,8 @@ Derived Writer::emit_leaf(Index node) {
   problem.cost = cost_;
   SafeBound bound;
   const CertificateTree::Node* source = nullptr;
-  constexpr std::size_t kAncestorsTried = 8;
-  for (std::size_t k = 0; k < std::min(kAncestorsTried, duals_.size()); ++k) {
+  const auto tried = static_cast<std::size_t>(tol::kCertificateAncestorsTried);
+  for (std::size_t k = 0; k < std::min(tried, duals_.size()); ++k) {
     source = duals_[duals_.size() - 1 - k];
     std::fill(y.begin(), y.end(), 0.0);
     for (const auto& [i, v] : source->y) y[static_cast<std::size_t>(i)] = v;
@@ -385,7 +386,9 @@ Derived Writer::round_to_step(const Derived& root, double step) {
   // (c / s) x >= L / s rounds up to (c / s) x >= ceil(L / s). The search pruned on exactly
   // this rounding (#221); without it a leaf at 13.2 against an incumbent of 14 would prove
   // only 13.2.
-  if (root.absurd || !(step >= 1.0) || step != std::trunc(step) || step > 9e15) return root;
+  if (root.absurd || !(step >= 1.0) || step != std::trunc(step) ||
+      step > tol::kCertificateExactInteger)
+    return root;
   const auto n = static_cast<std::size_t>(model_.num_cols());
   std::string coefficients;
   Index k = 0;
@@ -400,10 +403,10 @@ Derived Writer::round_to_step(const Derived& root, double step) {
   // side before the ceiling (or floor): the quotient is inexact in general.
   const double bound = sense_ * root.bound;
   const double quotient = bound / step;
-  const double rounded = sense_ > 0.0 ? std::ceil(std::nextafter(quotient, -1e300))
-                                      : std::floor(std::nextafter(quotient, 1e300));
+  const double rounded = sense_ > 0.0 ? std::ceil(std::nextafter(quotient, -kInfinity))
+                                      : std::floor(std::nextafter(quotient, kInfinity));
   const bool improves = sense_ > 0.0 ? rounded * step > bound : rounded * step < bound;
-  if (!improves || std::fabs(rounded * step) > 9e15) return root;
+  if (!improves || std::fabs(rounded * step) > tol::kCertificateExactInteger) return root;
   const Index cg = emit(fmt::format("r0 {} {} {}{} {{ rnd 1 {} 1/{} }} -1",
                                     sense_ > 0.0 ? 'G' : 'L', exact_decimal(rounded), k,
                                     coefficients, root.index, exact_decimal(step)));
