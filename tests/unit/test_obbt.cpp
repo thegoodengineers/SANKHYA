@@ -18,6 +18,9 @@
 namespace sankhya {
 namespace {
 
+using mip::obbt_root;
+using mip::ObbtResult;
+
 Options obbt_options() {
   Options opt;
   opt.set_bool("log_to_console", false);
