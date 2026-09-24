@@ -1562,7 +1562,6 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
-<<<<<<< HEAD
     s.push_back(
         {"ipm_proximal_regularization",
          OptionType::Bool,
@@ -1577,7 +1576,6 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
-=======
     s.push_back({"ipm_dense_columns",
                  OptionType::Bool,
                  false,
@@ -1598,7 +1596,6 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  kNoLimit,
                  {}});
->>>>>>> 438f395 (feat(ipm): dense columns by a Woodbury-preconditioned conjugate gradient, and the normal equations counted and refused before assembly (#467))
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
                  tol::kPdhgLoose,
