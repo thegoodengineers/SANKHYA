@@ -75,6 +75,25 @@ inline constexpr int kStrongBranchingCandidates = 10;
 /// probe measures a lower estimate of the gain rather than nothing.
 inline constexpr int kStrongBranchingIterations = 50;
 
+/// Strong-branch fixing (#502, option mip_strong_branch_fix): a probe that proves one side of
+/// a column infeasible fixes the column to the other side, the node LP is re-solved, and the
+/// branching decision is taken again on the new point. At most this many such rounds per
+/// node; each can cost up to 2 * kStrongBranchingCandidates probes, so the cap bounds the
+/// node's strong-branching work at a small multiple of what one decision already costs.
+inline constexpr int kStrongBranchFixRounds = 3;
+
+/// Node bound propagation: an implied column bound is recorded only when it tightens the
+/// current one by more than this. Keeps the propagation loops from chasing changes at the
+/// level of rounding error, which on continuous columns would never stop.
+inline constexpr double kPropagationMinChange = 1e-9;
+
+/// Incremental propagation to a fixpoint (#502, option mip_incremental_propagation): the
+/// worklist may process at most max(kPropagationWorkFloor, kPropagationWorkPerRow * rows)
+/// rows per node. A fixpoint on continuous columns can be approached geometrically and never
+/// reached; stopping early is always sound, since propagation only tightens implied bounds.
+inline constexpr int kPropagationWorkFloor = 1000;
+inline constexpr int kPropagationWorkPerRow = 20;
+
 /// LP optimality check used by the independent verifier: primal objective must equal dual
 /// objective to this relative accuracy. Tighter than feasibility on purpose - a converged
 /// simplex basis should reproduce strong duality far better than it satisfies bounds.

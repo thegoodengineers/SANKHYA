@@ -287,6 +287,11 @@ Solution BranchAndBound::run() {
                  : build_node_scaling(working_, node_options_);
   probe_options_ = node_options_;
   probe_options_.set_int("iteration_limit", tol::kStrongBranchingIterations);
+  // #502, each off by default until an A/B on main. The heap is one worker's: a parallel
+  // worker donates open nodes by erasing them from the middle of open_.
+  strong_branch_fix_ = options_.get_bool("mip_strong_branch_fix");
+  incremental_propagation_ = options_.get_bool("mip_incremental_propagation");
+  heap_open_list_ = options_.get_bool("mip_heap_open_list") && shared_ == nullptr;
   // First factorizations kept across node LPs (#501): off by default until an A/B on main.
   if (const std::int64_t entries = options_.get_int("mip_node_factor_cache"); entries > 0) {
     factor_cache_ = std::make_unique<NodeFactorCache>(static_cast<std::size_t>(entries));
@@ -307,7 +312,7 @@ Solution BranchAndBound::run() {
   if (seed_ != nullptr) {
     plant_seed();  // a subtree given away by another worker (#222); the root is not open
   } else {
-    open_.push_back(0);
+    push_open(0);
   }
 
   // RESUME (#287): replace the fresh root with the open nodes of a saved search. Everything
@@ -531,7 +536,7 @@ Solution BranchAndBound::run() {
       // THE NODE IS STILL OPEN. It was taken off the list to be solved and was not, so its
       // inherited bound is part of what the search can still say; leaving it out reported
       // the next-best bound instead, and with nothing else open, no bound at all (#222).
-      open_.push_back(node_index);
+      push_open(node_index);
       break;
     }
     if (relaxation.status != SolveStatus::kOptimal) {
@@ -559,7 +564,7 @@ Solution BranchAndBound::run() {
               : fmt::format("node LP returned {} at node {}", to_string(relaxation.status),
                             nodes_explored_);
       if (!out_of_iterations) return solution;
-      open_.push_back(node_index);  // still open, as above
+      push_open(node_index);  // still open, as above
       break;
     }
 
@@ -587,7 +592,7 @@ Solution BranchAndBound::run() {
     // Node bound in minimise space, excluding the offset (added back on report). Stored and
     // ordered raw; can_prune() and the gap test round it up to the next value an integer
     // solution can take (#221), so node selection is the same with or without the rounding.
-    const double node_bound = internal_objective(relaxation.col_value);
+    double node_bound = internal_objective(relaxation.col_value);
     certificate_record(node_index, relaxation, CertificateTree::Proof::kDual);  // #518
     if (debug_inside) debug_after_node_lp(relaxation);  // the bound after the cut rounds
 
@@ -610,8 +615,7 @@ Solution BranchAndBound::run() {
     // SAFE BOUNDS (#519): with the option on, the node is pruned, and its children ordered,
     // on the Neumaier-Shcherbina bound from the node LP's duals rather than on the objective
     // of its primal point. The believed bound still drives the pseudocosts and branching.
-    const double prune_bound =
-        safe_bounds_ ? safe_node_bound(relaxation, node_bound) : node_bound;
+    double prune_bound = safe_bounds_ ? safe_node_bound(relaxation, node_bound) : node_bound;
     if (can_prune(prune_bound)) {
       leave();
       ++nodes_pruned_;
@@ -638,7 +642,7 @@ Solution BranchAndBound::run() {
 
     // The children start from THIS relaxation's basis, captured before the dives and the
     // strong-branching probes can replace current_warm_ with the bases of their own solves.
-    const WarmStart children_warm = basis_of(relaxation);
+    WarmStart children_warm = basis_of(relaxation);
     current_warm_ = children_warm;
 
     // Diving (#25, #414): at the root, and every mip_dive_frequency nodes when that is set.
@@ -659,13 +663,34 @@ Solution BranchAndBound::run() {
 
     // The branching decision, with the node's bounds still entered: strong branching
     // solves the two children in place and restores the bounds it moved.
+    strong_fixes_.clear();
     const Index branch_column = [&] {
       // Strong branching's probe LPs are inside this, which is the point: it is the cost of
       // the branching decision.
       ProfileScope timed(logger_.profiler(), "branching", ProfileMode::kDetailed);
-      return reliability_branching_ ? select_branching_column(relaxation.col_value, node_bound)
-                                    : most_fractional(relaxation.col_value);
+      return reliability_branching_
+                 ? select_branching_column(relaxation, node_bound, prune_bound)
+                 : most_fractional(relaxation.col_value);
     }();
+    // STRONG-BRANCH FIXING (#502) may have closed the node, or fixed columns and re-solved it
+    // into `relaxation`, `node_bound` and `prune_bound`. Its fixes hold for the whole subtree,
+    // so whatever is created below hangs under them (link_strong_fixes) and the children
+    // start from the re-solved basis.
+    if (branch_column == kBranchPruned) {
+      leave();
+      ++nodes_pruned_;
+      continue;
+    }
+    if (!strong_fixes_.empty()) children_warm = basis_of(relaxation);
+    if (branch_column == kBranchIntegral && !strong_fixes_.empty()) {
+      offer_incumbent(relaxation.col_value);
+      if (pool_complete_ &&
+          split_integral_node(link_strong_fixes(node_index, prune_bound), relaxation)) {
+        continue;
+      }
+      leave();
+      continue;
+    }
     if (branch_column < 0) {
       // Cannot happen after the integrality test above, but a rule that returns nothing
       // must not be answered with a branch on column -1.
@@ -709,25 +734,28 @@ Solution BranchAndBound::run() {
     // were branched from, and the branched column's own contribution is the one term the
     // branch is about to settle.
     const double child_estimate = estimate_from(relaxation.col_value, node_bound);
+    // Read before link_strong_fixes() grows nodes_, which `node` refers into.
+    const Index child_depth = node.depth + 1;
+    const Index parent = link_strong_fixes(node_index, prune_bound);
 
     TreeNode down;
-    down.parent = node_index;
+    down.parent = parent;
     down.has_change = true;
     down.change = down_change;
     down.bound = prune_bound;
     down.parent_lp_bound = node_bound;
-    down.depth = node.depth + 1;
+    down.depth = child_depth;
     down.warm = children_warm;
     down.fraction = down_fraction;
     down.estimate = child_estimate;
 
     TreeNode up;
-    up.parent = node_index;
+    up.parent = parent;
     up.has_change = true;
     up.change = up_change;
     up.bound = prune_bound;
     up.parent_lp_bound = node_bound;
-    up.depth = node.depth + 1;
+    up.depth = child_depth;
     up.warm = children_warm;
     up.fraction = up_fraction;
     up.estimate = child_estimate;
@@ -736,8 +764,8 @@ Solution BranchAndBound::run() {
     const auto down_index = static_cast<Index>(nodes_.size() - 1);
     nodes_.push_back(up);
     const auto up_index = static_cast<Index>(nodes_.size() - 1);
-    open_.push_back(down_index);
-    open_.push_back(up_index);
+    push_open(down_index);
+    push_open(up_index);
     certificate_children(node_index, down_index, up_index);  // #518
     dive = true;
 
@@ -764,6 +792,7 @@ Solution BranchAndBound::run() {
 
   report_conflicts();
   report_safe_bounds();
+  report_branching_fixpoint();
   finish_certificate();  // #518: written here, whatever status the search ends in
   // A search stopped by a limit is exactly the one worth resuming (#287).
   if (limit_hit && !open_.empty()) save_checkpoint();

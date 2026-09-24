@@ -683,6 +683,36 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"mip_strong_branch_fix",
+                 OptionType::Bool,
+                 false,
+                 "MILP (#502): when a strong-branching probe proves one side of a column "
+                 "infeasible, fix the column to the other side for the node's whole subtree, "
+                 "re-solve the node LP and take the branching decision again on the new point, "
+                 "for a bounded number of rounds; a column with both sides infeasible fathoms "
+                 "the node. Off by default until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"mip_incremental_propagation",
+                 OptionType::Bool,
+                 false,
+                 "MILP (#502): propagate node bounds to a fixpoint through a worklist of the "
+                 "rows whose columns changed, up to a work limit, instead of at most three "
+                 "full sweeps. Off by default until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"mip_heap_open_list",
+                 OptionType::Bool,
+                 false,
+                 "MILP (#502): keep the open nodes in a binary heap under the best-bound and "
+                 "best-estimate node selections, so the next node is found in O(log n) rather "
+                 "than O(n); the order, and so the search, is the same as without it. Single "
+                 "worker only. Off by default until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_symmetry",
                  OptionType::Bool,
                  false,

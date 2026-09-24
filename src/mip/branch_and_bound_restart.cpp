@@ -141,7 +141,7 @@ void BranchAndBound::restart_search() {
   // into a failed build.
   nodes_.emplace_back();
   nodes_.back().bound = -std::numeric_limits<double>::infinity();
-  open_.push_back(0);
+  push_open(0);
   current_warm_ = WarmStart{};  // the slack basis: the new root is solved from scratch
   deepest_node_ = 0;
   fixed_since_root_ = 0;

@@ -295,6 +295,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/branch_and_bound_certificate.cpp
   src/mip/certificate_writer.cpp
   src/mip/certificate_sections.cpp
+  src/mip/branch_and_bound_fixpoint.cpp
   src/mip/flow_cover_cuts.cpp
   src/mip/implied_bound_cuts.cpp
   src/mip/obbt.cpp
