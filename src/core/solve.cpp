@@ -959,8 +959,8 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // ex73a, bgindy, gosh): a dropped certificate recovered this way, verified.
     // gran regresses to numerical_error without presolve - kept only when the retry is AT
     // LEAST as good, never as a straight replacement.
-    if (solution.status == SolveStatus::kInfeasible && solution.farkas_dual.empty() &&
-        !race && !warm_requested && options.get_bool("presolve")) {
+    if (solution.status == SolveStatus::kInfeasible && solution.farkas_dual.empty() && !race &&
+        !warm_requested && options.get_bool("presolve")) {
       Solution retry = run_lp_engine(model);
       retry.solve_seconds = timer.elapsed_seconds();
       reconcile_status_with_measurement(&retry, options, logger, /*check_dual=*/true);
