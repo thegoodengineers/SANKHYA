@@ -51,6 +51,57 @@ jobs:
           ./build/tests/sankhya_tests
           --gtest_filter='ParallelTree.*:BranchAndBound*.*:SolutionPool*.*:NodeSelection*.*:ResourceLimits.*:EngineConcurrency.*:EngineRace.*'
 
+  fuzz-readers:
+    # #534: a libFuzzer target per reader (MPS fixed, MPS free, LP, QPS' QUADOBJ extension),
+    # under ASan+UBSan, seeded from fuzz/corpus/. libFuzzer is a clang/LLVM feature with no
+    # GCC equivalent, so this job installs clang rather than adding it to every build - the
+    # other jobs stay on GCC, which is what ENGINEERING_RULES.md holds to -Werror cleanliness.
+    name: Fuzz the model readers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build zlib1g-dev clang
+
+      - name: Configure
+        run: |
+          cmake -G Ninja -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DSANKHYA_ENABLE_FUZZING=ON \
+            -DSANKHYA_BUILD_TESTS=OFF
+
+      - name: Build
+        run: >-
+          cmake --build build -j
+          --target fuzz_mps_fixed fuzz_mps_free fuzz_lp fuzz_qps
+
+      - name: Fuzz each reader for a fixed time
+        # A crash writes an artifact under -artifact_prefix and libFuzzer exits non-zero,
+        # which fails this step under set -e; a reproducer that is a genuine bug gets
+        # minimized and checked into fuzz/corpus/<dialect>/ in the fixing PR, which is what
+        # turns it into a permanent regression the next run of this job covers.
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fuzz-artifacts
+          for dialect in mps_fixed mps_free lp qps; do
+            echo "=== fuzz_${dialect} ==="
+            mkdir -p "/tmp/fuzz-grow-${dialect}"
+            "./build/fuzz_${dialect}" -max_total_time=45 -print_final_stats=1 \
+              -artifact_prefix="/tmp/fuzz-artifacts/${dialect}-" \
+              "/tmp/fuzz-grow-${dialect}" "fuzz/corpus/${dialect}"
+          done
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes
+          path: /tmp/fuzz-artifacts/
+
   build-and-test:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest

@@ -38,6 +38,7 @@ option(SANKHYA_BUILD_PYTHON "Build the pybind11 bindings (Phase 10)"    OFF)
 option(SANKHYA_BUILD_TESTS  "Build the GoogleTest suite"                ON)
 option(SANKHYA_SANITIZE     "Build with AddressSanitizer + UBSan"       OFF)
 option(SANKHYA_TSAN         "Build with ThreadSanitizer (#222)"         OFF)
+option(SANKHYA_ENABLE_FUZZING "Build libFuzzer targets for the model readers (#534)" OFF)
 option(SANKHYA_WITH_ZLIB    "Read gzip-compressed model files"          ON)
 option(SANKHYA_WITH_OPENMP  "Multi-core column loops through OpenMP (#57)" ON)
 
@@ -213,6 +214,25 @@ if(SANKHYA_TSAN)
   endif()
   target_compile_options(sankhya_flags INTERFACE -fsanitize=thread -fno-omit-frame-pointer)
   target_link_options(sankhya_flags INTERFACE -fsanitize=thread)
+endif()
+
+# libFuzzer targets for the model readers (#534). This is its OWN interface library, never
+# added to sankhya_flags: -fsanitize=fuzzer replaces main() with libFuzzer's, which would
+# silently break sankhya-cli and sankhya_tests if it leaked onto them. libFuzzer is a
+# clang/LLVM feature with no GCC equivalent, so this needs Clang - CI installs it
+# specifically for the fuzzing job rather than for every build.
+add_library(sankhya_fuzz_flags INTERFACE)
+if(SANKHYA_ENABLE_FUZZING)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "SANKHYA_ENABLE_FUZZING needs Clang (libFuzzer has no GCC equivalent)")
+  endif()
+  if(SANKHYA_SANITIZE OR SANKHYA_TSAN)
+    message(FATAL_ERROR "SANKHYA_ENABLE_FUZZING already links ASan+UBSan and cannot be combined with SANKHYA_SANITIZE or SANKHYA_TSAN")
+  endif()
+  target_link_libraries(sankhya_fuzz_flags INTERFACE sankhya_flags)
+  target_compile_options(sankhya_fuzz_flags INTERFACE
+    -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all)
+  target_link_options(sankhya_fuzz_flags INTERFACE -fsanitize=fuzzer,address,undefined)
 endif()
 
 # -----------------------------------------------------------------------------------------
@@ -405,6 +425,18 @@ target_include_directories(sankhya-cli PRIVATE "${PROJECT_SOURCE_DIR}/src")
 set_target_properties(sankhya-cli PROPERTIES OUTPUT_NAME sankhya)
 
 # -----------------------------------------------------------------------------------------
+# Reader fuzz targets (#534)
+# -----------------------------------------------------------------------------------------
+
+if(SANKHYA_ENABLE_FUZZING)
+  foreach(target_name fuzz_mps_fixed fuzz_mps_free fuzz_lp fuzz_qps)
+    add_executable(${target_name} fuzz/${target_name}.cpp)
+    target_link_libraries(${target_name} PRIVATE sankhya_core sankhya_fuzz_flags)
+    target_include_directories(${target_name} PRIVATE "${PROJECT_SOURCE_DIR}/fuzz")
+  endforeach()
+endif()
+
+# -----------------------------------------------------------------------------------------
 # Tests
 # -----------------------------------------------------------------------------------------
 
@@ -425,6 +457,7 @@ if(SANKHYA_ENABLE_CUDA)
   message(STATUS "  CUDA archs : ${SANKHYA_CUDA_ARCHITECTURES}")
 endif()
 message(STATUS "  sanitizers : ${SANKHYA_SANITIZE}")
+message(STATUS "  fuzzing    : ${SANKHYA_ENABLE_FUZZING}")
 message(STATUS "  tests      : ${SANKHYA_BUILD_TESTS}")
 message(STATUS "  zlib       : ${SANKHYA_WITH_ZLIB}")
 message(STATUS "")
