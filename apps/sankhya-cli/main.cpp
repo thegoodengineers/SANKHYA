@@ -20,6 +20,8 @@
 #include <fmt/format.h>
 #include <CLI/CLI.hpp>
 
+#include "core/engine_features.hpp"
+#include "core/engine_selection.hpp"
 #include "diagnose/diagnose.hpp"
 #include "solver_engine/engine_listing.hpp"
 #include "solver_engine/solver_registry.hpp"
@@ -266,6 +268,10 @@ int main(int argc, char** argv) {
   std::string info_path;
   info_cmd->add_option("file", info_path, "Model file (.mps, .lp)")->required();
   info_cmd->add_option("--option", option_assignments, "Set a solver option (name=value)");
+  bool info_features = false;
+  info_cmd->add_flag("--features", info_features,
+                     "Print the engine-selection features (#477) and the rule table's "
+                     "choice as one JSON line instead of the summary");
 
   CLI::App* diagnose_cmd = app.add_subcommand(
       "diagnose", "Analyse a model before solving: structure, numerics, presolve, guidance");
@@ -309,6 +315,18 @@ int main(int argc, char** argv) {
   if (info_cmd->parsed()) {
     sankhya::Model model;
     if (!load_model(info_path, options, &model)) return 3;
+    if (info_features) {
+      // The rule table's answer beside the features, from the same select_engine() that
+      // algorithm=auto calls (no warm start, no GPU), so the trainer compares against the
+      // rule the solver really runs rather than a copy of its thresholds.
+      const sankhya::EngineSelection rule = sankhya::select_engine(model, options, false);
+      std::string json =
+          sankhya::format_engine_features_json(sankhya::compute_engine_features(model));
+      json.pop_back();
+      fmt::print("{}, \"rule_table\": \"{}\", \"rule\": \"{}\"}}\n", json, rule.algorithm,
+                 rule.rule);
+      return 0;
+    }
     print_model_info(model);
     return 0;
   }

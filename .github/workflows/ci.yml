@@ -279,6 +279,12 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_kennington.py
 
+      - name: Engine-selection tree, gate and held-out split (#477)
+        # Pure Python, no solver: the CART labels, determinism, the emission gate (rows,
+        # distinct shapes, no shape on both sides of the split) and the committed grid.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_engine_selection_cart.py
+
       - name: Every results CSV is stamped with a commit on main (#433)
         # A benchmark run on a PR branch is stamped with a commit that dies at the squash
         # merge, and then scripts/reproduce.sh cannot tie the published number to a build.
