@@ -179,6 +179,14 @@ inline constexpr double kZeroDrop = 1e-11;
 /// 0.01 is the standard simplex compromise between sparsity and stability (Suhl & Suhl).
 inline constexpr double kMarkowitzThreshold = 0.01;
 
+/// Hyper-sparse FTRAN and BTRAN (#464, lu_hyper_sparse): the symbolic reach is tried when
+/// the right-hand side has at most this fraction of m nonzeros, and abandoned for the full
+/// loops once the steps it reaches pass the same fraction. Hall & McKinnon, "Hyper-sparsity
+/// in the revised simplex method and how to exploit it", Comput. Optim. Appl. 32 (2005),
+/// call a result hyper-sparse below 10% and find the full loops cheaper above it; the
+/// density bins the LU logs (LuSolveStats) are there to re-set it from our own data.
+inline constexpr double kHyperSparseDensity = 0.10;
+
 /// Below this, a computed pivot element is treated as a singular basis rather than a pivot.
 inline constexpr double kPivotTolerance = 1e-9;
 

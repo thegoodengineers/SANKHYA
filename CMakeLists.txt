@@ -275,6 +275,7 @@ set(SANKHYA_CORE_SOURCES
   src/la/ldl_supernodal.cpp
   src/la/lu.cpp
   src/la/lu_eliminate.cpp
+  src/la/lu_hyper.cpp
   src/la/scaling.cpp
   src/la/sparse.cpp
   src/simplex/dense_lu.cpp
@@ -338,6 +339,7 @@ set(SANKHYA_CORE_SOURCES
   src/simplex/primal_simplex.cpp
   src/simplex/crossover.cpp
   src/simplex/simplex_push.cpp
+  src/simplex/simplex_report.cpp
   src/simplex/ranging.cpp
   src/simplex/factor_cache.cpp
   src/util/logging.cpp
