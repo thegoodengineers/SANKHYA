@@ -744,8 +744,15 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          apt-get update
-          apt-get install -y ninja-build cmake g++ zlib1g-dev git
+          # security.ubuntu.com has served an index ahead of its pool (a 404 on
+          # libexpat1_2.4.7-1ubuntu0.9 on 24 Sep 2026); archive.ubuntu.com carries the same
+          # -security pocket. A few retries ride out a mirror mid-sync.
+          sed -i 's|http://security.ubuntu.com|http://archive.ubuntu.com|g' /etc/apt/sources.list
+          for attempt in 1 2 3; do
+            apt-get update && apt-get install -y ninja-build cmake g++ zlib1g-dev git && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 30
+          done
 
       - name: Configure with CUDA enabled
         run: |
