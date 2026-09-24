@@ -9,6 +9,9 @@
 
 #include "sankhya/options.hpp"
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -17,9 +20,6 @@
 #include <limits>
 #include <string_view>
 #include <unordered_map>
-
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
@@ -333,6 +333,19 @@ const std::vector<OptionSpec>& Options::registry() {
                  "singleton is; the recovered value lies in the box by construction. Not for "
                  "an integer column. Only read when presolve is on. OFF until the Netlib and "
                  "MIPLIB re-runs on main say what it changes.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"presolve_implied_integer",
+                 OptionType::Bool,
+                 true,
+                 "Implied-integer detection in presolve (#513; Achterberg et al. 2020, "
+                 "sec. 1.13): a continuous variable that appears in an equality row where "
+                 "every other variable is already integer with an integer coefficient, and "
+                 "whose own coefficient is +-1 (or divides evenly into an integer), must "
+                 "take an integer value in every feasible solution and is promoted to integer. "
+                 "The pass runs to a fixpoint: a newly promoted variable can unlock further "
+                 "detections. Only read when presolve is on.",
                  0.0,
                  0.0,
                  {}});
