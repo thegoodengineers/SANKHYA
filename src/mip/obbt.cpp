@@ -94,8 +94,9 @@ ObbtResult obbt_root(Model& model, const Options& options, Logger& logger, doubl
 
   WarmStart warm;  // reused across solves
   int solves = 0;
+  bool lp_infeasible = false;  // set when the cutoff row makes the LP infeasible
 
-  for (Index j = 0; j < n && solves < max_iters; ++j) {
+  for (Index j = 0; j < n && solves < max_iters && !lp_infeasible; ++j) {
     const auto u = static_cast<std::size_t>(j);
     const double lo = lp.col_lower[u];
     const double hi = lp.col_upper[u];
@@ -118,14 +119,21 @@ ObbtResult obbt_root(Model& model, const Options& options, Logger& logger, doubl
           ++result.bounds_tightened;
         }
         warm = {sol.col_status, sol.row_status};
+      } else if (sol.status == SolveStatus::kInfeasible) {
+        // The cutoff row (c'x <= incumbent - eps) made the LP infeasible: the LP
+        // relaxation bound already meets the cutoff, so every remaining probe will
+        // also be infeasible.  Stop early rather than exhausting the LP budget.
+        warm = {};
+        lp_infeasible = true;
       } else {
-        // Infeasible or unbounded with the cutoff row means we can stop.
+        // Unbounded (x_j has no finite lower bound) or numerical issue: cannot
+        // tighten this bound, but other variables may still be tightenable.
         warm = {};
       }
     }
 
     // ---- max x_j ----------------------------------------------------------------
-    if (solves < max_iters) {
+    if (!lp_infeasible && solves < max_iters) {
       lp.col_cost.assign(static_cast<std::size_t>(n), 0.0);
       lp.col_cost[u] = -1.0;  // minimise -x_j == maximise x_j
       lp.sense = ObjSense::kMinimize;
@@ -141,6 +149,10 @@ ObbtResult obbt_root(Model& model, const Options& options, Logger& logger, doubl
           ++result.bounds_tightened;
         }
         warm = {sol.col_status, sol.row_status};
+      } else if (sol.status == SolveStatus::kInfeasible) {
+        // Same as above: stop all remaining probes.
+        warm = {};
+        lp_infeasible = true;
       } else {
         warm = {};
       }
