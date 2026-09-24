@@ -1389,6 +1389,23 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"pdhg_detect_infeasibility",
+         OptionType::Bool,
+         false,
+         "At each restart (#484), test the period's iterate difference - already computed "
+         "for the primal-weight update, at no extra cost when this is off - as a candidate "
+         "primal ray (unbounded) or dual Farkas ray (infeasible): Applegate, Diaz, Lu and "
+         "Lubin, 'Infeasibility detection with primal-dual hybrid gradient for large-scale "
+         "linear programming', SIAM J. Optim. 34(1) (2024). Rather than the paper's own "
+         "numerical thresholds, the candidate is handed directly to this project's own "
+         "certificate checker (src/core/certificate.cpp, the same one every other engine's "
+         "proof is held to) and accepted only when it confirms the direction - a candidate "
+         "that does not check out changes nothing, and the normal iteration/time limit "
+         "reporting stands. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"qp_tolerance",
                  OptionType::Double,
                  1e-8,

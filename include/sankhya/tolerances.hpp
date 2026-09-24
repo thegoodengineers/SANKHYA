@@ -523,4 +523,11 @@ inline constexpr double kObbtCutoffEpsilon = 1e-6;
 /// most tightening happens in the first few (Savelsbergh 1994), and a cap keeps a slowly
 /// converging chain (bounds creeping by a small amount each round) from running long.
 inline constexpr int kDomainPropagationRounds = 50;
+
+/// PDHG infeasibility detection (#484; Applegate, Lubin & Hinder 2024): a restart difference is
+/// tested only from the kPdhgDetectionMinRestarts-th restart on - the first "difference" is a
+/// single projected gradient step, not the converging ray the method relies on - and only
+/// when its norm exceeds kPdhgDetectionMinNorm (a converged LP's differences go to zero).
+inline constexpr int kPdhgDetectionMinRestarts = 2;
+inline constexpr double kPdhgDetectionMinNorm = 1e-12;
 }  // namespace sankhya::tol
