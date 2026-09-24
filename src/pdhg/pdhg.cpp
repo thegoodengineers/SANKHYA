@@ -52,6 +52,7 @@
 #include <fmt/format.h>
 
 #include "../core/stop_controller.hpp"
+#include "sankhya/certificate.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -71,6 +72,64 @@ double project(double value, double lower, double upper) {
   if (is_finite_bound(lower) && value < lower) return lower;
   if (is_finite_bound(upper) && value > upper) return upper;
   return value;
+}
+
+/// A restart's iterate difference (#484): a candidate for a primal ray (dx, unbounded) or a
+/// dual Farkas ray (dy, infeasible), tested against the SAME checker every other engine's
+/// certificate goes through (src/core/certificate.cpp) before anything is claimed. Returns
+/// false, changing nothing, when neither checks out - the normal iteration/time limit
+/// reporting then stands exactly as if this had never run.
+///
+/// Applegate, Diaz, Lu & Lubin, "Infeasibility detection with primal-dual hybrid gradient for
+/// large-scale linear programming", SIAM J. Optim. 34(1), 2024 (arXiv 2102.04592): the
+/// iterate difference over a restart period converges to a certifying ray when the problem is
+/// infeasible or unbounded. Rather than re-deriving the paper's own numerical thresholds, the
+/// candidate direction is handed directly to the project's own certificate checker and
+/// accepted only when IT confirms the direction - never on a threshold alone, so a wrong
+/// guess here can decline but cannot lie.
+bool detect_certificate_from_restart(const Model& model, const Scaling& scaling,
+                                     const std::vector<double>& dx, double dx_norm,
+                                     const std::vector<double>& dy, double dy_norm,
+                                     SolveStatus* status, std::vector<double>* certificate,
+                                     std::string* message) {
+  if (dx_norm > 1e-12) {
+    const auto n = dx.size();
+    std::vector<double> ray(n);
+    for (std::size_t u = 0; u < n; ++u) ray[u] = dx[u] * scaling.column[u];
+    std::string why;
+    if (ray_proves_unbounded(model, ray, &why)) {
+      *status = SolveStatus::kUnbounded;
+      *certificate = std::move(ray);
+      *message =
+          fmt::format("a restart's iterate difference is a certified unbounded ray; {}", why);
+      return true;
+    }
+  }
+  if (dy_norm > 1e-12) {
+    const auto m = dy.size();
+    std::vector<double> candidate(m);
+    // row_dual's own convention is sense * (-y) (the file header explains why); Farkas'
+    // lemma's sign is a property of the proof, not of this engine's internal Lagrangian
+    // convention, so both signs are tried below rather than deriving which one is "right".
+    for (std::size_t u = 0; u < m; ++u) candidate[u] = -dy[u] * scaling.row[u];
+    std::string why;
+    if (farkas_proves_infeasible(model, candidate, &why)) {
+      *status = SolveStatus::kInfeasible;
+      *certificate = std::move(candidate);
+      *message =
+          fmt::format("a restart's iterate difference is a certified Farkas ray; {}", why);
+      return true;
+    }
+    for (double& v : candidate) v = -v;
+    if (farkas_proves_infeasible(model, candidate, &why)) {
+      *status = SolveStatus::kInfeasible;
+      *certificate = std::move(candidate);
+      *message =
+          fmt::format("a restart's iterate difference is a certified Farkas ray; {}", why);
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -257,6 +316,14 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   bool converged = false;
   bool logged_table = false;
   HalpernResult last_halpern_res;
+
+  // #484, off by default until an A/B on main: at each restart, test whether the period's
+  // iterate difference is itself a certified ray (see detect_certificate_from_restart above).
+  const bool detect_infeasibility = options.get_bool("pdhg_detect_infeasibility");
+  bool certificate_found = false;
+  SolveStatus certificate_status = SolveStatus::kNotSolved;
+  std::vector<double> certificate_vector;
+  std::string certificate_message;
 
   StopController stop(control, timer, limits);
   SolveStatus stop_status = SolveStatus::kIterationLimit;
@@ -573,6 +640,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         omega = std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
         omega = std::clamp(omega, 1e-6, 1e6);
       }
+      if (detect_infeasibility &&
+          detect_certificate_from_restart(model, scaling, dx, dx_norm, dy, dy_norm,
+                                          &certificate_status, &certificate_vector,
+                                          &certificate_message)) {
+        certificate_found = true;
+        break;
+      }
       // The period's reference residual in the NEW primal weight's norm: measured in the old
       // one, the 0.2 ratio test would compare residuals in two different norms (review of
       // #613).
@@ -619,6 +693,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
           omega =
               std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
           omega = std::clamp(omega, 1e-6, 1e6);
+        }
+        if (detect_infeasibility &&
+            detect_certificate_from_restart(model, scaling, dx, dx_norm, dy, dy_norm,
+                                            &certificate_status, &certificate_vector,
+                                            &certificate_message)) {
+          certificate_found = true;
+          break;
         }
 
         std::fill(x_sum.begin(), x_sum.end(), 0.0);
@@ -677,7 +758,24 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   // exactly what kFeasible means, and it is what gets reported now.
   const bool verifiable = converged && final_residuals.meets_project_standard();
 
-  if (verifiable) {
+  if (certificate_found) {
+    // #484: a restart's iterate difference already checked out against the project's own
+    // certificate checker (detect_certificate_from_restart, above) - reported directly,
+    // bypassing the relative-tolerance/limit reporting below entirely, the same way any
+    // other engine's certified infeasible or unbounded verdict bypasses it.
+    solution.status = certificate_status;
+    solution.message = certificate_message;
+    if (certificate_status == SolveStatus::kInfeasible) {
+      solution.farkas_dual = std::move(certificate_vector);
+      // #191: a verdict with no point does not get a point.
+      solution.col_value.clear();
+      solution.col_dual.clear();
+      solution.row_dual.clear();
+      solution.row_activity.clear();
+    } else {
+      solution.primal_ray = std::move(certificate_vector);
+    }
+  } else if (verifiable) {
     solution.status = SolveStatus::kOptimal;
     solution.message = fmt::format(
         "converged after {} iterations and {} restarts; absolute primal {:.3e}, dual {:.3e}, "
