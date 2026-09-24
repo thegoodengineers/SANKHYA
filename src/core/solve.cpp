@@ -35,12 +35,14 @@
 // pipeline and so cannot assume this file already did.
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <functional>
 #include <limits>
 #include <new>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -527,6 +529,11 @@ bool& interior_point_out_of_memory_for_testing() {
   return on;
 }
 
+double& interior_point_extra_seconds_for_testing() {
+  static double seconds = 0.0;
+  return seconds;
+}
+
 namespace {
 Solution solve_unguarded(const Model& model, const Options& options, SolveControl* control,
                          Logger& logger, const Timer& timer, std::string* engine_ran) {
@@ -761,17 +768,29 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         Solution interior = run_declining_on_out_of_memory(
             [&] {
               if (interior_point_out_of_memory_for_testing()) throw std::bad_alloc();
-              return ipm::solve_ipm(target, interior_options, logger, control);
+              Solution answer = ipm::solve_ipm(target, interior_options, logger, control);
+              if (interior_point_extra_seconds_for_testing() > 0.0) {
+                std::this_thread::sleep_for(
+                    std::chrono::duration<double>(interior_point_extra_seconds_for_testing()));
+              }
+              return answer;
             },
             "ipm", timer, logger);
         // From the interior point's answer to a vertex (#219), when asked: the basis the
         // rest of the pipeline wants, at the cost of a few pivots from an optimal point -
         // and, under crossover_from_nonoptimal, from a feasible or stopped one (#474).
-        // The crossover runs on what the budget has left too, which is why it is handed
-        // engine_options rather than the caller's (#289).
+        // The crossover runs on what the budget has left too (#289), and it measures that
+        // itself: crossover_to_vertex() gives the pivots time_limit minus `timer`'s elapsed
+        // seconds (simplex/crossover.cpp). It is therefore handed the CALLER'S options and
+        // the solve's clock, as the registry's ipm engine hands them
+        // (solver_engine/builtin_engines.cpp). It used to be handed
+        // with_the_time_that_is_left(options), whose time_limit is already net of the
+        // elapsed seconds, so they were subtracted twice and an interior point that finished
+        // past half the limit left the crossover nothing: irish-electricity finished at 170 s
+        // of 300 and was told "no time left for crossover" with 130 s left
+        // (bench/results/mittelmann-ipm-5c7efbc.csv, #576).
         interior =
-            crossover_when_wanted(target, std::move(interior),
-                                  with_the_time_that_is_left(options), logger, control, timer);
+            crossover_when_wanted(target, std::move(interior), options, logger, control, timer);
         // A SELECTED interior point that declines - a factor beyond its budget, a
         // numerical failure, no answer at all - is not the end of the solve: the selector
         // chose it from the model's shape, and the shape can lie (a dense model can be

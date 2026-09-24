@@ -128,4 +128,10 @@ Solution run_declining_on_out_of_memory(Body&& body, std::string_view engine,
 /// src/core/solve.cpp; read in one place per attempt; never set outside a test.
 bool& interior_point_out_of_memory_for_testing();
 
+/// Test seam (#576): while above zero, solve()'s selected interior point spends this many
+/// seconds more after it returns and before the crossover, so the crossover's share of a
+/// time limit the interior point has partly used can be tested without a model that takes
+/// that long. Defined in src/core/solve.cpp; never set outside a test.
+double& interior_point_extra_seconds_for_testing();
+
 }  // namespace sankhya

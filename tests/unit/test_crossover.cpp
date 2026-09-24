@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "core/status_guard.hpp"
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
@@ -119,6 +120,36 @@ TEST(Crossover, ADegenerateModelEndsAtAVertexNotAtTheAnalyticCentre) {
     }
   }
   EXPECT_GE(at_bound, 2) << "a vertex of this face has at least two coordinates at a bound";
+}
+
+/// Holds the interior point for `seconds` after it returns, for one test (#576).
+class InteriorPointTakesLonger {
+ public:
+  explicit InteriorPointTakesLonger(double seconds) {
+    interior_point_extra_seconds_for_testing() = seconds;
+  }
+  ~InteriorPointTakesLonger() { interior_point_extra_seconds_for_testing() = 0.0; }
+  InteriorPointTakesLonger(const InteriorPointTakesLonger&) = delete;
+  InteriorPointTakesLonger& operator=(const InteriorPointTakesLonger&) = delete;
+};
+
+TEST(Crossover, GetsWhatTheTimeLimitHasLeftAfterTheInteriorPointNotLessTwice) {
+  // #576: solve() handed the crossover a time_limit already net of the elapsed seconds, and
+  // crossover_to_vertex() subtracts them again, so an interior point that used more than half
+  // the limit left the crossover nothing: irish-electricity finished at 170 s of 300 and was
+  // told "no time left for crossover" with 130 s left. Here the interior point is held for
+  // 1.5 s of a 2.5 s limit; about 1.0 s is left, and counted twice it was -0.5 s.
+  const Model model = make_lp({{1.0, 1.0, 1.0}}, {3.0}, {kInfinity}, {1.0, 1.0, 1.0},
+                              {0.0, 0.0, 0.0}, {3.0, 3.0, 3.0});
+  Options options = ipm_options(true);
+  options.set_double("time_limit", 2.5);
+  const InteriorPointTakesLonger held(1.5);
+  const Solution vertex = solve(model, options);
+  ASSERT_EQ(vertex.status, SolveStatus::kOptimal) << vertex.message;
+  EXPECT_EQ(vertex.message.find("no time left for crossover"), std::string::npos)
+      << vertex.message;
+  EXPECT_NE(vertex.algorithm.find("crossover"), std::string::npos) << vertex.message;
+  expect_a_vertex(model, vertex);
 }
 
 TEST(Crossover, OffLeavesTheInteriorPointsAnswerAlone) {
