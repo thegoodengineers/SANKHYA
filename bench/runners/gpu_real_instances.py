@@ -42,7 +42,7 @@ CSV_COLUMNS = [
     "status", "objective", "iterations", "seconds", "wall_seconds",
     "reached_tolerance", "primal_residual", "dual_residual",
     "kkt_1e4_seconds", "kkt_1e6_seconds", "kkt_1e8_seconds",
-    "git_commit", "machine", "gpu", "timestamp_utc",
+    "git_commit", "machine", "gpu", "timestamp_utc", "solver_options",
 ]
 
 COMMON_OPTIONS = ["log_to_console=false", "algorithm=pdhg", "pdhg_polish=false",
@@ -144,7 +144,16 @@ def main() -> int:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--time-limit", type=float, default=300.0)
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE",
+                        help="passed to every solve, CPU and GPU arm alike, and recorded in the "
+                             "solver_options column: the A/B of an option (gpu_on_device_loop, "
+                             "pdhg_two_matvec, ...). Such a run is written to gpu-ab-<commit>-<tag>.csv, "
+                             "which the benchmark doc's gpu-real-* tier never reads.")
+    parser.add_argument("--skip-refinery", action="store_true",
+                        help="only the Mittelmann instances (the 779,640-row refinery year is the "
+                             "slow part)")
     args = parser.parse_args()
+    solver_options = " ".join(args.solver_option)
 
     commit = stamp.stamp(args.binary)
     machine = f"{platform.system()}-{platform.machine()}"
@@ -165,21 +174,27 @@ def main() -> int:
     # --- Refinery planning year (generate on the fly) ---
     with tempfile.TemporaryDirectory() as tmp_dir:
         refinery_mps = Path(tmp_dir) / "refinery_year.mps"
-        print("generating refinery year LP (779,640 rows)...")
-        gen = subprocess.run(
-            [sys.executable, str(REPO_ROOT / "bench" / "runners" / "generate_refinery_lp.py"),
-             "--periods", "8760", "--seed", "42", "--out", str(refinery_mps)],
-            capture_output=True, text=True, check=False,
-        )
-        if gen.returncode != 0 or not refinery_mps.exists():
+        gen = None
+        if args.skip_refinery:
+            print("refinery year skipped (--skip-refinery)")
+        else:
+            print("generating refinery year LP (779,640 rows)...")
+            gen = subprocess.run(
+                [sys.executable, str(REPO_ROOT / "bench" / "runners" / "generate_refinery_lp.py"),
+                 "--periods", "8760", "--seed", "42", "--out", str(refinery_mps)],
+                capture_output=True, text=True, check=False,
+            )
+        if gen is None:
+            pass
+        elif gen.returncode != 0 or not refinery_mps.exists():
             print(f"  ERROR generating refinery LP: {gen.stderr[:200]}")
         else:
             # warm-up GPU
-            run_solve(args.binary, refinery_mps, "pdhg-cuda", TOLERANCES[0], args.time_limit)
+            run_solve(args.binary, refinery_mps, "pdhg-cuda", TOLERANCES[0], args.time_limit, args.solver_option)
             r, c, nz = mps_dimensions(refinery_mps)
             for tol in TOLERANCES:
                 for alg in algorithms:
-                    result = run_solve(args.binary, refinery_mps, alg, tol, args.time_limit)
+                    result = run_solve(args.binary, refinery_mps, alg, tol, args.time_limit, args.solver_option)
                     key = ("refinery_year", tol, "pdhg-cpu")
                     if alg == "pdhg-cpu":
                         cpu_times[key] = result["seconds"]
@@ -205,7 +220,7 @@ def main() -> int:
                         "kkt_1e6_seconds": result.get("kkt_1e6_seconds", ""),
                         "kkt_1e8_seconds": result.get("kkt_1e8_seconds", ""),
                         "git_commit": commit, "machine": machine, "gpu": gpu,
-                        "timestamp_utc": timestamp,
+                        "timestamp_utc": timestamp, "solver_options": solver_options,
                     })
 
     # --- Mittelmann instances ---
@@ -215,11 +230,11 @@ def main() -> int:
             print(f"  SKIP {name}: not in {MITTELMANN_DIR} — run fetch_mittelmann.py first")
             continue
         # warm-up GPU
-        run_solve(args.binary, mps, "pdhg-cuda", TOLERANCES[0], args.time_limit)
+        run_solve(args.binary, mps, "pdhg-cuda", TOLERANCES[0], args.time_limit, args.solver_option)
         r, c, nz = mps_dimensions(mps)
         for tol in TOLERANCES:
             for alg in algorithms:
-                result = run_solve(args.binary, mps, alg, tol, args.time_limit)
+                result = run_solve(args.binary, mps, alg, tol, args.time_limit, args.solver_option)
                 key = (name, tol, "pdhg-cpu")
                 if alg == "pdhg-cpu":
                     cpu_times[key] = result["seconds"]
@@ -245,7 +260,7 @@ def main() -> int:
                     "kkt_1e6_seconds": result.get("kkt_1e6_seconds", ""),
                     "kkt_1e8_seconds": result.get("kkt_1e8_seconds", ""),
                     "git_commit": commit, "machine": machine, "gpu": gpu,
-                    "timestamp_utc": timestamp,
+                    "timestamp_utc": timestamp, "solver_options": solver_options,
                 })
 
     if not result_rows:
@@ -253,7 +268,13 @@ def main() -> int:
         return 1
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = args.out or (RESULTS_DIR / f"gpu-real-{commit}.csv")
+    if args.out is not None:
+        out = args.out
+    elif solver_options:
+        tag = re.sub(r"[^A-Za-z0-9]+", "-", solver_options).strip("-")
+        out = RESULTS_DIR / f"gpu-ab-{commit}-{tag}.csv"
+    else:
+        out = RESULTS_DIR / f"gpu-real-{commit}.csv"
     with out.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
         writer.writeheader()
