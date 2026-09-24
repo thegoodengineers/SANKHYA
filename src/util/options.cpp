@@ -1022,6 +1022,15 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back({"domain_prop_backend",
+                 OptionType::String,
+                 std::string("auto"),
+                 "Where gpu_domain_prop runs (#510): auto uses the CUDA propagator when the "
+                 "build has CUDA and a card answers, cpu forces the CPU reference (the same "
+                 "bounds either way). cpu exists so the two can be timed on one machine.",
+                 0.0,
+                 0.0,
+                 {"auto", "cpu"}});
     s.push_back({"gpu_pump",
                  OptionType::Bool,
                  false,
