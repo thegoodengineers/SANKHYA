@@ -359,4 +359,47 @@ inline constexpr double kProbingMaxBound = 1e9;
 inline constexpr std::int64_t kProbingWorkLimit = 20000000;
 inline constexpr std::int64_t kProbingProbeWorkLimit = 1000000;
 
+// ---------------------------------------------------------------------------------------
+// Spatial branch and bound for products of columns (#514, src/global/)
+// ---------------------------------------------------------------------------------------
+
+/// FBBT (Belotti et al. 2009, sec. 3): a derived bound is relaxed outward by this relative
+/// amount before it is applied, so rounding in the interval arithmetic cannot cut off a
+/// feasible point; a bound moves only when it improves by more than kFbbtMinImprovement
+/// relative, which also ends the passes on rows that would otherwise creep forever; and no
+/// more than kFbbtMaxPasses sweeps over the rows are made per box.
+inline constexpr double kFbbtSafety = 1e-9;
+inline constexpr double kFbbtMinImprovement = 1e-6;
+inline constexpr int kFbbtMaxPasses = 10;
+
+/// Branching point: this weight on the relaxation's value of the branching column, the rest
+/// on the box midpoint (the convex combination Belotti et al. 2009 discuss, sec. 5), kept at
+/// least kGlobalBranchPointMargin of the width from either end so both children are real
+/// parts of the box.
+inline constexpr double kGlobalBranchPointLpWeight = 0.5;
+inline constexpr double kGlobalBranchPointMargin = 0.1;
+
+/// A column narrower than this, relative to max(1, |bound|), is not branched on again: at
+/// that width the McCormick envelope is exact to the LP's own tolerance.
+inline constexpr double kGlobalMinBranchWidth = 1e-9;
+
+/// A product whose relaxation value is within this of the product of its factors, relative
+/// to max(1, |x_a x_b|), is treated as satisfied when choosing where to branch.
+inline constexpr double kGlobalProductTolerance = 1e-9;
+
+/// The alternating LP (src/global/local_search.cpp): at most this many LP solves per call,
+/// and it stops once a cycle through the sides improves the objective by less than
+/// kGlobalLocalSearchProgress relative.
+inline constexpr int kGlobalLocalSearchRounds = 8;
+inline constexpr double kGlobalLocalSearchProgress = 1e-9;
+
+/// A factor's implied value w / x_other is used only when the sum of the other factors'
+/// squares exceeds this; below it the relaxation's own value is kept.
+inline constexpr double kGlobalImpliedValueFloor = 1e-12;
+
+/// The alternating LP runs at each of the first kGlobalHeuristicAlwaysNodes nodes and then
+/// at every kGlobalHeuristicInterval-th node.
+inline constexpr std::int64_t kGlobalHeuristicAlwaysNodes = 10;
+inline constexpr std::int64_t kGlobalHeuristicInterval = 10;
+
 }  // namespace sankhya::tol

@@ -36,6 +36,20 @@ class Model:
         # one sankhya::Model uses. Stored raw: halving or mirroring here would be exactly
         # the misreading this script exists to catch the solver making.
         self.hessian: dict[tuple[int, int], float] = {}
+        # QCMATRIX quadratic ROWS (#514), keyed (row, col, col) exactly as the file lists
+        # them. The CPLEX/Gurobi convention is the FULL symmetric matrix with no 1/2: the row
+        # is a'x + sum over listed entries of value * x_i * x_j. Kept entry by entry, so the
+        # reading is the format's and not a folded form of it.
+        self.qc_entries: dict[tuple[int, int, int], float] = {}
+
+    def add_quadratic_rows(self, x: list[float], activity: list[float],
+                           row_scale: list[float]) -> None:
+        """Add every quadratic row's x'Q_r x to `activity`, and its terms to `row_scale`."""
+        for (i, a, b), value in self.qc_entries.items():
+            term = value * x[a] * x[b]
+            activity[i] += term
+            if abs(term) > row_scale[i]:
+                row_scale[i] = abs(term)
 
     def hessian_times(self, x: list[float]) -> list[float]:
         """Qx for the FULL symmetric Q, expanded from the stored lower triangle.
@@ -135,6 +149,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
     row_rhs: list[float] = []
     row_range: list[float | None] = []
     integer_marker = False
+    qc_row = -1
     lower_set: list[bool] = []
 
     with open_text(path) as handle:
@@ -157,6 +172,15 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 elif key in ("QUADOBJ", "QMATRIX", "QSECTION", "QUADS"):
                     # All four spellings are in circulation and denote the same thing.
                     section = "QUADOBJ"
+                elif key == "QCMATRIX":
+                    # A quadratic row (#514): `QCMATRIX <row>`, then its matrix entries.
+                    if len(head) < 2 or head[1] not in model.row_index:
+                        raise ValueError(f"{path}:{lineno}: QCMATRIX must name a constraint "
+                                         "row of ROWS")
+                    section = "QCMATRIX"
+                    qc_row = model.row_index[head[1]]
+                    if any(key3[0] == qc_row for key3 in model.qc_entries):
+                        raise ValueError(f"{path}:{lineno}: second QCMATRIX for {head[1]}")
                 elif key == "ENDATA":
                     break
                 else:
@@ -247,6 +271,20 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                         row_rhs[i] = value
                     else:
                         row_range[i] = value
+                continue
+
+            if section == "QCMATRIX":
+                if len(fields) < 3:
+                    raise ValueError(f"{path}:{lineno}: QCMATRIX entry needs 3 fields")
+                if fields[0] not in model.col_index or fields[1] not in model.col_index:
+                    unknown = fields[0] if fields[0] not in model.col_index else fields[1]
+                    raise ValueError(f"{path}:{lineno}: QCMATRIX names unknown column "
+                                     f"{unknown}")
+                key3 = (qc_row, model.col_index[fields[0]], model.col_index[fields[1]])
+                if key3 in model.qc_entries:
+                    raise ValueError(f"{path}:{lineno}: duplicate QCMATRIX entry "
+                                     f"{fields[0]} {fields[1]}")
+                model.qc_entries[key3] = float(fields[2])
                 continue
 
             if section == "QUADOBJ":

@@ -261,6 +261,7 @@ set(SANKHYA_CORE_SOURCES
   src/io/line_reader.cpp
   src/io/lp_reader.cpp
   src/io/mps_bounds.cpp
+  src/io/mps_quadratic.cpp
   src/io/mps_reader.cpp
   src/io/model_writer.cpp
   src/io/writer.cpp
@@ -302,6 +303,11 @@ set(SANKHYA_CORE_SOURCES
   src/nlp/derivatives.cpp
   src/nlp/expression.cpp
   src/nlp/nonlinear_model.cpp
+  src/global/fbbt.cpp
+  src/global/local_search.cpp
+  src/global/qcqp_model.cpp
+  src/global/relaxation.cpp
+  src/global/spatial_bnb.cpp
   src/presolve/coef_tightening.cpp
   src/presolve/presolve.cpp
   src/presolve/probing.cpp

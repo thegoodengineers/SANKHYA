@@ -14,6 +14,7 @@
 #include <csignal>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
@@ -27,6 +28,7 @@
 #include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/qcqp.hpp"
 #include "sankhya/solve_control.hpp"
 #include "sankhya/version.hpp"
 
@@ -111,6 +113,26 @@ bool load_model(const std::string& path, const sankhya::Options& options,
   const sankhya::io::ReadResult result = looks_like_lp(path)
                                              ? sankhya::io::read_lp(path, model)
                                              : sankhya::io::read_mps(path, model, format);
+  if (!result.ok) {
+    fmt::print(stderr, "error: {}\n", result.error);
+    return false;
+  }
+  return true;
+}
+
+/// The model with its quadratic rows, read only under `nonconvex=global` (#514). A file
+/// with QCMATRIX sections reaches the global method; one without is solved exactly as
+/// load_model() + solve() would, since solve_global() hands a product-free model to solve().
+bool load_qcqp_model(const std::string& path, const sankhya::Options& options,
+                     sankhya::QcqpModel* model) {
+  sankhya::io::MpsFormat format = sankhya::io::MpsFormat::kAuto;
+  if (!sankhya::io::parse_mps_format(options.get_string("mps_format"), &format)) {
+    fmt::print(stderr, "error: unknown mps_format\n");
+    return false;
+  }
+  const sankhya::io::ReadResult result = looks_like_lp(path)
+                                             ? sankhya::io::read_lp(path, &model->linear)
+                                             : sankhya::io::read_qcqp_mps(path, model, format);
   if (!result.ok) {
     fmt::print(stderr, "error: {}\n", result.error);
     return false;
@@ -317,7 +339,14 @@ int main(int argc, char** argv) {
 
   if (solve_cmd->parsed()) {
     sankhya::Model model;
-    if (!load_model(model_path, options, &model)) return 3;
+    // Under nonconvex=global the model is read with its quadratic rows and solved by the
+    // global method (#514); `model` then holds the linear part, for names and the writers.
+    const bool global = options.get_string("nonconvex") == "global";
+    sankhya::QcqpModel qcqp;
+    if (global ? !load_qcqp_model(model_path, options, &qcqp)
+               : !load_model(model_path, options, &model)) {
+      return 3;
+    }
     if (!progress_out_path.empty()) options.set_string("progress_out", progress_out_path);
 
     g_cli_interrupt = 0;
@@ -328,7 +357,9 @@ int main(int argc, char** argv) {
       return g_cli_interrupt ? 1 : 0;
     };
 
-    const sankhya::Solution solution = sankhya::solve(model, options, &control);
+    const sankhya::Solution solution = global ? sankhya::solve_global(qcqp, options, &control)
+                                              : sankhya::solve(model, options, &control);
+    if (global) model = std::move(qcqp.linear);
 
     std::signal(SIGINT, SIG_DFL);
 
