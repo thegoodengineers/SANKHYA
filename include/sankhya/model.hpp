@@ -558,6 +558,18 @@ class Solution {
   Count polish_iterations = 0;
   double solve_seconds = 0.0;
 
+  /// Every incumbent a MILP search accepted as an improvement (#504), in the order found:
+  /// the solver clock in seconds since solve() started, and the objective in the model's
+  /// own sense and units. Empty for an LP or QP, for a model presolve settled, and for the
+  /// parallel search (mip_threads > 1), which does not record one. Time to first feasible
+  /// and Berthold's primal integral ("Measuring the impact of primal heuristics", Oper.
+  /// Res. Lett. 41, 2013) are read from it by bench/runners/miplib.py.
+  struct IncumbentEvent {
+    double seconds = 0.0;
+    double objective = 0.0;
+  };
+  std::vector<IncumbentEvent> incumbent_trace;
+
   /// Which engine produced this: "simplex-primal", "pdhg-cpu", "branch-and-cut", ...
   std::string algorithm;
   /// How that engine was chosen for an LP (#284): the rule tag ("requested",

@@ -249,6 +249,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_pooling.py
 
+      - name: MIPLIB seeds, primal integral and the tier-2 rule (#504)
+        # Pure Python, no network, no solver: the MPS permutation leaves the model unchanged
+        # (read back by the independent verifier's reader), the shifted geometric mean, the
+        # primal gap and integral, the per-seed aggregation, and the tier-2 selection rule.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_miplib_seeds.py
+
       - name: Kennington set parsing and pass rule (#530)
         # Pure Python, no network: the readme table and its published optima, the set
         # selection, and the pass rule shared with the Netlib full-set runner.

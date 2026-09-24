@@ -1,0 +1,310 @@
+{
+  "rule": "The instances of the MIPLIB 2017 benchmark set (benchmark-v2.test) that miplib2017-v28.solu marks =opt=, ordered by the byte size of their .mps.gz file as the server reports it (Content-Length), ties broken by name, the first 60. No instance is added or removed for any other reason, in particular not for how SANKHYA does on it.",
+  "benchmark_list": "https://miplib.zib.de/downloads/benchmark-v2.test",
+  "solution_file": "https://miplib.zib.de/downloads/miplib2017-v28.solu",
+  "benchmark_instances": 240,
+  "with_proven_optimum": 233,
+  "not_sized": [],
+  "instances": [
+    {
+      "name": "markshare_4_0",
+      "gz_bytes": 797,
+      "published_optimal": 1.0
+    },
+    {
+      "name": "markshare2",
+      "gz_bytes": 2179,
+      "published_optimal": 1.0
+    },
+    {
+      "name": "enlight_hard",
+      "gz_bytes": 3872,
+      "published_optimal": 37.0
+    },
+    {
+      "name": "pk1",
+      "gz_bytes": 4005,
+      "published_optimal": 11.0
+    },
+    {
+      "name": "neos5",
+      "gz_bytes": 5686,
+      "published_optimal": 15.0
+    },
+    {
+      "name": "gen-ip054",
+      "gz_bytes": 5884,
+      "published_optimal": 6840.96564179
+    },
+    {
+      "name": "timtab1",
+      "gz_bytes": 7077,
+      "published_optimal": 764771.99999978
+    },
+    {
+      "name": "neos-3046615-murg",
+      "gz_bytes": 8706,
+      "published_optimal": 1600.0
+    },
+    {
+      "name": "sp150x300d",
+      "gz_bytes": 8719,
+      "published_optimal": 69.0
+    },
+    {
+      "name": "mas76",
+      "gz_bytes": 9186,
+      "published_optimal": 40005.05398999999
+    },
+    {
+      "name": "mas74",
+      "gz_bytes": 9840,
+      "published_optimal": 11801.18572
+    },
+    {
+      "name": "gen-ip002",
+      "gz_bytes": 10577,
+      "published_optimal": -4783.733392
+    },
+    {
+      "name": "neos-3754480-nidda",
+      "gz_bytes": 11954,
+      "published_optimal": 12941.73838561778
+    },
+    {
+      "name": "neos-2657525-crna",
+      "gz_bytes": 12286,
+      "published_optimal": 1.810748
+    },
+    {
+      "name": "assign1-5-8",
+      "gz_bytes": 12566,
+      "published_optimal": 211.999999999998
+    },
+    {
+      "name": "glass4",
+      "gz_bytes": 12661,
+      "published_optimal": 1200012599.972384
+    },
+    {
+      "name": "supportcase26",
+      "gz_bytes": 16561,
+      "published_optimal": 1745.123813
+    },
+    {
+      "name": "neos-911970",
+      "gz_bytes": 16586,
+      "published_optimal": 54.76
+    },
+    {
+      "name": "mad",
+      "gz_bytes": 16882,
+      "published_optimal": 0.0268
+    },
+    {
+      "name": "graphdraw-domain",
+      "gz_bytes": 18092,
+      "published_optimal": 19685.99997550038
+    },
+    {
+      "name": "exp-1-500-5-5",
+      "gz_bytes": 19201,
+      "published_optimal": 65887.0
+    },
+    {
+      "name": "tr12-30",
+      "gz_bytes": 19895,
+      "published_optimal": 130595.9999999999
+    },
+    {
+      "name": "neos-3381206-awhea",
+      "gz_bytes": 23793,
+      "published_optimal": 453.0
+    },
+    {
+      "name": "ic97_potential",
+      "gz_bytes": 26260,
+      "published_optimal": 3941.99993090225
+    },
+    {
+      "name": "neos-3627168-kasai",
+      "gz_bytes": 29391,
+      "published_optimal": 988585.6199999998
+    },
+    {
+      "name": "binkar10_1",
+      "gz_bytes": 30533,
+      "published_optimal": 6742.1998835
+    },
+    {
+      "name": "csched008",
+      "gz_bytes": 30990,
+      "published_optimal": 173.0
+    },
+    {
+      "name": "csched007",
+      "gz_bytes": 34830,
+      "published_optimal": 350.9999999999955
+    },
+    {
+      "name": "beasleyC3",
+      "gz_bytes": 35144,
+      "published_optimal": 753.9999999999128
+    },
+    {
+      "name": "p200x1188c",
+      "gz_bytes": 36690,
+      "published_optimal": 15078.0
+    },
+    {
+      "name": "neos-4338804-snowy",
+      "gz_bytes": 37835,
+      "published_optimal": 1471.0
+    },
+    {
+      "name": "50v-10",
+      "gz_bytes": 37959,
+      "published_optimal": 3311.1799841
+    },
+    {
+      "name": "pg",
+      "gz_bytes": 40207,
+      "published_optimal": -8674.34260712
+    },
+    {
+      "name": "mc11",
+      "gz_bytes": 40584,
+      "published_optimal": 11688.99999999966
+    },
+    {
+      "name": "gmu-35-40",
+      "gz_bytes": 42251,
+      "published_optimal": -2406733.3688
+    },
+    {
+      "name": "neos-4954672-berkel",
+      "gz_bytes": 42946,
+      "published_optimal": 2612710.0
+    },
+    {
+      "name": "mik-250-20-75-4",
+      "gz_bytes": 45471,
+      "published_optimal": -52301.0
+    },
+    {
+      "name": "mcsched",
+      "gz_bytes": 45739,
+      "published_optimal": 211913.0
+    },
+    {
+      "name": "pg5_34",
+      "gz_bytes": 46778,
+      "published_optimal": -14339.35345
+    },
+    {
+      "name": "n5-3",
+      "gz_bytes": 47192,
+      "published_optimal": 8104.999999993999
+    },
+    {
+      "name": "lotsize",
+      "gz_bytes": 48803,
+      "published_optimal": 1480195.0
+    },
+    {
+      "name": "ran14x18-disj-8",
+      "gz_bytes": 58880,
+      "published_optimal": 3712.0
+    },
+    {
+      "name": "rococoC10-001000",
+      "gz_bytes": 68392,
+      "published_optimal": 11460.0
+    },
+    {
+      "name": "gmu-35-50",
+      "gz_bytes": 68420,
+      "published_optimal": -2607958.33
+    },
+    {
+      "name": "b1c1s1",
+      "gz_bytes": 72442,
+      "published_optimal": 24544.25
+    },
+    {
+      "name": "uct-subprob",
+      "gz_bytes": 74931,
+      "published_optimal": 314.0
+    },
+    {
+      "name": "neos17",
+      "gz_bytes": 76383,
+      "published_optimal": 0.1500025774
+    },
+    {
+      "name": "bppc4-08",
+      "gz_bytes": 77423,
+      "published_optimal": 53.0
+    },
+    {
+      "name": "qap10",
+      "gz_bytes": 82641,
+      "published_optimal": 339.9999999983871
+    },
+    {
+      "name": "cvs16r128-89",
+      "gz_bytes": 84844,
+      "published_optimal": -97.0
+    },
+    {
+      "name": "milo-v12-6-r2-40-1",
+      "gz_bytes": 98049,
+      "published_optimal": 326481.14282799
+    },
+    {
+      "name": "reblock115",
+      "gz_bytes": 98516,
+      "published_optimal": -36800603.2332
+    },
+    {
+      "name": "fhnw-binpack4-48",
+      "gz_bytes": 101816,
+      "published_optimal": 0.0
+    },
+    {
+      "name": "rococoB10-011000",
+      "gz_bytes": 102783,
+      "published_optimal": 19449.0
+    },
+    {
+      "name": "roll3000",
+      "gz_bytes": 103405,
+      "published_optimal": 12889.999992
+    },
+    {
+      "name": "cost266-UUE",
+      "gz_bytes": 103586,
+      "published_optimal": 25148940.55999998
+    },
+    {
+      "name": "icir97_tension",
+      "gz_bytes": 106088,
+      "published_optimal": 6375.0
+    },
+    {
+      "name": "neos-3024952-loue",
+      "gz_bytes": 108040,
+      "published_optimal": 26756.0
+    },
+    {
+      "name": "neos-4738912-atrato",
+      "gz_bytes": 112252,
+      "published_optimal": 283627956.595
+    },
+    {
+      "name": "fastxgemm-n2r6s0t2",
+      "gz_bytes": 112266,
+      "published_optimal": 230.0
+    }
+  ]
+}

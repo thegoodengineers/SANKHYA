@@ -94,6 +94,7 @@ add_executable(sankhya_tests
   unit/test_deterministic.cpp
   unit/test_resource_limits.cpp
   unit/test_mip_limit_reporting.cpp
+  unit/test_incumbent_trace.cpp
   # The verification spine (Phase 3). The oracle is exact-arithmetic reference code
   # that lives only in the test binary; nothing in src/ can reach it.
   oracles/rational_simplex.cpp

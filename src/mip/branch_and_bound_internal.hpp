@@ -570,6 +570,7 @@ class BranchAndBound {
   void report_root(Solution* solution) const {
     solution->cuts_applied = root_cuts_applied_ + tree_cuts_applied_;
     solution->cut_filter_report = cut_filter_report_;
+    solution->incumbent_trace = incumbent_trace_;  // #504, not a root quantity but same exits
     if (std::isnan(root_bound_internal_)) return;
     solution->root_bound = reported(root_bound_internal_);
     solution->root_bound_after_cuts = reported(root_bound_after_cuts_internal_);
@@ -670,6 +671,8 @@ class BranchAndBound {
   bool have_incumbent_ = false;
   double incumbent_internal_ = std::numeric_limits<double>::infinity();
   std::vector<double> incumbent_x_;
+  /// Each accepted improvement, on this search's clock (#504); the sequential search only.
+  std::vector<Solution::IncumbentEvent> incumbent_trace_;
 
   /// Every integer-feasible point offer_incumbent() found feasible, not only the improving
   /// ones (#225).
