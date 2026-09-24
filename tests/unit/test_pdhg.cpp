@@ -701,6 +701,7 @@ TEST(Pdhg, OffTickEvaluationIsGeometricallyScheduled) {
 
   Options options = pdhg_options(1e-8);
   options.set_bool("pdhg_restart", false);
+  options.set_bool("presolve", false);
 
   pdhg::pdhg_evaluations_for_testing = 0;
   const Solution every = solve(model, options);
