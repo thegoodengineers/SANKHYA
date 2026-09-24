@@ -184,6 +184,7 @@ mathematics, not transcribed from anyone's implementation.
 | Nonlinear expression DAG: hash-consed construction, safe simplification, constant folding (#296) | Standard common-subexpression elimination by value numbering; written from the definition | `src/nlp/expression.cpp` |
 | Exact gradients (reverse-mode AD) and Hessians (forward-over-reverse, second-order adjoints) (#296) | Griewank & Walther, *Evaluating Derivatives*, 2nd ed. (SIAM, 2008), ch. 3 and 5 | `src/nlp/derivatives.cpp` |
 | Convexity by composition rules over interval ranges (#296) | Grant, Boyd & Ye, "Disciplined convex programming", in *Global Optimization* (Springer, 2006); Boyd & Vandenberghe, *Convex Optimization* (2004), sec. 3.2.4 | `src/nlp/convexity.cpp` |
+| Optimality-based bound tightening (OBBT) at the root (#515): for each non-fixed variable solve min/max x_j over the LP relaxation augmented with c'x <= incumbent - epsilon, writing tighter bounds back before the search begins | Gleixner, Berthold, Muller and Weltge, *Three enhancements for optimization-based bound tightening*, J. Global Optimization 67 (2017), sec. 2 | `src/mip/obbt.cpp` |
 
 Of the work once listed here as "Phases 6 onwards", restarted PDHG, the Mehrotra
 predictor-corrector, Gomory mixed-integer and lifted cover cuts, Devex pricing (#66, the

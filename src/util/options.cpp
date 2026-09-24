@@ -9,6 +9,9 @@
 
 #include "sankhya/options.hpp"
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -17,9 +20,6 @@
 #include <limits>
 #include <string_view>
 #include <unordered_map>
-
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
@@ -681,10 +681,31 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  kNoLimit,
                  {}});
+    s.push_back({"mip_obbt",
+                 OptionType::Bool,
+                 false,
+                 "Optimality-based bound tightening at the root (#515; Gleixner, Berthold, "
+                 "Muller and Weltge, J. Global Optimization 67, 2017): for each variable "
+                 "that is not already fixed, solve min/max x_j subject to the LP relaxation "
+                 "and an objective cutoff row c'x <= incumbent - epsilon when an incumbent "
+                 "is known. Tighter bounds reduce the feasible region of every subsequent "
+                 "node LP. Off by default; work is capped by mip_obbt_max_iters.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"mip_obbt_max_iters",
+                 OptionType::Int,
+                 std::int64_t{100},
+                 "Maximum number of LP solves OBBT (#515) may perform at the root. Each "
+                 "non-fixed variable requires two solves (min and max), so the default of "
+                 "100 covers up to 50 variables before stopping.",
+                 0.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"checkpoint",
                  OptionType::String,
                  std::string(""),
-                 "Write the branch-and-bound search to this file when a limit stops it, and "
+                 "Write the branch-and-bound search to this file when a limit stops it, and"
                  "every checkpoint_nodes nodes if that is set (#287). Written atomically: to "
                  "<file>.tmp, then moved over <file>, so a failed write leaves the previous "
                  "checkpoint intact. Empty writes none.",
