@@ -1517,6 +1517,9 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.root_bound = reduced.root_bound;
   solution.root_bound_after_cuts = reduced.root_bound_after_cuts;
   solution.solve_seconds = reduced.solve_seconds;
+  // Objective values of the reduced model, already in the original's units for the same
+  // reason as the root bounds (#504).
+  solution.incumbent_trace = reduced.incumbent_trace;
 
   // Start from the reduced point, scattered back into original positions.
   for (std::size_t j = 0; j < result.col_to_original.size(); ++j) {

@@ -8,6 +8,7 @@ build-*/
 # a judge picks the instance. Provenance is unaffected: every CSV row records the
 # instance sha256 and reference.json records the upstream readme hash.
 data/miplib/
+data/miplib-tier2/
 data/qplib/
 # Netlib's infeasible collection (#529) is fetched by bench/runners/fetch_netlib_infeasible.py;
 # the manifest (reference.json, with the sha256 of every file and its source URL) is

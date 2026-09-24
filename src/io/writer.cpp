@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
@@ -427,6 +428,15 @@ bool write_stats_json(const std::string& path, const Model& model, const Solutio
       {"root_bound_after_cuts", json_number(solution.root_bound_after_cuts)},
       {"polish_iterations", solution.polish_iterations},
       {"solve_seconds", json_number(solution.solve_seconds)}};
+  // Each accepted incumbent as [seconds, objective] (#504); an empty array when none was
+  // recorded, which is not the same claim as "none was found" (see Solution).
+  {
+    nlohmann::json trace = nlohmann::json::array();
+    for (const Solution::IncumbentEvent& event : solution.incumbent_trace) {
+      trace.push_back({json_number(event.seconds), json_number(event.objective)});
+    }
+    blob["effort"]["incumbent_trace"] = std::move(trace);
+  }
   if (options != nullptr) {
     // The limits as CONFIGURED, beside what the solve reached (#289). A row that says
     // node_limit is not readable without the budget it hit, and a runner should not have to

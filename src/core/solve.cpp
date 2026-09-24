@@ -958,8 +958,14 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     *engine_ran = "branch-and-bound";
     solution = with_presolve(
         [&](const Model& target) {
-          return mip::solve_branch_and_bound(target, with_the_time_that_is_left(options),
-                                             logger, control);
+          // The search times its incumbents on its own clock; move them onto solve()'s,
+          // so presolve counts towards the time to first feasible (#504).
+          const double started = timer.elapsed_seconds();
+          Solution found = mip::solve_branch_and_bound(
+              target, with_the_time_that_is_left(options), logger, control);
+          for (Solution::IncumbentEvent& event : found.incumbent_trace)
+            event.seconds += started;
+          return found;
         },
         &presolve_proved_it);
     if (presolve_proved_it) {
@@ -1073,8 +1079,14 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     *engine_ran = "branch-and-bound";
     solution = with_presolve(
         [&](const Model& target) {
-          return mip::solve_branch_and_bound(target, with_the_time_that_is_left(options),
-                                             logger, control);
+          // The search times its incumbents on its own clock; move them onto solve()'s,
+          // so presolve counts towards the time to first feasible (#504).
+          const double started = timer.elapsed_seconds();
+          Solution found = mip::solve_branch_and_bound(
+              target, with_the_time_that_is_left(options), logger, control);
+          for (Solution::IncumbentEvent& event : found.incumbent_trace)
+            event.seconds += started;
+          return found;
         },
         &presolve_proved_it);
     if (presolve_proved_it) {

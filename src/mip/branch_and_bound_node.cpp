@@ -508,7 +508,11 @@ bool BranchAndBound::offer_incumbent(const std::vector<double>& x) {
   have_incumbent_ = true;
   incumbent_internal_ = objective;
   incumbent_x_ = x;
-  if (shared_ != nullptr) shared_->publish(objective, x);
+  if (shared_ != nullptr) {
+    shared_->publish(objective, x);
+  } else {
+    incumbent_trace_.push_back({timer_.elapsed_seconds(), reported(objective)});
+  }
   return true;
 }
 

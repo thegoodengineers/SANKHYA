@@ -28,6 +28,17 @@ THREE THINGS THIS IS DELIBERATE ABOUT.
     python bench/runners/fetch_miplib.py                 # 30 smallest easy instances
     python bench/runners/fetch_miplib.py --count 10
     python bench/runners/fetch_miplib.py flugpl gen-ip002
+    python bench/runners/fetch_miplib.py --select-tier2      # rewrite miplib_tier2.json (#504)
+    python bench/runners/fetch_miplib.py --tier 2            # download the tier-2 instances
+    python bench/runners/fetch_miplib.py --tier 2 neos5      # ... or some of them
+
+THE SECOND TIER (#504). TIER2_RULE below is the whole selection rule, written before the tier
+was ever run: MIPLIB 2017's BENCHMARK set (not the easy list), those with a proven optimum,
+the 60 smallest by compressed size. Size is the only criterion - never whether we solve an
+instance - and small files are what fit this laptop's memory. `--select-tier2` applies the
+rule (HTTP HEAD only, no instance downloaded) and records the result, with the sizes it saw,
+in bench/runners/miplib_tier2.json, which is committed; `--tier 2` downloads exactly that
+list into data/miplib-tier2/ (gitignored) with the same manifest shape as the first tier.
 """
 from __future__ import annotations
 
@@ -46,6 +57,15 @@ DATA_DIR = REPO_ROOT / "data" / "miplib"
 MIPLIB = "https://miplib.zib.de"
 SOLUTION_FILE = f"{MIPLIB}/downloads/miplib2017-v28.solu"
 EASY_LIST = f"{MIPLIB}/downloads/easy-v15.test"
+BENCHMARK_LIST = f"{MIPLIB}/downloads/benchmark-v2.test"
+TIER2_FILE = REPO_ROOT / "bench" / "runners" / "miplib_tier2.json"
+TIER2_DIR = REPO_ROOT / "data" / "miplib-tier2"
+TIER2_COUNT = 60
+TIER2_RULE = (
+    "The instances of the MIPLIB 2017 benchmark set (benchmark-v2.test) that miplib2017-v28.solu "
+    "marks =opt=, ordered by the byte size of their .mps.gz file as the server reports it "
+    "(Content-Length), ties broken by name, the first 60. No instance is added or removed for "
+    "any other reason, in particular not for how SANKHYA does on it.")
 INSTANCE_BASE = f"{MIPLIB}/WebData/instances"
 
 
@@ -99,6 +119,55 @@ def easy_instances() -> list[str]:
     return [entry.replace(".mps.gz", "") for entry in text.split() if entry.endswith(".mps.gz")]
 
 
+def benchmark_instances() -> list[str]:
+    text = get(BENCHMARK_LIST).decode(errors="replace")
+    return [entry.replace(".mps.gz", "") for entry in text.split() if entry.endswith(".mps.gz")]
+
+
+def select_by_size(names: list[str], optima: dict[str, float], sizes: dict[str, int | None],
+                   count: int) -> list[tuple[str, int]]:
+    """TIER2_RULE as a function: those of `names` with a proven optimum and a known size,
+    smallest first, ties by name, the first `count`. Pure, so the rule is unit-tested."""
+    known = [(name, sizes[name]) for name in names
+             if name in optima and sizes.get(name) is not None]
+    known.sort(key=lambda pair: (pair[1], pair[0]))
+    return known[:count]
+
+
+def sizes_by_head(names: list[str]) -> dict[str, int | None]:
+    sizes: dict[str, int | None] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+        futures = {pool.submit(content_length, f"{INSTANCE_BASE}/{n}.mps.gz"): n for n in names}
+        for future in concurrent.futures.as_completed(futures):
+            sizes[futures[future]] = future.result()
+    return sizes
+
+
+def select_tier2() -> int:
+    """Apply TIER2_RULE and record the list; downloads no instance."""
+    optima = published_optima()
+    names = benchmark_instances()
+    sizes = sizes_by_head(names)
+    unsized = sorted(n for n in names if n in optima and sizes.get(n) is None)
+    chosen = select_by_size(names, optima, sizes, TIER2_COUNT)
+    record = {
+        "rule": TIER2_RULE,
+        "benchmark_list": BENCHMARK_LIST,
+        "solution_file": SOLUTION_FILE,
+        "benchmark_instances": len(names),
+        "with_proven_optimum": sum(1 for n in names if n in optima),
+        "not_sized": unsized,
+        "instances": [{"name": n, "gz_bytes": b, "published_optimal": optima[n]}
+                      for n, b in chosen],
+    }
+    TIER2_FILE.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8", newline="\n")
+    print(f"  {len(names)} benchmark instances, {record['with_proven_optimum']} with a proven "
+          f"optimum, {len(unsized)} the server would not size")
+    print(f"  kept {len(chosen)}: {chosen[0][1]} to {chosen[-1][1]} bytes compressed")
+    print(f"wrote {TIER2_FILE.relative_to(REPO_ROOT)}")
+    return 0
+
+
 def choose(count: int) -> list[tuple[str, int]]:
     """The `count` smallest easy instances that have a proven optimum, with their sizes."""
     optima = published_optima()
@@ -134,12 +203,29 @@ def main() -> int:
                         help="explicit instance names; omit to take the smallest easy ones")
     parser.add_argument("--count", type=int, default=30,
                         help="how many of the smallest easy instances to take (default 30)")
+    parser.add_argument("--tier", type=int, choices=(1, 2), default=1,
+                        help="2: download the list in bench/runners/miplib_tier2.json into "
+                             "data/miplib-tier2 (all of it, or the names given)")
+    parser.add_argument("--select-tier2", action="store_true",
+                        help="apply the tier-2 rule and rewrite miplib_tier2.json; downloads "
+                             "no instance")
     args = parser.parse_args()
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if args.select_tier2:
+        return select_tier2()
+    data_dir = DATA_DIR if args.tier == 1 else TIER2_DIR
+    data_dir.mkdir(parents=True, exist_ok=True)
     optima = published_optima()
 
-    if args.instances:
+    if args.tier == 2:
+        listed = [entry["name"] for entry in json.loads(TIER2_FILE.read_text())["instances"]]
+        unlisted = [n for n in args.instances if n not in listed]
+        if unlisted:
+            print(f"not in the tier-2 list: {', '.join(unlisted)}", file=sys.stderr)
+            return 1
+        chosen = [(name, 0) for name in (args.instances or listed)]
+        selection = "tier2" if not args.instances else "tier2-explicit"
+    elif args.instances:
         missing = [n for n in args.instances if n not in optima]
         if missing:
             print(f"no PROVEN optimum published for: {', '.join(missing)}", file=sys.stderr)
@@ -166,7 +252,7 @@ def main() -> int:
     for name, _size in chosen:
         url = f"{INSTANCE_BASE}/{name}.mps.gz"
         blob = get(url)
-        destination = DATA_DIR / f"{name}.mps.gz"
+        destination = data_dir / f"{name}.mps.gz"
         # Written to a scratch path and renamed, so an interrupted fetch cannot leave a
         # truncated instance behind that looks like a real one. Same reasoning as #87.
         scratch = destination.with_suffix(destination.suffix + ".partial")
@@ -185,12 +271,12 @@ def main() -> int:
         }
         print(f"  {name:<28}{len(blob):>10}  {optima[name]:.10g}", flush=True)
 
-    reference = DATA_DIR / "reference.json"
+    reference = data_dir / "reference.json"
     reference.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8",
                          newline="\n")
     print()
     print(f"wrote {reference.relative_to(REPO_ROOT)}")
-    print(f"{len(manifest['instances'])} instance(s) in {DATA_DIR.relative_to(REPO_ROOT)}")
+    print(f"{len(manifest['instances'])} instance(s) in {data_dir.relative_to(REPO_ROOT)}")
     return 0
 
 
