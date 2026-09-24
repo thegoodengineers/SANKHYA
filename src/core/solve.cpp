@@ -993,11 +993,16 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       solution.solve_seconds = timer.elapsed_seconds();
       return solution;
     }
-    *engine_ran = "convex-qp";
+    // qp_algorithm=ipm (#490) runs the proximal interior point in place of the Condat-Vu
+    // engine, through the same presolve, status guard and KKT gate; it is off by default.
+    const bool want_qp_ipm = options.get_string("qp_algorithm") == "ipm";
+    *engine_ran = want_qp_ipm ? "qp-ipm" : "convex-qp";
     solution = with_presolve(
         [&](const Model& target) {
-          return qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger,
-                                     control);
+          return want_qp_ipm ? qp::solve_convex_qp_ipm(
+                                   target, with_the_time_that_is_left(options), logger, control)
+                             : qp::solve_convex_qp(target, with_the_time_that_is_left(options),
+                                                   logger, control);
         },
         &presolve_proved_it);
     if (presolve_proved_it) {

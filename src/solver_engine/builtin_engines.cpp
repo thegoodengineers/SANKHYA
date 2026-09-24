@@ -249,6 +249,31 @@ class ConvexQpEngine final : public SolverEngine {
   }
 };
 
+class QpIpmEngine final : public SolverEngine {
+ public:
+  [[nodiscard]] std::string name() const override { return "qp-ipm"; }
+  [[nodiscard]] std::string summary() const override {
+    return "Proximal interior point for convex QP (#490): Mehrotra predictor-corrector on "
+           "the regularized quasi-definite augmented system, sparse LDL^T; qp_algorithm=ipm";
+  }
+  [[nodiscard]] std::string source() const override { return "src/qp/qp_ipm.cpp"; }
+
+  [[nodiscard]] EngineCapabilities capabilities() const override {
+    EngineCapabilities caps;
+    caps.qp = true;
+    caps.supports_duals = true;
+    caps.supports_interrupt = true;
+    caps.supports_deterministic_mode = true;
+    return caps;
+  }
+
+  [[nodiscard]] Solution solve_verified(const Model& model, const Options& options,
+                                        Logger& logger, SolveControl* control) const override {
+    const Options effective = apply_deterministic_mode(options, logger);
+    return qp::solve_convex_qp_ipm(model, effective, logger, control);
+  }
+};
+
 class BranchAndBoundEngine final : public SolverEngine {
  public:
   [[nodiscard]] std::string name() const override { return "branch-and-bound"; }
@@ -302,6 +327,9 @@ void register_builtin_engines(SolverRegistry& registry) {
 #endif
   registry.register_engine(std::make_shared<IpmEngine>());
   registry.register_engine(std::make_shared<ConvexQpEngine>());
+  // After convex-qp, so it stays the QP class's first candidate: qp-ipm is reached by name
+  // (qp_algorithm=ipm) until an A/B on main says otherwise (#490).
+  registry.register_engine(std::make_shared<QpIpmEngine>());
   registry.register_engine(std::make_shared<BranchAndBoundEngine>());
 }
 

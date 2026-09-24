@@ -125,6 +125,18 @@ class SparseLdl {
   [[nodiscard]] bool factorize(const SparseMatrix& lower, double regularization,
                                const ShouldStop& should_stop = {});
 
+  /// The same factorization of a symmetric QUASI-DEFINITE matrix (#490), whose pivots have
+  /// known signs: signs[i] is -1 or +1 for ORIGINAL index i. A pivot of the wrong sign or
+  /// smaller than `regularization` in magnitude is set to signs[i] * regularization and
+  /// counted in regularized_pivots(); smallest_pivot() and largest_pivot() are then of |d|.
+  /// Vanderbei, "Symmetric quasidefinite matrices", SIAM J. Optim. 5(1) (1995): such a
+  /// matrix has this factorization under every symmetric permutation, so the AMD ordering
+  /// from analyze() needs no numerical pivoting.
+  [[nodiscard]] bool factorize_quasidefinite(const SparseMatrix& lower,
+                                             const std::vector<signed char>& signs,
+                                             double regularization,
+                                             const ShouldStop& should_stop = {});
+
   /// Is `lower` positive semidefinite? (#303)
   ///
   /// The same LDL^T that factorize() runs, with the IPM's regularization REMOVED and the
@@ -166,6 +178,8 @@ class SparseLdl {
 
  private:
   [[nodiscard]] bool minimum_degree(const SparseMatrix& lower, const ShouldStop& should_stop);
+  [[nodiscard]] bool factorize_signed(const SparseMatrix& lower, double regularization,
+                                      const signed char* signs, const ShouldStop& should_stop);
   bool pattern_too_large_ = false;
   bool ordering_too_large_ = false;
   std::size_t ordering_budget_ = static_cast<std::size_t>(-1);

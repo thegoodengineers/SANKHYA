@@ -317,4 +317,19 @@ inline constexpr int kCutWaitingLimit = 500;
 /// which is five or more orders of magnitude larger.
 inline constexpr double kDebugSolutionTolerance = 1e-6;
 
+// ---- The proximal interior point for convex QP (#490, qp_algorithm=ipm) -------------------
+
+/// The complementarity products the QP interior point closes itself before handing the
+/// point to the in-process KKT gate: a tenth of the gate's own kComplementarity, so a point
+/// it calls optimal on the products passes the gate with room to spare.
+inline constexpr double kQpIpmComplementarityShare = 0.1;
+
+/// The pivot threshold of the quasi-definite factorization, as a fraction of the smaller
+/// proximal parameter: a pivot below it (or of the wrong sign) is replaced and counted.
+inline constexpr double kQpIpmPivotShare = 0.1;
+
+/// When a pivot comes out wrong the proximal parameters are multiplied by this and the
+/// matrix refactorized, at most kQpIpmRegularizationAttempts times.
+inline constexpr double kQpIpmRegularizationRaise = 100.0;
+inline constexpr int kQpIpmRegularizationAttempts = 8;
 }  // namespace sankhya::tol
