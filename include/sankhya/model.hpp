@@ -295,6 +295,22 @@ class Solution {
   /// carries the feasible point it starts from.
   std::vector<double> primal_ray;
 
+  // ---- Exact rational verification of the reported basis (#521, option "exact") ----
+  //
+  // An ADDITION to this frozen interface, called out here as farkas_dual was in #191. Default
+  // constructed as kNotAttempted with everything else empty; every existing consumer ignores
+  // these. Populated only when options.get_bool("exact") is true, on a plain LP (no integer
+  // columns, no quadratic objective) that reached kOptimal with a basis. See
+  // src/exact/exact_verify.hpp for the citations and exactly what is and is not checked.
+  enum class ExactVerification { kNotAttempted, kVerified, kDeclined, kFailed };
+  ExactVerification exact_status = ExactVerification::kNotAttempted;
+  /// Why declined or failed; empty when kVerified or kNotAttempted.
+  std::string exact_message;
+  /// Exact objective and column values as "numerator/denominator" decimal-integer strings -
+  /// exact, not rounded - populated only when exact_status is kVerified.
+  std::string exact_objective;
+  std::vector<std::string> exact_col_value;
+
   // ---- Sensitivity ranging (populated only when options.get_bool("ranging") is true) ----
   //
   // An ADDITION to this frozen interface, called out here as farkas_dual was in #191; every

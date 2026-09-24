@@ -65,6 +65,7 @@
 #include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
 #include "core/status_guard.hpp"
+#include "exact/exact_verify.hpp"
 #include "mip/components.hpp"
 #include "sankhya/certificate.hpp"
 #include "sankhya/ipm.hpp"
@@ -920,6 +921,30 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // full-size and the basis is expressed in terms of original column and row indices.
     detail::compute_ranging(model, options, logger, solution);
     compute_iis(model, &solution, options, logger);
+    if (options.get_bool("exact")) {
+      const exact::ExactResult exact_result = exact::verify_basis_exact(model, solution);
+      switch (exact_result.verdict) {
+        case exact::ExactVerdict::kVerified:
+          solution.exact_status = Solution::ExactVerification::kVerified;
+          solution.exact_objective = exact_result.exact_objective;
+          solution.exact_col_value = exact_result.exact_col_value;
+          logger.info("Exact verification: the reported basis is exactly optimal");
+          break;
+        case exact::ExactVerdict::kDeclined:
+          solution.exact_status = Solution::ExactVerification::kDeclined;
+          solution.exact_message = exact_result.message;
+          logger.info("Exact verification declined: {}", exact_result.message);
+          break;
+        case exact::ExactVerdict::kFailed:
+          solution.exact_status = Solution::ExactVerification::kFailed;
+          solution.exact_message = exact_result.message;
+          logger.warning(
+              "Exact verification FAILED (the double-precision basis is not "
+              "exactly optimal): {}",
+              exact_result.message);
+          break;
+      }
+    }
     logger.info("Result: {}  objective {:.10g}  {} iterations  {:.3f}s",
                 to_string(solution.status), solution.objective, solution.iterations,
                 solution.solve_seconds);

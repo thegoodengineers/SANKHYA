@@ -162,6 +162,15 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
     fmt::print(out, "ranging_basis {}\n",
                solution.ranging_basis_degenerate ? "degenerate" : "nondegenerate");
   }
+  if (solution.exact_status != Solution::ExactVerification::kNotAttempted) {
+    fmt::print(out, "exact_verification {}\n",
+               solution.exact_status == Solution::ExactVerification::kVerified   ? "verified"
+               : solution.exact_status == Solution::ExactVerification::kDeclined ? "declined"
+                                                                                 : "failed");
+    if (!solution.exact_message.empty()) {
+      fmt::print(out, "exact_message {}\n", solution.exact_message);
+    }
+  }
   fmt::print(out, "rows {}\n", m);
   fmt::print(out, "columns {}\n", n);
   fmt::print(out, "iterations {}\n", solution.iterations);
@@ -291,6 +300,26 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
                status_or(solution.row_status, i));
   }
   fmt::print(out, "end rows\n");
+
+  // Exact rational verification (#521, option "exact"). Only when verified: the objective
+  // and every column's value as an exact "numerator/denominator" decimal-integer fraction,
+  // never rounded. tools/verify_solution.py does not yet cross-check this section - the
+  // exact rational LU inside verify_basis_exact() is what proves it before it is written.
+  if (solution.exact_status == Solution::ExactVerification::kVerified) {
+    fmt::print(out,
+               "\n# Exact verification (#521): the reported basis rebuilt in exact rational\n"
+               "# arithmetic and found exactly primal and dual feasible. Values are\n"
+               "# \"numerator/denominator\", exact, never rounded.\n");
+    fmt::print(out, "exact_objective {}\n", solution.exact_objective);
+    fmt::print(out, "begin exact {}\n", n);
+    for (Index j = 0; j < n; ++j) {
+      fmt::print(out, "{} {}\n", quoted_name(column_name(model, j)),
+                 j < static_cast<Index>(solution.exact_col_value.size())
+                     ? solution.exact_col_value[static_cast<std::size_t>(j)]
+                     : "0/1");
+    }
+    fmt::print(out, "end exact\n");
+  }
 
   // The solution pool (#225). By default INTEGER COLUMNS ONLY: the continuous values follow
   // from re-solving the LP with the integers fixed, and ten full vectors of a 100,000-column
