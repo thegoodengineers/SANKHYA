@@ -35,6 +35,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 #include "sankhya/model.hpp"
@@ -48,6 +49,9 @@ struct FeasibilityJumpSettings {
   double feasibility_tolerance = tol::kPrimalFeasibility;  ///< absolute, on a row activity
   double integrality_tolerance = tol::kIntegrality;
   bool use_objective = true;  ///< after the first feasible point; off for a quadratic model
+  /// Called with each point the moment it is found, so the caller can offer it at once
+  /// rather than after the whole budget is spent; the point is kept in `points` as well.
+  std::function<void(const std::vector<double>&)> on_point;
 };
 
 struct FeasibilityJumpResult {

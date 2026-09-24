@@ -280,6 +280,7 @@ FeasibilityJumpResult Search::run(const std::vector<double>& start) {
       if (result_.points.empty() ||
           value < best - tol::kFeasibilityJumpMinScore * std::max(1.0, std::fabs(best))) {
         result_.points.push_back(x_);
+        if (settings_.on_point) settings_.on_point(x_);
         best = value;
       }
       if (costed_.empty()) break;  // nothing left to improve

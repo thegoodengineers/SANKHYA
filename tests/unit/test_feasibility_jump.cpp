@@ -211,6 +211,22 @@ TEST(FeasibilityJump, ImprovesTheObjectiveOfAMaximisation) {
   EXPECT_LE(objective(m, r.points.back()), 23.0) << "the optimum is 23, a and b";
 }
 
+TEST(FeasibilityJump, HandsEachPointOverAsItIsFound) {
+  // The branch and bound offers every point from this callback, so the time to the first
+  // incumbent is when FJ found it, not when its budget ran out.
+  Model m = make_model({{5, 7, 4, 4}}, {-kInfinity}, {12.0}, {10.0, 13.0, 7.0, 8.0},
+                       {0.0, 0.0, 0.0, 0.0}, {1.0, 1.0, 1.0, 1.0}, {true, true, true, true});
+  m.sense = ObjSense::kMaximize;
+  std::vector<std::vector<double>> seen;
+  FeasibilityJumpSettings settings;
+  settings.work_limit = 200000;
+  settings.seed = 1;
+  settings.on_point = [&seen](const std::vector<double>& x) { seen.push_back(x); };
+  const FeasibilityJumpResult r = feasibility_jump(m, feasibility_jump_zero_start(m), settings);
+  ASSERT_FALSE(r.points.empty());
+  EXPECT_EQ(seen, r.points);
+}
+
 TEST(FeasibilityJump, IsReproducibleForASeed) {
   const Model m =
       make_model({{1, 1, 1}, {1, -1, 0}, {0, 1, 1}}, {7.0, 1.0, 3.0}, {7.0, 1.0, kInfinity},

@@ -397,10 +397,12 @@ void BranchAndBound::run_feasibility_jump(const std::vector<double>* from) {
                   static_cast<std::uint64_t>(s.calls);
   settings.integrality_tolerance = integrality_tolerance_;
   settings.use_objective = !quadratic_;
+  // Offered as found, not after the budget: the time to the first incumbent is the point.
+  settings.on_point = [this](const std::vector<double>& point) {
+    (void)offer_from(kFeasibilityJump, point);
+  };
   const FeasibilityJumpResult found = feasibility_jump(
       original_, from != nullptr ? *from : feasibility_jump_zero_start(original_), settings);
-  for (const std::vector<double>& point : found.points)
-    (void)offer_from(kFeasibilityJump, point);
   s.work += found.work;
   s.seconds += clock.elapsed_seconds();
   logger_.verbose("Feasibility jump ({}): {} point(s), {} move(s), {} weight update(s)",
