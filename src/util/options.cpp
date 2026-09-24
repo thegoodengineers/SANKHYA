@@ -953,14 +953,22 @@ const std::vector<OptionSpec>& Options::registry() {
         {"gpu_batch_nodes",
          OptionType::Bool,
          false,
-         "Bound and score a slab of open B&B nodes in one batched GPU PDHG pass (#520). "
-         "CURRENTLY A STUB: the kernel is not written, solve_batch_nodes() returns an "
-         "empty result and the search runs its sequential node LPs exactly as with the "
-         "option off. Default OFF; it earns a default by a clean A/B on main once the "
-         "kernel exists. No-op when gpu=false or no CUDA device is present.",
+         "Bound and score a slab of open B&B nodes in one batched GPU PDHG pass (#520, "
+         "off by default): K node LPs sharing the same constraint matrix are solved "
+         "simultaneously via cusparseSpMM (n x K and m x K block iterates); safe "
+         "dual bounds (#519) are extracted every gpu_batch_check_every iterations and "
+         "nodes whose bound exceeds the incumbent are pruned without a simplex solve. "
+         "Falls back to sequential node LPs when no CUDA device is present.",
          0.0,
          0.0,
          {}});
+    s.push_back({"gpu_batch_max_iter",
+                 OptionType::Int,
+                 std::int64_t{400},
+                 "Maximum PDHG iterations per batched GPU node-bounding call (#520).",
+                 1.0,
+                 1e7,
+                 {}});
     s.push_back(
         {"gpu_domain_prop",
          OptionType::Bool,
