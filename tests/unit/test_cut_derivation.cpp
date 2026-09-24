@@ -165,9 +165,15 @@ TEST(CutDerivation, ZeroHalfCutsAreRoundingsOfHalfTheirRows) {
 }
 
 TEST(CutDerivation, ASearchWithRootCutsWritesTheirDerivations) {
-  Model m = make_model({{2, 3, 1}, {4, 1, 2}, {3, 4, 2}}, {-kInf, -kInf, -kInf}, {5, 11, 8},
-                       {0, 0, 0}, {10, 10, 10}, {true, true, true});
-  m.col_cost = {-5, -4, -3};
+  // The GOMORY model of tools/test_verify_certificate_cuts.py, whose root round applies cuts:
+  // min -x0 - 2 x1 - 5 b1 - 4 b2 - 3 b3 on 2 x0 + 2 x1 <= 3, -2 x0 + 2 x1 <= 1 (LP vertex
+  // (1/2, 1)), 3 x0 + x1 - x2 <= 4 with x2 continuous, and 5 b1 + 4 b2 + 3 b3 <= 7. The integer
+  // optimum is x0 = 1, b2 = b3 = 1: -1 - 7 = -8.
+  Model m = make_model(
+      {{2, 2, 0, 0, 0, 0}, {-2, 2, 0, 0, 0, 0}, {3, 1, 0, 0, 0, -1}, {0, 0, 5, 4, 3, 0}},
+      {-kInf, -kInf, -kInf, -kInf}, {3, 1, 4, 7}, {0, 0, 0, 0, 0, 0}, {10, 10, 1, 1, 1, 5},
+      {true, true, true, true, true, false});
+  m.col_cost = {-1, -2, -5, -4, -3, 0};
   const testing::TempFile file("", ".vipr");
   Options options;
   options.set_bool("log_to_console", false);
@@ -175,14 +181,12 @@ TEST(CutDerivation, ASearchWithRootCutsWritesTheirDerivations) {
   options.set_string("write_certificate", file.path());
   const Solution solved = solve(m, options);
   ASSERT_EQ(solved.status, SolveStatus::kOptimal);
-  EXPECT_DOUBLE_EQ(solved.objective, -13.0);
+  EXPECT_DOUBLE_EQ(solved.objective, -8.0);
   std::ifstream in(file.path());
   std::stringstream text;
   text << in.rdbuf();
-  EXPECT_NE(text.str().find("RTP range -13 -13"), std::string::npos)
-      << text.str().substr(0, 400);
-  // The model is chosen so that the root round applies a cut; without one the check below
-  // would pass vacuously.
+  EXPECT_NE(text.str().find("RTP range -8 -8"), std::string::npos) << text.str().substr(0, 400);
+  // Without an applied cut the check below would pass vacuously.
   ASSERT_GT(solved.cuts_applied, 0);
   EXPECT_NE(text.str().find("\ncut0 L "), std::string::npos) << text.str();
 }
