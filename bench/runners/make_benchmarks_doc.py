@@ -2160,6 +2160,10 @@ def gpu_section(path: Path | None) -> str:
                 return r
         return None
 
+    # Detect whether the CSV carries per-cell spread (seconds_min / seconds_max / repeats).
+    has_spread = any(r.get("seconds_min") or r.get("seconds_max") for r in rows)
+    repeats = rows[0].get("repeats", "") if rows else ""
+
     lines = [
         f"Source CSV: `bench/results/{path.name}`  ",
         f"Commit `{commit}` · machine `{machine}`",
@@ -2169,11 +2173,17 @@ def gpu_section(path: Path | None) -> str:
         "timed ones. The GPU pays a per-iteration launch and transfer cost that a small model "
         "cannot amortise; the crossover is where the parallel products start to pay for it.",
         "",
+        "> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd`"
+        " reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting"
+        " the whole trajectory. Speedup figures here are the median of repeated solves"
+        + (f" ({repeats} per cell)" if repeats else "") + ". Do not"
+        " compare a GPU iteration count against a CPU count for the same instance: the two"
+        " engines take different trajectories and any comparison is meaningless."
+        " `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same"
+        " stopping tolerance rather than to identical iterates. See also"
+        " `docs/ARCHITECTURE.md` § 7.",
+        "",
     ]
-
-    # Detect whether the CSV carries per-cell spread (seconds_min / seconds_max / repeats).
-    has_spread = any(r.get("seconds_min") or r.get("seconds_max") for r in rows)
-    repeats = rows[0].get("repeats", "") if rows else ""
 
     def fmt_s(r: dict | None) -> str:
         if not r:

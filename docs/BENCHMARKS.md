@@ -406,12 +406,7 @@ Commit `fb72ab4` · machine `Windows-AMD64`
 
 Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
 
-> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd`
-> reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting the
-> whole trajectory. Speedup figures here are the median of five repeated solves. Do not
-> compare a GPU iteration count against a CPU count for the same instance: the two engines
-> take different trajectories and any comparison is meaningless. See also
-> `docs/ARCHITECTURE.md` § 7.
+> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd` reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting the whole trajectory. Speedup figures here are the median of repeated solves. Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
 
 | rows×cols | CPU 1e-4 (s) | GPU 1e-4 (s) | speedup | CPU 1e-8 (s) | GPU 1e-8 (s) | speedup |
 |----------:|-------------:|-------------:|--------:|-------------:|-------------:|--------:|
@@ -474,6 +469,8 @@ Source CSV: `bench/results/gpu-l4-fdc89c5.csv`
 Commit `fdc89c5` · machine `Linux-x86_64`
 
 Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
+
+> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd` reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting the whole trajectory. Speedup figures here are the median of repeated solves (5 per cell). Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
 
 Each cell is the median of 5 solves; `[min–max]` shows the spread from run-to-run variance (thermal state, clock boost on the laptop GPU).
 
