@@ -42,8 +42,13 @@
 // THE UNREGULARIZED SYSTEM IS THE ONE SOLVED. The factors of K_reg are used as a
 // preconditioner for the Newton system with rho = delta = 0, by iterative refinement: the
 // residual is measured against the unregularized matrix and corrected through K_reg^-1. A
-// correction is kept only while that residual falls, so the direction handed back is never
-// further from the exact Newton direction than the regularized solve itself.
+// correction is kept only while that residual falls, so the direction handed back never has
+// a larger unregularized residual than the plain regularized solve. That is a statement
+// about the residual, not about the distance to the exact Newton direction, and the residual
+// can stall above what the method needs: the solve reports it RELATIVE to
+// max(1, |g|, |r_b|), and the interior point counts every solve left above
+// tol::kIpmProximalRefinementTarget, reports the count, and shrinks rho for the next
+// factorization so that K_reg moves toward the unregularized matrix.
 #pragma once
 
 #include <vector>
@@ -64,7 +69,15 @@ class ProximalSystem {
   void assemble(const std::vector<double>& theta_inverse, double rho, double delta);
 
   /// The regularization for the next iteration: max(floor, min(previous, share * mu)).
-  [[nodiscard]] static double next_regularization(double previous, double mu, double floor);
+  /// When the last refinement missed its target, `previous` is first shrunk by
+  /// tol::kIpmProximalRefinementShrink (never below the floor).
+  [[nodiscard]] static double next_regularization(double previous, double mu, double floor,
+                                                  bool refinement_missed = false);
+
+  /// The rho floor after `raises` recoveries from a non-finite direction (#209):
+  /// tol::kIpmProximalFloor * tol::kIpmProximalRecoveryRaise^raises, at most
+  /// tol::kIpmProximalRecoveryCap.
+  [[nodiscard]] static double recovery_floor(Count raises);
 
   /// Assemble with rho = delta = *reg and factor into `ldl`, which must already be analyzed
   /// on this pattern; while the factorization had to lift a pivot, raise *reg and factor
@@ -84,6 +97,9 @@ class ProximalSystem {
     int steps = 0;                ///< corrections kept
     double first_residual = 0.0;  ///< unregularized residual of the plain K_reg solve
     double final_residual = 0.0;  ///< the same after the kept corrections
+    double scale = 1.0;           ///< max(1, |g|, |r_b|), infinity norms
+    /// final_residual / scale: what the target tol::kIpmProximalRefinementTarget is on.
+    [[nodiscard]] double relative_residual() const noexcept { return final_residual / scale; }
   };
 
   /// Solve the UNREGULARIZED Newton system for dx (n + m) and dy (m), given g (n + m) and

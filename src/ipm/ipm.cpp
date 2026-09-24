@@ -40,6 +40,7 @@
 #include <fmt/format.h>
 
 #include "core/resource_limits.hpp"
+#include "ipm/ipm_testing.hpp"
 #include "ipm/model_space.hpp"
 #include "ipm/proximal_system.hpp"
 #include "la/ldl.hpp"
@@ -295,7 +296,19 @@ class InteriorPoint {
   SparseLdl purify_ldl_;
   bool purify_analyzed_ = false;
   Count refinement_steps_ = 0;
+  /// The worst RELATIVE unregularized residual a refined solve handed back (review of #473).
   double worst_refinement_residual_ = 0.0;
+  /// Refined solves, and those left above tol::kIpmProximalRefinementTarget. A miss is not
+  /// silent: it is counted, reported in the IPM line and in the message of every stop that
+  /// is not optimal, and it shrinks rho for the next factorization (refinement_missed_).
+  Count refinement_solves_ = 0;
+  Count refinement_misses_ = 0;
+  bool refinement_missed_ = false;
+  /// "augmented system" on the proximal path, "normal equations" otherwise: what a message
+  /// about the factorization is about.
+  [[nodiscard]] const char* system_name() const noexcept {
+    return proximal_ != nullptr ? "augmented system" : "normal equations";
+  }
   /// The proximal half of newton_direction(): the Newton system solved through the
   /// augmented factors with refinement on the unregularized matrix, for the given g.
   void proximal_newton_direction(const std::vector<double>& g);
@@ -773,9 +786,14 @@ bool InteriorPoint::factorize() {
       if (has_lower_[u]) theta_inverse[u] += zl_[u] / sl_[u];
       if (has_upper_[u]) theta_inverse[u] += zu_[u] / su_[u];
     }
-    // The floor follows the dual regularization's raises (#209): 1e-8 -> 1e-4 -> 1.
-    const double floor = tol::kIpmProximalFloor * (dual_regularization_ / kDualRegularization);
-    proximal_reg_ = ProximalSystem::next_regularization(proximal_reg_, mu_, floor);
+    // The floor rises with each recovery from a non-finite direction (#209), by the
+    // proximal path's own factor and to its own cap (1e-8 -> 1e-6 -> 1e-4), not the default
+    // path's x1e4, which took rho to 1. A refinement that missed its target since the last
+    // factorization shrinks rho toward that floor first.
+    const double floor = ProximalSystem::recovery_floor(regularization_raises_);
+    proximal_reg_ =
+        ProximalSystem::next_regularization(proximal_reg_, mu_, floor, refinement_missed_);
+    refinement_missed_ = false;
     proximal_->assemble(theta_inverse, proximal_reg_, proximal_reg_);
     assembled = true;
   } else {
@@ -804,8 +822,7 @@ bool InteriorPoint::factorize() {
     return false;
   };
   if (!analyzed_) {
-    logger_.verbose("interior point: {} assembled ({} nonzeros) at {:.2f}s",
-                    proximal_ != nullptr ? "augmented system" : "normal equations",
+    logger_.verbose("interior point: {} assembled ({} nonzeros) at {:.2f}s", system_name(),
                     system.num_nonzeros(),
                     clock_ != nullptr ? clock_->elapsed_seconds() : -1.0);
     Timer ordering_clock;
@@ -825,8 +842,8 @@ bool InteriorPoint::factorize() {
     logger_.verbose(
         "interior point: {} {} nonzeros, ordered and analysed in "
         "{:.2f}s, factor {} nonzeros",
-        proximal_ != nullptr ? "augmented system" : "normal equations", system.num_nonzeros(),
-        ordering_clock.elapsed_seconds(), ldl_.factor_nonzeros() + ldl_.dimension());
+        system_name(), system.num_nonzeros(), ordering_clock.elapsed_seconds(),
+        ldl_.factor_nonzeros() + ldl_.dimension());
     analyzed_ = true;
     // The ordering knows the factor's size before a single entry of it exists. A polish
     // that would need a 9-million-nonzero factor for a 7,000-row random-family model (#193)
@@ -935,8 +952,18 @@ void InteriorPoint::proximal_newton_direction(const std::vector<double>& g) {
   const ProximalSystem::Refinement refined =
       proximal_->solve(ldl_, g, r_b_, tol::kIpmProximalRefinementSteps, &dx_, &dy_);
   refinement_steps_ += refined.steps;
-  if (std::isfinite(refined.final_residual)) {
-    worst_refinement_residual_ = std::max(worst_refinement_residual_, refined.final_residual);
+  ++refinement_solves_;
+  // THE REFINEMENT CAN FAIL, AND NOT SILENTLY (review of #473). The residual is measured
+  // relative to the right-hand side, so the target means the same on every model. A finite
+  // miss is counted and shrinks rho for the next factorization; a non-finite one is a
+  // non-finite direction, which the #209 recovery in run() handles.
+  const double relative = refined.relative_residual();
+  if (std::isfinite(relative)) {
+    worst_refinement_residual_ = std::max(worst_refinement_residual_, relative);
+    if (relative > tol::kIpmProximalRefinementTarget) {
+      ++refinement_misses_;
+      refinement_missed_ = true;
+    }
   }
   // ds and dz from dx exactly as the normal-equations path recovers them.
   for (Index k = 0; k < total_; ++k) {
@@ -973,13 +1000,25 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
   solution.message = message;
   solution.iterations = iterations;
   solution.solve_seconds = seconds;
-  logger_.info("IPM: {} iterations, {} factorizations, {} regularized pivot(s) in total",
-               iterations, factorizations_, regularized_pivots_);
-  if (proximal_ != nullptr) {
+  if (proximal_ == nullptr) {
+    logger_.info("IPM: {} iterations, {} factorizations, {} regularized pivot(s) in total",
+                 iterations, factorizations_, regularized_pivots_);
+  } else {
+    const std::string refinement =
+        fmt::format("{} of {} refined solve(s) above the {:.0e} refinement target",
+                    refinement_misses_, refinement_solves_, tol::kIpmProximalRefinementTarget);
+    logger_.info("IPM: {} iterations, {} factorizations, {} regularized pivot(s) in total, {}",
+                 iterations, factorizations_, regularized_pivots_, refinement);
     logger_.verbose(
         "interior point: proximal regularization {:.1e} at the end, {} refinement "
-        "corrections on the unregularized system, worst residual kept {:.1e}",
+        "corrections on the unregularized system, worst relative residual kept {:.1e}",
         proximal_reg_, refinement_steps_, worst_refinement_residual_);
+    // Every stop that is not a proof says how the refinement went: a feasible point or a
+    // limit reached on directions that missed their target is a different story from one
+    // reached on exact ones.
+    if (status != SolveStatus::kOptimal && status != SolveStatus::kNotSolved) {
+      solution.message += (solution.message.empty() ? "" : "; ") + refinement;
+    }
   }
   // THE WORST ROWS AND VARIABLES, AT EVERY STOP THAT HANDS BACK A POINT (#582). A limit stop
   // restores the best iterate without re-measuring it, so it is measured here first: the
@@ -1332,6 +1371,14 @@ Solution InteriorPoint::run() {
   if (options_.get_bool("ipm_proximal_regularization")) {
     proximal_ = std::make_unique<ProximalSystem>(model_.matrix, fixed_);
     purify_ldl_.set_ordering_budget(ldl_.ordering_budget());
+    // The supernodal kernel (#470) factors the positive-definite normal equations only; the
+    // signed quasi-definite factorization this path runs is the scalar one whatever the
+    // option says (la/ldl.cpp), and a user who set both is told so, once.
+    if (ldl_.supernodal()) {
+      logger_.info(
+          "interior point: ipm_supernodal does not apply to the augmented system of "
+          "ipm_proximal_regularization, whose signed factorization stays scalar");
+    }
   }
   logger_.verbose("interior point: built in {:.2f}s from the start of the solve",
                   timer.elapsed_seconds());
@@ -1476,8 +1523,9 @@ Solution InteriorPoint::run() {
         return finish(
             warm_ != nullptr ? SolveStatus::kNotSolved : SolveStatus::kNumericalError,
             fmt::format(
-                "declined: the factor of the normal equations would hold {} nonzeros, "
+                "declined: the factor of the {} would hold {} nonzeros, "
                 "above {} = {}; raise the option or use another engine",
+                system_name(),
                 ldl_.factor_too_large()
                     ? fmt::format("more than {}", max_factor_nonzeros_)
                     : fmt::format("{}", ldl_.factor_nonzeros() + ldl_.dimension()),
@@ -1491,10 +1539,10 @@ Solution InteriorPoint::run() {
         return finish(
             SolveStatus::kNotSolved,
             fmt::format("the interior point declined: the ordering and first factorization "
-                        "of the normal equations ({} factor nonzeros) did not finish within "
+                        "of the {} ({} factor nonzeros) did not finish within "
                         "ipm_setup_share = {:g} of the {:g}s time limit ({:.1f}s), so the "
                         "factorization is not affordable here",
-                        ldl_.factor_nonzeros() + ldl_.dimension(),
+                        system_name(), ldl_.factor_nonzeros() + ldl_.dimension(),
                         options_.get_double("ipm_setup_share"), limits_.time_limit(),
                         timer.elapsed_seconds()),
             iterations, timer.elapsed_seconds());
@@ -1502,11 +1550,11 @@ Solution InteriorPoint::run() {
       if (ldl_.ordering_too_large()) {
         return finish(
             SolveStatus::kNumericalError,
-            fmt::format("the ordering of the normal equations was abandoned: its quotient "
+            fmt::format("the ordering of the {} was abandoned: its quotient "
                         "graph passed ipm_max_ordering_entries = {} list entries, so the "
                         "fill-in is beyond what this machine can hold (#246); raise the "
                         "option or use another engine",
-                        ldl_.ordering_budget()),
+                        system_name(), ldl_.ordering_budget()),
             iterations, timer.elapsed_seconds());
       }
       // Told to stop rather than unable to: the difference matters to a reader, and to the
@@ -1515,20 +1563,21 @@ Solution InteriorPoint::run() {
         restore_best();
         return finish(
             SolveStatus::kTimeLimit,
-            fmt::format(
-                "time limit {:g}s reached inside the {}, which was abandoned", time_limit,
-                assembly_stopped_ ? "assembly of the normal equations" : "factorization"),
+            fmt::format("time limit {:g}s reached inside the {}, which was abandoned",
+                        time_limit,
+                        assembly_stopped_ ? fmt::format("assembly of the {}", system_name())
+                                          : std::string("factorization")),
             iterations, timer.elapsed_seconds());
       }
       if (ldl_.pattern_too_large()) {
         return finish(SolveStatus::kNumericalError,
-                      fmt::format("the factor of the normal equations would hold more than "
+                      fmt::format("the factor of the {} would hold more than "
                                   "{} nonzeros, which this build cannot address (#305)",
-                                  kMaxNonzeros),
+                                  system_name(), kMaxNonzeros),
                       iterations, timer.elapsed_seconds());
       }
       return finish(SolveStatus::kNumericalError,
-                    "the normal equations could not be factorized", iterations,
+                    fmt::format("the {} could not be factorized", system_name()), iterations,
                     timer.elapsed_seconds());
     }
 
@@ -1628,6 +1677,10 @@ Solution InteriorPoint::run() {
         r_mu_u_[u] = has_upper_[u] ? -su_[u] * zu_[u] : 0.0;
       }
       newton_direction();
+      // Tests only (ipm_testing.hpp): poison this direction to reach the #209 recovery.
+      if (testing::take_poisoned_direction() && !dx_.empty()) {
+        dx_[0] = std::numeric_limits<double>::quiet_NaN();
+      }
       if (!direction_is_finite()) return false;
       const double alpha_p_aff = step_length(sl_, dsl_, su_, dsu_);
       const double alpha_d_aff = step_length(zl_, dzl_, zu_, dzu_);
@@ -1671,7 +1724,9 @@ Solution InteriorPoint::run() {
         logger_.verbose(
             "interior point: non-finite direction at iteration {}; "
             "regularization raised to {:.1e} and the step recomputed",
-            iterations, dual_regularization_);
+            iterations,
+            proximal_ != nullptr ? ProximalSystem::recovery_floor(regularization_raises_)
+                                 : dual_regularization_);
         if (!factorize()) break;
         step_is_finite = predictor_corrector();
       }

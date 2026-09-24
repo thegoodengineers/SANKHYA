@@ -20,10 +20,6 @@ double inf_norm(const std::vector<double>& v) {
   return norm;
 }
 
-/// A correction is kept whenever it lowers the residual; the refinement stops after one that
-/// gains less than a tenth, which has stalled at what the regularization lets it reach.
-constexpr double kRefinementProgress = 0.9;
-
 }  // namespace
 
 ProximalSystem::ProximalSystem(const SparseMatrix& a, const std::vector<bool>& fixed)
@@ -69,9 +65,20 @@ void ProximalSystem::assemble(const std::vector<double>& theta_inverse, double r
   k_.assign_columns(dim, dim, starts_, rows_, std::move(values));
 }
 
-double ProximalSystem::next_regularization(double previous, double mu, double floor) {
+double ProximalSystem::next_regularization(double previous, double mu, double floor,
+                                           bool refinement_missed) {
+  if (refinement_missed)
+    previous = std::max(floor, previous * tol::kIpmProximalRefinementShrink);
   const double target = std::isfinite(mu) ? tol::kIpmProximalShare * mu : previous;
   return std::max(floor, std::min(previous, target));
+}
+
+double ProximalSystem::recovery_floor(Count raises) {
+  double floor = tol::kIpmProximalFloor;
+  for (Count r = 0; r < raises && floor < tol::kIpmProximalRecoveryCap; ++r) {
+    floor *= tol::kIpmProximalRecoveryRaise;
+  }
+  return std::min(floor, tol::kIpmProximalRecoveryCap);
 }
 
 bool ProximalSystem::factorize(SparseLdl& ldl, const std::vector<double>& theta_inverse,
@@ -79,9 +86,10 @@ bool ProximalSystem::factorize(SparseLdl& ldl, const std::vector<double>& theta_
                                int* factorizations) {
   *factorizations = 0;
   for (int attempt = 0; attempt < tol::kIpmProximalAttempts; ++attempt) {
-    if (attempt > 0) *reg *= tol::kQpIpmRegularizationRaise;
+    if (attempt > 0) *reg *= tol::kIpmProximalRaise;
     assemble(theta_inverse, *reg, *reg);
-    if (!ldl.factorize_quasidefinite(k_, signs_, tol::kQpIpmPivotShare * *reg, should_stop)) {
+    if (!ldl.factorize_quasidefinite(k_, signs_, tol::kIpmProximalPivotShare * *reg,
+                                     should_stop)) {
       return false;
     }
     ++*factorizations;
@@ -151,23 +159,23 @@ ProximalSystem::Refinement ProximalSystem::solve(const SparseLdl& ldl,
   double best = residual(g, r_b, *dx, *dy, &p, &q);
   report.first_residual = best;
   report.final_residual = best;
+  report.scale = std::max({1.0, inf_norm(g), inf_norm(r_b)});
   if (!std::isfinite(best)) return report;
-  const double floor =
-      std::numeric_limits<double>::epsilon() * std::max({1.0, inf_norm(g), inf_norm(r_b)});
+  const double floor = std::numeric_limits<double>::epsilon() * report.scale;
   std::vector<double> cx(dx->size()), cy(dy->size());
   std::vector<double> tx(dx->size()), ty(dy->size());
+  std::vector<double> tp(p.size()), tq(q.size());
   for (int step = 0; step < max_steps && best > floor; ++step) {
     apply_inverse(ldl, p, q, &cx, &cy);
     for (std::size_t k = 0; k < tx.size(); ++k) tx[k] = (*dx)[k] + cx[k];
     for (std::size_t i = 0; i < ty.size(); ++i) ty[i] = (*dy)[i] + cy[i];
-    std::vector<double> tp(p.size()), tq(q.size());
     const double next = residual(g, r_b, tx, ty, &tp, &tq);
     if (!(next < best)) break;  // no better, or not finite: keep what is in hand
     std::swap(*dx, tx);
     std::swap(*dy, ty);
     std::swap(p, tp);
     std::swap(q, tq);
-    const bool stalled = !(next < kRefinementProgress * best);
+    const bool stalled = !(next < tol::kIpmProximalRefinementProgress * best);
     best = next;
     ++report.steps;
     if (stalled) break;

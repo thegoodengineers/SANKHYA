@@ -399,17 +399,38 @@ inline constexpr int kQpIpmRegularizationAttempts = 8;
 // ---- Proximal regularization of the LP interior point (#473, ipm_proximal_regularization) --
 
 /// rho = delta = max(floor, min(previous, kIpmProximalShare * mu)), starting from
-/// kIpmProximalStart: the regularization follows mu down and never rises except when a pivot
-/// comes out wrong (then by kQpIpmRegularizationRaise, at most kIpmProximalAttempts
-/// factorizations per iteration, the pivot threshold kQpIpmPivotShare of it - the QP interior
-/// point's rule, shared). The floor is 1e-8, the default path's primal regularization; below
-/// it the refinement against the unregularized system has nothing left to correct.
+/// kIpmProximalStart: the regularization follows mu down and rises only when a pivot comes
+/// out wrong (then by kIpmProximalRaise, at most kIpmProximalAttempts factorizations per
+/// iteration, with the pivot threshold kIpmProximalPivotShare of it). The floor is 1e-8, the
+/// default path's primal regularization, so this path never regularizes less than the
+/// default one does; a lower floor has not been measured.
 inline constexpr double kIpmProximalStart = 1e-6;
 inline constexpr double kIpmProximalFloor = 1e-8;
 inline constexpr double kIpmProximalShare = 1e-2;
 inline constexpr int kIpmProximalAttempts = 3;
+/// The LP path's own pivot rule. The values are the QP interior point's (kQpIpmPivotShare,
+/// kQpIpmRegularizationRaise) today, but the two paths are tuned apart: a pivot is lifted
+/// below kIpmProximalPivotShare * rho, and a lifted pivot raises rho by kIpmProximalRaise.
+inline constexpr double kIpmProximalPivotShare = 0.1;
+inline constexpr double kIpmProximalRaise = 100.0;
 /// Iterative-refinement corrections on the unregularized Newton system per solve, at most.
 inline constexpr int kIpmProximalRefinementSteps = 5;
+/// A correction is kept whenever it lowers the unregularized residual; the refinement stops
+/// after one that gains less than 10% (it has stalled at what the regularization allows).
+inline constexpr double kIpmProximalRefinementProgress = 0.9;
+/// The refinement's target, on the unregularized residual relative to max(1, |g|, |r_b|)
+/// (infinity norms): the interior point's own 1e-8 convergence tolerance. A solve left above
+/// it is counted and reported, and the next factorization's rho is shrunk by
+/// kIpmProximalRefinementShrink toward the floor: a smaller rho is a K_reg nearer K_0, so the
+/// refinement's contraction improves.
+inline constexpr double kIpmProximalRefinementTarget = 1e-8;
+inline constexpr double kIpmProximalRefinementShrink = 0.1;
+/// After a non-finite Newton direction (#209) the rho floor rises by this factor per raise,
+/// capped at kIpmProximalRecoveryCap. The default path's x1e4 on its 1e-10 dual
+/// regularization, applied to the 1e-8 rho floor, took rho to 1 after two raises: a proximal
+/// term as large as the matrix, whose refinement then has nothing to converge to.
+inline constexpr double kIpmProximalRecoveryRaise = 100.0;
+inline constexpr double kIpmProximalRecoveryCap = 1e-4;
 
 /// Binary probing (#512; Savelsbergh 1994; Achterberg et al. 2020). A probe x_j = v is
 /// declared infeasible only when a row misses its bound by more than this, relative to
