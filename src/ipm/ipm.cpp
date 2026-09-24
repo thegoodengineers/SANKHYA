@@ -803,8 +803,10 @@ bool InteriorPoint::factorize() {
   // budget is a factor over it too, and the ordering would refuse it - after an assembly
   // that on Linf_520c took 112 s and 474 million nonzeros, and on bdry2 would need 7.9e9.
   // Counting from the pattern of A costs at most the assembly's arithmetic and none of its
-  // memory, and usually one pass over the column counts.
-  if (!analyzed_ && max_factor_nonzeros_ >= 0) {
+  // memory, and usually one pass over the column counts. The proximal path (#473) never forms
+  // the normal equations - it factors the augmented system - so the count would refuse
+  // models that path solves; it is skipped there.
+  if (!analyzed_ && max_factor_nonzeros_ >= 0 && proximal_ == nullptr) {
     std::vector<char> skip(static_cast<std::size_t>(n_), 0);
     for (Index j = 0; j < n_; ++j) {
       const auto u = static_cast<std::size_t>(j);
@@ -1495,7 +1497,14 @@ Solution InteriorPoint::run() {
   }
   logger_.verbose("interior point: built in {:.2f}s from the start of the solve",
                   timer.elapsed_seconds());
-  if (options_.get_bool("ipm_dense_columns")) {
+  if (options_.get_bool("ipm_dense_columns") && proximal_ != nullptr) {
+    // The augmented system of the proximal path has no dense-column fill to split off, and
+    // this path's Schur complement is built on the normal-equations factor, which the
+    // proximal path does not use for its directions. The two do not combine; said once.
+    logger_.info(
+        "interior point: ipm_dense_columns does not apply with ipm_proximal_regularization "
+        "(the augmented system has no dense-column fill); the dense-column path is off");
+  } else if (options_.get_bool("ipm_dense_columns")) {
     // A fixed column has Theta 0 and contributes nothing to the normal equations, so it is
     // never dense in the sense that matters here.
     std::vector<char> eligible(static_cast<std::size_t>(n_), 0);

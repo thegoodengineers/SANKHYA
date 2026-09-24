@@ -358,5 +358,33 @@ TEST(DenseColumnCorrection, OverBudgetIsDeclinedBeforeAssemblyAndSolvedWithTheOp
   EXPECT_NEAR(solved.objective, 2.0, 1e-7);
 }
 
+TEST(DenseColumnCorrection, TheProximalPathIsNotCountedAndDoesNotTakeDenseColumns) {
+  // #473's proximal path factors the augmented system and never forms A Theta A^T, so the
+  // before-assembly count must not refuse a model it can solve, and ipm_dense_columns, which
+  // corrects for fill that system does not have, is declined there with a line in the log.
+  const Model model = one_dense_column(3000);
+  Options proximal = ipm_options(false);
+  proximal.set_bool("presolve", false);
+  proximal.set_int("ipm_max_factor_nonzeros", 1000000);
+  proximal.set_bool("ipm_proximal_regularization", true);
+  const Solution solved = solve(model, proximal);
+  EXPECT_EQ(solved.message.find("declined before assembly"), std::string::npos)
+      << solved.message;
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+  EXPECT_NEAR(solved.objective, 2.0, 1e-7);
+
+  Options both = proximal;
+  both.set_bool("ipm_dense_columns", true);
+  both.set_double("ipm_dense_column_factor", 10.0);
+  both.set_bool("log_to_console", true);
+  ::testing::internal::CaptureStdout();
+  const Solution also = solve(model, both);
+  const std::string log = ::testing::internal::GetCapturedStdout();
+  EXPECT_NE(log.find("ipm_dense_columns does not apply"), std::string::npos) << log;
+  EXPECT_EQ(log.find("split off the normal equations"), std::string::npos) << log;
+  ASSERT_EQ(also.status, SolveStatus::kOptimal) << also.message;
+  EXPECT_NEAR(also.objective, 2.0, 1e-7);
+}
+
 }  // namespace
 }  // namespace sankhya
