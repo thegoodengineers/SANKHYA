@@ -56,7 +56,17 @@ class Search {
   void apply(Index j, double value);
   void bump_weights();
   [[nodiscard]] double objective() const;
-  [[nodiscard]] bool out_of_work() const { return result_.work >= settings_.work_limit; }
+  [[nodiscard]] bool out_of_work() {
+    if (result_.work >= settings_.work_limit) return true;
+    // The work budget alone let an unbounded mip_fj_work ignore the time limit and Ctrl-C
+    // until it ran out (review of #635); the caller's stop is polled on a work stride.
+    if (settings_.should_stop && result_.work >= next_poll_) {
+      next_poll_ = result_.work + tol::kFeasibilityJumpPollWork;
+      return settings_.should_stop();
+    }
+    return false;
+  }
+  Count next_poll_ = 0;
 
   const Model& model_;
   const FeasibilityJumpSettings& settings_;

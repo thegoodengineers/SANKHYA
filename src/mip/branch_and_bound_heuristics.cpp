@@ -401,6 +401,12 @@ void BranchAndBound::run_feasibility_jump(const std::vector<double>* from) {
   settings.on_point = [this](const std::vector<double>& point) {
     (void)offer_from(kFeasibilityJump, point);
   };
+  // An interrupt always stops it; the time limit only when the schedule counts seconds, so
+  // a deterministic (work-budgeted) run stays independent of the clock.
+  settings.should_stop = [this]() {
+    if (control_ != nullptr && control_->interruption_requested()) return true;
+    return schedule_.seconds_budgets && limits_.time_exhausted(timer_.elapsed_seconds());
+  };
   const FeasibilityJumpResult found = feasibility_jump(
       original_, from != nullptr ? *from : feasibility_jump_zero_start(original_), settings);
   s.work += found.work;

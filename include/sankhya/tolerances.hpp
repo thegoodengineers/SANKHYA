@@ -463,4 +463,9 @@ inline constexpr double kRootCutTimeShare = 0.2;
 /// Larger amortises the synchronisation further but checks the iteration and time limits
 /// and the evaluation stride less often; 32 is under the evaluation interval of 40.
 inline constexpr Count kPdhgDeviceLoopBlock = 32;
+
+/// Feasibility Jump polls the caller's stop (interrupt, time limit) every this many work
+/// units: about a millisecond of work, so a stop is seen promptly and the poll costs nothing.
+inline constexpr Count kFeasibilityJumpPollWork = 65536;
+
 }  // namespace sankhya::tol
