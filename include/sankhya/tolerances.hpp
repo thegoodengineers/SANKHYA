@@ -595,8 +595,14 @@ inline constexpr double kIpmPcgAcceptedBackwardError = 1e-12;
 /// Steps per solve with the Woodbury preconditioner; the sparse-factor fallback gets this
 /// plus the number of dense columns.
 inline constexpr int kIpmPcgMaxIterations = 50;
-/// The iteration stops when the residual has not halved in this many steps.
-inline constexpr int kIpmPcgStagnationSteps = 3;
+/// The iteration stops when the residual has not halved in this many steps. Conjugate
+/// gradients minimize the M-norm of the error, not the residual, whose infinity norm can
+/// rise for several steps before it falls: on israel (33 dense columns at factor 2) the
+/// Woodbury-preconditioned residual went 27, 47, 41, 22, 15 and then 5e-3, and at 3 steps
+/// the iteration stopped at a backward error of 1.3e-4; with no early stop every solve of
+/// that run converged (worst 2.5e-15, longest run without halving 6 steps). 10 leaves room
+/// over the longest run seen.
+inline constexpr int kIpmPcgStagnationSteps = 10;
 /// A row whose diagonal in the sparse part is below this fraction of the dense columns'
 /// contribution gets the dense diagonal in the factor (see preconditioner_shift). Measured
 /// on israel's normal equations: at 1e-2 CG stalled with a direction 34% off, at 1e-6 not.
