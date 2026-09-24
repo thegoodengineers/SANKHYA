@@ -168,8 +168,10 @@ TEST(DebugSolution, APlantedInvalidCutIsCaughtInsideTheSearch) {
   planted.rhs = 1.0;
   planted.family = mip::CutFamily::kGomory;
   mip::testing::set_planted_cut(planted);
+  // The patterns use only `.` and `*`: gtest's own regex on Windows has \d and no brackets,
+  // POSIX regex on Linux has brackets and no \d, and CI runs both.
   EXPECT_DEATH((void)solve(model, options),
-               "debug solution cut off: gomory cut, root round 1, node 0, row \\d+: activity 2 "
+               "debug solution cut off: gomory cut, root round 1, node 0, row .*: activity 2 "
                "> rhs 1");
   mip::testing::set_planted_cut(std::nullopt);
   std::filesystem::remove(path);
@@ -207,7 +209,7 @@ TEST(DebugSolution, APlantedInvalidPresolveReductionIsCaught) {
   wrong.value = 0.0;
   reduced.records.push_back(wrong);
   EXPECT_DEATH(mip::check_presolve_against_debug_solution(model, reduced, options, quiet),
-               "debug solution cut off: presolve reduction \\d+ .fixed column. fixed column "
+               "debug solution cut off: presolve reduction .* .fixed column. fixed column "
                "x2 at 0; the debug solution has 1");
   std::filesystem::remove(path);
 }
