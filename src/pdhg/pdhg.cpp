@@ -143,6 +143,16 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         "PDLP restarts. Set pdhg_restart=false when using pdhg_halpern.";
     return solution;
   }
+  if (use_halpern && two_matvec) {
+    // The blend moves x_{k+1} after A x_{k+1} was computed, so the cached product would be
+    // A of the unblended point and every derived A xbar and A dx after it wrong (review of
+    // #613). Refused, like the restart combination above, rather than silently wrong.
+    solution.status = SolveStatus::kModelError;
+    solution.message =
+        "pdhg_halpern and pdhg_two_matvec cannot both be true: the Halpern blend moves the "
+        "iterate after the cached A x was computed. Set pdhg_two_matvec=false.";
+    return solution;
+  }
   // ROW-PARALLEL A x (#487). The serial product scatters column by column into y and
   // cannot be split across threads without a reduction; (A^T)^T x through the transpose
   // is a gather per ROW of A - one output per thread, no reduction, the same static
@@ -563,7 +573,12 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         omega = std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
         omega = std::clamp(omega, 1e-6, 1e6);
       }
-      halpern_reset(x, y, last_halpern_res.fp_residual, halpern);
+      // The period's reference residual in the NEW primal weight's norm: measured in the old
+      // one, the 0.2 ratio test would compare residuals in two different norms (review of
+      // #613).
+      const double r0 =
+          std::sqrt(omega * last_halpern_res.fp_x2 + last_halpern_res.fp_y2 / omega);
+      halpern_reset(x, y, r0, halpern);
       x_restart = x;
       y_restart = y;
       last_restart = iteration;

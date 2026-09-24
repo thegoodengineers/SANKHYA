@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// Reflected restarted Halpern PDHG for LP (#481) — CPU-side implementation.
+// Restarted Halpern PDHG for LP (#481), CPU side. The reflection step of [LY24]
+// ((1 + rho) T(z) - rho z) is not implemented: the blend is with T(z) itself.
 //
 // References: [LY24] Lu & Yang arXiv:2407.16144; [H67] Halpern 1967; [CSY24] arXiv:2408.12179
 // No reference implementation was read. See PROVENANCE.md row 22.
@@ -15,16 +16,17 @@ HalpernResult pdhg_halpern_step(const std::vector<double>& x, const std::vector<
                                 [[maybe_unused]] const Options& options) {
   // Fixed-point residual before the Halpern blend: ||T(z) - z||_P where
   //   ||dz||_P^2 = omega * ||dx||^2 + (1/omega) * ||dy||^2
-  double fp2 = 0.0;
+  double fx2 = 0.0;
+  double fy2 = 0.0;
   for (std::size_t j = 0; j < x.size(); ++j) {
     const double d = x_next[j] - x[j];
-    fp2 += omega * d * d;
+    fx2 += d * d;
   }
   for (std::size_t i = 0; i < y.size(); ++i) {
     const double d = y_next[i] - y[i];
-    fp2 += d * d / omega;
+    fy2 += d * d;
   }
-  const double r_k = std::sqrt(fp2);
+  const double r_k = std::sqrt(omega * fx2 + fy2 / omega);
 
   // On the very first step after a reset, record r0 and set anchor.
   // (halpern_reset was called before the first step, so state.r0 is set there.)
@@ -47,7 +49,7 @@ HalpernResult pdhg_halpern_step(const std::vector<double>& x, const std::vector<
   // Also restart on the very first step (r0 == 0 sentinel from halpern_reset).
   const bool should_restart = (state.r0 <= 0.0) || (r_k < 0.2 * state.r0);
 
-  return {true, r_k, should_restart};
+  return {true, r_k, fx2, fy2, should_restart};
 }
 
 void halpern_reset(const std::vector<double>& x, const std::vector<double>& y,

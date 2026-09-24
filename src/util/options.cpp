@@ -1404,7 +1404,8 @@ const std::vector<OptionSpec>& Options::registry() {
         {"pdhg_halpern",
          OptionType::Bool,
          false,
-         "Use the reflected restarted Halpern iteration for the LP PDHG engine instead of "
+         "Use the restarted Halpern iteration (no reflection step) for the LP PDHG engine "
+         "instead of "
          "the averaged (PDLP) scheme (#481). The Halpern form (Lu & Yang, arXiv:2407.16144) "
          "needs no running averages and restarts on the fixed-point residual ||z - T(z)||_P "
          "with the anchor set to the current iterate. Incompatible with pdhg_restart (the "

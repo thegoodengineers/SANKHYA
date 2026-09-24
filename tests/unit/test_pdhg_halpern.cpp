@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// SANKHYA - the Halpern reflected restarted PDHG iteration (#481).
+// SANKHYA - the restarted Halpern PDHG iteration (#481).
 //
 // With pdhg_halpern the running-average accumulator is replaced by the Halpern anchor
 // combination z_{k+1} = alpha_k * T(z_k) + (1-alpha_k) * z_0 with restarts on the
@@ -67,6 +67,17 @@ TEST(PdhgHalpern, OffIsBitwiseTheOldPath) {
   const Solution b = solve(model, off);
   EXPECT_EQ(a.objective, b.objective);
   EXPECT_EQ(a.iterations, b.iterations);
+}
+
+TEST(PdhgHalpern, TwoMatvecIsRefusedNotSilentlyWrong) {
+  // The blend moves the iterate after the cached A x was computed (review of #613).
+  Model model;
+  ASSERT_TRUE(io::read_model(netlib_path("afiro"), &model).ok);
+  Options options = pdhg_options(true);
+  options.set_bool("pdhg_two_matvec", true);
+  const Solution s = solve(model, options);
+  EXPECT_EQ(s.status, SolveStatus::kModelError) << s.message;
+  EXPECT_NE(s.message.find("pdhg_two_matvec"), std::string::npos) << s.message;
 }
 
 }  // namespace

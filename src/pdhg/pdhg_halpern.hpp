@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Reflected restarted Halpern PDHG for LP (#481).
+// Restarted Halpern PDHG for LP (#481), without the reflection step of [LY24].
 //
 // References:
 //   [LY24]  Lu & Yang, "Restarted Halpern PDHG for linear programming",
@@ -37,6 +37,8 @@ struct HalpernState {
 struct HalpernResult {
   bool active = false;          ///< false when pdhg_halpern=false (no-op path)
   double fp_residual = 0.0;     ///< ||T(z) - z||_P before the Halpern blend
+  double fp_x2 = 0.0;           ///< ||T(x) - x||^2, so the P-norm can be re-weighted
+  double fp_y2 = 0.0;           ///< ||T(y) - y||^2
   bool should_restart = false;  ///< true when the restart criterion is met
 };
 
