@@ -819,8 +819,9 @@ bool InteriorPoint::factorize() {
       predicted_normal_nonzeros_ = prediction.nonzeros;
       return false;
     }
-    logger_.verbose("interior point: normal equations predicted at {} {} nonzeros",
-                    prediction.exact ? "exactly" : "at most", prediction.nonzeros);
+    logger_.verbose(
+        "interior point: normal equations predicted from the pattern of A: {} {} nonzeros",
+        prediction.exact ? "exactly" : "at most", prediction.nonzeros);
   }
   std::vector<double> theta_sparse;
   std::vector<double> assembly_shift;
