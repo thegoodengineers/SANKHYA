@@ -222,10 +222,15 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 continue
 
             if section in ("RHS", "RANGES"):
-                # The set name is optional: if the first token already names a row, it was
-                # omitted. Counting tokens alone cannot tell a set name from a row name.
-                start = 0 if (fields[0] in model.row_index or fields[0] == objective_row
-                              or fields[0] in dropped_rows) else 1
+                # The set name is optional, and the payload is always (row, value) pairs, so
+                # the token count decides: odd means a set name leads, even means it was
+                # omitted. Asking "does the first token name a row?" instead misreads any
+                # file whose set name is also a row name: Maros-Meszaros dpklo1 names its RHS
+                # set "1" and has a row "1", so "1 77 3.577" was read as row 1 = 77 and the
+                # row came back violated by 77 at a correct point (#590).
+                if len(fields) < 2:
+                    raise ValueError(f"{path}:{lineno}: {section} entry has no row/value pair")
+                start = 1 if len(fields) % 2 == 1 else 0
                 for k in range(start, len(fields) - 1, 2):
                     row_name, value = fields[k], float(fields[k + 1])
                     if row_name == objective_row:
@@ -264,8 +269,18 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
 
             if section == "BOUNDS":
                 kind = fields[0].upper()
-                # As for RHS, the bound-set name is optional.
-                name_pos = 1 if fields[1] in model.col_index else 2
+                # As for RHS, the bound-set name is optional, and as for RHS it is the token
+                # count that tells, not whether the token happens to name a column (a set
+                # "1" beside a column "1" is the dpklo1 trap again, #590). A value-taking
+                # type carries (column, value), so 4 fields mean the name is present; a
+                # valueless type carries (column) alone, so 3 fields mean it is.
+                takes_value = kind in ("UP", "LO", "FX", "LI", "UI", "SC")
+                if len(fields) < 2 or (takes_value and len(fields) not in (3, 4)):
+                    raise ValueError(f"{path}:{lineno}: malformed {kind} bound")
+                if takes_value:
+                    name_pos = 2 if len(fields) == 4 else 1
+                else:
+                    name_pos = 2 if len(fields) >= 3 else 1
                 col_name = fields[name_pos]
                 if col_name not in model.col_index:
                     raise ValueError(f"{path}:{lineno}: unknown column {col_name}")

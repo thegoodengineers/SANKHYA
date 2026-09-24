@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import verify_solution as vs  # noqa: E402
 from verify_solution_mps import _parse_mps  # noqa: E402
 import test_verify_solution_limits  # noqa: E402
+import test_verify_solution_names  # noqa: E402
 
 FAILURES = 0
 
@@ -870,6 +871,8 @@ def main() -> int:
     test_an_optimal_status_cannot_launder_through_a_stated_infeasibility()
     print("a limit that found no point (#505)")
     test_verify_solution_limits.run(check)
+    print("a vector name that is also a row or column name (#590)")
+    test_verify_solution_names.run(check)
     print("the solution pool (#225)")
     test_a_valid_pool_verifies()
     test_a_pool_out_of_order_is_rejected()

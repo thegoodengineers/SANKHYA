@@ -1889,6 +1889,39 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     }
   }
 
+  // FOR A QP THE PRICE IS THE GRADIENT, NOT THE COST (#590). Every dual below is recovered
+  // from "the reduced cost of this column is c_j - a_j'y", which is the LP's stationarity
+  // condition. A convex QP's is (c + Q x)_j - a_j'y, at the point just reconstructed above.
+  // Pricing a singleton row on a quadratic column from c_j alone put the row's dual off by
+  // (Q x)_j / a: on Maros-Meszaros stcqp1, where presolve turns 171 singleton rows into
+  // bounds, the recovered duals gave a dual objective of -1.66e+05 against a primal of
+  // 1.55e+05 and a complementarity product of 7.7e+02, at a point the engine had solved
+  // correctly. The folds below are linear in the costs, so adding Q x to the starting cost
+  // carries the gradient through every one of them; columns presolve eliminated carry no
+  // Hessian entry (they are protected from removal), so their (Q x)_j is zero and their
+  // eliminated_cost is already their gradient. hessian_gradient is empty for an LP.
+  std::vector<double> hessian_gradient;
+  if (original.has_quadratic_objective() &&
+      solution.col_value.size() == static_cast<std::size_t>(original.num_cols())) {
+    hessian_gradient.assign(solution.col_value.size(), 0.0);
+    for (Index j = 0; j < original.hessian.num_cols(); ++j) {
+      const ColumnView column = original.hessian.column(j);
+      const auto uj = static_cast<std::size_t>(j);
+      for (Index k = 0; k < column.size; ++k) {
+        const auto ui = static_cast<std::size_t>(column.rows[k]);
+        // Lower triangle: a stored off-diagonal entry is two entries of the symmetric Q.
+        hessian_gradient[ui] += column.values[k] * solution.col_value[uj];
+        if (ui != uj) hessian_gradient[uj] += column.values[k] * solution.col_value[ui];
+      }
+    }
+    for (std::size_t u = 0; u < hessian_gradient.size(); ++u) {
+      adjusted_cost[u] += hessian_gradient[u];
+    }
+  }
+  const auto gradient_of = [&](std::size_t u) {
+    return original.col_cost[u] + (hessian_gradient.empty() ? 0.0 : hessian_gradient[u]);
+  };
+
   // THE DUALS ARE A SEPARATE PASS, and getting this wrong is the whole difficulty of
   // postsolve. A singleton row became a BOUND on one column, so at the optimum the price
   // that would have sat on that row is hiding in the column's reduced cost - or, when the
@@ -2489,7 +2522,7 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   for (Index j = 0; j < original.num_cols(); ++j) {
     const auto u = static_cast<std::size_t>(j);
     if (!recompute[u]) continue;
-    double d = original.col_cost[u];
+    double d = gradient_of(u);  // c_j for an LP, (c + Q x)_j for a QP
     const ColumnView view = original.matrix.column(j);
     for (Index k = 0; k < view.size; ++k) {
       d -= view.values[k] * solution.row_dual[static_cast<std::size_t>(view.rows[k])];

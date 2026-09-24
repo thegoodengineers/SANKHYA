@@ -44,6 +44,7 @@ add_executable(sankhya_tests
   unit/test_engine_selection.cpp
   unit/test_engine_race.cpp
   unit/test_kkt_check_qp.cpp
+  unit/test_qp_590.cpp
   unit/test_solver_engine.cpp
   unit/test_solver_engine_conformance.cpp
   unit/test_warm_start.cpp

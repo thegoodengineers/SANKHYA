@@ -523,7 +523,16 @@ void MpsParser::finish_model() {
   for (std::size_t k = 0; k < tri_row_.size(); ++k) {
     model_->matrix.add_entry(tri_row_[k], tri_col_[k], tri_value_[k]);
   }
-  model_->matrix.finalize();
+  // EVERY COEFFICIENT THE FILE STATES IS PART OF THE MODEL (#590). finalize()'s default
+  // drops |a| < kZeroDrop (1e-11), which is right for arithmetic that produced a rounding
+  // residue and wrong for data: MPS has no accumulate semantics (a repeated entry is refused
+  // above), so nothing here is a residue, and the exact zeros were already left out. On
+  // Maros-Meszaros hues-mod, a coefficient of 6.3e-12 against a row dual of 8.5e+04 is a
+  // reduced-cost term of 5.4e-07; dropping it solved a different model, whose answer the
+  // in-process KKT check (on the same dropped model) passed and the independent verifier
+  // (on the file) rejected. huestis and ksip carry such coefficients too, laser carries them
+  // in its Hessian. No Netlib, Kennington or MIPLIB file in data/ has one.
+  model_->matrix.finalize(0.0);
   // The Hessian, in the QPS convention the Model already uses: lower triangle, with the 0.5
   // carried by the objective rather than by the data, so entries need no transformation.
   model_->hessian.reset(n, n);
@@ -531,7 +540,7 @@ void MpsParser::finish_model() {
   for (std::size_t k = 0; k < quad_row_.size(); ++k) {
     model_->hessian.add_entry(quad_row_[k], quad_col_[k], quad_value_[k]);
   }
-  model_->hessian.finalize();
+  model_->hessian.finalize(0.0);  // as for the matrix: data, not residue (#590)
 }
 
 ReadResult MpsParser::parse(const std::string& path) {
