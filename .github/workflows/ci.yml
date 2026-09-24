@@ -154,8 +154,16 @@ jobs:
           # halt_on_error keeps a sanitizer report from being buried under later output.
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        # Tests run in parallel, one per runner core; they were run one at a time before.
-        run: ctest --test-dir build --output-on-failure -j "$(nproc)"
+        # Most tests run in parallel, one per runner core. The suites that start their own
+        # threads, or assert on how threads shared work, run afterwards one at a time: beside
+        # other tests they fight for the same cores, and on the first parallel run
+        # PdhgParallelSpmv took 649 s per test under ASan and ParallelTree's work-sharing count
+        # came out 46 against its floor of 50 while every answer still agreed.
+        run: |
+          set -euo pipefail
+          serial='^(ParallelTree|PdhgParallelSpmv|EngineConcurrency|EngineRace|EngineDeterminism|Deterministic)\.'
+          ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$serial"
+          ctest --test-dir build --output-on-failure -R "$serial"
 
       # The bindings are pure ctypes over the shared library, so there is no extension to
       # build and no Python dependency to install - but that also means nothing else in CI
