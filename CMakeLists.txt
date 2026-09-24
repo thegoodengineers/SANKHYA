@@ -302,6 +302,7 @@ set(SANKHYA_CORE_SOURCES
   src/presolve/coef_tightening.cpp
   src/presolve/presolve.cpp
   src/ipm/ipm.cpp
+  src/ipm/model_space.cpp
   src/pdhg/pdhg.cpp
   src/pdhg/pdhg_evaluate.cpp
   src/pdhg/pdhg_halpern.cpp

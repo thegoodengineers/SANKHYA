@@ -33,11 +33,13 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
 
 #include "core/resource_limits.hpp"
+#include "ipm/model_space.hpp"
 #include "la/ldl.hpp"
 #include "la/scaling.hpp"
 #include "util/profiler.hpp"
@@ -136,6 +138,9 @@ class InteriorPoint {
   /// The ten rows carrying the worst model-space violation, with their scale factors, at
   /// verbose, for a stop whose model-space residual is above the tolerance (#582).
   void log_worst_model_rows() const;
+  /// The same table for the dual side: the ten variables with the worst model-space dual
+  /// violation, their scaled dual residual and their Ruiz factor (#582).
+  void log_worst_model_duals() const;
   [[nodiscard]] bool direction_is_finite() const;
   [[nodiscard]] bool factorize();
 
@@ -224,6 +229,20 @@ class InteriorPoint {
   /// Per row, the model-space relative violation behind model_primal_infeasibility_, for
   /// the worst-rows table at a stop that does not meet it.
   std::vector<double> model_row_violation_;
+  /// THE DUAL HALF OF THE SAME MEASUREMENT (#582): the guard's dual_infeasibility_scaled and
+  /// complementarity_violation on the point this iterate would be reported as. The scaled
+  /// dual residual is Dc times the model's on a structural, so a column Ruiz shrank by 1e-5
+  /// hides a 1e-4 model-space residual behind a scaled 1e-9 (test_ipm_model_space.cpp).
+  double model_dual_infeasibility_ = 0.0;
+  double model_complementarity_ = 0.0;
+  std::vector<double> model_dual_violation_;
+  /// Every guard measure holds on the point as it would be reported: the loop may claim
+  /// optimal only then (#582).
+  [[nodiscard]] bool model_space_holds() const {
+    return model_primal_infeasibility_ <= tol::kPrimalFeasibility &&
+           model_dual_infeasibility_ <= tol::kDualFeasibility &&
+           model_complementarity_ <= tol::kComplementarity;
+  }
   const Scaling* scaling_ = nullptr;
   double mu_ = 0.0;
   double max_product_ = 0.0;
@@ -593,50 +612,26 @@ void InteriorPoint::residuals() {
 }
 
 void InteriorPoint::model_space_residuals() {
-  // The scaled model is Ahat = Dr A Dc, xhat = x / Dc, bhat = Dr b, so a scaled row
-  // residual r is Dr times the model's, a scaled structural bound residual is the model's
-  // over Dc, and a logical's bound is its row's bound. The guard's scale for a row is the
-  // largest |A_ij x_j| in the row - |Ahat_ij xhat_j| / Dr_i here - and for a bound it is
-  // |x_j|. One pass over the matrix, the same cost as the residual itself.
-  const auto dr = [&](Index i) {
-    return scaling_ == nullptr ? 1.0 : scaling_->row[static_cast<std::size_t>(i)];
-  };
-  const auto dc = [&](Index j) {
-    return scaling_ == nullptr ? 1.0 : scaling_->column[static_cast<std::size_t>(j)];
-  };
-  std::vector<double> row_term(static_cast<std::size_t>(m_), 1.0);
-  for (Index j = 0; j < n_; ++j) {
-    const double xj = x_[static_cast<std::size_t>(j)];
-    if (xj == 0.0) continue;
-    const ColumnView column = model_.matrix.column(j);
-    for (Index q = 0; q < column.size; ++q) {
-      const auto r = static_cast<std::size_t>(column.rows[q]);
-      row_term[r] =
-          std::max(row_term[r], std::fabs(column.values[q] * xj) / dr(column.rows[q]));
-    }
-  }
-  model_row_violation_.assign(static_cast<std::size_t>(m_), 0.0);
-  model_primal_infeasibility_ = 0.0;
-  for (Index i = 0; i < m_; ++i) {
-    const auto u = static_cast<std::size_t>(i);
-    const auto k = static_cast<std::size_t>(n_ + i);
-    double violation = std::fabs(r_b_[u]);
-    if (has_lower_[k]) violation = std::max(violation, std::fabs(r_l_[k]));
-    if (has_upper_[k]) violation = std::max(violation, std::fabs(r_u_[k]));
-    model_row_violation_[u] = violation / dr(i) / row_term[u];
-    model_primal_infeasibility_ =
-        std::max(model_primal_infeasibility_, model_row_violation_[u]);
-  }
-  for (Index j = 0; j < n_; ++j) {
-    const auto u = static_cast<std::size_t>(j);
-    if (!has_lower_[u] && !has_upper_[u]) continue;
-    double violation = 0.0;
-    if (has_lower_[u]) violation = std::max(violation, std::fabs(r_l_[u]));
-    if (has_upper_[u]) violation = std::max(violation, std::fabs(r_u_[u]));
-    const double x_model = std::fabs(x_[u] * dc(j));
-    model_primal_infeasibility_ =
-        std::max(model_primal_infeasibility_, violation * dc(j) / std::max(1.0, x_model));
-  }
+  // The guard's own measurement, made on the scaled iterate by ipm/model_space.cpp: rows
+  // and bounds over their terms for the primal side, the consistency of zl - zu with
+  // c - A^T y, the sign conditions and the relative products for the dual side, all in the
+  // model's units. One pass over the matrix per side, the cost of the residual itself.
+  ScaledIterate it;
+  it.matrix = &model_.matrix;
+  it.cost = &cost_;
+  it.lower = &lower_;
+  it.upper = &upper_;
+  it.x = &x_;
+  it.y = &y_;
+  it.zl = &zl_;
+  it.zu = &zu_;
+  it.scaling = scaling_;
+  ModelSpaceMeasure measure = measure_in_model_space(it);
+  model_primal_infeasibility_ = measure.primal;
+  model_dual_infeasibility_ = measure.dual;
+  model_complementarity_ = measure.complementarity;
+  model_row_violation_ = std::move(measure.row_violation);
+  model_dual_violation_ = std::move(measure.dual_violation);
 }
 
 void InteriorPoint::log_worst_model_rows() const {
@@ -663,6 +658,43 @@ void InteriorPoint::log_worst_model_rows() const {
                                  : fmt::format("row {}", i);
     logger_.verbose("  {:<24} {:.3e} | {:.3e} | {:.3e}", name, std::fabs(r_b_[u]), factor,
                     model_row_violation_[u]);
+  }
+}
+
+void InteriorPoint::log_worst_model_duals() const {
+  if (model_dual_violation_.empty()) return;
+  std::vector<Index> order(static_cast<std::size_t>(total_));
+  for (Index k = 0; k < total_; ++k) order[static_cast<std::size_t>(k)] = k;
+  const auto worse = [&](Index a, Index b) {
+    return model_dual_violation_[static_cast<std::size_t>(a)] >
+           model_dual_violation_[static_cast<std::size_t>(b)];
+  };
+  const std::size_t shown = std::min<std::size_t>(10, order.size());
+  std::partial_sort(order.begin(), order.begin() + static_cast<std::ptrdiff_t>(shown),
+                    order.end(), worse);
+  logger_.verbose(
+      "interior point: model-space dual infeasibility {:.3e} against {:.0e}; the worst "
+      "variables (scaled dual residual | Ruiz factor | model-space relative violation):",
+      model_dual_infeasibility_, tol::kDualFeasibility);
+  for (std::size_t q = 0; q < shown; ++q) {
+    const Index k = order[q];
+    const auto u = static_cast<std::size_t>(k);
+    std::string name;
+    double factor = 1.0;
+    if (k < n_) {
+      name = u < model_.col_names.size() && !model_.col_names[u].empty()
+                 ? model_.col_names[u]
+                 : fmt::format("column {}", k);
+      if (scaling_ != nullptr) factor = scaling_->column[u];
+    } else {
+      const auto r = static_cast<std::size_t>(k - n_);
+      name = r < model_.row_names.size() && !model_.row_names[r].empty()
+                 ? fmt::format("row {}", model_.row_names[r])
+                 : fmt::format("row {}", k - n_);
+      if (scaling_ != nullptr) factor = scaling_->row[r];
+    }
+    logger_.verbose("  {:<24} {:.3e} | {:.3e} | {:.3e}", name, std::fabs(r_c_[u]), factor,
+                    model_dual_violation_[u]);
   }
 }
 
@@ -852,6 +884,10 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
   if ((status == SolveStatus::kOptimal || status == SolveStatus::kFeasible) &&
       model_primal_infeasibility_ > tol::kPrimalFeasibility) {
     log_worst_model_rows();
+  }
+  if ((status == SolveStatus::kOptimal || status == SolveStatus::kFeasible) &&
+      model_dual_infeasibility_ > tol::kDualFeasibility) {
+    log_worst_model_duals();
   }
   bool have_point = status == SolveStatus::kOptimal || status == SolveStatus::kFeasible ||
                     status == SolveStatus::kIterationLimit ||
@@ -1221,16 +1257,17 @@ Solution InteriorPoint::run() {
         std::max({primal_infeasibility_, dual_infeasibility_, relative_gap, max_product_}));
     logger_.verbose(
         "ipm iteration {}: mu {:.2e}, relative gap {:.2e}, worst relative product {:.2e}, "
-        "primal {:.2e} scaled / {:.2e} model, regularized pivots so far {}",
+        "primal {:.2e} scaled / {:.2e} model, dual {:.2e} scaled / {:.2e} model, "
+        "regularized pivots so far {}",
         iterations, mu_, relative_gap, max_product_, primal_infeasibility_,
-        model_primal_infeasibility_, regularized_pivots_);
+        model_primal_infeasibility_, dual_infeasibility_, model_dual_infeasibility_,
+        regularized_pivots_);
     // BOTH SPACES (#582): the scaled residual is what the loop drives down; the model-space
     // one is what the answer is judged by, and on a badly scaled model they differ by the
     // Ruiz factors of the worst rows. Optimal is claimed only when the point would pass the
-    // guard's own measurement.
+    // guard's own measurement, primal and dual.
     if (primal_infeasibility_ <= kIpmTolerance && dual_infeasibility_ <= kIpmTolerance &&
-        model_primal_infeasibility_ <= tol::kPrimalFeasibility && relative_gap <= kIpmGap &&
-        max_product_ <= kIpmComplementarity) {
+        model_space_holds() && relative_gap <= kIpmGap && max_product_ <= kIpmComplementarity) {
       return finish(SolveStatus::kOptimal,
                     barrier_retry_used_
                         ? fmt::format("converged at a relative gap of {:.1e} one step after "
@@ -1380,10 +1417,9 @@ Solution InteriorPoint::run() {
           // numerical_error, because the guard measured what the claim did not. Optimal
           // only when every tolerance holds on the restored point; otherwise the point is
           // reported as what it is, feasible to the slack, with the numbers in the message.
-          const bool optimal_here = primal_infeasibility_ <= kIpmTolerance &&
-                                    dual_infeasibility_ <= kIpmTolerance &&
-                                    model_primal_infeasibility_ <= tol::kPrimalFeasibility &&
-                                    best_gap <= kIpmGap && max_product_ <= kIpmComplementarity;
+          const bool optimal_here =
+              primal_infeasibility_ <= kIpmTolerance && dual_infeasibility_ <= kIpmTolerance &&
+              model_space_holds() && best_gap <= kIpmGap && max_product_ <= kIpmComplementarity;
           return finish(
               optimal_here ? SolveStatus::kOptimal : SolveStatus::kFeasible,
               optimal_here
@@ -1392,12 +1428,13 @@ Solution InteriorPoint::run() {
                                 best_gap, regularized_now, m_)
                   : fmt::format("the barrier vanished ({} of {} pivots regularized in one "
                                 "factorization) with the best iterate at relative gap {:.1e} "
-                                "but infeasibility {:.1e} / {:.1e} scaled, {:.1e} in model "
-                                "space, and worst product {:.1e}, above the {:.0e} tolerance: "
-                                "a feasible point to that slack, not a proof (#576, #582)",
+                                "but infeasibility {:.1e} / {:.1e} scaled, {:.1e} / {:.1e} in "
+                                "model space, and worst product {:.1e}, above the {:.0e} "
+                                "tolerance: a feasible point to that slack, not a proof (#576, "
+                                "#582)",
                                 regularized_now, m_, best_gap, primal_infeasibility_,
-                                dual_infeasibility_, model_primal_infeasibility_, max_product_,
-                                kIpmTolerance),
+                                dual_infeasibility_, model_primal_infeasibility_,
+                                model_dual_infeasibility_, max_product_, kIpmTolerance),
               iterations, timer.elapsed_seconds());
         }
       }
@@ -1471,15 +1508,25 @@ Solution InteriorPoint::run() {
         residuals();
         const bool usable = std::isfinite(objective_) && primal_infeasibility_ <= 1e-6 &&
                             dual_infeasibility_ <= 1e-6;
+        // Converged only if the point handed back also holds in the model's units (#582):
+        // "within a decade" of the scaled tolerances is not a claim about the model.
+        const bool converged_here = nearly_converged && model_space_holds();
         return finish(
-            nearly_converged ? SolveStatus::kOptimal
-                             : (usable ? SolveStatus::kFeasible : SolveStatus::kNumericalError),
-            fmt::format("the Newton direction was not finite at iteration {} after {} "
-                        "regularization raise(s); {}",
-                        iterations, regularization_raises_,
-                        nearly_converged ? "the iterate before it is within a decade of "
-                                           "every tolerance and is reported as converged"
-                                         : "the best iterate is reported as it stands"),
+            converged_here ? SolveStatus::kOptimal
+                           : (usable ? SolveStatus::kFeasible : SolveStatus::kNumericalError),
+            fmt::format(
+                "the Newton direction was not finite at iteration {} after {} "
+                "regularization raise(s); {}",
+                iterations, regularization_raises_,
+                converged_here
+                    ? std::string("the iterate before it is within a decade of every "
+                                  "tolerance and is reported as converged")
+                : nearly_converged
+                    ? fmt::format("the iterate before it is within a decade of every "
+                                  "scaled tolerance but measures {:.1e} / {:.1e} in the "
+                                  "model's units, so it is reported as it stands (#582)",
+                                  model_primal_infeasibility_, model_dual_infeasibility_)
+                    : std::string("the best iterate is reported as it stands")),
             iterations, timer.elapsed_seconds());
       }
     }

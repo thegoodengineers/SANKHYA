@@ -89,6 +89,12 @@ void expect_the_guard_accepts(const Model& model, const char* what) {
   if (ipm.status == SolveStatus::kOptimal) {
     EXPECT_LE(ipm.primal_infeasibility_scaled, tol::kPrimalFeasibility)
         << what << ": " << ipm.message;
+    // And the dual side, measured the same way (#582): an optimal the guard would downgrade
+    // to feasible is not an optimal the engine may claim.
+    EXPECT_LE(ipm.dual_infeasibility_scaled, tol::kDualFeasibility)
+        << what << ": " << ipm.message;
+    EXPECT_LE(ipm.complementarity_violation, tol::kComplementarity)
+        << what << ": " << ipm.message;
     EXPECT_NEAR(ipm.objective, simplex.objective,
                 1e-6 * std::max(1.0, std::fabs(simplex.objective)))
         << what << ": " << ipm.message;
