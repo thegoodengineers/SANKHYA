@@ -881,13 +881,18 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
   solution.solve_seconds = seconds;
   logger_.info("IPM: {} iterations, {} factorizations, {} regularized pivot(s) in total",
                iterations, factorizations_, regularized_pivots_);
-  if ((status == SolveStatus::kOptimal || status == SolveStatus::kFeasible) &&
-      model_primal_infeasibility_ > tol::kPrimalFeasibility) {
-    log_worst_model_rows();
-  }
-  if ((status == SolveStatus::kOptimal || status == SolveStatus::kFeasible) &&
-      model_dual_infeasibility_ > tol::kDualFeasibility) {
-    log_worst_model_duals();
+  // THE WORST ROWS AND VARIABLES, AT EVERY STOP THAT HANDS BACK A POINT (#582). A limit stop
+  // restores the best iterate without re-measuring it, so it is measured here first: the
+  // table must describe the point that is returned. On irish-electricity the stop that shows
+  // the disagreement is the time limit, which the table did not cover before.
+  const bool returns_point =
+      status == SolveStatus::kOptimal || status == SolveStatus::kFeasible ||
+      status == SolveStatus::kIterationLimit || status == SolveStatus::kTimeLimit ||
+      status == SolveStatus::kInterrupted;
+  if (returns_point && logger_.enabled(LogLevel::kVerbose)) {
+    residuals();
+    if (model_primal_infeasibility_ > tol::kPrimalFeasibility) log_worst_model_rows();
+    if (model_dual_infeasibility_ > tol::kDualFeasibility) log_worst_model_duals();
   }
   bool have_point = status == SolveStatus::kOptimal || status == SolveStatus::kFeasible ||
                     status == SolveStatus::kIterationLimit ||
