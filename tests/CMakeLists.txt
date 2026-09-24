@@ -31,18 +31,24 @@ add_executable(sankhya_tests
   unit/test_presolve_report.cpp
   unit/test_simplex.cpp
   unit/test_dual_simplex.cpp
+  unit/test_dual_harris.cpp
   unit/test_ranging.cpp
   unit/test_dense_lu.cpp
   unit/test_sparse_lu.cpp
   unit/test_sparse_lu_singletons.cpp
+  unit/test_sparse_lu_hyper.cpp
   unit/test_ldl.cpp
   unit/test_ldl_supernodal.cpp
   unit/test_ipm.cpp
   unit/test_ipm_centrality.cpp
+  unit/test_ipm_proximal.cpp
   unit/test_ipm_time_limit.cpp
   unit/test_pdhg_kkt_crossings.cpp
   unit/test_ipm_scaling.cpp
   unit/test_ipm_model_space.cpp
+  unit/test_ipm_dense_columns.cpp
+  unit/test_ipm_column_side.cpp
+  unit/test_ipm_normal_side.cpp
   unit/test_pdhg_parallel_spmv.cpp
   unit/test_pdhg_two_matvec.cpp
   unit/test_pdhg_halpern.cpp
@@ -62,6 +68,7 @@ add_executable(sankhya_tests
   unit/test_banner.cpp
   unit/test_memory.cpp
   unit/test_pdhg_cuda_regression.cpp
+  unit/test_pdhg_infeasibility_detection.cpp
   unit/test_gpu_device.cpp
   unit/test_gpu_memory.cpp
   unit/test_multi_gpu.cpp
@@ -88,6 +95,7 @@ add_executable(sankhya_tests
   unit/test_debug_solution.cpp
   unit/test_cmir_cuts.cpp
   unit/test_root_cut_loop.cpp
+  unit/test_gmi_safety.cpp
   unit/test_knapsack_cover_separation.cpp
   unit/test_cut_filter_policy.cpp
   unit/test_presolve_parallel_rows.cpp

@@ -44,6 +44,8 @@
 // invisible.
 #pragma once
 
+#include <array>
+#include <cstdint>
 #include <functional>
 #include <utility>
 #include <vector>
@@ -60,6 +62,18 @@ struct LuColumn {
   const Index* rows = nullptr;
   const double* values = nullptr;
   Index size = 0;
+};
+
+/// How dense the base-factor results of FTRAN and BTRAN were, per solve (#464): the data
+/// the hyper-sparse switch threshold is set from. A result's density is its nonzeros over
+/// m, after the triangular solves and before the product-form etas (which FTRAN applies
+/// after the base solve); the bins are [0, 1%), [1%, 5%), [5%, 10%), [10%, 30%), [30%, 100%].
+struct LuSolveStats {
+  static constexpr std::array<double, 4> kBinEdges = {0.01, 0.05, 0.10, 0.30};
+  std::array<std::int64_t, 5> ftran_bins{};
+  std::array<std::int64_t, 5> btran_bins{};
+  std::int64_t ftran_hyper = 0;  ///< FTRANs that took the symbolic-reach path
+  std::int64_t btran_hyper = 0;  ///< BTRANs that took the symbolic-reach path
 };
 
 class SparseLu {
@@ -105,6 +119,18 @@ class SparseLu {
 
   /// Solve B z = b in place. FTRAN.
   void solve(double* b) const;
+
+  /// HYPER-SPARSE SOLVES (#464; Gilbert & Peierls 1988, Hall & McKinnon 2005). When on,
+  /// solve() and solve_transpose() on product-form factors first find, by a search over
+  /// the factors' graphs from the right-hand side's nonzeros, every elimination step the
+  /// result can reach, and run the numeric passes over those steps alone, in the same order
+  /// the full loops visit them - so the result is the same to the last bit. A right-hand
+  /// side or a reach above tol::kHyperSparseDensity of m falls back to the full loops.
+  /// Off by default until its A/B; sticky across factorize().
+  void use_hyper_sparse(bool on) noexcept { hyper_sparse_ = on; }
+  [[nodiscard]] bool hyper_sparse() const noexcept { return hyper_sparse_; }
+  /// Result densities of every solve since construction, whichever path took it.
+  [[nodiscard]] const LuSolveStats& solve_stats() const noexcept { return stats_; }
   /// The same solve with the back-substitution as a row-wise gather over every entry of
   /// U, kept as the reference the hyper-sparse push form is tested against (#68). Tests only.
   void solve_reference(double* b) const;
@@ -291,6 +317,27 @@ class SparseLu {
 
   Index m_ = 0;
   bool stopped_early_ = false;  ///< the last failure was a deadline, not a singular basis
+  bool hyper_sparse_ = false;   ///< see use_hyper_sparse()
+
+  // ---- hyper-sparse solves (#464, lu_hyper.cpp) ---------------------------------------
+  /// Row -> the step that retired it, and basis position -> the step that pivoted on it:
+  /// the inverses of pivot_row_ and pivot_col_, built at factorize().
+  std::vector<Index> step_of_row_;
+  std::vector<Index> step_of_position_;
+  /// Scratch for the symbolic reach: a mark per step (all zero between calls) and the two
+  /// reached sets, first the steps of one factor, then their closure through the other.
+  mutable std::vector<char> hs_mark_;
+  mutable std::vector<Index> hs_first_;
+  mutable std::vector<Index> hs_second_;
+  mutable LuSolveStats stats_;
+  void build_step_inverses();
+  /// The FTRAN (base factors only; the caller applies the etas) over the reached steps.
+  /// Returns false, having touched nothing, when the reach is too dense to pay.
+  [[nodiscard]] bool solve_hyper(double* b) const;
+  /// The BTRAN after the etas, over the reached steps; false, touching nothing, as above.
+  [[nodiscard]] bool solve_transpose_hyper(double* b) const;
+  /// Record one result's density in `bins`.
+  static void record_density(std::array<std::int64_t, 5>& bins, Index nonzeros, Index m);
   bool reference_elimination_ = false;  ///< see use_reference_elimination()
 
   // ---- the factors --------------------------------------------------------------------

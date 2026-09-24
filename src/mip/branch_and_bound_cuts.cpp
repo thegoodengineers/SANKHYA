@@ -203,7 +203,8 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
         cover_stats.supported_rows, cover_stats.covers_found, cover_stats.exact_separations,
         cover_stats.cuts_returned, cover_stats.best_base_violation);
   }
-  std::vector<Cut> gmi = generate_gmi_cuts(working_, relaxation);
+  std::vector<Cut> gmi =
+      generate_gmi_cuts(working_, relaxation, options_.get_bool("gmi_safety"));
   candidates.insert(candidates.end(), gmi.begin(), gmi.end());
   // Implied-bound cuts (#499): the line through a two-variable row's two binary cases,
   // tighter than the row when the continuous column's own bound caps one case.
@@ -278,6 +279,12 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
                     accepted.size(), passed, waiting_cuts_.size());
   }
   if (debug_.has_value()) append_planted_cut(&accepted);  // a test's planted cut (#500)
+  // With the loop on, round 1 counts against the same row budget as the rounds after it
+  // (#495): "at most the budget in all, round 1 included".
+  if (options_.get_bool("root_cut_loop")) {
+    take_within_budget(&accepted, &waiting_cuts_,
+                       static_cast<std::size_t>(root_cut_row_budget(original_root_rows)));
+  }
   if (accepted.empty()) return;
 
   append_cut_rows(accepted);

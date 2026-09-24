@@ -1152,6 +1152,7 @@ Solution Simplex::finish(SolveStatus status, const std::string& message, Count i
           pivot_rows_sparse_, pivot_rows_computed_);
     }
   }
+  report_solve_densities();
   // EVERY EXIT, not just the optimal one. The perturbation relaxes bounds, so any point
   // reported while it is active belongs to a problem whose feasible region is slightly
   // larger than the caller's. The optimal path already restores them before returning - it
@@ -1386,6 +1387,8 @@ std::optional<Solution> Simplex::prepare(const WarmStart* warm, const Timer& tim
     logger_.warning("basis_update '{}' is not recognised; using product-form", basis_update);
   }
   lu_.use_forrest_tomlin(basis_update == "forrest-tomlin");
+  // Hyper-sparse FTRAN/BTRAN (#464): the same arithmetic over the reached steps only.
+  lu_.use_hyper_sparse(options_.get_bool("lu_hyper_sparse"));
 
   build_working_problem();
   warm_started_ = warm != nullptr && !warm->empty() && seed_basis(*warm);
@@ -1961,6 +1964,7 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
                               NodeFactorCache* reuse) {
     Simplex simplex(problem, problem_options, logger, control);
     if (reuse != nullptr) simplex.use_factor_cache(reuse, cache.id);
+    simplex.count_distinct_costs_on(&model.col_cost);
     return engine == Engine::kDual ? simplex.run_dual(warm) : simplex.run(warm);
   };
   if (!cache.valid) return run_engine(model, options, nullptr);

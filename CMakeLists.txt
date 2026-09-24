@@ -275,6 +275,8 @@ set(SANKHYA_CORE_SOURCES
   src/la/ldl_supernodal.cpp
   src/la/lu.cpp
   src/la/lu_eliminate.cpp
+  src/la/lu_hyper.cpp
+  src/la/normal_pattern.cpp
   src/la/scaling.cpp
   src/la/sparse.cpp
   src/simplex/dense_lu.cpp
@@ -324,18 +326,24 @@ set(SANKHYA_CORE_SOURCES
   src/presolve/presolve.cpp
   src/presolve/probing.cpp
   src/ipm/centrality.cpp
+  src/ipm/dense_columns.cpp
+  src/ipm/column_side.cpp
   src/ipm/ipm.cpp
   src/ipm/model_space.cpp
+  src/ipm/proximal_system.cpp
   src/pdhg/pdhg.cpp
   src/pdhg/pdhg_evaluate.cpp
+  src/pdhg/pdhg_certificate.cpp
   src/pdhg/pdhg_halpern.cpp
   src/gpu/gpu_memory.cpp
   src/gpu/ipm_cudss.cpp
   src/gpu/multi_device.cpp
+  src/simplex/dual_ratio.cpp
   src/simplex/dual_simplex.cpp
   src/simplex/primal_simplex.cpp
   src/simplex/crossover.cpp
   src/simplex/simplex_push.cpp
+  src/simplex/simplex_report.cpp
   src/simplex/ranging.cpp
   src/simplex/factor_cache.cpp
   src/util/logging.cpp

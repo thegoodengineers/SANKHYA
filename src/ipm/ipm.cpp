@@ -32,6 +32,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -40,8 +41,13 @@
 
 #include "core/resource_limits.hpp"
 #include "ipm/centrality.hpp"
+#include "ipm/column_side.hpp"
+#include "ipm/dense_columns.hpp"
+#include "ipm/ipm_testing.hpp"
 #include "ipm/model_space.hpp"
+#include "ipm/proximal_system.hpp"
 #include "la/ldl.hpp"
+#include "la/normal_pattern.hpp"
 #include "la/scaling.hpp"
 #include "util/profiler.hpp"
 
@@ -206,6 +212,45 @@ class InteriorPoint {
   /// building it.
   std::int64_t max_factor_nonzeros_ = -1;
   bool factor_too_large_ = false;
+  /// Set when the refusal came BEFORE assembly (#467): the normal equations alone would
+  /// hold this many lower-triangle nonzeros (at least), and the factor at least as many.
+  std::int64_t predicted_normal_nonzeros_ = -1;
+  /// The dense-column path (#467, option ipm_dense_columns): the columns split off the
+  /// normal equations and corrected for by Sherman-Morrison-Woodbury inside conjugate
+  /// gradients. Inactive (no columns) by default, and then nothing below changes.
+  DenseColumnCorrection dense_;
+  bool dense_schur_failed_ = false;
+  Count pcg_iterations_ = 0;
+  Count pcg_solves_ = 0;
+  double worst_pcg_residual_ = 0.0;
+  /// Dense-column solves whose backward error stayed above kIpmPcgAcceptedBackwardError.
+  Count pcg_unconverged_ = 0;
+  /// Set by solve_normal() when the last dense-column or column-side (#469) solve did not
+  /// converge: the direction
+  /// built from it is not a Newton direction to the accuracy the loop assumes, and is
+  /// treated as a non-finite one is (regularization raised, refactorized, recomputed).
+  bool direction_inaccurate_ = false;
+  /// THE n x n SIDE (#469, option ipm_normal_side). When active, normal_lower_ and ldl_
+  /// hold N = Theta^-1 + A^T D^-1 A instead of M = A Theta A^T + D, and every solve with M
+  /// goes through column_side_: conjugate gradients on M preconditioned by the Woodbury
+  /// form built on N's factors. Inactive by default, and then nothing below changes.
+  ColumnSide column_side_;
+  bool column_side_active_ = false;
+  Count cg_iterations_ = 0;
+  Count cg_solves_ = 0;
+  double worst_backward_error_ = 0.0;
+  /// Column-side solves left above kIpmPcgAcceptedBackwardError: each set
+  /// direction_inaccurate_, exactly as an unconverged dense-column solve does.
+  Count cg_unconverged_ = 0;
+  /// Chooses the side for ipm_normal_side (#469) after build(), under the set-up's own
+  /// deadline as well as the solve's. Returns false, with `stopped` set to the finished
+  /// Solution, when a limit ended the choice or the choice declined the solve.
+  [[nodiscard]] bool choose_side(const Timer& timer, Solution* stopped);
+  /// Solve the normal equations for the factors in ldl_: the plain LDL^T solve with
+  /// kRefinementSteps of iterative refinement against normal_lower_, or, on the dense-column
+  /// path and on the n x n side (#469), preconditioned conjugate gradients against the whole
+  /// of A Theta A^T + D. The one place a direction's solve is judged, for every path.
+  void solve_normal(std::vector<double>* rhs);
 
   Index n_ = 0;
   Index m_ = 0;
@@ -284,6 +329,32 @@ class InteriorPoint {
   SparseMatrix normal_lower_;
   SparseLdl ldl_;
   bool analyzed_ = false;
+
+  // THE PROXIMAL PATH (#473, ipm_proximal_regularization, off by default): the regularized
+  // augmented system of ipm/proximal_system.hpp in place of the normal equations. ldl_ then
+  // holds ITS factors, so the reporting below reads the same object on either path; the
+  // dual purification, which needs the normal equations, gets its own factorization.
+  std::unique_ptr<ProximalSystem> proximal_;
+  double proximal_reg_ = tol::kIpmProximalStart;
+  SparseLdl purify_ldl_;
+  bool purify_analyzed_ = false;
+  Count refinement_steps_ = 0;
+  /// The worst RELATIVE unregularized residual a refined solve handed back (review of #473).
+  double worst_refinement_residual_ = 0.0;
+  /// Refined solves, and those left above tol::kIpmProximalRefinementTarget. A miss is not
+  /// silent: it is counted, reported in the IPM line and in the message of every stop that
+  /// is not optimal, and it shrinks rho for the next factorization (refinement_missed_).
+  Count refinement_solves_ = 0;
+  Count refinement_misses_ = 0;
+  bool refinement_missed_ = false;
+  /// "augmented system" on the proximal path, "normal equations" otherwise: what a message
+  /// about the factorization is about.
+  [[nodiscard]] const char* system_name() const noexcept {
+    return proximal_ != nullptr ? "augmented system" : "normal equations";
+  }
+  /// The proximal half of newton_direction(): the Newton system solved through the
+  /// augmented factors with refinement on the unregularized matrix, for the given g.
+  void proximal_newton_direction(const std::vector<double>& g);
 
   // Directions.
   std::vector<double> dx_, dy_, dsl_, dzl_, dsu_, dzu_;
@@ -765,12 +836,80 @@ bool InteriorPoint::factorize() {
     }
   }
   Profiler* profiler = logger_.profiler();
-  bool assembled = false;
-  {
-    ProfileScope timed(profiler, "normal equations", ProfileMode::kDetailed);
-    assembled = normal_equations_lower(model_.matrix, theta_x, row_shift, dual_regularization_,
-                                       &normal_lower_, should_stop_);
+  // THE SIZE IS KNOWN BEFORE THE MATRIX IS BUILT (#467). The factor's pattern contains the
+  // lower triangle of the normal equations, so a normal-equations matrix over the factor
+  // budget is a factor over it too, and the ordering would refuse it - after an assembly
+  // that on Linf_520c took 112 s and 474 million nonzeros, and on bdry2 would need 7.9e9.
+  // Counting from the pattern of A costs at most the assembly's arithmetic and none of its
+  // memory, and usually one pass over the column counts. The proximal path (#473) never forms
+  // the normal equations - it factors the augmented system - so the count would refuse
+  // models that path solves; it is skipped there.
+  // The count is of the system that will be FORMED (#469): on the n x n side that is N,
+  // with the pattern of A^T A, not A Theta A^T - one dense column makes the latter dense and
+  // leaves the former sparse, and counting the wrong one refused models the n side solves.
+  if (!analyzed_ && max_factor_nonzeros_ >= 0 && proximal_ == nullptr) {
+    std::vector<char> skip(static_cast<std::size_t>(n_), 0);
+    for (Index j = 0; j < n_; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      skip[u] = fixed_[u] || (dense_.active() && dense_.mask()[u] != 0) ? 1 : 0;
+    }
+    const NormalPrediction prediction =
+        column_side_active_
+            ? column_side_.predict_column_side(max_factor_nonzeros_, should_stop_)
+            : predict_normal_nonzeros(model_.matrix, skip, max_factor_nonzeros_, should_stop_);
+    if (prediction.stopped) {
+      assembly_stopped_ = true;
+      return false;
+    }
+    if (prediction.over_cap) {
+      factor_too_large_ = true;
+      predicted_normal_nonzeros_ = prediction.nonzeros;
+      return false;
+    }
+    logger_.verbose(
+        "interior point: normal equations{} predicted from the pattern of A: {} {} nonzeros",
+        column_side_active_ ? " (n x n side)" : "", prediction.exact ? "exactly" : "at most",
+        prediction.nonzeros);
   }
+  std::vector<double> theta_sparse;
+  std::vector<double> assembly_shift;
+  if (dense_.active()) {
+    dense_.sparse_theta(theta_x, &theta_sparse);
+    (void)dense_.preconditioner_shift(model_.matrix, theta_x, row_shift, dual_regularization_,
+                                      &assembly_shift);
+  }
+  bool assembled = false;
+  // The proximal path (#473) factors the augmented system instead; its Theta^-1 carries no
+  // regularization, which the system adds itself as rho and delta.
+  std::vector<double> theta_inverse;
+  if (proximal_ != nullptr) {
+    theta_inverse.assign(static_cast<std::size_t>(total_), 0.0);
+    for (Index k = 0; k < total_; ++k) {
+      const auto u = static_cast<std::size_t>(k);
+      if (has_lower_[u]) theta_inverse[u] += zl_[u] / sl_[u];
+      if (has_upper_[u]) theta_inverse[u] += zu_[u] / su_[u];
+    }
+    // The floor rises with each recovery from a non-finite direction (#209), by the
+    // proximal path's own factor and to its own cap (1e-8 -> 1e-6 -> 1e-4), not the default
+    // path's x1e4, which took rho to 1. A refinement that missed its target since the last
+    // factorization shrinks rho toward that floor first.
+    const double floor = ProximalSystem::recovery_floor(regularization_raises_);
+    proximal_reg_ =
+        ProximalSystem::next_regularization(proximal_reg_, mu_, floor, refinement_missed_);
+    refinement_missed_ = false;
+    proximal_->assemble(theta_inverse, proximal_reg_, proximal_reg_);
+    assembled = true;
+  } else {
+    ProfileScope timed(profiler, "normal equations", ProfileMode::kDetailed);
+    assembled =
+        column_side_active_
+            ? column_side_.assemble(theta_x, row_shift, dual_regularization_, &normal_lower_,
+                                    should_stop_)
+            : normal_equations_lower(model_.matrix, dense_.active() ? theta_sparse : theta_x,
+                                     dense_.active() ? assembly_shift : row_shift,
+                                     dual_regularization_, &normal_lower_, should_stop_);
+  }
+  const SparseMatrix& system = proximal_ != nullptr ? proximal_->matrix() : normal_lower_;
   if (!assembled) {
     assembly_stopped_ = true;
     return false;
@@ -791,15 +930,15 @@ bool InteriorPoint::factorize() {
     return false;
   };
   if (!analyzed_) {
-    logger_.verbose("interior point: normal equations assembled ({} nonzeros) at {:.2f}s",
-                    normal_lower_.num_nonzeros(),
+    logger_.verbose("interior point: {} assembled ({} nonzeros) at {:.2f}s", system_name(),
+                    system.num_nonzeros(),
                     clock_ != nullptr ? clock_->elapsed_seconds() : -1.0);
     Timer ordering_clock;
     ldl_.set_factor_budget(max_factor_nonzeros_);
     bool analysed = false;
     {
       ProfileScope timed(profiler, "ordering", ProfileMode::kDetailed);
-      analysed = ldl_.analyze(normal_lower_, setup_stop);
+      analysed = ldl_.analyze(system, setup_stop);
     }
     if (!analysed) {
       // The pattern count passed the cap before the pattern was stored (#246); the exact
@@ -809,9 +948,9 @@ bool InteriorPoint::factorize() {
       return false;
     }
     logger_.verbose(
-        "interior point: normal equations {} nonzeros, ordered and analysed in "
+        "interior point: {} {} nonzeros, ordered and analysed in "
         "{:.2f}s, factor {} nonzeros",
-        normal_lower_.num_nonzeros(), ordering_clock.elapsed_seconds(),
+        system_name(), system.num_nonzeros(), ordering_clock.elapsed_seconds(),
         ldl_.factor_nonzeros() + ldl_.dimension());
     analyzed_ = true;
     // The ordering knows the factor's size before a single entry of it exists. A polish
@@ -827,8 +966,14 @@ bool InteriorPoint::factorize() {
   bool factored = false;
   {
     ProfileScope timed(profiler, "factorization", ProfileMode::kDetailed);
-    factored = ldl_.factorize(normal_lower_, dual_regularization_,
-                              factorizations_ == 0 ? setup_stop : should_stop_);
+    const SparseLdl::ShouldStop& stop = factorizations_ == 0 ? setup_stop : should_stop_;
+    if (proximal_ != nullptr) {
+      int attempts = 0;
+      factored = proximal_->factorize(ldl_, theta_inverse, &proximal_reg_, stop, &attempts);
+      factorizations_ += attempts > 1 ? attempts - 1 : 0;
+    } else {
+      factored = ldl_.factorize(normal_lower_, dual_regularization_, stop);
+    }
   }
   if (!factored) {
     if (setup_past_share && !(should_stop_ && should_stop_())) ordering_declined_ = true;
@@ -836,32 +981,58 @@ bool InteriorPoint::factorize() {
   }
   ++factorizations_;
   regularized_pivots_ += ldl_.regularized_pivots();
+  if (dense_.active() &&
+      !dense_.prepare(ldl_, model_.matrix, theta_x, row_shift, dual_regularization_)) {
+    dense_schur_failed_ = true;
+    return false;
+  }
   return true;
 }
 
-/// One Newton direction for the current r_mu terms: solves the normal equations for dy,
-/// then recovers dx, ds, dz. The factorization in ldl_ is the current one.
-void InteriorPoint::newton_direction() {
-  // g_k = r_c - r_mu_l/s_l + z_l r_l/s_l + r_mu_u/s_u - z_u r_u/s_u; rhs = r_b + Abar Theta g.
-  std::vector<double> g(static_cast<std::size_t>(total_));
-  std::vector<double> theta_g(static_cast<std::size_t>(total_));
-  for (Index k = 0; k < total_; ++k) {
-    const auto u = static_cast<std::size_t>(k);
-    double value = r_c_[u];
-    if (has_lower_[u]) value += (-r_mu_l_[u] + zl_[u] * r_l_[u]) / sl_[u];
-    if (has_upper_[u]) value += (r_mu_u_[u] - zu_[u] * r_u_[u]) / su_[u];
-    g[u] = value;
-    theta_g[u] = theta_[u] * value;
+void InteriorPoint::solve_normal(std::vector<double>* rhs) {
+  if (column_side_active_) {
+    ColumnSideReport report = column_side_.solve(ldl_, rhs->data());
+    // Tests only (ipm_testing.hpp): report this solve as unconverged.
+    if (testing::take_rejected_column_side_solve()) report.converged = false;
+    ++cg_solves_;
+    cg_iterations_ += report.iterations;
+    worst_backward_error_ = std::max(worst_backward_error_, report.backward_error);
+    if (!report.converged) {
+      // THE SAME RULE AS THE DENSE-COLUMN PATH (review of #616 and #620): a solve left above
+      // kIpmPcgAcceptedBackwardError is not a Newton direction to the accuracy the loop
+      // assumes, and is raised, refactorized and recomputed like a non-finite one.
+      ++cg_unconverged_;
+      direction_inaccurate_ = true;
+      logger_.verbose(
+          "interior point: column-side conjugate gradients did not converge ({} step(s), "
+          "backward error {:.1e})",
+          report.iterations, report.backward_error);
+    }
+    return;
   }
-  std::vector<double> rhs(static_cast<std::size_t>(m_));
-  constraint_times(theta_g, &rhs);
-  for (Index i = 0; i < m_; ++i)
-    rhs[static_cast<std::size_t>(i)] += r_b_[static_cast<std::size_t>(i)];
-
+  if (dense_.active()) {
+    const PcgReport report = dense_.solve(rhs->data());
+    ++pcg_solves_;
+    pcg_iterations_ += report.iterations;
+    worst_pcg_residual_ = std::max(worst_pcg_residual_, report.relative_residual);
+    if (!report.converged) {
+      // NEVER A SILENT INEXACT DIRECTION. Neither the Woodbury nor the sparse-factor
+      // preconditioner brought the backward error under kIpmPcgAcceptedBackwardError within
+      // its budget; the caller sees the flag and recovers or stops, and says why.
+      ++pcg_unconverged_;
+      direction_inaccurate_ = true;
+      logger_.verbose(
+          "interior point: dense-column conjugate gradients did not converge ({} step(s), "
+          "backward error {:.1e}{}, Woodbury preconditioner {})",
+          report.iterations, report.relative_residual, report.broke_down ? ", broke down" : "",
+          dense_.woodbury_available() ? "available" : "not positive definite");
+    }
+    return;
+  }
   // Solve with iterative refinement against the matrix actually built (the factors carry
   // the regularization; the residual is measured against the unregularized-by-pivot M).
-  dy_ = rhs;
-  ldl_.solve(dy_.data());
+  const std::vector<double> b = *rhs;
+  ldl_.solve(rhs->data());
   const auto multiply_normal = [&](const std::vector<double>& v, std::vector<double>* out) {
     // M is stored as its lower triangle: M v = L v + L^T v - diag v.
     std::fill(out->begin(), out->end(), 0.0);
@@ -880,15 +1051,42 @@ void InteriorPoint::newton_direction() {
   };
   std::vector<double> residual(static_cast<std::size_t>(m_));
   for (int step = 0; step < kRefinementSteps; ++step) {
-    multiply_normal(dy_, &residual);
+    multiply_normal(*rhs, &residual);
     for (Index i = 0; i < m_; ++i) {
       residual[static_cast<std::size_t>(i)] =
-          rhs[static_cast<std::size_t>(i)] - residual[static_cast<std::size_t>(i)];
+          b[static_cast<std::size_t>(i)] - residual[static_cast<std::size_t>(i)];
     }
     ldl_.solve(residual.data());
     for (Index i = 0; i < m_; ++i)
-      dy_[static_cast<std::size_t>(i)] += residual[static_cast<std::size_t>(i)];
+      (*rhs)[static_cast<std::size_t>(i)] += residual[static_cast<std::size_t>(i)];
   }
+}
+
+/// One Newton direction for the current r_mu terms: solves the normal equations for dy,
+/// then recovers dx, ds, dz. The factorization in ldl_ is the current one.
+void InteriorPoint::newton_direction() {
+  // g_k = r_c - r_mu_l/s_l + z_l r_l/s_l + r_mu_u/s_u - z_u r_u/s_u; rhs = r_b + Abar Theta g.
+  std::vector<double> g(static_cast<std::size_t>(total_));
+  std::vector<double> theta_g(static_cast<std::size_t>(total_));
+  for (Index k = 0; k < total_; ++k) {
+    const auto u = static_cast<std::size_t>(k);
+    double value = r_c_[u];
+    if (has_lower_[u]) value += (-r_mu_l_[u] + zl_[u] * r_l_[u]) / sl_[u];
+    if (has_upper_[u]) value += (r_mu_u_[u] - zu_[u] * r_u_[u]) / su_[u];
+    g[u] = value;
+    theta_g[u] = theta_[u] * value;
+  }
+  if (proximal_ != nullptr) {
+    proximal_newton_direction(g);
+    return;
+  }
+  std::vector<double> rhs(static_cast<std::size_t>(m_));
+  constraint_times(theta_g, &rhs);
+  for (Index i = 0; i < m_; ++i)
+    rhs[static_cast<std::size_t>(i)] += r_b_[static_cast<std::size_t>(i)];
+
+  dy_ = rhs;
+  solve_normal(&dy_);
 
   // dx = Theta (Abar^T dy - g); ds_l = dx + r_l; ds_u = -dx + r_u;
   // dz_l = (r_mu_l - z_l ds_l)/s_l; dz_u = (r_mu_u - z_u ds_u)/s_u.
@@ -992,6 +1190,37 @@ InteriorPoint::Centrality InteriorPoint::centrality_after(double alpha_p,
   return c;
 }
 
+void InteriorPoint::proximal_newton_direction(const std::vector<double>& g) {
+  const ProximalSystem::Refinement refined =
+      proximal_->solve(ldl_, g, r_b_, tol::kIpmProximalRefinementSteps, &dx_, &dy_);
+  refinement_steps_ += refined.steps;
+  ++refinement_solves_;
+  // THE REFINEMENT CAN FAIL, AND NOT SILENTLY (review of #473). The residual is measured
+  // relative to the right-hand side, so the target means the same on every model. A finite
+  // miss is counted and shrinks rho for the next factorization; a non-finite one is a
+  // non-finite direction, which the #209 recovery in run() handles.
+  const double relative = refined.relative_residual();
+  if (std::isfinite(relative)) {
+    worst_refinement_residual_ = std::max(worst_refinement_residual_, relative);
+    if (relative > tol::kIpmProximalRefinementTarget) {
+      ++refinement_misses_;
+      refinement_missed_ = true;
+    }
+  }
+  // ds and dz from dx exactly as the normal-equations path recovers them.
+  for (Index k = 0; k < total_; ++k) {
+    const auto u = static_cast<std::size_t>(k);
+    if (has_lower_[u]) {
+      dsl_[u] = dx_[u] + r_l_[u];
+      dzl_[u] = (r_mu_l_[u] - zl_[u] * dsl_[u]) / sl_[u];
+    }
+    if (has_upper_[u]) {
+      dsu_[u] = -dx_[u] + r_u_[u];
+      dzu_[u] = (r_mu_u_[u] - zu_[u] * dsu_[u]) / su_[u];
+    }
+  }
+}
+
 double InteriorPoint::step_length(const std::vector<double>& s, const std::vector<double>& ds,
                                   const std::vector<double>& t,
                                   const std::vector<double>& dt) const {
@@ -1013,8 +1242,39 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
   solution.message = message;
   solution.iterations = iterations;
   solution.solve_seconds = seconds;
-  logger_.info("IPM: {} iterations, {} factorizations, {} regularized pivot(s) in total",
-               iterations, factorizations_, regularized_pivots_);
+  if (proximal_ == nullptr) {
+    logger_.info("IPM: {} iterations, {} factorizations, {} regularized pivot(s) in total",
+                 iterations, factorizations_, regularized_pivots_);
+  } else {
+    const std::string refinement =
+        fmt::format("{} of {} refined solve(s) above the {:.0e} refinement target",
+                    refinement_misses_, refinement_solves_, tol::kIpmProximalRefinementTarget);
+    logger_.info("IPM: {} iterations, {} factorizations, {} regularized pivot(s) in total, {}",
+                 iterations, factorizations_, regularized_pivots_, refinement);
+    logger_.verbose(
+        "interior point: proximal regularization {:.1e} at the end, {} refinement "
+        "corrections on the unregularized system, worst relative residual kept {:.1e}",
+        proximal_reg_, refinement_steps_, worst_refinement_residual_);
+    // Every stop that is not a proof says how the refinement went: a feasible point or a
+    // limit reached on directions that missed their target is a different story from one
+    // reached on exact ones.
+    if (status != SolveStatus::kOptimal && status != SolveStatus::kNotSolved) {
+      solution.message += (solution.message.empty() ? "" : "; ") + refinement;
+    }
+  }
+  if (dense_.active()) {
+    logger_.info(
+        "IPM: dense-column correction over {} column(s): {} conjugate-gradient step(s) in {} "
+        "solve(s), worst relative residual {:.1e}, {} solve(s) not converged",
+        dense_.columns().size(), pcg_iterations_, pcg_solves_, worst_pcg_residual_,
+        pcg_unconverged_);
+  }
+  if (column_side_active_) {
+    logger_.info(
+        "IPM: n x n side (#469): {} conjugate-gradient step(s) in {} solve(s), worst "
+        "backward error {:.1e}, {} solve(s) not converged",
+        cg_iterations_, cg_solves_, worst_backward_error_, cg_unconverged_);
+  }
   if (corrector_cap_ > 0) {
     logger_.verbose("interior point: {} centrality correctors tried, {} kept (#472)",
                     correctors_tried_, correctors_kept_);
@@ -1163,7 +1423,9 @@ bool InteriorPoint::model_space_holds_as_reported(bool throttled) {
 }
 
 bool InteriorPoint::purify_duals() {
-  if (m_ == 0 || total_ == 0 || !analyzed_) return false;
+  // On the proximal path ldl_ holds the augmented system's factors; the normal equations
+  // the purification needs are ordered once, on first use, into their own object (#473).
+  if (m_ == 0 || total_ == 0 || (!analyzed_ && proximal_ == nullptr)) return false;
   const auto T = static_cast<std::size_t>(total_);
   const auto M = static_cast<std::size_t>(m_);
 
@@ -1251,15 +1513,46 @@ bool InteriorPoint::purify_duals() {
       row_shift[static_cast<std::size_t>(k - n_)] = 1.0;
     }
   }
-  if (!normal_equations_lower(model_.matrix, theta_x, row_shift, dual_regularization_,
-                              &normal_lower_, should_stop_)) {
+  // On the dense-column path (#467) the dense columns stay out of the assembled matrix,
+  // whose pattern the analysis fixed, and come back through the correction.
+  std::vector<double> theta_sparse;
+  std::vector<double> assembly_shift;
+  if (dense_.active()) {
+    dense_.sparse_theta(theta_x, &theta_sparse);
+    (void)dense_.preconditioner_shift(model_.matrix, theta_x, row_shift, dual_regularization_,
+                                      &assembly_shift);
+  }
+  const bool assembled =
+      column_side_active_
+          ? column_side_.assemble(theta_x, row_shift, dual_regularization_, &normal_lower_,
+                                  should_stop_)
+          : normal_equations_lower(model_.matrix, dense_.active() ? theta_sparse : theta_x,
+                                   dense_.active() ? assembly_shift : row_shift,
+                                   dual_regularization_, &normal_lower_, should_stop_);
+  if (!assembled) return false;
+  SparseLdl& ldl = proximal_ != nullptr ? purify_ldl_ : ldl_;
+  if (proximal_ != nullptr && !purify_analyzed_) {
+    ldl.set_factor_budget(max_factor_nonzeros_);
+    if (!ldl.analyze(normal_lower_, should_stop_)) return false;
+    purify_analyzed_ = true;
+  }
+  if (!ldl.factorize(normal_lower_, dual_regularization_, should_stop_)) return false;
+  ++factorizations_;
+  if (dense_.active() &&
+      !dense_.prepare(ldl_, model_.matrix, theta_x, row_shift, dual_regularization_)) {
     return false;
   }
-  if (!ldl_.factorize(normal_lower_, dual_regularization_, should_stop_)) return false;
-  ++factorizations_;
 
   std::vector<double> dy = rhs;
-  ldl_.solve(dy.data());
+  if (column_side_active_) {
+    // An unconverged solve is not a least-squares correction; the point stays as it is.
+    if (!column_side_.solve(ldl, dy.data()).converged) return false;
+  } else if (dense_.active()) {
+    // An unconverged solve is not a least-squares correction; the point stays as it is.
+    if (!dense_.solve(dy.data()).converged) return false;
+  } else {
+    ldl.solve(dy.data());
+  }
   if (!std::all_of(dy.begin(), dy.end(), [](double v) { return std::isfinite(v); }))
     return false;
 
@@ -1304,6 +1597,82 @@ bool InteriorPoint::purify_duals() {
       "interior point: dual purification over {} interior columns took their worst relative "
       "reduced cost from {:.3e} to {:.3e}; worst sign violation {:.3e} -> {:.3e}",
       count, interior_before, interior_after, sign_before, sign_after);
+  return true;
+}
+
+bool InteriorPoint::choose_side(const Timer& timer, Solution* stopped) {
+  // THE SIDE (#469). "rows" is the m x m system every earlier version solved; "columns" the
+  // n x n one; "auto" compares the two when the rows outnumber the columns, and otherwise
+  // takes the column side only to rescue a row side that is over the factor budget.
+  const std::string side = options_.get_string("ipm_normal_side");
+  if (side == "rows") return true;
+  // NEITHER EXCLUSION IS SILENT (review of #620). The proximal path factors the augmented
+  // system and has no normal equations to take a side of; the dense-column correction is
+  // built on the row side's factor, and the column side has no dense-column fill to split
+  // off. Each wins over ipm_normal_side, as the proximal path already wins over the
+  // dense-column one, and the log says so once.
+  if (proximal_ != nullptr) {
+    logger_.info(
+        "interior point: ipm_normal_side = {} does not apply with ipm_proximal_regularization "
+        "(the augmented system has no normal equations); the option is ignored",
+        side);
+    return true;
+  }
+  if (options_.get_bool("ipm_dense_columns")) {
+    logger_.info(
+        "interior point: ipm_normal_side = {} does not combine with ipm_dense_columns (the "
+        "dense-column correction is built on the row side's factor); the row side is kept",
+        side);
+    return true;
+  }
+  column_side_.set_matrix(model_.matrix,
+                          std::vector<bool>(fixed_.begin(), fixed_.begin() + n_));
+  if (side == "columns") {
+    column_side_active_ = true;
+  } else {
+    // THE CHOICE IS SET-UP WORK (#357): it counts, builds and orders up to two systems, so it
+    // answers to the set-up's share of the time limit as the first ordering does, and a
+    // choice still running at the share declines the solve instead of eating the rest.
+    bool past_share = false;
+    const SparseLdl::ShouldStop setup_stop = [this, &past_share] {
+      if (should_stop_ && should_stop_()) return true;
+      if (run_clock_ != nullptr && run_clock_->elapsed_seconds() > ordering_deadline_) {
+        past_share = true;
+        return true;
+      }
+      return false;
+    };
+    const SideChoice choice =
+        column_side_.choose(m_ > n_, max_factor_nonzeros_, ldl_.ordering_budget(), setup_stop);
+    if (choice.side == NormalSide::kStopped) {
+      const double elapsed = timer.elapsed_seconds();
+      if (past_share && !(should_stop_ && should_stop_())) {
+        ordering_declined_ = true;
+        *stopped = finish(
+            SolveStatus::kNotSolved,
+            fmt::format("the interior point declined: choosing the side of the normal "
+                        "equations (ipm_normal_side = auto, #469) did not finish within "
+                        "ipm_setup_share = {:g} of the {:g}s time limit ({:.1f}s)",
+                        options_.get_double("ipm_setup_share"), limits_.time_limit(), elapsed),
+            0, elapsed);
+        return false;
+      }
+      const bool interrupted = control_ != nullptr && control_->interruption_requested();
+      *stopped = finish(
+          interrupted ? SolveStatus::kInterrupted : SolveStatus::kTimeLimit,
+          interrupted ? std::string("interrupted before the first iteration")
+                      : fmt::format("time limit {:g}s reached before the first iteration, "
+                                    "while choosing the side of the normal equations",
+                                    limits_.time_limit()),
+          0, elapsed);
+      return false;
+    }
+    logger_.verbose("interior point: {}", choice.reason);
+    column_side_active_ = choice.side == NormalSide::kColumns;
+  }
+  logger_.info("Interior point: normal equations on the {} side ({} x {})",
+               column_side_active_ ? "column" : "row", column_side_active_ ? n_ : m_,
+               column_side_active_ ? n_ : m_);
   return true;
 }
 
@@ -1360,8 +1729,53 @@ Solution InteriorPoint::run() {
   }
   build();
   corrector_cap_ = static_cast<int>(options_.get_int("ipm_centrality_correctors"));
+  if (options_.get_bool("ipm_proximal_regularization")) {
+    proximal_ = std::make_unique<ProximalSystem>(model_.matrix, fixed_);
+    purify_ldl_.set_ordering_budget(ldl_.ordering_budget());
+    // The supernodal kernel (#470) factors the positive-definite normal equations only; the
+    // signed quasi-definite factorization this path runs is the scalar one whatever the
+    // option says (la/ldl.cpp), and a user who set both is told so, once.
+    if (ldl_.supernodal()) {
+      logger_.info(
+          "interior point: ipm_supernodal does not apply to the augmented system of "
+          "ipm_proximal_regularization, whose signed factorization stays scalar");
+    }
+  }
   logger_.verbose("interior point: built in {:.2f}s from the start of the solve",
                   timer.elapsed_seconds());
+  if (options_.get_bool("ipm_dense_columns") && proximal_ != nullptr) {
+    // The augmented system of the proximal path has no dense-column fill to split off, and
+    // this path's Schur complement is built on the normal-equations factor, which the
+    // proximal path does not use for its directions. The two do not combine; said once.
+    logger_.info(
+        "interior point: ipm_dense_columns does not apply with ipm_proximal_regularization "
+        "(the augmented system has no dense-column fill); the dense-column path is off");
+  } else if (options_.get_bool("ipm_dense_columns")) {
+    // A fixed column has Theta 0 and contributes nothing to the normal equations, so it is
+    // never dense in the sense that matters here.
+    std::vector<char> eligible(static_cast<std::size_t>(n_), 0);
+    for (Index j = 0; j < n_; ++j) {
+      eligible[static_cast<std::size_t>(j)] = fixed_[static_cast<std::size_t>(j)] ? 0 : 1;
+    }
+    dense_.set_columns(model_.matrix,
+                       find_dense_columns(model_.matrix, eligible,
+                                          options_.get_double("ipm_dense_column_factor"),
+                                          tol::kIpmMaxDenseColumns));
+    if (dense_.active()) {
+      Index largest = 0;
+      for (const Index j : dense_.columns()) {
+        largest = std::max(largest, model_.matrix.column(j).size);
+      }
+      logger_.info(
+          "Interior point: {} dense column(s) (the largest with {} entries) split off the "
+          "normal equations and corrected for by Sherman-Morrison-Woodbury (#467)",
+          dense_.columns().size(), largest);
+    }
+  }
+  {
+    Solution stopped;
+    if (!choose_side(timer, &stopped)) return stopped;
+  }
   // A polish arrives with most of its budget spent by the first-order phase; a build that
   // already used the rest must not go on to assemble and order for nothing (#232).
   if (should_stop_ && should_stop_()) {
@@ -1497,14 +1911,36 @@ Solution InteriorPoint::run() {
           iterations, timer.elapsed_seconds());
     }
     if (!factorize()) {
+      if (factor_too_large_ && predicted_normal_nonzeros_ >= 0) {
+        return finish(
+            warm_ != nullptr ? SolveStatus::kNotSolved : SolveStatus::kNumericalError,
+            fmt::format(
+                "declined before assembly: the normal equations{} alone would hold at least "
+                "{} lower-triangle nonzeros, above {} = {}, and their factor at least as many "
+                "(#467); {}raise the option or use another engine",
+                column_side_active_ ? " on the n x n side" : "", predicted_normal_nonzeros_,
+                warm_ != nullptr ? "polish_max_factor_nonzeros" : "ipm_max_factor_nonzeros",
+                max_factor_nonzeros_,
+                dense_.active() || options_.get_bool("ipm_dense_columns") || column_side_active_
+                    ? ""
+                    : "ipm_dense_columns=true splits dense columns off, or "),
+            iterations, timer.elapsed_seconds());
+      }
+      if (dense_schur_failed_) {
+        return finish(SolveStatus::kNumericalError,
+                      "the Schur complement of the dense-column correction was not "
+                      "numerically positive definite (#467)",
+                      iterations, timer.elapsed_seconds());
+      }
       if (factor_too_large_) {
         // A declined polish leaves the first-order answer standing, so it is not a failure;
         // a declined plain solve has nothing to fall back on and says so as one.
         return finish(
             warm_ != nullptr ? SolveStatus::kNotSolved : SolveStatus::kNumericalError,
             fmt::format(
-                "declined: the factor of the normal equations would hold {} nonzeros, "
+                "declined: the factor of the {} would hold {} nonzeros, "
                 "above {} = {}; raise the option or use another engine",
+                system_name(),
                 ldl_.factor_too_large()
                     ? fmt::format("more than {}", max_factor_nonzeros_)
                     : fmt::format("{}", ldl_.factor_nonzeros() + ldl_.dimension()),
@@ -1518,10 +1954,10 @@ Solution InteriorPoint::run() {
         return finish(
             SolveStatus::kNotSolved,
             fmt::format("the interior point declined: the ordering and first factorization "
-                        "of the normal equations ({} factor nonzeros) did not finish within "
+                        "of the {} ({} factor nonzeros) did not finish within "
                         "ipm_setup_share = {:g} of the {:g}s time limit ({:.1f}s), so the "
                         "factorization is not affordable here",
-                        ldl_.factor_nonzeros() + ldl_.dimension(),
+                        system_name(), ldl_.factor_nonzeros() + ldl_.dimension(),
                         options_.get_double("ipm_setup_share"), limits_.time_limit(),
                         timer.elapsed_seconds()),
             iterations, timer.elapsed_seconds());
@@ -1529,11 +1965,11 @@ Solution InteriorPoint::run() {
       if (ldl_.ordering_too_large()) {
         return finish(
             SolveStatus::kNumericalError,
-            fmt::format("the ordering of the normal equations was abandoned: its quotient "
+            fmt::format("the ordering of the {} was abandoned: its quotient "
                         "graph passed ipm_max_ordering_entries = {} list entries, so the "
                         "fill-in is beyond what this machine can hold (#246); raise the "
                         "option or use another engine",
-                        ldl_.ordering_budget()),
+                        system_name(), ldl_.ordering_budget()),
             iterations, timer.elapsed_seconds());
       }
       // Told to stop rather than unable to: the difference matters to a reader, and to the
@@ -1542,20 +1978,21 @@ Solution InteriorPoint::run() {
         restore_best();
         return finish(
             SolveStatus::kTimeLimit,
-            fmt::format(
-                "time limit {:g}s reached inside the {}, which was abandoned", time_limit,
-                assembly_stopped_ ? "assembly of the normal equations" : "factorization"),
+            fmt::format("time limit {:g}s reached inside the {}, which was abandoned",
+                        time_limit,
+                        assembly_stopped_ ? fmt::format("assembly of the {}", system_name())
+                                          : std::string("factorization")),
             iterations, timer.elapsed_seconds());
       }
       if (ldl_.pattern_too_large()) {
         return finish(SolveStatus::kNumericalError,
-                      fmt::format("the factor of the normal equations would hold more than "
+                      fmt::format("the factor of the {} would hold more than "
                                   "{} nonzeros, which this build cannot address (#305)",
-                                  kMaxNonzeros),
+                                  system_name(), kMaxNonzeros),
                       iterations, timer.elapsed_seconds());
       }
       return finish(SolveStatus::kNumericalError,
-                    "the normal equations could not be factorized", iterations,
+                    fmt::format("the {} could not be factorized", system_name()), iterations,
                     timer.elapsed_seconds());
     }
 
@@ -1655,8 +2092,13 @@ Solution InteriorPoint::run() {
         r_mu_l_[u] = has_lower_[u] ? -sl_[u] * zl_[u] : 0.0;
         r_mu_u_[u] = has_upper_[u] ? -su_[u] * zu_[u] : 0.0;
       }
+      direction_inaccurate_ = false;
       newton_direction();
-      if (!direction_is_finite()) return false;
+      // Tests only (ipm_testing.hpp): poison this direction to reach the #209 recovery.
+      if (testing::take_poisoned_direction() && !dx_.empty()) {
+        dx_[0] = std::numeric_limits<double>::quiet_NaN();
+      }
+      if (!direction_is_finite() || direction_inaccurate_) return false;
       const double alpha_p_aff = step_length(sl_, dsl_, su_, dsu_);
       const double alpha_d_aff = step_length(zl_, dzl_, zu_, dzu_);
       double mu_aff = 0.0;
@@ -1679,7 +2121,7 @@ Solution InteriorPoint::run() {
         if (has_upper_[u]) r_mu_u_[u] = sigma * mu_ - su_[u] * zu_[u] - dsu_[u] * dzu_[u];
       }
       newton_direction();
-      return direction_is_finite();
+      return direction_is_finite() && !direction_inaccurate_;
     };
     bool step_is_finite = predictor_corrector();
     // A NON-FINITE DIRECTION IS CAUGHT BEFORE IT IS TAKEN (#209). On the 5,000-row
@@ -1698,9 +2140,13 @@ Solution InteriorPoint::run() {
         dual_regularization_ *= kRegularizationRaise;
         ++regularization_raises_;
         logger_.verbose(
-            "interior point: non-finite direction at iteration {}; "
+            "interior point: {} direction at iteration {}; "
             "regularization raised to {:.1e} and the step recomputed",
-            iterations, dual_regularization_);
+            direction_inaccurate_ ? "inaccurate (conjugate gradients did not converge)"
+                                  : "non-finite",
+            iterations,
+            proximal_ != nullptr ? ProximalSystem::recovery_floor(regularization_raises_)
+                                 : dual_regularization_);
         if (!factorize()) break;
         step_is_finite = predictor_corrector();
       }
@@ -1721,8 +2167,15 @@ Solution InteriorPoint::run() {
             converged_here ? SolveStatus::kOptimal
                            : (usable ? SolveStatus::kFeasible : SolveStatus::kNumericalError),
             fmt::format(
-                "the Newton direction was not finite at iteration {} after {} "
+                "the Newton direction was {} at iteration {} after {} "
                 "regularization raise(s); {}",
+                direction_inaccurate_
+                    ? (column_side_active_
+                           ? "not solved to accuracy (the column-side conjugate gradients did "
+                             "not converge, #469)"
+                           : "not solved to accuracy (the dense-column conjugate gradients "
+                             "did not converge, #467)")
+                    : "not finite",
                 iterations, regularization_raises_,
                 converged_here
                     ? std::string("the iterate before it is within a decade of every "

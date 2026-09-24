@@ -179,6 +179,14 @@ inline constexpr double kZeroDrop = 1e-11;
 /// 0.01 is the standard simplex compromise between sparsity and stability (Suhl & Suhl).
 inline constexpr double kMarkowitzThreshold = 0.01;
 
+/// Hyper-sparse FTRAN and BTRAN (#464, lu_hyper_sparse): the symbolic reach is tried when
+/// the right-hand side has at most this fraction of m nonzeros, and abandoned for the full
+/// loops once the steps it reaches pass the same fraction. Hall & McKinnon, "Hyper-sparsity
+/// in the revised simplex method and how to exploit it", Comput. Optim. Appl. 32 (2005),
+/// call a result hyper-sparse below 10% and find the full loops cheaper above it; the
+/// density bins the LU logs (LuSolveStats) are there to re-set it from our own data.
+inline constexpr double kHyperSparseDensity = 0.10;
+
 /// Below this, a computed pivot element is treated as a singular basis rather than a pivot.
 inline constexpr double kPivotTolerance = 1e-9;
 
@@ -228,6 +236,27 @@ inline constexpr double kRatioTestFeasibility = 1e-9;
 /// point recompute_quality() would call feasible into one it calls infeasible.
 inline constexpr double kHarrisRelaxation = 0.1 * kPrimalFeasibility;
 
+/// The dual simplex's Harris relaxation (#465, dual_ratio_test=harris): pass one of the dual
+/// ratio test loosens every candidate's reduced cost by this much. The same tenth of the
+/// tolerance as the primal's kHarrisRelaxation, for the same reason: a column the step
+/// passes by at most this much ends with a wrong-signed reduced cost an order of magnitude
+/// inside kDualFeasibility, and the entering column's own wrong sign is removed by a cost
+/// shift rather than by a backward step (Koberstein 2005, ch. 6).
+inline constexpr double kDualHarrisRelaxation = 0.1 * kDualFeasibility;
+
+/// Cost perturbation at the start of the dual simplex (#465, dual_perturb_costs_at_start;
+/// Koberstein 2005, ch. 6). Applied only when the structural costs take fewer than
+/// kDualStartPerturbationDistinctFraction * n distinct values, the shape of a model whose
+/// ties the dual ratio test cannot break (brazil3, mostly zero costs). Each nonbasic
+/// structural cost moves by xi_j = kDualStartPerturbationAbsolute +
+/// kDualStartPerturbationRelative * |c_j|, times a per-column factor in [0.5, 1], in the
+/// direction that keeps its reduced cost dual feasible. The absolute part is 100 times the
+/// dual tolerance, so the shifts are distinct at the resolution the ratio test compares
+/// reduced costs at.
+inline constexpr double kDualStartPerturbationDistinctFraction = 0.25;
+inline constexpr double kDualStartPerturbationAbsolute = 100.0 * kDualFeasibility;
+inline constexpr double kDualStartPerturbationRelative = 1e-5;
+
 // ---------------------------------------------------------------------------------------
 // First-order method (PDHG)
 // ---------------------------------------------------------------------------------------
@@ -276,6 +305,20 @@ inline constexpr double kCutMaxCoefficientRatio = 1e6;
 /// solver treats coefficients under kZeroDrop as zero everywhere - is paid for by weakening
 /// the cut's constant, which is what keeps the cut valid; see src/mip/cuts.cpp.
 inline constexpr double kCutNoiseRelative = 1e-14;
+
+/// GMI safety, under `gmi_safety` (#496 item 4). Cornuejols, Margot and Nannicini, "On the
+/// safety of Gomory cut generators", Math. Programming Computation 5 (2013), measure what a
+/// GMI generator's parameters do to cut validity: among them the minimum fractionality of
+/// the source row's basic variable, the maximum dynamism of the cut and a relaxation of its
+/// right-hand side. The values here are conservative choices of ours, not tuned from that
+/// study. A source row whose basic value is within kGmiMinFractionality of an integer gives
+/// no cut: its f0 is the divisor of every coefficient, so a small f0 magnifies the tableau
+/// row's rounding by 1/f0. The emitted rhs is loosened by kGmiRhsRelaxAbsolute plus
+/// kGmiRhsRelaxRelative * |rhs|, which only weakens the cut. Dynamism is already capped for
+/// every family by kCutMaxCoefficientRatio in the filter.
+inline constexpr double kGmiMinFractionality = 0.01;
+inline constexpr double kGmiRhsRelaxAbsolute = 1e-9;
+inline constexpr double kGmiRhsRelaxRelative = 1e-9;
 
 /// Minimum root-LP violation for a cut to be accepted. Valid cuts that are not violated
 /// or barely violated are safely rejected to save LP solves.
@@ -369,6 +412,42 @@ inline constexpr double kIpmCentralityBetaMin = 0.1;
 inline constexpr double kIpmCentralityBetaMax = 10.0;
 /// A corrector is kept only when alpha_p + alpha_d grows by this factor: 1% (the issue).
 inline constexpr double kIpmCentralityAcceptance = 1.01;
+
+// ---- Proximal regularization of the LP interior point (#473, ipm_proximal_regularization) --
+
+/// rho = delta = max(floor, min(previous, kIpmProximalShare * mu)), starting from
+/// kIpmProximalStart: the regularization follows mu down and rises only when a pivot comes
+/// out wrong (then by kIpmProximalRaise, at most kIpmProximalAttempts factorizations per
+/// iteration, with the pivot threshold kIpmProximalPivotShare of it). The floor is 1e-8, the
+/// default path's primal regularization, so this path never regularizes less than the
+/// default one does; a lower floor has not been measured.
+inline constexpr double kIpmProximalStart = 1e-6;
+inline constexpr double kIpmProximalFloor = 1e-8;
+inline constexpr double kIpmProximalShare = 1e-2;
+inline constexpr int kIpmProximalAttempts = 3;
+/// The LP path's own pivot rule. The values are the QP interior point's (kQpIpmPivotShare,
+/// kQpIpmRegularizationRaise) today, but the two paths are tuned apart: a pivot is lifted
+/// below kIpmProximalPivotShare * rho, and a lifted pivot raises rho by kIpmProximalRaise.
+inline constexpr double kIpmProximalPivotShare = 0.1;
+inline constexpr double kIpmProximalRaise = 100.0;
+/// Iterative-refinement corrections on the unregularized Newton system per solve, at most.
+inline constexpr int kIpmProximalRefinementSteps = 5;
+/// A correction is kept whenever it lowers the unregularized residual; the refinement stops
+/// after one that gains less than 10% (it has stalled at what the regularization allows).
+inline constexpr double kIpmProximalRefinementProgress = 0.9;
+/// The refinement's target, on the unregularized residual relative to max(1, |g|, |r_b|)
+/// (infinity norms): the interior point's own 1e-8 convergence tolerance. A solve left above
+/// it is counted and reported, and the next factorization's rho is shrunk by
+/// kIpmProximalRefinementShrink toward the floor: a smaller rho is a K_reg nearer K_0, so the
+/// refinement's contraction improves.
+inline constexpr double kIpmProximalRefinementTarget = 1e-8;
+inline constexpr double kIpmProximalRefinementShrink = 0.1;
+/// After a non-finite Newton direction (#209) the rho floor rises by this factor per raise,
+/// capped at kIpmProximalRecoveryCap. The default path's x1e4 on its 1e-10 dual
+/// regularization, applied to the 1e-8 rho floor, took rho to 1 after two raises: a proximal
+/// term as large as the matrix, whose refinement then has nothing to converge to.
+inline constexpr double kIpmProximalRecoveryRaise = 100.0;
+inline constexpr double kIpmProximalRecoveryCap = 1e-4;
 
 /// Binary probing (#512; Savelsbergh 1994; Achterberg et al. 2020). A probe x_j = v is
 /// declared infeasible only when a row misses its bound by more than this, relative to
@@ -467,6 +546,10 @@ inline constexpr double kRootCutStallFraction = 1e-3;
 /// And the loop stops once the solve has used this share of time_limit, so a root whose
 /// every round is slow leaves the tree most of the time it was given.
 inline constexpr double kRootCutTimeShare = 0.2;
+/// And the loop adds at most max(kRootCutRowFloor, kRootCutRowShare * m) cut rows in all,
+/// round 1 included, m the rows of the LP the root separates on before its first cut.
+inline constexpr int kRootCutRowFloor = 100;
+inline constexpr double kRootCutRowShare = 1.0;
 
 /// GPU PDHG device loop (#478): iterations replayed on the device per host synchronisation.
 /// Larger amortises the synchronisation further but checks the iteration and time limits
@@ -493,4 +576,69 @@ inline constexpr double kObbtCutoffEpsilon = 1e-6;
 /// most tightening happens in the first few (Savelsbergh 1994), and a cap keeps a slowly
 /// converging chain (bounds creeping by a small amount each round) from running long.
 inline constexpr int kDomainPropagationRounds = 50;
+
+/// PDHG infeasibility detection (#484; Applegate, Lubin & Hinder 2024): a restart difference is
+/// tested only from the kPdhgDetectionMinRestarts-th restart on - the first "difference" is a
+/// single projected gradient step, not the converging ray the method relies on - and only
+/// when its norm exceeds kPdhgDetectionMinNorm (a converged LP's differences go to zero).
+inline constexpr int kPdhgDetectionMinRestarts = 2;
+inline constexpr double kPdhgDetectionMinNorm = 1e-12;
+
+// ---- Dense columns in the LP interior point's normal equations (#467, ipm_dense_columns) ---
+
+/// A column is dense when it has more than this times sqrt(rows) entries: the default of
+/// `ipm_dense_column_factor`, the figure Andersen, Gondzio, Meszaros & Xu (1996, sec. 5)
+/// and the issue use.
+inline constexpr double kIpmDenseColumnFactor = 10.0;
+/// At most this many columns go to the correction, densest first: each costs one solve with
+/// the sparse factor per factorization to build the k x k Schur complement, which is then
+/// factored densely.
+inline constexpr Index kIpmMaxDenseColumns = 100;
+/// Conjugate gradients aim at a normwise backward error (Higham 2002, sec. 7.1) of this: the
+/// residual against the size of the terms M x is summed from, i.e. the rounding floor.
+inline constexpr double kIpmPcgTargetBackwardError = 1e-16;
+/// A solve whose backward error is at most this is converged, two decades above the target.
+/// A solve above it is NOT used as a Newton direction: the interior point treats it as it
+/// treats a non-finite direction (raise the regularization, refactorize, recompute).
+inline constexpr double kIpmPcgAcceptedBackwardError = 1e-12;
+/// Steps per solve with the Woodbury preconditioner; the sparse-factor fallback gets this
+/// plus the number of dense columns.
+inline constexpr int kIpmPcgMaxIterations = 50;
+/// The iteration stops when the residual has not halved in this many steps. Conjugate
+/// gradients minimize the M-norm of the error, not the residual, whose infinity norm can
+/// rise for several steps before it falls: on israel (33 dense columns at factor 2) the
+/// Woodbury-preconditioned residual went 27, 47, 41, 22, 15 and then 5e-3, and at 3 steps
+/// the iteration stopped at a backward error of 1.3e-4; with no early stop every solve of
+/// that run converged (worst 2.5e-15, longest run without halving 6 steps). 10 leaves room
+/// over the longest run seen.
+inline constexpr int kIpmPcgStagnationSteps = 10;
+/// A row whose diagonal in the sparse part is below this fraction of the dense columns'
+/// contribution gets the dense diagonal in the factor (see preconditioner_shift). Measured
+/// on israel's normal equations: at 1e-2 CG stalled with a direction 34% off, at 1e-6 not.
+inline constexpr double kIpmDenseSupportRatio = 1e-6;
+/// Every eigenvalue of the scaled Schur complement I + V^T M_s^-1 V is at least 1 in exact
+/// arithmetic; a Cholesky pivot below this means the solves it was built from were not
+/// accurate, and the Woodbury preconditioner is not used for that factorization.
+inline constexpr double kIpmDenseSchurMinPivot = 0.5;
+
+// ---- The LP interior point's normal equations on the n x n side (#469, ipm_normal_side) ---
+//
+// The column side's conjugate gradients on M = A Theta A^T + D aim at and accept the same
+// backward errors as the dense-column path (kIpmPcgTargetBackwardError,
+// kIpmPcgAcceptedBackwardError) within the same kIpmPcgMaxIterations steps and the same
+// kIpmPcgStagnationSteps without halving; an unaccepted solve is handled as a non-finite
+// direction is. #469 stopped after 3 steps without halving; once an unaccepted solve was no
+// longer used silently, share2b on the column side stopped three solves at backward errors
+// of 1.4e-9, 6.3e-12 and 3.1e-12 after 3 to 6 steps - the non-monotone residual that
+// kIpmPcgStagnationSteps was measured against on israel - and its regularization raises
+// ended the solve as a numerical error at iteration 153 (row side: optimal in 43).
+
+/// D in the preconditioner (and in N) is at least this times the row's diagonal of
+/// A Theta A^T. An equality row's D is the 1e-10 regularization alone and would put 1e10
+/// A_E^T A_E into N. Measured by #469 over nine Netlib instances (afiro, adlittle, sc50a,
+/// sc50b, blend, share2b, scagr7, stocfor1, israel): at 1e-8 all end optimal at about two
+/// conjugate-gradient steps per solve; 1e-6 takes up to three; at 1e-4 share2b runs to the
+/// iteration limit; with no floor none converged.
+inline constexpr double kIpmColumnSideDiagonalFloor = 1e-8;
+
 }  // namespace sankhya::tol

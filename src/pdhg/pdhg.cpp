@@ -38,6 +38,7 @@
 
 #include "sankhya/pdhg.hpp"
 
+#include "pdhg_certificate.hpp"
 #include "pdhg_evaluate.hpp"
 #include "pdhg_halpern.hpp"
 
@@ -52,6 +53,7 @@
 #include <fmt/format.h>
 
 #include "../core/stop_controller.hpp"
+#include "sankhya/certificate.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -257,6 +259,15 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   bool converged = false;
   bool logged_table = false;
   HalpernResult last_halpern_res;
+
+  // #484, off by default until an A/B on main: at each restart, test whether the period's
+  // iterate difference is itself a certified ray (see detect_certificate_from_restart,
+  // pdhg_certificate.hpp).
+  const bool detect_infeasibility = options.get_bool("pdhg_detect_infeasibility");
+  bool certificate_found = false;
+  SolveStatus certificate_status = SolveStatus::kNotSolved;
+  std::vector<double> certificate_vector;
+  std::string certificate_message;
 
   StopController stop(control, timer, limits);
   SolveStatus stop_status = SolveStatus::kIterationLimit;
@@ -573,6 +584,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         omega = std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
         omega = std::clamp(omega, 1e-6, 1e6);
       }
+      if (detect_infeasibility && restarts + 1 >= tol::kPdhgDetectionMinRestarts &&
+          detect_certificate_from_restart(model, scaling, dx, dx_norm, dy, dy_norm,
+                                          &certificate_status, &certificate_vector,
+                                          &certificate_message)) {
+        certificate_found = true;
+        break;
+      }
       // The period's reference residual in the NEW primal weight's norm: measured in the old
       // one, the 0.2 ratio test would compare residuals in two different norms (review of
       // #613).
@@ -619,6 +637,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
           omega =
               std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
           omega = std::clamp(omega, 1e-6, 1e6);
+        }
+        if (detect_infeasibility && restarts + 1 >= tol::kPdhgDetectionMinRestarts &&
+            detect_certificate_from_restart(model, scaling, dx, dx_norm, dy, dy_norm,
+                                            &certificate_status, &certificate_vector,
+                                            &certificate_message)) {
+          certificate_found = true;
+          break;
         }
 
         std::fill(x_sum.begin(), x_sum.end(), 0.0);
@@ -677,7 +702,29 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   // exactly what kFeasible means, and it is what gets reported now.
   const bool verifiable = converged && final_residuals.meets_project_standard();
 
-  if (verifiable) {
+  if (certificate_found) {
+    // #484: a restart's iterate difference already checked out against the project's own
+    // certificate checker (detect_certificate_from_restart, pdhg_certificate.hpp) - reported
+    // directly, bypassing the relative-tolerance/limit reporting below entirely, the same way
+    // any other engine's certified infeasible or unbounded verdict bypasses it.
+    solution.status = certificate_status;
+    solution.message = certificate_message;
+    if (certificate_status == SolveStatus::kInfeasible) {
+      solution.farkas_dual = std::move(certificate_vector);
+      // #191: a verdict with no point does not get a point.
+      solution.col_value.clear();
+      solution.col_dual.clear();
+      solution.row_dual.clear();
+      solution.row_activity.clear();
+    } else {
+      // kInfeasibleOrUnbounded: the ray is the evidence, and there is no point to report.
+      solution.primal_ray = std::move(certificate_vector);
+      solution.col_value.clear();
+      solution.col_dual.clear();
+      solution.row_dual.clear();
+      solution.row_activity.clear();
+    }
+  } else if (verifiable) {
     solution.status = SolveStatus::kOptimal;
     solution.message = fmt::format(
         "converged after {} iterations and {} restarts; absolute primal {:.3e}, dual {:.3e}, "

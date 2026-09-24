@@ -498,6 +498,24 @@ def test_a_valid_farkas_certificate_verifies() -> None:
           "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
 
 
+def test_a_tiny_farkas_vector_on_a_feasible_model_is_rejected() -> None:
+    """Review of #652. x >= 1e6 with x in [0, 2e6] is feasible (x = 1e6). The multiplier
+    1e-12 aggregates to d = 1e-12, under the zero floor, so the aggregate read as
+    0 >= 1e-6 - a "proof" of infeasibility. Scaled to unit size first, it is x >= 1e6 against
+    a reachable 2e6, which proves nothing."""
+    feasible = _two_row_lp(cost=[0.0], lower=[0.0], upper=[2e6], rows=[(1e6, vs.INF, [1.0])])
+    report = _run(feasible, _verdict("infeasible", farkas={"r0": 1e-12}))
+    check(report.failures >= 1, "a tiny Farkas vector on a feasible model is rejected",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
+
+
+def test_a_valid_farkas_certificate_verifies_at_any_scale() -> None:
+    report = _run(_contradictory_pair(),
+                  _verdict("infeasible", farkas={"r0": 1e-9, "r1": -1e-9}))
+    check(report.failures == 0, "a valid Farkas certificate scaled by 1e-9 still verifies",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
+
+
 def test_a_weakened_farkas_certificate_is_rejected() -> None:
     """The control. Shrink one multiplier and the aggregate stops contradicting anything -
     it becomes 0.8x >= 4.6, which x can satisfy because x has no upper bound."""
@@ -855,6 +873,8 @@ def main() -> int:
     test_quadratic_maximization_keeps_its_sign()
     print("the two verdicts with no point (#191)")
     test_a_valid_farkas_certificate_verifies()
+    test_a_tiny_farkas_vector_on_a_feasible_model_is_rejected()
+    test_a_valid_farkas_certificate_verifies_at_any_scale()
     test_a_weakened_farkas_certificate_is_rejected()
     test_an_infeasible_verdict_without_a_certificate_is_not_a_failure()
     test_a_header_that_promises_a_certificate_must_carry_one()

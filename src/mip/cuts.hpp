@@ -216,8 +216,12 @@ struct RootGmiContext {
 
 /// Production multi-row GMI generator.
 /// Iterates over all fractional basic structural integer variables, generating one cut per
-/// eligible row. Returns candidates in deterministic basis-slot order.
-[[nodiscard]] std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution);
+/// eligible row. Returns candidates in deterministic basis-slot order. With `safe` (the
+/// `gmi_safety` option, #496; Cornuejols, Margot and Nannicini 2013) a row whose basic value
+/// is within kGmiMinFractionality of an integer gives no cut, and every cut's rhs is loosened
+/// by kGmiRhsRelaxAbsolute + kGmiRhsRelaxRelative * |rhs|.
+[[nodiscard]] std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution,
+                                                 bool safe = false);
 
 // =========================================================================================
 // Cut Filtering and Deduplication (Stage 4C)

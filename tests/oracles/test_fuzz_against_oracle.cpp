@@ -16,6 +16,7 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -45,18 +46,21 @@ struct Tally {
   }
 };
 
-Solution solve_float(const Model& model, const std::string& ratio_test = "textbook") {
+/// Extra solver options as key=value pairs, on top of the defaults.
+using OptionList = std::vector<std::pair<std::string, std::string>>;
+
+Solution solve_float(const Model& model, const OptionList& extra = {}) {
   Options options;
   options.set_bool("log_to_console", false);
   std::string error;
-  if (ratio_test != "textbook") {
-    EXPECT_TRUE(options.set_from_string("ratio_test", ratio_test, &error)) << error;
+  for (const auto& [key, value] : extra) {
+    EXPECT_TRUE(options.set_from_string(key, value, &error)) << error;
   }
   return solve(model, options);
 }
 
 /// Compare one instance. Returns true when the two engines agree.
-bool compare(const GeneratedLp& lp, Tally* tally, const std::string& ratio_test = "textbook") {
+bool compare(const GeneratedLp& lp, Tally* tally, const OptionList& extra = {}) {
   const OracleResult exact = solve_exact(lp);
   if (exact.status == OracleStatus::kOverflow ||
       exact.status == OracleStatus::kIterationLimit) {
@@ -65,7 +69,7 @@ bool compare(const GeneratedLp& lp, Tally* tally, const std::string& ratio_test 
   }
 
   const Model model = to_model(lp);
-  const Solution approximate = solve_float(model, ratio_test);
+  const Solution approximate = solve_float(model, extra);
 
   const auto disagree = [&](const std::string& why) {
     ++tally->mismatched;
@@ -177,15 +181,77 @@ TEST(FuzzAgainstOracle, HarrisRatioTestAgainstOracle) {
   Tally tally;
 
   for (int trial = 0; trial < 1000; ++trial) {
-    compare(random_lp(rng, config), &tally, "harris");
+    compare(random_lp(rng, config), &tally, {{"ratio_test", "harris"}});
   }
   for (int trial = 0; trial < 1000; ++trial) {
-    compare(degenerate_lp(rng, config), &tally, "harris");
+    compare(degenerate_lp(rng, config), &tally, {{"ratio_test", "harris"}});
   }
 
   report("2000 instances (random + degenerate) under ratio_test=harris", tally);
   EXPECT_EQ(tally.mismatched, 0);
   EXPECT_GT(tally.compared(), 1600) << "the oracle abstained too often to prove anything";
+}
+
+TEST(FuzzAgainstOracle, DualHarrisAndStartPerturbationAgainstOracle) {
+  // #465: the dual simplex's Harris ratio test with cost shifting and its cost perturbation
+  // at the start are opt-in, and both change the costs the dual loop works on; the exact
+  // oracle is what says every such change was undone before the answer left. Same
+  // generators and trial counts as the primal Harris run above, under the dual simplex with
+  // both options on.
+  std::mt19937_64 rng(465465465);
+  GeneratorConfig config;
+  Tally tally;
+  const OptionList dual = {{"algorithm", "dual-simplex"},
+                           {"dual_ratio_test", "harris"},
+                           {"dual_perturb_costs_at_start", "true"}};
+
+  for (int trial = 0; trial < 1000; ++trial) {
+    compare(random_lp(rng, config), &tally, dual);
+  }
+  for (int trial = 0; trial < 1000; ++trial) {
+    compare(degenerate_lp(rng, config), &tally, dual);
+  }
+  // The generators above give n <= 8 columns with costs spread over [-6, 6], so the start
+  // perturbation's gate (fewer than n / 4 distinct costs) almost never opens there and the
+  // runs above are Harris runs (review of #653). These have at least 9 columns and costs in
+  // {0, 1}: two distinct costs, under n / 4 for every n >= 9, so every solve perturbs, and
+  // presolve is off so it is the dual loop that sees them.
+  GeneratorConfig wide = config;
+  wide.min_cols = 9;
+  wide.max_cols = 12;
+  OptionList perturbed = dual;
+  perturbed.push_back({"presolve", "false"});
+  std::bernoulli_distribution coin(0.5);
+  for (int trial = 0; trial < 1000; ++trial) {
+    GeneratedLp lp = random_lp(rng, wide);
+    for (auto& c : lp.c) c = coin(rng) ? 1 : 0;
+    compare(lp, &tally, perturbed);
+  }
+
+  report(
+      "3000 instances (random + degenerate, and 1000 with {0,1} costs that always perturb) "
+      "under the dual simplex, dual_ratio_test=harris and dual_perturb_costs_at_start",
+      tally);
+  EXPECT_EQ(tally.mismatched, 0);
+  EXPECT_GT(tally.compared(), 2400) << "the oracle abstained too often to prove anything";
+}
+
+TEST(FuzzAgainstOracle, HyperSparseSolvesAgainstOracle) {
+  // #464: the hyper-sparse FTRAN and BTRAN are opt-in; the exact oracle judges them with the
+  // option on, under product-form updates and under Forrest-Tomlin, whose first factorization
+  // (before any FT update) still takes the fast path (review of #665).
+  std::mt19937_64 rng(464464464);
+  GeneratorConfig config;
+  Tally tally;
+  const OptionList product = {{"lu_hyper_sparse", "true"}};
+  const OptionList forrest = {{"lu_hyper_sparse", "true"}, {"basis_update", "forrest-tomlin"}};
+  for (int trial = 0; trial < 500; ++trial) {
+    compare(random_lp(rng, config), &tally, product);
+    compare(degenerate_lp(rng, config), &tally, forrest);
+  }
+  report("1000 instances under lu_hyper_sparse, product-form and Forrest-Tomlin", tally);
+  EXPECT_EQ(tally.mismatched, 0);
+  EXPECT_GT(tally.compared(), 800) << "the oracle abstained too often to prove anything";
 }
 
 TEST(FuzzAgainstOracle, KktInstancesAgainstTheAnalyticOptimum) {
