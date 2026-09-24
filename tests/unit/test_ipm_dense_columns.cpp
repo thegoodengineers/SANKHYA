@@ -26,6 +26,7 @@
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 #include "sankhya/sparse.hpp"
+#include "sankhya/tolerances.hpp"
 
 namespace sankhya {
 namespace {
@@ -224,6 +225,42 @@ TEST(DenseColumnCorrection, FindsOnlyColumnsOverTheThreshold) {
   // The cap keeps the densest; ineligible columns are never chosen.
   EXPECT_EQ(ipm::find_dense_columns(a, {}, 5.0, 1), (std::vector<Index>{1}));
   EXPECT_EQ(ipm::find_dense_columns(a, {1, 0, 1, 1}, 5.0, 100), (std::vector<Index>{3}));
+}
+
+// AN UNCONVERGED SOLVE SAYS SO. The factor handed to prepare() is of a different matrix (a
+// theta of all ones where the true theta spans eight decades), so neither preconditioner is
+// near M^-1 and conjugate gradients cannot reach the accepted backward error in their
+// budget. The report must say `converged = false` with the true backward error above the
+// acceptance: the interior point relies on that flag to refuse the direction (#467).
+TEST(DenseColumnCorrection, AnUnconvergedSolveIsReportedAsSuch) {
+  std::mt19937_64 rng(4670);
+  const Index m = 300;
+  const Index n = 400;
+  const SparseMatrix a = random_matrix(rng, m, n, 0.02, 1);
+  std::uniform_real_distribution<double> decades(-4.0, 4.0);
+  std::vector<double> theta(static_cast<std::size_t>(n));
+  for (double& t : theta) t = std::pow(10.0, decades(rng));
+  const std::vector<double> shift(static_cast<std::size_t>(m), 1e-3);
+  const double delta = 1e-10;
+
+  ipm::DenseColumnCorrection correction;
+  correction.set_columns(a, ipm::find_dense_columns(a, {}, 1e-9, 1));
+  ASSERT_EQ(correction.columns().size(), 1u);
+  const std::vector<double> wrong_theta(static_cast<std::size_t>(n), 1.0);
+  std::vector<double> sparse_theta;
+  correction.sparse_theta(wrong_theta, &sparse_theta);
+  SparseMatrix sparse;
+  ASSERT_TRUE(normal_equations_lower(a, sparse_theta, shift, delta, &sparse));
+  SparseLdl part;
+  ASSERT_TRUE(part.analyze(sparse));
+  ASSERT_TRUE(part.factorize(sparse, delta));
+  ASSERT_TRUE(correction.prepare(part, a, theta, shift, delta));
+  std::vector<double> x(static_cast<std::size_t>(m));
+  for (double& v : x) v = decades(rng);
+  const ipm::PcgReport report = correction.solve(x.data());
+  EXPECT_FALSE(report.converged) << "backward error " << report.relative_residual << " after "
+                                 << report.iterations << " steps";
+  EXPECT_GT(report.relative_residual, tol::kIpmPcgAcceptedBackwardError);
 }
 
 Options ipm_options(bool dense) {

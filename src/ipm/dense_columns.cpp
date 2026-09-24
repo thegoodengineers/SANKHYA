@@ -329,9 +329,12 @@ PcgReport DenseColumnCorrection::solve(double* rhs) const {
   }
   // First the Woodbury preconditioner, which is M^-1 up to rounding when M_s is well
   // conditioned. When it is not - or when the Schur complement could not be factored - the
-  // factor of M_s alone: M_s^-1 M = I + M_s^-1 V V^T has every eigenvalue but k equal to
-  // one, so conjugate gradients finish in k + 1 steps in exact arithmetic however singular
-  // M_s is, at the price of those steps (Golub and Van Loan, sec. 11.5).
+  // factor of M_s alone. Without diagonal support, M_s^-1 M = I + M_s^-1 V V^T has every
+  // eigenvalue but k equal to one, so conjugate gradients finish in k + 1 steps in exact
+  // arithmetic however singular M_s is (Golub and Van Loan, sec. 11.5). With b rows
+  // supported the factor is of M_s + B, and (M_s + B)^-1 M = I + (M_s + B)^-1 (V V^T - B)
+  // has up to k + b eigenvalues away from one, so the budget below is not a guarantee:
+  // a solve that runs out of it is reported unconverged, and the caller must not use it.
   std::vector<double> x;
   PcgReport report;
   if (woodbury_) {

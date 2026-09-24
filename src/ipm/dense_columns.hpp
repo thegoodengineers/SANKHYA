@@ -95,7 +95,9 @@ class DenseColumnCorrection {
 
   /// Solve M x = rhs in place, M = A Theta A^T + diag(row_shift) + delta I with the theta
   /// given to prepare(), by conjugate gradients preconditioned with the Woodbury inverse,
-  /// and with the sparse factor alone when that does not converge.
+  /// and with the sparse factor alone when that does not converge. When neither converges
+  /// (`converged` false in the report) rhs holds the better of the two, which the caller
+  /// must NOT use as a Newton direction: the interior point raises its regularization.
   PcgReport solve(double* rhs) const;
   /// Whether the last prepare() could factor the Schur complement.
   [[nodiscard]] bool woodbury_available() const noexcept { return woodbury_; }

@@ -221,6 +221,12 @@ class InteriorPoint {
   Count pcg_iterations_ = 0;
   Count pcg_solves_ = 0;
   double worst_pcg_residual_ = 0.0;
+  /// Dense-column solves whose backward error stayed above kIpmPcgAcceptedBackwardError.
+  Count pcg_unconverged_ = 0;
+  /// Set by solve_normal() when the last dense-column solve did not converge: the direction
+  /// built from it is not a Newton direction to the accuracy the loop assumes, and is
+  /// treated as a non-finite one is (regularization raised, refactorized, recomputed).
+  bool direction_inaccurate_ = false;
   /// Solve the normal equations for the factors in ldl_: the plain LDL^T solve with
   /// kRefinementSteps of iterative refinement against normal_lower_, or, on the dense-column
   /// path, preconditioned conjugate gradients against the whole of A Theta A^T.
@@ -939,6 +945,17 @@ void InteriorPoint::solve_normal(std::vector<double>* rhs) {
     ++pcg_solves_;
     pcg_iterations_ += report.iterations;
     worst_pcg_residual_ = std::max(worst_pcg_residual_, report.relative_residual);
+    if (!report.converged) {
+      // NEVER A SILENT INEXACT DIRECTION. Neither the Woodbury nor the sparse-factor
+      // preconditioner brought the backward error under kIpmPcgAcceptedBackwardError within
+      // its budget; the caller sees the flag and recovers or stops, and says why.
+      ++pcg_unconverged_;
+      direction_inaccurate_ = true;
+      logger_.verbose(
+          "interior point: dense-column conjugate gradients did not converge ({} step(s), "
+          "backward error {:.1e}{})",
+          report.iterations, report.relative_residual, report.broke_down ? ", broke down" : "");
+    }
     return;
   }
   // Solve with iterative refinement against the matrix actually built (the factors carry
@@ -1092,8 +1109,9 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
   if (dense_.active()) {
     logger_.info(
         "IPM: dense-column correction over {} column(s): {} conjugate-gradient step(s) in {} "
-        "solve(s), worst relative residual {:.1e}",
-        dense_.columns().size(), pcg_iterations_, pcg_solves_, worst_pcg_residual_);
+        "solve(s), worst relative residual {:.1e}, {} solve(s) not converged",
+        dense_.columns().size(), pcg_iterations_, pcg_solves_, worst_pcg_residual_,
+        pcg_unconverged_);
   }
   // THE WORST ROWS AND VARIABLES, AT EVERY STOP THAT HANDS BACK A POINT (#582). A limit stop
   // restores the best iterate without re-measuring it, so it is measured here first: the
@@ -1358,7 +1376,8 @@ bool InteriorPoint::purify_duals() {
 
   std::vector<double> dy = rhs;
   if (dense_.active()) {
-    (void)dense_.solve(dy.data());
+    // An unconverged solve is not a least-squares correction; the point stays as it is.
+    if (!dense_.solve(dy.data()).converged) return false;
   } else {
     ldl.solve(dy.data());
   }
@@ -1812,12 +1831,13 @@ Solution InteriorPoint::run() {
         r_mu_l_[u] = has_lower_[u] ? -sl_[u] * zl_[u] : 0.0;
         r_mu_u_[u] = has_upper_[u] ? -su_[u] * zu_[u] : 0.0;
       }
+      direction_inaccurate_ = false;
       newton_direction();
       // Tests only (ipm_testing.hpp): poison this direction to reach the #209 recovery.
       if (testing::take_poisoned_direction() && !dx_.empty()) {
         dx_[0] = std::numeric_limits<double>::quiet_NaN();
       }
-      if (!direction_is_finite()) return false;
+      if (!direction_is_finite() || direction_inaccurate_) return false;
       const double alpha_p_aff = step_length(sl_, dsl_, su_, dsu_);
       const double alpha_d_aff = step_length(zl_, dzl_, zu_, dzu_);
       double mu_aff = 0.0;
@@ -1839,7 +1859,7 @@ Solution InteriorPoint::run() {
         if (has_upper_[u]) r_mu_u_[u] = sigma * mu_ - su_[u] * zu_[u] - dsu_[u] * dzu_[u];
       }
       newton_direction();
-      return direction_is_finite();
+      return direction_is_finite() && !direction_inaccurate_;
     };
     bool step_is_finite = predictor_corrector();
     // A NON-FINITE DIRECTION IS CAUGHT BEFORE IT IS TAKEN (#209). On the 5,000-row
@@ -1858,8 +1878,10 @@ Solution InteriorPoint::run() {
         dual_regularization_ *= kRegularizationRaise;
         ++regularization_raises_;
         logger_.verbose(
-            "interior point: non-finite direction at iteration {}; "
+            "interior point: {} direction at iteration {}; "
             "regularization raised to {:.1e} and the step recomputed",
+            direction_inaccurate_ ? "inaccurate (dense-column CG did not converge)"
+                                  : "non-finite",
             iterations,
             proximal_ != nullptr ? ProximalSystem::recovery_floor(regularization_raises_)
                                  : dual_regularization_);
@@ -1883,8 +1905,12 @@ Solution InteriorPoint::run() {
             converged_here ? SolveStatus::kOptimal
                            : (usable ? SolveStatus::kFeasible : SolveStatus::kNumericalError),
             fmt::format(
-                "the Newton direction was not finite at iteration {} after {} "
+                "the Newton direction was {} at iteration {} after {} "
                 "regularization raise(s); {}",
+                direction_inaccurate_
+                    ? "not solved to accuracy (the dense-column conjugate gradients did not "
+                      "converge, #467)"
+                    : "not finite",
                 iterations, regularization_raises_,
                 converged_here
                     ? std::string("the iterate before it is within a decade of every "
