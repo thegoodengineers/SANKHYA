@@ -162,8 +162,10 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   Solution initial_relaxation = *relaxation;
 
   std::vector<Cut> candidates;
+  KnapsackCoverStats cover_stats;
   for (Index i = 0; i < original_root_rows; ++i) {
-    auto cover = generate_knapsack_cover_cut(working_, i);
+    auto cover =
+        generate_knapsack_cover_cut(working_, i, &initial_relaxation.col_value, &cover_stats);
     if (cover.has_value()) {
       Cut cut;
       cut.family = CutFamily::kKnapsackCover;
@@ -174,6 +176,13 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
       cut.rhs = cover->rhs;
       candidates.push_back(std::move(cut));
     }
+  }
+  if (cover_stats.supported_rows > 0) {
+    logger_.verbose(
+        "knapsack covers: {} supported row(s), {} cover(s) at the point ({} by the exact DP), "
+        "{} violated cut(s); best base violation {:.3e}",
+        cover_stats.supported_rows, cover_stats.covers_found, cover_stats.exact_separations,
+        cover_stats.cuts_returned, cover_stats.best_base_violation);
   }
   std::vector<Cut> gmi = generate_gmi_cuts(working_, initial_relaxation);
   candidates.insert(candidates.end(), gmi.begin(), gmi.end());

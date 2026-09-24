@@ -42,6 +42,7 @@
 //     small: density, coefficient range and violation (filter_and_deduplicate_cuts)
 #pragma once
 
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -123,8 +124,30 @@ struct KnapsackCoverCut {
 /// knapsack auxiliary problem. Lifting coefficients of zero are valid and are included.
 ///
 /// The function does NOT append the cut to `model`. The caller is responsible for that.
-[[nodiscard]] std::optional<KnapsackCoverCut> generate_knapsack_cover_cut(const Model& model,
-                                                                          Index row);
+///
+/// SEPARATION AT A POINT (#496): with `point` (the LP relaxation's column values), the
+/// cover is chosen to be violated by that point, the greedy of Crowder, Johnson & Padberg
+/// (1983) as run by Gu, Nemhauser & Savelsbergh (1998): items in ascending order of
+/// (1 - x*_j) / a_j until the weights exceed b, then trimmed to a minimal cover by dropping
+/// the members the point uses least; the lifted cut is returned only when the point
+/// violates it. Without a point the cover is built from the row alone (the largest
+/// coefficients), which is a valid inequality but not a separated one: on the 30-instance
+/// MIPLIB set every such cut was refused for weak violation (bench/results/miplib-5daee10.csv).
+/// What the separator saw on one row (#496): whether the row is of the supported class,
+/// whether a cover was found (at the point, when given), and whether the cut was returned.
+struct KnapsackCoverStats {
+  Index supported_rows = 0;
+  Index covers_found = 0;
+  Index cuts_returned = 0;
+  /// The largest base-cover violation seen, sum_C x*_j - (|C| - 1): positive means a cover
+  /// the point violates; the most negative row is how far the point is from any cover.
+  double best_base_violation = -std::numeric_limits<double>::infinity();
+  Index exact_separations = 0;  ///< rows separated by the DP rather than the greedy
+};
+
+[[nodiscard]] std::optional<KnapsackCoverCut> generate_knapsack_cover_cut(
+    const Model& model, Index row, const std::vector<double>* point = nullptr,
+    KnapsackCoverStats* stats = nullptr);
 
 // =========================================================================================
 // Gomory mixed-integer cuts (Stage 3B)

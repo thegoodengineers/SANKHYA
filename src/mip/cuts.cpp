@@ -196,24 +196,160 @@ struct KnapsackVar {
   return cover;
 }
 
+/// A cover the point violates, if one exists (#496): items sorted by (1 - x*_j) / a_j
+/// ascending (ties by coefficient descending, then column ascending, so the choice is
+/// deterministic), taken until their weights exceed b, then trimmed to minimal by dropping,
+/// from the least-used end, every member whose removal still leaves a cover. Crowder,
+/// Johnson & Padberg (1983) section 3; Gu, Nemhauser & Savelsbergh (1998) section 2.
+[[nodiscard]] std::vector<std::size_t> find_cover_at_point(const std::vector<KnapsackVar>& vars,
+                                                           double b,
+                                                           const std::vector<double>& x) {
+  std::vector<std::size_t> order(vars.size());
+  for (std::size_t k = 0; k < vars.size(); ++k) order[k] = k;
+  const auto slack = [&](std::size_t k) {
+    const double xv = std::clamp(x[static_cast<std::size_t>(vars[k].col)], 0.0, 1.0);
+    return (1.0 - xv) / vars[k].a;
+  };
+  std::stable_sort(order.begin(), order.end(), [&](std::size_t p, std::size_t q) {
+    const double sp = slack(p);
+    const double sq = slack(q);
+    if (sp != sq) return sp < sq;
+    if (vars[p].a != vars[q].a) return vars[p].a > vars[q].a;
+    return vars[p].col < vars[q].col;
+  });
+  double sum = 0.0;
+  std::vector<std::size_t> cover;
+  for (const std::size_t k : order) {
+    sum += vars[k].a;
+    cover.push_back(k);
+    if (sum > b) break;
+  }
+  if (sum <= b) return {};
+  // Minimality: walk from the last-added member (the one the point uses least) backwards.
+  for (std::size_t q = cover.size(); q-- > 0;) {
+    if (cover.size() == 1) break;
+    if (sum - vars[cover[q]].a > b) {
+      sum -= vars[cover[q]].a;
+      cover.erase(cover.begin() + static_cast<std::ptrdiff_t>(q));
+    }
+  }
+  std::sort(cover.begin(), cover.end());
+  return cover;
+}
+
+/// The MOST violated cover at the point, exactly (#496). Minimising sum_C (1 - x*_j) over
+/// covers C (weight > b) is the same as choosing the complement S = N \\ C with weight
+/// <= sum(a) - b - 1 and maximum profit sum_S (1 - x*_j): a 0/1 knapsack over integral
+/// weights, the same DP as the lifting, kept in a table so the set can be read back. Null
+/// when the table would pass the DP limit, and the greedy takes over. Crowder, Johnson &
+/// Padberg (1983) state the separation problem in this form; Gu, Nemhauser & Savelsbergh
+/// (1998) section 2 the DP.
+[[nodiscard]] std::optional<std::vector<std::size_t>> find_cover_at_point_exact(
+    const std::vector<KnapsackVar>& vars, double b, const std::vector<double>& x) {
+  double total = 0.0;
+  for (const KnapsackVar& v : vars) total += v.a;
+  if (total <= b) return std::vector<std::size_t>{};  // no cover exists
+  const auto cap = static_cast<std::size_t>(std::llround(total - b - 1.0));
+  const std::size_t n = vars.size();
+  if (n * (cap + 1) > kKnapsackDpLimit) return std::nullopt;
+  std::vector<double> slack(n);
+  for (std::size_t k = 0; k < n; ++k) {
+    slack[k] = 1.0 - std::clamp(x[static_cast<std::size_t>(vars[k].col)], 0.0, 1.0);
+  }
+  // dp[c]: best profit with weight <= c over the items so far; keep[k][c]: item k taken
+  // at capacity c. A strict improvement is required, so ties leave the item OUT of S,
+  // i.e. IN the cover, which keeps the choice deterministic.
+  std::vector<double> dp(cap + 1, 0.0);
+  std::vector<std::vector<bool>> keep(n, std::vector<bool>(cap + 1, false));
+  for (std::size_t k = 0; k < n; ++k) {
+    const auto w = static_cast<std::size_t>(std::llround(vars[k].a));
+    if (w == 0 || w > cap) continue;
+    for (std::size_t c = cap; c >= w; --c) {
+      const double candidate = dp[c - w] + slack[k];
+      if (candidate > dp[c]) {
+        dp[c] = candidate;
+        keep[k][c] = true;
+      }
+    }
+  }
+  std::vector<bool> excluded(n, false);
+  std::size_t c = cap;
+  for (std::size_t k = n; k-- > 0;) {
+    if (keep[k][c]) {
+      excluded[k] = true;
+      c -= static_cast<std::size_t>(std::llround(vars[k].a));
+    }
+  }
+  std::vector<std::size_t> cover;
+  double sum = 0.0;
+  for (std::size_t k = 0; k < n; ++k) {
+    if (!excluded[k]) {
+      cover.push_back(k);
+      sum += vars[k].a;
+    }
+  }
+  // The complement of a set of weight <= total - b - 1 has weight >= b + 1 > b: a cover.
+  // Minimality, from the least-used member: removing a member the point uses cannot raise
+  // the violation, removing one it does not use cannot lower it, and a minimal cover is
+  // the stronger inequality either way.
+  std::vector<std::size_t> by_use(cover);
+  std::stable_sort(by_use.begin(), by_use.end(),
+                   [&](std::size_t p, std::size_t q) { return slack[p] > slack[q]; });
+  for (const std::size_t k : by_use) {
+    if (cover.size() > 1 && sum - vars[k].a > b) {
+      sum -= vars[k].a;
+      cover.erase(std::find(cover.begin(), cover.end(), k));
+    }
+  }
+  return cover;
+}
+
 }  // namespace
 
 // =========================================================================================
 // Public API: generate_knapsack_cover_cut
 // =========================================================================================
 
-std::optional<KnapsackCoverCut> generate_knapsack_cover_cut(const Model& model, Index row) {
+std::optional<KnapsackCoverCut> generate_knapsack_cover_cut(const Model& model, Index row,
+                                                            const std::vector<double>* point,
+                                                            KnapsackCoverStats* stats) {
   if (row < 0 || row >= model.num_rows()) return std::nullopt;
   if (model.num_cols() == 0) return std::nullopt;
 
   // Step 1. Classify row.
   const std::vector<KnapsackVar> vars = classify_row(model, row);
   if (vars.empty()) return std::nullopt;
+  if (stats != nullptr) ++stats->supported_rows;
 
   const double b = model.row_upper[static_cast<std::size_t>(row)];
 
-  // Step 2. Find a minimal cover.
-  const std::vector<std::size_t> cover_indices = find_minimal_cover(vars, b);
+  // Step 2. Find a minimal cover: at the LP point when there is one (#496), from the row
+  // alone otherwise.
+  const bool have_point =
+      point != nullptr && static_cast<Index>(point->size()) == model.num_cols();
+  std::vector<std::size_t> cover_indices;
+  if (have_point) {
+    std::optional<std::vector<std::size_t>> exact = find_cover_at_point_exact(vars, b, *point);
+    if (exact.has_value()) {
+      cover_indices = std::move(*exact);
+      if (stats != nullptr) ++stats->exact_separations;
+    } else {
+      cover_indices = find_cover_at_point(vars, b, *point);
+    }
+  } else {
+    cover_indices = find_minimal_cover(vars, b);
+  }
+  if (stats != nullptr && !cover_indices.empty()) {
+    ++stats->covers_found;
+    if (have_point) {
+      double used = 0.0;
+      for (const std::size_t k : cover_indices) {
+        used += std::clamp((*point)[static_cast<std::size_t>(vars[k].col)], 0.0, 1.0);
+      }
+      stats->best_base_violation = std::max(
+          stats->best_base_violation, used - (static_cast<double>(cover_indices.size()) - 1.0));
+    }
+  }
   if (cover_indices.empty()) return std::nullopt;
 
   const double cover_size = static_cast<double>(cover_indices.size());
@@ -338,6 +474,17 @@ std::optional<KnapsackCoverCut> generate_knapsack_cover_cut(const Model& model, 
     cut.coeff.push_back(c);
   }
 
+  // A separated cut is one the point violates; the lifted form is at least as violated as
+  // the base cover inequality the cover was chosen for, and the filter's own violation test
+  // runs again on what is returned.
+  if (have_point) {
+    double lhs = 0.0;
+    for (std::size_t k = 0; k < cut.col_index.size(); ++k) {
+      lhs += cut.coeff[k] * (*point)[static_cast<std::size_t>(cut.col_index[k])];
+    }
+    if (lhs <= cut.rhs + tol::kCutViolationTolerance) return std::nullopt;
+  }
+  if (stats != nullptr) ++stats->cuts_returned;
   return cut;
 }
 
