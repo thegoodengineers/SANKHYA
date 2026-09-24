@@ -223,6 +223,12 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 tools/test_verify_solution.py
 
+      - name: MILP certificates verify in exact arithmetic, and tampered ones do not (#518)
+        # Hand-written certificates for every reason the checker knows, then certificates the
+        # built CLI writes for small MILPs, each checked and then tampered with.
+        if: matrix.name == 'Release'
+        run: python3 tools/test_verify_certificate.py
+
       - name: The solution report prints only numbers the .sol file holds (#527)
         if: matrix.name == 'Release'
         run: python3 tools/test_report.py

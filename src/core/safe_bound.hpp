@@ -56,6 +56,7 @@
 #pragma once
 
 #include <span>
+#include <utility>
 #include <vector>
 
 #include "sankhya/model.hpp"
@@ -79,6 +80,26 @@ struct SafeBound {
   double shrink = 0.0;
 };
 
+/// A column bound the computation derived from one row (see the file header), with what a
+/// proof needs to re-derive it: `coefficient * x_column <= rhs` (is_upper) or `>= rhs`,
+/// from the row's upper side (uses_row_upper) or lower side and the other columns' bounds.
+struct ImpliedBound {
+  Index column = -1;
+  Index row = -1;
+  bool is_upper = false;
+  bool uses_row_upper = false;
+  double coefficient = 0.0;
+  double rhs = 0.0;
+};
+
+/// What the bound was computed from, for a certificate (#518) to state it exactly.
+struct SafeBoundDetail {
+  /// The y actually used: the input with dropped entries zeroed, scaled when the retry ran.
+  std::vector<double> multipliers;
+  /// The row-implied column bounds the bound relied on.
+  std::vector<ImpliedBound> implied;
+};
+
 /// The data safe_dual_bound() reads: an LP in minimise space. Spans, so the caller can
 /// substitute a column box (a branch-and-bound node's) without copying the model.
 struct SafeBoundProblem {
@@ -95,14 +116,20 @@ struct SafeBoundProblem {
 /// Neumaier-Shcherbina bound for `problem` from the multipliers `y` (minimise space: y_i > 0
 /// prices the row's lower side). `y` must have one entry per row. With `imply_bounds`,
 /// columns whose reduced cost needs a missing bound get one from a row (see the file
-/// header); without it they make the bound -inf.
+/// header); without it they make the bound -inf. When `detail` is given and the bound is
+/// finite, it receives the multipliers and implied bounds the value was computed from.
 [[nodiscard]] SafeBound safe_dual_bound(const SafeBoundProblem& problem,
-                                        std::span<const double> y, bool imply_bounds = true);
+                                        std::span<const double> y, bool imply_bounds = true,
+                                        SafeBoundDetail* detail = nullptr);
 
 /// The same for a whole Model with its own bounds, taking the duals exactly as a Solution
 /// reports them (in the model's sense). The result is in minimise space without the offset,
 /// which is what branch and bound compares.
 [[nodiscard]] SafeBound safe_dual_bound(const Model& model, const std::vector<double>& row_dual,
                                         bool imply_bounds = true);
+
+/// An interval containing the exact value of sum_j a_j b_j, by the same outward rounding.
+[[nodiscard]] std::pair<double, double> dot_enclosure(std::span<const double> a,
+                                                      std::span<const double> b);
 
 }  // namespace sankhya

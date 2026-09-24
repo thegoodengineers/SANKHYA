@@ -407,4 +407,11 @@ inline constexpr std::int64_t kGlobalHeuristicInterval = 10;
 /// the second evaluation cannot undo it. Neumaier & Shcherbina, Math. Program. 99 (2004).
 inline constexpr double kSafeBoundMaxShrink = 1e-6;
 inline constexpr double kSafeBoundShrinkMargin = 4.0;
+
+/// MILP certificates (#518): how many ancestors' duals a leaf tries before it gives up on a
+/// bound, and the largest magnitude an objective step or its rounded bound may have for the
+/// Chvatal-Gomory rounding step to be written: below 2^53 every integer is a double, so the
+/// ceiling and the product are exact (9e15 < 2^53 = 9.007e15).
+inline constexpr Count kCertificateAncestorsTried = 8;
+inline constexpr double kCertificateExactInteger = 9e15;
 }  // namespace sankhya::tol

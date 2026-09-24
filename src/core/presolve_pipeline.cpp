@@ -49,6 +49,16 @@ PresolveOutcome run_with_presolve(const Model& model, const Options& options, Lo
     outcome.solution.presolve_report.skipped_because = why;
     return outcome;
   }
+  if (mixed_integer && options.get_bool("presolve") &&
+      !options.get_string("write_certificate").empty()) {
+    const char* why =
+        "write_certificate proves the answer for the model as given, and presolve would hand "
+        "the search a different one (#518)";
+    logger.info("Presolve skipped: {}", why);
+    outcome.solution = run_engine(model);
+    outcome.solution.presolve_report.skipped_because = why;
+    return outcome;
+  }
   if (!options.get_bool("presolve")) {
     if (!options.get_string("write_presolved").empty()) {
       logger.warning(

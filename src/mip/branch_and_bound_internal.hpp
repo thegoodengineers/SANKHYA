@@ -23,6 +23,7 @@
 #include "sankhya/qp.hpp"
 #include "sankhya/solve_control.hpp"
 
+#include "certificate_writer.hpp"
 #include "checkpoint.hpp"
 #include "conflict.hpp"
 #include "cut_selection.hpp"
@@ -181,6 +182,7 @@ class BranchAndBound {
     }
     reliability_branching_ = options.get_string("mip_branching") != "most-fractional";
     safe_bounds_ = options.get_bool("safe_bounds");
+    certificate_path_ = options.get_string("write_certificate");
     const auto columns = static_cast<std::size_t>(model.num_cols());
     pseudo_down_sum_.assign(columns, 0.0);
     pseudo_up_sum_.assign(columns, 0.0);
@@ -522,7 +524,21 @@ class BranchAndBound {
   [[nodiscard]] double safe_node_bound(const Solution& relaxation, double believed);
   void report_safe_bounds() const;
   bool safe_bounds_ = false;
-  Count safe_bound_nodes_ = 0;     ///< node bounds computed
+  // ---- Certificates (#518), in branch_and_bound_certificate.cpp -------------------------
+  /// Keep what a solved node's LP proves: its duals (kDual) or Farkas multipliers (kFarkas).
+  void certificate_record(Index node, const Solution& relaxation, CertificateTree::Proof proof);
+  void certificate_children(Index node, Index down, Index up);
+  /// Give up on the certificate, keeping the first reason.
+  void certificate_refuse(const std::string& why);
+  /// Write it, or say why not. At the end of run().
+  void finish_certificate();
+  /// True when y or -y proves the entered node's LP infeasible, by the safe test (#519).
+  [[nodiscard]] bool farkas_proves(const std::vector<double>& y) const;
+  Count certificate_farkas_resolves_ = 0;
+  std::string certificate_path_;  ///< write_certificate; empty when off
+  std::string certificate_refusal_;
+  std::vector<CertificateTree::Node> certificate_nodes_;  ///< parallel to nodes_, grown lazily
+  Count safe_bound_nodes_ = 0;                            ///< node bounds computed
   Count safe_bound_infinite_ = 0;  ///< of which -inf (no finite bound from those duals)
   Count safe_bound_refusals_ = 0;  ///< the believed bound prunes and the safe one does not
   /// max over nodes of believed - safe (finite ones; negative when safe was always higher)

@@ -1525,6 +1525,24 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"write_certificate",
+                 OptionType::String,
+                 std::string(""),
+                 "MILP: write a proof of the answer to this path in the VIPR format (#518; "
+                 "Cheung, Gleixner and Steffy, IPCO 2017), checked independently by "
+                 "tools/verify_certificate.py in exact rational arithmetic: every leaf of the "
+                 "tree bounded by the safe bound of its LP duals (#519), every branching node "
+                 "combining its children over the disjunction. Presolve, node propagation and "
+                 "the integer row tightening are switched off and the search runs on one "
+                 "thread, so every node LP is solved over exactly the box its derivation uses. "
+                 "Nothing is written, and the log says why, when cut, symmetry or objective "
+                 "rows were added (set enable_root_cuts=false), after a restart, or for an "
+                 "MIQP. Empty (default) disables it.",
+                 0.0,
+                 0.0,
+                 {},
+                 /*planned_for=*/std::string(""),
+                 /*case_sensitive=*/true});
     s.push_back({"write_presolved",
                  OptionType::String,
                  std::string(""),

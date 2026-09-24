@@ -464,6 +464,7 @@ Solution BranchAndBound::run() {
     // costs now rule out; and if that fixed enough of the integer columns, throw the tree
     // away and re-solve the root on the tightened bounds.
     if (fix_by_reduced_cost() > 0 && restart_due()) {
+      certificate_refuse("the search restarted and discarded its tree");
       restart_search();
       continue;
     }
@@ -508,6 +509,7 @@ Solution BranchAndBound::run() {
     if (debug_inside) debug_after_node_lp(relaxation);
 
     if (relaxation.status == SolveStatus::kInfeasible) {
+      certificate_record(node_index, relaxation, CertificateTree::Proof::kFarkas);
       leave();
       ++nodes_pruned_;
       analyze_conflict(node_index, ConflictSource::kLp, &relaxation.farkas_dual);
@@ -589,6 +591,7 @@ Solution BranchAndBound::run() {
     // ordered raw; can_prune() and the gap test round it up to the next value an integer
     // solution can take (#221), so node selection is the same with or without the rounding.
     const double node_bound = internal_objective(relaxation.col_value);
+    certificate_record(node_index, relaxation, CertificateTree::Proof::kDual);  // #518
     if (debug_inside) debug_after_node_lp(relaxation);  // the bound after the cut rounds
 
     // THE PSEUDOCOST OBSERVATION (#69): what branching on this node's column bought, per
@@ -628,7 +631,10 @@ Solution BranchAndBound::run() {
     if (most_fractional(relaxation.col_value) < 0) {
       // Integral relaxation: this node's optimum is a MILP solution.
       offer_incumbent(relaxation.col_value);
-      if (pool_complete_ && split_integral_node(node_index, relaxation)) continue;
+      if (pool_complete_ && split_integral_node(node_index, relaxation)) {
+        certificate_refuse("pool_complete split a node other than by one disjunction");
+        continue;
+      }
       leave();
       continue;
     }
@@ -735,6 +741,7 @@ Solution BranchAndBound::run() {
     const auto up_index = static_cast<Index>(nodes_.size() - 1);
     open_.push_back(down_index);
     open_.push_back(up_index);
+    certificate_children(node_index, down_index, up_index);  // #518
     dive = true;
 
     // ---- The node table -------------------------------------------------------------------
@@ -760,6 +767,7 @@ Solution BranchAndBound::run() {
 
   report_conflicts();
   report_safe_bounds();
+  finish_certificate();  // #518: written here, whatever status the search ends in
   // A search stopped by a limit is exactly the one worth resuming (#287).
   if (limit_hit && !open_.empty()) save_checkpoint();
   if (shared_ != nullptr) leave_shared(limit_hit, solution.stopped_by, gap_target_met);
@@ -938,8 +946,11 @@ Solution solve_branch_and_bound(const Model& model, const Options& options, Logg
   // It runs on a COPY. The caller's model is an input, and a solver that silently rewrites
   // the model it was handed makes a second solve of the "same" model mean something different
   // from the first.
+  // A certificate (#518) proves the answer for the rows as given, so they are not rewritten.
+  const bool certify = !options.get_string("write_certificate").empty();
   Model tightened = model;
-  const RowTightening effect = tighten_integral_rows(&tightened, logger);
+  const RowTightening effect =
+      certify ? RowTightening{} : tighten_integral_rows(&tightened, logger);
   const Model& searched = effect.rows_tightened > 0 ? tightened : model;
   // The debug-solution check (#500): the model as received and after the rounding above, and
   // at the end the answer. Nothing happens unless `debug_solution` is set.
@@ -958,7 +969,7 @@ Solution solve_branch_and_bound(const Model& model, const Options& options, Logg
   // PARALLEL TREE SEARCH (#222), when asked for and when the model is one it takes: a MILP,
   // not a pool_complete search (whose pruning reads the pool's cutoff at every node), and
   // not in deterministic mode (the tree a parallel search explores depends on timing).
-  const int threads = parallel_threads(searched, options, logger);
+  const int threads = certify ? 1 : parallel_threads(searched, options, logger);
   if (threads > 1)
     return checked(
         solve_branch_and_bound_parallel(searched, options, logger, control, threads));
