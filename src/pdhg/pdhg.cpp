@@ -263,7 +263,9 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         const auto u = static_cast<std::size_t>(j);
         const double gradient = scaling.cost[u] + at_y[u];
         x_next[u] = project(x[u] - tau * gradient, scaling.col_lower[u], scaling.col_upper[u]);
-        extrapolated[u] = 2.0 * x_next[u] - x[u];  // the [CP11] extrapolation
+        // two_matvec derives A*xbar from A*x_{k+1} and A*x_k, so the extrapolated
+        // vector itself is not needed in that path.
+        if (!two_matvec) extrapolated[u] = 2.0 * x_next[u] - x[u];  // the [CP11] extrapolation
       }
     }
 
