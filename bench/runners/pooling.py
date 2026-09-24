@@ -298,7 +298,7 @@ def main() -> int:
             ours = row["our_objective"]
             print(f"{name:<10}{formulation:<5}{row['status']:<12}"
                   f"{(f'{float(ours):.8g}' if ours else '-'):>16}{reference:>16.10g}"
-                  f"{(f'{float(row['root_bound']):.6g}' if row['root_bound'] else '-'):>14}"
+                  f"{(format(float(row['root_bound']), '.6g') if row['root_bound'] else '-'):>14}"
                   f"{row['wall_seconds']:>8.2f}s  "
                   f"{'PASS' if row['passed'] else 'FAIL: ' + row['failure_reason']}")
             if not row["matches_manifest"]:
