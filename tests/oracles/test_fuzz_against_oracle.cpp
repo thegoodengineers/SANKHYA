@@ -211,13 +211,29 @@ TEST(FuzzAgainstOracle, DualHarrisAndStartPerturbationAgainstOracle) {
   for (int trial = 0; trial < 1000; ++trial) {
     compare(degenerate_lp(rng, config), &tally, dual);
   }
+  // The generators above give n <= 8 columns with costs spread over [-6, 6], so the start
+  // perturbation's gate (fewer than n / 4 distinct costs) almost never opens there and the
+  // runs above are Harris runs (review of #653). These have at least 9 columns and costs in
+  // {0, 1}: two distinct costs, under n / 4 for every n >= 9, so every solve perturbs, and
+  // presolve is off so it is the dual loop that sees them.
+  GeneratorConfig wide = config;
+  wide.min_cols = 9;
+  wide.max_cols = 12;
+  OptionList perturbed = dual;
+  perturbed.push_back({"presolve", "false"});
+  std::bernoulli_distribution coin(0.5);
+  for (int trial = 0; trial < 1000; ++trial) {
+    GeneratedLp lp = random_lp(rng, wide);
+    for (auto& c : lp.c) c = coin(rng) ? 1 : 0;
+    compare(lp, &tally, perturbed);
+  }
 
   report(
-      "2000 instances (random + degenerate) under the dual simplex, dual_ratio_test=harris "
-      "and dual_perturb_costs_at_start",
+      "3000 instances (random + degenerate, and 1000 with {0,1} costs that always perturb) "
+      "under the dual simplex, dual_ratio_test=harris and dual_perturb_costs_at_start",
       tally);
   EXPECT_EQ(tally.mismatched, 0);
-  EXPECT_GT(tally.compared(), 1600) << "the oracle abstained too often to prove anything";
+  EXPECT_GT(tally.compared(), 2400) << "the oracle abstained too often to prove anything";
 }
 
 TEST(FuzzAgainstOracle, KktInstancesAgainstTheAnalyticOptimum) {

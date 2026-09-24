@@ -227,5 +227,54 @@ TEST(DualHarris, PerturbationAtTheStartIsGatedOnDistinctCostsAndUndoneByThePrima
   EXPECT_GT(alone, 5);
 }
 
+TEST(DualHarris, OffIsBitForBitTheTextbookPath) {
+  // With both options at their defaults the dual simplex must be exactly the old path
+  // (review of #653): same iterations, objective, point and duals as naming the old
+  // settings explicitly, on instances with degenerate ties.
+  const auto netlib =
+      std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "data/netlib";
+  int compared = 0;
+  for (const char* name : {"afiro", "sc50b", "share2b", "degen2"}) {
+    Model model;
+    if (!io::read_model((netlib / (std::string(name) + ".mps")).string(), &model).ok) continue;
+    Options defaults;
+    defaults.set_bool("log_to_console", false);
+    defaults.set_bool("presolve", false);
+    defaults.set_string("algorithm", "dual-simplex");
+    Options named = defaults;
+    named.set_string("dual_ratio_test", "textbook");
+    named.set_bool("dual_perturb_costs_at_start", false);
+    const Solution a = solve(model, defaults);
+    const Solution b = solve(model, named);
+    EXPECT_EQ(a.status, b.status) << name;
+    EXPECT_EQ(a.iterations, b.iterations) << name;
+    EXPECT_EQ(a.objective, b.objective) << name;
+    EXPECT_EQ(a.col_value, b.col_value) << name;
+    EXPECT_EQ(a.row_dual, b.row_dual) << name;
+    ++compared;
+  }
+  EXPECT_GE(compared, 3);
+}
+
+TEST(DualHarris, AZeroIterationExitReportsDualsForTheModelsOwnCosts) {
+  // The start perturbation runs before the zero-iteration exit (#289); that exit must still
+  // hand back duals for the model's costs, not the perturbed ones (review of #653). {0,1}
+  // costs over 12 columns open the perturbation's gate.
+  std::vector<double> cost(12);
+  for (std::size_t j = 0; j < cost.size(); ++j) cost[j] = static_cast<double>(j % 2);
+  const Model model =
+      make_model(cost, std::vector<double>(12, 0.0), std::vector<double>(12, 1.0),
+                 {std::vector<double>(12, 1.0)}, {3.0}, {kInf});
+  Options perturbed = dual_options({"perturb-at-start", false, true});
+  perturbed.set_int("iteration_limit", 0);
+  Options plain = dual_options({"plain", false, false});
+  plain.set_int("iteration_limit", 0);
+  const Solution a = solve(model, perturbed);
+  const Solution b = solve(model, plain);
+  ASSERT_EQ(a.row_dual.size(), b.row_dual.size());
+  EXPECT_EQ(a.row_dual, b.row_dual);
+  EXPECT_EQ(a.col_dual, b.col_dual);
+}
+
 }  // namespace
 }  // namespace sankhya

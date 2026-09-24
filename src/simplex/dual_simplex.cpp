@@ -67,6 +67,7 @@
 // stall that survives that hands the basis to the primal loop, which has its own
 // anti-degeneracy machinery - so a stall costs iterations and never a wrong answer.
 
+#include "core/safe_bound.hpp"
 #include "primal_simplex.hpp"
 #include "simplex_core.hpp"
 
@@ -487,6 +488,9 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   // a pivot, which is the right place for every larger budget and the wrong one for this.
   if (const LimitReason why = limits_.exhausted(timer.elapsed_seconds(), iterations, 0);
       why != LimitReason::kNone) {
+    // The start perturbation (#465) ran above; the duals this exit reports must be for the
+    // model's own costs (review of #653).
+    remove_cost_perturbation();
     compute_reduced_costs(false);
     return finish(status_for(why),
                   limits_.describe(why, timer.elapsed_seconds(), iterations, 0), iterations,
@@ -667,13 +671,30 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       // Exact costs first: the bound below is the objective of the basic solution, and a
       // perturbed cost vector would put a perturbation-sized error into a number that
       // branch and bound prunes against.
+      // A basis that was dual feasible for PERTURBED or SHIFTED costs is not, in general, dual
+      // feasible for the model's own: restoring them can leave nonbasic reduced costs of the
+      // wrong sign (by up to the perturbation, ~1e-5 with dual_perturb_costs_at_start), and
+      // then the objective of the basic solution is no bound at all - a wrong-signed column
+      // with no bound on its far side makes the true bound -inf. Such an exit reports the
+      // Neumaier-Shcherbina bound from its duals instead (#519, src/core/safe_bound.hpp),
+      // which charges every wrong-signed reduced cost against the column's range and says
+      // -inf when it cannot (review of #653).
+      const bool costs_moved = cost_perturbed_ || cost_shifted_;
       remove_cost_perturbation();
       const bool bound_is_valid = !any_artificial_bound();
       const double bound = minimization_objective();
       remove_artificial_bounds();
       compute_reduced_costs(false);
       Solution stopped = finish(status, why, iterations, timer.elapsed_seconds());
-      if (bound_is_valid) stopped.dual_bound = bound;
+      if (bound_is_valid && !costs_moved) {
+        stopped.dual_bound = bound;
+      } else if (bound_is_valid &&
+                 stopped.row_dual.size() == static_cast<std::size_t>(model_.num_rows())) {
+        const SafeBound safe = safe_dual_bound(model_, stopped.row_dual);
+        if (std::isfinite(safe.value)) {
+          stopped.dual_bound = model_.sense_multiplier() * safe.value + model_.objective_offset;
+        }
+      }
       return stopped;
     };
     const auto count_iteration = [&]() -> std::optional<Solution> {
