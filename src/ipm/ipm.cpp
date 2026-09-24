@@ -366,17 +366,27 @@ class InteriorPoint {
   int corrector_cap_ = 0;
   Count correctors_tried_ = 0;
   Count correctors_kept_ = 0;
+  /// The most correctors any one iteration was allowed and tried: reported, so a test can
+  /// hold the conjugate-gradient paths to their one corrector (review of #668).
+  int corrector_budget_most_ = 0;
+  int correctors_tried_most_ = 0;
+  /// This iteration's budget: corrector_budget() from the factor's shape, lowered where a
+  /// solve is a conjugate gradient or a refined one (tolerances.hpp, kIpmCentrality*).
+  [[nodiscard]] int corrector_budget_now() const;
   /// After the Mehrotra direction is in dx_ ... dzu_: try correctors that push the
   /// complementarity products back towards [beta_min, beta_max] sigma mu, each one more
-  /// back-solve with the current factors, keeping one only while it lengthens the step.
+  /// solve with the current factors, keeping one only while its solve is finite and accurate,
+  /// it lengthens the step and it leaves the products no less even (centrality_after).
   void centrality_correctors(double sigma);
   /// The complementarity products at the point the current direction reaches with the step
   /// lengths the iteration would take (kStepToBoundary times alpha_p and alpha_d, at most 1):
-  /// the worst in the stopping test's measure s z / (1 + |x|), and the spread, the largest
-  /// product over their mean (1 when all are equal).
+  /// the worst in the stopping test's measure s z / (1 + |x|), the spread, the largest
+  /// product over their mean (1 when all are equal), and the floor, the smallest product over
+  /// their mean (1 when all are equal): the two ends of Gondzio's band.
   struct Centrality {
     double worst = 0.0;
     double spread = 0.0;
+    double floor = 0.0;
   };
   [[nodiscard]] Centrality centrality_after(double alpha_p, double alpha_d) const;
   /// The dual regularization the factorization runs with (#209). It starts at
@@ -1105,91 +1115,6 @@ void InteriorPoint::newton_direction() {
   }
 }
 
-// GONDZIO'S MULTIPLE CENTRALITY CORRECTORS (#472; Gondzio 1996, Colombo & Gondzio 2008, see
-// ipm/centrality.hpp). The Mehrotra direction is in hand with its step lengths. From a trial
-// point at the aspiration step min(1.5 alpha + 0.3, 1), the complementarity products outside
-// [beta_min, beta_max] sigma mu are pulled back towards that interval by adding the gap to the
-// r_mu terms and solving again with the SAME factors: by linearity the new direction is the
-// Mehrotra direction plus the corrector. It is kept when it lengthens alpha_p + alpha_d by at
-// least kIpmCentralityAcceptance, otherwise the previous direction is restored and the loop
-// ends. How many are tried is capped by the option and by the factor's shape, never by a clock.
-//
-// A LONGER STEP IS NOT ENOUGH. The correctors exist to make the products more even (Gondzio
-// 1996, sec. 1), and the stopping test bounds the worst of them. A corrector that lengthens
-// the step by leaving products behind is therefore refused as well: it is kept only when, at
-// the point the step reaches, neither the worst product in the stopping test's measure nor
-// the spread (the largest product over the mean) is larger than with the previous direction.
-// Each half was needed on its own (#472): with the step test alone a KKT oracle instance
-// reached mu 6.5e-9 with one product at 1.2e-8 and stalled there for 60 iterations; with the
-// worst product alone Netlib shell stalled with its largest product 100 times the mean (a
-// longer step lowers every product, so that test passes while the spread grows); with the
-// spread alone another oracle instance stalled.
-void InteriorPoint::centrality_correctors(double sigma) {
-  const int budget = corrector_budget(static_cast<double>(ldl_.factor_nonzeros()),
-                                      static_cast<double>(ldl_.dimension()), corrector_cap_);
-  double alpha_p = step_length(sl_, dsl_, su_, dsu_);
-  double alpha_d = step_length(zl_, dzl_, zu_, dzu_);
-  Centrality current = centrality_after(alpha_p, alpha_d);
-  for (int k = 0; k < budget; ++k) {
-    if (alpha_p >= 1.0 && alpha_d >= 1.0) return;  // nothing left to lengthen
-    const std::vector<double> dx = dx_, dy = dy_, dsl = dsl_, dzl = dzl_, dsu = dsu_,
-                              dzu = dzu_, rl = r_mu_l_, ru = r_mu_u_;
-    const double target = sigma * mu_;
-    const double trial_p = aspiration_step(alpha_p);
-    const double trial_d = aspiration_step(alpha_d);
-    const Index corrected = add_centrality_term(sl_, dsl_, zl_, dzl_, has_lower_, trial_p,
-                                                trial_d, target, &r_mu_l_) +
-                            add_centrality_term(su_, dsu_, zu_, dzu_, has_upper_, trial_p,
-                                                trial_d, target, &r_mu_u_);
-    if (corrected == 0) return;
-    ++correctors_tried_;
-    newton_direction();
-    const double next_p = step_length(sl_, dsl_, su_, dsu_);
-    const double next_d = step_length(zl_, dzl_, zu_, dzu_);
-    const bool finite = direction_is_finite();
-    const Centrality next = finite ? centrality_after(next_p, next_d) : current;
-    if (finite && next_p + next_d >= tol::kIpmCentralityAcceptance * (alpha_p + alpha_d) &&
-        next.worst <= current.worst && next.spread <= current.spread) {
-      alpha_p = next_p;
-      alpha_d = next_d;
-      current = next;
-      ++correctors_kept_;
-      continue;
-    }
-    dx_ = dx;
-    dy_ = dy;
-    dsl_ = dsl;
-    dzl_ = dzl;
-    dsu_ = dsu;
-    dzu_ = dzu;
-    r_mu_l_ = rl;
-    r_mu_u_ = ru;
-    return;
-  }
-}
-
-InteriorPoint::Centrality InteriorPoint::centrality_after(double alpha_p,
-                                                          double alpha_d) const {
-  const double ap = std::min(1.0, kStepToBoundary * alpha_p);
-  const double ad = std::min(1.0, kStepToBoundary * alpha_d);
-  Centrality c;
-  double largest = 0.0;
-  double sum = 0.0;
-  const auto take = [&](double v, double x) {
-    c.worst = std::max(c.worst, v / (1.0 + std::fabs(x)));
-    largest = std::max(largest, v);
-    sum += v;
-  };
-  for (Index k = 0; k < total_; ++k) {
-    const auto u = static_cast<std::size_t>(k);
-    const double x = x_[u] + ap * dx_[u];
-    if (has_lower_[u]) take((sl_[u] + ap * dsl_[u]) * (zl_[u] + ad * dzl_[u]), x);
-    if (has_upper_[u]) take((su_[u] + ap * dsu_[u]) * (zu_[u] + ad * dzu_[u]), x);
-  }
-  if (sum > 0.0) c.spread = largest * static_cast<double>(bound_count_) / sum;
-  return c;
-}
-
 void InteriorPoint::proximal_newton_direction(const std::vector<double>& g) {
   const ProximalSystem::Refinement refined =
       proximal_->solve(ldl_, g, r_b_, tol::kIpmProximalRefinementSteps, &dx_, &dy_);
@@ -1219,6 +1144,138 @@ void InteriorPoint::proximal_newton_direction(const std::vector<double>& g) {
       dzu_[u] = (r_mu_u_[u] - zu_[u] * dsu_[u]) / su_[u];
     }
   }
+}
+
+// GONDZIO'S MULTIPLE CENTRALITY CORRECTORS (#472; Gondzio 1996, Colombo & Gondzio 2008, see
+// ipm/centrality.hpp). The Mehrotra direction is in hand with its step lengths. From a trial
+// point at the aspiration step min(1.5 alpha + 0.3, 1), the complementarity products outside
+// [beta_min, beta_max] sigma mu are pulled back towards that interval by adding the gap to the
+// r_mu terms and solving again with the SAME factors: by linearity the new direction is the
+// Mehrotra direction plus the corrector. It is kept when it lengthens alpha_p + alpha_d by at
+// least kIpmCentralityAcceptance, otherwise the previous direction is restored and the loop
+// ends. How many are tried is capped by the option and by the factor's shape, never by a clock.
+//
+// A LONGER STEP IS NOT ENOUGH. The correctors exist to make the products more even (Gondzio
+// 1996, sec. 1), and the stopping test bounds the worst of them. A corrector that lengthens
+// the step by leaving products behind is therefore refused as well: it is kept only when, at
+// the point the step reaches, neither the worst product in the stopping test's measure nor
+// the spread (the largest product over the mean) is larger than with the previous direction,
+// and the floor (the smallest product over the mean) is not smaller. Each was needed on its
+// own (#472): with the step test alone a KKT oracle instance reached mu 6.5e-9 with one
+// product at 1.2e-8 and stalled there for 60 iterations; with the worst product alone Netlib
+// shell stalled with its largest product 100 times the mean (a longer step lowers every
+// product, so that test passes while the spread grows); with the spread alone another oracle
+// instance stalled. The floor is the band's lower end (review of #668): on KKT oracle trial
+// 18 a corrector kept at iteration 2 lengthened the step and passed both upper tests, the
+// next Mehrotra step fell to 0.44 / 0.71, and the run ended at mu 8.3e-9 with its worst
+// product 2.8 times the mean and stalled; with the floor test that corrector is refused and
+// all 150 oracle trials converge.
+//
+// A CORRECTOR'S SOLVE IS JUDGED AS THE MEHROTRA DIRECTION'S IS (review of #668). On the
+// dense-column path (#467) and the n x n side (#469) a solve whose conjugate gradients did
+// not converge sets direction_inaccurate_, and on the proximal path (#473) a refinement that
+// missed its target sets refinement_missed_. The run loop never takes such a direction as it
+// stands, so neither may a corrector: each one's solve is judged on its own (both flags
+// cleared before it), refused when either is set or the direction is not finite, and the
+// flags are put back as the accepted direction left them - a refused corrector's miss must
+// not shrink rho at the next factorization, nor a refused inaccurate solve reach the
+// recovery, since the direction that is taken is the one before it.
+void InteriorPoint::centrality_correctors(double sigma) {
+  const int budget = corrector_budget_now();
+  corrector_budget_most_ = std::max(corrector_budget_most_, budget);
+  int tried = 0;
+  double alpha_p = step_length(sl_, dsl_, su_, dsu_);
+  double alpha_d = step_length(zl_, dzl_, zu_, dzu_);
+  Centrality current = centrality_after(alpha_p, alpha_d);
+  for (int k = 0; k < budget; ++k) {
+    if (alpha_p >= 1.0 && alpha_d >= 1.0) break;  // nothing left to lengthen
+    const std::vector<double> dx = dx_, dy = dy_, dsl = dsl_, dzl = dzl_, dsu = dsu_,
+                              dzu = dzu_, rl = r_mu_l_, ru = r_mu_u_;
+    const double target = sigma * mu_;
+    const double trial_p = aspiration_step(alpha_p);
+    const double trial_d = aspiration_step(alpha_d);
+    const Index corrected = add_centrality_term(sl_, dsl_, zl_, dzl_, has_lower_, trial_p,
+                                                trial_d, target, &r_mu_l_) +
+                            add_centrality_term(su_, dsu_, zu_, dzu_, has_upper_, trial_p,
+                                                trial_d, target, &r_mu_u_);
+    if (corrected == 0) break;  // r_mu is untouched when nothing was corrected
+    ++correctors_tried_;
+    ++tried;
+    const bool inaccurate_before = direction_inaccurate_;
+    const bool missed_before = refinement_missed_;
+    direction_inaccurate_ = false;
+    refinement_missed_ = false;
+    newton_direction();
+    const bool solved = direction_is_finite() && !direction_inaccurate_ && !refinement_missed_;
+    direction_inaccurate_ = inaccurate_before;
+    refinement_missed_ = missed_before;
+    const double next_p = solved ? step_length(sl_, dsl_, su_, dsu_) : 0.0;
+    const double next_d = solved ? step_length(zl_, dzl_, zu_, dzu_) : 0.0;
+    const Centrality next = solved ? centrality_after(next_p, next_d) : current;
+    if (solved && next_p + next_d >= tol::kIpmCentralityAcceptance * (alpha_p + alpha_d) &&
+        next.worst <= current.worst && next.spread <= current.spread &&
+        next.floor >= current.floor) {
+      alpha_p = next_p;
+      alpha_d = next_d;
+      current = next;
+      ++correctors_kept_;
+      continue;
+    }
+    dx_ = dx;
+    dy_ = dy;
+    dsl_ = dsl;
+    dzl_ = dzl;
+    dsu_ = dsu;
+    dzu_ = dzu;
+    r_mu_l_ = rl;
+    r_mu_u_ = ru;
+    break;
+  }
+  correctors_tried_most_ = std::max(correctors_tried_most_, tried);
+}
+
+int InteriorPoint::corrector_budget_now() const {
+  const auto factor = static_cast<double>(ldl_.factor_nonzeros());
+  const auto dimension = static_cast<double>(ldl_.dimension());
+  if (proximal_ != nullptr) {
+    // A refined solve is up to 1 + kIpmProximalRefinementSteps back-solves: the
+    // factorization buys that many times fewer of them.
+    const double solves = 1.0 + static_cast<double>(tol::kIpmProximalRefinementSteps);
+    return std::min(corrector_budget(factor / solves, dimension, corrector_cap_),
+                    tol::kIpmCentralityProximalCorrectors);
+  }
+  const int budget = corrector_budget(factor, dimension, corrector_cap_);
+  if (dense_.active() || column_side_active_) {
+    return std::min(budget, tol::kIpmCentralityConjugateGradientCorrectors);
+  }
+  return budget;
+}
+
+InteriorPoint::Centrality InteriorPoint::centrality_after(double alpha_p,
+                                                          double alpha_d) const {
+  const double ap = std::min(1.0, kStepToBoundary * alpha_p);
+  const double ad = std::min(1.0, kStepToBoundary * alpha_d);
+  Centrality c;
+  double largest = 0.0;
+  double smallest = std::numeric_limits<double>::infinity();
+  double sum = 0.0;
+  const auto take = [&](double v, double x) {
+    c.worst = std::max(c.worst, v / (1.0 + std::fabs(x)));
+    largest = std::max(largest, v);
+    smallest = std::min(smallest, v);
+    sum += v;
+  };
+  for (Index k = 0; k < total_; ++k) {
+    const auto u = static_cast<std::size_t>(k);
+    const double x = x_[u] + ap * dx_[u];
+    if (has_lower_[u]) take((sl_[u] + ap * dsl_[u]) * (zl_[u] + ad * dzl_[u]), x);
+    if (has_upper_[u]) take((su_[u] + ap * dsu_[u]) * (zu_[u] + ad * dzu_[u]), x);
+  }
+  if (sum > 0.0) {
+    c.spread = largest * static_cast<double>(bound_count_) / sum;
+    c.floor = smallest * static_cast<double>(bound_count_) / sum;
+  }
+  return c;
 }
 
 double InteriorPoint::step_length(const std::vector<double>& s, const std::vector<double>& ds,
@@ -1276,8 +1333,10 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
         cg_iterations_, cg_solves_, worst_backward_error_, cg_unconverged_);
   }
   if (corrector_cap_ > 0) {
-    logger_.verbose("interior point: {} centrality correctors tried, {} kept (#472)",
-                    correctors_tried_, correctors_kept_);
+    logger_.info(
+        "IPM: centrality correctors: {} kept of {} tried, at most {} tried in one iteration "
+        "under a budget of at most {} (#472)",
+        correctors_kept_, correctors_tried_, correctors_tried_most_, corrector_budget_most_);
   }
   // THE WORST ROWS AND VARIABLES, AT EVERY STOP THAT HANDS BACK A POINT (#582). A limit stop
   // restores the best iterate without re-measuring it, so it is measured here first: the
@@ -1728,7 +1787,6 @@ Solution InteriorPoint::run() {
     }
   }
   build();
-  corrector_cap_ = static_cast<int>(options_.get_int("ipm_centrality_correctors"));
   if (options_.get_bool("ipm_proximal_regularization")) {
     proximal_ = std::make_unique<ProximalSystem>(model_.matrix, fixed_);
     purify_ldl_.set_ordering_budget(ldl_.ordering_budget());
@@ -1741,6 +1799,7 @@ Solution InteriorPoint::run() {
           "ipm_proximal_regularization, whose signed factorization stays scalar");
     }
   }
+  corrector_cap_ = static_cast<int>(options_.get_int("ipm_centrality_correctors"));
   logger_.verbose("interior point: built in {:.2f}s from the start of the solve",
                   timer.elapsed_seconds());
   if (options_.get_bool("ipm_dense_columns") && proximal_ != nullptr) {
@@ -2210,20 +2269,7 @@ Solution InteriorPoint::run() {
 
     // A method that stops moving is not converging; say so rather than spin to the limit.
     if (mu_ >= 0.999 * previous_mu && alpha_p < 1e-6 && alpha_d < 1e-6) {
-      if (++stalled >= 5 && !barrier_retry_used_ &&
-          regularization_raises_ < kMaxRegularizationRaises &&
-          primal_infeasibility_ <= kBarrierExhaustedSlack * kIpmTolerance &&
-          dual_infeasibility_ <= kBarrierExhaustedSlack * kIpmTolerance &&
-          max_product_ <= kBarrierExhaustedSlack * kIpmComplementarity) {
-        barrier_retry_used_ = true;
-        dual_regularization_ *= kRegularizationRaise;
-        ++regularization_raises_;
-        logger_.verbose(
-            "interior point: stalled at iteration {} within a decade of every tolerance; "
-            "regularization raised for one more step",
-            iterations);
-        stalled = 0;
-      } else if (stalled >= 5) {
+      if (++stalled >= 5) {
         // The best iterate is returned as a FEASIBLE point when it met the feasibility
         // tolerances, for the status guard to judge; otherwise as the numerical failure it
         // is. Never as optimal: the convergence test above is the only thing that says so.

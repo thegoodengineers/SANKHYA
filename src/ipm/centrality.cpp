@@ -12,7 +12,8 @@
 namespace sankhya::ipm {
 
 double aspiration_step(double alpha) {
-  return std::min(1.5 * alpha + 0.3, 1.0);
+  return std::min(
+      tol::kIpmCentralityAspirationScale * alpha + tol::kIpmCentralityAspirationShift, 1.0);
 }
 
 Index add_centrality_term(const std::vector<double>& s, const std::vector<double>& ds,
@@ -41,9 +42,12 @@ Index add_centrality_term(const std::vector<double>& s, const std::vector<double
 
 int corrector_budget(double factor_nonzeros, double dimension, int cap) {
   if (cap <= 0 || dimension <= 0.0) return 0;
-  const double ratio = (factor_nonzeros / dimension + 1.0) / 4.0;
+  const double ratio = (factor_nonzeros / dimension + 1.0) / tol::kIpmCentralitySolveWork;
   int budget = 1;
-  for (double r = ratio; r > 2.0 && budget < cap; r *= 0.5) ++budget;
+  for (double r = ratio; r > tol::kIpmCentralityBudgetStart && budget < cap;
+       r /= tol::kIpmCentralityBudgetGrowth) {
+    ++budget;
+  }
   return std::min(budget, cap);
 }
 

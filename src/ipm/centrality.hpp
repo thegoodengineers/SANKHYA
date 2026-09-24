@@ -42,8 +42,10 @@ Index add_centrality_term(const std::vector<double>& s, const std::vector<double
 /// How many correctors an iteration may try, at most `cap`, from the factor's shape: the
 /// factorization costs about sum_j c_j^2 multiply-adds for column counts c_j and a solve
 /// about 4 sum_j c_j, so with the average column count c their ratio is near c / 4. One
-/// corrector when the ratio is at most 1, one more for each doubling beyond. 0 when `cap`
-/// is 0 (the option's default: off).
+/// corrector while the ratio is at most 2, one more for each doubling beyond (the constants
+/// are tol::kIpmCentralitySolveWork, kIpmCentralityBudgetStart, kIpmCentralityBudgetGrowth).
+/// 0 when `cap` is 0 (the option's default: off). The caller lowers it further where a solve
+/// is not one back-solve (ipm.cpp, centrality_correctors).
 [[nodiscard]] int corrector_budget(double factor_nonzeros, double dimension, int cap);
 
 }  // namespace sankhya::ipm
