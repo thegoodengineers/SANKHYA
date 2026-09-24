@@ -26,14 +26,7 @@
 // optimum and the search then proves the wrong answer, confidently, so a plain, correct
 // search came first and is what makes each addition checkable.
 
-#include "sankhya/mip.hpp"
-#include "sankhya/qp.hpp"
-#include "sankhya/solve_control.hpp"
-
-#include "cuts.hpp"
-#include "mir_cuts.hpp"
-#include "solution_pool.hpp"
-#include "symmetry.hpp"
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <cmath>
@@ -42,17 +35,21 @@
 #include <string>
 #include <vector>
 
-#include <fmt/format.h>
-
 #include "../core/stop_controller.hpp"
 #include "../util/profiler.hpp"
+#include "branch_and_bound_internal.hpp"
+#include "cuts.hpp"
+#include "mir_cuts.hpp"
+#include "obbt.hpp"
+#include "parallel_search.hpp"
+#include "sankhya/mip.hpp"
+#include "sankhya/qp.hpp"
+#include "sankhya/solve_control.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
-
 #include "simplex/primal_simplex.hpp"
-
-#include "branch_and_bound_internal.hpp"
-#include "parallel_search.hpp"
+#include "solution_pool.hpp"
+#include "symmetry.hpp"
 
 namespace sankhya::mip {
 
@@ -951,13 +948,19 @@ Solution solve_branch_and_bound(const Model& model, const Options& options, Logg
   Model tightened = model;
   const RowTightening effect =
       certify ? RowTightening{} : tighten_integral_rows(&tightened, logger);
-  const Model& searched = effect.rows_tightened > 0 ? tightened : model;
+  // OBBT (#515): tighten column bounds by solving min/max x_j LPs before the
+  // search starts. Runs on the copy so the caller's model is unchanged.
+  const ObbtResult obbt_result = (!certify && options.get_bool("mip_obbt"))
+                                     ? obbt_root(tightened, options, logger)
+                                     : ObbtResult{};
+  const bool any_tightening = effect.rows_tightened > 0 || obbt_result.bounds_tightened > 0;
+  const Model& searched = any_tightening ? tightened : model;
   // The debug-solution check (#500): the model as received and after the rounding above, and
   // at the end the answer. Nothing happens unless `debug_solution` is set.
   const std::optional<DebugSolution> debug = load_debug_solution(options, model, logger);
   if (debug.has_value()) {
-    check_search_input_against_debug_solution(
-        model, effect.rows_tightened > 0 ? &tightened : nullptr, *debug, logger);
+    check_search_input_against_debug_solution(model, any_tightening ? &tightened : nullptr,
+                                              *debug, logger);
   }
   const auto checked = [&](Solution result) {
     if (debug.has_value()) {

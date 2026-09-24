@@ -93,6 +93,7 @@ add_executable(sankhya_tests
   unit/test_node_factor_cache.cpp
   unit/test_objective_branching.cpp
   unit/test_combinatorial_cuts.cpp
+  unit/test_obbt.cpp
   unit/test_checkpoint.cpp
   unit/test_parallel_tree.cpp
   unit/test_profiler.cpp
