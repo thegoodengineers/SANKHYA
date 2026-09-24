@@ -191,7 +191,8 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   std::vector<double> x_restart = x;
   std::vector<double> y_restart = y;
 
-  // Halpern state: initialised lazily before the first evaluation tick.
+  // Halpern state. r0 = 0 is the bootstrap sentinel: the first restart sets r0 to the
+  // actual FP residual so that subsequent restarts use a meaningful 20%-ratio threshold.
   HalpernState halpern;
   if (use_halpern) halpern_reset(x, y, 0.0, halpern);
 
