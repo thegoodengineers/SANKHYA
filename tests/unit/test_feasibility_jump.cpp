@@ -303,6 +303,7 @@ TEST(FeasibilityJump, TheSearchWithItOnAgreesWithTheExactOracle) {
   options.set_double("mip_absolute_gap", 0.0);
   int compared = 0;
   int fj_ran = 0;
+  int searched = 0;  // trials whose log reaches the branch and bound summary
   for (int trial = 0; trial < 200; ++trial) {
     const oracle::GeneratedLp lp = random_milp(rng, trial);
     const oracle::OracleResult exact = oracle::solve_exact_milp(lp, 20000);
@@ -315,6 +316,9 @@ TEST(FeasibilityJump, TheSearchWithItOnAgreesWithTheExactOracle) {
     const Solution got = solve(model, options);
     std::fflush(stdout);
     const std::string log = testing::internal::GetCapturedStdout();
+    // The search prints its heuristic table right after "Nodes pruned"; a model the solve
+    // settles before branch and bound (an infeasible or integral LP) never gets there.
+    if (log.find("Nodes pruned") != std::string::npos) ++searched;
     std::smatch calls;
     if (std::regex_search(log, calls, std::regex(R"(feasibility jump\s+calls\s+(\d+))")) &&
         std::stoi(calls[1].str()) > 0) {
@@ -337,7 +341,12 @@ TEST(FeasibilityJump, TheSearchWithItOnAgreesWithTheExactOracle) {
     ++compared;
   }
   EXPECT_GT(compared, 120) << "most generated MILPs should reach a verdict in the oracle";
-  EXPECT_GT(fj_ran, compared / 2) << "feasibility jump ran on " << fj_ran << " of " << compared;
+  // Every search runs FJ before its root LP, so it must show in every search's table. On CI
+  // at 23459ed 54 of 148 compared trials reached the search; a quarter is the floor that
+  // says the test is exercising FJ at all.
+  EXPECT_EQ(fj_ran, searched) << "feasibility jump ran in " << fj_ran << " of " << searched
+                              << " searches";
+  EXPECT_GT(searched, compared / 4) << searched << " of " << compared << " reached the search";
 }
 
 }  // namespace
