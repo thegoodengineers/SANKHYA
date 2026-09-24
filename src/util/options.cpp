@@ -567,6 +567,19 @@ const std::vector<OptionSpec>& Options::registry() {
                  1.0,
                  kNoLimit,
                  {}});
+    s.push_back({"mip_local_mip",
+                 OptionType::Bool,
+                 false,
+                 "After finding a MIP incumbent, run lift and breakthrough moves to improve it "
+                 "by a weighted local search over integer variables (#507; Lin, Zou and Cai, "
+                 "\"Local-MIP: efficient local search for mixed integer programming\", "
+                 "CP 2024, LIPIcs 307). Lift moves shift an integer variable ±1 in the "
+                 "objective-improving direction at a feasible point; tight/breakthrough moves "
+                 "reduce weighted constraint violations at an infeasible point, with a virtual "
+                 "objective-cutoff row. OFF until its A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_reduced_cost_fixing",
                  OptionType::Bool,
                  false,

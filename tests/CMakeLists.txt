@@ -69,6 +69,7 @@ add_executable(sankhya_tests
   unit/test_solution_pool.cpp
   unit/test_conflict.cpp
   unit/test_heuristics.cpp
+  unit/test_local_mip.cpp
   unit/test_restarts.cpp
   unit/test_flow_cover_cuts.cpp
   unit/test_presolve_dual_fixing.cpp
