@@ -126,6 +126,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
                                     : static_cast<Count>(limits.iteration_limit());
   const bool use_restarts = options.get_bool("pdhg_restart");
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
+  const bool two_matvec = options.get_bool("pdhg_two_matvec");
   // ROW-PARALLEL A x (#487). The serial product scatters column by column into y and
   // cannot be split across threads without a reduction; (A^T)^T x through the transpose
   // is a gather per ROW of A - one output per thread, no reduction, the same static
@@ -168,6 +169,10 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   std::vector<double> extrapolated(n, 0.0);
   std::vector<double> at_y(n, 0.0);
   std::vector<double> a_x(m, 0.0);
+  // pdhg_two_matvec: A*x_k cached across iterations; A*x_{k+1} computed once, then
+  // A*xbar and A*dx are derived by vector ops instead of extra mat-vecs (#479).
+  std::vector<double> a_x_cached(m, 0.0);
+  std::vector<double> a_x_new(m, 0.0);
 
   // Running average since the last restart. PDLP restarts to whichever of the average and
   // the current iterate has the better KKT error.
@@ -194,6 +199,8 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       y_unscaled[u] = ys[u] * scaling.row[u];
     }
   };
+
+  if (two_matvec && rows > 0) a_times(x.data(), a_x_cached.data());
 
   double eta = spectral_norm > 0.0 ? 1.0 / spectral_norm : 1.0;
   double omega = 1.0;  // primal weight
@@ -263,7 +270,17 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     // Dual: y' = prox_{sigma sigma_C}( y + sigma A xbar ) = v - sigma proj_C(v / sigma)
     {
       ProfileScope timed(logger.profiler(), "dual step", ProfileMode::kDetailed);
-      if (rows > 0) a_times(extrapolated.data(), a_x.data());
+      if (rows > 0) {
+        if (two_matvec) {
+          // A*x_{k+1} computed once; A*xbar = 2*A*x_{k+1} - A*x_k by vector ops.
+          std::fill(a_x_new.begin(), a_x_new.end(), 0.0);
+          a_times(x_next.data(), a_x_new.data());
+          for (std::size_t i = 0; i < m; ++i)
+            a_x[i] = 2.0 * a_x_new[i] - a_x_cached[i];
+        } else {
+          a_times(extrapolated.data(), a_x.data());
+        }
+      }
       for (Index i = 0; i < rows; ++i) {
         const auto u = static_cast<std::size_t>(i);
         const double v = y[u] + sigma * a_x[u];
@@ -287,16 +304,22 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     double interaction = 0.0;
     if (rows > 0) {
       // (y' - y)' A (x' - x)
-      std::vector<double> dx(n);
-      for (Index j = 0; j < cols; ++j) {
-        dx[static_cast<std::size_t>(j)] =
-            x_next[static_cast<std::size_t>(j)] - x[static_cast<std::size_t>(j)];
-      }
-      std::vector<double> adx(m, 0.0);
-      a_times(dx.data(), adx.data());
-      for (Index i = 0; i < rows; ++i) {
-        const auto u = static_cast<std::size_t>(i);
-        interaction += (y_next[u] - y[u]) * adx[u];
+      if (two_matvec) {
+        // A*(x_next - x) = a_x_new - a_x_cached; no extra mat-vec (#479).
+        for (std::size_t i = 0; i < m; ++i)
+          interaction += (y_next[i] - y[i]) * (a_x_new[i] - a_x_cached[i]);
+      } else {
+        std::vector<double> dx(n);
+        for (Index j = 0; j < cols; ++j) {
+          dx[static_cast<std::size_t>(j)] =
+              x_next[static_cast<std::size_t>(j)] - x[static_cast<std::size_t>(j)];
+        }
+        std::vector<double> adx(m, 0.0);
+        a_times(dx.data(), adx.data());
+        for (Index i = 0; i < rows; ++i) {
+          const auto u = static_cast<std::size_t>(i);
+          interaction += (y_next[u] - y[u]) * adx[u];
+        }
       }
       interaction = std::fabs(interaction);
     }
@@ -342,6 +365,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       // Accept.
       x.swap(x_next);
       y.swap(y_next);
+      if (two_matvec) a_x_cached.swap(a_x_new);
       for (Index j = 0; j < cols; ++j) {
         x_sum[static_cast<std::size_t>(j)] += x[static_cast<std::size_t>(j)];
       }
@@ -504,6 +528,10 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         averaged = 0;
         x_restart = x;
         y_restart = y;
+        if (two_matvec && rows > 0) {
+          std::fill(a_x_cached.begin(), a_x_cached.end(), 0.0);
+          a_times(x.data(), a_x_cached.data());
+        }
         restart_kkt = kkt;
         last_restart = iteration;
         ++restarts;
