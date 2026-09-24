@@ -116,11 +116,14 @@ jobs:
           # -O1 rather than the Debug default -O0: the AddressSanitizer documentation
           # recommends it for reasonable performance, every check still runs, and the build
           # stays Debug so assert() is still compiled in. At -O0 this leg took 15 to 20
-          # minutes, most of it the test suite and the case studies.
+          # minutes, most of it the test suite and the case studies. At -O1 GCC 13 reports a
+          # known false positive, maybe-uninitialized, inside libstdc++'s own std::regex
+          # (std_function.h), so that one warning stays a warning here; the Release leg still
+          # builds everything with -Werror and the warning on.
           - name: Debug+ASan+UBSan
             build_type: Debug
             sanitize: ON
-            debug_flags: "-g -O1"
+            debug_flags: "-g -O1 -Wno-error=maybe-uninitialized"
 
     steps:
       - uses: actions/checkout@v4
