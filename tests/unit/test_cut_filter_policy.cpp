@@ -8,13 +8,20 @@
 // cut passes or fails independently of the scale its coefficients are written in.
 
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <random>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "mip/cuts.hpp"
 #include "sankhya/model.hpp"
+#include "sankhya/options.hpp"
 #include "sankhya/tolerances.hpp"
+
+#include "oracles/lp_generator.hpp"
+#include "oracles/rational_simplex.hpp"
 
 namespace sankhya {
 namespace {
@@ -103,6 +110,87 @@ TEST(CutFilterPolicy, EfficacyIsScaleFreeWhereTheAbsoluteViolationIsNot) {
   res = mip::filter_and_deduplicate_cuts(m, x, {dense_cut(10, 2, 1.0, 0.8)}, efficacy);
   ASSERT_EQ(res.size(), 1u);
   EXPECT_EQ(res[0].reason, mip::CutFilterReason::kAccepted);
+}
+
+TEST(CutFilterPolicy, ASearchWithBothOnStillReachesTheExactOptimum) {
+  // The unit tests above say which cuts the policy lets through; this says the search that
+  // takes them still gets the right answer. Binary knapsack and covering rows, 8 to 12
+  // columns: 0.2 n is 1 or 2 nonzeros there, so the default filter refuses nearly every cut
+  // and the floor admits them, which is where the policy changes what reaches the LP. Every
+  // root family, tree rounds to depth 4, the floor at 100 and the efficacy test, each
+  // answer compared with the exact rational branch and bound, and the same with both off.
+  std::mt19937_64 rng(20260926);
+  std::uniform_int_distribution<Index> width(8, 12);
+  std::uniform_int_distribution<Index> height(2, 4);
+  std::uniform_int_distribution<std::int64_t> weight(1, 9);
+  std::uniform_int_distribution<std::int64_t> profit(1, 40);
+  std::uniform_int_distribution<int> percent(0, 99);
+  Options on;
+  on.set_bool("log_to_console", false);
+  for (const char* name :
+       {"enable_root_cuts", "enable_mir_cuts", "enable_clique_cuts", "enable_zero_half_cuts"}) {
+    on.set_bool(name, true);
+  }
+  on.set_int("tree_cut_depth", 4);
+  Options off = on;
+  on.set_int("cut_support_floor", 100);
+  on.set_bool("cut_efficacy_test", true);
+  int solved = 0;
+  std::int64_t cuts_on = 0;
+  std::int64_t cuts_off = 0;
+  for (int trial = 0; trial < 120; ++trial) {
+    oracle::GeneratedLp lp;
+    lp.num_cols = width(rng);
+    const Index knapsacks = height(rng);
+    const Index covers = height(rng) - 1;
+    lp.num_rows = knapsacks + covers;
+    const auto n = static_cast<std::size_t>(lp.num_cols);
+    lp.integral.assign(n, 1);
+    lp.upper.assign(n, 1);
+    lp.c.resize(n);
+    for (std::size_t j = 0; j < n; ++j) lp.c[j] = -profit(rng);  // maximise profit
+    for (Index i = 0; i < knapsacks; ++i) {
+      std::vector<std::int64_t> row(n, 0);
+      std::int64_t sum = 0;
+      for (std::size_t j = 0; j < n; ++j) {
+        if (percent(rng) < 70) row[j] = weight(rng);
+        sum += row[j];
+      }
+      for (std::int64_t& a : row) a = -a;  // sum a x <= b, as -a x >= -b
+      lp.a.push_back(row);
+      lp.b.push_back(-std::max<std::int64_t>(1, sum / 2));
+    }
+    for (Index i = 0; i < covers; ++i) {
+      std::vector<std::int64_t> row(n, 0);
+      for (std::size_t j = 0; j < n; ++j) row[j] = percent(rng) < 30 ? 1 : 0;
+      lp.a.push_back(row);
+      lp.b.push_back(1);
+    }
+    const oracle::OracleResult exact = oracle::solve_exact_milp(lp, 20000);
+    if (exact.status != oracle::OracleStatus::kOptimal) continue;
+    Model model = oracle::to_model(lp);
+    for (std::size_t j = 0; j < n; ++j) {
+      model.col_type[j] = VarType::kInteger;
+      model.col_upper[j] = 1.0;
+    }
+    const Solution with = solve(model, on);
+    const Solution without = solve(model, off);
+    const double expected = exact.objective.to_double();
+    const double tolerance = 1e-6 * std::max(1.0, std::fabs(expected));
+    ASSERT_EQ(with.status, SolveStatus::kOptimal) << lp.to_text();
+    EXPECT_NEAR(with.objective, expected, tolerance) << lp.to_text();
+    ASSERT_EQ(without.status, SolveStatus::kOptimal) << lp.to_text();
+    EXPECT_NEAR(without.objective, expected, tolerance) << lp.to_text();
+    cuts_on += with.cuts_applied;
+    cuts_off += without.cuts_applied;
+    ++solved;
+  }
+  EXPECT_GE(solved, 80);
+  EXPECT_GT(cuts_on, cuts_off) << "the policy changed nothing on these instances";
+  std::printf(
+      "[  INFO    ] cut filter policy: %d instances at the exact optimum; cut rows applied "
+      "%lld with the floor and efficacy, %lld without\n",
+      solved, static_cast<long long>(cuts_on), static_cast<long long>(cuts_off));
 }
 
 }  // namespace
