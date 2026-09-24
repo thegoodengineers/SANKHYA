@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-// SANKHYA - MILP primal heuristics (#290). References on the declarations.
+// SANKHYA - MILP primal heuristics (#290, #507). References on the declarations.
 
 #include "mip/heuristics.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <random>
 
+#include "sankhya/logging.hpp"
 #include "sankhya/sparse.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -363,6 +365,274 @@ bool rens_submodel(const Model& model, const std::vector<Index>& integer_columns
   }
   *fixed = integral;
   return true;
+}
+
+// =============================================================================
+// Local-MIP improvement (#507)
+// =============================================================================
+
+// Lin, Zou and Cai, "Local-MIP: efficient local search for mixed integer
+// programming", CP 2024, LIPIcs 307.
+
+bool local_mip_improve(const Model& model, const Options& options, Solution& incumbent,
+                       Logger& logger) {
+  (void)options;  // option guard already checked by caller
+  if (incumbent.col_value.empty()) return false;
+
+  // Collect integer columns.
+  std::vector<Index> int_cols;
+  int_cols.reserve(static_cast<std::size_t>(model.num_integer_columns()));
+  for (Index j = 0; j < model.num_cols(); ++j) {
+    if (model.col_type[static_cast<std::size_t>(j)] == VarType::kInteger) int_cols.push_back(j);
+  }
+  if (int_cols.empty()) return false;
+
+  // Working point.
+  std::vector<double> x = incumbent.col_value;
+  double best_obj = incumbent.objective;  // in model sense (with offset)
+  const double sense = model.sense_multiplier();
+
+  // Row activities.
+  const auto m = static_cast<std::size_t>(model.num_rows());
+  std::vector<double> activity(m, 0.0);
+  model.matrix.multiply_add(x.data(), activity.data());
+
+  // Constraint weights (FJ scheme): one per original row.
+  std::vector<double> weights(m, 1.0);
+
+  // Breakthrough: virtual row  sense * (c . x) <= sense * z* - 1  (cut off anything no
+  // better than the current incumbent in minimisation space).
+  // cutoff_min = sense * best_obj - offset already folded in evaluate_objective, so:
+  //   sense * sum c_j x_j <= sense * (best_obj - offset) - 1
+  // We track sense * sum c_j x_j separately.
+  auto min_obj_activity = [&]() {
+    double v = 0.0;
+    for (std::size_t j = 0; j < static_cast<std::size_t>(model.num_cols()); ++j) {
+      v += model.col_cost[j] * x[j];
+    }
+    return sense * v;
+  };
+
+  double cutoff_min = sense * (best_obj - model.objective_offset) - 1.0;
+  double obj_act = min_obj_activity();
+  double bt_weight = 1.0;
+
+  // Tabu list: (column, direction) pairs.
+  struct TabuEntry {
+    Index column;
+    double direction;  // +1.0 or -1.0
+    int tenure;
+  };
+  std::vector<TabuEntry> tabu;
+  tabu.reserve(32);
+
+  std::mt19937 rng(12345);
+  std::uniform_int_distribution<int> rand10(0, 9);
+
+  auto is_tabu = [&](Index col, double dir) -> bool {
+    for (const auto& e : tabu) {
+      if (e.column == col && e.direction == dir) return true;
+    }
+    return false;
+  };
+  auto add_tabu = [&](Index col, double dir) { tabu.push_back({col, dir, 3 + rand10(rng)}); };
+  auto tick_tabu = [&]() {
+    for (auto& e : tabu) --e.tenure;
+    tabu.erase(std::remove_if(tabu.begin(), tabu.end(),
+                              [](const TabuEntry& e) { return e.tenure <= 0; }),
+               tabu.end());
+  };
+
+  constexpr int kMaxIter = 500;
+  constexpr double kWeightGrowth = 1.1;  // multiplicative increase on violation
+  constexpr double kWeightDecay = 0.95;  // smoothing: floor at 1.0
+
+  bool improved = false;
+
+  for (int iter = 0; iter < kMaxIter; ++iter) {
+    tick_tabu();
+
+    // Feasibility check for the current point.
+    bool feasible = true;
+    for (std::size_t i = 0; i < m; ++i) {
+      if (violation(activity[i], model.row_lower[i], model.row_upper[i]) >
+          tol::kPrimalFeasibility) {
+        feasible = false;
+        break;
+      }
+    }
+
+    if (feasible) {
+      // ---- Lift move ----------------------------------------------------------
+      // Shift an integer column by ±1 in the direction that strictly improves the
+      // objective, provided the move stays feasible.
+      bool found = false;
+      for (const Index j : int_cols) {
+        const auto u = static_cast<std::size_t>(j);
+        const double c_min = sense * model.col_cost[u];  // in minimise space
+        if (c_min == 0.0) continue;
+        const double step = (c_min < 0.0) ? 1.0 : -1.0;
+        if (is_tabu(j, step)) continue;
+        const double moved = x[u] + step;
+        if (is_finite_bound(model.col_lower[u]) && moved < model.col_lower[u] - 1e-9) continue;
+        if (is_finite_bound(model.col_upper[u]) && moved > model.col_upper[u] + 1e-9) continue;
+
+        const ColumnView col = model.matrix.column(j);
+        bool stays_feasible = true;
+        for (Index k = 0; k < col.size; ++k) {
+          const auto i = static_cast<std::size_t>(col.rows[k]);
+          if (violation(activity[i] + step * col.values[k], model.row_lower[i],
+                        model.row_upper[i]) > tol::kPrimalFeasibility) {
+            stays_feasible = false;
+            break;
+          }
+        }
+        if (!stays_feasible) continue;
+
+        // Accept lift move.
+        x[u] += step;
+        for (Index k = 0; k < col.size; ++k) {
+          const auto i = static_cast<std::size_t>(col.rows[k]);
+          activity[i] += step * col.values[k];
+        }
+        obj_act += c_min * step;
+        add_tabu(j, -step);
+        found = true;
+
+        const double new_obj = model.evaluate_objective(x.data());
+        if (sense * new_obj < sense * best_obj - tol::kPrimalFeasibility) {
+          best_obj = new_obj;
+          incumbent.col_value = x;
+          incumbent.objective = new_obj;
+          improved = true;
+          cutoff_min = sense * (best_obj - model.objective_offset) - 1.0;
+          logger.verbose("local_mip: lift move improved objective to {:.10g}", new_obj);
+        }
+        break;
+      }
+      if (!found) {
+        // No lift move available; decay weights and stop.
+        break;
+      }
+    } else {
+      // ---- Tight / breakthrough move ------------------------------------------
+      // Pick the integer variable and direction (±1) that most reduces the weighted
+      // sum of constraint violations plus the breakthrough penalty.
+
+      Index best_col = -1;
+      double best_step = 0.0;
+      double best_delta = 0.0;  // reduction in total weighted violation (positive = better)
+
+      for (const Index j : int_cols) {
+        const auto u = static_cast<std::size_t>(j);
+        for (const double step : {1.0, -1.0}) {
+          if (is_tabu(j, step)) continue;
+          const double moved = x[u] + step;
+          if (is_finite_bound(model.col_lower[u]) && moved < model.col_lower[u] - 1e-9)
+            continue;
+          if (is_finite_bound(model.col_upper[u]) && moved > model.col_upper[u] + 1e-9)
+            continue;
+
+          // Change in weighted row violations.
+          double delta = 0.0;
+          const ColumnView col = model.matrix.column(j);
+          for (Index k = 0; k < col.size; ++k) {
+            const auto i = static_cast<std::size_t>(col.rows[k]);
+            delta -=
+                weights[i] * violation(activity[i], model.row_lower[i], model.row_upper[i]);
+            delta += weights[i] * violation(activity[i] + step * col.values[k],
+                                            model.row_lower[i], model.row_upper[i]);
+          }
+          // Breakthrough contribution.
+          const double c_min = sense * model.col_cost[u];
+          const double new_obj_act = obj_act + c_min * step;
+          delta -= bt_weight * std::max(0.0, obj_act - cutoff_min);
+          delta += bt_weight * std::max(0.0, new_obj_act - cutoff_min);
+
+          const double reduction = -delta;
+          if (reduction > best_delta ||
+              (reduction == best_delta && best_col >= 0 && j < best_col)) {
+            best_delta = reduction;
+            best_col = j;
+            best_step = step;
+          }
+        }
+      }
+
+      if (best_col < 0 || best_delta <= 0.0) {
+        // Stuck: bump weights on the most-violated constraint and continue.
+        double wv_max = 0.0;
+        std::size_t wv_row = m;
+        for (std::size_t i = 0; i < m; ++i) {
+          const double wv =
+              weights[i] * violation(activity[i], model.row_lower[i], model.row_upper[i]);
+          if (wv > wv_max) {
+            wv_max = wv;
+            wv_row = i;
+          }
+        }
+        const double bt_v = bt_weight * std::max(0.0, obj_act - cutoff_min);
+        if (wv_row < m && wv_max >= bt_v) {
+          weights[wv_row] *= kWeightGrowth;
+        } else {
+          bt_weight *= kWeightGrowth;
+        }
+        continue;
+      }
+
+      // Apply the best move.
+      const auto u = static_cast<std::size_t>(best_col);
+      x[u] += best_step;
+      const ColumnView col = model.matrix.column(best_col);
+      for (Index k = 0; k < col.size; ++k) {
+        const auto i = static_cast<std::size_t>(col.rows[k]);
+        activity[i] += best_step * col.values[k];
+        if (violation(activity[i], model.row_lower[i], model.row_upper[i]) >
+            tol::kPrimalFeasibility) {
+          weights[i] *= kWeightGrowth;
+        }
+      }
+      obj_act += sense * model.col_cost[u] * best_step;
+      add_tabu(best_col, -best_step);
+
+      // Additive weight smoothing: decay all weights (floor at 1).
+      for (double& w : weights) w = std::max(1.0, w * kWeightDecay);
+      bt_weight = std::max(1.0, bt_weight * kWeightDecay);
+
+      // If the point is now feasible and better, record it.
+      bool now_feasible = true;
+      for (std::size_t i = 0; i < m; ++i) {
+        if (violation(activity[i], model.row_lower[i], model.row_upper[i]) >
+            tol::kPrimalFeasibility) {
+          now_feasible = false;
+          break;
+        }
+      }
+      if (now_feasible) {
+        bool integral = true;
+        for (const Index j2 : int_cols) {
+          const double v = x[static_cast<std::size_t>(j2)];
+          if (std::fabs(v - std::round(v)) > tol::kIntegrality) {
+            integral = false;
+            break;
+          }
+        }
+        if (integral) {
+          const double new_obj = model.evaluate_objective(x.data());
+          if (sense * new_obj < sense * best_obj - tol::kPrimalFeasibility) {
+            best_obj = new_obj;
+            incumbent.col_value = x;
+            incumbent.objective = new_obj;
+            improved = true;
+            cutoff_min = sense * (best_obj - model.objective_offset) - 1.0;
+            logger.verbose("local_mip: breakthrough improved objective to {:.10g}", new_obj);
+          }
+        }
+      }
+    }
+  }
+
+  return improved;
 }
 
 namespace {

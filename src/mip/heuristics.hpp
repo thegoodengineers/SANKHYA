@@ -48,6 +48,7 @@
 #include <string>
 #include <vector>
 
+#include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 
@@ -157,5 +158,24 @@ struct HeuristicSchedule {
   /// The heuristics that run, by name, comma separated, rounding first.
   [[nodiscard]] std::string names() const;
 };
+
+/// Improve the MIP incumbent by local search (Lin, Zou and Cai, "Local-MIP: efficient local
+/// search for mixed integer programming", CP 2024, LIPIcs 307, #507):
+///
+///   lift move      at a feasible point, shift an integer variable by ±1 in the
+///                  objective-improving direction, provided all row activities remain
+///                  within bounds after the shift.
+///   tight move     at an infeasible point, shift a variable by one unit in the direction
+///                  that most reduces the weighted sum of constraint violations.
+///   breakthrough   add a virtual objective-cutoff row  c^T x <= z* - 1  (minimisation
+///                  with incumbent z*), weighted by the FJ scheme, so the search explores
+///                  infeasible-but-better space.
+///   tabu list      (variable, direction) pairs with tenure 3 + rand(10) prevent cycling.
+///   weight update  violated constraints are re-weighted multiplicatively after each move;
+///                  all weights decay by a smoothing factor between iterations.
+///
+/// Returns true when `incumbent` was strictly improved. Guarded by option `mip_local_mip`.
+bool local_mip_improve(const Model& model, const Options& options, Solution& incumbent,
+                       Logger& logger);
 
 }  // namespace sankhya::mip
