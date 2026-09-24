@@ -250,7 +250,8 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   {
     std::fill(theta_inverse.begin(), theta_inverse.end(), 1.0);
     const SparseMatrix k0 = kkt.build(theta_inverse, rho, delta);
-    if (ldl.factorize_quasidefinite(k0, signs, 0.1 * std::min(rho, delta), should_stop) &&
+    if (ldl.factorize_quasidefinite(k0, signs, tol::kQpIpmPivotShare * std::min(rho, delta),
+                                    should_stop) &&
         ldl.regularized_pivots() == 0) {
       for (std::size_t j = 0; j < nc; ++j) rhs[j] = s.g[j];
       for (std::size_t i = 0; i < nr; ++i) rhs[nc + i] = s.b[i];
@@ -361,8 +362,9 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
     // finite while mu is pushed to zero cannot cost the answer already found.
     const bool relative_met =
         primal_rel <= tolerance && dual_rel <= tolerance && gap_rel <= tolerance;
-    if (relative_met && (largest_product <= 0.1 * tol::kComplementarity ||
-                         iterations_past_relative >= kIterationsForProducts)) {
+    if (relative_met &&
+        (largest_product <= tol::kQpIpmComplementarityShare * tol::kComplementarity ||
+         iterations_past_relative >= kIterationsForProducts)) {
       status = SolveStatus::kOptimal;
       break;
     }
@@ -416,16 +418,17 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
     }
     SparseMatrix k;
     bool factored = false;
-    for (int attempt = 0; attempt < 8 && !factored; ++attempt) {
+    for (int attempt = 0; attempt < tol::kQpIpmRegularizationAttempts && !factored; ++attempt) {
       k = kkt.build(theta_inverse, rho, delta);
-      if (!ldl.factorize_quasidefinite(k, signs, 0.1 * std::min(rho, delta), should_stop)) {
+      if (!ldl.factorize_quasidefinite(k, signs, tol::kQpIpmPivotShare * std::min(rho, delta),
+                                       should_stop)) {
         break;
       }
       if (ldl.regularized_pivots() == 0) {
         factored = true;
       } else {
-        rho *= 100.0;
-        delta *= 100.0;
+        rho *= tol::kQpIpmRegularizationRaise;
+        delta *= tol::kQpIpmRegularizationRaise;
       }
     }
     if (!factored) {
