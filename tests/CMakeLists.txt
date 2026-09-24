@@ -76,6 +76,7 @@ add_executable(sankhya_tests
   unit/test_cut_selection.cpp
   unit/test_cut_filter_report.cpp
   unit/test_debug_solution.cpp
+  unit/test_cmir_cuts.cpp
   unit/test_knapsack_cover_separation.cpp
   unit/test_cut_filter_policy.cpp
   unit/test_presolve_parallel_rows.cpp

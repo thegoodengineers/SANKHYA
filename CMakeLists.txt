@@ -278,6 +278,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/combinatorial_cuts.cpp
   src/mip/cuts.cpp
   src/mip/mir_cuts.cpp
+  src/mip/mir_cmir.cpp
   src/mip/branch_and_bound_checkpoint.cpp
   src/mip/branch_and_bound_cuts.cpp
   src/mip/branch_and_bound_debug.cpp

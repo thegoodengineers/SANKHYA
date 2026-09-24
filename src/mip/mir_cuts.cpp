@@ -14,6 +14,8 @@
 
 #include "mir_cuts.hpp"
 
+#include "mir_cmir.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -283,7 +285,8 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
 
 std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
                                    const std::vector<double>& col_lower,
-                                   const std::vector<double>& col_upper, MirStats* stats) {
+                                   const std::vector<double>& col_upper, MirStats* stats,
+                                   const MirOptions& options) {
   std::vector<Cut> cuts;
   const Index n = model.num_cols();
   if (static_cast<Index>(solution.col_value.size()) != n || n == 0) return cuts;
@@ -291,6 +294,16 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
     return cuts;
   }
   const std::vector<RowEntries> rows = rows_of(model);
+  // c-MIR (#498): the variable bounds are read once per call, off the model's two-nonzero
+  // rows, and every base row below is separated by separate_cmir instead.
+  const VariableBounds variable_bounds =
+      options.cmir ? find_variable_bounds(model) : VariableBounds{};
+  if (stats != nullptr) stats->variable_bound_rows = variable_bounds.rows;
+  const auto separate = [&](const BaseRow& base) {
+    return options.cmir ? separate_cmir(model, solution, col_lower, col_upper, base.columns,
+                                        base.values, base.rhs, variable_bounds, kMinViolation)
+                        : separate_from_base(model, solution, col_lower, col_upper, base);
+  };
 
   // Which rows contain a fractional integer column: only those can start an aggregation.
   std::vector<char> row_has_fractional(static_cast<std::size_t>(model.num_rows()), 0);
@@ -325,8 +338,7 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
       double best_violation = 0.0;
       int best_depth = 0;
       for (int depth = 0; depth <= kMaxAggregation; ++depth) {
-        if (std::optional<Cut> cut =
-                separate_from_base(model, solution, col_lower, col_upper, base)) {
+        if (std::optional<Cut> cut = separate(base)) {
           double lhs = 0.0;
           for (Index j = 0; j < n; ++j) {
             const auto uj = static_cast<std::size_t>(j);
