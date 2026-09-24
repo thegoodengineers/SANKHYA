@@ -272,6 +272,7 @@ set(SANKHYA_CORE_SOURCES
   src/qp/qp_ipm.cpp
   src/qp/qp_ipm_system.cpp
   src/la/ldl.cpp
+  src/la/ldl_supernodal.cpp
   src/la/lu.cpp
   src/la/lu_eliminate.cpp
   src/la/scaling.cpp

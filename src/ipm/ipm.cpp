@@ -1240,6 +1240,7 @@ Solution InteriorPoint::run() {
                            : ordering_entries == 0
                                ? auto_ordering_budget(physical_memory_bytes())
                                : static_cast<std::size_t>(ordering_entries));
+  ldl_.set_supernodal(options_.get_bool("ipm_supernodal"));
   run_clock_ = &timer;
   ordering_declined_ = false;
   ordering_deadline_ = std::numeric_limits<double>::infinity();
