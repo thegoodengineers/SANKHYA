@@ -94,14 +94,13 @@ TEST(DomainPropagation, NoIntegerPointOfTheRowsIsCutOff) {
   int boxes = 0;
   int points = 0;
   for (int trial = 0; trial < 400; ++trial) {
-    const int n = 3;
-    const int m = 2 + trial % 3;
-    std::vector<std::vector<double>> a(static_cast<std::size_t>(m),
-                                       std::vector<double>(static_cast<std::size_t>(n)));
-    std::vector<double> row_lo(static_cast<std::size_t>(m));
-    std::vector<double> row_hi(static_cast<std::size_t>(m));
-    for (int i = 0; i < m; ++i) {
-      for (int j = 0; j < n; ++j) a[i][j] = coef(rng);
+    const std::size_t n = 3;
+    const std::size_t m = 2 + static_cast<std::size_t>(trial % 3);
+    std::vector<std::vector<double>> a(m, std::vector<double>(n));
+    std::vector<double> row_lo(m);
+    std::vector<double> row_hi(m);
+    for (std::size_t i = 0; i < m; ++i) {
+      for (std::size_t j = 0; j < n; ++j) a[i][j] = coef(rng);
       const int b = rhs(rng);
       row_lo[i] = trial % 2 == 0 ? -kInfinity : b - 6;
       row_hi[i] = b;
@@ -118,17 +117,17 @@ TEST(DomainPropagation, NoIntegerPointOfTheRowsIsCutOff) {
         for (int x2 = -3; x2 <= 4; ++x2) {
           const int x[3] = {x0, x1, x2};
           bool feasible = true;
-          for (int i = 0; i < m && feasible; ++i) {
+          for (std::size_t i = 0; i < m && feasible; ++i) {
             double act = 0.0;
-            for (int j = 0; j < n; ++j) act += a[i][j] * x[j];
+            for (std::size_t j = 0; j < n; ++j) act += a[i][j] * x[j];
             feasible = act >= row_lo[i] && act <= row_hi[i];
           }
           if (!feasible) continue;
           ++points;
           ASSERT_FALSE(r.infeasible) << "trial " << trial << ": a feasible point exists";
-          for (int j = 0; j < n; ++j) {
-            EXPECT_GE(x[j], lo[static_cast<std::size_t>(j)]) << "trial " << trial;
-            EXPECT_LE(x[j], hi[static_cast<std::size_t>(j)]) << "trial " << trial;
+          for (std::size_t j = 0; j < n; ++j) {
+            EXPECT_GE(x[j], lo[j]) << "trial " << trial;
+            EXPECT_LE(x[j], hi[j]) << "trial " << trial;
           }
         }
       }
@@ -163,22 +162,20 @@ TEST(DomainPropagation, TheGpuReturnsTheCpuBounds) {
   std::uniform_real_distribution<double> value(-5.0, 5.0);
   std::uniform_int_distribution<int> pick(0, 3);
   for (int trial = 0; trial < 60; ++trial) {
-    const int n = 20 + trial;
-    const int m = 10 + trial / 2;
-    std::vector<std::vector<double>> a(static_cast<std::size_t>(m),
-                                       std::vector<double>(static_cast<std::size_t>(n), 0.0));
-    std::vector<double> row_lo(static_cast<std::size_t>(m));
-    std::vector<double> row_hi(static_cast<std::size_t>(m));
-    for (int i = 0; i < m; ++i) {
-      for (int j = 0; j < n; ++j) {
+    const auto n = static_cast<std::size_t>(20 + trial);
+    const auto m = static_cast<std::size_t>(10 + trial / 2);
+    std::vector<std::vector<double>> a(m, std::vector<double>(n, 0.0));
+    std::vector<double> row_lo(m);
+    std::vector<double> row_hi(m);
+    for (std::size_t i = 0; i < m; ++i) {
+      for (std::size_t j = 0; j < n; ++j) {
         if (pick(rng) == 0) a[i][j] = value(rng);
       }
-      row_hi[i] = 3.0 * n / 4.0 + value(rng);
+      row_hi[i] = 3.0 * static_cast<double>(n) / 4.0 + value(rng);
       row_lo[i] = pick(rng) == 0 ? row_hi[i] - 10.0 : -kInfinity;
     }
     Model model = integer_model(a, row_lo, row_hi, 0.0, 9.0);
-    for (int j = 0; j < n; j += 3)
-      model.col_type[static_cast<std::size_t>(j)] = VarType::kContinuous;
+    for (std::size_t j = 0; j < n; j += 3) model.col_type[j] = VarType::kContinuous;
     same(model, "random " + std::to_string(trial));
   }
   const std::filesystem::path netlib =
