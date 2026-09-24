@@ -87,6 +87,7 @@ add_executable(sankhya_tests
   unit/test_debug_solution.cpp
   unit/test_cmir_cuts.cpp
   unit/test_root_cut_loop.cpp
+  unit/test_gmi_safety.cpp
   unit/test_knapsack_cover_separation.cpp
   unit/test_cut_filter_policy.cpp
   unit/test_presolve_parallel_rows.cpp

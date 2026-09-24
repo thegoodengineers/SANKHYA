@@ -24,6 +24,7 @@
 // has moved and the parallelism test is against a different set.
 #pragma once
 
+#include <cstddef>
 #include <vector>
 
 #include "cuts.hpp"
@@ -57,5 +58,15 @@ struct CutSelection {
 [[nodiscard]] CutSelection select_cuts(const Model& model, const std::vector<double>& point,
                                        std::vector<Cut> candidates, Index max_per_round,
                                        double max_parallelism);
+
+/// The root separation loop's row budget (#495): max(kRootCutRowFloor, kRootCutRowShare *
+/// `model_rows`) cut rows in all, `model_rows` the rows before the first cut.
+[[nodiscard]] Index root_cut_row_budget(Index model_rows);
+
+/// A selection cut short to `room` rows: the first `room` of `selected` (best first, as
+/// select_cuts returns them) stay; the rest go to the FRONT of `waiting`, since they scored
+/// above everything selection deferred, and `waiting` is held to kCutWaitingLimit.
+void take_within_budget(std::vector<Cut>* selected, std::vector<Cut>* waiting,
+                        std::size_t room);
 
 }  // namespace sankhya::mip

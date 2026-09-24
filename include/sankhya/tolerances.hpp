@@ -277,6 +277,20 @@ inline constexpr double kCutMaxCoefficientRatio = 1e6;
 /// the cut's constant, which is what keeps the cut valid; see src/mip/cuts.cpp.
 inline constexpr double kCutNoiseRelative = 1e-14;
 
+/// GMI safety, under `gmi_safety` (#496 item 4). Cornuejols, Margot and Nannicini, "On the
+/// safety of Gomory cut generators", Math. Programming Computation 5 (2013), measure what a
+/// GMI generator's parameters do to cut validity: among them the minimum fractionality of
+/// the source row's basic variable, the maximum dynamism of the cut and a relaxation of its
+/// right-hand side. The values here are conservative choices of ours, not tuned from that
+/// study. A source row whose basic value is within kGmiMinFractionality of an integer gives
+/// no cut: its f0 is the divisor of every coefficient, so a small f0 magnifies the tableau
+/// row's rounding by 1/f0. The emitted rhs is loosened by kGmiRhsRelaxAbsolute plus
+/// kGmiRhsRelaxRelative * |rhs|, which only weakens the cut. Dynamism is already capped for
+/// every family by kCutMaxCoefficientRatio in the filter.
+inline constexpr double kGmiMinFractionality = 0.01;
+inline constexpr double kGmiRhsRelaxAbsolute = 1e-9;
+inline constexpr double kGmiRhsRelaxRelative = 1e-9;
+
 /// Minimum root-LP violation for a cut to be accepted. Valid cuts that are not violated
 /// or barely violated are safely rejected to save LP solves.
 inline constexpr double kCutViolationTolerance = 1e-5;
@@ -458,6 +472,10 @@ inline constexpr double kRootCutStallFraction = 1e-3;
 /// And the loop stops once the solve has used this share of time_limit, so a root whose
 /// every round is slow leaves the tree most of the time it was given.
 inline constexpr double kRootCutTimeShare = 0.2;
+/// And the loop adds at most max(kRootCutRowFloor, kRootCutRowShare * m) cut rows in all,
+/// round 1 included, m the rows of the LP the root separates on before its first cut.
+inline constexpr int kRootCutRowFloor = 100;
+inline constexpr double kRootCutRowShare = 1.0;
 
 /// GPU PDHG device loop (#478): iterations replayed on the device per host synchronisation.
 /// Larger amortises the synchronisation further but checks the iteration and time limits

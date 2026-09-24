@@ -6,11 +6,13 @@
 // below the single round's (every round only appends rows); and a search with the loop on,
 // every family on, still reaches the exact optimum of the rational branch and bound.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -19,6 +21,9 @@
 #include "sankhya/mip.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/tolerances.hpp"
+
+#include "mip/cut_selection.hpp"
 
 #include "oracles/lp_generator.hpp"
 #include "oracles/rational_simplex.hpp"
@@ -141,6 +146,97 @@ TEST(RootCutLoop, OffIsTheSingleRoundAndOnNeverEndsBelowIt) {
       "[  INFO    ] root cut loop: %d instances, %d ran a second round, %d closed more of the "
       "root gap than one round\n",
       instances, looped, higher);
+}
+
+/// The loop's closing line, "Root cut loop: R round(s), N row(s) of a budget of B, ...":
+/// N and B, or {-1, -1} when the log has none.
+std::pair<long, long> rows_and_budget(const std::string& log) {
+  const std::size_t at = log.find("Root cut loop: ");
+  if (at == std::string::npos) return {-1, -1};
+  long rounds = 0;
+  long rows = 0;
+  long budget = 0;
+  if (std::sscanf(log.c_str() + at,
+                  "Root cut loop: %ld round(s), %ld row(s) of a budget of %ld", &rounds, &rows,
+                  &budget) != 3) {
+    return {-1, -1};
+  }
+  return {rows, budget};
+}
+
+TEST(RootCutLoop, NeverAddsMoreRowsThanItsBudget) {
+  // Wider binary models than above, and rounds of up to 60 cuts: every loop reports
+  // max(kRootCutRowFloor, share * m) as its budget and never passes it, and a loop that
+  // reaches it says that is why it stopped. (These loops stall well below the floor; the
+  // cut-short round itself is take_within_budget's test below.)
+  std::mt19937_64 rng(20260929);
+  Options options = root_cuts(true);
+  options.set_int("cut_max_per_round", 60);
+  int loops = 0;
+  int reached = 0;
+  long most = 0;
+  for (int trial = 0; trial < 30; ++trial) {
+    const oracle::GeneratedLp lp = binary_instance(rng, 40);
+    const Model model = integer_model(lp);
+    Solution on;
+    const std::string log = solve_logged(model, options, &on);
+    const auto [rows, budget] = rows_and_budget(log);
+    if (rows < 0) continue;
+    ++loops;
+    most = std::max(most, rows);
+    const double share = tol::kRootCutRowShare * static_cast<double>(model.num_rows());
+    EXPECT_EQ(budget, static_cast<long>(std::max(static_cast<double>(tol::kRootCutRowFloor),
+                                                 std::floor(share))));
+    EXPECT_LE(rows, budget) << log;
+    EXPECT_GE(on.cuts_applied, rows);  // the tree may add more; the root adds no more
+    if (rows == budget) {
+      ++reached;
+      EXPECT_NE(log.find("stopped on the row budget"), std::string::npos) << log;
+    }
+  }
+  EXPECT_GE(loops, 10);
+  std::printf("[  INFO    ] root row budget: %d loops, %d reached it, the most rows %ld\n",
+              loops, reached, most);
+}
+
+TEST(RootCutLoop, TheBudgetIsTheFloorOrTheShareOfTheRows) {
+  EXPECT_EQ(mip::root_cut_row_budget(0), tol::kRootCutRowFloor);
+  EXPECT_EQ(mip::root_cut_row_budget(29), tol::kRootCutRowFloor);  // gt2: the floor
+  const auto timtab1 = static_cast<Index>(std::floor(tol::kRootCutRowShare * 169.0));
+  EXPECT_EQ(mip::root_cut_row_budget(169), std::max<Index>(tol::kRootCutRowFloor, timtab1));
+}
+
+TEST(RootCutLoop, ARoundCutShortKeepsItsBestAndTheRestWaitFirst) {
+  // Five selected cuts, best first, told apart by their rhs; two already waiting.
+  auto cut = [](double rhs) {
+    mip::Cut c;
+    c.coeff = {1.0};
+    c.rhs = rhs;
+    return c;
+  };
+  std::vector<mip::Cut> selected{cut(1), cut(2), cut(3), cut(4), cut(5)};
+  std::vector<mip::Cut> waiting{cut(10), cut(11)};
+  mip::take_within_budget(&selected, &waiting, 2);
+  ASSERT_EQ(selected.size(), 2U);
+  EXPECT_EQ(selected[0].rhs, 1.0);
+  EXPECT_EQ(selected[1].rhs, 2.0);
+  ASSERT_EQ(waiting.size(), 5U);
+  const std::vector<double> order{3, 4, 5, 10, 11};
+  for (std::size_t k = 0; k < order.size(); ++k) EXPECT_EQ(waiting[k].rhs, order[k]) << k;
+  // Room enough: nothing moves. No room: everything waits.
+  mip::take_within_budget(&selected, &waiting, 7);
+  EXPECT_EQ(selected.size(), 2U);
+  EXPECT_EQ(waiting.size(), 5U);
+  mip::take_within_budget(&selected, &waiting, 0);
+  EXPECT_TRUE(selected.empty());
+  EXPECT_EQ(waiting.size(), 7U);
+  EXPECT_EQ(waiting.front().rhs, 1.0);
+  // The waiting list keeps its limit, dropping from the back.
+  std::vector<mip::Cut> many(static_cast<std::size_t>(tol::kCutWaitingLimit), cut(0));
+  std::vector<mip::Cut> top{cut(-1), cut(-2)};
+  mip::take_within_budget(&top, &many, 1);
+  EXPECT_EQ(many.size(), static_cast<std::size_t>(tol::kCutWaitingLimit));
+  EXPECT_EQ(many.front().rhs, -2.0);
 }
 
 TEST(RootCutLoop, ASearchWithTheLoopOnReachesTheExactOptimum) {
