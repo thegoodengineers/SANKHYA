@@ -562,6 +562,16 @@ class BranchAndBound {
   /// The root round: cover, Gomory and MIR candidates, filtered, appended, the root
   /// re-solved; rolled back if the re-solve fails. Replaces `relaxation` on success.
   void root_cut_round(Solution* relaxation);
+  /// The candidates every root round separates at `relaxation`: covers on the first
+  /// `model_rows` rows, Gomory, MIR and the combinatorial families, in that order.
+  [[nodiscard]] std::vector<Cut> separate_root_candidates(const Solution& relaxation,
+                                                          Index model_rows);
+  /// Rounds 2 onward of the root loop (#495, branch_and_bound_root_loop.cpp): separate at
+  /// the current LP point, append, re-solve warm, until the bound stalls, the round cap, the
+  /// time share or a round that takes nothing. `first_taken` and `first_iterations` are
+  /// round 1's, for its log line.
+  void root_cut_loop(Solution* relaxation, Index model_rows,
+                     const std::vector<Cut>& first_taken, std::int64_t first_iterations);
   /// A round at a node of depth <= tree_cut_depth_: MIR cuts on the global bounds,
   /// appended for the whole tree, the node re-solved from its own basis.
   void tree_cut_round(Index depth, Solution* relaxation);
@@ -736,6 +746,7 @@ class BranchAndBound {
   double root_bound_internal_ = std::numeric_limits<double>::quiet_NaN();
   double root_bound_after_cuts_internal_ = std::numeric_limits<double>::quiet_NaN();
   Count root_cuts_applied_ = 0;
+  Count root_cut_rounds_ = 0;      ///< #495: rounds that appended rows at the root
   std::string cut_filter_report_;  ///< the root filter's verdicts per family and reason (#496)
   /// Cut rows below the root (#221): the option-driven depth cap and per-round row cap,
   /// the column bounds every tree cut is built on (valid everywhere), the pool of rows
