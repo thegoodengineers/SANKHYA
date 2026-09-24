@@ -15,6 +15,7 @@ add_executable(sankhya_tests
   unit/test_c_api_certificates.cpp
   unit/test_c_api_ranging_iis_pool.cpp
   unit/test_certificate.cpp
+  unit/test_exact_verify.cpp
   unit/test_cuts.cpp
   unit/test_non_finite.cpp
   unit/test_miqp.cpp

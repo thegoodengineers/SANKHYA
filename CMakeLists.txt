@@ -242,6 +242,7 @@ endif()
 set(SANKHYA_CORE_SOURCES
   src/api/c_api.cpp
   src/core/certificate.cpp
+  src/exact/exact_verify.cpp
   src/core/iis.cpp
   src/core/model.cpp
   src/core/resource_limits.cpp

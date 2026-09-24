@@ -994,6 +994,33 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.9,
                  {}});
+    s.push_back(
+        {"exact",
+         OptionType::Bool,
+         false,
+         "After a plain LP (no integer columns, no quadratic objective) reaches optimal, "
+         "rebuild the reported basis in exact rational arithmetic (Gleixner, Steffy and "
+         "Wolter, INFORMS J. Computing 28(3), 2016) - every model coefficient converted "
+         "bit-exactly from the double the reader already produced - and check it is exactly "
+         "primal and dual feasible, which for a nondegenerate basis is exact optimality. "
+         "Checks the ONE basis double precision already found rather than searching for a "
+         "better one, so a basis double precision got structurally wrong is reported FAILED, "
+         "not repaired. An intermediate value too large for exact __int128 arithmetic, or a "
+         "basis with more rows than the exact module's dense-elimination cap, is reported "
+         "DECLINED, never guessed at - and in measurement DECLINED is the common case for a "
+         "realistic model: a double's exact fraction for an ordinary decimal coefficient "
+         "(0.30, 0.86, ...) already needs on the order of 54 bits, naive Gaussian elimination "
+         "multiplies several together, and even a 3-row model (demo/crude_blend.mps) "
+         "overflows __int128's 127 bits this way. Verified correct on integer-coefficient "
+         "LPs (tests/unit/test_exact_verify.cpp, including two hand-built bases proven "
+         "infeasible/singular to confirm this rejects a wrong basis rather than rubber-"
+         "stamping it); on typical decimal-coefficient instances, expect DECLINED far more "
+         "often than VERIFIED until this arithmetic gets a wider backing type. The result is "
+         "written to the .sol file as exact_verification and, when verified, an exact "
+         "objective and column values as numerator/denominator strings. Off by default.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"engine_race",
                  OptionType::Bool,
                  false,
