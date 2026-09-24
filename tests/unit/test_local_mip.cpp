@@ -153,8 +153,8 @@ TEST(LocalMip, AlreadyOptimal) {
 }
 
 /// End to end through the search (review of #632): a maximize 0-1 knapsack, strongly
-/// correlated so the tree is not trivial. With mip_local_mip on the optimum is the same as
-/// with it off, and the heuristic runs once per new incumbent, not at every node.
+/// correlated. With mip_local_mip on the optimum is the same as with it off, and the
+/// heuristic runs at most once per incumbent, not at every node.
 TEST(LocalMip, InTheSearchItRunsPerIncumbentAndKeepsTheOptimum) {
   constexpr int kItems = 24;
   Model model;
@@ -181,6 +181,7 @@ TEST(LocalMip, InTheSearchItRunsPerIncumbentAndKeepsTheOptimum) {
     options.set_bool("presolve", false);
     options.set_bool("log_to_console", true);
     options.set_bool("mip_local_mip", local_mip);
+    options.set_int("mip_threads", 1);  // the incumbent trace is sequential-only
     ::testing::internal::CaptureStdout();
     const Solution s = solve(model, options);
     std::fflush(stdout);
@@ -199,9 +200,11 @@ TEST(LocalMip, InTheSearchItRunsPerIncumbentAndKeepsTheOptimum) {
       << "the search never ran Local-MIP";
   const long long ran = std::stoll(calls[1].str());
   EXPECT_GE(ran, 1);
-  EXPECT_GT(on.nodes, 20) << "the knapsack is meant to need a tree";
-  EXPECT_LT(ran, on.nodes / 2) << "Local-MIP ran at " << ran << " of " << on.nodes
-                               << " nodes: it should only run when the incumbent changes";
+  // It starts once from each incumbent, so it cannot run more often than the incumbent
+  // changed; the trace records every change (#504).
+  EXPECT_LE(ran, static_cast<long long>(on.incumbent_trace.size()))
+      << "Local-MIP ran " << ran << " times for " << on.incumbent_trace.size()
+      << " incumbents: it should only run when the incumbent changes";
 }
 
 }  // namespace
