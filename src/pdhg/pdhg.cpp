@@ -528,7 +528,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       break;
     }
 
-    if (use_halpern && last_halpern_res.active && last_halpern_res.should_restart) {
+    const bool halpern_artificial =
+        use_halpern && last_halpern_res.active &&
+        (iteration - last_restart) >=
+            std::max<Count>(kEvaluationInterval,
+                            static_cast<Count>(0.36 * static_cast<double>(iteration)));
+    if (use_halpern && last_halpern_res.active &&
+        (last_halpern_res.should_restart || halpern_artificial)) {
       // Halpern restart ([LY24] section 4): new anchor = current Halpern iterate.
       // Primal weight updated the same way as PDLP to keep the step sizes calibrated.
       std::vector<double> dx(n);
