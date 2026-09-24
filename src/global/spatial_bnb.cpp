@@ -244,12 +244,17 @@ void Search::process(std::unique_ptr<Node> node) {
   if (relaxed.status == SolveStatus::kInfeasible) return;
   if (relaxed.status == SolveStatus::kOptimal &&
       static_cast<Index>(relaxed.col_value.size()) == lp.num_cols()) {
-    double proved = dual_bound_from_multipliers(lp, relaxed.row_dual);
-    if (!std::isfinite(proved)) {
-      proved = relaxed.objective;  // the LP's own claim; counted and reported
-      ++unsafe_bounds_;
+    // Only a bound the multipliers prove is used. When they prove none (a column with no
+    // finite bound on the side its reduced cost needs), the box keeps its parent's proved
+    // bound: the LP's own objective is only as good as the tolerance it was solved to, and
+    // pruning or declaring optimality on it would make the "proved" gap a claim (review of
+    // #637). The box is still branched, and its children get a fresh chance to prove more.
+    const double proved = dual_bound_from_multipliers(lp, relaxed.row_dual);
+    if (std::isfinite(proved)) {
+      bound = std::max(bound, proved);
+    } else {
+      ++unsafe_bounds_;  // counted and reported; the parent's bound stands
     }
-    bound = std::max(bound, proved);
     point = relaxed.col_value;
   } else {
     if (relaxed.stopped_by == LimitReason::kTime || seconds_left() <= 0.0) {
@@ -400,7 +405,7 @@ Solution Search::finish(LimitReason stopped_by) {
       lp_failures_ > 0 ? fmt::format(", {} node LPs failed (parent bound kept)", lp_failures_)
                        : "",
       unsafe_bounds_ > 0
-          ? fmt::format(", {} bounds taken from the LP objective, not its multipliers",
+          ? fmt::format(", {} node LPs whose multipliers proved no bound (parent bound kept)",
                         unsafe_bounds_)
           : "",
       unresolved_ > 0
