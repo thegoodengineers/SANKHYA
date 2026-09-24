@@ -468,4 +468,8 @@ inline constexpr Count kPdhgDeviceLoopBlock = 32;
 /// units: about a millisecond of work, so a stop is seen promptly and the poll costs nothing.
 inline constexpr Count kFeasibilityJumpPollWork = 65536;
 
+/// Implied-integer detection (#513): every coefficient and right-hand side it reasons about
+/// must be an integer of magnitude below 2^53, where a double holds every integer exactly
+/// and fmod is exact, so the divisibility test adds no rounding of its own.
+inline constexpr double kImpliedIntegerDataLimit = 9007199254740992.0;
 }  // namespace sankhya::tol
