@@ -950,16 +950,17 @@ Solution solve_branch_and_bound(const Model& model, const Options& options, Logg
       certify ? RowTightening{} : tighten_integral_rows(&tightened, logger);
   // OBBT (#515): tighten column bounds by solving min/max x_j LPs before the
   // search starts. Runs on the copy so the caller's model is unchanged.
-  const ObbtResult obbt_result =
-      (!certify && options.get_bool("mip_obbt")) ? obbt_root(tightened, options, logger) : ObbtResult{};
+  const ObbtResult obbt_result = (!certify && options.get_bool("mip_obbt"))
+                                     ? obbt_root(tightened, options, logger)
+                                     : ObbtResult{};
   const bool any_tightening = effect.rows_tightened > 0 || obbt_result.bounds_tightened > 0;
   const Model& searched = any_tightening ? tightened : model;
   // The debug-solution check (#500): the model as received and after the rounding above, and
   // at the end the answer. Nothing happens unless `debug_solution` is set.
   const std::optional<DebugSolution> debug = load_debug_solution(options, model, logger);
   if (debug.has_value()) {
-    check_search_input_against_debug_solution(
-        model, any_tightening ? &tightened : nullptr, *debug, logger);
+    check_search_input_against_debug_solution(model, any_tightening ? &tightened : nullptr,
+                                              *debug, logger);
   }
   const auto checked = [&](Solution result) {
     if (debug.has_value()) {
