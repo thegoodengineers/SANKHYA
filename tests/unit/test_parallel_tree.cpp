@@ -12,7 +12,9 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
+#include <mutex>
 #include <random>
 #include <regex>
 #include <string>
@@ -337,11 +339,36 @@ TEST(ParallelTree, ATimeLimitStopsEveryWorkerPromptly) {
 TEST(ParallelTree, AnInterruptFromAnotherThreadStopsTheSearch) {
   const Model model = market_split(4, 40, 13);
   SolveControl control;
-  std::thread stopper([&control] {
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    control.interrupt();
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool callback_reached = false;
+  bool interrupt_sent = false;
+  bool solve_finished = false;
+
+  control.progress_callback = [&](const Progress&) {
+    std::unique_lock<std::mutex> lock(mutex);
+    callback_reached = true;
+    cv.notify_all();
+    cv.wait(lock, [&] { return interrupt_sent || solve_finished; });
+    return 0;
+  };
+
+  std::thread stopper([&] {
+    std::unique_lock<std::mutex> lock(mutex);
+    cv.wait(lock, [&] { return callback_reached || solve_finished; });
+    if (!solve_finished) {
+      control.interrupt();
+      interrupt_sent = true;
+      cv.notify_all();
+    }
   });
+
   const Solution stopped = solve(model, on_threads(4), &control);
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    solve_finished = true;
+    cv.notify_all();
+  }
   stopper.join();
   ASSERT_NE(stopped.status, SolveStatus::kOptimal) << "the model must outlast the interrupt";
   EXPECT_EQ(stopped.stopped_by, LimitReason::kInterrupt) << stopped.message;
