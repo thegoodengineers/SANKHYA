@@ -172,7 +172,7 @@ def main() -> int:
 
     manifest["instances"] = dict(sorted(manifest["instances"].items()))
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                             encoding="utf-8")
+                             encoding="utf-8", newline="\n")
     print(f"\nwrote {manifest_path.relative_to(REPO_ROOT)}")
     print(f"{len(wanted) - len(failures)} instance(s) in {DATA_DIR.relative_to(REPO_ROOT)}")
     if failures:

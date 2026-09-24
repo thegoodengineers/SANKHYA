@@ -29,7 +29,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # The manifests the fetch scripts rewrite as part of a run; a change there says nothing
 # about what was measured. Untracked files are ignored for the same reason.
-MANIFEST_EXCLUSIONS = (":!data/netlib/reference.json", ":!data/mittelmann/reference.json")
+# Every fetcher that rewrites a tracked manifest belongs here. The four added with #529, #530
+# and #491 were missing, and a Windows fetch left their manifests rewritten with CRLF endings,
+# which stamped a whole night of otherwise clean runs `-dirty`.
+MANIFEST_EXCLUSIONS = (
+    ":!data/netlib/reference.json",
+    ":!data/mittelmann/reference.json",
+    ":!data/kennington/reference.json",
+    ":!data/netlib-infeasible/reference.json",
+    ":!data/maros-meszaros/reference.json",
+    ":!data/miplib/reference.json",
+)
 _VERSION_SHA = re.compile(r"\(([0-9a-fA-F]{7,40})[,)]")
 
 

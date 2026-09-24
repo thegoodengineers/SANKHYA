@@ -198,7 +198,7 @@ def main() -> int:
         print("not writing reference.json; rerun with --repin if the change is understood")
         return 1
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                             encoding="utf-8")
+                             encoding="utf-8", newline="\n")
     total = sum(entry["qps_bytes"] for entry in instances.values())
     print(f"wrote {manifest_path.relative_to(REPO_ROOT)}: {len(instances)} instances, "
           f"{total / 1e6:.1f} MB of QPS" + (f", repinned {len(conflicts)}" if conflicts else ""))

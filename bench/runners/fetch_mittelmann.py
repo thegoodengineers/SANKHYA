@@ -220,7 +220,7 @@ def main() -> int:
               f"than the committed entry; pass --update-manifest to record the new digests")
     else:
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                                 encoding="utf-8")
+                                 encoding="utf-8", newline="\n")
         print(f"wrote {manifest_path} ({len(archives)} instances in set '{args.instance_set}')")
     return 0
 

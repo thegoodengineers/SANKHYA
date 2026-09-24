@@ -186,7 +186,8 @@ def main() -> int:
         print(f"  {name:<28}{len(blob):>10}  {optima[name]:.10g}", flush=True)
 
     reference = DATA_DIR / "reference.json"
-    reference.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    reference.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+                         newline="\n")
     print()
     print(f"wrote {reference.relative_to(REPO_ROOT)}")
     print(f"{len(manifest['instances'])} instance(s) in {DATA_DIR.relative_to(REPO_ROOT)}")
