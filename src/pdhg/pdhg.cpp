@@ -39,6 +39,7 @@
 #include "sankhya/pdhg.hpp"
 
 #include "pdhg_evaluate.hpp"
+#include "pdhg_halpern.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -133,6 +134,25 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
   const bool geometric_evaluation = options.get_bool("pdhg_geometric_evaluation");
   const bool two_matvec = options.get_bool("pdhg_two_matvec");
+  const bool use_halpern = options.get_bool("pdhg_halpern");
+  if (use_halpern && use_restarts) {
+    solution.status = SolveStatus::kModelError;
+    solution.message =
+        "pdhg_halpern and pdhg_restart cannot both be true: the Halpern path has its own "
+        "fixed-point-residual restart logic and is incompatible with the averaged-path "
+        "PDLP restarts. Set pdhg_restart=false when using pdhg_halpern.";
+    return solution;
+  }
+  if (use_halpern && two_matvec) {
+    // The blend moves x_{k+1} after A x_{k+1} was computed, so the cached product would be
+    // A of the unblended point and every derived A xbar and A dx after it wrong (review of
+    // #613). Refused, like the restart combination above, rather than silently wrong.
+    solution.status = SolveStatus::kModelError;
+    solution.message =
+        "pdhg_halpern and pdhg_two_matvec cannot both be true: the Halpern blend moves the "
+        "iterate after the cached A x was computed. Set pdhg_two_matvec=false.";
+    return solution;
+  }
   // ROW-PARALLEL A x (#487). The serial product scatters column by column into y and
   // cannot be split across threads without a reduction; (A^T)^T x through the transpose
   // is a gather per ROW of A - one output per thread, no reduction, the same static
@@ -155,7 +175,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   logger.info("Scaled matrix entries in [{:.3e}, {:.3e}], estimated ||A||_2 = {:.4e}",
               scaling.min_abs, scaling.max_abs, spectral_norm);
   logger.info("Target relative tolerance {:.1e}, restarts {}, A x {}", tolerance,
-              use_restarts ? "on" : "off",
+              use_halpern ? "halpern-fp" : (use_restarts ? "on" : "off"),
               parallel_spmv ? "row-parallel over the thread pool (#487)" : "serial");
 
   // ---- Iterates, in SCALED space ----------------------------------------------------------
@@ -188,6 +208,11 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
 
   std::vector<double> x_restart = x;
   std::vector<double> y_restart = y;
+
+  // Halpern state. r0 = 0 is the bootstrap sentinel: the first restart sets r0 to the
+  // actual FP residual so that subsequent restarts use a meaningful 20%-ratio threshold.
+  HalpernState halpern;
+  if (use_halpern) halpern_reset(x, y, 0.0, halpern);
 
   // Unscaled scratch for the convergence test.
   std::vector<double> x_unscaled(n, 0.0);
@@ -231,6 +256,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
 
   bool converged = false;
   bool logged_table = false;
+  HalpernResult last_halpern_res;
 
   StopController stop(control, timer, limits);
   SolveStatus stop_status = SolveStatus::kIterationLimit;
@@ -375,17 +401,22 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     const double proposed = std::min(shrink * limit, grow * eta);
 
     if (eta <= limit) {
-      // Accept.
+      // Accept.  Apply Halpern blend to (x_next, y_next) before swapping (#481).
+      if (use_halpern) {
+        last_halpern_res = pdhg_halpern_step(x, y, x_next, y_next, halpern, omega, options);
+      }
       x.swap(x_next);
       y.swap(y_next);
       if (two_matvec) a_x_cached.swap(a_x_new);
-      for (Index j = 0; j < cols; ++j) {
-        x_sum[static_cast<std::size_t>(j)] += x[static_cast<std::size_t>(j)];
+      if (!use_halpern) {
+        for (Index j = 0; j < cols; ++j) {
+          x_sum[static_cast<std::size_t>(j)] += x[static_cast<std::size_t>(j)];
+        }
+        for (Index i = 0; i < rows; ++i) {
+          y_sum[static_cast<std::size_t>(i)] += y[static_cast<std::size_t>(i)];
+        }
+        ++averaged;
       }
-      for (Index i = 0; i < rows; ++i) {
-        y_sum[static_cast<std::size_t>(i)] += y[static_cast<std::size_t>(i)];
-      }
-      ++averaged;
       ++iteration;
     }
     // Whether accepted or not, the step size moves to the proposal. A rejected step is
@@ -516,7 +547,48 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       break;
     }
 
-    if (use_restarts) {
+    const bool halpern_artificial =
+        use_halpern && last_halpern_res.active &&
+        (iteration - last_restart) >=
+            std::max<Count>(kEvaluationInterval,
+                            static_cast<Count>(0.36 * static_cast<double>(iteration)));
+    if (use_halpern && last_halpern_res.active &&
+        (last_halpern_res.should_restart || halpern_artificial)) {
+      // Halpern restart ([LY24] section 4): new anchor = current Halpern iterate.
+      // Primal weight updated the same way as PDLP to keep the step sizes calibrated.
+      std::vector<double> dx(n);
+      std::vector<double> dy(m);
+      for (Index j = 0; j < cols; ++j) {
+        dx[static_cast<std::size_t>(j)] =
+            x[static_cast<std::size_t>(j)] - x_restart[static_cast<std::size_t>(j)];
+      }
+      for (Index i = 0; i < rows; ++i) {
+        dy[static_cast<std::size_t>(i)] =
+            y[static_cast<std::size_t>(i)] - y_restart[static_cast<std::size_t>(i)];
+      }
+      const double dx_norm = euclidean_norm(dx);
+      const double dy_norm = euclidean_norm(dy);
+      if (dx_norm > 1e-12 && dy_norm > 1e-12) {
+        const double theta = 0.5;
+        omega = std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
+        omega = std::clamp(omega, 1e-6, 1e6);
+      }
+      // The period's reference residual in the NEW primal weight's norm: measured in the old
+      // one, the 0.2 ratio test would compare residuals in two different norms (review of
+      // #613).
+      const double r0 =
+          std::sqrt(omega * last_halpern_res.fp_x2 + last_halpern_res.fp_y2 / omega);
+      halpern_reset(x, y, r0, halpern);
+      x_restart = x;
+      y_restart = y;
+      last_restart = iteration;
+      ++restarts;
+      if (logger.profiler() != nullptr) logger.profiler()->count("pdhg restarts");
+      logger.verbose(
+          "halpern restart {} at iteration {}: FP residual {:.3e}, primal weight "
+          "{:.3e}",
+          restarts, iteration, last_halpern_res.fp_residual, omega);
+    } else if (!use_halpern && use_restarts) {
       // [PDLP] section 4.3. The exact normalised duality gap needs a trust-region
       // subproblem per candidate; the KKT error is the practical proxy the paper describes,
       // and it is what is used here. Said plainly so the log is not mistaken for the

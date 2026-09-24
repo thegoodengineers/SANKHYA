@@ -43,6 +43,7 @@ add_executable(sankhya_tests
   unit/test_ipm_model_space.cpp
   unit/test_pdhg_parallel_spmv.cpp
   unit/test_pdhg_two_matvec.cpp
+  unit/test_pdhg_halpern.cpp
   unit/test_crossover.cpp
   unit/test_crossover_nonoptimal.cpp
   unit/test_engine_selection.cpp
