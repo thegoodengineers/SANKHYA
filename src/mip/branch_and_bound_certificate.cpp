@@ -81,7 +81,9 @@ Model BranchAndBound::certificate_rows() const {
 }
 
 void BranchAndBound::certify_round_cuts(std::vector<Cut>* accepted) {
-  if (!certificate_mode() || accepted->empty()) return;
+  // Once the certificate is refused it will not be written, so there is nothing to derive
+  // against and no reason to drop cuts the search could use.
+  if (!certificate_mode() || !certificate_refusal_.empty() || accepted->empty()) return;
   if (certificate_cuts_derived_ + certificate_cuts_dropped_ == 0) {
     std::string off;
     for (const char* option : {"enable_clique_cuts", "enable_flow_cover_cuts",

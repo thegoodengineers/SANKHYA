@@ -181,9 +181,10 @@ TEST(CutDerivation, ASearchWithRootCutsWritesTheirDerivations) {
   text << in.rdbuf();
   EXPECT_NE(text.str().find("RTP range -13 -13"), std::string::npos)
       << text.str().substr(0, 400);
-  if (solved.cuts_applied > 0) {
-    EXPECT_NE(text.str().find("\ncut0 L "), std::string::npos) << text.str();
-  }
+  // The model is chosen so that the root round applies a cut; without one the check below
+  // would pass vacuously.
+  ASSERT_GT(solved.cuts_applied, 0);
+  EXPECT_NE(text.str().find("\ncut0 L "), std::string::npos) << text.str();
 }
 
 }  // namespace

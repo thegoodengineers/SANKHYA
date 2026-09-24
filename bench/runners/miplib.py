@@ -374,6 +374,8 @@ def main() -> int:
         key, _, value = option.partition("=")
         if key.strip() == "mip_threads":
             threads = int(value)
+    if args.certificate:
+        threads = 1  # write_certificate runs the tree on one thread, whatever mip_threads says
     print(f"commit   {commit}   machine {machine}   time limit {args.time_limit:g}s"
           + (f"   seeds {args.seeds}" if args.seeds > 1 else "")
           + (f"   options {solver_options}" if solver_options else ""))
