@@ -37,16 +37,12 @@ Options pdhg_options(bool parallel, int threads) {
 }
 
 std::string netlib_path(const char* name) {
-  return (std::filesystem::path(__FILE__)
-              .parent_path()
-              .parent_path()
-              .parent_path() /
+  return (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
           "data/netlib" / (std::string(name) + ".mps"))
       .string();
 }
 
-const char* const kInstances[] = {"afiro", "adlittle", "sc50a",
-                                  "sc105", "blend",    "israel"};
+const char* const kInstances[] = {"afiro", "adlittle", "sc50a", "sc105", "blend", "israel"};
 
 TEST(PdhgParallelSpmv, SerialIsReproducible) {
   // Two back-to-back serial solves must produce the exact same bits: same
@@ -95,8 +91,7 @@ TEST(PdhgParallelSpmv, AgreesWithTheSerialProductToRounding) {
     ASSERT_TRUE(io::read_model(netlib_path(name), &model).ok) << name;
     const Solution serial = solve(model, pdhg_options(false, 1));
     const Solution parallel = solve(model, pdhg_options(true, 4));
-    EXPECT_EQ(serial.status, parallel.status)
-        << name << ": " << parallel.message;
+    EXPECT_EQ(serial.status, parallel.status) << name << ": " << parallel.message;
     // A different summation order can move a restart decision by an ulp on a
     // knife edge; it has not on these six, and if it ever does the iteration
     // count says so here.
