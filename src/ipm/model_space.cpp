@@ -101,6 +101,7 @@ ModelSpaceMeasure measure_in_model_space(const ScaledIterate& it) {
     const double d = d_hat / factor;
     if (d > 0.0 && !is_finite_bound(lower[u])) worst = std::max(worst, d / scale);
     if (d < 0.0 && !is_finite_bound(upper[u])) worst = std::max(worst, -d / scale);
+    out.dual_residual = std::max(out.dual_residual, worst);
     const double distance = nearest_bound_distance(x[u], lower[u], upper[u]);
     if (d_hat != 0.0 && is_finite_bound(distance)) {
       const double product = std::fabs(d_hat) * distance;
@@ -128,6 +129,7 @@ ModelSpaceMeasure measure_in_model_space(const ScaledIterate& it) {
     double worst = 0.0;
     if (price > 0.0 && !is_finite_bound(lower[k])) worst = price / price_scale;
     if (price < 0.0 && !is_finite_bound(upper[k])) worst = -price / price_scale;
+    out.dual_residual = std::max(out.dual_residual, worst);
     const double distance = nearest_bound_distance(activity[u], lower[k], upper[k]);
     if (y[u] != 0.0 && is_finite_bound(distance)) {
       const double product = std::fabs(y[u]) * distance;

@@ -212,6 +212,8 @@ TEST(InteriorPointModelSpace, AgreesWithTheStatusGuardOnRandomlyScaledModels) {
     expect_agrees(ours.dual, guard.dual_infeasibility_scaled, "dual", trial);
     expect_agrees(ours.complementarity, guard.complementarity_violation, "complementarity",
                   trial);
+    // The residual part the loop requires is a part of the guard's dual measure.
+    EXPECT_LE(ours.dual_residual, ours.dual) << "trial " << trial;
   }
 }
 
@@ -281,6 +283,7 @@ TEST(InteriorPointModelSpace, AResidualInsideTheLoopsToleranceIsFourDecadesOutIn
   EXPECT_GT(ours.dual, 1e2 * tol::kDualFeasibility);
   EXPECT_GT(ours.primal, 1e2 * tol::kPrimalFeasibility);
   EXPECT_NEAR(ours.dual, 1e-4, 1e-6);
+  EXPECT_NEAR(ours.dual_residual, 1e-4, 1e-6);  // the consistency residual carries it
   EXPECT_NEAR(ours.primal, 1e-4, 1e-6);
   expect_agrees(ours.primal, guard.primal_infeasibility_scaled, "primal", 0);
   expect_agrees(ours.dual, guard.dual_infeasibility_scaled, "dual", 0);

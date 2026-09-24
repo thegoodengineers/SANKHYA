@@ -110,6 +110,12 @@ constexpr int kMaxIterations = 300;
 /// Iterative refinement steps on each normal-equations solve.
 constexpr int kRefinementSteps = 2;
 constexpr int kRuizIterations = 10;
+/// Iterations the loop may spend converged in its scaled measures while the model-space
+/// measures fail to improve by kModelSpaceProgress before it stops and reports the point as
+/// feasible (#582). Measured on finnis and d2q06c: once the scaled residuals are at their
+/// floor the model-space ones do not move at all, so a short window loses nothing.
+constexpr int kModelSpaceStallIterations = 3;
+constexpr double kModelSpaceProgress = 0.9;
 
 class InteriorPoint {
  public:
@@ -229,20 +235,40 @@ class InteriorPoint {
   /// Per row, the model-space relative violation behind model_primal_infeasibility_, for
   /// the worst-rows table at a stop that does not meet it.
   std::vector<double> model_row_violation_;
-  /// THE DUAL HALF OF THE SAME MEASUREMENT (#582): the guard's dual_infeasibility_scaled and
-  /// complementarity_violation on the point this iterate would be reported as. The scaled
-  /// dual residual is Dc times the model's on a structural, so a column Ruiz shrank by 1e-5
-  /// hides a 1e-4 model-space residual behind a scaled 1e-9 (test_ipm_model_space.cpp).
+  /// THE DUAL HALF OF THE SAME MEASUREMENT (#582): the residual part of the guard's
+  /// dual_infeasibility_scaled - the consistency of zl - zu with c - A^T y over each
+  /// column's terms, and the sign conditions - on the point this iterate would be reported
+  /// as. The scaled dual residual is Dc times the model's on a structural, and the loop
+  /// divides it by 1 + ||c||, not by each column's own terms: on finnis a scaled 7.8e-9 is
+  /// 7.0e-6 in the model, on a column whose Ruiz factor is 1.
   double model_dual_infeasibility_ = 0.0;
+  /// The guard's complementarity_violation, the largest absolute |multiplier| * distance.
+  /// Logged, not required: a product is the same number in both spaces, and the guard
+  /// already downgrades an optimal claim that fails it (the claim is then not a proof, but
+  /// it is also not a disagreement between two measurements, which is what #582 is).
   double model_complementarity_ = 0.0;
   std::vector<double> model_dual_violation_;
-  /// Every guard measure holds on the point as it would be reported: the loop may claim
-  /// optimal only then (#582).
+  /// The guard's primal and dual residual measures hold on the point as it would be
+  /// reported: the loop may claim optimal only then (#582).
   [[nodiscard]] bool model_space_holds() const {
     return model_primal_infeasibility_ <= tol::kPrimalFeasibility &&
-           model_dual_infeasibility_ <= tol::kDualFeasibility &&
-           model_complementarity_ <= tol::kComplementarity;
+           model_dual_infeasibility_ <= tol::kDualFeasibility;
   }
+  /// How far the worse model-space residual is from its tolerance, as a ratio (<= 1 holds).
+  [[nodiscard]] double model_space_excess() const {
+    return std::max(model_primal_infeasibility_ / tol::kPrimalFeasibility,
+                    model_dual_infeasibility_ / tol::kDualFeasibility);
+  }
+  /// model_space_holds() on the point as finish() would REPORT it, which for an optimal
+  /// status is after dual purification. When only the dual side fails, the purification is
+  /// tried here: kept if every model-space measure then holds, rolled back otherwise, so a
+  /// failed attempt leaves the iterate exactly as it was. On finnis the dual residual sat at
+  /// 7.0e-6 in model units - 7.8e-9 in the loop's, where every per-term scale is replaced by
+  /// 1 + ||c|| - for eight iterations; the purification is what makes that point a proof.
+  [[nodiscard]] bool model_space_holds_as_reported();
+  bool purified_ = false;
+  double best_model_excess_ = std::numeric_limits<double>::infinity();
+  int model_stalled_ = 0;
   const Scaling* scaling_ = nullptr;
   double mu_ = 0.0;
   double max_product_ = 0.0;
@@ -628,7 +654,7 @@ void InteriorPoint::model_space_residuals() {
   it.scaling = scaling_;
   ModelSpaceMeasure measure = measure_in_model_space(it);
   model_primal_infeasibility_ = measure.primal;
-  model_dual_infeasibility_ = measure.dual;
+  model_dual_infeasibility_ = measure.dual_residual;
   model_complementarity_ = measure.complementarity;
   model_row_violation_ = std::move(measure.row_violation);
   model_dual_violation_ = std::move(measure.dual_violation);
@@ -950,7 +976,7 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
     solution.dual_bound = model_.sense == ObjSense::kMaximize ? kInfinity : -kInfinity;
     return solution;
   }
-  if (status == SolveStatus::kOptimal) purify_duals();
+  if (status == SolveStatus::kOptimal && !purified_) purify_duals();
   const double sense = model_.sense_multiplier();
   for (Index j = 0; j < n_; ++j) {
     const auto u = static_cast<std::size_t>(j);
@@ -994,6 +1020,27 @@ constexpr double kPurifyInteriorFraction =
     1e-5;                              ///< slack per unit of |x| that counts as interior
 constexpr double kPurifyShift = 1e-8;  ///< diagonal shift on rows with no interior logical
 }  // namespace
+
+bool InteriorPoint::model_space_holds_as_reported() {
+  if (model_space_holds()) return true;
+  // Purification moves y and z only; a primal failure is not its to repair.
+  if (model_primal_infeasibility_ > tol::kPrimalFeasibility) return false;
+  const std::vector<double> y = y_;
+  const std::vector<double> zl = zl_;
+  const std::vector<double> zu = zu_;
+  if (purify_duals()) {
+    model_space_residuals();
+    if (model_space_holds()) {
+      purified_ = true;
+      return true;
+    }
+  }
+  y_ = y;
+  zl_ = zl;
+  zu_ = zu;
+  model_space_residuals();
+  return false;
+}
 
 bool InteriorPoint::purify_duals() {
   if (m_ == 0 || total_ == 0 || !analyzed_) return false;
@@ -1271,8 +1318,10 @@ Solution InteriorPoint::run() {
     // one is what the answer is judged by, and on a badly scaled model they differ by the
     // Ruiz factors of the worst rows. Optimal is claimed only when the point would pass the
     // guard's own measurement, primal and dual.
-    if (primal_infeasibility_ <= kIpmTolerance && dual_infeasibility_ <= kIpmTolerance &&
-        model_space_holds() && relative_gap <= kIpmGap && max_product_ <= kIpmComplementarity) {
+    const bool scaled_converged =
+        primal_infeasibility_ <= kIpmTolerance && dual_infeasibility_ <= kIpmTolerance &&
+        relative_gap <= kIpmGap && max_product_ <= kIpmComplementarity;
+    if (scaled_converged && model_space_holds_as_reported()) {
       return finish(SolveStatus::kOptimal,
                     barrier_retry_used_
                         ? fmt::format("converged at a relative gap of {:.1e} one step after "
@@ -1280,6 +1329,30 @@ Solution InteriorPoint::run() {
                                       relative_gap)
                         : std::string{},
                     iterations, timer.elapsed_seconds());
+    }
+    // CONVERGED IN THE LOOP'S UNITS, NOT IN THE MODEL'S (#582). Every scaled measure holds
+    // and the model-space ones do not, even after purification. The loop goes on while they
+    // improve; when kModelSpaceStallIterations pass without kModelSpaceProgress, the point is
+    // at the floor the regularization leaves, and it is reported as the feasible point it is
+    // with both measurements in the message, for the status guard to judge. Before this the
+    // loop ran on to the iteration limit (d2q06c: 300 iterations at a relative gap of 1.7e-9).
+    if (scaled_converged) {
+      const double excess = model_space_excess();
+      if (excess < kModelSpaceProgress * best_model_excess_) {
+        best_model_excess_ = excess;
+        model_stalled_ = 0;
+      } else if (++model_stalled_ >= kModelSpaceStallIterations) {
+        return finish(
+            SolveStatus::kFeasible,
+            fmt::format("converged in the scaled space (relative gap {:.1e}, infeasibility "
+                        "{:.1e} / {:.1e}) but the point measures {:.1e} / {:.1e} in the "
+                        "model's units, complementarity {:.1e}, and {} more iterations did "
+                        "not reduce that: a feasible point, not a proof (#582)",
+                        relative_gap, primal_infeasibility_, dual_infeasibility_,
+                        model_primal_infeasibility_, model_dual_infeasibility_,
+                        model_complementarity_, kModelSpaceStallIterations),
+            iterations, timer.elapsed_seconds());
+      }
     }
     if (iterations >= kMaxIterations || limits_.iterations_exhausted(iterations)) {
       restore_best();
@@ -1424,7 +1497,8 @@ Solution InteriorPoint::run() {
           // reported as what it is, feasible to the slack, with the numbers in the message.
           const bool optimal_here =
               primal_infeasibility_ <= kIpmTolerance && dual_infeasibility_ <= kIpmTolerance &&
-              model_space_holds() && best_gap <= kIpmGap && max_product_ <= kIpmComplementarity;
+              best_gap <= kIpmGap && max_product_ <= kIpmComplementarity &&
+              model_space_holds_as_reported();
           return finish(
               optimal_here ? SolveStatus::kOptimal : SolveStatus::kFeasible,
               optimal_here
@@ -1515,7 +1589,7 @@ Solution InteriorPoint::run() {
                             dual_infeasibility_ <= 1e-6;
         // Converged only if the point handed back also holds in the model's units (#582):
         // "within a decade" of the scaled tolerances is not a claim about the model.
-        const bool converged_here = nearly_converged && model_space_holds();
+        const bool converged_here = nearly_converged && model_space_holds_as_reported();
         return finish(
             converged_here ? SolveStatus::kOptimal
                            : (usable ? SolveStatus::kFeasible : SolveStatus::kNumericalError),

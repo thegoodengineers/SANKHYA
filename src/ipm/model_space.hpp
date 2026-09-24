@@ -47,6 +47,11 @@ struct ModelSpaceMeasure {
   /// column's terms, the sign of a price or reduced cost against a bound that does not
   /// exist, and each relative complementarity product.
   double dual = 0.0;
+  /// The part of `dual` that is a residual: consistency and sign conditions, without the
+  /// complementarity products. The products |d| * distance are the same number in scaled and
+  /// model units - only their denominators move - and the loop drives them down itself; the
+  /// residual is what the scaling and the loop's global norms can hide (#582).
+  double dual_residual = 0.0;
   /// complementarity_violation: the largest absolute |multiplier| * distance to the nearest
   /// bound, which the guard compares with tol::kComplementarity on its own.
   double complementarity = 0.0;
