@@ -406,6 +406,13 @@ Commit `fb72ab4` · machine `Windows-AMD64`
 
 Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
 
+> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd`
+> reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting the
+> whole trajectory. Speedup figures here are the median of five repeated solves. Do not
+> compare a GPU iteration count against a CPU count for the same instance: the two engines
+> take different trajectories and any comparison is meaningless. See also
+> `docs/ARCHITECTURE.md` § 7.
+
 | rows×cols | CPU 1e-4 (s) | GPU 1e-4 (s) | speedup | CPU 1e-8 (s) | GPU 1e-8 (s) | speedup |
 |----------:|-------------:|-------------:|--------:|-------------:|-------------:|--------:|
 | 200×200 | 0.027 | 2.495 | 0.01× | 0.068 | 3.365 | 0.02× |
