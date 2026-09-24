@@ -154,6 +154,18 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 tools/test_bundle.py
 
+      - name: The Python-API walkthrough notebook runs end to end (#537)
+        # Executed, not just present, so it cannot rot: notebooks/walkthrough.ipynb builds
+        # demo/crude_blend.mps, solves it under two engines, verifies both independently,
+        # then runs the parametric sweep (#522), the infeasibility repair (#523) and a
+        # warm-started re-solve (#524) live. --stdout discards the executed copy; a raised
+        # cell (an assertion or an exception) makes nbconvert exit non-zero.
+        if: matrix.name == 'Release'
+        run: |
+          pip install nbconvert nbclient ipykernel
+          python3 -m nbconvert --to notebook --execute --stdout notebooks/walkthrough.ipynb \
+            > /dev/null
+
       - name: The Maros-Meszaros fetcher, residuals and doc section pass their tests (#491)
         # Hermetic: no download and no solve. It pins the readme parser that produces every
         # reference objective, and the residual arithmetic every QP success is judged by.
