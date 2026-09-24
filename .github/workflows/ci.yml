@@ -112,9 +112,15 @@ jobs:
           - name: Release
             build_type: Release
             sanitize: OFF
+            debug_flags: ""
+          # -O1 rather than the Debug default -O0: the AddressSanitizer documentation
+          # recommends it for reasonable performance, every check still runs, and the build
+          # stays Debug so assert() is still compiled in. At -O0 this leg took 15 to 20
+          # minutes, most of it the test suite and the case studies.
           - name: Debug+ASan+UBSan
             build_type: Debug
             sanitize: ON
+            debug_flags: "-g -O1"
 
     steps:
       - uses: actions/checkout@v4
@@ -134,6 +140,7 @@ jobs:
           cmake -G Ninja -B build \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DSANKHYA_SANITIZE=${{ matrix.sanitize }} \
+            ${{ matrix.debug_flags && format('-DCMAKE_CXX_FLAGS_DEBUG="{0}"', matrix.debug_flags) || '' }} \
             -DSANKHYA_BUILD_TESTS=ON
 
       - name: Build
@@ -144,7 +151,8 @@ jobs:
           # halt_on_error keeps a sanitizer report from being buried under later output.
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: ctest --test-dir build --output-on-failure
+        # Tests run in parallel, one per runner core; they were run one at a time before.
+        run: ctest --test-dir build --output-on-failure -j "$(nproc)"
 
       # The bindings are pure ctypes over the shared library, so there is no extension to
       # build and no Python dependency to install - but that also means nothing else in CI
