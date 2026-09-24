@@ -1071,6 +1071,12 @@ std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution,
 
     auto row_opt = context.tableau_row(model, solution, slot);
     if (!row_opt) continue;
+    if (safe) {
+      // The cut divides by the reconstructed row's own f0, which can differ from the one read
+      // off col_value above: gate on that one too, so no cut divides by less than the floor.
+      const double f_row = row_opt->rhs - std::floor(row_opt->rhs);
+      if (f_row <= away || f_row >= 1.0 - away) continue;
+    }
 
     auto cut_opt = compute_gmi_from_tableau(model, *row_opt);
     if (!cut_opt) continue;

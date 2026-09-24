@@ -279,6 +279,12 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
                     accepted.size(), passed, waiting_cuts_.size());
   }
   if (debug_.has_value()) append_planted_cut(&accepted);  // a test's planted cut (#500)
+  // With the loop on, round 1 counts against the same row budget as the rounds after it
+  // (#495): "at most the budget in all, round 1 included".
+  if (options_.get_bool("root_cut_loop")) {
+    take_within_budget(&accepted, &waiting_cuts_,
+                       static_cast<std::size_t>(root_cut_row_budget(original_root_rows)));
+  }
   if (accepted.empty()) return;
 
   append_cut_rows(accepted);
