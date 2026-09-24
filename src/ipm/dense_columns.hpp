@@ -108,8 +108,11 @@ class DenseColumnCorrection {
  private:
   void multiply_full(const std::vector<double>& v, std::vector<double>* out) const;
   [[nodiscard]] double terms_of_product(const std::vector<double>& v) const;
+  /// `patience`: steps before the stagnation test may stop the iteration. The sparse-factor
+  /// pass has k eigenvalues away from one and needs about k + 1 steps whatever its residual
+  /// does on the way, so it is not judged stalled before them.
   PcgReport conjugate_gradients(const std::vector<double>& b, bool woodbury, int max_iterations,
-                                std::vector<double>* x) const;
+                                int patience, std::vector<double>* x) const;
   bool woodbury_ = false;
 
   std::vector<Index> columns_;

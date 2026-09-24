@@ -256,6 +256,7 @@ void DenseColumnCorrection::multiply_full(const std::vector<double>& v,
 
 PcgReport DenseColumnCorrection::conjugate_gradients(const std::vector<double>& b,
                                                      bool woodbury, int max_iterations,
+                                                     int patience,
                                                      std::vector<double>* x) const {
   PcgReport report;
   const std::size_t m = b.size();
@@ -299,7 +300,7 @@ PcgReport DenseColumnCorrection::conjugate_gradients(const std::vector<double>& 
     if (residual <= 0.5 * checkpoint) {
       checkpoint = residual;
       since_checkpoint = 0;
-    } else if (++since_checkpoint >= kPcgStagnation) {
+    } else if (++since_checkpoint >= kPcgStagnation && report.iterations > patience) {
       break;
     }
     precondition(r, &z);
@@ -338,7 +339,7 @@ PcgReport DenseColumnCorrection::solve(double* rhs) const {
   std::vector<double> x;
   PcgReport report;
   if (woodbury_) {
-    report = conjugate_gradients(b, true, kPcgMaxIterations, &x);
+    report = conjugate_gradients(b, true, kPcgMaxIterations, 0, &x);
     report.preconditioner = PcgReport::Preconditioner::kWoodbury;
     if (report.converged) {
       std::copy(x.begin(), x.end(), rhs);
@@ -347,7 +348,8 @@ PcgReport DenseColumnCorrection::solve(double* rhs) const {
   }
   std::vector<double> y;
   PcgReport plain =
-      conjugate_gradients(b, false, static_cast<int>(columns_.size()) + kPcgMaxIterations, &y);
+      conjugate_gradients(b, false, static_cast<int>(columns_.size()) + kPcgMaxIterations,
+                          static_cast<int>(columns_.size()) + 1, &y);
   plain.preconditioner = PcgReport::Preconditioner::kSparseFactor;
   plain.iterations += report.iterations;
   if (!woodbury_ || plain.relative_residual <= report.relative_residual) {

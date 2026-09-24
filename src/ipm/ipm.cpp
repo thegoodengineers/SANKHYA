@@ -953,8 +953,9 @@ void InteriorPoint::solve_normal(std::vector<double>* rhs) {
       direction_inaccurate_ = true;
       logger_.verbose(
           "interior point: dense-column conjugate gradients did not converge ({} step(s), "
-          "backward error {:.1e}{})",
-          report.iterations, report.relative_residual, report.broke_down ? ", broke down" : "");
+          "backward error {:.1e}{}, Woodbury preconditioner {})",
+          report.iterations, report.relative_residual, report.broke_down ? ", broke down" : "",
+          dense_.woodbury_available() ? "available" : "not positive definite");
     }
     return;
   }
