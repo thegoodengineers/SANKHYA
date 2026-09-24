@@ -13,13 +13,14 @@
 // deterministic=true, where only the counted budgets apply: the rule #288 set for the
 // interior-point polish.
 
-#include <fmt/format.h>
+#include "branch_and_bound_internal.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
-#include "branch_and_bound_internal.hpp"
+#include <fmt/format.h>
+
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -230,9 +231,14 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
   }
 
   // LOCAL-MIP IMPROVEMENT (#507): lift and breakthrough moves after incumbent updates.
-  // Runs when mip_local_mip is on and a feasible incumbent is in hand. The heuristic runs
-  // its own internal budget (500 iterations) so it does not need a separate budget here.
-  if (options_.get_bool("mip_local_mip") && have_incumbent_) {
+  // Runs when mip_local_mip is on and a feasible incumbent is in hand that it has not
+  // started from yet. The heuristic runs its own internal budget (500 iterations) so it
+  // does not need a separate budget here.
+  // Only when the incumbent is new since the last run: from the same point the search is
+  // the same (fixed seed), so running it again at every node only costs time.
+  if (options_.get_bool("mip_local_mip") && have_incumbent_ &&
+      incumbent_internal_ != local_mip_from_) {
+    local_mip_from_ = incumbent_internal_;
     HeuristicStats& s = heuristic_stats_[kLocalMip];
     const Timer clock;
     ++s.calls;

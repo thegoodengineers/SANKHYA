@@ -12,7 +12,10 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdio>
 #include <limits>
+#include <regex>
+#include <string>
 #include <vector>
 
 #include "mip/heuristics.hpp"
@@ -147,6 +150,58 @@ TEST(LocalMip, AlreadyOptimal) {
 
   EXPECT_FALSE(got_better);
   EXPECT_NEAR(incumbent.objective, 0.0, 1e-9);
+}
+
+/// End to end through the search (review of #632): a maximize 0-1 knapsack, strongly
+/// correlated so the tree is not trivial. With mip_local_mip on the optimum is the same as
+/// with it off, and the heuristic runs once per new incumbent, not at every node.
+TEST(LocalMip, InTheSearchItRunsPerIncumbentAndKeepsTheOptimum) {
+  constexpr int kItems = 24;
+  Model model;
+  model.sense = ObjSense::kMaximize;
+  model.resize_columns(kItems);
+  model.resize_rows(1);
+  model.row_lower = {-kInfinity};
+  model.matrix.reset(1, kItems);
+  double capacity = 0.0;
+  for (int j = 0; j < kItems; ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    const double weight = 10.0 + static_cast<double>((j * 37) % 23);
+    model.col_cost[u] = weight + 5.0;
+    model.col_upper[u] = 1.0;
+    model.col_type[u] = VarType::kInteger;
+    model.matrix.add_entry(0, j, weight);
+    capacity += weight;
+  }
+  model.row_upper = {std::floor(capacity / 2.0) + 0.5};
+  model.matrix.finalize();
+
+  const auto run = [&model](bool local_mip, std::string* log) {
+    Options options;
+    options.set_bool("presolve", false);
+    options.set_bool("log_to_console", true);
+    options.set_bool("mip_local_mip", local_mip);
+    ::testing::internal::CaptureStdout();
+    const Solution s = solve(model, options);
+    std::fflush(stdout);
+    *log = ::testing::internal::GetCapturedStdout();
+    return s;
+  };
+  std::string off_log;
+  std::string on_log;
+  const Solution off = run(false, &off_log);
+  const Solution on = run(true, &on_log);
+  ASSERT_EQ(off.status, SolveStatus::kOptimal) << off.message;
+  ASSERT_EQ(on.status, SolveStatus::kOptimal) << on.message;
+  EXPECT_NEAR(on.objective, off.objective, 1e-6);
+  std::smatch calls;
+  ASSERT_TRUE(std::regex_search(on_log, calls, std::regex(R"(local MIP\s+calls\s+(\d+))")))
+      << "the search never ran Local-MIP";
+  const long long ran = std::stoll(calls[1].str());
+  EXPECT_GE(ran, 1);
+  EXPECT_GT(on.nodes, 20) << "the knapsack is meant to need a tree";
+  EXPECT_LT(ran, on.nodes / 2) << "Local-MIP ran at " << ran << " of " << on.nodes
+                               << " nodes: it should only run when the incumbent changes";
 }
 
 }  // namespace

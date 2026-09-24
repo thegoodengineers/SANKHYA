@@ -647,6 +647,8 @@ class BranchAndBound {
 
   // Primal heuristics (#290, #414): which run and with what budgets, resolved once.
   std::vector<HeuristicStats> heuristic_stats_;
+  /// The incumbent (internal objective) Local-MIP last started from (#507); NaN before any.
+  double local_mip_from_ = std::numeric_limits<double>::quiet_NaN();
   Locks locks_;
   HeuristicSchedule schedule_;
   // Reduced-cost fixing and restarts (#418).
