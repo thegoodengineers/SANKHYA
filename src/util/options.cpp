@@ -1545,7 +1545,9 @@ const std::vector<OptionSpec>& Options::registry() {
                  "more nonzeros than this (1e8 is 800 MB of values and 400 MB of pattern), "
                  "before any of it is allocated; the message carries both numbers. The polish "
                  "of a first-order answer has its own, tighter cap in "
-                 "polish_max_factor_nonzeros. -1 for no cap.",
+                 "polish_max_factor_nonzeros. -1 for no cap. Since #467 the normal equations "
+                 "are counted from the pattern of A before they are assembled, and a count "
+                 "above this cap declines at once: the factor holds at least as many.",
                  -1.0,
                  kNoLimit,
                  {}});
@@ -1574,6 +1576,26 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back({"ipm_dense_columns",
+                 OptionType::Bool,
+                 false,
+                 "Split dense columns off the interior point's normal equations (#467): a "
+                 "column with more than ipm_dense_column_factor * sqrt(rows) entries (at most "
+                 "100 of them, densest first) is left out of A Theta A^T and corrected for by "
+                 "Sherman-Morrison-Woodbury, used as the preconditioner of conjugate gradients "
+                 "on the whole system (Andersen, Gondzio, Meszaros & Xu 1996). One column of "
+                 "bdry2 would otherwise make the normal equations 7.9e9 nonzeros. Default OFF.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"ipm_dense_column_factor",
+                 OptionType::Double,
+                 tol::kIpmDenseColumnFactor,
+                 "With ipm_dense_columns, a column is dense when it has more than this times "
+                 "sqrt(rows) entries (#467).",
+                 0.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
                  tol::kPdhgLoose,

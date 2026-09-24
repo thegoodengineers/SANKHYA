@@ -574,4 +574,42 @@ inline constexpr int kDomainPropagationRounds = 50;
 /// when its norm exceeds kPdhgDetectionMinNorm (a converged LP's differences go to zero).
 inline constexpr int kPdhgDetectionMinRestarts = 2;
 inline constexpr double kPdhgDetectionMinNorm = 1e-12;
+
+// ---- Dense columns in the LP interior point's normal equations (#467, ipm_dense_columns) ---
+
+/// A column is dense when it has more than this times sqrt(rows) entries: the default of
+/// `ipm_dense_column_factor`, the figure Andersen, Gondzio, Meszaros & Xu (1996, sec. 5)
+/// and the issue use.
+inline constexpr double kIpmDenseColumnFactor = 10.0;
+/// At most this many columns go to the correction, densest first: each costs one solve with
+/// the sparse factor per factorization to build the k x k Schur complement, which is then
+/// factored densely.
+inline constexpr Index kIpmMaxDenseColumns = 100;
+/// Conjugate gradients aim at a normwise backward error (Higham 2002, sec. 7.1) of this: the
+/// residual against the size of the terms M x is summed from, i.e. the rounding floor.
+inline constexpr double kIpmPcgTargetBackwardError = 1e-16;
+/// A solve whose backward error is at most this is converged, two decades above the target.
+/// A solve above it is NOT used as a Newton direction: the interior point treats it as it
+/// treats a non-finite direction (raise the regularization, refactorize, recompute).
+inline constexpr double kIpmPcgAcceptedBackwardError = 1e-12;
+/// Steps per solve with the Woodbury preconditioner; the sparse-factor fallback gets this
+/// plus the number of dense columns.
+inline constexpr int kIpmPcgMaxIterations = 50;
+/// The iteration stops when the residual has not halved in this many steps. Conjugate
+/// gradients minimize the M-norm of the error, not the residual, whose infinity norm can
+/// rise for several steps before it falls: on israel (33 dense columns at factor 2) the
+/// Woodbury-preconditioned residual went 27, 47, 41, 22, 15 and then 5e-3, and at 3 steps
+/// the iteration stopped at a backward error of 1.3e-4; with no early stop every solve of
+/// that run converged (worst 2.5e-15, longest run without halving 6 steps). 10 leaves room
+/// over the longest run seen.
+inline constexpr int kIpmPcgStagnationSteps = 10;
+/// A row whose diagonal in the sparse part is below this fraction of the dense columns'
+/// contribution gets the dense diagonal in the factor (see preconditioner_shift). Measured
+/// on israel's normal equations: at 1e-2 CG stalled with a direction 34% off, at 1e-6 not.
+inline constexpr double kIpmDenseSupportRatio = 1e-6;
+/// Every eigenvalue of the scaled Schur complement I + V^T M_s^-1 V is at least 1 in exact
+/// arithmetic; a Cholesky pivot below this means the solves it was built from were not
+/// accurate, and the Woodbury preconditioner is not used for that factorization.
+inline constexpr double kIpmDenseSchurMinPivot = 0.5;
+
 }  // namespace sankhya::tol
