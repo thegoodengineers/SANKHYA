@@ -2511,6 +2511,83 @@ def gpu_pdlp_section(path: Path | None) -> str:
     return chr(10).join(lines)
 
 
+def commercial_agreement_section(path: Path | None) -> str:
+    """Section 4b (#533): agreement of objectives against size-limited commercial editions.
+
+    Each solver is invoked as a separate process over the same MPS files; no commercial code
+    is linked into SANKHYA. See bench/runners/commercial_agreement.py and the licence terms
+    recorded in docs/PROVENANCE.md.
+    """
+    if path is None:
+        return chr(10).join([
+            "No commercial-agreement run has been committed yet. Reproduce with:",
+            "",
+            "```bash",
+            "# install one or more of: gurobi_cl (Gurobi), cplex (CPLEX Community), glpsol (GLPK)",
+            "python bench/runners/commercial_agreement.py --suite netlib --time-limit 60",
+            "```",
+            "",
+            "Licence terms for each edition are checked in `docs/PROVENANCE.md` before any run.",
+            "",
+        ])
+    rows = read_csv(path)
+    if not rows:
+        return "The commercial-agreement CSV is empty.\n"
+
+    commit = rows[0].get("git_commit", "unknown")
+    machine = rows[0].get("machine", "unknown")
+    ts = rows[0].get("timestamp_utc", "unknown")
+
+    solvers = sorted({r.get("solver", "") for r in rows})
+    out = [
+        f"Source CSV: `bench/results/{path.name}`  ",
+        f"Commit `{commit}` · machine `{machine}` · generated {ts}",
+        "",
+        "Each solver runs as a **separate process** over the same MPS files; no commercial "
+        "code is linked into SANKHYA. Licence terms are recorded in `docs/PROVENANCE.md`.",
+        "",
+    ]
+    for solver in solvers:
+        solver_rows = [r for r in rows if r.get("solver") == solver]
+        agree = sum(1 for r in solver_rows
+                    if r.get("verdict", "") in ("agree", "status_agree"))
+        disagree_rows = [r for r in solver_rows
+                         if r.get("verdict", "").startswith("disagree")]
+        not_installed = sum(1 for r in solver_rows
+                            if r.get("ref_status", "") == "not_installed")
+        if not_installed == len(solver_rows):
+            out.append(f"**{solver}**: not installed on the run machine.")
+            out.append("")
+            continue
+        eligible = len(solver_rows) - not_installed
+        out += [
+            f"**{solver}** — {agree} of {eligible} instances agree on the objective.",
+            "",
+            "| instance | our status | our objective | ref status | ref objective "
+            "| rel gap | verdict |",
+            "|---|---|---:|---|---:|---:|---|",
+        ]
+        for r in sorted(solver_rows, key=lambda x: x.get("instance", "")):
+            if r.get("ref_status") == "not_installed":
+                continue
+            out.append(
+                f"| `{r['instance']}` | {r.get('our_status', '')} "
+                f"| {r.get('our_objective', '-') or '-'} "
+                f"| {r.get('ref_status', '')} "
+                f"| {r.get('ref_objective', '-') or '-'} "
+                f"| {r.get('rel_gap', '-')} "
+                f"| {r.get('verdict', '')} |"
+            )
+        if disagree_rows:
+            out += [
+                "",
+                f"**{len(disagree_rows)} disagreement(s)**, named rather than dropped: "
+                + ", ".join(f"`{r['instance']}`" for r in disagree_rows) + ".",
+            ]
+        out.append("")
+    return chr(10).join(out)
+
+
 def main() -> int:
     # Both tiers, separately. Reporting only one was the whole of issue #53: the small set
     # is 8/8, which reads as a solved problem, and the medium tier is the number that says
@@ -2563,6 +2640,7 @@ def main() -> int:
     # is pooling-partial-<sha>.csv and the prefix filter keeps it out (#516).
     pooling_csv = newest("pooling-*.csv", prefix="pooling")
     gpu_pdlp_csv = newest("gpu-pdlp-*.csv")
+    commercial_csv = newest("commercial-agreement-*.csv")
 
     # Legacy untagged CSVs predate the tier tag; fall back so an old results directory still
     # generates something rather than failing.
@@ -2811,6 +2889,19 @@ nothing: the instances we fail are exactly the ones a reader should want to see 
 mature solver.
 
 {comparison_section(compare_csv)}
+---
+
+## 4b. Agreement against size-limited commercial editions (#533)
+
+Gurobi Academic/Trial (≤2000 variables + constraints), CPLEX Community Edition (≤1000), and
+GLPK (no size limit), each invoked as a **separate process** over the same MPS files. No
+commercial code is linked into SANKHYA. Licence terms are recorded in `docs/PROVENANCE.md`.
+The point of this section is not timing: on Netlib-scale instances every modern solver is
+fast. What is being measured is **agreement of objective values and statuses** — because a
+solver that claims the same answer as three independent implementations is more credible than
+one that does not, regardless of how it compares on a wall clock.
+
+{commercial_agreement_section(commercial_csv)}
 ---
 
 ## 5. Robustness — where the solver stops working
