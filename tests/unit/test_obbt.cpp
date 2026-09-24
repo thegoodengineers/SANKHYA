@@ -21,6 +21,10 @@ namespace {
 using mip::obbt_root;
 using mip::ObbtResult;
 
+Logger make_logger() {
+  return Logger(nullptr);
+}
+
 Options obbt_options() {
   Options opt;
   opt.set_bool("log_to_console", false);
@@ -57,7 +61,8 @@ TEST(Obbt, TightensUpperBoundsFromSingleConstraint) {
   const double orig_ub0 = model.col_upper[0];
   const double orig_ub1 = model.col_upper[1];
 
-  const ObbtResult result = obbt_root(model, obbt_options(), Logger{});
+  Logger logger1 = make_logger();
+  const ObbtResult result = obbt_root(model, obbt_options(), logger1);
 
   EXPECT_GT(result.lp_solves, 0) << "OBBT should have solved at least one LP";
   EXPECT_GT(result.bounds_tightened, 0) << "OBBT should have tightened at least one bound";
@@ -99,7 +104,8 @@ TEST(Obbt, TightensWithIncumbentCutoff) {
   const double orig_ub2 = model.col_upper[2];
   const double incumbent = 3.0;  // known feasible objective = 1+1+1
 
-  const ObbtResult result = obbt_root(model, obbt_options(), Logger{}, incumbent);
+  Logger logger2 = make_logger();
+  const ObbtResult result = obbt_root(model, obbt_options(), logger2, incumbent);
 
   EXPECT_GT(result.bounds_tightened, 0) << "OBBT should tighten at least one bound";
   // x2's upper bound must be strictly tighter than the original 10.
@@ -124,7 +130,8 @@ TEST(Obbt, SkipsWhenDisabled) {
   Options opt = obbt_options();
   opt.set_bool("mip_obbt", false);
 
-  const ObbtResult result = obbt_root(model, opt, Logger{});
+  Logger logger3 = make_logger();
+  const ObbtResult result = obbt_root(model, opt, logger3);
   EXPECT_EQ(result.lp_solves, 0);
   EXPECT_EQ(result.bounds_tightened, 0);
   EXPECT_NEAR(model.col_upper[0], 10.0, 1e-12);
@@ -149,7 +156,8 @@ TEST(Obbt, RespectsMaxIters) {
   Options opt = obbt_options();
   opt.set_int("mip_obbt_max_iters", 2);
 
-  const ObbtResult result = obbt_root(model, opt, Logger{});
+  Logger logger4 = make_logger();
+  const ObbtResult result = obbt_root(model, opt, logger4);
   EXPECT_LE(result.lp_solves, 2);
 }
 
