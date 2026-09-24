@@ -235,6 +235,10 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
         return flat
 
 
+class PermutationError(ValueError):
+    """A seed whose instance could not be permuted; the row is named, not dropped."""
+
+
 def run_seed(binary: Path, instance: Path, seed: int, scratch: Path, args,
              published: float) -> tuple[dict, str, dict]:
     """One run of one seed: the published file for seed 0, a permuted copy otherwise.
@@ -243,7 +247,12 @@ def run_seed(binary: Path, instance: Path, seed: int, scratch: Path, args,
     target, digest = instance, ""
     if seed != 0:
         target = scratch / f"{instance.name.replace('.mps.gz', '')}-seed{seed}.mps"
-        miplib_seeds.permute_mps(instance, target, seed)
+        try:
+            miplib_seeds.permute_mps(instance, target, seed)
+        except ValueError as error:
+            # Only the permutation is caught as "not permuted"; a ValueError from the solve
+            # or the stats parse below is a real failure and must not be relabelled (#627).
+            raise PermutationError(str(error)) from error
         digest = hashlib.sha256(target.read_bytes()).hexdigest()
     blob = solve(binary, target, args.time_limit, not args.no_verify, args.solver_option,
                  verify_against=instance)
@@ -338,7 +347,7 @@ def main() -> int:
                 try:
                     blob, digest, metrics = run_seed(binary, instance, seed, scratch, args,
                                                      published)
-                except ValueError as error:
+                except PermutationError as error:
                     # Named, never dropped: a seed that could not be permuted is a row missing
                     # from the table, and the reader has to be told which.
                     print(f"{name:<24}{seed:>4} {'NOT PERMUTED':<14}{error}", flush=True)
