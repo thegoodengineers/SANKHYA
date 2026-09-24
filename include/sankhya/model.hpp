@@ -394,6 +394,11 @@ class Solution {
     Count implied_free_column_singletons = 0;
     Count bounds_tightened = 0;
     Count integer_bounds_rounded = 0;
+    /// #511: integer-column coefficients reduced by coefficient tightening, and the column
+    /// bounds the bound propagation that feeds it tightened (also counted in
+    /// bounds_tightened).
+    Count coefficients_tightened = 0;
+    Count propagated_bounds = 0;
 
     // What presolve deliberately did NOT do, which is as much a part of explaining a reduced
     // model as what it did (#301): a column carrying curvature, or an integer column whose

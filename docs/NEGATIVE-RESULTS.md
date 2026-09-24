@@ -133,6 +133,7 @@ Nothing has demoted these. Each is off by default until its A/B on `main` says w
 | Parallel rows (#412, #436) | `presolve_parallel_rows` | a row that is a scalar multiple of an earlier one folds its bounds into that row | same |
 | Dominated columns (#412, #440) | `presolve_dominated_columns` | activity moves from a dominated column onto a dominating one; one of the two is fixed | same |
 | Implied-free substitution (#412, #443) | `presolve_implied_free` | a singleton column whose row already implies its box is substituted away with its row | same |
+| Coefficient tightening (#511) | `presolve_coefficient_tightening` | an integer column's coefficient larger than the row's slack at its maximum is cut to that slack (big-M to the column's implied bound), alternating with bound propagation | MIPLIB root bounds and times on `main` |
 
 ---
 

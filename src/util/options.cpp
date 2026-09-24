@@ -309,6 +309,21 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"presolve_coefficient_tightening",
+                 OptionType::Bool,
+                 false,
+                 "Coefficient tightening and big-M strengthening on integer rows in presolve "
+                 "(#511; Savelsbergh 1994; Achterberg et al. 2020): on a row whose maximum "
+                 "activity M exceeds its bound b by g = M - b, an integer column's "
+                 "coefficient larger than g is reduced to g and the bound moved to match, "
+                 "which leaves the integer points unchanged and tightens the LP relaxation "
+                 "(x <= M y with x <= U < M becomes x <= U y). Alternates with bound "
+                 "propagation, whose bounds are written into the reduced model. Only for a "
+                 "model with integer columns, and only read when presolve is on. OFF until "
+                 "the MIPLIB re-run on main says what it changes.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"tree_cut_depth",
                  OptionType::Int,
                  std::int64_t{0},

@@ -260,6 +260,36 @@ inline constexpr double kCutViolationTolerance = 1e-5;
 /// machine epsilon because the coefficients arrive through a reader and a scaling pass.
 inline constexpr double kPresolveParallelRowTolerance = 1e-9;
 
+/// Presolve, coefficient tightening (#511; Savelsbergh 1994; Achterberg et al. 2020, sec.
+/// 3). When a row's activity is not an exact integer sum, the gap g = M - b it tightens to
+/// is rounded UP by this much relative to max(1, the row's total magnitude): a g that comes
+/// out a hair too small would cut off an integer point, a hair too large only leaves the
+/// row a hair weaker. Also the relative margin a propagated bound is loosened by, for the
+/// same reason. A few hundred ulps over a long row, far below every feasibility tolerance.
+inline constexpr double kPresolveCoefficientSafety = 1e-9;
+
+/// A coefficient is only tightened when it drops by more than this relative to max(1, |a|),
+/// and only towards a g at least this large relative to the row's largest coefficient: a
+/// change below it moves nothing the LP can see, and a coefficient driven to near zero by a
+/// row that is barely binding is noise, not a reduction.
+inline constexpr double kPresolveCoefficientMinStep = 1e-6;
+
+/// A continuous column's bound propagated from a row is only written when it improves the
+/// old one by more than this relative to max(1, |old bound|) (Achterberg et al. 2020 use a
+/// rule of the same order): below it propagation converges geometrically and forever on a
+/// cycle of rows, and the LP gains nothing from the last digits. An integer bound moves by
+/// whole units and has no such floor.
+inline constexpr double kPresolveBoundMinStep = 1e-3;
+
+/// A propagated bound larger in magnitude than this is not written: it is finite in name
+/// only and would put a coefficient range of 1e9 into the LP for no gain.
+inline constexpr double kPresolveMaxPropagatedBound = 1e9;
+
+/// Rounds of bound propagation followed by coefficient tightening, each one pass over the
+/// rows. A tightened row propagates tighter bounds and a tighter bound tightens more rows,
+/// so the two alternate; the cap is a work limit, not a convergence test.
+inline constexpr int kPresolveCoefficientRounds = 20;
+
 /// Cut selection (#415; Wesselmann & Suhl, "Implementing cutting plane management and
 /// selection techniques", 2012; Achterberg 2007, ch. 8). A cut's score is the weighted sum
 /// of its efficacy (the Euclidean distance from the LP point to its hyperplane), its
