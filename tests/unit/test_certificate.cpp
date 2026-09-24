@@ -239,5 +239,45 @@ TEST(Certificate, AnUnprovableCertificateIsDroppedRatherThanPublished) {
   }
 }
 
+// GALENET from Netlib's infeasible LP collection (J. W. Chinneck, 1993,
+// https://netlib.org/lp/infeas/): a transportation network with three supplies, two transit
+// nodes and three demands. Presolve proves it infeasible by bound arithmetic on row D8 and
+// keeps no Farkas vector, so before #559 the verdict came back with no certificate at all.
+Model galenet() {
+  // Columns T14 T24 T25 T35 T46 T47 T57 T58; rows S1 S2 S3 NODE4 NODE5 D6 D7 D8.
+  Model model;
+  model.resize_columns(8);
+  model.col_upper = {30.0, 20.0, 10.0, 10.0, 10.0, 2.0, 20.0, 30.0};
+  model.resize_rows(8);
+  model.row_lower = {-kInfinity, -kInfinity, -kInfinity, 0.0, 0.0, 10.0, 20.0, 30.0};
+  model.row_upper = {20.0, 20.0, 20.0, 0.0, 0.0, kInfinity, kInfinity, kInfinity};
+  model.matrix.reset(8, 8);
+  const struct {
+    Index row, col;
+    double value;
+  } entries[] = {{0, 0, 1.0}, {3, 0, 1.0},  {1, 1, 1.0}, {3, 1, 1.0},
+                 {1, 2, 1.0}, {4, 2, 1.0},  {2, 3, 1.0}, {4, 3, 1.0},
+                 {5, 4, 1.0}, {3, 4, -1.0}, {6, 5, 1.0}, {3, 5, -1.0},
+                 {6, 6, 1.0}, {4, 6, -1.0}, {7, 7, 1.0}, {4, 7, -1.0}};
+  for (const auto& e : entries) model.matrix.add_entry(e.row, e.col, e.value);
+  model.matrix.finalize();
+  return model;
+}
+
+TEST(Certificate, AnInfeasibilityPresolveProvesWithoutAProofIsRetriedForOne) {
+  // #559: with presolve on (the default), an infeasible verdict whose certificate presolve
+  // could not supply is retried once against the original model, and the retry's verified
+  // certificate is what comes back. Without the retry this model has no certificate.
+  const Model model = galenet();
+  const Solution solution = solve(model, quiet(/*presolve=*/true));
+  ASSERT_EQ(solution.status, SolveStatus::kInfeasible) << solution.message;
+  ASSERT_FALSE(solution.farkas_dual.empty()) << solution.message;
+  std::string why;
+  EXPECT_TRUE(farkas_proves_infeasible(model, solution.farkas_dual, &why)) << why;
+  EXPECT_NE(solution.message.find("retried directly against the original model"),
+            std::string::npos)
+      << solution.message;
+}
+
 }  // namespace
 }  // namespace sankhya
