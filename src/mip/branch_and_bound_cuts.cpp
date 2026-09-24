@@ -203,6 +203,23 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   // opt1217", carried on the Solution into the stats and the MIPLIB CSV.
   cut_filter_report_ = describe_cut_filter(filtered);
   logger_.verbose("root cut filter: {}", cut_filter_report_);
+  // HOW DENSE THE REFUSED ONES WERE (#496): whether any support cap could admit them. The
+  // counts say "too_dense"; only the supports say whether that is 20 nonzeros over a cap of
+  // 12 or every column of the model.
+  Index densest = 0;
+  Index sparsest = std::numeric_limits<Index>::max();
+  for (const FilteredCut& fc : filtered) {
+    if (fc.reason != CutFilterReason::kTooDense) continue;
+    const auto support = static_cast<Index>(
+        std::count_if(fc.cut.coeff.begin(), fc.cut.coeff.end(),
+                      [](double a) { return std::fabs(a) > tol::kZeroDrop; }));
+    densest = std::max(densest, support);
+    sparsest = std::min(sparsest, support);
+  }
+  if (densest > 0) {
+    logger_.verbose("root cut filter: the too_dense candidates have {} to {} nonzeros of {}",
+                    sparsest, densest, working_.num_cols());
+  }
   std::vector<Cut> passing;
   for (auto& fc : filtered) {
     if (fc.reason == CutFilterReason::kAccepted) passing.push_back(std::move(fc.cut));
