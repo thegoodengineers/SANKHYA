@@ -29,6 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import kkt_crossings  # the relative-KKT crossing tables (#486)
 import latest_result
 import maros_meszaros_doc  # the QP section (#491), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
@@ -695,7 +696,10 @@ def mittelmann_engines_section(default: Path | None, pdhg: Path | None,
         out.append(f"| `{name}` | " + " | ".join(cells) + " |")
     out += ["", "Finished and verified inside the limit: "
             + ", ".join(f"{engine} **{count} of {len(instances)}**" for engine, count in finished.items())
-            + ".", ""]
+            + "."]
+    if "PDHG" in tables:
+        out += kkt_crossings.feasibility_standard_table(tables["PDHG"])
+    out += [""]
     return chr(10).join(out)
 
 
@@ -901,6 +905,7 @@ def pdhg_section(path: Path | None) -> str:
             out.append(f"| `{name}` | {on} | {off} | {ratio} |")
         out.append("")
         out.append("A ratio above 1 means restarts saved iterations on that instance.")
+    out += kkt_crossings.pdhg_report_table(rows)
     out.append("")
     return chr(10).join(out)
 

@@ -208,6 +208,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_netlib_infeasible.py
 
+      - name: The relative-KKT crossing columns and their doc tables (#486)
+        # Pure Python, no solve: blanks for a non-PDHG row, nan kept for a level never
+        # reached, the ordering check, and the generated tables that label the 1e-6
+        # crossing as the feasibility-page standard, not an optimal basis.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_kkt_crossings.py
+
       - name: Results CSVs are stamped from the binary, not the tree (#433)
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_stamp.py
