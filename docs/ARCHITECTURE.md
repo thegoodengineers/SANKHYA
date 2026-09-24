@@ -297,6 +297,16 @@ Two consequences for reading section 1g of `docs/BENCHMARKS.md`:
    count as evidence of algorithmic equivalence — the two paths walk different numerical
    trajectories whenever the GPU's non-associative reductions diverge from the CPU's.
 
+**Benchmark CSV stamp validation** (#433). Every number in `docs/BENCHMARKS.md` is generated
+from a CSV in `bench/results/`. Each CSV records the git commit it was produced at in a
+`git_commit` column. A benchmark run on a PR branch is stamped with a commit that dies at
+the squash merge: on a fresh clone the stamp does not resolve, so `scripts/reproduce.sh`
+cannot tie the number to a build. CI catches this with `bench/runners/check_result_stamps.py`,
+which fails if any cited CSV's stamp is not an ancestor of `main`. Branch-run stamps that were
+squash-merged are listed in `bench/results/squash-stamps.txt` with their squash commit;
+the checker accepts them when the squash commit is on `main`, so the chain of custody is
+preserved without re-running on a main commit.
+
 ## 8. Resource limits, and what each one means
 
 One place decides what a limit means: `ResourceLimits` in `src/core/resource_limits.hpp`,
