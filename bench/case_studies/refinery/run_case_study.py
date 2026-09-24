@@ -82,31 +82,6 @@ def _find_sankhya(hint: str | None) -> str | None:
 def _mps_stats(mps_path: Path) -> dict[str, int]:
     """Count rows, cols, nonzeros and binary columns in the MPS file."""
     rows = cols = nnz = binary = 0
-    in_rows = in_cols = in_int = False
-    with mps_path.open(encoding="utf-8") as f:
-        for line in f:
-            stripped = line.strip()
-            if stripped.startswith("ROWS"):
-                in_rows, in_cols, in_int = True, False, False
-            elif stripped.startswith("COLUMNS"):
-                in_rows, in_cols, in_int = False, True, False
-            elif stripped.startswith(("RHS", "BOUNDS", "RANGES", "ENDATA")):
-                in_rows = in_cols = False
-            elif in_rows and stripped and stripped[0] not in ("N", "*"):
-                rows += 1
-            elif in_cols and stripped:
-                if "INTORG" in stripped:
-                    in_int = True
-                elif "INTEND" in stripped:
-                    in_int = False
-                elif not stripped.startswith("*"):
-                    parts = stripped.split()
-                    if len(parts) >= 2 and parts[1] not in ("COST",) or True:
-                        # Each data line in COLUMNS contributes one (col, row) nonzero
-                        # and a new column name when it first appears
-                        pass
-    # Re-parse properly
-    rows = cols = nnz = binary = 0
     seen_cols: set[str] = set()
     seen_int: set[str] = set()
     in_rows = in_cols = in_int_block = False

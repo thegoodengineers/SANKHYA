@@ -93,13 +93,13 @@ optimum is exact when verified in rational arithmetic.
 
 ## Size ladder
 
-| Size | Periods | Crudes | Products | Units | Specs | Commits | ~rows | ~cols |
+| Size | Periods | Crudes | Products | Units | Specs | Commits | rows | cols |
 |---|---|---|---|---|---|---|---|---|
-| small  | 4  | 3  | 4  | 5  | 3  | 2 | ~120  | ~160  |
-| medium | 12 | 8  | 8  | 8  | 6  | 4 | ~900  | ~1200 |
-| large  | 52 | 15 | 12 | 10 | 10 | 8 | ~9000 | ~13000 |
+| small  | 4  | 3  | 4  | 5  | 3  | 2 | 88   | 84   |
+| medium | 12 | 8  | 8  | 8  | 6  | 4 | 516  | 576  |
+| large  | 52 | 15 | 12 | 10 | 10 | 8 | 3536 | 4212 |
 
-Row and column counts are approximate; the exact numbers depend on the seed.
+Row and column counts are exact; they depend only on the preset dimensions, not the seed.
 
 Generate all sizes (LP and MILP) with:
 
