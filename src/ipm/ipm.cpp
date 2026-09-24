@@ -40,10 +40,10 @@
 #include <fmt/format.h>
 
 #include "core/resource_limits.hpp"
+#include "ipm/dense_columns.hpp"
 #include "ipm/ipm_testing.hpp"
 #include "ipm/model_space.hpp"
 #include "ipm/proximal_system.hpp"
-#include "ipm/dense_columns.hpp"
 #include "la/ldl.hpp"
 #include "la/normal_pattern.hpp"
 #include "la/scaling.hpp"
@@ -1501,10 +1501,10 @@ Solution InteriorPoint::run() {
     for (Index j = 0; j < n_; ++j) {
       eligible[static_cast<std::size_t>(j)] = fixed_[static_cast<std::size_t>(j)] ? 0 : 1;
     }
-    dense_.set_columns(
-        model_.matrix,
-        find_dense_columns(model_.matrix, eligible,
-                           options_.get_double("ipm_dense_column_factor"), tol::kIpmMaxDenseColumns));
+    dense_.set_columns(model_.matrix,
+                       find_dense_columns(model_.matrix, eligible,
+                                          options_.get_double("ipm_dense_column_factor"),
+                                          tol::kIpmMaxDenseColumns));
     if (dense_.active()) {
       Index largest = 0;
       for (const Index j : dense_.columns()) {
