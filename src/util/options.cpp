@@ -584,6 +584,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  kNoLimit,
                  {}});
+    s.push_back({"mip_node_factor_cache",
+                 OptionType::Int,
+                 std::int64_t{0},
+                 "MILP: keep the LU factors of up to this many node LP starting bases and "
+                 "reuse them when a later node LP starts from the same basis (#501) - the "
+                 "strong-branching probes of a node and its children all do. The factors "
+                 "reused are the ones the solve would have computed, so the tree and the "
+                 "answer are unchanged. 0 is off, which is the default until the MIPLIB A/B "
+                 "on main.",
+                 0.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"mip_objective_branching",
                  OptionType::Bool,
                  false,

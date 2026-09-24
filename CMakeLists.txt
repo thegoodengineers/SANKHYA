@@ -317,6 +317,7 @@ set(SANKHYA_CORE_SOURCES
   src/simplex/crossover.cpp
   src/simplex/simplex_push.cpp
   src/simplex/ranging.cpp
+  src/simplex/factor_cache.cpp
   src/util/logging.cpp
   src/util/memory.cpp
   src/util/options.cpp

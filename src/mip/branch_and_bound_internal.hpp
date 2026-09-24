@@ -37,6 +37,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,7 @@
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
+#include "simplex/factor_cache.hpp"
 #include "simplex/primal_simplex.hpp"
 
 namespace sankhya::mip {
@@ -390,8 +392,8 @@ class BranchAndBound {
     // numerical answer at a node cannot be fathomed honestly, and the search below stops
     // on it, so it is worth one more solve to avoid.
     if (node_engine_dual_ && !current_warm_.empty()) {
-      Solution warm =
-          solve_dual_simplex(working_, options, logger_, scaling_, control_, &current_warm_);
+      Solution warm = solve_dual_simplex(working_, options, logger_, scaling_, control_,
+                                         &current_warm_, factor_cache_.get());
       if (warm.status == SolveStatus::kOptimal || warm.status == SolveStatus::kInfeasible ||
           warm.status == SolveStatus::kUnbounded ||
           warm.status == SolveStatus::kIterationLimit) {
@@ -405,7 +407,8 @@ class BranchAndBound {
           to_string(warm.status));
       ++cold_fallbacks_;
     }
-    Solution cold = solve_primal_simplex(working_, options, logger_, scaling_, control_);
+    Solution cold = solve_primal_simplex(working_, options, logger_, scaling_, control_,
+                                         nullptr, factor_cache_.get());
     ++cold_node_solves_;
     cold_node_iterations_ += cold.iterations;
     return cold;
@@ -625,6 +628,9 @@ class BranchAndBound {
   Count strong_branch_iterations_ = 0;
   /// The basis to start the NEXT node LP from; empty means the slack basis (the root).
   WarmStart current_warm_;
+  /// mip_node_factor_cache (#501): first factorizations kept for the next node LP that
+  /// starts from the same basis. Null when the option is 0.
+  std::unique_ptr<NodeFactorCache> factor_cache_;
   Count warm_node_solves_ = 0;
   Count cold_node_solves_ = 0;
   Count cold_fallbacks_ = 0;

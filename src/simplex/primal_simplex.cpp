@@ -47,6 +47,7 @@
 #include "simplex_core.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -334,6 +335,7 @@ bool Simplex::refactorize() {
   // Reset at entry rather than at the successful return, so every exit path - the ladder,
   // a repair, a failure - leaves the counter consistent with whatever factors are in use.
   eta_work_since_refactor_ = 0.0;
+  last_factorization_plain_ = false;
   // A column judged dependent on the previous factors is eligible again on these.
   std::fill(numerically_dependent_.begin(), numerically_dependent_.end(), 0);
   // Phase 2 materialised a dense m x m array here and threw it away again on every pivot:
@@ -388,6 +390,7 @@ bool Simplex::refactorize() {
       // conditioned, do not update on top of it" - a property of the factorization in hand,
       // so each one sets it for itself.
       basis_needed_stricter_threshold_ = attempt > 0;
+      last_factorization_plain_ = attempt == 0;
       if (attempt > 0 && !warned_about_threshold_) {
         warned_about_threshold_ = true;
         logger_.warning(
@@ -1393,7 +1396,13 @@ std::optional<Solution> Simplex::prepare(const WarmStart* warm, const Timer& tim
   }
   if (!warm_started_) set_initial_basis();
 
-  if (!refactorize()) {
+  bool factorized = false;
+  {
+    // Timed on its own (#501): the share of a node LP that NodeFactorCache can save.
+    ProfileScope timed(logger_.profiler(), "first factorization", ProfileMode::kDetailed);
+    factorized = first_factorization();
+  }
+  if (!factorized) {
     if (factors_abandoned_) return factorization_failed(0, timer);
     if (!warm_started_) {
       return finish(SolveStatus::kNumericalError, "the initial slack basis is singular", 0,
@@ -1907,6 +1916,9 @@ NodeScaling build_node_scaling(const Model& model, const Options& options) {
   // the sense never enters; folding it in here would mean unfolding it again below.
   cache.scaling = build_scaling(model, model.col_cost, kRuizIterations);
   cache.valid = true;
+  // Relaxed ordering is enough: the id only has to be unique, not ordered (#501).
+  static std::atomic<std::uint64_t> next_id{1};
+  cache.id = next_id.fetch_add(1, std::memory_order_relaxed);
   return cache;
 }
 
@@ -1918,9 +1930,9 @@ Solution solve_primal_simplex(const Model& model, const Options& options, Logger
 
 Solution solve_primal_simplex(const Model& model, const Options& options, Logger& logger,
                               const NodeScaling& cache, SolveControl* control,
-                              const WarmStart* warm) {
+                              const WarmStart* warm, NodeFactorCache* factors) {
   return detail::solve_with_scaling(model, options, logger, cache, detail::Engine::kPrimal,
-                                    warm, control);
+                                    warm, control, factors);
 }
 
 Solution solve_dual_simplex(const Model& model, const Options& options, Logger& logger,
@@ -1931,23 +1943,27 @@ Solution solve_dual_simplex(const Model& model, const Options& options, Logger& 
 
 Solution solve_dual_simplex(const Model& model, const Options& options, Logger& logger,
                             const NodeScaling& cache, SolveControl* control,
-                            const WarmStart* warm) {
+                            const WarmStart* warm, NodeFactorCache* factors) {
   return detail::solve_with_scaling(model, options, logger, cache, detail::Engine::kDual, warm,
-                                    control);
+                                    control, factors);
 }
 
 namespace detail {
 
 Solution solve_with_scaling(const Model& model, const Options& options, Logger& logger,
                             const NodeScaling& cache, Engine engine, const WarmStart* warm,
-                            SolveControl* control) {
+                            SolveControl* control, NodeFactorCache* factors) {
   // One place chooses the loop, so the scaled attempt and the unscaled retry below cannot
   // disagree about which method they are running.
-  const auto run_engine = [&](const Model& problem, const Options& problem_options) {
+  // `factors` is handed only to the scaled attempt: its matrix is the one cache.id names.
+  // The unscaled retry factorizes the caller's matrix, which no id identifies.
+  const auto run_engine = [&](const Model& problem, const Options& problem_options,
+                              NodeFactorCache* reuse) {
     Simplex simplex(problem, problem_options, logger, control);
+    if (reuse != nullptr) simplex.use_factor_cache(reuse, cache.id);
     return engine == Engine::kDual ? simplex.run_dual(warm) : simplex.run(warm);
   };
-  if (!cache.valid) return run_engine(model, options);
+  if (!cache.valid) return run_engine(model, options, nullptr);
 
   // THE CACHE'S PRECONDITION, CHECKED RATHER THAN TRUSTED. The multipliers are indexed by
   // column and row, so a cache built from a model of different dimensions would read past
@@ -1966,7 +1982,7 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
         cache.scaling.row.size(), cache.scaling.column.size(), model.num_rows(),
         model.num_cols());
     return solve_with_scaling(model, options, logger, build_node_scaling(model, options),
-                              engine, warm, control);
+                              engine, warm, control, factors);
   }
 
   const Scaling& scaling = cache.scaling;
@@ -2046,7 +2062,7 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   // early failure leaves, never after a time limit.
   const double scaled_share = options.get_double("scaled_share");
   if (limited) scaled_options.set_double("time_limit", scaled_share * time_limit);
-  Solution solution = run_engine(scaled, scaled_options);
+  Solution solution = run_engine(scaled, scaled_options, factors);
   const double scaled_seconds = budget.elapsed_seconds();
   const auto note_route = [&](Solution& kept, const char* what) {
     const std::string note =
@@ -2146,7 +2162,7 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
 
   logger.info("Scaled solve returned {} (primal infeasibility {:.3e}); retrying unscaled",
               to_string(solution.status), solution.primal_infeasibility);
-  Solution unscaled = run_engine(model, retry_options);
+  Solution unscaled = run_engine(model, retry_options, nullptr);
   const bool unscaled_usable =
       (unscaled.status == SolveStatus::kOptimal || unscaled.status == SolveStatus::kFeasible) &&
       unscaled.primal_infeasibility <= primal_tolerance;

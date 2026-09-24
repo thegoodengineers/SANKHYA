@@ -2,6 +2,7 @@
 // SANKHYA - bounded-variable revised primal simplex.
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 #include "sankhya/logging.hpp"
@@ -33,7 +34,13 @@ namespace sankhya {
 struct NodeScaling {
   Scaling scaling;
   bool valid = false;
+  /// Which scaled matrix this is, for NodeFactorCache (#501): drawn from a process-wide
+  /// counter by build_node_scaling(), carried unchanged by copies (which hold the same
+  /// matrix), and 0 for an invalid cache, which names no matrix.
+  std::uint64_t id = 0;
 };
+
+class NodeFactorCache;
 
 /// Compute the reusable part once. Returns an invalid cache when scaling is switched off, so
 /// a caller can build it unconditionally and let the solve decide.
@@ -54,9 +61,14 @@ struct NodeScaling {
 struct WarmStart;
 /// As above, started from `warm` (#218): the right restart after a COST change, which keeps
 /// the old basis primal feasible.
+///
+/// `factors`, when given, keeps the first factorization of each starting basis for the
+/// next solve that starts from the same one (#501, factor_cache.hpp); the answer is the
+/// same with or without it. Used only on the scaled attempt, whose matrix `cache.id` names.
 [[nodiscard]] Solution solve_primal_simplex(const Model& model, const Options& options,
                                             Logger& logger, const NodeScaling& cache,
-                                            SolveControl* control, const WarmStart* warm);
+                                            SolveControl* control, const WarmStart* warm,
+                                            NodeFactorCache* factors = nullptr);
 
 /// A basis to start from, as the statuses a previous Solution reported.
 ///
@@ -85,9 +97,11 @@ struct WarmStart {
 [[nodiscard]] Solution solve_dual_simplex(const Model& model, const Options& options,
                                           Logger& logger, SolveControl* control = nullptr,
                                           const WarmStart* warm = nullptr);
+/// `factors` as for solve_primal_simplex above.
 [[nodiscard]] Solution solve_dual_simplex(const Model& model, const Options& options,
                                           Logger& logger, const NodeScaling& cache,
                                           SolveControl* control = nullptr,
-                                          const WarmStart* warm = nullptr);
+                                          const WarmStart* warm = nullptr,
+                                          NodeFactorCache* factors = nullptr);
 
 }  // namespace sankhya

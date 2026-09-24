@@ -813,6 +813,20 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTreeCuts) {
   EXPECT_GT(wide.cuts_applied, 0) << "no cut row was ever applied: the sweep proved nothing";
 }
 
+// The node factor cache (#501) under the exact oracle, with tree cuts on so the scaled
+// matrix is rebuilt mid-search: a factorization kept for the old matrix must never be
+// handed to a node LP on the new one.
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheNodeFactorCache) {
+  Options options = mip_options();
+  options.set_int("mip_node_factor_cache", 8);
+  expect_clean_sweep(run_milp_fuzz(options, "node factor cache"));
+  options.set_bool("enable_root_cuts", true);
+  options.set_int("tree_cut_depth", 4);
+  options.set_bool("presolve", false);
+  expect_clean_sweep(run_milp_fuzz(options, "node factor cache, tree cuts, wide", true, 600),
+                     200, 100);
+}
+
 TEST(TreeCuts, RowsAddedBelowTheRootKeepTheAnswerAndAreCounted) {
   // Three coupled knapsack rows over sixteen general-integer columns: the root LP is
   // fractional, the root round does not close the tree, and the shallow nodes have
