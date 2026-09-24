@@ -40,6 +40,7 @@
 #include <fmt/format.h>
 
 #include "core/resource_limits.hpp"
+#include "ipm/column_side.hpp"
 #include "ipm/dense_columns.hpp"
 #include "ipm/ipm_testing.hpp"
 #include "ipm/model_space.hpp"
@@ -227,6 +228,18 @@ class InteriorPoint {
   /// built from it is not a Newton direction to the accuracy the loop assumes, and is
   /// treated as a non-finite one is (regularization raised, refactorized, recomputed).
   bool direction_inaccurate_ = false;
+  /// THE n x n SIDE (#469, option ipm_normal_side). When active, normal_lower_ and ldl_
+  /// hold N = Theta^-1 + A^T D^-1 A instead of M = A Theta A^T + D, and every solve with M
+  /// goes through column_side_: conjugate gradients on M preconditioned by the Woodbury
+  /// form built on N's factors. Inactive by default, and then nothing below changes.
+  ColumnSide column_side_;
+  bool column_side_active_ = false;
+  Count cg_iterations_ = 0;
+  Count cg_solves_ = 0;
+  double worst_backward_error_ = 0.0;
+  /// Which side "auto" chooses: the symbolic factor size of each, from its own ordering,
+  /// the m side's abandoned as soon as it passes the n side's (Zanetti & Gondzio 2025).
+  [[nodiscard]] bool column_side_is_smaller();
   /// Solve the normal equations for the factors in ldl_: the plain LDL^T solve with
   /// kRefinementSteps of iterative refinement against normal_lower_, or, on the dense-column
   /// path, preconditioned conjugate gradients against the whole of A Theta A^T.
@@ -857,9 +870,13 @@ bool InteriorPoint::factorize() {
     assembled = true;
   } else {
     ProfileScope timed(profiler, "normal equations", ProfileMode::kDetailed);
-    assembled = normal_equations_lower(model_.matrix, dense_.active() ? theta_sparse : theta_x,
-                                       dense_.active() ? assembly_shift : row_shift,
-                                       dual_regularization_, &normal_lower_, should_stop_);
+    assembled =
+        column_side_active_
+            ? column_side_.assemble(theta_x, row_shift, dual_regularization_, &normal_lower_,
+                                    should_stop_)
+            : normal_equations_lower(model_.matrix, dense_.active() ? theta_sparse : theta_x,
+                                     dense_.active() ? assembly_shift : row_shift,
+                                     dual_regularization_, &normal_lower_, should_stop_);
   }
   const SparseMatrix& system = proximal_ != nullptr ? proximal_->matrix() : normal_lower_;
   if (!assembled) {
@@ -942,6 +959,13 @@ bool InteriorPoint::factorize() {
 }
 
 void InteriorPoint::solve_normal(std::vector<double>* rhs) {
+  if (column_side_active_) {
+    const ColumnSideReport report = column_side_.solve(ldl_, rhs->data());
+    ++cg_solves_;
+    cg_iterations_ += report.iterations;
+    worst_backward_error_ = std::max(worst_backward_error_, report.backward_error);
+    return;
+  }
   if (dense_.active()) {
     const PcgReport report = dense_.solve(rhs->data());
     ++pcg_solves_;
@@ -1115,6 +1139,12 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
         "solve(s), worst relative residual {:.1e}, {} solve(s) not converged",
         dense_.columns().size(), pcg_iterations_, pcg_solves_, worst_pcg_residual_,
         pcg_unconverged_);
+  }
+  if (column_side_active_) {
+    logger_.info(
+        "IPM: n x n side (#469): {} conjugate-gradient step(s) in {} solve(s), worst "
+        "backward error {:.1e}",
+        cg_iterations_, cg_solves_, worst_backward_error_);
   }
   // THE WORST ROWS AND VARIABLES, AT EVERY STOP THAT HANDS BACK A POINT (#582). A limit stop
   // restores the best iterate without re-measuring it, so it is measured here first: the
@@ -1359,11 +1389,14 @@ bool InteriorPoint::purify_duals() {
     (void)dense_.preconditioner_shift(model_.matrix, theta_x, row_shift, dual_regularization_,
                                       &assembly_shift);
   }
-  if (!normal_equations_lower(model_.matrix, dense_.active() ? theta_sparse : theta_x,
-                              dense_.active() ? assembly_shift : row_shift,
-                              dual_regularization_, &normal_lower_, should_stop_)) {
-    return false;
-  }
+  const bool assembled =
+      column_side_active_
+          ? column_side_.assemble(theta_x, row_shift, dual_regularization_, &normal_lower_,
+                                  should_stop_)
+          : normal_equations_lower(model_.matrix, dense_.active() ? theta_sparse : theta_x,
+                                   dense_.active() ? assembly_shift : row_shift,
+                                   dual_regularization_, &normal_lower_, should_stop_);
+  if (!assembled) return false;
   SparseLdl& ldl = proximal_ != nullptr ? purify_ldl_ : ldl_;
   if (proximal_ != nullptr && !purify_analyzed_) {
     ldl.set_factor_budget(max_factor_nonzeros_);
@@ -1378,7 +1411,9 @@ bool InteriorPoint::purify_duals() {
   }
 
   std::vector<double> dy = rhs;
-  if (dense_.active()) {
+  if (column_side_active_) {
+    (void)column_side_.solve(ldl, dy.data());
+  } else if (dense_.active()) {
     // An unconverged solve is not a least-squares correction; the point stays as it is.
     if (!dense_.solve(dy.data()).converged) return false;
   } else {
@@ -1429,6 +1464,48 @@ bool InteriorPoint::purify_duals() {
       "reduced cost from {:.3e} to {:.3e}; worst sign violation {:.3e} -> {:.3e}",
       count, interior_before, interior_after, sign_before, sign_after);
   return true;
+}
+
+bool InteriorPoint::column_side_is_smaller() {
+  // Both patterns with unit weights - the pattern is all an ordering sees - each ordered by
+  // its own SparseLdl, the m side under a factor budget equal to the n side's factor so
+  // that a larger m side is abandoned as soon as the count passes it.
+  std::vector<double> ones_x(static_cast<std::size_t>(n_), 1.0);
+  for (Index j = 0; j < n_; ++j) {
+    if (fixed_[static_cast<std::size_t>(j)]) ones_x[static_cast<std::size_t>(j)] = 0.0;
+  }
+  const std::vector<double> ones_m(static_cast<std::size_t>(m_), 1.0);
+  SparseMatrix pattern;
+  if (!column_side_.assemble(ones_x, ones_m, dual_regularization_, &pattern, should_stop_)) {
+    return false;
+  }
+  SparseLdl columns;
+  columns.set_ordering_budget(ldl_.ordering_budget());
+  if (!columns.analyze(pattern, should_stop_)) return false;
+  const auto column_factor =
+      static_cast<std::int64_t>(columns.factor_nonzeros()) + columns.dimension();
+  if (!normal_equations_lower(model_.matrix, ones_x, ones_m, dual_regularization_, &pattern,
+                              should_stop_)) {
+    return false;
+  }
+  SparseLdl rows;
+  rows.set_ordering_budget(ldl_.ordering_budget());
+  rows.set_factor_budget(column_factor);
+  const bool rows_analysed = rows.analyze(pattern, should_stop_);
+  const bool rows_larger =
+      !rows_analysed && (rows.factor_too_large() || rows.ordering_too_large());
+  const auto row_factor =
+      rows_analysed ? static_cast<std::int64_t>(rows.factor_nonzeros()) + rows.dimension() : -1;
+  logger_.verbose(
+      "interior point: normal equations on the row side ({} x {}): factor {}; on the column "
+      "side ({} x {}): factor {}",
+      m_, m_,
+      rows_analysed ? fmt::format("{}", row_factor)
+                    : fmt::format("more than {}", column_factor),
+      n_, n_, column_factor);
+  if (rows_larger) return true;
+  if (!rows_analysed) return false;  // stopped: keep the side every earlier version used
+  return column_factor < row_factor;
 }
 
 Solution InteriorPoint::run() {
@@ -1524,6 +1601,20 @@ Solution InteriorPoint::run() {
           "Interior point: {} dense column(s) (the largest with {} entries) split off the "
           "normal equations and corrected for by Sherman-Morrison-Woodbury (#467)",
           dense_.columns().size(), largest);
+    }
+  }
+  {
+    // THE SIDE (#469). "rows" is the m x m system every earlier version solved; "columns"
+    // the n x n one; "auto" orders both and keeps the smaller factor, and only asks when
+    // the rows outnumber the columns, since otherwise the n side cannot be the smaller.
+    const std::string side = options_.get_string("ipm_normal_side");
+    if (side == "columns" || (side == "auto" && m_ > n_)) {
+      column_side_.set_matrix(model_.matrix,
+                              std::vector<bool>(fixed_.begin(), fixed_.begin() + n_));
+      column_side_active_ = side == "columns" || column_side_is_smaller();
+      logger_.info("Interior point: normal equations on the {} side ({} x {})",
+                   column_side_active_ ? "column" : "row", column_side_active_ ? n_ : m_,
+                   column_side_active_ ? n_ : m_);
     }
   }
   // A polish arrives with most of its budget spent by the first-order phase; a build that

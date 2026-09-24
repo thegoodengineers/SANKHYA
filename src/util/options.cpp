@@ -1596,6 +1596,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  kNoLimit,
                  {}});
+    s.push_back({"ipm_normal_side",
+                 OptionType::String,
+                 std::string("rows"),
+                 "Which normal equations the interior point factors (#469): rows (the m x m "
+                 "A Theta A^T + D every earlier version factored), columns (the n x n "
+                 "Theta^-1 + A^T D^-1 A, with M's solves by conjugate gradients preconditioned "
+                 "by the Woodbury identity on its factors), or auto (when rows outnumber "
+                 "columns, both are ordered and the smaller predicted factor is kept). "
+                 "Default rows.",
+                 0.0,
+                 0.0,
+                 {"rows", "columns", "auto"}});
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
                  tol::kPdhgLoose,
