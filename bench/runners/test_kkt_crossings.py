@@ -46,11 +46,15 @@ def test_cells() -> None:
                    "kkt_1e8_iterations": -1},
           "a PDHG row keeps the times and iterations, and the writer's nan and -1 for a level "
           "never reached", str(pdhg))
-    merged = kkt_crossings.crossings(blob("pdhg+ipm", kkt_1e4_seconds=0.1))
+    merged = kkt_crossings.crossings(blob("pdhg-cpu+ipm", kkt_1e4_seconds=0.1))
     check(merged["kkt_1e4_seconds"] == 0.1, "a polished PDHG run is still a PDHG row")
     simplex = kkt_crossings.crossings(blob("simplex-dual"))
     check(simplex == {k: "" for k in kkt_crossings.ALL_COLUMNS},
           "any other engine gets blanks, not a 'never reached' it never attempted")
+    for gpu in ("pdhg-cuda", "pdhg-cuda-multi", "pdhg-cuda+ipm"):
+        cells = kkt_crossings.crossings(blob(gpu))
+        check(cells == {k: "" for k in kkt_crossings.ALL_COLUMNS},
+              f"{gpu} records no crossings, so its row is blank, not 'never reached'")
     bare = kkt_crossings.crossings({"result": {"algorithm": "pdhg-cpu"}, "effort": {}})
     check(all(bare[k] == "nan" for k in kkt_crossings.COLUMNS)
           and all(bare[k] == -1 for k in kkt_crossings.ITERATION_COLUMNS),

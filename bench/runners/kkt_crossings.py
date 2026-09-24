@@ -10,7 +10,8 @@ largest of
 
     ||A x - proj_[l,u](A x)||_2 / (1 + ||b||_2)          relative primal residual
     ||c - A'y - z||_2 / (1 + ||c||_2)                    relative dual residual
-    |c'x - b'y| / (1 + |c'x| + |b'y|)                    relative gap
+    |primal obj - dual obj| / (1 + |primal| + |dual|)    relative gap (the dual objective
+                                                         with its column-bound terms)
 
 on the unscaled model, b the finite row bounds, evaluated on the better of the current and
 the averaged iterate (src/pdhg/pdhg_evaluate.cpp). A crossing is taken at the engine's
@@ -18,8 +19,9 @@ evaluation interval, so it is an upper bound within one interval, and it is take
 first-order phase, before any polish, so it is the polishing-off figure.
 
 The stats JSON carries the fields for every engine (NaN where nothing was recorded). A
-column that says "never reached" about a simplex run would be a claim about the wrong
-engine, so a non-PDHG row gets blanks here, and a PDHG row keeps the writer's `nan` for a
+column that says "never reached" about a run that never recorded would be a claim about the
+wrong engine, so every engine but the CPU PDHG (simplex, IPM, and the CUDA PDHG, which does
+not record them yet) gets blanks here, and a CPU PDHG row keeps the writer's `nan` for a
 level the run never reached.
 """
 
@@ -36,16 +38,24 @@ ALL_COLUMNS = COLUMNS + ITERATION_COLUMNS
 LEVELS = ("1e-4", "1e-6", "1e-8")
 
 
-def is_pdhg(algorithm: str) -> bool:
-    """`pdhg-cpu`, `pdhg-cuda`, `pdhg-cuda-multi`, `pdhg+ipm`: every first-order run."""
-    return str(algorithm or "").startswith("pdhg")
+# The engines that record the crossings. Only the CPU PDHG does today (src/pdhg/pdhg.cpp);
+# pdhg-cuda and pdhg-cuda-multi leave the writer's defaults, and reading those as "never
+# reached" would put "not reached" beside a verified optimum that passed 1e-6 on the way.
+RECORDING_ENGINES = ("pdhg-cpu",)
+
+
+def records_crossings(algorithm: str) -> bool:
+    """`pdhg-cpu`, and `pdhg-cpu+ipm` after the interior-point polish, whose first-order
+    phase's crossings are carried forward (src/core/solve.cpp)."""
+    base = str(algorithm or "").split("+", 1)[0]
+    return base in RECORDING_ENGINES
 
 
 def crossings(blob: dict) -> dict:
     """The six CSV cells (ALL_COLUMNS) for one stats JSON blob."""
     algorithm = blob.get("result", {}).get("algorithm", "")
     effort = blob.get("effort", {})
-    if not is_pdhg(algorithm):
+    if not records_crossings(algorithm):
         return {k: "" for k in ALL_COLUMNS}
     cells = {k: effort.get(k, "nan") for k in COLUMNS}
     cells.update({k: effort.get(k, -1) for k in ITERATION_COLUMNS})
