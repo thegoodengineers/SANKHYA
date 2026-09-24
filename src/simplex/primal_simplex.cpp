@@ -1152,6 +1152,7 @@ Solution Simplex::finish(SolveStatus status, const std::string& message, Count i
           pivot_rows_sparse_, pivot_rows_computed_);
     }
   }
+  report_solve_densities();
   // EVERY EXIT, not just the optimal one. The perturbation relaxes bounds, so any point
   // reported while it is active belongs to a problem whose feasible region is slightly
   // larger than the caller's. The optimal path already restores them before returning - it
@@ -1386,6 +1387,8 @@ std::optional<Solution> Simplex::prepare(const WarmStart* warm, const Timer& tim
     logger_.warning("basis_update '{}' is not recognised; using product-form", basis_update);
   }
   lu_.use_forrest_tomlin(basis_update == "forrest-tomlin");
+  // Hyper-sparse FTRAN/BTRAN (#464): the same arithmetic over the reached steps only.
+  lu_.use_hyper_sparse(options_.get_bool("lu_hyper_sparse"));
 
   build_working_problem();
   warm_started_ = warm != nullptr && !warm->empty() && seed_basis(*warm);

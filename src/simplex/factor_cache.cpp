@@ -82,6 +82,9 @@ bool Simplex::first_factorization() {
     eta_work_since_refactor_ = 0.0;
     std::fill(numerically_dependent_.begin(), numerically_dependent_.end(), 0);
     lu_ = *cached;
+    // The copy carries the cached LU's own hyper-sparse flag; this solve's option decides
+    // (#464).
+    lu_.use_hyper_sparse(options_.get_bool("lu_hyper_sparse"));
     basis_needed_stricter_threshold_ = false;
     last_factorization_plain_ = true;
     const double pivot = lu_.smallest_pivot();

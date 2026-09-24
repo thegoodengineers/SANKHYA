@@ -404,6 +404,10 @@ class Simplex {
   /// same vector unbounded_ray_residual() assembles to check itself; #191 keeps it.
   [[nodiscard]] std::vector<double> unbounded_ray(Index entering, int direction) const;
 
+  /// The LU's FTRAN and BTRAN result densities (#464), at verbose level and into the
+  /// profiler's counters: the data the hyper-sparse switch threshold is set from.
+  void report_solve_densities() const;
+
   [[nodiscard]] double minimization_objective() const;
   Solution finish(SolveStatus status, const std::string& message, Count iterations,
                   double seconds);
