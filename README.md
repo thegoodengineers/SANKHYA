@@ -192,6 +192,20 @@ factorization (two rows), named row by row in #576, plus `irish-electricity` con
 a 8.6e-15 gap and reported `numerical_error`, a status defect filed in the same issue. On
 this set the interior point is bound by its ordering budget, not by memory.
 
+**Three more sets, run overnight on `main` at `65eecbc`, alone on the machine on mains (#596).**
+Kennington: **15 of 16** matched and verified at 600 s (`bench/results/kennington-full-65eecbc.csv`;
+`pds-20` ends `feasible` at 418 s, the interior point's answer standing without crossover with
+its complementarity 1.5e-6 above the verifier's 1e-6). Netlib's infeasible set: **13 of 29**
+infeasible with a Farkas certificate the verifier accepts, the other 16 correct `infeasible`
+verdicts without one (12 from the dual simplex and phase 1, 3 from presolve) and `cplex2` a
+`numerical_error`; no wrong verdict (`bench/results/netlib-infeasible-65eecbc.csv`, #559 for the
+certificates). Maros-Meszaros, all 138 convex QPs at 300 s: `optimal` on 45, within 1e-6 of the
+reference on 44, verifier-accepted on 39, and **six labelled `optimal` that the verifier rejects**
+(`bench/results/maros-meszaros-65eecbc.csv`, #590): since #593 the in-process KKT gate writes such
+answers as `feasible`, and the next run measures that. The engine race (#476) on the same binary:
+3 of 8 Mittelmann against `auto`'s 2, the same 89 of 89 on Netlib as the plain run but 182.9 s of
+solver time against 108.0 s, which is why it stays off by default.
+
 ## Reproduce everything
 
 One command takes a fresh clone to every claim on this page - build, tests, the Netlib

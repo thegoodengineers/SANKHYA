@@ -277,13 +277,43 @@ Operations Research 38(2), 1990), larger and sparser than the core Netlib set. F
 hashed by `bench/runners/fetch_kennington.py`, which parses the published optima from the
 directory's own readme; run by `bench/runners/kennington.py` under the full-set rules.
 
-Not yet run at this commit. Reproduce with:
+Source CSV: `bench/results/kennington-full-65eecbc.csv`  
+Commit `65eecbc` · machine `Windows-AMD64` · generated 2026-09-23T22:38:22+00:00
 
-```
-python bench/runners/fetch_kennington.py
-python bench/runners/kennington.py --time-limit 600
-python bench/runners/kennington.py --time-limit 600 --solver-option algorithm=pdhg   # and simplex, dual-simplex, ipm
-```
+**15 of 16** matched the readme's published optimum to a relative 1e-6 **and** passed independent verification. The published values are Vanderbei's ALPO results printed to eight significant figures, so rounding moves them by at most 5e-8 relative, well inside the tolerance.
+
+**1 failed**, grouped by the reason the solver itself gave. They are named here because a pass rate without its failures is a claim, not evidence:
+
+| why it failed | count | instances |
+|---|---:|---|
+| optimality claim withdrawn by our own check (#157) | 1 | pds-20 |
+
+| instance | rows | cols | status | our objective | published optimum | rel. error | iters | time (s) | verified |
+|---|---:|---:|---|---:|---:|---:|---:|---:|:--:|
+| `cre-a` | 3516 | 4067 | optimal | 2.3595407061e+07 | 2.3595407e+07 | 2.6e-09 | 2945 | 0.262 | yes |
+| `cre-b` | 9648 | 72447 | optimal | 2.3129639887e+07 | 2.3129640e+07 | 4.9e-09 | 8560 | 19.293 | yes |
+| `cre-c` | 3068 | 3678 | optimal | 2.5275116141e+07 | 2.5275116e+07 | 5.6e-09 | 2937 | 0.314 | yes |
+| `cre-d` | 8926 | 69980 | optimal | 2.4454969765e+07 | 2.4454970e+07 | 9.6e-09 | 7356 | 14.159 | yes |
+| `ken-07` | 2426 | 3602 | optimal | -6.7952044338e+08 | -6.7952044e+08 | 5.0e-09 | 1330 | 0.088 | yes |
+| `ken-11` | 14694 | 21349 | optimal | -6.9723822625e+09 | -6.9723823e+09 | 5.4e-09 | 9051 | 2.514 | yes |
+| `ken-13` | 28632 | 42659 | optimal | -1.0257394789e+10 | -1.0257395e+10 | 2.1e-08 | 6117 | 5.041 | yes |
+| `ken-18` | 105127 | 154699 | optimal | -5.2217025287e+10 | -5.2217025e+10 | 5.5e-09 | 187081 | 423.351 | yes |
+| `osa-07` | 1118 | 23949 | optimal | 5.3572251730e+05 | 5.3572252e+05 | 5.0e-09 | 48 | 0.392 | yes |
+| `osa-14` | 2337 | 52460 | optimal | 1.1064628447e+06 | 1.1064628e+06 | 4.0e-08 | 50 | 0.800 | yes |
+| `osa-30` | 4350 | 100024 | optimal | 2.1421398732e+06 | 2.1421399e+06 | 1.3e-08 | 76 | 1.636 | yes |
+| `osa-60` | 10280 | 232966 | optimal | 4.0440725032e+06 | 4.0440725e+06 | 7.8e-10 | 200 | 4.953 | yes |
+| `pds-02` | 2953 | 7535 | optimal | 2.8857862010e+10 | 2.8857862e+10 | 3.5e-10 | 964 | 0.112 | yes |
+| `pds-06` | 9881 | 28655 | optimal | 2.7761037600e+10 | 2.7761038e+10 | 1.4e-08 | 9478 | 2.608 | yes |
+| `pds-10` | 16558 | 48763 | optimal | 2.6727094976e+10 | 2.6727095e+10 | 9.0e-10 | 6183 | 26.015 | yes |
+| `pds-20` | 33874 | 105728 | feasible | 2.3821658640e+10 | 2.3821659e+10 | 1.5e-08 | 77 | 373.403 | yes |
+
+**Summary**
+
+- shifted geometric mean solve time over the passed instances (shift 1s): **3.881s**
+- worst relative error against a published optimum: **4.04e-08**
+- **failed: `pds-20`**, kept in the table on purpose
+
+No per-engine option run is committed yet (`--solver-option algorithm=dual-simplex`, `simplex`, `pdhg`, `ipm`).
 
 ### 1d. Beyond Netlib — Mittelmann's LP set
 
@@ -293,8 +323,8 @@ instances of that size and name what happens. These are the eight smallest archi
 Mittelmann's LP test set (`bench/runners/fetch_mittelmann.py`, provenance in
 `data/mittelmann/reference.json`).
 
-Source CSV: `bench/results/mittelmann-5c7efbc.csv`  
-Commit `5c7efbc` · machine `Linux-x86_64` · time limit 300 s per instance, both solvers
+Source CSV: `bench/results/mittelmann-65eecbc.csv`  
+Commit `65eecbc` · machine `Windows-AMD64` · time limit 300 s per instance, both solvers
 
 **2 of 8** instances reached `optimal` inside the limit; **2 of 8** also passed the independent verifier and agree with HiGHS. HiGHS, run as a separate process under the same limit, finished **4 of 8**.
 
@@ -302,34 +332,34 @@ These are the smallest archives in Mittelmann's LP directory; against Netlib's l
 
 | instance | rows | cols | nonzeros | status | our objective | HiGHS objective | rel. diff | iters | solver time (s) | verified |
 |---|---:|---:|---:|---|---:|---:|---:|---:|---:|:--:|
-| `Linf_520c` | 93326 | 69004 | 566193 | time_limit | 0.1864263131 | Time limit reached | - | 171831 | 300.0 | - |
-| `bdry2` | 376500 | 250998 | 1500003 | time_limit | 0.001999991456 | Time limit reached | - | 39422 | 241.0 | - |
-| `brazil3` | 14646 | 23968 | 133184 | optimal | 2 | 2 | 3.7e-11 | 15 | 1.8 | yes |
-| `chromaticindex1024-7` | 67583 | 73728 | 270324 | optimal | 3 | 3 | 2.6e-12 | 560 | 21.2 | yes |
-| `irish-electricity` | 104259 | 61728 | 523257 | time_limit | 2454384.171 | 2546254.563 | - | 228067 | 240.0 | - |
-| `qap15` | 6330 | 22275 | 94950 | time_limit | 1277.50546 | Time limit reached | - | 84064 | 300.0 | - |
-| `rmine15` | 358395 | 42438 | 879732 | time_limit | -5042.482374 | Time limit reached | - | 76058 | 216.2 | - |
-| `supportcase10` | 165684 | 14770 | 555082 | time_limit | 3.383923731 | 3.383923666 | - | 183732 | 220.9 | - |
+| `Linf_520c` | 93326 | 69004 | 566193 | time_limit | 0.180810452 | Time limit reached | - | 112642 | 300.0 | - |
+| `bdry2` | 376500 | 250998 | 1500003 | time_limit | 0.001999991456 | Time limit reached | - | 22699 | 258.8 | - |
+| `brazil3` | 14646 | 23968 | 133184 | optimal | 2 | 2 | 3.7e-11 | 15 | 2.7 | yes |
+| `chromaticindex1024-7` | 67583 | 73728 | 270324 | optimal | 3 | 3 | 2.6e-12 | 560 | 20.1 | yes |
+| `irish-electricity` | 104259 | 61728 | 523257 | time_limit | 2454384.009 | 2546254.563 | - | 109000 | 240.1 | - |
+| `qap15` | 6330 | 22275 | 94950 | time_limit | 1218.102164 | Time limit reached | - | 75820 | 300.0 | - |
+| `rmine15` | 358395 | 42438 | 879732 | time_limit | -5042.467038 | Time limit reached | - | 36957 | 216.4 | - |
+| `supportcase10` | 165684 | 14770 | 555082 | time_limit | 3.383923735 | 3.383923666 | - | 93920 | 216.7 | - |
 
 **Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `irish-electricity`, `qap15`, `rmine15`, `supportcase10`.
 
 #### The same eight under each engine
 
-Source CSVs: `bench/results/mittelmann-5c7efbc.csv` (dual simplex), `bench/results/mittelmann-pdhg-5c7efbc.csv` (PDHG), `bench/results/mittelmann-ipm-5c7efbc.csv` (interior point)  
+Source CSVs: `bench/results/mittelmann-65eecbc.csv` (dual simplex), `bench/results/mittelmann-pdhg-5c7efbc.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
 Same 300 s limit per instance and engine; HiGHS is not re-run here.
 
 | instance | dual simplex: status · verified · time (s) | PDHG: status · verified · time (s) | interior point: status · verified · time (s) |
 |---|---|---|---|
-| `Linf_520c` | time_limit · - · 300.0 | time_limit · - · 231.4 | numerical_error · - · 21.5 |
-| `bdry2` | time_limit · - · 241.0 | time_limit · - · 241.1 | not_solved · - · 86.5 |
-| `brazil3` | optimal · yes · 1.8 | optimal · yes · 58.0 | optimal · yes · 1.8 |
-| `chromaticindex1024-7` | optimal · yes · 21.2 | optimal · yes · 0.7 | numerical_error · - · 20.4 |
-| `irish-electricity` | time_limit · - · 240.0 | time_limit · - · 240.0 | numerical_error · - · 170.1 |
-| `qap15` | time_limit · - · 300.0 | optimal · yes · 93.4 | optimal · yes · 200.3 |
-| `rmine15` | time_limit · - · 216.2 | time_limit · - · 216.2 | not_solved · - · 60.2 |
-| `supportcase10` | time_limit · - · 220.9 | time_limit · - · 220.9 | numerical_error · - · 11.0 |
+| `Linf_520c` | time_limit · - · 300.0 | time_limit · - · 231.4 | not run |
+| `bdry2` | time_limit · - · 258.8 | time_limit · - · 241.1 | not run |
+| `brazil3` | optimal · yes · 2.7 | optimal · yes · 58.0 | optimal · yes · 2.7 |
+| `chromaticindex1024-7` | optimal · yes · 20.1 | optimal · yes · 0.7 | not run |
+| `irish-electricity` | time_limit · - · 240.1 | time_limit · - · 240.0 | not run |
+| `qap15` | time_limit · - · 300.0 | optimal · yes · 93.4 | not run |
+| `rmine15` | time_limit · - · 216.4 | time_limit · - · 216.2 | not run |
+| `supportcase10` | time_limit · - · 216.7 | time_limit · - · 220.9 | not run |
 
-Finished and verified inside the limit: dual simplex **2 of 8**, PDHG **3 of 8**, interior point **2 of 8**.
+Finished and verified inside the limit: dual simplex **2 of 8**, PDHG **3 of 8**, interior point **1 of 8**.
 
 ### 1e. The first-order engine — PDHG
 
@@ -854,12 +884,168 @@ reports. Solved by the default QP engine (Condat-Vu, `src/qp/`) and judged the w
 published QP benchmark judges it, on primal residual, dual residual and duality gap at 1e-6
 and at 1e-9, as well as against the published objective and by the independent verifier.
 
-Not yet run on `main`. Reproduce with:
+Source CSV: `bench/results/maros-meszaros-65eecbc.csv`  
+Commit `65eecbc` · machine `Windows-AMD64` · time limit 300 s per instance · solver defaults
 
-```
-python bench/runners/fetch_maros_meszaros.py
-python bench/runners/maros_meszaros.py
-```
+**138 of 138 instances** run. `optimal` on **45**; within 1e-6 relative of the published objective on **44**; accepted by the independent verifier on **39**.
+
+| level | success, relative measures (#491) | success, absolute measures (the published report's criterion) |
+|---|---:|---:|
+| 1e-6 | 40 / 138 | 30 / 138 |
+| 1e-9 | 7 / 138 | 3 / 138 |
+
+Success at a level means the status is `optimal` and the primal residual, the dual residual and the duality gap are all within it, each recomputed from the QPS file and the written `.sol` by `bench/runners/qp_residuals.py` through the verifier's own MPS reader. The reference objectives are the readme's OPT column (BPMPD at default settings, eight significant digits), parsed by `bench/runners/fetch_maros_meszaros.py` into `data/maros-meszaros/reference.json` with every file's sha256.
+
+Shifted geometric mean of solver time, shift 10 s, an instance not successful at 1e-6 charged the full limit as the published report does: **108.81 s**.
+
+| instance | rows | cols | status | our objective | reference | rel. gap | primal rel. | dual rel. | gap rel. | iters | solver time (s) | verified | 1e-6 | 1e-9 |
+|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|:--:|:--:|:--:|
+| `aug2d` | 10000 | 20200 | optimal | 1687411.733 | 1687411.8 | 3.9e-08 | 2.8e-10 | 5.5e-12 | 1.2e-08 | 55000 | 9.63 | yes | yes | **no** |
+| `aug2dc` | 10000 | 20200 | optimal | 1818368.044 | 1818368.1 | 3.1e-08 | 2.9e-10 | 5.2e-12 | 1.2e-08 | 57250 | 10.02 | yes | yes | **no** |
+| `aug2dcqp` | 10000 | 20200 | optimal | 6498134.662 | 6498134.8 | 2.1e-08 | 1.5e-10 | 3.3e-14 | 1.2e-08 | 221900 | 36.80 | yes | yes | **no** |
+| `aug2dqp` | 10000 | 20200 | optimal | 6237011.951 | 6237012.1 | 2.4e-08 | 1.5e-10 | 3.4e-14 | 1.2e-08 | 217450 | 35.39 | yes | yes | **no** |
+| `aug3d` | 1000 | 3873 | optimal | 554.0677252 | 554.06773 | 8.6e-09 | 2.8e-10 | 8.5e-11 | 1.3e-09 | 350 | 0.01 | yes | yes | **no** |
+| `aug3dc` | 1000 | 3873 | optimal | 771.262438 | 771.26244 | 2.6e-09 | 3.9e-10 | 7.5e-11 | 1.2e-09 | 450 | 0.01 | yes | yes | **no** |
+| `aug3dcqp` | 1000 | 3873 | optimal | 993.3621388 | 993.36215 | 1.1e-08 | 2.5e-09 | 1.3e-10 | 8.7e-09 | 1400 | 0.04 | yes | yes | **no** |
+| `aug3dqp` | 1000 | 3873 | optimal | 675.2376676 | 675.23767 | 3.5e-09 | 1.5e-09 | 1.1e-10 | 6.2e-09 | 1250 | 0.03 | yes | yes | **no** |
+| `boyd1` | 18 | 93261 | time_limit | -95250705.5 | -61735220 | 5.4e-01 | 4.4e-06 | 1.0e+00 | 1.2e+00 | 153129 | 299.97 | - | **no** | **no** |
+| `boyd2` | 186531 | 93263 | time_limit | -2.105336429 | 21.256767 | 1.1e+00 | 2.3e-05 | 1.0e+00 | 1.0e+00 | 196630 | 299.95 | - | **no** | **no** |
+| `cont-050` | 2401 | 2597 | optimal | -4.563850924 | -4.5638509 | 5.2e-09 | 2.4e-09 | 0.0e+00 | 3.2e-06 | 469850 | 14.30 | yes | **no** | **no** |
+| `cont-100` | 9801 | 10197 | iteration_limit | -4.644374126 | -4.6443979 | 5.1e-06 | 1.2e-06 | 0.0e+00 | 1.2e-04 | 1000000 | 117.60 | - | **no** | **no** |
+| `cont-101` | 10098 | 10197 | iteration_limit | 0.1405772629 | 0.19552733 | 5.5e-02 | 9.8e-05 | 0.0e+00 | 1.1e+00 | 1000000 | 117.63 | - | **no** | **no** |
+| `cont-200` | 39601 | 40397 | time_limit | -4.656165408 | -4.6848759 | 6.1e-03 | 7.6e-05 | 0.0e+00 | 4.4e-01 | 618267 | 299.98 | - | **no** | **no** |
+| `cont-201` | 40198 | 40397 | time_limit | 0.08595597548 | 0.19248337 | 1.1e-01 | 1.7e-04 | 0.0e+00 | 1.0e+00 | 684000 | 299.98 | - | **no** | **no** |
+| `cont-300` | 90298 | 90597 | time_limit | 0.01212100489 | 0.19151232 | 1.8e-01 | 6.5e-05 | 0.0e+00 | 1.0e+00 | 260281 | 299.95 | - | **no** | **no** |
+| `cvxqp1l` | 5000 | 10000 | model_error | 0 | 1.087048e+08 | 1.0e+00 | - | - | - | 0 | 0.04 | - | **no** | **no** |
+| `cvxqp1m` | 500 | 1000 | iteration_limit | 1038951.305 | 1087511.6 | 4.5e-02 | 2.6e-02 | 0.0e+00 | 1.4e-02 | 1000000 | 13.96 | - | **no** | **no** |
+| `cvxqp1s` | 50 | 100 | iteration_limit | 11590.71479 | 11590.718 | 2.8e-07 | 2.7e-07 | 0.0e+00 | 2.9e-07 | 1000000 | 3.57 | - | **no** | **no** |
+| `cvxqp2l` | 2500 | 10000 | model_error | 0 | 81842458 | 1.0e+00 | - | - | - | 0 | 0.03 | - | **no** | **no** |
+| `cvxqp2m` | 250 | 1000 | iteration_limit | 820155.4293 | 820155.43 | 8.0e-10 | 4.8e-08 | 0.0e+00 | 2.0e-09 | 1000000 | 12.91 | - | **no** | **no** |
+| `cvxqp2s` | 25 | 100 | optimal | 8120.940472 | 8120.9405 | 3.5e-09 | 1.6e-09 | 0.0e+00 | 6.5e-10 | 42500 | 0.14 | yes | yes | **no** |
+| `cvxqp3l` | 7500 | 10000 | model_error | 0 | 1.157111e+08 | 1.0e+00 | - | - | - | 0 | 0.04 | - | **no** | **no** |
+| `cvxqp3m` | 750 | 1000 | iteration_limit | 1094161.422 | 1362828.7 | 2.0e-01 | 3.1e-02 | 0.0e+00 | 1.1e-02 | 1000000 | 15.33 | - | **no** | **no** |
+| `cvxqp3s` | 75 | 100 | iteration_limit | 11941.3851 | 11943.432 | 1.7e-04 | 3.4e-04 | 0.0e+00 | 1.1e-04 | 1000000 | 3.74 | - | **no** | **no** |
+| `dpklo1` | 77 | 133 | optimal | 0.3700962171 | 0.37009622 | 2.9e-09 | 2.1e+00 | 6.3e-09 | 1.0e+00 | 3900 | 0.02 | **no** | **no** | **no** |
+| `dtoc3` | 9998 | 14999 | optimal | 235.2625082 | 235.26248 | 1.2e-07 | 6.2e-10 | 2.2e-04 | 3.8e-04 | 250450 | 32.28 | **no** | **no** | **no** |
+| `dual1` | 1 | 85 | optimal | 0.03501296573 | 0.035012966 | 2.7e-10 | 1.1e-11 | 0.0e+00 | 1.0e-07 | 5650 | 0.05 | yes | yes | **no** |
+| `dual2` | 1 | 96 | optimal | 0.03373367592 | 0.033733676 | 8.3e-11 | 5.7e-09 | 0.0e+00 | 1.8e-07 | 1550 | 0.02 | yes | yes | **no** |
+| `dual3` | 1 | 111 | optimal | 0.135755837 | 0.13575584 | 3.0e-09 | 7.1e-10 | 0.0e+00 | 3.7e-07 | 1900 | 0.02 | yes | yes | **no** |
+| `dual4` | 1 | 75 | optimal | 0.7460908398 | 0.74609084 | 1.5e-10 | 2.3e-09 | 0.0e+00 | 5.9e-10 | 1300 | 0.01 | yes | yes | **no** |
+| `dualc1` | 215 | 9 | iteration_limit | 0.5297453898 | 6155.2508 | 1.0e+00 | 5.8e-02 | 0.0e+00 | 1.0e+00 | 1000000 | 2.61 | - | **no** | **no** |
+| `dualc2` | 229 | 7 | iteration_limit | 5.773191917 | 3551.3077 | 1.0e+00 | 1.5e-02 | 0.0e+00 | 9.9e-01 | 1000000 | 2.46 | - | **no** | **no** |
+| `dualc5` | 278 | 8 | optimal | 427.2323272 | 427.23233 | 6.5e-09 | 1.5e-12 | 0.0e+00 | 1.0e-09 | 15700 | 0.04 | yes | yes | **no** |
+| `dualc8` | 503 | 8 | iteration_limit | 0.7777487925 | 18309.359 | 1.0e+00 | 1.7e-01 | 0.0e+00 | 1.0e+00 | 1000000 | 2.52 | - | **no** | **no** |
+| `exdata` | 3001 | 3000 | time_limit | -139.3853733 | -141.84343 | 1.7e-02 | 3.5e-04 | 3.1e-03 | 1.0e-02 | 136162 | 299.97 | - | **no** | **no** |
+| `genhs28` | 8 | 10 | optimal | 0.9271736941 | 0.92717369 | 4.1e-09 | 2.5e-09 | 4.0e-09 | 1.1e-10 | 750 | 0.00 | yes | yes | **no** |
+| `gouldqp2` | 349 | 699 | iteration_limit | 0.0001843129839 | 0.00018427534 | 3.8e-08 | 1.5e-11 | 0.0e+00 | 5.4e-07 | 1000000 | 7.82 | - | **no** | **no** |
+| `gouldqp3` | 349 | 699 | optimal | 2.062783972 | 2.062784 | 1.4e-08 | 4.7e-11 | 0.0e+00 | 3.2e-10 | 650 | 0.01 | yes | yes | yes |
+| `hs118` | 17 | 15 | optimal | 664.82045 | 664.82045 | 2.0e-11 | 5.5e-11 | 0.0e+00 | 2.2e-09 | 12450 | 0.03 | yes | yes | **no** |
+| `hs21` | 1 | 2 | optimal | -99.96 | -99.96 | 0.0e+00 | 0.0e+00 | 0.0e+00 | 1.4e-16 | 50 | 0.00 | yes | yes | yes |
+| `hs268` | 5 | 5 | iteration_limit | 0.01105986918 | 5.7310705e-07 | 1.1e-02 | 0.0e+00 | 8.2e-07 | 1.6e-01 | 1000000 | 2.46 | - | **no** | **no** |
+| `hs35` | 1 | 3 | optimal | 0.1111111109 | 0.11111111 | 8.7e-10 | 3.6e-10 | 9.6e-12 | 3.8e-10 | 150 | 0.00 | yes | yes | yes |
+| `hs35mod` | 1 | 3 | optimal | 0.25 | 0.25 | 1.8e-15 | 0.0e+00 | 5.5e-11 | 1.9e-10 | 150 | 0.00 | yes | yes | yes |
+| `hs51` | 3 | 5 | optimal | 0 | 8.8817842e-16 | 8.9e-16 | 7.5e-10 | 1.5e-10 | 1.9e-09 | 600 | 0.00 | yes | yes | **no** |
+| `hs52` | 3 | 5 | optimal | 5.326647483 | 5.3266476 | 2.2e-08 | 7.9e-09 | 1.4e-09 | 1.5e-08 | 800 | 0.00 | yes | yes | **no** |
+| `hs53` | 3 | 5 | optimal | 4.093023212 | 4.0930233 | 2.1e-08 | 5.9e-09 | 0.0e+00 | 7.3e-10 | 700 | 0.00 | yes | yes | **no** |
+| `hs76` | 3 | 4 | optimal | -4.681818174 | -4.6818182 | 5.5e-09 | 0.0e+00 | 1.9e-09 | 1.5e-09 | 150 | 0.00 | yes | yes | **no** |
+| `hues-mod` | 2 | 10000 | optimal | 34824463.87 | 34824690 | 6.5e-06 | 6.1e-13 | 2.8e-07 | 7.2e-12 | 1150 | 0.08 | **no** | yes | **no** |
+| `huestis` | 2 | 10000 | iteration_limit | 3.482446261e+11 | 3.482469e+11 | 6.5e-06 | 8.8e-10 | 2.8e-07 | 3.6e-08 | 1000000 | 73.82 | - | **no** | **no** |
+| `ksip` | 1001 | 20 | iteration_limit | 0.5757924737 | 0.57579794 | 5.5e-06 | 5.0e-06 | 3.4e-08 | 2.2e-06 | 1000000 | 19.20 | - | **no** | **no** |
+| `laser` | 1000 | 1002 | optimal | 2409601.345 | 2409601.4 | 2.3e-08 | 2.0e-11 | 1.0e-12 | 4.8e-11 | 2050 | 0.03 | **no** | yes | yes |
+| `liswet1` | 10000 | 10002 | iteration_limit | 25.00229279 | 36.122402 | 3.1e-01 | 1.1e-05 | 1.6e-08 | 4.2e-05 | 1000000 | 98.25 | - | **no** | **no** |
+| `liswet10` | 10000 | 10002 | iteration_limit | 25.00183223 | 49.485785 | 4.9e-01 | 3.3e-06 | 6.0e-09 | 1.1e-05 | 1000000 | 97.91 | - | **no** | **no** |
+| `liswet11` | 10000 | 10002 | iteration_limit | 24.99923002 | 49.523957 | 5.0e-01 | 3.5e-06 | 6.3e-09 | 1.7e-05 | 1000000 | 96.45 | - | **no** | **no** |
+| `liswet12` | 10000 | 10002 | iteration_limit | 24.99860346 | 1736.9274 | 9.9e-01 | 4.4e-06 | 7.3e-09 | 6.3e-05 | 1000000 | 99.77 | - | **no** | **no** |
+| `liswet2` | 10000 | 10002 | iteration_limit | 24.99737829 | 24.998076 | 2.8e-05 | 3.5e-06 | 5.9e-09 | 9.1e-06 | 1000000 | 97.13 | - | **no** | **no** |
+| `liswet3` | 10000 | 10002 | iteration_limit | 25.00066021 | 25.00122 | 2.2e-05 | 3.5e-06 | 5.9e-09 | 9.0e-06 | 1000000 | 97.28 | - | **no** | **no** |
+| `liswet4` | 10000 | 10002 | iteration_limit | 24.99954431 | 25.000112 | 2.3e-05 | 3.5e-06 | 5.9e-09 | 9.0e-06 | 1000000 | 98.43 | - | **no** | **no** |
+| `liswet5` | 10000 | 10002 | iteration_limit | 25.03368649 | 25.034253 | 2.3e-05 | 1.3e-06 | 2.3e-09 | 9.0e-06 | 1000000 | 97.01 | - | **no** | **no** |
+| `liswet6` | 10000 | 10002 | iteration_limit | 24.99514341 | 24.995748 | 2.4e-05 | 3.2e-06 | 5.9e-09 | 9.1e-06 | 1000000 | 98.63 | - | **no** | **no** |
+| `liswet7` | 10000 | 10002 | iteration_limit | 25.00219315 | 498.84089 | 9.5e-01 | 3.5e-06 | 5.9e-09 | 1.2e-05 | 1000000 | 99.11 | - | **no** | **no** |
+| `liswet8` | 10000 | 10002 | iteration_limit | 25.00214848 | 7144.7006 | 1.0e+00 | 3.5e-06 | 5.9e-09 | 1.6e-05 | 1000000 | 98.89 | - | **no** | **no** |
+| `liswet9` | 10000 | 10002 | iteration_limit | 25.0017006 | 1963.2513 | 9.9e-01 | 3.6e-06 | 6.0e-09 | 6.0e-05 | 1000000 | 98.37 | - | **no** | **no** |
+| `lotschd` | 7 | 12 | optimal | 2398.415891 | 2398.4159 | 3.7e-09 | 4.0e-11 | 8.6e-12 | 8.7e-11 | 1250 | 0.00 | yes | yes | yes |
+| `mosarqp1` | 700 | 2500 | optimal | -952.875443 | -952.87544 | 3.2e-09 | 4.8e-09 | 2.8e-10 | 1.3e-12 | 7900 | 0.15 | yes | yes | **no** |
+| `mosarqp2` | 600 | 900 | optimal | -1597.482118 | -1597.4821 | 1.1e-08 | 2.2e-09 | 5.1e-13 | 1.2e-11 | 1500 | 0.02 | yes | yes | **no** |
+| `powell20` | 10000 | 10000 | iteration_limit | 4.361097351e+10 | 5.2089583e+10 | 1.6e-01 | 2.5e-04 | 2.1e-07 | 4.4e-02 | 1000000 | 92.49 | - | **no** | **no** |
+| `primal1` | 85 | 325 | optimal | -0.03501296558 | -0.035012965 | 5.8e-10 | 6.5e-09 | 3.1e-09 | 6.3e-11 | 900 | 0.01 | yes | yes | **no** |
+| `primal2` | 96 | 649 | optimal | -0.03373367581 | -0.033733676 | 1.9e-10 | 4.1e-09 | 2.6e-09 | 2.7e-10 | 750 | 0.01 | yes | yes | **no** |
+| `primal3` | 111 | 745 | optimal | -0.1357558372 | -0.13575584 | 2.8e-09 | 3.1e-09 | 1.9e-10 | 3.5e-10 | 950 | 0.03 | yes | yes | **no** |
+| `primal4` | 75 | 1489 | optimal | -0.7460908336 | -0.74609083 | 3.6e-09 | 6.0e-09 | 5.6e-09 | 4.8e-09 | 750 | 0.02 | yes | yes | **no** |
+| `primalc1` | 9 | 230 | iteration_limit | -19.16893551 | -6155.2508 | 1.0e+00 | 7.6e-07 | 3.7e-01 | 1.0e+00 | 1000000 | 4.67 | - | **no** | **no** |
+| `primalc2` | 7 | 231 | iteration_limit | -21.03068798 | -3551.3077 | 9.9e-01 | 2.0e-06 | 2.5e-01 | 1.0e+00 | 1000000 | 4.41 | - | **no** | **no** |
+| `primalc5` | 8 | 287 | iteration_limit | -60.549064 | -427.23233 | 8.6e-01 | 2.1e-06 | 2.6e-01 | 1.0e+00 | 1000000 | 5.07 | - | **no** | **no** |
+| `primalc8` | 8 | 520 | iteration_limit | -14.76888787 | -18309.43 | 1.0e+00 | 3.7e-07 | 1.0e+00 | 1.0e+00 | 1000000 | 6.96 | - | **no** | **no** |
+| `q25fv47` | 820 | 1571 | iteration_limit | 9905852.009 | 13744448 | 2.8e-01 | 2.8e-03 | 6.0e-05 | 1.2e-01 | 1000000 | 121.54 | - | **no** | **no** |
+| `qadlittl` | 56 | 97 | iteration_limit | 480328.8788 | 480318.86 | 2.1e-05 | 1.4e-06 | 9.6e-09 | 2.1e-05 | 1000000 | 3.32 | - | **no** | **no** |
+| `qafiro` | 27 | 32 | optimal | -1.590781909 | -1.5907818 | 6.9e-08 | 2.2e-10 | 5.8e-11 | 1.2e-08 | 13200 | 0.03 | yes | yes | **no** |
+| `qbandm` | 305 | 472 | iteration_limit | 16353.53009 | 16352.342 | 7.3e-05 | 5.4e-03 | 3.0e-03 | 7.6e-01 | 1000000 | 6.40 | - | **no** | **no** |
+| `qbeaconf` | 173 | 262 | iteration_limit | 164541.6587 | 164712.06 | 1.0e-03 | 3.9e-03 | 5.3e-03 | 1.4e-02 | 1000000 | 5.05 | - | **no** | **no** |
+| `qbore3d` | 233 | 315 | iteration_limit | 3503.854158 | 3100.2008 | 1.3e-01 | 2.7e-03 | 4.4e-04 | 4.7e-01 | 1000000 | 4.56 | - | **no** | **no** |
+| `qbrandy` | 220 | 249 | iteration_limit | 27730.90375 | 28375.115 | 2.3e-02 | 1.0e-04 | 3.9e-04 | 2.0e-01 | 1000000 | 4.96 | - | **no** | **no** |
+| `qcapri` | 271 | 353 | iteration_limit | 44854747.17 | 66793293 | 3.3e-01 | 3.6e-03 | 1.4e-07 | 1.1e-01 | 1000000 | 6.75 | - | **no** | **no** |
+| `qe226` | 223 | 282 | iteration_limit | 212.9726108 | 212.65343 | 1.5e-03 | 1.1e-03 | 1.1e-03 | 4.6e-02 | 1000000 | 7.36 | - | **no** | **no** |
+| `qetamacr` | 400 | 688 | iteration_limit | 79285.67549 | 86760.37 | 8.6e-02 | 2.9e-04 | 1.7e-06 | 1.3e-03 | 1000000 | 14.88 | - | **no** | **no** |
+| `qfffff80` | 524 | 854 | iteration_limit | 75555683.87 | 873147.47 | 8.6e+01 | 3.4e-02 | 4.7e-03 | 9.4e-01 | 1000000 | 13.17 | - | **no** | **no** |
+| `qforplan` | 161 | 421 | iteration_limit | 2176776009 | 7.4566315e+09 | 7.1e-01 | 6.2e-04 | 1.4e-04 | 2.6e-01 | 1000000 | 8.48 | - | **no** | **no** |
+| `qgfrdxpn` | 616 | 1092 | iteration_limit | 1.000064009e+11 | 1.0079059e+11 | 7.8e-03 | 5.6e-03 | 1.1e-06 | 6.4e-03 | 1000000 | 9.57 | - | **no** | **no** |
+| `qgrow15` | 300 | 645 | iteration_limit | -2242610.57 | -1.0169364e+08 | 9.8e-01 | 3.5e-16 | 4.2e-01 | 9.7e-01 | 1000000 | 11.99 | - | **no** | **no** |
+| `qgrow22` | 440 | 946 | iteration_limit | -2304787.79 | -1.4962895e+08 | 9.8e-01 | 3.1e-16 | 2.9e-01 | 9.8e-01 | 1000000 | 16.45 | - | **no** | **no** |
+| `qgrow7` | 140 | 301 | iteration_limit | -2226802.473 | -42798714 | 9.5e-01 | 2.3e-16 | 4.2e-01 | 9.3e-01 | 1000000 | 7.17 | - | **no** | **no** |
+| `qisrael` | 174 | 142 | iteration_limit | 25372338.87 | 25347838 | 9.7e-04 | 7.6e-06 | 3.5e-05 | 1.5e+00 | 1000000 | 5.94 | - | **no** | **no** |
+| `qpcblend` | 74 | 83 | iteration_limit | -0.008369148215 | -0.0078425409 | 5.3e-04 | 5.8e-05 | 1.1e-08 | 4.1e-04 | 1000000 | 3.44 | - | **no** | **no** |
+| `qpcboei1` | 351 | 384 | iteration_limit | 11265858.39 | 11503914 | 2.1e-02 | 7.7e-05 | 1.7e-07 | 4.8e-03 | 1000000 | 7.44 | - | **no** | **no** |
+| `qpcboei2` | 166 | 143 | iteration_limit | 7255114.683 | 8171962.3 | 1.1e-01 | 2.9e-03 | 5.3e-09 | 2.2e-02 | 1000000 | 4.21 | - | **no** | **no** |
+| `qpcstair` | 356 | 467 | iteration_limit | 6030333.794 | 6204387.5 | 2.8e-02 | 2.3e-03 | 5.1e-09 | 1.8e-02 | 1000000 | 9.99 | - | **no** | **no** |
+| `qpilotno` | 975 | 2172 | iteration_limit | 3177737.434 | 4728586.9 | 3.3e-01 | 1.9e-01 | 2.2e-04 | 7.0e-01 | 1000000 | 21.25 | - | **no** | **no** |
+| `qptest` | 2 | 2 | optimal | 4.37187499 | 4.371875 | 2.2e-09 | 1.1e-09 | 1.9e-11 | 1.5e-09 | 200 | 0.00 | yes | yes | **no** |
+| `qrecipe` | 91 | 180 | iteration_limit | -257.3009097 | -266.616 | 3.5e-02 | 5.6e-02 | 0.0e+00 | 3.8e-01 | 1000000 | 3.71 | - | **no** | **no** |
+| `qsc205` | 205 | 203 | optimal | -0.005813943782 | -0.0058139518 | 8.0e-09 | 5.0e-09 | 1.0e-10 | 3.3e-08 | 62550 | 0.24 | yes | yes | **no** |
+| `qscagr25` | 471 | 500 | iteration_limit | 201737817.2 | 2.0173794e+08 | 6.1e-07 | 2.0e-06 | 1.7e-06 | 3.3e-01 | 1000000 | 6.12 | - | **no** | **no** |
+| `qscagr7` | 129 | 140 | iteration_limit | 26865948.07 | 26865949 | 3.5e-08 | 3.3e-08 | 2.6e-08 | 8.7e-08 | 1000000 | 3.40 | - | **no** | **no** |
+| `qscfxm1` | 330 | 457 | iteration_limit | 2998949.928 | 16882692 | 8.2e-01 | 2.0e-03 | 3.3e-04 | 7.0e-01 | 1000000 | 7.62 | - | **no** | **no** |
+| `qscfxm2` | 660 | 914 | iteration_limit | 2435241.03 | 27776162 | 9.1e-01 | 2.3e-03 | 4.1e-04 | 8.0e-01 | 1000000 | 12.35 | - | **no** | **no** |
+| `qscfxm3` | 990 | 1371 | iteration_limit | 2449069.497 | 30816355 | 9.2e-01 | 2.3e-03 | 4.1e-04 | 8.1e-01 | 1000000 | 16.68 | - | **no** | **no** |
+| `qscorpio` | 388 | 358 | iteration_limit | 1876.674649 | 1880.5096 | 2.0e-03 | 4.4e-04 | 1.5e-07 | 3.9e-04 | 1000000 | 5.25 | - | **no** | **no** |
+| `qscrs8` | 490 | 1169 | iteration_limit | 237.981727 | 904.56001 | 7.4e-01 | 3.5e-03 | 3.2e-05 | 4.3e-01 | 1000000 | 9.64 | - | **no** | **no** |
+| `qscsd1` | 77 | 760 | optimal | 8.666666618 | 8.6666667 | 9.5e-09 | 9.6e-09 | 1.8e-09 | 6.5e-09 | 412150 | 3.20 | yes | yes | **no** |
+| `qscsd6` | 147 | 1350 | optimal | 50.80821385 | 50.808214 | 3.0e-09 | 3.9e-09 | 2.1e-09 | 8.1e-10 | 195850 | 2.35 | yes | yes | **no** |
+| `qscsd8` | 397 | 2750 | iteration_limit | 940.7635764 | 940.76357 | 6.8e-09 | 4.9e-06 | 7.5e-06 | 4.6e-09 | 1000000 | 22.21 | - | **no** | **no** |
+| `qsctap1` | 300 | 480 | iteration_limit | 1408.730082 | 1415.8611 | 5.0e-03 | 1.2e-04 | 2.5e-05 | 4.5e-03 | 1000000 | 6.32 | - | **no** | **no** |
+| `qsctap2` | 1090 | 1880 | iteration_limit | 1734.54668 | 1735.0265 | 2.8e-04 | 7.1e-04 | 1.9e-04 | 2.5e-04 | 1000000 | 16.67 | - | **no** | **no** |
+| `qsctap3` | 1480 | 2480 | iteration_limit | 1438.811969 | 1438.7547 | 4.0e-05 | 1.5e-04 | 3.0e-05 | 3.5e-04 | 1000000 | 21.00 | - | **no** | **no** |
+| `qseba` | 515 | 1028 | iteration_limit | 55854.75528 | 81481801 | 1.0e+00 | 1.8e-02 | 1.0e-03 | 9.6e-01 | 1000000 | 10.82 | - | **no** | **no** |
+| `qshare1b` | 117 | 225 | iteration_limit | 819303.2256 | 720078.32 | 1.4e-01 | 1.7e-03 | 4.4e-03 | 9.8e-01 | 1000000 | 4.28 | - | **no** | **no** |
+| `qshare2b` | 96 | 79 | iteration_limit | 7637.290698 | 11703.692 | 3.5e-01 | 1.0e-02 | 4.2e-05 | 1.0e-01 | 1000000 | 3.46 | - | **no** | **no** |
+| `qshell` | 536 | 1775 | iteration_limit | 1.572636849e+12 | 1.5726368e+12 | 3.1e-08 | 3.3e-08 | 1.5e-07 | 1.5e-08 | 1000000 | 74.13 | - | **no** | **no** |
+| `qship04l` | 402 | 2118 | iteration_limit | 2393244.661 | 2420015.5 | 1.1e-02 | 1.5e-03 | 9.0e-09 | 7.2e-03 | 1000000 | 13.74 | - | **no** | **no** |
+| `qship04s` | 402 | 1458 | iteration_limit | 2419765.395 | 2424993.7 | 2.2e-03 | 1.1e-03 | 3.7e-10 | 1.3e-03 | 1000000 | 9.71 | - | **no** | **no** |
+| `qship08l` | 778 | 4283 | iteration_limit | 2321123.857 | 2376040.6 | 2.3e-02 | 1.3e-03 | 2.9e-06 | 1.6e-02 | 1000000 | 81.94 | - | **no** | **no** |
+| `qship08s` | 778 | 2387 | iteration_limit | 2373296.341 | 2385728.9 | 5.2e-03 | 1.3e-03 | 1.3e-07 | 1.9e-03 | 1000000 | 32.52 | - | **no** | **no** |
+| `qship12l` | 1151 | 5427 | iteration_limit | 2833919.918 | 3018876.6 | 6.1e-02 | 1.0e-02 | 7.1e-07 | 2.2e-02 | 1000000 | 131.43 | - | **no** | **no** |
+| `qship12s` | 1151 | 2763 | iteration_limit | 2921606.906 | 3056962.3 | 4.4e-02 | 1.0e-02 | 2.3e-08 | 1.1e-02 | 1000000 | 42.96 | - | **no** | **no** |
+| `qsierra` | 1227 | 2036 | iteration_limit | 4854051.363 | 23750458 | 8.0e-01 | 1.2e-02 | 0.0e+00 | 1.0e+00 | 1000000 | 15.29 | - | **no** | **no** |
+| `qstair` | 356 | 467 | iteration_limit | 7965254.061 | 7985452.8 | 2.5e-03 | 9.1e-04 | 2.0e-10 | 1.2e-03 | 1000000 | 9.52 | - | **no** | **no** |
+| `qstandat` | 359 | 1075 | iteration_limit | 6403.476297 | 6411.8384 | 1.3e-03 | 2.9e-04 | 3.5e-05 | 1.5e-02 | 1000000 | 9.55 | - | **no** | **no** |
+| `s268` | 5 | 5 | iteration_limit | 0.01105986918 | 5.7310705e-07 | 1.1e-02 | 0.0e+00 | 8.2e-07 | 1.6e-01 | 1000000 | 2.41 | - | **no** | **no** |
+| `stadat1` | 3999 | 2001 | iteration_limit | -10183355.17 | -28526864 | 6.4e-01 | 1.2e-03 | 3.3e-04 | 8.7e-01 | 1000000 | 34.31 | - | **no** | **no** |
+| `stadat2` | 3999 | 2001 | iteration_limit | -12.53047383 | -32.626665 | 6.2e-01 | 1.1e-04 | 1.7e-02 | 8.6e-01 | 1000000 | 28.33 | - | **no** | **no** |
+| `stadat3` | 7999 | 4001 | iteration_limit | -3.861122357 | -35.779453 | 8.9e-01 | 4.3e-04 | 1.0e-02 | 9.7e-01 | 1000000 | 53.47 | - | **no** | **no** |
+| `stcqp1` | 2052 | 4097 | optimal | 155143.5547 | 155143.56 | 3.4e-08 | 8.1e-10 | 0.0e+00 | 1.9e+00 | 17500 | 1.33 | **no** | **no** | **no** |
+| `stcqp2` | 2052 | 4097 | optimal | 22327.31326 | 22327.313 | 1.2e-08 | 8.3e-10 | 0.0e+00 | 5.5e-01 | 157750 | 11.85 | **no** | **no** | **no** |
+| `tame` | 1 | 2 | optimal | 0 | 0 | 0.0e+00 | 3.3e-10 | 7.9e-10 | 7.9e-10 | 200 | 0.00 | yes | yes | yes |
+| `ubh1` | 12000 | 18009 | iteration_limit | 28.14809217 | 1.1160008 | 2.4e+01 | 1.6e-09 | 1.6e-04 | 5.3e-01 | 1000000 | 146.22 | - | **no** | **no** |
+| `values` | 1 | 202 | model_error | 0 | -1.3966211 | 1.0e+00 | - | - | - | 0 | 0.00 | - | **no** | **no** |
+| `yao` | 2000 | 2002 | iteration_limit | 4.672266627 | 197.70426 | 9.8e-01 | 5.7e-04 | 4.8e-08 | 3.1e-01 | 1000000 | 20.66 | - | **no** | **no** |
+| `zecevic2` | 2 | 2 | optimal | -4.125000007 | -4.125 | 1.7e-09 | 1.3e-09 | 0.0e+00 | 7.7e-10 | 900 | 0.00 | yes | yes | **no** |
+
+Every failure, named:
+
+- **Did not reach `optimal`** (93): `boyd1`, `boyd2`, `cont-100`, `cont-101`, `cont-200`, `cont-201`, `cont-300`, `cvxqp1l`, `cvxqp1m`, `cvxqp1s`, `cvxqp2l`, `cvxqp2m`, `cvxqp3l`, `cvxqp3m`, `cvxqp3s`, `dualc1`, `dualc2`, `dualc8`, `exdata`, `gouldqp2`, `hs268`, `huestis`, `ksip`, `liswet1`, `liswet10`, `liswet11`, `liswet12`, `liswet2`, `liswet3`, `liswet4`, `liswet5`, `liswet6`, `liswet7`, `liswet8`, `liswet9`, `powell20`, `primalc1`, `primalc2`, `primalc5`, `primalc8`, `q25fv47`, `qadlittl`, `qbandm`, `qbeaconf`, `qbore3d`, `qbrandy`, `qcapri`, `qe226`, `qetamacr`, `qfffff80`, `qforplan`, `qgfrdxpn`, `qgrow15`, `qgrow22`, `qgrow7`, `qisrael`, `qpcblend`, `qpcboei1`, `qpcboei2`, `qpcstair`, `qpilotno`, `qrecipe`, `qscagr25`, `qscagr7`, `qscfxm1`, `qscfxm2`, `qscfxm3`, `qscorpio`, `qscrs8`, `qscsd8`, `qsctap1`, `qsctap2`, `qsctap3`, `qseba`, `qshare1b`, `qshare2b`, `qshell`, `qship04l`, `qship04s`, `qship08l`, `qship08s`, `qship12l`, `qship12s`, `qsierra`, `qstair`, `qstandat`, `s268`, `stadat1`, `stadat2`, `stadat3`, `ubh1`, `values`, `yao`.
+- **`optimal` but more than 1e-6 relative from the reference objective** (1): `hues-mod`.
+- **Rejected by `tools/verify_solution.py`** (6): `dpklo1`, `dtoc3`, `hues-mod`, `laser`, `stcqp1`, `stcqp2`.
+- **`optimal` but not successful at 1e-6 relative** (5): `cont-050`, `dpklo1`, `dtoc3`, `stcqp1`, `stcqp2`.
+- **`optimal` but not successful at 1e-9 relative** (38): `aug2d`, `aug2dc`, `aug2dcqp`, `aug2dqp`, `aug3d`, `aug3dc`, `aug3dcqp`, `aug3dqp`, `cont-050`, `cvxqp2s`, `dpklo1`, `dtoc3`, `dual1`, `dual2`, `dual3`, `dual4`, `dualc5`, `genhs28`, `hs118`, `hs51`, `hs52`, `hs53`, `hs76`, `hues-mod`, `mosarqp1`, `mosarqp2`, `primal1`, `primal2`, `primal3`, `primal4`, `qafiro`, `qptest`, `qsc205`, `qscsd1`, `qscsd6`, `stcqp1`, `stcqp2`, `zecevic2`.
 
 ---
 
@@ -886,13 +1072,53 @@ Chinneck's collection of infeasible LPs (`netlib.org/lp/infeas`, fetched and has
 alone proves nothing; a pass needs the Farkas certificate the solver wrote to survive
 `tools/verify_solution.py` (`bench/runners/netlib_infeasible.py`).
 
-Not yet run at this commit. Reproduce with:
+Source CSV: `bench/results/netlib-infeasible-65eecbc.csv`  
+Commit `65eecbc` · machine `Windows-AMD64` · time limit 60 s per instance
 
-```
-python bench/runners/fetch_netlib_infeasible.py
-python bench/runners/netlib_infeasible.py --time-limit 60
-python bench/runners/netlib_infeasible.py --time-limit 60 --solver-option algorithm=simplex   # and dual-simplex, pdhg
-```
+**13 of 29** reported `infeasible` **and** wrote a Farkas certificate that `tools/verify_solution.py` accepted. A status of `infeasible` without a certificate is not counted: the verifier has nothing to check, so the verdict is unproven.
+
+**16 not passed**, every one named with its cause:
+
+| why | count | instances |
+|---|---:|---|
+| infeasible without a certificate (simplex-dual) | 6 | bgindy, box1, ex72a, ex73a, klein3, mondou2 |
+| infeasible without a certificate (simplex-dual+primal) | 6 | cplex1, gosh, pang, qual, refinery, vol1 |
+| infeasible without a certificate (presolve) | 3 | ceria3d, galenet, gran |
+| no verdict: numerical_error | 1 | cplex2 |
+
+| instance | rows | cols | status | engine | certificate | multipliers | time (s) | verified | the solver's message |
+|---|---:|---:|---|---|---|---:|---:|:--:|---|
+| `bgdbg1` | 348 | 407 | infeasible | presolve | farkas | 2 | 0.025 | yes | row 163 allows activity of at most 24 but the column bounds force at least 54; proved by presolve; proof: the rows aggre |
+| `bgetam` | 400 | 688 | infeasible | simplex-dual | farkas | 14 | 0.085 | yes | dual simplex: basic variable 808 is outside its bounds by 2.733e+03, far above the 1.0e-07 feasibility tolerance, and no |
+| `bgindy` | 2671 | 10116 | infeasible | simplex-dual | none | 0 | 0.118 | - | dual simplex: basic variable 12467 is outside its bounds by 7.134e+03, far above the 1.0e-07 feasibility tolerance, and  |
+| `bgprtr` | 20 | 34 | infeasible | simplex-dual+primal | farkas | 6 | 0.030 | yes | phase 1 terminated with max bound violation 2.343e+01, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `box1` | 231 | 261 | infeasible | simplex-dual | none | 0 | 0.028 | - | dual simplex: basic variable 201 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
+| `ceria3d` | 3576 | 824 | infeasible | presolve | none | 0 | 0.038 | - | row 292 needs activity of at least 0.75 but the column bounds cap it at 0.5; proved by presolve; no machine-checkable ce |
+| `chemcom` | 288 | 720 | infeasible | simplex-dual | farkas | 7 | 0.048 | yes | dual simplex: basic variable 807 is outside its bounds by 2.909e+03, far above the 1.0e-07 feasibility tolerance, and no |
+| `cplex1` | 3005 | 3221 | infeasible | simplex-dual+primal | none | 0 | 0.269 | - | phase 1 terminated with max bound violation 6.834e+06, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `cplex2` | 224 | 221 | numerical_error | simplex-dual+primal | none | 0 | 0.049 | - | phase 1 stalled at max bound violation 4.100e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as |
+| `ex72a` | 197 | 215 | infeasible | simplex-dual | none | 0 | 0.036 | - | dual simplex: basic variable 151 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
+| `ex73a` | 193 | 211 | infeasible | simplex-dual | none | 0 | 0.028 | - | dual simplex: basic variable 137 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
+| `forest6` | 66 | 95 | infeasible | simplex-dual | farkas | 65 | 0.065 | yes | dual simplex: basic variable 0 is outside its bounds by 3.252e+05, far above the 1.0e-07 feasibility tolerance, and no n |
+| `galenet` | 8 | 8 | infeasible | presolve | none | 0 | 0.030 | - | row 4 needs activity of at least 30 but the column bounds cap it at 20; proved by presolve; no machine-checkable certifi |
+| `gosh` | 3792 | 10733 | infeasible | simplex-dual+primal | none | 0 | 11.327 | - | phase 1 terminated with max bound violation 7.715e-02, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `gran` | 2658 | 2520 | infeasible | presolve | none | 0 | 0.045 | - | row 1612 allows activity of at most 97.7 but the column bounds force at least 97.7; proved by presolve; no machine-check |
+| `greenbea` | 2393 | 5405 | infeasible | presolve | farkas | 1 | 0.054 | yes | row 1491 allows activity of at most 0 but the column bounds force at least 320; proved by presolve; proof: the rows aggr |
+| `itest2` | 9 | 4 | infeasible | presolve | farkas | 3 | 0.029 | yes | row 4 allows activity of at most 2 but the column bounds force at least 13; proved by presolve; proof: the rows aggregat |
+| `itest6` | 11 | 8 | infeasible | presolve | farkas | 3 | 0.033 | yes | row 3 needs activity of at least 50000 but the column bounds cap it at -30000; proved by presolve; proof: the rows aggre |
+| `klein1` | 54 | 54 | infeasible | simplex-dual | farkas | 52 | 0.091 | yes | dual simplex: basic variable 89 is outside its bounds by 2.056e+06, far above the 1.0e-07 feasibility tolerance, and no  |
+| `klein2` | 477 | 54 | infeasible | simplex-dual | farkas | 52 | 0.298 | yes | dual simplex: basic variable 258 is outside its bounds by 8.818e+05, far above the 1.0e-07 feasibility tolerance, and no |
+| `klein3` | 994 | 88 | infeasible | simplex-dual | none | 0 | 0.193 | - | dual simplex: basic variable 57 is outside its bounds by 7.183e+05, far above the 1.0e-07 feasibility tolerance, and no  |
+| `mondou2` | 312 | 604 | infeasible | simplex-dual | none | 0 | 0.030 | - | dual simplex: basic variable 296 is outside its bounds by 1.530e+04, far above the 1.0e-07 feasibility tolerance, and no |
+| `pang` | 361 | 459 | infeasible | simplex-dual+primal | none | 0 | 0.041 | - | phase 1 terminated with max bound violation 2.606e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `pilot4i` | 410 | 1000 | infeasible | presolve | farkas | 1 | 0.036 | yes | row 390 needs activity of at least 15.17 but the column bounds cap it at 0; proved by presolve; proof: the rows aggregat |
+| `qual` | 323 | 464 | infeasible | simplex-dual+primal | none | 0 | 0.042 | - | phase 1 terminated with max bound violation 5.125e+05, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `reactor` | 318 | 637 | infeasible | presolve | farkas | 1 | 0.032 | yes | row 116 needs activity of at least 0 but the column bounds cap it at -1; proved by presolve; proof: the rows aggregate t |
+| `refinery` | 323 | 464 | infeasible | simplex-dual+primal | none | 0 | 0.039 | - | phase 1 terminated with max bound violation 5.380e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `vol1` | 323 | 464 | infeasible | simplex-dual+primal | none | 0 | 0.032 | - | phase 1 terminated with max bound violation 1.056e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `woodinfe` | 35 | 89 | infeasible | presolve | farkas | 1 | 0.025 | yes | row 17 needs activity of at least 0 but the column bounds cap it at -5; proved by presolve; proof: the rows aggregate to |
+
+No per-engine option run is committed yet (`--solver-option algorithm=simplex`, `dual-simplex`, `pdhg`).
 
 ### 3b. Parametric LP - the optimal value as a function of one coefficient
 
