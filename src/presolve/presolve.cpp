@@ -426,6 +426,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
             }
           }
           if (!all_others_integer || candidate < 0) continue;
+          // Guard against a near-zero coefficient that would cause division by zero below.
+          // A zero-coefficient entry shouldn't appear in sparse storage, but coefficient
+          // updates during substitution can produce near-zeros; skip the row in that case.
+          if (std::fabs(candidate_coeff) < tol::kIntegrality) continue;
           // candidate_coeff must divide evenly into an integer (i.e. rhs/a and every other
           // a_other/a must be integer). Equivalent to: |a| divides gcd of rhs and all integer
           // coefficients. The simplest sufficient check: |a| == 1.0 or rhs/a is integer and
@@ -470,7 +474,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       // every node re-derives the same fractional bound the parent had. Inward only - widening
       // an integer box cannot make the relaxation wrong, but narrowing past a feasible integer
       // removes it from the problem with no symptom at all.
-      if (model.col_type[u] == VarType::kInteger) {
+      if (model.col_type[u] == VarType::kInteger || work.col_implied_integer[u]) {
         const double rounded_lower = finite(work.col_lower[u])
                                          ? round_integer_lower(work.col_lower[u])
                                          : work.col_lower[u];
