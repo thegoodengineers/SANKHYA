@@ -327,6 +327,7 @@ set(SANKHYA_CORE_SOURCES
   src/ipm/model_space.cpp
   src/pdhg/pdhg.cpp
   src/pdhg/pdhg_evaluate.cpp
+  src/pdhg/pdhg_certificate.cpp
   src/pdhg/pdhg_halpern.cpp
   src/gpu/gpu_memory.cpp
   src/gpu/ipm_cudss.cpp

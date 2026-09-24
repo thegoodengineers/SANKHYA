@@ -1154,9 +1154,7 @@ Commit `65eecbc` · machine `Windows-AMD64` · time limit 60 s per instance
 | `vol1` | 323 | 464 | infeasible | simplex-dual+primal | none | 0 | 0.032 | - | phase 1 terminated with max bound violation 1.056e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
 | `woodinfe` | 35 | 89 | infeasible | presolve | farkas | 1 | 0.025 | yes | row 17 needs activity of at least 0 but the column bounds cap it at -5; proved by presolve; proof: the rows aggregate to |
 
-Per engine, each from its own option run:
-
-- `algorithm=pdhg` (`netlib-infeasible-34bb81d-pdhg.csv`): **5 of 29**; not passed, by cause: no verdict: time_limit: bgetam, bgindy, box1, ceria3d, chemcom, cplex1, ex72a, ex73a, forest6, gosh, gran, greenbea, klein1, klein2, klein3, pang, pilot4i, qual, reactor, refinery, vol1, woodinfe; no verdict: iteration_limit: bgprtr; no verdict: numerical_error: cplex2
+No per-engine option run is committed yet (`--solver-option algorithm=simplex`, `dual-simplex`, `pdhg`).
 
 ### 3b. Parametric LP - the optimal value as a function of one coefficient
 

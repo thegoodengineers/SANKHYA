@@ -12,7 +12,9 @@
 //      function the .sol writer and the verifier both hold every engine's certificate to)
 //      accept - the positive case, so this file is not all negative controls.
 
+#include <cmath>
 #include <filesystem>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -104,6 +106,86 @@ TEST(PdhgInfeasibilityDetection, AGenuinelyInfeasibleModelIsDetectedWithAValidCe
 
   std::string why;
   EXPECT_TRUE(farkas_proves_infeasible(model, solution.farkas_dual, &why)) << why;
+}
+
+/// Columns x0.., rows given densely with [row_lo, row_hi], x >= 0 with no upper bound.
+Model dense_lp(const std::vector<double>& cost, const std::vector<std::vector<double>>& rows,
+               const std::vector<double>& row_lo, const std::vector<double>& row_hi) {
+  Model m;
+  const auto n = static_cast<Index>(cost.size());
+  const auto r = static_cast<Index>(rows.size());
+  m.resize_columns(n);
+  m.col_cost = cost;
+  m.resize_rows(r);
+  m.row_lower = row_lo;
+  m.row_upper = row_hi;
+  m.matrix.reset(r, n);
+  for (Index i = 0; i < r; ++i) {
+    for (Index j = 0; j < n; ++j) {
+      const double v = rows[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)];
+      if (v != 0.0) m.matrix.add_entry(i, j, v);
+    }
+  }
+  m.matrix.finalize();
+  return m;
+}
+
+TEST(PdhgInfeasibilityDetection, AnInfeasibleModelWithAnImprovingRayIsNotUnbounded) {
+  // min -x1; x2 + x3 <= 1; 2 x2 + 3 x3 >= 4; x >= 0. Infeasible (x2 + x3 <= 1 caps
+  // 2 x2 + 3 x3 at 3), and x1 is an improving direction no row touches. A ray alone proves
+  // the dual infeasible, not the primal feasible, so the engine must not say unbounded
+  // (review of #652: it did, at iteration 1).
+  const Model model = dense_lp({-1.0, 0.0, 0.0}, {{0.0, 1.0, 1.0}, {0.0, 2.0, 3.0}},
+                               {-kInfinity, 4.0}, {1.0, kInfinity});
+  for (const bool halpern : {false, true}) {
+    Options o = detection_options();
+    o.set_bool("presolve", false);
+    o.set_bool("pdhg_halpern", halpern);
+    if (halpern) o.set_bool("pdhg_restart", false);
+    const Solution s = solve(model, o);
+    EXPECT_NE(s.status, SolveStatus::kUnbounded) << (halpern ? "halpern: " : "") << s.message;
+    EXPECT_NE(s.status, SolveStatus::kOptimal) << s.message;
+  }
+}
+
+TEST(PdhgInfeasibilityDetection, FeasibleBoundedBadlyScaledLpsAreNeverCertifiedOtherwise) {
+  // A x <= b with A > 0, b > 0 and x >= 0: x = 0 is feasible and every column is bounded by
+  // the rows, so the LP is feasible and bounded. Rows scaled by 10^k for k in [-3, 3]. In
+  // review of #652, 8 such LPs came back infeasible and 41 unbounded, from near-converged
+  // restart differences small enough to slip under the checkers' absolute floors.
+  std::mt19937_64 rng(4840);
+  std::uniform_real_distribution<double> entry(0.1, 50.0);
+  std::uniform_int_distribution<int> power(-3, 3);
+  std::uniform_real_distribution<double> price(-5.0, 5.0);
+  int solved = 0;
+  for (int trial = 0; trial < 60; ++trial) {
+    const std::size_t n = 6 + static_cast<std::size_t>(trial % 7);
+    const std::size_t m = 4 + static_cast<std::size_t>(trial % 5);
+    std::vector<std::vector<double>> a(m, std::vector<double>(n));
+    std::vector<double> hi(m);
+    for (std::size_t i = 0; i < m; ++i) {
+      const double scale = std::pow(10.0, power(rng));
+      for (std::size_t j = 0; j < n; ++j) a[i][j] = scale * entry(rng);
+      hi[i] = scale * 100.0;
+    }
+    std::vector<double> cost(n);
+    for (double& c : cost) c = price(rng);
+    const Model model = dense_lp(cost, a, std::vector<double>(m, -kInfinity), hi);
+    for (const bool halpern : {false, true}) {
+      Options o = detection_options();
+      o.set_bool("presolve", false);
+      o.set_bool("pdhg_halpern", halpern);
+      if (halpern) o.set_bool("pdhg_restart", false);
+      o.set_int("iteration_limit", 200000);
+      const Solution s = solve(model, o);
+      EXPECT_NE(s.status, SolveStatus::kInfeasible) << "trial " << trial << " " << s.message;
+      EXPECT_NE(s.status, SolveStatus::kUnbounded) << "trial " << trial << " " << s.message;
+      EXPECT_NE(s.status, SolveStatus::kInfeasibleOrUnbounded)
+          << "trial " << trial << " " << s.message;
+      ++solved;
+    }
+  }
+  EXPECT_EQ(solved, 120);
 }
 
 }  // namespace
