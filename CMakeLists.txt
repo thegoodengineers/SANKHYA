@@ -292,6 +292,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/branch_and_bound_restart.cpp
   src/mip/branch_and_bound_safe.cpp
   src/mip/flow_cover_cuts.cpp
+  src/mip/implied_bound_cuts.cpp
   src/mip/symmetry.cpp
   src/mip/cut_selection.cpp
   src/mip/checkpoint.cpp

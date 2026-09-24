@@ -71,6 +71,7 @@ add_executable(sankhya_tests
   unit/test_heuristics.cpp
   unit/test_restarts.cpp
   unit/test_flow_cover_cuts.cpp
+  unit/test_implied_bound_cuts.cpp
   unit/test_presolve_dual_fixing.cpp
   unit/test_presolve_coef_tightening.cpp
   unit/test_presolve_dominated_columns.cpp

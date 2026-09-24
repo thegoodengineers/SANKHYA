@@ -772,6 +772,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"mip_implied_bound_cuts",
+                 OptionType::Bool,
+                 false,
+                 "Include implied-bound cuts in the root round (#499; Savelsbergh 1994): on a "
+                 "row with a continuous x and a binary y only, the line x <= u0 + (u1 - u0) y "
+                 "through x's bounds at y = 0 and y = 1, each capped by x's own bound; it is "
+                 "tighter than the row exactly when that cap binds. Only read when "
+                 "enable_root_cuts is set; OFF until the MIPLIB A/B on main says what it buys.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"enable_flow_cover_cuts",
                  OptionType::Bool,
                  false,

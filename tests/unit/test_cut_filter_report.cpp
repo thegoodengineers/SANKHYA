@@ -27,7 +27,7 @@ FilteredCut verdict(CutFamily family, CutFilterReason reason) {
 }
 
 TEST(CutFilterReport, EveryFamilyAndReasonHasAName) {
-  for (int f = 0; f <= static_cast<int>(CutFamily::kZeroHalf); ++f) {
+  for (int f = 0; f <= static_cast<int>(CutFamily::kImpliedBound); ++f) {
     EXPECT_STRNE(cut_family_name(static_cast<CutFamily>(f)), "") << f;
   }
   EXPECT_STREQ(cut_family_name(CutFamily::kGomory), "gomory");
