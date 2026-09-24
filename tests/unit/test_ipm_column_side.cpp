@@ -138,10 +138,10 @@ TEST(InteriorPointColumnSide, BothSidesAreCountedExactlyBeforeTheyAreBuilt) {
     ASSERT_TRUE(side.assemble(theta, ones, 1e-10, &lower_n, {}));
     const std::int64_t count_m = lower_m.num_nonzeros();
     const std::int64_t count_n = lower_n.num_nonzeros();
-    EXPECT_FALSE(side.row_side_exceeds(count_m, {})) << name;
-    EXPECT_TRUE(side.row_side_exceeds(count_m - 1, {})) << name;
-    EXPECT_FALSE(side.column_side_exceeds(count_n, {})) << name;
-    EXPECT_TRUE(side.column_side_exceeds(count_n - 1, {})) << name;
+    EXPECT_FALSE(side.predict_row_side(count_m, {}).over_cap) << name;
+    EXPECT_TRUE(side.predict_row_side(count_m - 1, {}).over_cap) << name;
+    EXPECT_FALSE(side.predict_column_side(count_n, {}).over_cap) << name;
+    EXPECT_TRUE(side.predict_column_side(count_n - 1, {}).over_cap) << name;
   }
 }
 

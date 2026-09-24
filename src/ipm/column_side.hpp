@@ -29,10 +29,13 @@
 // products with A and never formed: exact where D is well scaled, repaired where it is not.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "la/ldl.hpp"
+#include "la/normal_pattern.hpp"
 #include "sankhya/sparse.hpp"
 
 namespace sankhya::ipm {
@@ -42,6 +45,13 @@ struct ColumnSideReport {
   int iterations = 0;
   double backward_error = 0.0;  ///< ||r - M x||_inf over ||r||_inf plus the terms of M x
   bool converged = false;
+};
+
+/// Which system ipm_normal_side=auto factors (#469), and why.
+enum class NormalSide { kRows, kColumns, kStopped };
+struct SideChoice {
+  NormalSide side = NormalSide::kRows;
+  std::string reason;  ///< one line for the log
 };
 
 class ColumnSide {
@@ -61,17 +71,35 @@ class ColumnSide {
   /// the factors of that N.
   ColumnSideReport solve(const SparseLdl& ldl, double* rhs) const;
 
-  /// Whether the lower triangle of the m-side M = A Theta A^T + D (unfixed columns) holds
-  /// more than `cap` nonzeros, counted from the pattern of A with a marker array and
-  /// stopped as soon as it passes - M itself is never built. On supportcase10 M has 2.2e8
-  /// nonzeros and building it to order it took the working set past 3 GB. Returns false
-  /// when `should_stop` fires first. (The same count as #467's predict_normal_nonzeros, which
-  /// this can call once both are in.)
-  [[nodiscard]] bool row_side_exceeds(std::int64_t cap,
-                                      const SparseLdl::ShouldStop& should_stop) const;
-  /// The same for N = Theta^-1 + A^T D^-1 A, before assemble() builds it.
-  [[nodiscard]] bool column_side_exceeds(std::int64_t cap,
-                                         const SparseLdl::ShouldStop& should_stop) const;
+  /// The lower triangle of the m-side M = A Theta A^T + D over the unfixed columns,
+  /// counted from the pattern of A before it is built, up to `cap` (< 0: no cap). The one
+  /// count #467 added (predict_normal_nonzeros), so both sides are measured alike.
+  [[nodiscard]] NormalPrediction predict_row_side(std::int64_t cap,
+                                                  const SparseLdl::ShouldStop& stop) const;
+  /// The same for N = Theta^-1 + A^T D^-1 A: the count of A^T's product with its own
+  /// transpose, a fixed column an identity row. What the column side will actually form.
+  [[nodiscard]] NormalPrediction predict_column_side(std::int64_t cap,
+                                                     const SparseLdl::ShouldStop& stop) const;
+
+  /// THE CHOICE, BEFORE EITHER SYSTEM IS BUILT FOR THE SOLVE (ipm_normal_side=auto). Each
+  /// side is first counted from the pattern of A (predict_normal_nonzeros, which stops as
+  /// soon as its count passes the cap) and only then built with unit weights and ordered,
+  /// the m side under a factor budget equal to the n side's factor so that a larger m side
+  /// is abandoned once it passes it; the smaller symbolic factor is kept (Zanetti & Gondzio
+  /// 2025).
+  ///
+  /// `compare` (the rows outnumber the columns) asks for that comparison. Without it the
+  /// column side is only a RESCUE: considered when the row side's own count is over
+  /// `factor_budget` - the row side would be declined before assembly; one dense column, as
+  /// on bdry2, makes A Theta A^T dense and leaves A^T A sparse - and taken only when its own
+  /// count and factor fit that budget. A negative budget is no budget: nothing to rescue.
+  ///
+  /// `stop` is consulted inside every count, assembly and ordering, and once before each
+  /// stage, so a deadline that has already passed is seen even on a model too small for
+  /// the inner checks to run; kStopped is returned the moment it fires.
+  [[nodiscard]] SideChoice choose(bool compare, std::int64_t factor_budget,
+                                  std::size_t ordering_budget,
+                                  const SparseLdl::ShouldStop& stop);
 
  private:
   void multiply_m(const std::vector<double>& v, std::vector<double>* out) const;
@@ -84,8 +112,8 @@ class ColumnSide {
   std::vector<bool> fixed_;
   std::vector<double> theta_;  ///< over the n columns, 0 on a fixed one
   std::vector<double> d_;      ///< over the m rows: row_shift + delta
-  /// d_ floored at kDiagonalFloor of each row's A Theta A^T diagonal: what N and the
-  /// preconditioner are built with (column_side.cpp).
+  /// d_ floored at tol::kIpmColumnSideDiagonalFloor of each row's A Theta A^T diagonal:
+  /// what N and the preconditioner are built with (column_side.cpp).
   std::vector<double> preconditioner_d_;
 };
 

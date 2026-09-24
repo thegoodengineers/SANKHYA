@@ -612,4 +612,23 @@ inline constexpr double kIpmDenseSupportRatio = 1e-6;
 /// accurate, and the Woodbury preconditioner is not used for that factorization.
 inline constexpr double kIpmDenseSchurMinPivot = 0.5;
 
+// ---- The LP interior point's normal equations on the n x n side (#469, ipm_normal_side) ---
+//
+// The column side's conjugate gradients on M = A Theta A^T + D aim at and accept the same
+// backward errors as the dense-column path (kIpmPcgTargetBackwardError,
+// kIpmPcgAcceptedBackwardError) within the same kIpmPcgMaxIterations steps; an unaccepted
+// solve is handled as a non-finite direction is. Two constants are its own:
+
+/// The iteration stops when the residual has not halved in this many steps: the
+/// preconditioner's floor is reached. Measured by #469 on nine Netlib instances (afiro,
+/// adlittle, sc50a, sc50b, blend, share2b, scagr7, stocfor1, israel) at about two steps per
+/// solve; a solve that stops here unaccepted now raises the regularization.
+inline constexpr int kIpmColumnSideStagnationSteps = 3;
+/// D in the preconditioner (and in N) is at least this times the row's diagonal of
+/// A Theta A^T. An equality row's D is the 1e-10 regularization alone and would put 1e10
+/// A_E^T A_E into N. Measured by #469 over the same nine instances: at 1e-8 all end optimal
+/// at about two conjugate-gradient steps per solve; 1e-6 takes up to three; at 1e-4 share2b
+/// runs to the iteration limit; with no floor none converged.
+inline constexpr double kIpmColumnSideDiagonalFloor = 1e-8;
+
 }  // namespace sankhya::tol

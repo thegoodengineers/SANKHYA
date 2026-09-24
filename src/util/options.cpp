@@ -1603,8 +1603,11 @@ const std::vector<OptionSpec>& Options::registry() {
                  "A Theta A^T + D every earlier version factored), columns (the n x n "
                  "Theta^-1 + A^T D^-1 A, with M's solves by conjugate gradients preconditioned "
                  "by the Woodbury identity on its factors), or auto (when rows outnumber "
-                 "columns, both are ordered and the smaller predicted factor is kept). "
-                 "Default rows.",
+                 "columns, both are counted and ordered and the smaller predicted factor is "
+                 "kept; otherwise the column side only when the row side's count is over "
+                 "ipm_max_factor_nonzeros). The choice counts against ipm_setup_share. "
+                 "Ignored, with a log line, under ipm_proximal_regularization or "
+                 "ipm_dense_columns. Default rows.",
                  0.0,
                  0.0,
                  {"rows", "columns", "auto"}});
