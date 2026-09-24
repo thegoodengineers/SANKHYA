@@ -418,6 +418,8 @@ class Solution {
     /// #412: the free_column_singletons whose column was implied free by its row rather than
     /// free in the model; a subset of that count, not an addition to it.
     Count implied_free_column_singletons = 0;
+    Count implied_integers =
+        0;  ///< #513: continuous columns promoted to integer by equality rows
     Count bounds_tightened = 0;
     Count integer_bounds_rounded = 0;
     /// #511: integer-column coefficients reduced by coefficient tightening, and the column

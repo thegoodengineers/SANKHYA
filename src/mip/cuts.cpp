@@ -1108,7 +1108,7 @@ const char* cut_filter_reason_name(CutFilterReason reason) noexcept {
 
 std::string describe_cut_filter(const std::vector<FilteredCut>& filtered) {
   if (filtered.empty()) return "no candidates";
-  constexpr int kFamilies = 7;
+  constexpr int kFamilies = 8;  // kUnknown..kImpliedBound
   constexpr int kReasons = 7;
   int counts[kFamilies][kReasons] = {};
   for (const FilteredCut& fc : filtered) {
