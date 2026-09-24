@@ -11,9 +11,8 @@ namespace sankhya::pdhg {
 
 HalpernResult pdhg_halpern_step(const std::vector<double>& x, const std::vector<double>& y,
                                 std::vector<double>& x_next, std::vector<double>& y_next,
-                                HalpernState& state, double omega, const Options& options) {
-  if (!options.get_bool("pdhg_halpern")) return {};
-
+                                HalpernState& state, double omega,
+                                [[maybe_unused]] const Options& options) {
   // Fixed-point residual before the Halpern blend: ||T(z) - z||_P where
   //   ||dz||_P^2 = omega * ||dx||^2 + (1/omega) * ||dy||^2
   double fp2 = 0.0;

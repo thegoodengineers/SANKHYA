@@ -135,6 +135,14 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   const bool geometric_evaluation = options.get_bool("pdhg_geometric_evaluation");
   const bool two_matvec = options.get_bool("pdhg_two_matvec");
   const bool use_halpern = options.get_bool("pdhg_halpern");
+  if (use_halpern && use_restarts) {
+    solution.status = SolveStatus::kModelError;
+    solution.message =
+        "pdhg_halpern and pdhg_restart cannot both be true: the Halpern path has its own "
+        "fixed-point-residual restart logic and is incompatible with the averaged-path "
+        "PDLP restarts. Set pdhg_restart=false when using pdhg_halpern.";
+    return solution;
+  }
   // ROW-PARALLEL A x (#487). The serial product scatters column by column into y and
   // cannot be split across threads without a reduction; (A^T)^T x through the transpose
   // is a gather per ROW of A - one output per thread, no reduction, the same static
@@ -157,7 +165,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   logger.info("Scaled matrix entries in [{:.3e}, {:.3e}], estimated ||A||_2 = {:.4e}",
               scaling.min_abs, scaling.max_abs, spectral_norm);
   logger.info("Target relative tolerance {:.1e}, restarts {}, A x {}", tolerance,
-              use_restarts ? "on" : "off",
+              use_halpern ? "halpern-fp" : (use_restarts ? "on" : "off"),
               parallel_spmv ? "row-parallel over the thread pool (#487)" : "serial");
 
   // ---- Iterates, in SCALED space ----------------------------------------------------------
