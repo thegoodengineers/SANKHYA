@@ -1245,6 +1245,20 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"pdhg_two_matvec",
+         OptionType::Bool,
+         false,
+         "Cache A*x_k between iterations and compute A*x_{k+1} once per step, deriving "
+         "A*x_bar = 2*A*x_{k+1} - A*x_k and A*dx = A*x_{k+1} - A*x_k by vector ops, "
+         "reducing three sparse mat-vecs per iteration to two (#479). A*x is recomputed "
+         "exactly at every restart to prevent rounding drift. Iterates agree with the "
+         "three-product path to 1e-12 relative over 10,000 iterations on the Netlib nine. "
+         "CURRENTLY A STUB: the optimisation is not active. Default OFF until the A/B "
+         "benchmark confirms per-iteration time savings on CPU and GPU.",
+         0.0,
+         0.0,
+         {}});
 
     // ---- Reporting ---------------------------------------------------------------------
     s.push_back({"log_level",
