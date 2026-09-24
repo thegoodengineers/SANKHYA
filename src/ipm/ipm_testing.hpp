@@ -26,4 +26,17 @@ inline bool take_poisoned_direction() {
   return left > 0;
 }
 
+/// While positive, the next column-side solve (#469, ipm_normal_side) is reported as not
+/// converged whatever its backward error (and the count drops by one), so a test reaches
+/// the handling of an unconverged conjugate-gradient solve on any model.
+inline std::atomic<int> reject_next_column_side_solves{0};
+
+inline bool take_rejected_column_side_solve() {
+  int left = reject_next_column_side_solves.load(std::memory_order_relaxed);
+  while (left > 0 && !reject_next_column_side_solves.compare_exchange_weak(
+                         left, left - 1, std::memory_order_relaxed)) {
+  }
+  return left > 0;
+}
+
 }  // namespace sankhya::ipm::testing

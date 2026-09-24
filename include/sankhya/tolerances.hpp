@@ -612,4 +612,24 @@ inline constexpr double kIpmDenseSupportRatio = 1e-6;
 /// accurate, and the Woodbury preconditioner is not used for that factorization.
 inline constexpr double kIpmDenseSchurMinPivot = 0.5;
 
+// ---- The LP interior point's normal equations on the n x n side (#469, ipm_normal_side) ---
+//
+// The column side's conjugate gradients on M = A Theta A^T + D aim at and accept the same
+// backward errors as the dense-column path (kIpmPcgTargetBackwardError,
+// kIpmPcgAcceptedBackwardError) within the same kIpmPcgMaxIterations steps and the same
+// kIpmPcgStagnationSteps without halving; an unaccepted solve is handled as a non-finite
+// direction is. #469 stopped after 3 steps without halving; once an unaccepted solve was no
+// longer used silently, share2b on the column side stopped three solves at backward errors
+// of 1.4e-9, 6.3e-12 and 3.1e-12 after 3 to 6 steps - the non-monotone residual that
+// kIpmPcgStagnationSteps was measured against on israel - and its regularization raises
+// ended the solve as a numerical error at iteration 153 (row side: optimal in 43).
+
+/// D in the preconditioner (and in N) is at least this times the row's diagonal of
+/// A Theta A^T. An equality row's D is the 1e-10 regularization alone and would put 1e10
+/// A_E^T A_E into N. Measured by #469 over nine Netlib instances (afiro, adlittle, sc50a,
+/// sc50b, blend, share2b, scagr7, stocfor1, israel): at 1e-8 all end optimal at about two
+/// conjugate-gradient steps per solve; 1e-6 takes up to three; at 1e-4 share2b runs to the
+/// iteration limit; with no floor none converged.
+inline constexpr double kIpmColumnSideDiagonalFloor = 1e-8;
+
 }  // namespace sankhya::tol
