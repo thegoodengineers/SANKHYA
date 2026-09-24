@@ -1722,9 +1722,13 @@ const std::vector<OptionSpec>& Options::registry() {
                  "combining its children over the disjunction. Presolve, node propagation and "
                  "the integer row tightening are switched off and the search runs on one "
                  "thread, so every node LP is solved over exactly the box its derivation uses. "
-                 "Nothing is written, and the log says why, when cut, symmetry or objective "
-                 "rows were added (set enable_root_cuts=false), after a restart, or for an "
-                 "MIQP. Empty (default) disables it.",
+                 "Root cuts are derived in the certificate from the model (knapsack cover and "
+                 "{0,1/2} cuts as Chvatal-Gomory roundings, Gomory and MIR cuts as splits); "
+                 "a cut whose derivation does not check is dropped, and the clique, flow "
+                 "cover, implied-bound and c-MIR separators and tree cut rounds are off in "
+                 "this mode. Nothing is written, and the log says why, when symmetry or "
+                 "objective rows were added, after a restart, or for an MIQP. Empty (default) "
+                 "disables it.",
                  0.0,
                  0.0,
                  {},

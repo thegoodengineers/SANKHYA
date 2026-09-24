@@ -31,6 +31,12 @@ completion is what lets the solver write only the row multipliers of each leaf L
 
 A derived constraint may give OBJ in place of its coefficient list, meaning the objective's.
 
+Cut rows the solver's LPs carried are derived constraints like any other (#518): a
+Chvatal-Gomory cut is one rnd step, a split cut (Gomory mixed-integer, MIR) two asm steps for
+the disjunction's sides, a lin step under each and the uns step that discharges them, as the
+paper derives split cuts. Nothing is taken on trust: a cut with one coefficient changed is
+rejected at the step that no longer proves it.
+
 Exit status: 0 the claim is proved and the solution is exactly feasible (or within
 --feas-tol, when given) with the gap within tolerance; 1 the certificate is rejected; 2 every
 step checks but optimality is not shown (the gap exceeds the tolerance, or the solution is

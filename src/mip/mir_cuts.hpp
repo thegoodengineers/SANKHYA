@@ -57,6 +57,9 @@ struct MirOptions {
   /// closest simple or VARIABLE bound, divisor trials delta / 2, / 4, / 8 after the best
   /// delta, complementation of the integer columns, the most efficacious cut kept.
   bool cmir = false;
+  /// Certificate mode (#518): each plain MIR cut carries the split it rests on
+  /// (cut_derivation.hpp). c-MIR cuts carry none.
+  bool derive = false;
 };
 
 [[nodiscard]] std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,

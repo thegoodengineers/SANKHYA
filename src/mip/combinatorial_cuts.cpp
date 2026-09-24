@@ -3,6 +3,7 @@
 // argument for each family are on the declarations.
 
 #include "combinatorial_cuts.hpp"
+#include "cut_derivation.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -216,6 +217,8 @@ namespace {
 struct IntegerRow {
   std::map<Index, double> coef;  // integer-valued, in x'
   double rhs = 0.0;
+  Index row = -1;     ///< the model row
+  double sign = 1.0;  ///< +1 its upper side, -1 its lower side (negated)
 };
 
 /// A fixed-size set of small integers, as 64-bit words.
@@ -359,7 +362,7 @@ std::vector<std::vector<int>> mod2_row_sets(const std::vector<IntegerRow>& rows,
 std::vector<Cut> generate_zero_half_cuts(const Model& model, const Solution& solution,
                                          const std::vector<double>& col_lower,
                                          const std::vector<double>& col_upper,
-                                         CombinatorialCutStats* stats) {
+                                         CombinatorialCutStats* stats, bool derive) {
   std::vector<Cut> cuts;
   const Index n = model.num_cols();
   const auto un = static_cast<std::size_t>(n);
@@ -398,6 +401,8 @@ std::vector<Cut> generate_zero_half_cuts(const Model& model, const Solution& sol
       if (!std::isfinite(bound)) continue;
       IntegerRow r;
       r.rhs = bound;
+      r.row = i;
+      r.sign = sign;
       for (Index k = 0; k < row.size; ++k) {
         const Index j = row.rows[k];
         const auto u = static_cast<std::size_t>(j);
@@ -481,6 +486,14 @@ std::vector<Cut> generate_zero_half_cuts(const Model& model, const Solution& sol
     cut.coeff.assign(un, 0.0);
     for (const auto& [j, c] : in_x) cut.coeff[static_cast<std::size_t>(j)] = c;
     cut.rhs = rhs;
+    if (derive) {  // #518: 1/2 on each row side of the set, then Chvatal-Gomory rounding
+      auto d = std::make_shared<CutDerivation>();
+      for (const int r : set) {
+        const IntegerRow& row = rows[static_cast<std::size_t>(r)];
+        d->rows[0].emplace_back(row.row, 0.5 * row.sign);
+      }
+      cut.derivation = std::move(d);
+    }
     cuts.push_back(std::move(cut));
   }
   return cuts;

@@ -3,6 +3,7 @@
 // and for the references each family is written from.
 
 #include "cuts.hpp"
+#include "cut_derivation.hpp"
 
 #include <fmt/format.h>
 
@@ -1050,7 +1051,8 @@ std::optional<detail::ReconstructedTableauRow> RootGmiContext::tableau_row(
   return row;
 }
 
-std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution, bool safe) {
+std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution, bool safe,
+                                   bool derive) {
   std::vector<Cut> cuts;
   RootGmiContext context(model, solution);
   if (!context.is_valid) return cuts;
@@ -1086,6 +1088,7 @@ std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution,
       cut_opt->rhs +=
           tol::kGmiRhsRelaxAbsolute + tol::kGmiRhsRelaxRelative * std::abs(cut_opt->rhs);
     }
+    if (derive) cut_opt->derivation = gmi_derivation(model, *row_opt);  // #518
     cuts.push_back(std::move(*cut_opt));
   }
 
