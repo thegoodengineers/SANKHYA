@@ -197,6 +197,11 @@ class Simplex {
     factor_cache_matrix_ = matrix_id;
   }
 
+  /// The caller's own costs, before scaling, for the distinct-cost test of
+  /// perturb_costs_at_start() (#465): column scaling turns {0, 1} into as many values as
+  /// there are scale factors, and the test is about the model, not its scaling.
+  void count_distinct_costs_on(const std::vector<double>* costs) { original_costs_ = costs; }
+
   /// The primal simplex, from the slack basis or from `warm`.
   Solution run(const WarmStart* warm = nullptr);
   /// The dual simplex (#65), from the slack basis or from `warm`; hands over to the primal
@@ -219,7 +224,12 @@ class Simplex {
   /// Shift every nonbasic cost in the direction that keeps its reduced cost dual feasible,
   /// so the dual ratio test stops tying. Recomputes the reduced costs.
   void perturb_costs();
+  /// Koberstein's perturbation at the start (#465, dual_perturb_costs_at_start): every
+  /// nonbasic structural cost moved away from dual infeasibility, when the costs take few
+  /// distinct values. Returns whether it was applied.
+  bool perturb_costs_at_start();
   /// Put the exact costs back and recompute the reduced costs. Safe to call when inactive.
+  /// Undoes the perturbations and every Harris cost shift alike.
   void remove_cost_perturbation();
 
  private:
@@ -259,9 +269,20 @@ class Simplex {
   [[nodiscard]] Index choose_leaving_row() const;
   /// rho_ = B^-T e_r and pivot_row_[j] = rho . a_j for every nonbasic column j.
   void compute_pivot_row(Index leaving_slot);
-  /// The bounded dual ratio test with bound flipping (Maros ch. 10; Koberstein 2005).
+  /// The bounded dual ratio test with bound flipping (Maros ch. 10; Koberstein 2005), by
+  /// the rule dual_ratio_test selects (dual_ratio.cpp).
   [[nodiscard]] DualRatioResult dual_ratio_test(Index leaving_slot,
                                                 bool leaving_to_upper) const;
+  [[nodiscard]] DualRatioResult dual_ratio_test_textbook(Index leaving_slot,
+                                                         bool leaving_to_upper) const;
+  /// Harris's two passes inside the bound-flipping test (#465; Harris 1973, Koberstein
+  /// 2005 ch. 6): the entering column may carry a wrong-signed reduced cost within
+  /// kDualHarrisRelaxation, which the loop removes with shift_cost() before it steps.
+  [[nodiscard]] DualRatioResult dual_ratio_test_harris(Index leaving_slot,
+                                                       bool leaving_to_upper) const;
+  /// Move cost_[k] (and reduced_cost_[k] with it) by `amount`, saving the exact costs the
+  /// first time any cost moves; remove_cost_perturbation() undoes every shift (#465).
+  void shift_cost(Index k, double amount);
   void reset_dual_weights();
   /// Dual steepest edge (#411): every weight set to the exact squared norm of its row of
   /// B^-1, one BTRAN per row. The slack basis has them all at 1 without the solves.
@@ -426,6 +447,13 @@ class Simplex {
   bool cost_perturbed_ = false;
   std::vector<double> unperturbed_cost_;
   Count cost_perturbations_ = 0;
+  /// Harris cost shifts (#465): set once any cost has been shifted, sharing
+  /// unperturbed_cost_ with the perturbation. Either flag means the costs are not the
+  /// model's, and no optimum is claimed from the dual loop while one is set.
+  bool cost_shifted_ = false;
+  Count cost_shifts_ = 0;
+  bool dual_harris_ = false;                             ///< dual_ratio_test=harris
+  const std::vector<double>* original_costs_ = nullptr;  ///< see count_distinct_costs_on()
 
   /// Number of basis columns swapped for logicals to escape a singular basis (#34).
   Count repaired_columns_ = 0;

@@ -59,12 +59,13 @@
 // boxed problem: the boxes are gone before finish() runs, on every exit.
 //
 // THE RATIO TEST'S PIVOT FLOOR IS RELATIVE TO THE ROW (#244), and the optimal exit sums
-// what its wrong-signed reduced costs price before it claims anything (see the loop). What
-// is not here is the Harris variant of the dual ratio test. Cost perturbation against
-// dual degeneracy IS here (COST PERTURBATION, below): a stall perturbs the nonbasic costs
-// and iterates on, and only a stall that survives that hands the basis to the primal loop,
-// which has its own anti-degeneracy machinery - so a stall costs iterations and never a
-// wrong answer.
+// what its wrong-signed reduced costs price before it claims anything (see the loop). The
+// ratio tests - the textbook one and, behind dual_ratio_test=harris, Harris's two passes
+// with cost shifting (#465) - and the cost perturbation against dual degeneracy live in
+// dual_ratio.cpp: a stall perturbs the nonbasic costs and iterates on (or, behind
+// dual_perturb_costs_at_start, the costs are perturbed before the first pivot), and only a
+// stall that survives that hands the basis to the primal loop, which has its own
+// anti-degeneracy machinery - so a stall costs iterations and never a wrong answer.
 
 #include "primal_simplex.hpp"
 #include "simplex_core.hpp"
@@ -110,18 +111,6 @@ constexpr double kDualWeightResetThreshold = 1e6;
 /// where the hand-over reaches a verified feasible point. The disagreement is a symptom of
 /// the basis, not of the tolerance, and the primal loop is the right place to be on it.
 constexpr double kPivotAgreement = 1e-8;
-
-/// COST PERTURBATION, the dual's analogue of the primal loop's bound perturbation. A dual
-/// degenerate vertex has many reduced costs at exactly zero, so the dual ratio test ties
-/// and the dual step is zero; dfl001 spent 1001 consecutive iterations that way and was
-/// handed to the primal, which then needed 15,000 phase-1 iterations. Each NONBASIC cost is
-/// shifted by this fraction of max(1, |c_j|), times the same deterministic per-variable
-/// factor the bound perturbation uses, in the direction that keeps its reduced cost dual
-/// feasible. Nonbasic only: y = B^-T c_B is untouched, so every other reduced cost is too.
-///
-/// 1e-6 and not kPerturbationSize's 1e-9: the shift has to exceed the dual tolerance the
-/// ratio test judges ties by (1e-7), or it changes nothing the test can see.
-constexpr double kDualCostPerturbation = 1e-6;
 
 }  // namespace
 
@@ -448,127 +437,6 @@ void Simplex::update_dual_weights(Index leaving_slot, double pivot) {
 }
 
 // -----------------------------------------------------------------------------------------
-// The dual ratio test
-// -----------------------------------------------------------------------------------------
-
-DualRatioResult Simplex::dual_ratio_test(Index leaving_slot, bool leaving_to_upper) const {
-  // The leaving variable x_r is outside its bounds. Moving the duals by t along rho changes
-  // every nonbasic reduced cost by d_j <- d_j - s t alpha_rj, where s = +1 when x_r is above
-  // its upper bound and -1 when below its lower one (so that the leaving variable's own new
-  // reduced cost, -s t, has the sign its destination bound demands). A nonbasic column
-  // blocks when its reduced cost would cross zero: at its lower bound when s alpha_rj > 0,
-  // at its upper bound when s alpha_rj < 0, and a free column for either sign. The ratio is
-  // d_j / (s alpha_rj), never negative - a reduced cost a hair on the wrong side of zero is
-  // treated as zero rather than as a step backwards.
-  DualRatioResult result;
-  const double s = leaving_to_upper ? 1.0 : -1.0;
-
-  struct Candidate {
-    Index column;
-    double ratio;
-    double alpha_abs;
-    double range;  ///< upper - lower when both are finite, else infinite
-  };
-  std::vector<Candidate> candidates;
-  candidates.reserve(64);
-
-  // THE PIVOT FLOOR IS RELATIVE TO THE ROW (#244). An absolute 1e-9 floor is a statement
-  // about scaled rows; on an unscaled one with entries of order 1e+3 it admits a pivot five
-  // orders below its neighbours, and the basis the next factorization sees is singular. So
-  // the floor is the larger of the absolute tolerance and a fraction of the row's largest
-  // entry among the columns that could enter.
-  double alpha_max = 0.0;
-  for (Index k = 0; k < total_; ++k) {
-    const auto u = static_cast<std::size_t>(k);
-    if (basis_position_[u] >= 0 || status_[u] == BasisStatus::kFixed) continue;
-    alpha_max = std::max(alpha_max, std::fabs(pivot_row_[u]));
-  }
-  const double pivot_floor =
-      std::max(tol::kPivotTolerance, tol::kDualPivotRelativeFloor * alpha_max);
-
-  for (Index k = 0; k < total_; ++k) {
-    const auto u = static_cast<std::size_t>(k);
-    if (basis_position_[u] >= 0) continue;
-    if (status_[u] == BasisStatus::kFixed) continue;
-    const double a = s * pivot_row_[u];
-    if (std::fabs(a) <= pivot_floor) continue;
-    bool eligible = false;
-    switch (status_[u]) {
-      case BasisStatus::kAtLower: eligible = a > 0.0; break;
-      case BasisStatus::kAtUpper: eligible = a < 0.0; break;
-      case BasisStatus::kNonbasicFree: eligible = true; break;
-      case BasisStatus::kFixed:
-      case BasisStatus::kBasic:
-      case BasisStatus::kUnknown: break;
-    }
-    if (!eligible) continue;
-    double ratio = reduced_cost_[u] / a;
-    if (ratio < 0.0) ratio = 0.0;
-    const double lo = lower_[u];
-    const double hi = upper_[u];
-    const double range = is_finite_bound(lo) && is_finite_bound(hi)
-                             ? hi - lo
-                             : std::numeric_limits<double>::infinity();
-    candidates.push_back({k, ratio, std::fabs(a), range});
-  }
-
-  if (candidates.empty()) {
-    result.dual_unbounded = true;
-    return result;
-  }
-  std::sort(candidates.begin(), candidates.end(),
-            [](const Candidate& x, const Candidate& y) { return x.ratio < y.ratio; });
-
-  // BOUND FLIPPING (Maros ch. 10, Koberstein sec. 3.3). The dual objective along the step
-  // is piecewise linear and concave: its slope starts at the leaving row's primal
-  // infeasibility and drops by |alpha_rj| * (upper_j - lower_j) each time a BOXED column's
-  // reduced cost crosses zero - because that column can simply be moved to its other bound
-  // and stay dual feasible. So the step runs past every boxed breakpoint while the slope
-  // stays positive, flipping those columns, and stops at the first breakpoint it cannot
-  // pass: a column with only one bound, or one whose flip would turn the slope negative.
-  // That column enters. On a MILP relaxation nearly every column is boxed, and one dual
-  // pivot then does the work of many.
-  const Index leaving = basis_[static_cast<std::size_t>(leaving_slot)];
-  const double x_r = x_basic_[static_cast<std::size_t>(leaving_slot)];
-  double slope = leaving_to_upper ? x_r - upper_[static_cast<std::size_t>(leaving)]
-                                  : lower_[static_cast<std::size_t>(leaving)] - x_r;
-
-  std::size_t stop = 0;
-  while (stop < candidates.size()) {
-    const Candidate& candidate = candidates[stop];
-    if (!std::isfinite(candidate.range)) break;
-    const double drop = candidate.alpha_abs * candidate.range;
-    // Flip only while the row stays infeasible beyond tolerance afterwards; a flip that
-    // lands the row inside its bounds is the whole step, and the pivot is not needed.
-    if (slope - drop <= primal_tolerance_) break;
-    slope -= drop;
-    result.flips.push_back(candidate.column);
-    ++stop;
-  }
-  if (stop == candidates.size()) {
-    // Every candidate was boxed and passed, and the dual objective still climbs: the dual
-    // ray is unbounded, so the primal is infeasible. The flips are moot.
-    result.flips.clear();
-    result.dual_unbounded = true;
-    return result;
-  }
-
-  // Among the candidates tied at the stopping ratio, the largest pivot - the same tie-break
-  // the primal ratio test uses, for the same reason: a tiny pivot element is how a basis
-  // decays. (A Harris two-pass window here was measured for #244 and set aside: without
-  // cost shifting its tolerance-sized wrong-signed reduced costs accumulate across pivots,
-  // 6.8e-6 on etamacro, and the status guard downgrades the claim.)
-  const double stop_ratio = candidates[stop].ratio;
-  std::size_t best = stop;
-  for (std::size_t i = stop; i < candidates.size(); ++i) {
-    if (candidates[i].ratio > stop_ratio + tol::kRatioTestFeasibility) break;
-    if (candidates[i].alpha_abs > candidates[best].alpha_abs) best = i;
-  }
-  result.entering = candidates[best].column;
-  return result;
-}
-
-// -----------------------------------------------------------------------------------------
 // The iteration loop
 // -----------------------------------------------------------------------------------------
 
@@ -582,6 +450,9 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   compute_reduced_costs(false);
   make_dual_feasible();
   reset_dual_weights();
+  // #465, both off by default until their A/B on main.
+  dual_harris_ = options_.get_string("dual_ratio_test") == "harris";
+  if (options_.get_bool("dual_perturb_costs_at_start")) perturb_costs_at_start();
 
   int degenerate_run = 0;
   const auto hand_over = [&](const std::string& why) -> std::optional<Solution> {
@@ -654,7 +525,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       // OPTIMAL FOR THE PERTURBED COSTS IS NOT OPTIMAL, exactly as the primal loop says of
       // its perturbed bounds. The point is primal feasible, and with the exact costs back
       // it is a phase-2 start for the primal loop: usually a handful of pivots.
-      if (cost_perturbed_) {
+      if (cost_perturbed_ || cost_shifted_) {
         return hand_over("optimal under cost perturbation; exact costs restored");
       }
       // OPTIMAL WITHIN TOLERANCE IS NOT OPTIMAL WHEN THE TOLERANCE IS WORTH MONEY (#244).
@@ -869,6 +740,17 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
                       pivot, pivot_by_row));
     }
 
+    // HARRIS'S WRONG-SIGNED ENTERING COLUMN (#465). The Harris test may pick a column whose
+    // reduced cost sits up to kDualHarrisRelaxation on the wrong side of zero; stepping on
+    // it would move the duals backwards. Its cost is shifted so the reduced cost is exactly
+    // zero instead, and the step is degenerate (Koberstein 2005, ch. 6). The shift is
+    // undone with every other cost change before any answer leaves this loop.
+    if (dual_harris_) {
+      const double d = reduced_cost_[e];
+      const double a = (to_upper ? 1.0 : -1.0) * pivot_by_row;
+      if (a > 0.0 ? d < 0.0 : d > 0.0) shift_cost(entering, -d);
+    }
+
     // Dual step length: the duals move by this much along rho below, and the stall counter
     // reads it here.
     const double dual_step = reduced_cost_[e] / pivot_by_row;
@@ -966,36 +848,6 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   }
 }
 
-void Simplex::perturb_costs() {
-  if (cost_perturbed_) return;
-  unperturbed_cost_ = cost_;
-  for (Index k = 0; k < total_; ++k) {
-    const auto u = static_cast<std::size_t>(k);
-    if (basis_position_[u] >= 0) continue;
-    // The per-variable factor in (0.25, 1] that perturbation_for() encodes, rescaled from
-    // the bound perturbation's size to the cost one's, times the cost's own magnitude.
-    const double factor = perturbation_for(k) / kPerturbationSize;
-    const double shift = kDualCostPerturbation * factor * std::max(1.0, std::fabs(cost_[u]));
-    if (status_[u] == BasisStatus::kAtLower) {
-      cost_[u] += shift;  // d_j = c_j - a_j^T y grows: further inside dual feasibility
-    } else if (status_[u] == BasisStatus::kAtUpper) {
-      cost_[u] -= shift;  // d_j shrinks: further inside on the upper side
-    }
-    // Fixed and free nonbasic columns are left alone: a fixed one has no sign condition
-    // to protect, and a free one must keep its reduced cost at zero.
-  }
-  cost_perturbed_ = true;
-  ++cost_perturbations_;
-  compute_reduced_costs(false);
-}
-
-void Simplex::remove_cost_perturbation() {
-  if (!cost_perturbed_) return;
-  cost_ = unperturbed_cost_;
-  cost_perturbed_ = false;
-  compute_reduced_costs(false);
-}
-
 Solution Simplex::run_dual(const WarmStart* warm) {
   Timer timer;
   limits_ = ResourceLimits(options_, logger_);
@@ -1013,8 +865,8 @@ Solution Simplex::run_dual(const WarmStart* warm) {
   if (bound_flips_ > 0 || dual_iterations_ > 0) {
     logger_.verbose(
         "dual simplex: {} iterations, {} bound flips, {} weight resets, {} cost "
-        "perturbation(s)",
-        dual_iterations_, bound_flips_, dual_weight_resets_, cost_perturbations_);
+        "perturbation(s), {} Harris cost shift(s)",
+        dual_iterations_, bound_flips_, dual_weight_resets_, cost_perturbations_, cost_shifts_);
   }
   if (done) return *done;
   algorithm_name_ = "simplex-dual+primal";

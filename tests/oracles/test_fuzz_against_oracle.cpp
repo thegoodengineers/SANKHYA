@@ -16,6 +16,7 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -45,18 +46,21 @@ struct Tally {
   }
 };
 
-Solution solve_float(const Model& model, const std::string& ratio_test = "textbook") {
+/// Extra solver options as key=value pairs, on top of the defaults.
+using OptionList = std::vector<std::pair<std::string, std::string>>;
+
+Solution solve_float(const Model& model, const OptionList& extra = {}) {
   Options options;
   options.set_bool("log_to_console", false);
   std::string error;
-  if (ratio_test != "textbook") {
-    EXPECT_TRUE(options.set_from_string("ratio_test", ratio_test, &error)) << error;
+  for (const auto& [key, value] : extra) {
+    EXPECT_TRUE(options.set_from_string(key, value, &error)) << error;
   }
   return solve(model, options);
 }
 
 /// Compare one instance. Returns true when the two engines agree.
-bool compare(const GeneratedLp& lp, Tally* tally, const std::string& ratio_test = "textbook") {
+bool compare(const GeneratedLp& lp, Tally* tally, const OptionList& extra = {}) {
   const OracleResult exact = solve_exact(lp);
   if (exact.status == OracleStatus::kOverflow ||
       exact.status == OracleStatus::kIterationLimit) {
@@ -65,7 +69,7 @@ bool compare(const GeneratedLp& lp, Tally* tally, const std::string& ratio_test 
   }
 
   const Model model = to_model(lp);
-  const Solution approximate = solve_float(model, ratio_test);
+  const Solution approximate = solve_float(model, extra);
 
   const auto disagree = [&](const std::string& why) {
     ++tally->mismatched;
@@ -177,13 +181,41 @@ TEST(FuzzAgainstOracle, HarrisRatioTestAgainstOracle) {
   Tally tally;
 
   for (int trial = 0; trial < 1000; ++trial) {
-    compare(random_lp(rng, config), &tally, "harris");
+    compare(random_lp(rng, config), &tally, {{"ratio_test", "harris"}});
   }
   for (int trial = 0; trial < 1000; ++trial) {
-    compare(degenerate_lp(rng, config), &tally, "harris");
+    compare(degenerate_lp(rng, config), &tally, {{"ratio_test", "harris"}});
   }
 
   report("2000 instances (random + degenerate) under ratio_test=harris", tally);
+  EXPECT_EQ(tally.mismatched, 0);
+  EXPECT_GT(tally.compared(), 1600) << "the oracle abstained too often to prove anything";
+}
+
+TEST(FuzzAgainstOracle, DualHarrisAndStartPerturbationAgainstOracle) {
+  // #465: the dual simplex's Harris ratio test with cost shifting and its cost perturbation
+  // at the start are opt-in, and both change the costs the dual loop works on; the exact
+  // oracle is what says every such change was undone before the answer left. Same
+  // generators and trial counts as the primal Harris run above, under the dual simplex with
+  // both options on.
+  std::mt19937_64 rng(465465465);
+  GeneratorConfig config;
+  Tally tally;
+  const OptionList dual = {{"algorithm", "dual-simplex"},
+                           {"dual_ratio_test", "harris"},
+                           {"dual_perturb_costs_at_start", "true"}};
+
+  for (int trial = 0; trial < 1000; ++trial) {
+    compare(random_lp(rng, config), &tally, dual);
+  }
+  for (int trial = 0; trial < 1000; ++trial) {
+    compare(degenerate_lp(rng, config), &tally, dual);
+  }
+
+  report(
+      "2000 instances (random + degenerate) under the dual simplex, dual_ratio_test=harris "
+      "and dual_perturb_costs_at_start",
+      tally);
   EXPECT_EQ(tally.mismatched, 0);
   EXPECT_GT(tally.compared(), 1600) << "the oracle abstained too often to prove anything";
 }

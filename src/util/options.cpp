@@ -237,6 +237,32 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"harris", "textbook"}});
+    s.push_back({"dual_ratio_test",
+                 OptionType::String,
+                 std::string("textbook"),
+                 "Dual simplex entering-variable rule inside the bound-flipping ratio test "
+                 "(#465): textbook (default; the tightest breakpoint, ties to the largest "
+                 "pivot) or harris (Harris 1973 two passes per group of breakpoints: the step "
+                 "bound with every reduced cost relaxed by a tenth of the dual tolerance, "
+                 "then the largest pivot under it; an entering reduced cost of the wrong sign "
+                 "is removed by shifting its cost, and a solve that shifted a cost ends with "
+                 "the exact costs and the primal simplex; Koberstein 2005, ch. 6). Not the "
+                 "default until its A/B on main.",
+                 0.0,
+                 0.0,
+                 {"harris", "textbook"}});
+    s.push_back({"dual_perturb_costs_at_start",
+                 OptionType::Bool,
+                 false,
+                 "Dual simplex (#465): perturb the nonbasic structural costs before the first "
+                 "iteration when they take fewer than n/4 distinct values, by 1e-5 + 1e-5 "
+                 "|c_j| times a per-column factor in [0.5, 1], in the direction that keeps "
+                 "the basis dual feasible (Koberstein 2005, ch. 6). The exact costs are "
+                 "restored at the end and the primal simplex finishes. Off by default; without "
+                 "it the costs are perturbed only after a dual-degenerate stall.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mps_format",
                  OptionType::String,
                  std::string("auto"),
