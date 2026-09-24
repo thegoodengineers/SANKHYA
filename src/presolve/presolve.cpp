@@ -3,8 +3,6 @@
 
 #include "presolve.hpp"
 
-#include <fmt/format.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -255,9 +253,9 @@ void log_presolve_report(const Solution::PresolveReport& report, Logger& logger)
   line("probing: conflicts", report.probing_conflicts);
   line("probing: cliques", report.probing_cliques);
   line("integer bounds rounded", report.integer_bounds_rounded);
-  line("implied integers", report.implied_integers);
   line("coefficients tightened", report.coefficients_tightened);
   line("propagated bounds", report.propagated_bounds);
+  line("implied integers", report.implied_integers);
   // Declines are reported for the same reason the reductions are: a model that came back
   // barely smaller than it went in is explained by these, not by the counts above.
   line("quadratic columns kept", report.quadratic_columns_protected);
@@ -280,6 +278,9 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   const bool dominated_columns = options.get_bool("presolve_dominated_columns");
   const bool implied_free = options.get_bool("presolve_implied_free");
   const bool implied_integer = options.get_bool("presolve_implied_integer");
+  const bool has_integer_columns =
+      std::any_of(model.col_type.begin(), model.col_type.end(),
+                  [](VarType type) { return type == VarType::kInteger; });
 
   Timer presolve_clock;
   Workspace work;
@@ -386,7 +387,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
     // Runs FIRST in each pass so the updated integer flags are visible to all subsequent
     // reductions in the same pass. Running to a fixpoint: each newly promoted variable may
     // unlock further detections in the same or another row.
-    if (implied_integer && !result.proved_infeasible) {
+    // Only in a model that already has integer columns: in a pure LP the pass would turn a
+    // singleton equality's column into an integer and the LP into a MILP, losing its duals,
+    // basis and ranging for nothing (review of #629).
+    if (implied_integer && has_integer_columns && !result.proved_infeasible) {
       bool ii_changed = true;
       while (ii_changed) {
         ii_changed = false;
@@ -401,17 +405,21 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           if (std::fabs(work.row_upper[r] - work.row_lower[r]) > feasibility) continue;
           if (!finite(work.row_lower[r])) continue;
           const double rhs = work.row_lower[r];
-          // RHS must be integer.
-          if (std::fabs(rhs - std::round(rhs)) > tol::kIntegrality) continue;
+          // RHS must be an integer EXACTLY. Within a tolerance the claim fails: with
+          // 2.0000005 y + x = 3 and y up to 1000, x misses an integer by 5e-4, and promoting it
+          // would cut off feasible points with no symptom (review of #629).
+          if (rhs != std::round(rhs)) continue;
           // Find the one non-integer live variable, if exactly one exists.
           Index candidate = -1;
           double candidate_coeff = 0.0;
           bool all_others_integer = true;
+          Index integer_partners = 0;
           for (const auto& [j, a] : work.rows[r]) {
             if (work.col_dead[static_cast<std::size_t>(j)]) continue;
             if (is_integer_col(j)) {
-              // Coefficient must be integer too.
-              if (std::fabs(a - std::round(a)) > tol::kIntegrality) {
+              ++integer_partners;
+              // Coefficient must be an integer too, exactly.
+              if (a != std::round(a)) {
                 all_others_integer = false;
                 break;
               }
@@ -425,35 +433,26 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
               candidate_coeff = a;
             }
           }
-          if (!all_others_integer || candidate < 0) continue;
-          // Guard against a near-zero coefficient that would cause division by zero below.
-          // A zero-coefficient entry shouldn't appear in sparse storage, but coefficient
-          // updates during substitution can produce near-zeros; skip the row in that case.
-          if (std::fabs(candidate_coeff) < tol::kIntegrality) continue;
-          // candidate_coeff must divide evenly into an integer (i.e. rhs/a and every other
-          // a_other/a must be integer). Equivalent to: |a| divides gcd of rhs and all integer
-          // coefficients. The simplest sufficient check: |a| == 1.0 or rhs/a is integer and
-          // for all other live (integer) entries a_other/a is integer.
-          if (std::fabs(std::fabs(candidate_coeff) - 1.0) > tol::kIntegrality) {
-            // Check the general divisibility condition.
-            bool divides = true;
-            if (std::fabs(rhs / candidate_coeff - std::round(rhs / candidate_coeff)) >
-                tol::kIntegrality) {
-              divides = false;
-            }
-            if (divides) {
-              for (const auto& [j, a] : work.rows[r]) {
-                if (work.col_dead[static_cast<std::size_t>(j)]) continue;
-                if (j == candidate) continue;
-                if (std::fabs(a / candidate_coeff - std::round(a / candidate_coeff)) >
-                    tol::kIntegrality) {
-                  divides = false;
-                  break;
-                }
-              }
-            }
-            if (!divides) continue;
+          // A row with no integer partner only fixes x_j to rhs / a: nothing to promote.
+          if (!all_others_integer || candidate < 0 || integer_partners == 0) continue;
+          // x_j = (rhs - sum a_k y_k) / c. With every datum an EXACT integer below 2^53, and c
+          // dividing rhs and every a_k, the right side is an integer at every integer y. c must
+          // be an integer too: a fractional c (0.3) leaves binary rounding in every quotient.
+          // fmod is exact on integer-valued doubles, so the test itself adds no rounding.
+          const auto exact_integer = [](double v) {
+            return v == std::round(v) && std::fabs(v) < tol::kImpliedIntegerDataLimit;
+          };
+          if (!exact_integer(candidate_coeff) || candidate_coeff == 0.0 ||
+              !exact_integer(rhs)) {
+            continue;
           }
+          bool divides = std::fmod(rhs, candidate_coeff) == 0.0;
+          for (const auto& [j, a] : work.rows[r]) {
+            if (!divides) break;
+            if (work.col_dead[static_cast<std::size_t>(j)] || j == candidate) continue;
+            divides = exact_integer(a) && std::fmod(a, candidate_coeff) == 0.0;
+          }
+          if (!divides) continue;
           // Promote.
           work.col_implied_integer[static_cast<std::size_t>(candidate)] = true;
           ++result.report.implied_integers;

@@ -125,5 +125,43 @@ TEST(PresolveImpliedInteger, NonUnitCoefficientDivisible) {
   EXPECT_GE(result.report.implied_integers, 1);
 }
 
+// Review of #629: the data must be integers EXACTLY. 2.0000005 x1 + x0 = 3 with x1 integer
+// in [0, 1000]: x0 = 3 - 2.0000005 x1 misses an integer by up to 5e-4, so promoting x0
+// would cut off feasible points. Within the old 1e-6 tolerance it was promoted.
+TEST(PresolveImpliedInteger, ANearIntegerCoefficientIsNotEnough) {
+  Model model = build({{1.0, 2.0000005}}, {3.0}, {3.0}, {1.0, 0.0}, {-kInfinity, 0.0},
+                      {kInfinity, 1000.0}, {false, true});
+  Logger logger(nullptr);
+  const presolve::Result result = presolve::presolve(model, with_implied_integer(true), logger);
+  EXPECT_EQ(result.report.implied_integers, 0);
+}
+
+// A pure LP is never touched: a singleton equality x0 = 3 would otherwise make x0 integer
+// and the LP a MILP, which loses its duals and basis.
+TEST(PresolveImpliedInteger, APureLpIsLeftAnLp) {
+  Model model = build({{1.0, 0.0}, {1.0, 1.0}}, {3.0, 4.0}, {3.0, 4.0}, {1.0, 1.0}, {0.0, 0.0},
+                      {10.0, 10.0}, {false, false});
+  Logger logger(nullptr);
+  const presolve::Result result = presolve::presolve(model, with_implied_integer(true), logger);
+  EXPECT_EQ(result.report.implied_integers, 0);
+  for (const VarType type : result.model.col_type) EXPECT_EQ(type, VarType::kContinuous);
+}
+
+// In a MILP, a row whose only live column is the continuous one has no integer partner:
+// it fixes x0 = 3 and proves nothing about integrality. x2 is the model's integer column.
+TEST(PresolveImpliedInteger, ARowWithNoIntegerPartnerPromotesNothing) {
+  Model model =
+      build({{1.0, 0.0, 0.0}, {0.0, 1.0, 1.0}}, {3.0, -kInfinity}, {3.0, 9.5}, {1.0, 1.0, 1.0},
+            {0.0, 0.0, 0.0}, {10.0, 10.0, 10.0}, {false, false, true});
+  Logger logger(nullptr);
+  const presolve::Result result = presolve::presolve(model, with_implied_integer(true), logger);
+  EXPECT_EQ(result.report.implied_integers, 0);
+}
+
+// Off by default until the MIPLIB A/B on main.
+TEST(PresolveImpliedInteger, OffByDefault) {
+  EXPECT_FALSE(Options().get_bool("presolve_implied_integer"));
+}
+
 }  // namespace
 }  // namespace sankhya

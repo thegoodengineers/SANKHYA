@@ -338,14 +338,16 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"presolve_implied_integer",
                  OptionType::Bool,
-                 true,
+                 false,
                  "Implied-integer detection in presolve (#513; Achterberg et al. 2020, "
                  "sec. 1.13): a continuous variable that appears in an equality row where "
                  "every other variable is already integer with an integer coefficient, and "
                  "whose own coefficient is +-1 (or divides evenly into an integer), must "
                  "take an integer value in every feasible solution and is promoted to integer. "
                  "The pass runs to a fixpoint: a newly promoted variable can unlock further "
-                 "detections. Only read when presolve is on.",
+                 "detections. Exact integer data only, and only in a model that already has "
+                 "integer columns. Only read when presolve is on. OFF until the MIPLIB A/B "
+                 "on main says what it changes.",
                  0.0,
                  0.0,
                  {}});
