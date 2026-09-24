@@ -299,6 +299,9 @@ Solution BranchAndBound::run() {
 
   logger_.info("Branch and bound: {} rows, {} columns, {} integer columns",
                original_.num_rows(), original_.num_cols(), integer_columns_.size());
+  // Feasibility Jump before any LP (#506), when asked for: an incumbent now prunes from
+  // the first node.
+  run_feasibility_jump(nullptr);
 
   // THE ROOT STARTS WITH NO BOUND PROVED (#289). TreeNode::bound is 0.0 by default, which
   // is a placeholder for "inherited from the parent" and the root has no parent. A search

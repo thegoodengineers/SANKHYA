@@ -49,6 +49,7 @@ LEGS: dict[str, list[str]] = {
     "pump": ["mip_heur_pump=on"],
     "rins": ["mip_heur_rins=on"],
     "rens": ["mip_heur_rens=on"],
+    "feasibility-jump": ["mip_heur_fj=on"],
     "dive-coefficient": ["mip_heur_dive_coefficient=on"],
     "dive-vector-length": ["mip_heur_dive_vector_length=on"],
     "dive-guided": ["mip_heur_dive_guided=on"],

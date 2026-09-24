@@ -458,6 +458,27 @@ const std::vector<OptionSpec>& Options::registry() {
                  1.0,
                  kNoLimit,
                  {}});
+    s.push_back({"mip_heur_fj",
+                 OptionType::String,
+                 std::string("off"),
+                 "Feasibility Jump (#506; Luteberget and Sartor, Math. Programming "
+                 "Computation 15, 2023): weighted local search over the original rows, no LP, "
+                 "once before the root LP from the box point closest to zero and once from "
+                 "the rounded root relaxation, each for mip_fj_work nonzero visits. Every "
+                 "point it finds is checked against the original model before it can become "
+                 "the incumbent. OFF by default, not auto, until its A/B on main; auto "
+                 "follows mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_fj_work",
+                 OptionType::Int,
+                 std::int64_t{tol::kFeasibilityJumpWork},
+                 "The work budget of one Feasibility Jump run (#506), in nonzero visits: "
+                 "counted, not timed, so a run is reproducible.",
+                 1.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"mip_pump_rounds",
                  OptionType::Int,
                  std::int64_t{20},
