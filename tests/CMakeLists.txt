@@ -63,6 +63,7 @@ add_executable(sankhya_tests
   unit/test_pdhg_cuda_regression.cpp
   unit/test_gpu_device.cpp
   unit/test_gpu_memory.cpp
+  unit/test_gpu_heuristics.cpp
   unit/test_multi_gpu.cpp
   unit/test_qp.cpp
   unit/test_convexity_sparse.cpp

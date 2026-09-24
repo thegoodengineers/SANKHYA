@@ -976,31 +976,48 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"gpu_pump",
                  OptionType::Bool,
                  false,
-                 "GPU feasibility pump for MIP (#509). CURRENTLY A STUB: the kernel is not "
-                 "written and feasibility_pump() returns nothing, so the search behaves "
-                 "exactly as with the option off. The design: PDHG on the device solves each "
-                 "L1 projection LP; the outer loop rounds to integer and repeats until "
-                 "feasible or a round limit. Default OFF; it earns a default by a clean A/B "
-                 "on main once the kernel exists. "
+                 "GPU feasibility pump for MIP (#509, off by default): PDHG on the device "
+                 "solves each L1 projection LP (min sum|x_j - x^INT_j| over integer columns "
+                 "j, linearised with two auxiliary variables per column); the outer loop "
+                 "rounds to integer and repeats; stalls are broken by flipping the most-"
+                 "fractional column's rounding. Requires SANKHYA_ENABLE_CUDA=ON and a CUDA "
+                 "device; falls back silently when neither is present. "
                  "References: Fischetti, Glover & Lodi, Math. Prog. 104 (2005); "
                  "Mexi et al., arXiv:2307.03466; Corduk et al., arXiv:2510.20499.",
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"gpu_pump_max_iter",
+                 OptionType::Int,
+                 std::int64_t{50},
+                 "Maximum outer-loop iterations for the GPU feasibility pump (#509). "
+                 "Each iteration solves one L1 projection LP on the GPU.",
+                 1.0,
+                 1e6,
+                 {}});
     s.push_back(
         {"gpu_fix_and_prop",
          OptionType::Bool,
          false,
-         "GPU fix-and-propagate heuristic for MIP (#509). CURRENTLY A STUB: the kernel "
-         "is not written and fix_and_propagate() returns nothing, so the search behaves "
-         "exactly as with the option off. The design: fix near-integer columns from the "
-         "LP relaxation, run GPU domain propagation (#510) to tighten the rest, solve "
-         "the residual LP. Default OFF; it earns a default by a clean A/B on main once "
-         "the kernel exists. "
+         "GPU fix-and-propagate heuristic for MIP (#509, off by default): sort integer "
+         "columns by ascending fractionality from the LP relaxation, fix each to its "
+         "nearest integer, run GPU domain propagation (#510) after each fix; backtrack "
+         "to the other rounding on infeasibility; solve the residual LP on the remaining "
+         "free columns. Requires SANKHYA_ENABLE_CUDA=ON and a CUDA device. "
          "Reference: Corduk et al., arXiv:2510.20499.",
          0.0,
          0.0,
          {}});
+    s.push_back({"gpu_fix_backtrack",
+                 OptionType::Int,
+                 std::int64_t{5},
+                 "Maximum backtracks allowed in GPU fix-and-propagate (#509): if propagation "
+                 "is infeasible after fixing a column and the alternative rounding is also "
+                 "infeasible, backtrack credits are consumed; the heuristic aborts when "
+                 "exhausted.",
+                 0.0,
+                 1000.0,
+                 {}});
     s.push_back({"gpu_on_device_loop",
                  OptionType::Bool,
                  false,

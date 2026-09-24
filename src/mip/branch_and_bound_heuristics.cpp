@@ -17,6 +17,10 @@
 #include "feasibility_jump.hpp"
 #include "parallel_search.hpp"
 
+#ifdef SANKHYA_ENABLE_CUDA
+#include "../gpu/gpu_heuristics.hpp"
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -45,6 +49,8 @@ enum Slot : std::size_t {
   kRens,
   kLocalMip,
   kFeasibilityJump,
+  kGpuPump,
+  kGpuFixAndProp,
   kSlots
 };
 constexpr const char* kNames[kSlots] = {"rounding",
@@ -58,7 +64,9 @@ constexpr const char* kNames[kSlots] = {"rounding",
                                         "RINS",
                                         "RENS",
                                         "local MIP",
-                                        "feasibility jump"};
+                                        "feasibility jump",
+                                        "GPU pump",
+                                        "GPU fix-and-propagate"};
 static_assert(kDiveGuided - kDiveFractional + 1 == kDiveRules);
 
 /// The options a sub-MIP (RINS, RENS) is solved with: the search's own, quiet, capped at
@@ -378,6 +386,32 @@ void BranchAndBound::run_root_pump(const Solution& relaxation) {
   s.work += solves;
   if (!x.empty()) (void)offer_from(kPump, x);
   s.seconds += clock.elapsed_seconds();
+}
+
+// GPU heuristics (#509): feasibility pump and fix-and-propagate on GPU PDHG relaxations.
+// Both run at the root only, only when no incumbent is known yet, and only in sequential
+// search (parallel workers skip them via seed_ != nullptr && !seed_->is_root).
+void BranchAndBound::run_gpu_heuristics() {
+  if (have_incumbent_ || quadratic_) return;
+  if (seed_ != nullptr && !seed_->is_root) return;
+#ifdef SANKHYA_ENABLE_CUDA
+  {
+    HeuristicStats& s = heuristic_stats_[kGpuPump];
+    const Timer clock;
+    ++s.calls;
+    const auto sol = gpu::feasibility_pump(original_, options_);
+    if (sol.has_value()) (void)offer_from(kGpuPump, sol->x);
+    s.seconds += clock.elapsed_seconds();
+  }
+  if (!have_incumbent_) {
+    HeuristicStats& s = heuristic_stats_[kGpuFixAndProp];
+    const Timer clock;
+    ++s.calls;
+    const auto sol = gpu::fix_and_propagate(original_, options_);
+    if (sol.has_value()) (void)offer_from(kGpuFixAndProp, sol->x);
+    s.seconds += clock.elapsed_seconds();
+  }
+#endif
 }
 
 // Feasibility Jump (#506; Luteberget and Sartor, Math. Programming Computation 15, 2023),
