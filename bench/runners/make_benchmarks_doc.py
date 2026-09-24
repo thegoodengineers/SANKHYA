@@ -2234,6 +2234,15 @@ def gpu_section(path: Path | None) -> str:
         f"GPU: {gpu}.  ",
         "Instances are synthetic KKT LPs with ~5 nonzeros per column (seed 42).",
         "",
+        "> **GPU iteration counts vary run to run (#448, #451).** The device reductions inside "
+        "the GPU mat-vec are not bitwise reproducible, and a one-ulp difference can flip a "
+        "restart decision and shift the whole trajectory, which is why every GPU cell is the "
+        "median of repeated solves. Do not compare a GPU iteration count against the CPU count "
+        "for the same instance: the two engines take different trajectories to the same "
+        "tolerance. The regression test holds them to agreement at the stopping tolerance, "
+        "not to the same iterate (`tests/unit/test_pdhg_cuda_regression.cpp`); see also "
+        "`docs/ARCHITECTURE.md` section 7.",
+        "",
     ]
 
     # Honest 1e-8 list: sizes where either engine returned 'feasible' (met requested
@@ -2271,12 +2280,17 @@ def gpu_real_section(path: Path | None) -> str:
     """CPU vs GPU PDHG on non-synthetic instances (#446)."""
     if path is None:
         return chr(10).join([
-            "Not yet run. Reproduce with:",
+            "Not yet run on this tier (the datacenter card's run is in 1g.3). Reproduce with:",
             "",
             "```",
             "python bench/runners/fetch_mittelmann.py",
             "python bench/runners/gpu_real_instances.py --binary build_gpu/sankhya",
             "```",
+            "",
+            "> **Needs a CUDA-capable card and a CUDA build** (`-DSANKHYA_ENABLE_CUDA=ON`, the "
+            "CUDA runtime installed). On a build without CUDA, or a machine whose card fails the "
+            "device checks, `gpu=true` warns and runs on the CPU, so both arms of the runner "
+            "would be CPU solves and the GPU column would mean nothing: do not run it there.",
             "",
         ])
     rows = read_csv(path)
