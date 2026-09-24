@@ -81,6 +81,9 @@ Options sub_mip_options(const Options& base, Count node_limit, double time_limit
   sub.set_string("profile_out", "");
   sub.set_string("progress_out", "");
   sub.set_string("conflict_out", "");
+  // A sub-MIP searches a restriction of the model (#500): the known point need not lie in it,
+  // so the debug-solution check is the search's alone.
+  sub.set_string("debug_solution", "");
   // A sub-MIP is one worker's business (#222): it must not start a parallel search of its
   // own inside a tree worker.
   sub.set_int("mip_threads", 1);

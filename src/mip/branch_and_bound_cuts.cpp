@@ -99,6 +99,7 @@ void BranchAndBound::append_cut_rows(const std::vector<Cut>& accepted) {
   assert(working_.row_lower.size() == static_cast<std::size_t>(working_.num_rows()));
   assert(working_.row_upper.size() == static_cast<std::size_t>(working_.num_rows()));
 
+  debug_check_cuts(accepted, old_rows);  // #500: every cut row against the known point
   if (first_cut_row_ < 0) first_cut_row_ = old_rows;
   for (const Cut& cut : accepted) {
     pool_cuts_.push_back(cut);
@@ -196,6 +197,10 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   // unit-coefficient covering and packing rows MIR cannot separate. Derived under the
   // GLOBAL bounds, so they hold at every node.
   add_combinatorial_cuts(initial_relaxation, &candidates);
+  if (debug_.has_value()) {
+    debug_round_ = "root round 1";
+    debug_check_cuts(candidates, -1);  // #500: every candidate, before the filter
+  }
 
   auto filtered = filter_and_deduplicate_cuts(working_, initial_relaxation, candidates,
                                               cut_filter_policy());
@@ -219,6 +224,7 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
     logger_.verbose("root cut selection: {} of {} taken, {} waiting for a tree round",
                     accepted.size(), passed, waiting_cuts_.size());
   }
+  if (debug_.has_value()) append_planted_cut(&accepted);  // a test's planted cut (#500)
   if (accepted.empty()) return;
 
   append_cut_rows(accepted);
@@ -244,14 +250,34 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
 
 void BranchAndBound::tree_cut_round(Index depth, Solution* relaxation) {
   if (most_fractional(relaxation->col_value) < 0) return;
+  // THE OBJECTIVE ROW'S BOUNDS ARE THE NODE'S, NOT THE TREE'S (#500's check found this).
+  // Objective branching (#418) moves them at every node below a split, and every separator
+  // reads row bounds: a {0,1/2} cut combining the branched objective row with a knapsack row
+  // cut off the unique optimum of a 10-binary instance. Tree cuts are kept for the whole
+  // tree, so they are separated with that row free, which is its global state.
+  const auto objective = static_cast<std::size_t>(objective_row_);
+  const double objective_lower = objective_row_ >= 0 ? working_.row_lower[objective] : 0.0;
+  const double objective_upper = objective_row_ >= 0 ? working_.row_upper[objective] : 0.0;
+  if (objective_row_ >= 0) {
+    working_.row_lower[objective] = -kInfinity;
+    working_.row_upper[objective] = kInfinity;
+  }
   std::vector<Cut> candidates =
       generate_mir_cuts(working_, *relaxation, global_lower_, global_upper_);
   add_combinatorial_cuts(*relaxation, &candidates);
+  if (objective_row_ >= 0) {
+    working_.row_lower[objective] = objective_lower;
+    working_.row_upper[objective] = objective_upper;
+  }
   // The cuts an earlier round left waiting (#415) are candidates again: the filter re-tests
   // their violation at THIS node's point, and the selection below scores them afresh.
   candidates.insert(candidates.end(), waiting_cuts_.begin(), waiting_cuts_.end());
   waiting_cuts_.clear();
   if (candidates.empty()) return;
+  if (debug_.has_value()) {
+    debug_round_ = fmt::format("tree round {} (depth {})", tree_cut_rounds_ + 1, depth);
+    debug_check_cuts(candidates, -1);  // #500: every candidate, before the filter
+  }
   auto filtered =
       filter_and_deduplicate_cuts(working_, *relaxation, candidates, cut_filter_policy());
   logger_.verbose("tree cut filter at depth {}: {}", depth, describe_cut_filter(filtered));

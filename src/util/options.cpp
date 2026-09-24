@@ -1350,6 +1350,21 @@ const std::vector<OptionSpec>& Options::registry() {
          {},
          /*planned_for=*/std::string(""),
          /*case_sensitive=*/true});
+    s.push_back(
+        {"debug_solution",
+         OptionType::String,
+         std::string(""),
+         "MILP checking mode (#500): a known feasible or optimal solution (a SANKHYA .sol, or "
+         "`name value` lines as in a MIPLIB .sol). Every presolve reduction, integral row "
+         "rounding, cut row, node propagation, node LP and reduced-cost fixing is checked "
+         "against it, and the first one that cuts it off prints the family, round, node and "
+         "row and aborts. Optimality-based reductions are only guaranteed to keep the unique "
+         "optimum. Off (empty) by default; costs a pass over the point per node.",
+         0.0,
+         0.0,
+         {},
+         /*planned_for=*/std::string(""),
+         /*case_sensitive=*/true});
     s.push_back({"progress_out",
                  OptionType::String,
                  std::string(""),

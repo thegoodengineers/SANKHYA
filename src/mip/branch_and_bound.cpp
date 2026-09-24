@@ -278,6 +278,7 @@ Solution BranchAndBound::run() {
       seed_ == nullptr) {
     append_symmetry_rows();
   }
+  debug_start();  // the debug-solution check (#500); nothing unless the option is set
 
   // Once, here, and not once per node (#76). Built from working_ before any branching has
   // touched its bounds, though it would not matter if it had: only the matrix, the cost and
@@ -479,8 +480,12 @@ Solution BranchAndBound::run() {
     // Moved, not copied: this node will not be solved twice, and the open list must not
     // hold a basis per closed node.
     current_warm_ = std::move(nodes_[static_cast<std::size_t>(node_index)].warm);
+    debug_node_ = node_index;
+    const bool debug_inside = debug_node_contains();  // #500: false with no debug solution
 
-    if (!propagate()) {
+    const bool propagated = propagate();
+    if (debug_inside) debug_after_propagation(propagated);
+    if (!propagated) {
       const bool by_conflict = conflict_pruned_;
       leave();
       ++nodes_pruned_;
@@ -496,6 +501,7 @@ Solution BranchAndBound::run() {
       ProfileScope timed(logger_.profiler(), "node LP", ProfileMode::kDetailed);
       return solve_node();
     }();
+    if (debug_inside) debug_after_node_lp(relaxation);
 
     if (relaxation.status == SolveStatus::kInfeasible) {
       leave();
@@ -579,6 +585,7 @@ Solution BranchAndBound::run() {
     // ordered raw; can_prune() and the gap test round it up to the next value an integer
     // solution can take (#221), so node selection is the same with or without the rounding.
     const double node_bound = internal_objective(relaxation.col_value);
+    if (debug_inside) debug_after_node_lp(relaxation);  // the bound after the cut rounds
 
     // THE PSEUDOCOST OBSERVATION (#69): what branching on this node's column bought, per
     // unit of the fractionality it removed, in the direction it went. Recorded whether or
@@ -906,16 +913,30 @@ Solution solve_branch_and_bound(const Model& model, const Options& options, Logg
   Model tightened = model;
   const RowTightening effect = tighten_integral_rows(&tightened, logger);
   const Model& searched = effect.rows_tightened > 0 ? tightened : model;
+  // The debug-solution check (#500): the model as received and after the rounding above, and
+  // at the end the answer. Nothing happens unless `debug_solution` is set.
+  const std::optional<DebugSolution> debug = load_debug_solution(options, model, logger);
+  if (debug.has_value()) {
+    check_search_input_against_debug_solution(
+        model, effect.rows_tightened > 0 ? &tightened : nullptr, *debug, logger);
+  }
+  const auto checked = [&](Solution result) {
+    if (debug.has_value()) {
+      check_search_result_against_debug_solution(model, result, options, *debug, logger);
+    }
+    return result;
+  };
 
   // PARALLEL TREE SEARCH (#222), when asked for and when the model is one it takes: a MILP,
   // not a pool_complete search (whose pruning reads the pool's cutoff at every node), and
   // not in deterministic mode (the tree a parallel search explores depends on timing).
   const int threads = parallel_threads(searched, options, logger);
   if (threads > 1)
-    return solve_branch_and_bound_parallel(searched, options, logger, control, threads);
+    return checked(
+        solve_branch_and_bound_parallel(searched, options, logger, control, threads));
 
   BranchAndBound search(searched, options, logger, control);
-  return search.run();
+  return checked(search.run());
 }
 
 }  // namespace sankhya::mip
