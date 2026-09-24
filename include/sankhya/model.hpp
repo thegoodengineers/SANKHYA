@@ -667,16 +667,13 @@ class Solution {
     case SolveStatus::kIterationLimit:
     case SolveStatus::kTimeLimit:
     case SolveStatus::kNodeLimit:
-    case SolveStatus::kInterrupted:
-      return true;
+    case SolveStatus::kInterrupted: return true;
     case SolveStatus::kNotSolved:
     case SolveStatus::kInfeasible:
     case SolveStatus::kInfeasibleOrUnbounded:
     case SolveStatus::kNumericalError:
-    case SolveStatus::kModelError:
-      return false;
-    default:
-      return false;
+    case SolveStatus::kModelError: return false;
+    default: return false;
   }
 }
 
