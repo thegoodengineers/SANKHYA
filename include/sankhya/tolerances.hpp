@@ -414,4 +414,21 @@ inline constexpr double kSafeBoundShrinkMargin = 4.0;
 /// ceiling and the product are exact (9e15 < 2^53 = 9.007e15).
 inline constexpr Count kCertificateAncestorsTried = 8;
 inline constexpr double kCertificateExactInteger = 9e15;
+
+/// The root separation loop (#495, `root_cut_loop`, off by default): separate, add, re-solve,
+/// repeat, and stop at the first of these. Achterberg, "Constraint Integer Programming"
+/// (thesis, 2007), ch. 8 describes the loop and a stall rule of this shape; the numbers are
+/// the ones #495 proposes, chosen to bound the root's cost rather than tuned.
+///
+/// At most this many rounds, the first included.
+inline constexpr int kRootCutMaxRounds = 20;
+/// The bound has stalled when the last kRootCutStallRounds rounds together moved it by at
+/// most kRootCutStallFraction of the reference: the gap to the incumbent when there is one,
+/// max(1, |bound|) when there is not.
+inline constexpr int kRootCutStallRounds = 3;
+inline constexpr double kRootCutStallFraction = 1e-3;
+/// And the loop stops once the solve has used this share of time_limit, so a root whose
+/// every round is slow leaves the tree most of the time it was given.
+inline constexpr double kRootCutTimeShare = 0.2;
+
 }  // namespace sankhya::tol

@@ -414,6 +414,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"root_cut_loop",
+                 OptionType::Bool,
+                 false,
+                 "Root cuts (#495): after the first round, separate again at the new LP "
+                 "point, add, re-solve warm, and repeat until the bound stalls (3 rounds "
+                 "moving it by at most 1e-3 of the gap, or of max(1, |bound|) with no "
+                 "incumbent), 20 rounds, 20 percent of time_limit, or a round that takes "
+                 "nothing. Logs one line per round. Only read when enable_root_cuts is set. "
+                 "Off until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_heuristics",
                  OptionType::Bool,
                  false,

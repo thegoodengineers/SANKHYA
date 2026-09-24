@@ -177,17 +177,14 @@ bool BranchAndBound::is_pooled_duplicate(const Cut& cut) const {
                      [&cut](const Cut& pooled) { return same_cut(pooled, cut); });
 }
 
-void BranchAndBound::root_cut_round(Solution* relaxation) {
-  const Index original_root_rows = working_.num_rows();
-  Model pre_cut_model = working_;
-  auto pre_cut_scaling = scaling_;
-  Solution initial_relaxation = *relaxation;
-
+std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxation,
+                                                          Index model_rows) {
   std::vector<Cut> candidates;
   KnapsackCoverStats cover_stats;
-  for (Index i = 0; i < original_root_rows; ++i) {
-    auto cover =
-        generate_knapsack_cover_cut(working_, i, &initial_relaxation.col_value, &cover_stats);
+  // Covers from the model's own rows only: a cut row is valid but is not a knapsack of the
+  // model, and the first round never had any.
+  for (Index i = 0; i < model_rows; ++i) {
+    auto cover = generate_knapsack_cover_cut(working_, i, &relaxation.col_value, &cover_stats);
     if (cover.has_value()) {
       Cut cut;
       cut.family = CutFamily::kKnapsackCover;
@@ -206,7 +203,7 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
         cover_stats.supported_rows, cover_stats.covers_found, cover_stats.exact_separations,
         cover_stats.cuts_returned, cover_stats.best_base_violation);
   }
-  std::vector<Cut> gmi = generate_gmi_cuts(working_, initial_relaxation);
+  std::vector<Cut> gmi = generate_gmi_cuts(working_, relaxation);
   candidates.insert(candidates.end(), gmi.begin(), gmi.end());
   // Implied-bound cuts (#499): the line through a two-variable row's two binary cases,
   // tighter than the row when the continuous column's own bound caps one case.
@@ -217,14 +214,25 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   // MIR cuts from the model's own rows (#221): built from original coefficients rather
   // than tableau rows, so they carry none of the Gomory cuts' numerical fragility.
   if (options_.get_bool("enable_mir_cuts")) {
-    std::vector<Cut> mir = generate_mir_cuts(working_, initial_relaxation, working_.col_lower,
+    std::vector<Cut> mir = generate_mir_cuts(working_, relaxation, working_.col_lower,
                                              working_.col_upper, nullptr, mir_options());
     candidates.insert(candidates.end(), mir.begin(), mir.end());
   }
   // Clique and {0,1/2}-Chvatal-Gomory cuts (#358): the families built for the pure-integer,
   // unit-coefficient covering and packing rows MIR cannot separate. Derived under the
   // GLOBAL bounds, so they hold at every node.
-  add_combinatorial_cuts(initial_relaxation, &candidates, /*root=*/true);
+  add_combinatorial_cuts(relaxation, &candidates, /*root=*/true);
+  return candidates;
+}
+
+void BranchAndBound::root_cut_round(Solution* relaxation) {
+  const Index original_root_rows = working_.num_rows();
+  Model pre_cut_model = working_;
+  auto pre_cut_scaling = scaling_;
+  Solution initial_relaxation = *relaxation;
+
+  std::vector<Cut> candidates =
+      separate_root_candidates(initial_relaxation, original_root_rows);
   if (debug_.has_value()) {
     debug_round_ = "root round 1";
     debug_check_cuts(candidates, -1);  // #500: every candidate, before the filter
@@ -279,6 +287,11 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
     *relaxation = std::move(final_relaxation);
     root_cuts_applied_ = static_cast<Count>(accepted.size());
     root_bound_after_cuts_internal_ = internal_objective(relaxation->col_value);
+    // More rounds from the new basis, until the bound stalls (#495); off by default, and
+    // the round above is the whole of what runs then.
+    if (options_.get_bool("root_cut_loop")) {
+      root_cut_loop(relaxation, original_root_rows, accepted, relaxation->iterations);
+    }
     return;
   }
   logger_.info("Root cuts induced failure: {}; rolled back to initial relaxation",

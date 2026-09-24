@@ -135,7 +135,8 @@ Options every_family_on() {
        {"enable_root_cuts", "enable_mir_cuts", "enable_clique_cuts", "enable_zero_half_cuts",
         "enable_flow_cover_cuts", "presolve_dual_fixing", "presolve_parallel_rows",
         "presolve_dominated_columns", "presolve_implied_free", "mip_symmetry",
-        "mip_reduced_cost_fixing", "mip_objective_branching", "conflict_analysis"}) {
+        "mip_reduced_cost_fixing", "mip_objective_branching", "conflict_analysis",
+        "root_cut_loop"}) {
     options.set_bool(name, true);
   }
   options.set_int("tree_cut_depth", 4);
