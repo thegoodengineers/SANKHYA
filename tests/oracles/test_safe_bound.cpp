@@ -21,8 +21,10 @@
 #include "sankhya/options.hpp"
 
 #include "core/safe_bound.hpp"
+#include "mip/checkpoint.hpp"
 #include "oracles/lp_generator.hpp"
 #include "oracles/rational_simplex.hpp"
+#include "support/temp_file.hpp"
 
 namespace sankhya::oracle {
 namespace {
@@ -91,6 +93,7 @@ TEST(SafeBound, AdversarialNearOptimalDualOverstatesThePlainBoundButNotTheSafeOn
   // now infeasible by 1e-6 on every column of that row, and its plain objective b.y claims
   // 4e-6 more than the LP can deliver.
   std::vector<double> y = solved.row_dual;
+  ASSERT_FALSE(y.empty());
   y[0] += 1e-6;
   const double plain = plain_bound(model, y);
   EXPECT_GT(rational_at_least(plain), exact.objective)
@@ -336,6 +339,90 @@ TEST(SafeBound, BranchAndBoundWithSafeBoundsMatchesTheExactMilp) {
     ++compared;
   }
   EXPECT_GT(compared, 10);
+}
+
+// The shape of MIPLIB pk1: minimise the largest deviation t of six equality rows over 16
+// binaries, each deviation split into a positive and a negative part p_i, n_i >= 0 with no
+// upper bound, and t >= p_i, t >= n_i. The rows imply no upper bound on p, n or t, so a dual
+// whose reduced costs round the wrong way proves nothing and the safe bound is -inf at most
+// nodes. The children of such a node inherit -inf as their bound. The pseudocost observation
+// must still measure the LP gain against the parent's LP objective: measured against -inf it
+// was +inf, and it stayed in the column's pseudocost sum for the rest of the search (the
+// checkpoint wrote those sums as null). Found in review of #636; 26 of 32 sums on this model
+// were non-finite after 400 nodes before the fix.
+TEST(SafeBound, AnUnprovedNodeBoundDoesNotPoisonThePseudocosts) {
+  constexpr int kBinaries = 16;
+  constexpr int kRows = 6;
+  const int a[kRows][kBinaries] = {{0, 0, 11, 0, 0, 0, 38, 0, 26, 0, 0, 0, 0, 0, 0, 28},
+                                   {11, 0, 0, 0, 0, 33, 24, 0, 0, 0, 0, 0, 0, 30, 0, 0},
+                                   {32, 0, 0, 23, 36, 0, 0, 11, 0, 0, 33, 34, 40, 0, 0, 0},
+                                   {0, 22, 0, 0, 37, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0},
+                                   {0, 0, 0, 11, 12, 0, 0, 0, 0, 23, 0, 0, 0, 29, 39, 0},
+                                   {26, 0, 0, 0, 0, 9, 0, 32, 0, 0, 17, 27, 2, 0, 0, 0}};
+  const double rhs[kRows] = {48, 46, 100, 35, 62, 54};
+  // Columns: t, x_0..x_15, then p_i and n_i. Rows: the six equalities, then t - p_i >= 0 and
+  // t - n_i >= 0.
+  const Index t = 0;
+  const auto x = [](int j) { return static_cast<Index>(1 + j); };
+  const auto p = [](int i) { return static_cast<Index>(1 + kBinaries + 2 * i); };
+  const auto n = [](int i) { return static_cast<Index>(2 + kBinaries + 2 * i); };
+  const Index columns = 1 + kBinaries + 2 * kRows;
+  const Index rows = 3 * kRows;
+  Model model;
+  model.resize_columns(columns);
+  model.col_cost.assign(static_cast<std::size_t>(columns), 0.0);
+  model.col_cost[static_cast<std::size_t>(t)] = 1.0;
+  model.col_lower.assign(static_cast<std::size_t>(columns), 0.0);
+  model.col_upper.assign(static_cast<std::size_t>(columns), kInfinity);
+  model.col_type.assign(static_cast<std::size_t>(columns), VarType::kContinuous);
+  for (int j = 0; j < kBinaries; ++j) {
+    model.col_upper[static_cast<std::size_t>(x(j))] = 1.0;
+    model.col_type[static_cast<std::size_t>(x(j))] = VarType::kInteger;
+  }
+  model.resize_rows(rows);
+  model.row_lower.assign(static_cast<std::size_t>(rows), 0.0);
+  model.row_upper.assign(static_cast<std::size_t>(rows), kInfinity);
+  model.matrix.reset(rows, columns);
+  for (int i = 0; i < kRows; ++i) {
+    model.row_lower[static_cast<std::size_t>(i)] = rhs[i];
+    model.row_upper[static_cast<std::size_t>(i)] = rhs[i];
+    for (int j = 0; j < kBinaries; ++j) {
+      if (a[i][j] != 0) model.matrix.add_entry(i, x(j), a[i][j]);
+    }
+    model.matrix.add_entry(i, p(i), 1.0);
+    model.matrix.add_entry(i, n(i), -1.0);
+    model.matrix.add_entry(kRows + 2 * i, t, 1.0);
+    model.matrix.add_entry(kRows + 2 * i, p(i), -1.0);
+    model.matrix.add_entry(kRows + 2 * i + 1, t, 1.0);
+    model.matrix.add_entry(kRows + 2 * i + 1, n(i), -1.0);
+  }
+  model.matrix.finalize();
+
+  testing::TempFile file("", ".chk");
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_bool("safe_bounds", true);
+  options.set_bool("deterministic", true);
+  options.set_bool("presolve", false);
+  options.set_int("node_limit", 400);
+  options.set_string("checkpoint", file.path());
+  options.set_int("checkpoint_nodes", 400);
+  const Solution solved = solve(model, options);
+  ASSERT_TRUE(solved.status == SolveStatus::kOptimal ||
+              solved.status == SolveStatus::kFeasible ||
+              solved.status == SolveStatus::kNodeLimit)
+      << solved.message;
+  mip::TreeCheckpoint c;
+  std::string error;
+  ASSERT_TRUE(mip::read_checkpoint(file.path(), &c, &error)) << error;
+  ASSERT_FALSE(c.pseudo_down_sum.empty());
+  int observed = 0;
+  for (std::size_t u = 0; u < c.pseudo_down_sum.size(); ++u) {
+    EXPECT_TRUE(std::isfinite(c.pseudo_down_sum[u])) << "down, column " << u;
+    EXPECT_TRUE(std::isfinite(c.pseudo_up_sum[u])) << "up, column " << u;
+    observed += static_cast<int>(c.pseudo_down_count[u] + c.pseudo_up_count[u] > 0);
+  }
+  EXPECT_GT(observed, 0) << "the search recorded no pseudocost, so the test proved nothing";
 }
 
 }  // namespace

@@ -4,6 +4,8 @@
 
 #include "core/safe_bound.hpp"
 
+#include "sankhya/tolerances.hpp"
+
 #include <algorithm>
 #include <cfenv>
 #include <cmath>
@@ -15,10 +17,8 @@ namespace sankhya {
 namespace {
 
 constexpr double kInf = std::numeric_limits<double>::infinity();
-/// The largest factor y is ever scaled down by, and how far past the first-order estimate
-/// the scaling goes to clear the rounding of the second evaluation.
-constexpr double kMaxShrink = 1e-6;
-constexpr double kShrinkMargin = 4.0;
+constexpr double kMaxShrink = tol::kSafeBoundMaxShrink;
+constexpr double kShrinkMargin = tol::kSafeBoundShrinkMargin;
 
 // ---- Outward rounding ------------------------------------------------------------------
 //

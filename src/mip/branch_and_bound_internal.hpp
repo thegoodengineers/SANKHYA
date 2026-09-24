@@ -97,6 +97,12 @@ struct TreeNode {
   DomainChange change;
   bool has_change = false;
   double bound = 0.0;  ///< the LP bound inherited from the parent, in minimise space
+  /// The parent's LP objective as computed, in minimise space (#519). Equal to `bound`
+  /// unless safe_bounds replaced `bound` with the proved bound, which may be -inf. The
+  /// pseudocost observation reads this one: it measures what the branching bought in the
+  /// LP, and a proved bound of -inf would record an infinite gain. NaN where a path does
+  /// not set it (a restored checkpoint, a parallel seed); the observation then uses `bound`.
+  double parent_lp_bound = std::numeric_limits<double>::quiet_NaN();
   Index depth = 0;
   /// The parent's optimal basis, as statuses (#65). One bound differs between parent and
   /// child, so this basis is dual feasible at the child and the dual simplex reaches the
