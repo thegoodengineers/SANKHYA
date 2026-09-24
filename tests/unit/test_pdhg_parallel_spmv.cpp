@@ -78,8 +78,10 @@ TEST(PdhgParallelSpmv, TheSameBitsAtOneTwoAndFourThreads) {
     // Bitwise: the double compares equal, not nearly equal.
     EXPECT_EQ(one.objective, two.objective) << name;
     EXPECT_EQ(one.objective, four.objective) << name;
+    ASSERT_EQ(one.col_value.size(), two.col_value.size()) << name;
     ASSERT_EQ(one.col_value.size(), four.col_value.size()) << name;
     for (std::size_t j = 0; j < one.col_value.size(); ++j) {
+      ASSERT_EQ(one.col_value[j], two.col_value[j]) << name << " column " << j;
       ASSERT_EQ(one.col_value[j], four.col_value[j]) << name << " column " << j;
     }
   }
