@@ -13,6 +13,7 @@
 
 #include <fmt/format.h>
 
+#include "presolve/coef_tightening.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -241,6 +242,8 @@ void log_presolve_report(const Solution::PresolveReport& report, Logger& logger)
   line("dual fixed columns", report.dual_fixed_columns);
   line("parallel rows", report.parallel_rows);
   line("integer bounds rounded", report.integer_bounds_rounded);
+  line("coefficients tightened", report.coefficients_tightened);
+  line("propagated bounds", report.propagated_bounds);
   // Declines are reported for the same reason the reductions are: a model that came back
   // barely smaller than it went in is explained by these, not by the counts above.
   line("quadratic columns kept", report.quadratic_columns_protected);
@@ -1411,6 +1414,23 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
     return identity;
   }
 
+  // COEFFICIENT TIGHTENING (#511; Savelsbergh 1994; Achterberg et al. 2020, sec. 3), on the
+  // reduced model rather than inside the passes above: it keeps every row and column, needs
+  // no record (the integer points are unchanged, see coef_tightening.hpp), and running it on
+  // the compacted model keeps it away from the records the passes push, whose postsolve
+  // formulas read the coefficients the passes saw. Only with integrality: the tightened
+  // rows' LP duals belong to a different matrix, which only a MILP, reporting none, can
+  // ignore.
+  CoefficientTighteningStats tightening;
+  if (options.get_bool("presolve_coefficient_tightening") && reduced.has_integrality()) {
+    tightening = tighten_coefficients(&reduced);
+    if (tightening.found_crossing_bounds) {
+      logger.verbose(
+          "  presolve: bound propagation found crossing bounds; the model is left for the "
+          "engine to prove infeasible");
+    }
+  }
+
   // WHAT PRESOLVE DID, STRUCTURED (#286). The counts come from the records that postsolve
   // will replay, so the report and the transformation cannot drift apart: a reduction that
   // fired left a record, and a record is what is counted here.
@@ -1445,7 +1465,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   }
   // A singleton row's whole effect is a tightened column bound, so it is counted as one as
   // well as under its own name; the integer roundings are already counted where they fire.
-  report.bounds_tightened = report.singleton_rows + report.integer_bounds_rounded;
+  report.coefficients_tightened = tightening.coefficients_tightened;
+  report.propagated_bounds = tightening.bounds_tightened;
+  report.bounds_tightened =
+      report.singleton_rows + report.integer_bounds_rounded + report.propagated_bounds;
   report.seconds = presolve_clock.elapsed_seconds();
 
   logger.info(

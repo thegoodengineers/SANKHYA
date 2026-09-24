@@ -298,6 +298,7 @@ set(SANKHYA_CORE_SOURCES
   src/nlp/derivatives.cpp
   src/nlp/expression.cpp
   src/nlp/nonlinear_model.cpp
+  src/presolve/coef_tightening.cpp
   src/presolve/presolve.cpp
   src/ipm/ipm.cpp
   src/pdhg/pdhg.cpp
