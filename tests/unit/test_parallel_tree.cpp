@@ -324,7 +324,9 @@ TEST(ParallelTree, ALimitedSearchReportsTheSameRoundedBoundAsTheSequentialOne) {
 }
 
 TEST(ParallelTree, ATimeLimitStopsEveryWorkerPromptly) {
-  const Model model = market_split(4, 40, 11);
+  // Five market-split rows: far beyond 0.3 s for any search, so the limit is what stops it.
+  // Four rows became solvable fast enough on a CI runner to finish first.
+  const Model model = market_split(5, 50, 11);
   Options limited = on_threads(4);
   limited.set_double("time_limit", 0.3);
   const auto start = std::chrono::steady_clock::now();
@@ -337,7 +339,11 @@ TEST(ParallelTree, ATimeLimitStopsEveryWorkerPromptly) {
 }
 
 TEST(ParallelTree, AnInterruptFromAnotherThreadStopsTheSearch) {
-  const Model model = market_split(4, 40, 13);
+  // The interrupt is sent from inside the search's first progress report, so the model only
+  // has to outlast the root; five rows do, where four were once solved before the tree's
+  // first report on a CI runner (the stopper then never fired and the solve came back
+  // optimal).
+  const Model model = market_split(5, 50, 13);
   SolveControl control;
   std::mutex mutex;
   std::condition_variable cv;
@@ -370,6 +376,9 @@ TEST(ParallelTree, AnInterruptFromAnotherThreadStopsTheSearch) {
     cv.notify_all();
   }
   stopper.join();
+  ASSERT_TRUE(callback_reached) << "the search finished before its first progress report, so "
+                                   "nothing was interrupted: "
+                                << stopped.message;
   ASSERT_NE(stopped.status, SolveStatus::kOptimal) << "the model must outlast the interrupt";
   EXPECT_EQ(stopped.stopped_by, LimitReason::kInterrupt) << stopped.message;
 }
