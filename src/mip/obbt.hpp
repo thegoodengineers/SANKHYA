@@ -11,6 +11,8 @@
 // Tighter bounds produce tighter LP relaxations throughout the tree.
 #pragma once
 
+#include <limits>
+
 #include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
@@ -26,8 +28,10 @@ struct ObbtResult {
 
 /// Run OBBT on `model` at the root, before the cut round.
 ///
-/// When `incumbent` is finite the cutoff row c'x <= incumbent - epsilon is
-/// added; otherwise only the feasibility region is used.  Tightened bounds are
+/// When `incumbent` is finite a cutoff row keeps only strictly improving points, in the
+/// model's sense (c'x <= incumbent - eps minimising, c'x >= incumbent + eps maximising); the
+/// caller must then keep that incumbent, since the bounds may exclude it. Otherwise only the
+/// feasible region is used.  Tightened bounds are
 /// written back to `model` in place.  Returns a summary for logging.
 ObbtResult obbt_root(Model& model, const Options& options, Logger& logger,
                      double incumbent = std::numeric_limits<double>::infinity());

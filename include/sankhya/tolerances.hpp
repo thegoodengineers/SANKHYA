@@ -472,4 +472,11 @@ inline constexpr Count kFeasibilityJumpPollWork = 65536;
 /// must be an integer of magnitude below 2^53, where a double holds every integer exactly
 /// and fmod is exact, so the divisibility test adds no rounding of its own.
 inline constexpr double kImpliedIntegerDataLimit = 9007199254740992.0;
+
+/// OBBT at the root (#515): a column whose range is below kObbtFixedRange is not probed; a
+/// probe's bound is written only when it tightens by at least kObbtMinimumTightening; the
+/// objective cutoff keeps points better than the incumbent by kObbtCutoffEpsilon.
+inline constexpr double kObbtFixedRange = 1e-6;
+inline constexpr double kObbtMinimumTightening = 1e-8;
+inline constexpr double kObbtCutoffEpsilon = 1e-6;
 }  // namespace sankhya::tol

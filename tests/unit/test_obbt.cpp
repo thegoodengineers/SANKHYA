@@ -83,10 +83,9 @@ TEST(Obbt, TightensUpperBoundsFromSingleConstraint) {
 ///   x0 >= 1  (lower bound)
 ///   x1 >= 1
 ///   x0, x1, x2 in [0, 10]
-/// With an objective cutoff c'x <= 2 (minimise sum, incumbent = 2):
-///   Feasible solutions must satisfy x0 + x1 + x2 <= 2 (cutoff: sum <= 2 - eps).
-///   Combined with x0 >= 1, x1 >= 1: x2 <= 2 - 1 - 1 = 0.
-/// So OBBT should tighten x2's upper bound to (near) 0.
+/// With an objective cutoff (minimise the sum, incumbent 3): only strictly improving points
+/// remain, x0 + x1 + x2 <= 3 - eps. With x0 >= 1 and x1 >= 1 that gives x2 <= 1 - eps, so
+/// OBBT tightens x2's upper bound below 1.
 TEST(Obbt, TightensWithIncumbentCutoff) {
   Model model;
   model.col_cost = {1.0, 1.0, 1.0};
@@ -112,6 +111,48 @@ TEST(Obbt, TightensWithIncumbentCutoff) {
   EXPECT_LT(model.col_upper[2], orig_ub2 - 1e-6);
   // It should be ~0 (2 - 1 - 1 - epsilon).
   EXPECT_LT(model.col_upper[2], 1.0);
+}
+
+/// The cutoff follows the model's sense (review of #631). Maximise x0 + x1 + x2 over
+/// x0 + x1 + x2 <= 3, x in [0, 10], with incumbent 2: an improving point has sum >= 2 + eps,
+/// and x2 >= 0 already. Written the minimise way (sum <= 2 - eps) the row would have cut away
+/// every improving point, and OBBT would have tightened x2's upper bound to about 2. The
+/// correct row leaves x2 able to reach 3.
+TEST(Obbt, TheCutoffFollowsTheObjectiveSense) {
+  Model model;
+  model.sense = ObjSense::kMaximize;
+  model.col_cost = {1.0, 1.0, 1.0};
+  model.col_lower = {0.0, 0.0, 0.0};
+  model.col_upper = {10.0, 10.0, 10.0};
+  model.col_type = {VarType::kContinuous, VarType::kContinuous, VarType::kContinuous};
+  model.row_lower = {-kInfinity};
+  model.row_upper = {3.0};
+  model.matrix.reset(1, 3);
+  for (Index j = 0; j < 3; ++j) model.matrix.add_entry(0, j, 1.0);
+  model.matrix.finalize();
+  Logger logger5 = make_logger();
+  (void)obbt_root(model, obbt_options(), logger5, 2.0);
+  EXPECT_GE(model.col_upper[2], 3.0 - 1e-6) << "the improving point (0, 0, 3) was cut off";
+  EXPECT_LE(model.col_upper[2], 3.0 + 1e-6);
+}
+
+/// An integer column's probed bound is rounded to an integer it cannot exclude, and never
+/// past a point the LP admits: 2 x0 <= 7 with x0 integer in [0, 10] gives x0 <= 3.
+TEST(Obbt, AnIntegerColumnGetsAnIntegerBound) {
+  Model model;
+  model.col_cost = {1.0};
+  model.col_lower = {0.0};
+  model.col_upper = {10.0};
+  model.col_type = {VarType::kInteger};
+  model.row_lower = {-kInfinity};
+  model.row_upper = {7.0};
+  model.matrix.reset(1, 1);
+  model.matrix.add_entry(0, 0, 2.0);
+  model.matrix.finalize();
+  Logger logger6 = make_logger();
+  (void)obbt_root(model, obbt_options(), logger6);
+  EXPECT_EQ(model.col_upper[0], 3.0);
+  EXPECT_EQ(model.col_lower[0], 0.0);
 }
 
 /// When mip_obbt is false, obbt_root should be a no-op and return zero solves.
