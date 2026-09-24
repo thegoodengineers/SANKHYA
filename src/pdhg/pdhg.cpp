@@ -275,8 +275,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
           // A*x_{k+1} computed once; A*xbar = 2*A*x_{k+1} - A*x_k by vector ops.
           std::fill(a_x_new.begin(), a_x_new.end(), 0.0);
           a_times(x_next.data(), a_x_new.data());
-          for (std::size_t i = 0; i < m; ++i)
-            a_x[i] = 2.0 * a_x_new[i] - a_x_cached[i];
+          for (std::size_t i = 0; i < m; ++i) a_x[i] = 2.0 * a_x_new[i] - a_x_cached[i];
         } else {
           a_times(extrapolated.data(), a_x.data());
         }
