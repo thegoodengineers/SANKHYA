@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <iterator>
 #include <numeric>
 #include <vector>
 
@@ -105,6 +107,22 @@ CutSelection select_cuts(const Model& model, const std::vector<double>& point,
   for (std::size_t w = 0; w < keep; ++w)
     out.deferred.push_back(std::move(candidates[waiting[w]]));
   return out;
+}
+
+Index root_cut_row_budget(Index model_rows) {
+  const double share = std::floor(tol::kRootCutRowShare * static_cast<double>(model_rows));
+  return static_cast<Index>(std::max(static_cast<double>(tol::kRootCutRowFloor), share));
+}
+
+void take_within_budget(std::vector<Cut>* selected, std::vector<Cut>* waiting,
+                        std::size_t room) {
+  if (selected->size() <= room) return;
+  const auto keep = static_cast<std::ptrdiff_t>(room);
+  waiting->insert(waiting->begin(), std::make_move_iterator(selected->begin() + keep),
+                  std::make_move_iterator(selected->end()));
+  selected->resize(room);
+  const auto limit = static_cast<std::size_t>(tol::kCutWaitingLimit);
+  if (waiting->size() > limit) waiting->resize(limit);
 }
 
 }  // namespace sankhya::mip

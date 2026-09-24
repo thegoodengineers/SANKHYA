@@ -23,8 +23,18 @@
 // the tree rounds do (branch_and_bound_cuts.cpp).
 //
 // STOPPING, whichever comes first: the bound stalls (tolerances.hpp, kRootCutStall*), the
-// round cap, the time share, a point already integral, a round whose filter and selection
-// take nothing, or a re-solve that does not come back optimal (that round is rolled back).
+// round cap, the time share, the row budget, a point already integral, a round whose filter
+// and selection take nothing, or a re-solve that does not come back optimal (that round is
+// rolled back).
+//
+// THE ROW BUDGET. A cut row is paid for at every node LP of the tree, not at the root, so
+// neither the stall rule nor the time share sees its cost: rounds that are each fast and
+// each move the bound can still leave the tree an LP several times the model's size. The
+// loop therefore adds at most max(kRootCutRowFloor, kRootCutRowShare * m) rows in all,
+// round 1 included, m the rows before the first cut. A round the budget cannot hold whole
+// takes its best cuts up to the budget (selection returns them best first) and the rest
+// wait for the tree rounds with the other deferred cuts. Achterberg's thesis (ch. 8) limits
+// the root's separation effort the same way, in rounds and in cuts; the numbers are ours.
 
 #include <algorithm>
 #include <cmath>
@@ -64,8 +74,13 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
                reported(bounds.back()), first_taken.size(), by_family(first_taken),
                first_iterations);
   const bool timed = time_limit_ > 0.0 && time_limit_ < 1e300;
+  const auto row_budget = static_cast<Count>(root_cut_row_budget(model_rows));
   const char* why = "the round cap";
   for (int round = 2; round <= tol::kRootCutMaxRounds; ++round) {
+    if (root_cuts_applied_ >= row_budget) {
+      why = "the row budget";
+      break;
+    }
     const auto rounds_done = static_cast<int>(bounds.size()) - 1;
     if (rounds_done >= tol::kRootCutStallRounds) {
       const double now = bounds.back();
@@ -106,6 +121,9 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
                                       cut_max_per_round_, cut_max_parallelism_);
     std::vector<Cut> accepted = std::move(chosen.selected);
     waiting_cuts_ = std::move(chosen.deferred);
+    // A round the budget cannot hold whole takes its best cuts up to it (#495).
+    take_within_budget(&accepted, &waiting_cuts_,
+                       static_cast<std::size_t>(row_budget - root_cuts_applied_));
     if (accepted.empty()) {
       logger_.info("Root cut round {}: {} candidate(s), none taken ({})", round, found,
                    describe_cut_filter(filtered));
@@ -148,9 +166,13 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
         by_family(accepted), relaxation->iterations);
   }
   current_warm_ = basis_of(*relaxation);
-  logger_.info("Root cut loop: {} round(s), {} row(s), bound {:.10g} to {:.10g}; stopped on {}",
-               root_cut_rounds_, root_cuts_applied_, reported(bounds.front()),
-               reported(bounds.back()), why);
+  if (root_cuts_applied_ >= row_budget)
+    why = "the row budget";  // e.g. the last round filled it
+  logger_.info(
+      "Root cut loop: {} round(s), {} row(s) of a budget of {}, bound {:.10g} to {:.10g}; "
+      "stopped on {}",
+      root_cut_rounds_, root_cuts_applied_, row_budget, reported(bounds.front()),
+      reported(bounds.back()), why);
 }
 
 }  // namespace sankhya::mip

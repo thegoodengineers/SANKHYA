@@ -458,6 +458,10 @@ inline constexpr double kRootCutStallFraction = 1e-3;
 /// And the loop stops once the solve has used this share of time_limit, so a root whose
 /// every round is slow leaves the tree most of the time it was given.
 inline constexpr double kRootCutTimeShare = 0.2;
+/// And the loop adds at most max(kRootCutRowFloor, kRootCutRowShare * m) cut rows in all,
+/// round 1 included, m the rows of the LP the root separates on before its first cut.
+inline constexpr int kRootCutRowFloor = 100;
+inline constexpr double kRootCutRowShare = 1.0;
 
 /// GPU PDHG device loop (#478): iterations replayed on the device per host synchronisation.
 /// Larger amortises the synchronisation further but checks the iteration and time limits
