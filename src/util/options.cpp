@@ -1592,7 +1592,7 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"ipm_dense_column_factor",
                  OptionType::Double,
-                 10.0,
+                 tol::kIpmDenseColumnFactor,
                  "With ipm_dense_columns, a column is dense when it has more than this times "
                  "sqrt(rows) entries (#467).",
                  0.0,

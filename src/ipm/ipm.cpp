@@ -121,10 +121,6 @@ constexpr int kRuizIterations = 10;
 /// floor the model-space ones do not move at all, so a short window loses nothing.
 constexpr int kModelSpaceStallIterations = 3;
 constexpr double kModelSpaceProgress = 0.9;
-/// At most this many columns go to the dense-column correction (#467): each costs one solve
-/// with the sparse factor per factorization to build the Schur complement, and the k x k
-/// complement is factored densely. The densest are taken first.
-constexpr Index kMaxDenseColumns = 100;
 
 class InteriorPoint {
  public:
@@ -1489,7 +1485,7 @@ Solution InteriorPoint::run() {
     dense_.set_columns(
         model_.matrix,
         find_dense_columns(model_.matrix, eligible,
-                           options_.get_double("ipm_dense_column_factor"), kMaxDenseColumns));
+                           options_.get_double("ipm_dense_column_factor"), tol::kIpmMaxDenseColumns));
     if (dense_.active()) {
       Index largest = 0;
       for (const Index j : dense_.columns()) {

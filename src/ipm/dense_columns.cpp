@@ -11,33 +11,18 @@
 #include <numeric>
 #include <utility>
 
+#include "sankhya/tolerances.hpp"
+
 namespace sankhya::ipm {
 namespace {
 
-/// Conjugate gradients stop when the normwise backward error of x,
-///     ||rhs - M x||_inf / (||rhs||_inf + || |A| Theta |A|^T |x| + (shift + delta) |x| ||_inf),
-/// is at most this (Higham, "Accuracy and Stability of Numerical Algorithms", 2nd ed. (2002),
-/// sec. 7.1): the residual measured against the size of the terms M x is summed from, which
-/// is the floor rounding leaves. Measured against ||rhs|| alone, israel's normal equations
-/// stopped at 1e-9 for want of digits, not of iterations.
-constexpr double kPcgRelativeResidual = 1e-16;
-/// More steps than this means the preconditioner is far from M^-1 - M_s is singular in more
-/// directions than the dense columns span - and the answer is returned as it stands.
-constexpr int kPcgMaxIterations = 50;
-/// A solve whose backward error is at most this is reported converged: two decades above
-/// the target, which is what the iteration aims at.
-constexpr double kPcgAccepted = 1e-12;
-/// Conjugate gradients stop when the residual has not halved in this many steps: the
-/// iteration has reached the floor of the preconditioner it has.
-constexpr int kPcgStagnation = 3;
-/// A row whose diagonal in the sparse part is below this fraction of the dense columns'
-/// contribution to it is held by the dense columns, and gets their diagonal in the factor
-/// (see preconditioner_shift). Measured on the Netlib normal equations of the tests: at
-/// 1e-2 the support reached rows the Woodbury form handled exactly (israel: conjugate
-/// gradients stalled at 3.6e-8 and the direction was 34% off); at 1e-6 only rows the sparse
-/// part holds by less than a millionth are supported, which is where the product form's
-/// error grows past the rounding floor.
-constexpr double kSupportRatio = 1e-6;
+// The constants (kIpmPcg*, kIpmDenseSupportRatio) are in include/sankhya/tolerances.hpp,
+// with the measurements behind them.
+constexpr double kPcgRelativeResidual = tol::kIpmPcgTargetBackwardError;
+constexpr int kPcgMaxIterations = tol::kIpmPcgMaxIterations;
+constexpr double kPcgAccepted = tol::kIpmPcgAcceptedBackwardError;
+constexpr int kPcgStagnation = tol::kIpmPcgStagnationSteps;
+constexpr double kSupportRatio = tol::kIpmDenseSupportRatio;
 
 double dot(const std::vector<double>& a, const std::vector<double>& b) {
   double sum = 0.0;
@@ -166,11 +151,12 @@ bool DenseColumnCorrection::prepare(const SparseLdl& ldl, const SparseMatrix& a,
   for (std::size_t j = 0; j < k; ++j) {
     double pivot = schur_[j * k + j];
     for (std::size_t p = 0; p < j; ++p) pivot -= schur_[p * k + j] * schur_[p * k + j];
-    // Every eigenvalue of S is at least 1 in exact arithmetic. A pivot below one half means
-    // the solves it was built from were not accurate - M_s is nearly singular, in a direction
-    // no diagonal support reaches (a rank-deficient A_s) - and the product form would carry
-    // that error into every direction. solve() then uses the sparse factor alone.
-    if (!(pivot > 0.5) || !std::isfinite(pivot)) {
+    // Every eigenvalue of S is at least 1 in exact arithmetic. A pivot below
+    // kIpmDenseSchurMinPivot (one half) means the solves it was built from were not
+    // accurate - M_s is nearly singular, in a direction no diagonal support reaches (a
+    // rank-deficient A_s) - and the product form would carry that error into every
+    // direction. solve() then uses the sparse factor alone.
+    if (!(pivot > tol::kIpmDenseSchurMinPivot) || !std::isfinite(pivot)) {
       woodbury_ = false;
       return true;
     }
