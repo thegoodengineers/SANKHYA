@@ -124,6 +124,7 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
     // A round the budget cannot hold whole takes its best cuts up to it (#495).
     take_within_budget(&accepted, &waiting_cuts_,
                        static_cast<std::size_t>(row_budget - root_cuts_applied_));
+    certify_round_cuts(&accepted);  // #518: certificate mode only
     if (accepted.empty()) {
       logger_.info("Root cut round {}: {} candidate(s), none taken ({})", round, found,
                    describe_cut_filter(filtered));

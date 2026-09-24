@@ -26,6 +26,15 @@ that is not integral is a relaxation, whatever the status says.
     python bench/runners/miplib.py --instances flugpl gen-ip002
     python bench/runners/miplib.py --seeds 3 --time-limit 300      # #504
     python bench/runners/miplib.py --tier 2 --seeds 3              # the 60-instance tier
+    python bench/runners/miplib.py --certificate                   # #518: VIPR proofs
+
+CERTIFICATES (#518). `--certificate` asks the solver for a VIPR proof of every answer
+(option write_certificate, which also turns presolve off and runs the tree on one thread)
+and checks it with tools/verify_certificate.py, in exact rational arithmetic against the
+file that was solved, the incumbent up to the 1e-7 primal tolerance and the bound
+exactly. The verdict is the `certificate` column - verified, rejected,
+unproved (every step checks but the gap is not closed) or not_written - and the checker's
+own runtime is `certificate_check_seconds`. Both are blank without the flag.
 
 SEEDS (#504). `--seeds N` runs every instance N times: seed 0 is the published file, seeds
 1..N-1 are row-and-column permutations of it written to a temporary directory by
@@ -59,6 +68,13 @@ DATA_DIR = REPO_ROOT / "data" / "miplib"
 TIER_DIRS = {1: DATA_DIR, 2: REPO_ROOT / "data" / "miplib-tier2"}
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
+CERTIFICATE_CHECKER = REPO_ROOT / "tools" / "verify_certificate.py"
+# verify_certificate.py's exit status (see its docstring) -> the certificate column.
+CERTIFICATE_VERDICTS = {0: "verified", 1: "rejected", 2: "unproved"}
+# The incumbent's continuous values are doubles, so the SOL point is checked up to the
+# project's primal feasibility tolerance (tolerances.hpp kPrimalFeasibility, the same 1e-7
+# as verify_solution.py); the bound side is always checked exactly.
+CERTIFICATE_FEAS_TOL = 1e-7
 
 # An objective within this relative distance of the published optimum counts as MATCHED.
 # Looser than the LP set's 1e-6 on purpose: MIPLIB objectives run to eight and nine figures,
@@ -112,6 +128,9 @@ CSV_COLUMNS = [
     "primal_integral",
     "incumbents",
     "incumbent_trace_recorded",
+    # #518, after the rest for the same reason; blank unless --certificate.
+    "certificate",
+    "certificate_check_seconds",
 ]
 
 SUMMARY_COLUMNS = [
@@ -173,7 +192,8 @@ def git_commit(binary=None) -> str:
     return stamp.stamp(binary)
 
 def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
-          solver_options: list[str] | None = None, verify_against: Path | None = None) -> dict:
+          solver_options: list[str] | None = None, verify_against: Path | None = None,
+          certificate: bool = False) -> dict:
     import time
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -186,6 +206,9 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
                    "--option", "log_to_console=false"]
         for option in solver_options or []:
             command += ["--option", option]
+        proof_path = Path(tmp) / "proof.vipr"
+        if certificate:
+            command += ["--option", f"write_certificate={proof_path}"]
         started = time.perf_counter()
         completed = subprocess.run(command, capture_output=True, text=True)
         wall = time.perf_counter() - started
@@ -221,6 +244,8 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             "incumbent_trace": effort.get("incumbent_trace", []),
             "wall_seconds": wall,
             "verified": None,
+            "certificate": None,
+            "certificate_check_seconds": None,
         }
 
         # The independent check runs on any point we claim, proved or not. An incumbent that
@@ -232,7 +257,27 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
                  "--quiet"],
                 capture_output=True, text=True)
             flat["verified"] = check.returncode == 0
+        if certificate:
+            flat.update(check_certificate(proof_path, instance))
         return flat
+
+
+def check_certificate(proof: Path, instance: Path) -> dict:
+    """The independent checker's verdict on the proof the solver wrote for `instance` (#518),
+    and how long the check took. The model is the file that was solved - for a permuted seed
+    the permuted copy, since the proof names its rows and columns."""
+    import time
+
+    if not proof.exists():
+        return {"certificate": "not_written", "certificate_check_seconds": None}
+    started = time.perf_counter()
+    check = subprocess.run(
+        [sys.executable, str(CERTIFICATE_CHECKER), str(proof), "--mps", str(instance),
+         "--feas-tol", repr(CERTIFICATE_FEAS_TOL)],
+        capture_output=True, text=True)
+    seconds = time.perf_counter() - started
+    return {"certificate": CERTIFICATE_VERDICTS.get(check.returncode, "checker_failed"),
+            "certificate_check_seconds": seconds}
 
 
 class PermutationError(ValueError):
@@ -255,7 +300,7 @@ def run_seed(binary: Path, instance: Path, seed: int, scratch: Path, args,
             raise PermutationError(str(error)) from error
         digest = hashlib.sha256(target.read_bytes()).hexdigest()
     blob = solve(binary, target, args.time_limit, not args.no_verify, args.solver_option,
-                 verify_against=instance)
+                 verify_against=instance, certificate=args.certificate)
     if seed != 0:
         target.unlink(missing_ok=True)
     trace = blob.get("incumbent_trace") or []
@@ -293,6 +338,9 @@ def main() -> int:
     parser.add_argument("--tier", type=int, choices=sorted(TIER_DIRS), default=1,
                         help="1: the 30 smallest easy instances (data/miplib); 2: the "
                              "60-instance tier of bench/runners/miplib_tier2.json")
+    parser.add_argument("--certificate", action="store_true",
+                        help="write a VIPR proof of every answer and check it with "
+                             "tools/verify_certificate.py (#518)")
     args = parser.parse_args()
     if args.seeds < 1:
         parser.error("--seeds must be at least 1")
@@ -318,12 +366,16 @@ def main() -> int:
 
     if args.threads is not None:
         args.solver_option.append(f"mip_threads={args.threads}")
-    solver_options = " ".join(args.solver_option)
+    # The proof's path is a temporary file; the CSV records that the mode was on.
+    solver_options = " ".join(args.solver_option
+                              + (["write_certificate=on"] if args.certificate else []))
     threads = 1
     for option in args.solver_option:
         key, _, value = option.partition("=")
         if key.strip() == "mip_threads":
             threads = int(value)
+    if args.certificate:
+        threads = 1  # write_certificate runs the tree on one thread, whatever mip_threads says
     print(f"commit   {commit}   machine {machine}   time limit {args.time_limit:g}s"
           + (f"   seeds {args.seeds}" if args.seeds > 1 else "")
           + (f"   options {solver_options}" if solver_options else ""))
@@ -383,6 +435,14 @@ def main() -> int:
     if unproved:
         # Naming them is not optional. A rate without its failures is a claim, not evidence.
         print(f"not proved (in at least one seed): {', '.join(unproved)}")
+    if args.certificate:
+        certified = [r for r in rows if r["proved_optimal"] and r["certificate"] == "verified"]
+        print(f"{len(certified)}/{proved_count} proved optima ship a certificate the "
+              f"independent checker accepts")
+        uncertified = [f"{r['instance']} seed {r['seed']} ({r['certificate']})" for r in rows
+                       if r["proved_optimal"] and r["certificate"] != "verified"]
+        if uncertified:
+            print("proved but not certified: " + ", ".join(uncertified))
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     # Default names that bench/runners/latest_result.py will NOT take for the 30-instance
@@ -447,6 +507,9 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
         "reduced_cost_fixings": blob.get("reduced_cost_fixings", ""),
         "machine": machine,
         "timestamp_utc": stamp,
+        "certificate": blob.get("certificate") or "",
+        "certificate_check_seconds": ("" if blob.get("certificate_check_seconds") is None
+                                      else f"{blob['certificate_check_seconds']:.6f}"),
     }
 
 

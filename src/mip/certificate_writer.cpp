@@ -44,8 +44,9 @@ struct Derived {
 
 class Writer {
  public:
-  Writer(const Model& model, const CertificateTree& tree, std::ostream& der)
-      : model_(model), tree_(tree), der_(der), rows_(model.matrix) {
+  /// `model` is the rows every node LP had: the model's first `model_rows`, then the cuts.
+  Writer(const Model& model, Index model_rows, const CertificateTree& tree, std::ostream& der)
+      : model_(model), tree_(tree), der_(der), rows_(model.matrix), model_rows_(model_rows) {
     sense_ = model.sense_multiplier();
     const auto n = static_cast<std::size_t>(model.num_cols());
     cost_.resize(n);
@@ -57,7 +58,7 @@ class Writer {
     const auto m = static_cast<std::size_t>(model.num_rows());
     con_lower_.assign(m, -1);
     con_upper_.assign(m, -1);
-    for (std::size_t i = 0; i < m; ++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(model_rows); ++i) {
       const double lo = model.row_lower[i];
       const double hi = model.row_upper[i];
       if (is_finite_bound(lo) && lo == hi) {
@@ -219,6 +220,7 @@ class Writer {
   const CertificateTree& tree_;
   std::ostream& der_;
   CsrView rows_;
+  Index model_rows_ = 0;
   double sense_ = 1.0;
   std::vector<double> cost_;
   std::vector<double> lower_;
@@ -337,6 +339,10 @@ bool Writer::walk(Derived* root) {
     Derived down;
     bool pushed_duals = false;
   };
+  // The cut rows first: every leaf may use them, and each is derived from the model alone.
+  detail::emit_cut_derivations(
+      tree_.cuts, model_rows_, [this](const std::string& line) { return emit(line); },
+      &con_lower_, &con_upper_);
   std::vector<Frame> stack;
   stack.emplace_back(0);
   Derived result;
@@ -428,6 +434,13 @@ CertificateOutcome write_vipr_certificate(const std::string& path, const Model& 
     outcome.message = "the search has no tree";
     return outcome;
   }
+  for (const CertificateTree::CutRow& cut : tree.cuts) {
+    if (!cut.proof) {
+      outcome.message = "a cut row has no certified derivation";
+      return outcome;
+    }
+  }
+  const Model rows = detail::with_cut_rows(model, tree.cuts);
   // The derivations go to a side file first: the DER header needs their count.
   const std::string body_path = path + ".der.tmp";
   Derived root;
@@ -439,7 +452,7 @@ CertificateOutcome write_vipr_certificate(const std::string& path, const Model& 
       outcome.message = "cannot open " + body_path;
       return outcome;
     }
-    Writer w(model, tree, body);
+    Writer w(rows, model.num_rows(), tree, body);
     if (!w.walk(&root)) {
       outcome.message = w.error();
       body.close();
@@ -453,9 +466,9 @@ CertificateOutcome write_vipr_certificate(const std::string& path, const Model& 
     outcome.leaves = fmt::format(
         "leaves: {} from their own LP duals, {} from an ancestor's, {} infeasible by Farkas, "
         "{} infeasible LPs bounded by an ancestor's duals instead, {} empty boxes; {} "
-        "row-implied column bounds derived",
+        "row-implied column bounds derived; {} cut row(s) derived from the model",
         c.own_duals, c.inherited_duals, c.farkas, c.farkas_failed, c.empty_box,
-        c.implied_bounds);
+        c.implied_bounds, tree.cuts.size());
     if (!body) {
       outcome.message = "writing " + body_path + " failed";
       return outcome;

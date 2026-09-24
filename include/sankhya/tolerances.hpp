@@ -551,6 +551,14 @@ inline constexpr double kSafeBoundShrinkMargin = 4.0;
 /// ceiling and the product are exact (9e15 < 2^53 = 9.007e15).
 inline constexpr Count kCertificateAncestorsTried = 8;
 inline constexpr double kCertificateExactInteger = 9e15;
+/// A cut whose certified derivation (#518, src/mip/cut_derivation.cpp) proves a right-hand
+/// side above the cut's own by at most this, relative to max(1, |rhs|), is kept with the
+/// proved right-hand side: that difference is the rounding of the generator's floating-point
+/// arithmetic, which accumulates over the terms it summed and so is far more than one ulp of
+/// the result. 1e-9 relative is loose on purpose; soundness does not rest on it, because the
+/// row kept is the one with the PROVED right-hand side. More than this means the cut is not
+/// the one the derivation describes, and it is dropped.
+inline constexpr double kCertificateCutSlack = 1e-9;
 
 /// The root separation loop (#495, `root_cut_loop`, off by default): separate, add, re-solve,
 /// repeat, and stop at the first of these. Achterberg, "Constraint Integer Programming"

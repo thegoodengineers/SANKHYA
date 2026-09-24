@@ -255,6 +255,12 @@ Solution BranchAndBound::run() {
   global_upper_ = working_.col_upper;
   if (options_.get_bool("enable_root_cuts")) {
     tree_cut_depth_ = static_cast<Index>(options_.get_int("tree_cut_depth"));
+    if (certificate_mode() && tree_cut_depth_ > 0) {
+      // A tree round separates with the objective row free and may add rows mid-tree; the
+      // certificate derives root cuts only (#518).
+      logger_.info("Certificate (#518): tree cut rounds are off in this mode (tree_cut_depth)");
+      tree_cut_depth_ = 0;
+    }
     tree_cut_rows_per_round_ = static_cast<Index>(options_.get_int("tree_cut_rows_per_round"));
     cut_max_per_round_ = static_cast<Index>(options_.get_int("cut_max_per_round"));
     cut_max_parallelism_ = options_.get_double("cut_max_parallelism");
