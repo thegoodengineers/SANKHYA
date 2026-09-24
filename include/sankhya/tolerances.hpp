@@ -277,4 +277,14 @@ inline constexpr double kCutMaxParallelism = 0.9;
 /// Cuts a round may keep waiting for a later round after selection; the best by score stay.
 inline constexpr int kCutWaitingLimit = 500;
 
+/// Debug-solution check (#500): how far a known feasible point may sit outside a cut, a row
+/// or a bound, relative to max(1, |rhs|, the largest term of the activity), and still count
+/// as inside it. A valid cut computed in floating point can exclude a point on its boundary
+/// by rounding: the Gomory derivation is a few dozen multiply-adds, each with relative error
+/// near 1e-16, and presolve folds fixed columns into row bounds the same way. 1e-6 is ten
+/// times the simplex's own row tolerance (kPrimalFeasibility), so rounding never trips it,
+/// and a cut that really removes an integer point misses it by a whole fraction of a unit,
+/// which is five or more orders of magnitude larger.
+inline constexpr double kDebugSolutionTolerance = 1e-6;
+
 }  // namespace sankhya::tol

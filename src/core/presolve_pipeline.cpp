@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "core/presolve_pipeline.hpp"
 
+#include <algorithm>
+#include <string>
 #include <utility>
 
 #include <fmt/format.h>
 
+#include "mip/debug_solution.hpp"
 #include "presolve/presolve.hpp"
 #include "sankhya/certificate.hpp"
 #include "sankhya/io.hpp"
@@ -26,6 +29,17 @@ PresolveOutcome run_with_presolve(const Model& model, const Options& options, Lo
   // plans" for a model with columns already spent. The complete pool wins, and says so.
   const bool mixed_integer = problem_class == engine::ProblemClass::kMilp ||
                              problem_class == engine::ProblemClass::kMiqp;
+  // THE DEBUG-SOLUTION CHECK (#500) reads its point by column NAME, which is what lets it
+  // follow presolve's renumbering. An unnamed column is written as C<index>, and presolve
+  // would carry that name to a different index, so the columns are named first.
+  const bool debug_check = mixed_integer && !options.get_string("debug_solution").empty();
+  const bool unnamed = model.col_names.size() != static_cast<std::size_t>(model.num_cols()) ||
+                       std::any_of(model.col_names.begin(), model.col_names.end(),
+                                   [](const std::string& name) { return name.empty(); });
+  if (debug_check && unnamed) {
+    return run_with_presolve(mip::with_column_names(model), options, logger, timer,
+                             problem_class, run_engine);
+  }
   if (mixed_integer && options.get_bool("presolve") && options.get_bool("pool_complete")) {
     const char* why =
         "pool_complete enumerates the best assignments of the model as given, and presolve "
@@ -52,6 +66,8 @@ PresolveOutcome run_with_presolve(const Model& model, const Options& options, Lo
     ProfileScope timed(logger.profiler(), "presolve");
     return presolve::presolve(model, options, logger);
   }();
+  // Every reduction against the known point (#500), before anything acts on the result.
+  if (debug_check) mip::check_presolve_against_debug_solution(model, reduced, options, logger);
   if (reduced.proved_infeasible) {
     Solution proof;
     proof.allocate_for(model);

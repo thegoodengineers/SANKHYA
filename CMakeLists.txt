@@ -280,6 +280,8 @@ set(SANKHYA_CORE_SOURCES
   src/mip/mir_cuts.cpp
   src/mip/branch_and_bound_checkpoint.cpp
   src/mip/branch_and_bound_cuts.cpp
+  src/mip/branch_and_bound_debug.cpp
+  src/mip/debug_solution.cpp
   src/mip/branch_and_bound_heuristics.cpp
   src/mip/branch_and_bound_restart.cpp
   src/mip/flow_cover_cuts.cpp

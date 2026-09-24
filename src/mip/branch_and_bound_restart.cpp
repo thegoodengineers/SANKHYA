@@ -45,6 +45,17 @@ void BranchAndBound::remember_root_relaxation(const Solution& relaxation) {
   root_reduced_.resize(n);
   for (std::size_t u = 0; u < n; ++u) root_reduced_[u] = sense_ * relaxation.col_dual[u];
   root_status_ = relaxation.col_status;
+  // WHERE THE COLUMN SAT (#500's check found this). The root LP is solved after root
+  // propagation, whose tightenings are node-local (saved_, undone by leave()), so a column
+  // "at its lower bound" may sit at a propagated bound above global_lower_. Its reduced cost
+  // prices a move away from THAT bound, and counting the move from the global one instead
+  // fixed x <= 1 on a model whose unique optimum has x = 2. Root propagation is valid for
+  // the whole tree, so the propagated bound is a sound place to count from.
+  root_at_bound_.assign(n, std::numeric_limits<double>::quiet_NaN());
+  for (std::size_t u = 0; u < n; ++u) {
+    if (root_status_[u] == BasisStatus::kAtLower) root_at_bound_[u] = working_.col_lower[u];
+    if (root_status_[u] == BasisStatus::kAtUpper) root_at_bound_[u] = working_.col_upper[u];
+  }
   fixing_incumbent_ = std::numeric_limits<double>::infinity();  // this root: nothing used yet
 }
 
@@ -69,12 +80,13 @@ Count BranchAndBound::fix_by_reduced_cost() {
   for (const Index j : integer_columns_) {
     const auto u = static_cast<std::size_t>(j);
     const double d = root_reduced_[u];
+    const double at = root_at_bound_[u];  // the root LP's bound for this column (#500)
     if (root_status_[u] == BasisStatus::kAtLower && d > tol::kDualFeasibility &&
-        is_finite_bound(global_lower_[u])) {
+        is_finite_bound(at)) {
       // Units the column may still move up: the last k with z_root + d k < room's line,
       // computed conservatively (the 1e-9 keeps a k that sits on the line by rounding).
       const double k_max = std::max(0.0, std::ceil(room / d - 1e-9) - 1.0);
-      const double new_upper = global_lower_[u] + k_max;
+      const double new_upper = at + k_max;
       if (new_upper < global_upper_[u] - 0.5) {  // integral bounds: a move is a whole unit
         global_upper_[u] = new_upper;
         working_.col_upper[u] = new_upper;
@@ -82,9 +94,9 @@ Count BranchAndBound::fix_by_reduced_cost() {
         if (new_upper == global_lower_[u]) ++fixed_since_root_;
       }
     } else if (root_status_[u] == BasisStatus::kAtUpper && d < -tol::kDualFeasibility &&
-               is_finite_bound(global_upper_[u])) {
+               is_finite_bound(at)) {
       const double k_max = std::max(0.0, std::ceil(room / -d - 1e-9) - 1.0);
-      const double new_lower = global_upper_[u] - k_max;
+      const double new_lower = at - k_max;
       if (new_lower > global_lower_[u] + 0.5) {
         global_lower_[u] = new_lower;
         working_.col_lower[u] = new_lower;
@@ -94,6 +106,7 @@ Count BranchAndBound::fix_by_reduced_cost() {
     }
   }
   reduced_cost_fixings_ += moved;
+  if (moved > 0) debug_after_global_tightening();  // #500
   if (moved > 0) {
     logger_.verbose(
         "reduced-cost fixing: {} bound(s) tightened against the incumbent {:.10g}, "
@@ -136,6 +149,7 @@ void BranchAndBound::restart_search() {
   // reduced costs were valid for looser bounds and are not reused.
   root_reduced_.clear();
   root_status_.clear();
+  root_at_bound_.clear();
 }
 
 }  // namespace sankhya::mip

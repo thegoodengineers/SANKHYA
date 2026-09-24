@@ -27,6 +27,7 @@
 #include "conflict.hpp"
 #include "cut_selection.hpp"
 #include "cuts.hpp"
+#include "debug_solution.hpp"
 #include "flow_cover_cuts.hpp"
 #include "heuristics.hpp"
 #include "solution_pool.hpp"
@@ -544,6 +545,20 @@ class BranchAndBound {
     return policy;
   }
 
+  // ---- The debug-solution check (#500), in branch_and_bound_debug.cpp ------------------
+  void debug_start();                ///< load the point; check the rows appended at the root
+  bool debug_node_contains() const;  ///< the entered node's domain contains the point
+  /// Every cut against the point; `first_row` is the row the first becomes, or -1 for the
+  /// candidates of a round before its filter.
+  void debug_check_cuts(const std::vector<Cut>& cuts, Index first_row);
+  void debug_after_propagation(bool feasible);   ///< for a node that contained the point
+  void debug_after_node_lp(const Solution& lp);  ///< for a node that contains the point
+  void debug_after_global_tightening();          ///< reduced-cost fixing
+  std::optional<DebugSolution> debug_;
+  double debug_objective_ = 0.0;
+  Index debug_node_ = 0;
+  std::string debug_round_;
+
   /// The root bounds and the cut counts onto the answer (#221).
   void report_root(Solution* solution) const {
     solution->cuts_applied = root_cuts_applied_ + tree_cuts_applied_;
@@ -622,6 +637,9 @@ class BranchAndBound {
   bool reduced_cost_fixing_ = false;
   std::vector<double> root_reduced_;  ///< the root relaxation's reduced costs, minimise space
   std::vector<BasisStatus> root_status_;
+  /// The bound each nonbasic column sat at in the root LP, which is the root's PROPAGATED
+  /// bound, not global_lower_/global_upper_: the reduced cost prices moves from there.
+  std::vector<double> root_at_bound_;
   double fixing_incumbent_ = std::numeric_limits<double>::infinity();  ///< last pass used
   Count reduced_cost_fixings_ = 0;  ///< bounds moved over the search, reported
   Count symmetry_generators_ = 0;   ///< #413: verified generators the detection found
