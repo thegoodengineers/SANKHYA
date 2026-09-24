@@ -12,6 +12,12 @@ runs rather than from anybody's recollection:
     rather than asserted.
 4.  An honest list of the instances PDHG cannot drive to 1e-8.
 
+Every row also carries the independent verifier's verdict on the written solution
+(tools/verify_solution.py, which never links our C++) and, for a PDHG row, the solver
+clock at which the relative KKT error first crossed 1e-4, 1e-6 and 1e-8 in that run (#486,
+kkt_crossings.py has the formula). The crossings are the PDLP measurement; the verdict is
+the project's absolute standard. They are side by side because they are not the same claim.
+
 Usage:
     python bench/runners/pdhg_report.py --binary build/sankhya
 """
@@ -21,6 +27,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime
+import hashlib
 import json
 import platform
 import subprocess
@@ -28,16 +35,21 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+import kkt_crossings  # noqa: E402  (#486: the relative-KKT crossing columns)
 import stamp  # noqa: E402  (#433: stamps from the binary)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data" / "netlib"
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
+VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
 
 CSV_COLUMNS = [
     "instance", "algorithm", "tolerance", "restarts_enabled", "status",
     "objective", "published_objective", "relative_error", "iterations", "seconds",
     "reached_tolerance", "git_commit", "machine", "timestamp_utc", "solver_options",
+    # Appended (#486), so a reader of an older CSV by name is unaffected.
+    "instance_sha256", "absolute_error", "independently_verified", "verifier_message",
+    *kkt_crossings.ALL_COLUMNS,
 ]
 
 
@@ -56,6 +68,27 @@ def as_number(value):
         return None
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verdict(mps: Path, sol: Path, status: str) -> tuple[str, str]:
+    """The independent verifier on a written point: ("1" | "0", why) for a status that
+    claims a point, ("", "") otherwise - a limit hands back no claim to check."""
+    if status not in ("optimal", "feasible") or not sol.exists():
+        return "", ""
+    check = subprocess.run([sys.executable, str(VERIFIER), str(mps), str(sol)],
+                           capture_output=True, text=True)
+    if check.returncode == 0:
+        return "1", ""
+    failing = [line.strip() for line in check.stdout.splitlines() if "[FAIL]" in line]
+    return "0", "; ".join(failing)[:300]
+
+
 def default_binary() -> Path:
     sys.path.insert(0, str(REPO_ROOT / "bindings" / "python"))
     import sankhya
@@ -66,10 +99,13 @@ def default_binary() -> Path:
 
 
 def run(binary: Path, mps: Path, algorithm: str, tolerance: float | None,
-        restarts: bool, time_limit: float, extra_options: list[str] | None = None) -> dict:
+        restarts: bool, time_limit: float, extra_options: list[str] | None = None,
+        verify: bool = True) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         stats = Path(tmp) / "s.json"
+        sol = Path(tmp) / "s.sol"
         command = [str(binary), "solve", str(mps), "--stats", str(stats),
+                   "--write-sol", str(sol),
                    "--time-limit", str(time_limit),
                    "--option", "log_to_console=false",
                    "--option", f"algorithm={algorithm}"]
@@ -84,13 +120,19 @@ def run(binary: Path, mps: Path, algorithm: str, tolerance: float | None,
         seconds = time.perf_counter() - started
         if not stats.exists():
             return {"status": "no_output", "objective": None, "iterations": "",
-                    "seconds": seconds}
+                    "seconds": seconds, "verified": "", "verifier_message": "",
+                    **{k: "" for k in kkt_crossings.ALL_COLUMNS}}
         blob = json.loads(stats.read_text())
+        status = blob.get("result", {}).get("status", "unknown")
+        verified, why = verdict(mps, sol, status) if verify else ("", "")
         return {
-            "status": blob.get("result", {}).get("status", "unknown"),
+            "status": status,
             "objective": as_number(blob.get("result", {}).get("objective")),
             "iterations": blob.get("effort", {}).get("iterations", ""),
             "seconds": seconds,
+            "verified": verified,
+            "verifier_message": why,
+            **kkt_crossings.crossings(blob),
         }
 
 
@@ -111,6 +153,8 @@ def main() -> int:
                              "skips it for that reason.")
     parser.add_argument("--out", type=Path, default=None,
                         help="write the CSV here instead of bench/results/pdhg-<commit>.csv")
+    parser.add_argument("--no-verify", action="store_true",
+                        help="skip the independent verifier (the verdict column stays blank)")
     args = parser.parse_args()
 
     binary = args.binary or default_binary()
@@ -123,10 +167,15 @@ def main() -> int:
     machine = f"{platform.system()}-{platform.machine()}"
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     rows: list[dict] = []
+    digests = {n: sha256_file(DATA_DIR / f"{n}.mps") for n in names
+               if (DATA_DIR / f"{n}.mps").exists()}
+    verify = not args.no_verify
 
     def record(name, algorithm, tolerance, restarts, result, published):
         error = (None if result["objective"] is None
                  else abs(result["objective"] - published) / max(1.0, abs(published)))
+        absolute = (None if result["objective"] is None
+                    else abs(result["objective"] - published))
         rows.append({
             "instance": name, "algorithm": algorithm,
             "tolerance": "" if tolerance is None else f"{tolerance:g}",
@@ -143,6 +192,11 @@ def main() -> int:
             "reached_tolerance": int(result["status"] in ("optimal", "feasible")),
             "git_commit": commit, "machine": machine, "timestamp_utc": timestamp,
             "solver_options": " ".join(args.solver_option),
+            "instance_sha256": digests[name],
+            "absolute_error": "" if absolute is None else repr(absolute),
+            "independently_verified": result.get("verified", ""),
+            "verifier_message": result.get("verifier_message", ""),
+            **{k: result.get(k, "") for k in kkt_crossings.ALL_COLUMNS},
         })
         return error
 
@@ -160,13 +214,15 @@ def main() -> int:
             continue
         published = reference[name]["published_optimal"]
 
-        simplex = run(binary, mps, "simplex", None, True, args.time_limit)
+        simplex = run(binary, mps, "simplex", None, True, args.time_limit, verify=verify)
         simplex_error = record(name, "simplex", None, None, simplex, published)
 
-        loose = run(binary, mps, "pdhg", 1e-4, True, args.time_limit, args.solver_option)
+        loose = run(binary, mps, "pdhg", 1e-4, True, args.time_limit,
+                  args.solver_option, verify=verify)
         loose_error = record(name, "pdhg", 1e-4, True, loose, published)
 
-        tight = run(binary, mps, "pdhg", 1e-8, True, args.time_limit, args.solver_option)
+        tight = run(binary, mps, "pdhg", 1e-8, True, args.time_limit,
+                  args.solver_option, verify=verify)
         tight_error = record(name, "pdhg", 1e-8, True, tight, published)
         if tight["status"] not in ("optimal", "feasible"):
             missed_tight.append(name)
@@ -187,6 +243,20 @@ def main() -> int:
     else:
         print("every instance reached the 1e-8 relative tolerance")
 
+    # ---- the relative-KKT crossings of the 1e-8 run, beside the verifier (#486) ---------
+    print("\nRelative KKT error (PDLP definition) first at or under each level, in the 1e-8 "
+          "run,\nbeside the independent verifier's verdict on the point it returned.\n")
+    print(f"{'instance':<11}{'1e-4 (s)':>12}{'1e-6 (s)':>12}{'1e-8 (s)':>12}"
+          f"  {'status':<10}verified")
+    print("-" * 70)
+    for row in rows:
+        if row["algorithm"] != "pdhg" or row["tolerance"] != "1e-08":
+            continue
+        cells = [kkt_crossings.cell_text(row[k]) for k in kkt_crossings.COLUMNS]
+        mark = {"1": "yes", "0": "NO"}.get(str(row["independently_verified"]), "-")
+        print(f"{row['instance']:<11}{cells[0]:>12}{cells[1]:>12}{cells[2]:>12}"
+              f"  {row['status']:<10}{mark}")
+
     # ---- 3: restarts on versus off ------------------------------------------------------
     print("\nRestarts on vs off, at 1e-8. This is the measurement behind the claim that "
           "restarts help.\n")
@@ -197,8 +267,10 @@ def main() -> int:
         if not mps.exists():
             continue
         published = reference[name]["published_optimal"]
-        on = run(binary, mps, "pdhg", 1e-8, True, args.time_limit, args.solver_option)
-        off = run(binary, mps, "pdhg", 1e-8, False, args.time_limit, args.solver_option)
+        on = run(binary, mps, "pdhg", 1e-8, True, args.time_limit,
+                  args.solver_option, verify=verify)
+        off = run(binary, mps, "pdhg", 1e-8, False, args.time_limit,
+                  args.solver_option, verify=verify)
         record(name, "pdhg", 1e-8, True, on, published)
         record(name, "pdhg", 1e-8, False, off, published)
         on_iters = on["iterations"] if isinstance(on["iterations"], int) else 0
@@ -212,7 +284,9 @@ def main() -> int:
         writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
-    print(f"\nwrote {out.relative_to(REPO_ROOT)}")
+    # An --out outside the repository (a scratch run) is printed as given.
+    shown = out.resolve().relative_to(REPO_ROOT) if out.resolve().is_relative_to(REPO_ROOT) else out
+    print(f"\nwrote {shown}")
     return 0
 
 

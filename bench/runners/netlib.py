@@ -35,6 +35,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+import kkt_crossings  # noqa: E402  (#486: the relative-KKT crossing columns)
 import stamp  # noqa: E402  (#433: stamps from the binary)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +92,10 @@ CSV_COLUMNS = [
     "solver_seconds",
     "iterations",
     "algorithm",
+    # First crossings of the relative KKT error at 1e-4, 1e-6 and 1e-8 in the run, in seconds
+    # and in iterations (#486, kkt_crossings.py): blank for an engine other than PDHG, nan
+    # (seconds) or -1 (iterations) for a level a PDHG run never reached.
+    *kkt_crossings.ALL_COLUMNS,
     "git_commit",
     "machine",
     "timestamp_utc",
@@ -187,6 +192,7 @@ def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
             "wall_seconds": wall,
             "stderr": completed.stderr.strip()[:400],
             "verified": None,
+            **kkt_crossings.crossings(blob),
         }
 
         if verify and sol_path.exists() and flat["status"] in ("optimal", "feasible"):
@@ -320,6 +326,7 @@ def main() -> int:
             "solver_seconds": blob.get("solver_seconds", ""),
             "iterations": blob.get("iterations", ""),
             "algorithm": blob.get("algorithm", ""),
+            **{k: blob.get(k, "") for k in kkt_crossings.ALL_COLUMNS},
             "git_commit": commit,
             "solver_options": solver_options,
             "machine": machine,
