@@ -154,6 +154,20 @@ __global__ void k_interaction_fused(const double* __restrict__ dy,
   if (threadIdx.x == 0) atomicAdd(d_interaction, bsum);
 }
 
+// Two-mat-vec (#479): from A x_{k+1} and the cached A x_k derive both products the step
+// needs, A xbar = 2 A x_{k+1} - A x_k for the dual update and A dx = A x_{k+1} - A x_k
+// for the interaction term, by linearity, instead of two more sparse products.
+__global__ void k_derive_products(const double* __restrict__ ax_next,
+                                  const double* __restrict__ ax_cached,
+                                  double* __restrict__ ax_bar, double* __restrict__ adx, int m) {
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= m) return;
+  const double next = ax_next[i];
+  const double cached = ax_cached[i];
+  ax_bar[i] = 2.0 * next - cached;
+  adx[i] = next - cached;
+}
+
 // Accumulate into running sums (for the average iterate)
 __global__ void k_accum_n(const double* __restrict__ v, double* __restrict__ sum, int n) {
   const int j = blockIdx.x * blockDim.x + threadIdx.x;
@@ -204,6 +218,8 @@ struct GpuState {
   // Iterates (scaled space)
   double *d_x{}, *d_xn{}, *d_ext{}, *d_dx{}, *d_aty{}, *d_xsum{};
   double *d_y{}, *d_yn{}, *d_dy{}, *d_ax{}, *d_adx{}, *d_ysum{};
+  // Two-mat-vec (#479): A x_k and A x_{k+1}; allocated only when the option is on.
+  double *d_axc{}, *d_axn{};
   // Per-iteration scalar accumulators: [0]=movement_x, [1]=movement_y, [2]=interaction.
   // Zeroed by cudaMemset at the top of each iteration; updated via atomicAdd inside the
   // fused primal/dual kernels; downloaded in one transfer to avoid per-scalar sync stalls.
@@ -241,6 +257,8 @@ struct GpuState {
     cudaFree(d_ax);
     cudaFree(d_adx);
     cudaFree(d_ysum);
+    cudaFree(d_axc);
+    cudaFree(d_axn);
     cudaFree(d_scalars);
     cudaFree(d_cost);
     cudaFree(d_clo);
@@ -361,6 +379,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       limits.iteration_limit() < 0 ? 1000000 : static_cast<Count>(limits.iteration_limit());
   const bool use_restarts = options.get_bool("pdhg_restart");
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
+  const bool two_matvec = options.get_bool("pdhg_two_matvec");
 
   logger.info("Solving LP with CUDA restarted PDHG on {}: {} rows, {} columns, {} nonzeros",
               device_desc, rows, cols, model.num_nonzeros());
@@ -386,6 +405,10 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   g.d_dy = dev_zeros(m);
   g.d_ax = dev_zeros(m);
   g.d_adx = dev_zeros(m);
+  if (two_matvec) {
+    g.d_axc = dev_zeros(m);
+    g.d_axn = dev_zeros(m);
+  }
   g.d_ysum = dev_zeros(m);
   g.d_scalars = dev_zeros(3);  // [0]=mv_x, [1]=mv_y, [2]=interaction
   g.d_cost = dev_zeros(n);
@@ -541,6 +564,12 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   StopController stop(control, timer, limits);
   SolveStatus stop_status = SolveStatus::kIterationLimit;
 
+  // Two-mat-vec (#479): the cache starts as A x0, filled once the SpMV buffers exist.
+  if (two_matvec) {
+    if ((mi > 0 && (g.d_axc == nullptr || g.d_axn == nullptr)) || !spmv_nt(g, g.d_x, g.d_axc)) {
+      gpu_error = true;  // the CPU fallback below takes over
+    }
+  }
   while (!gpu_error) {
     if (iteration >= iteration_limit) break;
     if (stop.should_stop(
@@ -579,8 +608,19 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       break;
     }
 
-    // 3. A * extrapolated  [CP11 Alg.1 dual step]
-    if (!spmv_nt(g, g.d_ext, g.d_ax)) {
+    // 3. A * extrapolated  [CP11 Alg.1 dual step]. With two_matvec (#479): A x_{k+1} once,
+    // and A xbar and A dx derived from it and the cached A x_k.
+    if (two_matvec) {
+      if (!spmv_nt(g, g.d_xn, g.d_axn)) {
+        gpu_error = true;
+        break;
+      }
+      if (mi > 0) k_derive_products<<<bm, kBlockSize>>>(g.d_axn, g.d_axc, g.d_ax, g.d_adx, mi);
+      if (!launch_ok()) {
+        gpu_error = true;
+        break;
+      }
+    } else if (!spmv_nt(g, g.d_ext, g.d_ax)) {
       gpu_error = true;
       break;
     }
@@ -594,8 +634,8 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       break;
     }
 
-    // 5. A * dx  [PDLP §3.1 interaction term]
-    if (!spmv_nt(g, g.d_dx, g.d_adx)) {
+    // 5. A * dx  [PDLP §3.1 interaction term]; already derived with two_matvec.
+    if (!two_matvec && !spmv_nt(g, g.d_dx, g.d_adx)) {
       gpu_error = true;
       break;
     }
@@ -631,6 +671,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       // Accept: swap iterates via pointer swap
       std::swap(g.d_x, g.d_xn);
       std::swap(g.d_y, g.d_yn);
+      if (two_matvec) std::swap(g.d_axc, g.d_axn);  // A x_{k+1} is A x of the new iterate
       // Accumulate running sums
       if (ni > 0) k_accum_n<<<bn, kBlockSize>>>(g.d_x, g.d_xsum, ni);
       if (mi > 0) k_accum_m<<<bm, kBlockSize>>>(g.d_y, g.d_ysum, mi);
@@ -739,6 +780,12 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
         restart_kkt = kkt;
         last_restart = iteration;
         ++restarts;
+        // The cache is A x carried forward by derivation; at each restart it is recomputed
+        // from x so rounding cannot accumulate across restart periods (#479).
+        if (two_matvec && !spmv_nt(g, g.d_x, g.d_axc)) {
+          gpu_error = true;
+          break;
+        }
         logger.verbose("restart {} at iteration {}: KKT {:.3e}, primal weight {:.3e}", restarts,
                        iteration, kkt, omega);
       }
