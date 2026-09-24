@@ -697,7 +697,7 @@ TEST(Pdhg, OffTickEvaluationIsGeometricallyScheduled) {
   // no-information iteration, while the geometric mode evaluates at consecutive
   // no-information counts 1, 2, 4, ... The test intentionally compares the two evaluation
   // counts rather than hard-coding an expected count.
-  const Model model = make_lp({{1.0}}, {-kInfinity}, {kInfinity}, {-0.01}, {1.0});
+  const Model model = make_lp({{1.0}}, {-kInfinity}, {kInfinity}, {-1.0}, {1000.0});
 
   Options options = pdhg_options(1e-8);
   options.set_bool("pdhg_restart", false);
