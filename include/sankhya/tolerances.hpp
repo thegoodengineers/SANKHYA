@@ -479,4 +479,9 @@ inline constexpr double kImpliedIntegerDataLimit = 9007199254740992.0;
 inline constexpr double kObbtFixedRange = 1e-6;
 inline constexpr double kObbtMinimumTightening = 1e-8;
 inline constexpr double kObbtCutoffEpsilon = 1e-6;
+
+/// Root domain propagation (#510): synchronous rounds at most. Each round reads every row once;
+/// most tightening happens in the first few (Savelsbergh 1994), and a cap keeps a slowly
+/// converging chain (bounds creeping by a small amount each round) from running long.
+inline constexpr int kDomainPropagationRounds = 50;
 }  // namespace sankhya::tol
