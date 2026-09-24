@@ -39,6 +39,7 @@ enum Slot : std::size_t {
   kPump,
   kRins,
   kRens,
+  kLocalMip,
   kSlots
 };
 constexpr const char* kNames[kSlots] = {"rounding",
@@ -50,7 +51,8 @@ constexpr const char* kNames[kSlots] = {"rounding",
                                         "guided diving",
                                         "feasibility pump",
                                         "RINS",
-                                        "RENS"};
+                                        "RENS",
+                                        "local MIP"};
 static_assert(kDiveGuided - kDiveFractional + 1 == kDiveRules);
 
 /// The options a sub-MIP (RINS, RENS) is solved with: the search's own, quiet, capped at
@@ -231,12 +233,17 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
   // Runs when mip_local_mip is on and a feasible incumbent is in hand. The heuristic runs
   // its own internal budget (500 iterations) so it does not need a separate budget here.
   if (options_.get_bool("mip_local_mip") && have_incumbent_) {
+    HeuristicStats& s = heuristic_stats_[kLocalMip];
+    const Timer clock;
+    ++s.calls;
     Solution sol;
     sol.col_value = incumbent_x_;
     sol.objective = reported(incumbent_internal_);
     if (local_mip_improve(original_, options_, sol, logger_)) {
-      (void)offer_incumbent(sol.col_value);
+      ++s.found;
+      if (offer_incumbent(sol.col_value)) ++s.improved;
     }
+    s.seconds += clock.elapsed_seconds();
   }
 }
 

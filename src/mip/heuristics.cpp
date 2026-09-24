@@ -500,7 +500,7 @@ bool local_mip_improve(const Model& model, const Options& options, Solution& inc
         found = true;
 
         const double new_obj = model.evaluate_objective(x.data());
-        if (new_obj < best_obj - tol::kPrimalFeasibility) {
+        if (sense * new_obj < sense * best_obj - tol::kPrimalFeasibility) {
           best_obj = new_obj;
           incumbent.col_value = x;
           incumbent.objective = new_obj;
@@ -619,7 +619,7 @@ bool local_mip_improve(const Model& model, const Options& options, Solution& inc
         }
         if (integral) {
           const double new_obj = model.evaluate_objective(x.data());
-          if (new_obj < best_obj - tol::kPrimalFeasibility) {
+          if (sense * new_obj < sense * best_obj - tol::kPrimalFeasibility) {
             best_obj = new_obj;
             incumbent.col_value = x;
             incumbent.objective = new_obj;
