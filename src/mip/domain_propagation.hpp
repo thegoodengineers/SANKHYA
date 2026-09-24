@@ -29,6 +29,7 @@
 
 #include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
+#include "sankhya/options.hpp"
 #include "sankhya/types.hpp"
 
 namespace sankhya::mip {
@@ -60,6 +61,6 @@ JacobiPropagation propagate_jacobi(const Model& model, const RowMajor& rows,
 /// place, on the device when the build has CUDA and a card answers, otherwise with the CPU
 /// reference above - the same bounds either way. A box proved empty is left as it was (the
 /// search proves it again, with its own evidence). Returns the number of bounds changed.
-Count propagate_root_bounds(Model* model, Logger& logger);
+Count propagate_root_bounds(Model* model, const Options& options, Logger& logger);
 
 }  // namespace sankhya::mip

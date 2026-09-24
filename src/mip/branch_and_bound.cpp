@@ -988,7 +988,7 @@ Solution solve_branch_and_bound(const Model& model, const Options& options, Logg
                                      : ObbtResult{};
   // Root domain propagation (#510): the synchronous propagator, on the GPU when there is one.
   const Count propagated = (!certify && options.get_bool("gpu_domain_prop"))
-                               ? propagate_root_bounds(&tightened, logger)
+                               ? propagate_root_bounds(&tightened, options, logger)
                                : 0;
   const bool any_tightening =
       effect.rows_tightened > 0 || obbt_result.bounds_tightened > 0 || propagated > 0;
