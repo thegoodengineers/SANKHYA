@@ -41,6 +41,7 @@ Constraints (per period):
     delivery commit SELL_{j,t}                                 >= commit   (G)
 
 Objective: minimise  sum_{k,t} c_buy[k] * BUY_{k,t}
+           (+ sum_{k,t} f_{k,t} * ZDEC_{k,t}, a fixed ordering cost, with --milp)
                    - sum_{j,t} p_sell[j] * SELL_{j,t}
                    + sum_{k,t} h_crude[k] * CS_{k,t}
                    + sum_{j,t} h_prod[j] * PS_{j,t}
@@ -97,6 +98,10 @@ STOCK_SLACK = 5         # tank size = peak stock held + [0, STOCK_SLACK]
 MULT_RANGE = 9          # |y*_i| and reduced-cost d_j drawn from [1, MULT_RANGE]
 TIGHT_PROB = 0.5        # probability that a capacity / spec / demand row is tight
 BIG_M_FACTOR = 4        # bigM = BIG_M_FACTOR * CDU_capacity (MILP only)
+# Fixed cost of placing a crude order in a period (MILP only), as a share of what the
+# largest purchase in the LP plan costs. Without it the binaries cost nothing, z = 1
+# everywhere reproduces the LP optimum, and the "MILP" is the LP (review of #633).
+FIXED_ORDER_SHARE = Fraction(1, 4)
 
 # ---------------------------------------------------------------------------
 # Size presets
@@ -348,7 +353,10 @@ def extend_to_milp(inst: Instance, periods: int, crudes: int) -> None:
 
     The LP optimal primal values for BUY are all >= 0; we choose bigM large
     enough that the LP relaxation is not tightened, so the LP optimum is still
-    feasible for the MILP relaxation.  The MILP optimum is not pre-verified.
+    feasible for the MILP relaxation.  Each order carries a fixed cost
+    (FIXED_ORDER_SHARE of the largest purchase's cost), so the MILP optimum is
+    strictly above the LP optimum whenever crude must be bought.  The MILP
+    optimum is not pre-verified.
     """
     fr = Fraction
     # Identify BUY column indices: they were added in the order (t=0,k=0..K-1),
@@ -370,8 +378,11 @@ def extend_to_milp(inst: Instance, periods: int, crudes: int) -> None:
             # BUY_{k,t} - bigM * ZDEC_{k,t} <= 0
             inst.add_row(f"ZLINK_{k}_{t}", "L",
                          {buy_col: fr(1), z_col: -big_m}, fr(0))
-            # Extend cost vector: binary variables have cost 0 in the objective
-            inst.cost.append(fr(0))
+            # A fixed ordering cost: the LP relaxation pays it only in proportion
+            # BUY / bigM, so the relaxation is weaker than the MILP and branching matters.
+            # |c_buy|: the KKT construction gives signed prices, and a negative fixed cost
+            # would reward ordering instead of charging for it.
+            inst.cost.append(FIXED_ORDER_SHARE * max(abs(inst.cost[buy_col]), fr(1)) * max_buy)
 
 
 # ---------------------------------------------------------------------------

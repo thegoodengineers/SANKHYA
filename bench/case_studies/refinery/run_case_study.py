@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -60,10 +61,16 @@ RUNS: list[tuple[str, str]] = [
 def _find_sankhya(hint: str | None) -> str | None:
     if hint:
         return hint
+    # Relative to the repository, not the working directory, so the driver finds the
+    # build from anywhere (review of #633); SANKHYA_BIN wins, as for the other runners.
+    env = os.environ.get("SANKHYA_BIN")
+    if env and Path(env).exists():
+        return env
+    root = Path(__file__).resolve().parents[3]
     candidates = [
-        Path("build") / "sankhya.exe",
-        Path("build") / "sankhya",
-        Path("build") / "Release" / "sankhya.exe",
+        root / "build" / "sankhya.exe",
+        root / "build" / "sankhya",
+        root / "build" / "Release" / "sankhya.exe",
     ]
     for p in candidates:
         if p.exists():

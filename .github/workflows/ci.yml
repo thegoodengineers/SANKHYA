@@ -233,6 +233,10 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 tools/test_report.py
 
+      - name: The refinery case study generates, solves, and its MILP is not its LP (#517)
+        if: matrix.name == 'Release'
+        run: python3 bench/case_studies/refinery/test_generator.py
+
       - name: An evidence bundle replays - integrity, verifier, re-solve (#526)
         if: matrix.name == 'Release'
         run: python3 tools/test_bundle.py
