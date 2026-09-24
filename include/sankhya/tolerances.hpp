@@ -402,4 +402,9 @@ inline constexpr double kGlobalImpliedValueFloor = 1e-12;
 inline constexpr std::int64_t kGlobalHeuristicAlwaysNodes = 10;
 inline constexpr std::int64_t kGlobalHeuristicInterval = 10;
 
+/// Safe dual bounds (#519): the largest factor y is ever scaled down by in the (1 - e) y
+/// retry, and how far past the first-order estimate of e the scaling goes so the rounding of
+/// the second evaluation cannot undo it. Neumaier & Shcherbina, Math. Program. 99 (2004).
+inline constexpr double kSafeBoundMaxShrink = 1e-6;
+inline constexpr double kSafeBoundShrinkMargin = 4.0;
 }  // namespace sankhya::tol

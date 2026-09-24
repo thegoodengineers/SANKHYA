@@ -481,6 +481,14 @@ void mix_doubles(std::uint64_t* hash, const std::vector<double>& values) noexcep
 void mix_matrix(std::uint64_t* hash, const SparseMatrix& matrix) noexcept {
   mix_index(hash, matrix.num_rows());
   mix_index(hash, matrix.num_cols());
+  // A matrix never finalized has no stored order to read: the Hessian of an LP or MILP built
+  // in code is left default-constructed, and reading it asserted in a Debug build whenever a
+  // deterministic solve logged the fingerprint (found in review of #636). Its entry count
+  // still enters the hash; a finalized matrix hashes exactly as before.
+  if (!matrix.frozen()) {
+    mix_index(hash, matrix.num_nonzeros());
+    return;
+  }
   // The stored order. Two matrices that hold the same entries in a different column order
   // are different inputs to the factorization and are meant to fingerprint differently.
   for (const Index start : matrix.column_starts()) mix_index(hash, start);

@@ -594,12 +594,25 @@ Solution BranchAndBound::run() {
     // THE PSEUDOCOST OBSERVATION (#69): what branching on this node's column bought, per
     // unit of the fractionality it removed, in the direction it went. Recorded whether or
     // not the node is pruned next - the gain is real either way.
+    // The gain is taken against the parent's LP objective, not the proved bound safe_bounds
+    // may have stored in `bound` (#519): that one is -inf when no bound could be proved, and
+    // an infinite gain would stay in the column's pseudocost sum for the rest of the search.
     if (node.has_change && node.fraction > 0.0) {
-      record_pseudocost(node.change.column, node.change.is_upper,
-                        std::max(node_bound - node.bound, 0.0), node.fraction);
+      const double parent_lp =
+          std::isnan(node.parent_lp_bound) ? node.bound : node.parent_lp_bound;
+      const double gain = node_bound - parent_lp;
+      if (std::isfinite(gain)) {
+        record_pseudocost(node.change.column, node.change.is_upper, std::max(gain, 0.0),
+                          node.fraction);
+      }
     }
 
-    if (can_prune(node_bound)) {
+    // SAFE BOUNDS (#519): with the option on, the node is pruned, and its children ordered,
+    // on the Neumaier-Shcherbina bound from the node LP's duals rather than on the objective
+    // of its primal point. The believed bound still drives the pseudocosts and branching.
+    const double prune_bound =
+        safe_bounds_ ? safe_node_bound(relaxation, node_bound) : node_bound;
+    if (can_prune(prune_bound)) {
       leave();
       ++nodes_pruned_;
       continue;
@@ -698,7 +711,8 @@ Solution BranchAndBound::run() {
     down.parent = node_index;
     down.has_change = true;
     down.change = down_change;
-    down.bound = node_bound;
+    down.bound = prune_bound;
+    down.parent_lp_bound = node_bound;
     down.depth = node.depth + 1;
     down.warm = children_warm;
     down.fraction = down_fraction;
@@ -708,7 +722,8 @@ Solution BranchAndBound::run() {
     up.parent = node_index;
     up.has_change = true;
     up.change = up_change;
-    up.bound = node_bound;
+    up.bound = prune_bound;
+    up.parent_lp_bound = node_bound;
     up.depth = node.depth + 1;
     up.warm = children_warm;
     up.fraction = up_fraction;
@@ -744,6 +759,7 @@ Solution BranchAndBound::run() {
   }
 
   report_conflicts();
+  report_safe_bounds();
   // A search stopped by a limit is exactly the one worth resuming (#287).
   if (limit_hit && !open_.empty()) save_checkpoint();
   if (shared_ != nullptr) leave_shared(limit_hit, solution.stopped_by, gap_target_met);
