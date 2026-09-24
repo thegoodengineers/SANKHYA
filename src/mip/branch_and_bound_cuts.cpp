@@ -208,7 +208,7 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
   // Implied-bound cuts (#499): the line through a two-variable row's two binary cases,
   // tighter than the row when the continuous column's own bound caps one case.
   if (options_.get_bool("mip_implied_bound_cuts")) {
-    std::vector<Cut> implied = implied_bound_cuts(working_, initial_relaxation.col_value);
+    std::vector<Cut> implied = implied_bound_cuts(working_, relaxation.col_value);
     candidates.insert(candidates.end(), implied.begin(), implied.end());
   }
   // MIR cuts from the model's own rows (#221): built from original coefficients rather
