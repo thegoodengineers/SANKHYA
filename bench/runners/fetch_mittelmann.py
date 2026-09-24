@@ -12,7 +12,10 @@ as bzip2-compressed MPS files. They are LARGE - the benchmark page runs them wit
 limit and its smallest members are still an order of magnitude beyond Netlib's largest - so
 this script fetches a NAMED SUBSET, `small`, of the smallest archives by size, which is the
 honest place to start: a runner that reports failures by name is worth more than one that
-never ran. `--set full` fetches every top-level archive in the directory.
+never ran. `medium` (#531) is the next size class by the same rule - smallest-first,
+extending SMALL_SET rather than replacing it - four more archives, still comfortably short
+of the "order of magnitude beyond Netlib" tier the largest FULL_SET members reach.
+`--set full` fetches every top-level archive in the directory.
 
 Provenance recorded per instance in data/mittelmann/reference.json: the archive URL, the
 sha256 of the archive and of the decompressed MPS, and both sizes. No published optimum is
@@ -20,8 +23,9 @@ recorded, because the benchmark page publishes solver TIMES, not objective value
 runner therefore reports the verifier's verdict and cross-checks against HiGHS when it is
 available, rather than a pass against a number nobody printed.
 
-    python bench/runners/fetch_mittelmann.py              # the small set
-    python bench/runners/fetch_mittelmann.py --set full   # everything at the top level
+    python bench/runners/fetch_mittelmann.py                # the small set
+    python bench/runners/fetch_mittelmann.py --set medium   # small + the next size class
+    python bench/runners/fetch_mittelmann.py --set full     # everything at the top level
 """
 from __future__ import annotations
 
@@ -56,6 +60,15 @@ SMALL_SET = [
     "supportcase10.mps.bz2",
     "bdry2.bz2",
     "rmine15.mps.bz2",
+]
+
+# #531: the next size class after SMALL_SET, chosen by the same rule - smallest archives
+# first by compressed size, not by which ones we expect to pass. Four more: compressed
+# 3.7-4.8 MB against SMALL_SET's largest at 3.1 MB, decided to fit this laptop's memory
+# (SMALL_SET's largest decompressed member, bdry2, is 67 MB; these four are the next step
+# up, not the next order of magnitude - FULL_SET's later members are).
+MEDIUM_SET = SMALL_SET + [
+    "physiciansched3-3.mps.bz2", "ex10.mps.bz2", "datt256_lp.mps.bz2", "s250r10.mps.bz2",
 ]
 
 FULL_SET = SMALL_SET + [
@@ -137,7 +150,8 @@ def download(url: str, target: Path, attempts: int = 4) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--set", dest="instance_set", choices=("small", "full"), default="small")
+    parser.add_argument("--set", dest="instance_set", choices=("small", "medium", "full"),
+                        default="small")
     parser.add_argument("--force", action="store_true", help="re-download present archives")
     parser.add_argument("--update-manifest", action="store_true",
                         help="rewrite data/mittelmann/reference.json when a decoded MPS differs "
@@ -146,7 +160,7 @@ def main() -> int:
                              "fresh clone does not stamp itself -dirty, #488)")
     args = parser.parse_args()
 
-    archives = SMALL_SET if args.instance_set == "small" else FULL_SET
+    archives = {"small": SMALL_SET, "medium": MEDIUM_SET, "full": FULL_SET}[args.instance_set]
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     manifest_path = DATA_DIR / "reference.json"
     manifest = {"source": BASE_URL, "benchmark_page": "https://plato.asu.edu/ftp/lpfeas.html",

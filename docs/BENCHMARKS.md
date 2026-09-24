@@ -323,43 +323,51 @@ instances of that size and name what happens. These are the eight smallest archi
 Mittelmann's LP test set (`bench/runners/fetch_mittelmann.py`, provenance in
 `data/mittelmann/reference.json`).
 
-Source CSV: `bench/results/mittelmann-65eecbc.csv`  
-Commit `65eecbc` · machine `Windows-AMD64` · time limit 300 s per instance, both solvers
+Source CSV: `bench/results/mittelmann-72123ff.csv`  
+Commit `72123ff` · machine `Windows-AMD64` · time limit 300 s per instance, both solvers
 
-**2 of 8** instances reached `optimal` inside the limit; **2 of 8** also passed the independent verifier and agree with HiGHS. HiGHS, run as a separate process under the same limit, finished **4 of 8**.
+**5 of 12** instances reached `optimal` inside the limit; **5 of 12** also passed the independent verifier and agree with HiGHS. HiGHS, run as a separate process under the same limit, finished **4 of 12**.
 
 These are the smallest archives in Mittelmann's LP directory; against Netlib's largest instance (dfl001, 6,071 rows, 35,632 nonzeros) they range from the same row count with 2.7x the nonzeros (qap15) to 62x the rows and 42x the nonzeros (bdry2). No published optimum exists for them, so there is no pass-against-a-number column: the outcome is the status, the verifier's verdict where a solution was written, and HiGHS's objective where HiGHS finished. `our objective` on a `time_limit` row is the last iterate's value, not a bound, and is printed only so that a later run can be compared with it.
 
 | instance | rows | cols | nonzeros | status | our objective | HiGHS objective | rel. diff | iters | solver time (s) | verified |
 |---|---:|---:|---:|---|---:|---:|---:|---:|---:|:--:|
-| `Linf_520c` | 93326 | 69004 | 566193 | time_limit | 0.180810452 | Time limit reached | - | 112642 | 300.0 | - |
-| `bdry2` | 376500 | 250998 | 1500003 | time_limit | 0.001999991456 | Time limit reached | - | 22699 | 258.8 | - |
-| `brazil3` | 14646 | 23968 | 133184 | optimal | 2 | 2 | 3.7e-11 | 15 | 2.7 | yes |
-| `chromaticindex1024-7` | 67583 | 73728 | 270324 | optimal | 3 | 3 | 2.6e-12 | 560 | 20.1 | yes |
-| `irish-electricity` | 104259 | 61728 | 523257 | time_limit | 2454384.009 | 2546254.563 | - | 109000 | 240.1 | - |
-| `qap15` | 6330 | 22275 | 94950 | time_limit | 1218.102164 | Time limit reached | - | 75820 | 300.0 | - |
-| `rmine15` | 358395 | 42438 | 879732 | time_limit | -5042.467038 | Time limit reached | - | 36957 | 216.4 | - |
-| `supportcase10` | 165684 | 14770 | 555082 | time_limit | 3.383923735 | 3.383923666 | - | 93920 | 216.7 | - |
+| `Linf_520c` | 93326 | 69004 | 566193 | time_limit | 0.7756970849 | Time limit reached | - | 24039 | 300.1 | - |
+| `bdry2` | 376500 | 250998 | 1500003 | time_limit | 0.001999991456 | Time limit reached | - | 7019 | 253.4 | - |
+| `brazil3` | 14646 | 23968 | 133184 | optimal | 2 | 2 | 3.7e-11 | 15 | 5.9 | yes |
+| `chromaticindex1024-7` | 67583 | 73728 | 270324 | optimal | 3 | 3 | 2.6e-12 | 560 | 57.9 | yes |
+| `datt256_lp` | 11077 | 262144 | 1503732 | optimal | 256 | Time limit reached | - | 10 | 153.0 | yes |
+| `ex10` | 69608 | 17680 | 1162000 | optimal | 100 | 100 | 3.0e-12 | 1480 | 77.6 | yes |
+| `irish-electricity` | 104259 | 61728 | 523257 | time_limit | 2454378.022 | Time limit reached | - | 36902 | 240.2 | - |
+| `physiciansched3-3` | 266227 | 79555 | 1062479 | time_limit | 1431579.932 | Time limit reached | - | 21399 | 216.8 | - |
+| `qap15` | 6330 | 22275 | 94950 | time_limit | 172.7930772 | Time limit reached | - | 23875 | 300.1 | - |
+| `rmine15` | 358395 | 42438 | 879732 | time_limit | -5042.486721 | Time limit reached | - | 20597 | 216.7 | - |
+| `s250r10` | 10962 | 273142 | 1318607 | optimal | -0.1726767184 | -0.1726770419 | 3.2e-07 | 116 | 185.0 | yes |
+| `supportcase10` | 165684 | 14770 | 555082 | time_limit | 3.383924801 | Time limit reached | - | 22080 | 220.7 | - |
 
-**Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `irish-electricity`, `qap15`, `rmine15`, `supportcase10`.
+**Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `irish-electricity`, `physiciansched3-3`, `qap15`, `rmine15`, `supportcase10`.
 
 #### The same eight under each engine
 
-Source CSVs: `bench/results/mittelmann-65eecbc.csv` (dual simplex), `bench/results/mittelmann-pdhg-5c7efbc.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
+Source CSVs: `bench/results/mittelmann-72123ff.csv` (dual simplex), `bench/results/mittelmann-pdhg-5c7efbc.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
 Same 300 s limit per instance and engine; HiGHS is not re-run here.
 
 | instance | dual simplex: status · verified · time (s) | PDHG: status · verified · time (s) | interior point: status · verified · time (s) |
 |---|---|---|---|
-| `Linf_520c` | time_limit · - · 300.0 | time_limit · - · 231.4 | not run |
-| `bdry2` | time_limit · - · 258.8 | time_limit · - · 241.1 | not run |
-| `brazil3` | optimal · yes · 2.7 | optimal · yes · 58.0 | optimal · yes · 2.7 |
-| `chromaticindex1024-7` | optimal · yes · 20.1 | optimal · yes · 0.7 | not run |
-| `irish-electricity` | time_limit · - · 240.1 | time_limit · - · 240.0 | not run |
-| `qap15` | time_limit · - · 300.0 | optimal · yes · 93.4 | not run |
-| `rmine15` | time_limit · - · 216.4 | time_limit · - · 216.2 | not run |
-| `supportcase10` | time_limit · - · 216.7 | time_limit · - · 220.9 | not run |
+| `Linf_520c` | time_limit · - · 300.1 | time_limit · - · 231.4 | not run |
+| `bdry2` | time_limit · - · 253.4 | time_limit · - · 241.1 | not run |
+| `brazil3` | optimal · yes · 5.9 | optimal · yes · 58.0 | optimal · yes · 2.7 |
+| `chromaticindex1024-7` | optimal · yes · 57.9 | optimal · yes · 0.7 | not run |
+| `datt256_lp` | optimal · yes · 153.0 | not run | not run |
+| `ex10` | optimal · yes · 77.6 | not run | not run |
+| `irish-electricity` | time_limit · - · 240.2 | time_limit · - · 240.0 | not run |
+| `physiciansched3-3` | time_limit · - · 216.8 | not run | not run |
+| `qap15` | time_limit · - · 300.1 | optimal · yes · 93.4 | not run |
+| `rmine15` | time_limit · - · 216.7 | time_limit · - · 216.2 | not run |
+| `s250r10` | optimal · yes · 185.0 | not run | not run |
+| `supportcase10` | time_limit · - · 220.7 | time_limit · - · 220.9 | not run |
 
-Finished and verified inside the limit: dual simplex **2 of 8**, PDHG **3 of 8**, interior point **1 of 8**.
+Finished and verified inside the limit: dual simplex **5 of 12**, PDHG **3 of 12**, interior point **1 of 12**.
 
 ### 1e. The first-order engine — PDHG
 
