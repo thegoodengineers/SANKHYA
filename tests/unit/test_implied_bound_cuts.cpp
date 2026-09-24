@@ -188,7 +188,11 @@ TEST(ImpliedBoundCuts, ASearchWithThemReachesTheExactOptimum) {
     lp.b[demand_row] = demand / 2 + 1;
     const oracle::OracleResult exact = oracle::solve_exact_milp(lp, 20000);
     if (exact.status != oracle::OracleStatus::kOptimal) continue;
-    const Model model = oracle::to_model(lp);
+    Model model = oracle::to_model(lp);
+    // to_model carries the LP only; the integrality is set here, as the oracle MILP tests do.
+    for (std::size_t j = 0; j < lp.integral.size(); ++j) {
+      if (lp.integral[j] != 0) model.col_type[j] = VarType::kInteger;
+    }
     Options options;
     options.set_bool("log_to_console", false);
     options.set_bool("presolve", false);
