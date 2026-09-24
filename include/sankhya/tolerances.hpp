@@ -440,6 +440,36 @@ inline constexpr double kIpmProximalRefinementShrink = 0.1;
 inline constexpr double kIpmProximalRecoveryRaise = 100.0;
 inline constexpr double kIpmProximalRecoveryCap = 1e-4;
 
+// ---- Gondzio's centrality correctors in the LP interior point (#472) ----------------------
+
+/// The products a corrector aims for: [kIpmCentralityBetaMin, kIpmCentralityBetaMax] times
+/// the target sigma mu, Gondzio's (1996) 0.1 and 10 (the issue's gamma = 0.1, and 1 / gamma).
+inline constexpr double kIpmCentralityBetaMin = 0.1;
+inline constexpr double kIpmCentralityBetaMax = 10.0;
+/// A corrector is kept only when alpha_p + alpha_d grows by this factor: 1% (the issue).
+inline constexpr double kIpmCentralityAcceptance = 1.01;
+/// The trial point is at the aspiration step min(scale * alpha + shift, 1) of Colombo and
+/// Gondzio (2008): alpha + delta_alpha with delta_alpha growing as the step does.
+inline constexpr double kIpmCentralityAspirationScale = 1.5;
+inline constexpr double kIpmCentralityAspirationShift = 0.3;
+/// The per-iteration budget from the factor's shape (ipm/centrality.hpp): the ratio of a
+/// factorization's work (about sum_j c_j^2) to a solve's (about kIpmCentralitySolveWork *
+/// sum_j c_j, a forward and a backward sweep over L, each a multiply and an add per entry).
+/// One corrector while that ratio is at most kIpmCentralityBudgetStart, then one more each
+/// time it grows by the factor kIpmCentralityBudgetGrowth.
+inline constexpr double kIpmCentralitySolveWork = 4.0;
+inline constexpr double kIpmCentralityBudgetStart = 2.0;
+inline constexpr double kIpmCentralityBudgetGrowth = 2.0;
+/// Where a corrector's solve is not one back-solve the budget above assumes (review of
+/// #668). On the dense-column path (#467) and the n x n side (#469) every solve is a
+/// preconditioned conjugate gradient of up to kIpmPcgMaxIterations steps: at most this many
+/// correctors per iteration there.
+inline constexpr int kIpmCentralityConjugateGradientCorrectors = 1;
+/// On the proximal path (#473) a solve is up to 1 + kIpmProximalRefinementSteps back-solves
+/// plus as many products with the unregularized system; the factor's ratio is divided by
+/// that, and at most this many correctors run per iteration.
+inline constexpr int kIpmCentralityProximalCorrectors = 2;
+
 /// Binary probing (#512; Savelsbergh 1994; Achterberg et al. 2020). A probe x_j = v is
 /// declared infeasible only when a row misses its bound by more than this, relative to
 /// max(1, |bound|), on top of the rounding the activity sum can carry: a probe wrongly called

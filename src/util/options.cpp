@@ -1620,6 +1620,27 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"rows", "columns", "auto"}});
+    s.push_back(
+        {"ipm_centrality_correctors",
+         OptionType::Int,
+         std::int64_t{0},
+         "Gondzio's multiple centrality correctors in the LP interior point (#472; Gondzio "
+         "1996, Colombo and Gondzio 2008): after the Mehrotra direction, up to this many "
+         "extra solves with the same factors push the complementarity products back into "
+         "[0.1, 10] sigma mu from the aspiration step min(1.5 alpha + 0.3, 1). A corrector is "
+         "kept only if its solve is finite and accurate (the conjugate gradients of "
+         "ipm_dense_columns or the n x n side converged, the refinement of "
+         "ipm_proximal_regularization met its target), it lengthens alpha_p + alpha_d by 1%, "
+         "and at the point the step reaches neither the worst complementarity product nor "
+         "their spread (largest over mean) grows and their floor (smallest over mean) does "
+         "not fall; the first one refused ends the iteration's "
+         "correctors. The number tried per iteration is also bounded by the factor's "
+         "estimated factorization-to-solve cost ratio (one, plus one per doubling past 2), "
+         "and is at most 1 on the dense-column and n x n paths and at most 2 on the proximal "
+         "path. 0 (the default) is off and leaves the iteration exactly as without it.",
+         0.0,
+         10.0,
+         {}});
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
                  tol::kPdhgLoose,

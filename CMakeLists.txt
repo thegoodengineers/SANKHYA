@@ -328,6 +328,7 @@ set(SANKHYA_CORE_SOURCES
   src/presolve/probing.cpp
   src/ipm/dense_columns.cpp
   src/ipm/column_side.cpp
+  src/ipm/centrality.cpp
   src/ipm/ipm.cpp
   src/ipm/model_space.cpp
   src/ipm/proximal_system.cpp
