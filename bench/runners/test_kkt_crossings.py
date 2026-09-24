@@ -51,10 +51,13 @@ def test_cells() -> None:
     simplex = kkt_crossings.crossings(blob("simplex-dual"))
     check(simplex == {k: "" for k in kkt_crossings.ALL_COLUMNS},
           "any other engine gets blanks, not a 'never reached' it never attempted")
-    for gpu in ("pdhg-cuda", "pdhg-cuda-multi", "pdhg-cuda+ipm"):
-        cells = kkt_crossings.crossings(blob(gpu))
+    for engine in ("pdhg-cuda-multi", "pdhg-cuda-multi+ipm"):
+        cells = kkt_crossings.crossings(blob(engine))
         check(cells == {k: "" for k in kkt_crossings.ALL_COLUMNS},
-              f"{gpu} records no crossings, so its row is blank, not 'never reached'")
+              f"{engine} records no crossings, so its row is blank, not 'never reached'")
+    for engine in ("pdhg-cuda", "pdhg-cuda+ipm"):
+        cells = kkt_crossings.crossings(blob(engine, kkt_1e4_seconds=0.2))
+        check(cells["kkt_1e4_seconds"] == 0.2, f"{engine} records its crossings")
     bare = kkt_crossings.crossings({"result": {"algorithm": "pdhg-cpu"}, "effort": {}})
     check(all(bare[k] == "nan" for k in kkt_crossings.COLUMNS)
           and all(bare[k] == -1 for k in kkt_crossings.ITERATION_COLUMNS),

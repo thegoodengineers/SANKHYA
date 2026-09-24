@@ -277,5 +277,23 @@ TEST(PdhgCudaRegression, TheDeviceLoopAgreesWithTheCpuAtTheStoppingTolerance) {
   }
 }
 
+TEST(PdhgCudaRegression, AConvergedCudaRunCarriesItsKktCrossings) {
+  // #486 on the device: the CUDA loop records the first crossings of the relative KKT error
+  // as the CPU engine does. A run that converged to 1e-8 relative crossed all three levels,
+  // in order, and its CSV row must not read "never reached".
+  Model model;
+  ASSERT_TRUE(io::read_model(repository_path("data/netlib/afiro.mps"), &model).ok);
+  const Solution gpu = solve(model, pdhg_regression_options(/*gpu=*/true));
+  if (!cuda_was_used(gpu))
+    GTEST_SKIP() << "CUDA backend not in this build: skipped, not passed.";
+  ASSERT_EQ(gpu.status, SolveStatus::kOptimal) << gpu.message;
+  EXPECT_GT(gpu.kkt_1e4_iterations, 0);
+  EXPECT_GE(gpu.kkt_1e6_iterations, gpu.kkt_1e4_iterations);
+  EXPECT_GE(gpu.kkt_1e8_iterations, gpu.kkt_1e6_iterations);
+  EXPECT_LE(gpu.kkt_1e8_iterations, gpu.iterations);
+  EXPECT_TRUE(std::isfinite(gpu.kkt_1e4_seconds));
+  EXPECT_LE(gpu.kkt_1e4_seconds, gpu.kkt_1e8_seconds);
+}
+
 }  // namespace
 }  // namespace sankhya

@@ -20,8 +20,8 @@ first-order phase, before any polish, so it is the polishing-off figure.
 
 The stats JSON carries the fields for every engine (NaN where nothing was recorded). A
 column that says "never reached" about a run that never recorded would be a claim about the
-wrong engine, so every engine but the CPU PDHG (simplex, IPM, and the CUDA PDHG, which does
-not record them yet) gets blanks here, and a CPU PDHG row keeps the writer's `nan` for a
+wrong engine, so every engine but the CPU and single-card CUDA PDHG (simplex, IPM, and the multi-GPU
+PDHG, which does not record them yet) gets blanks here, and a recording row keeps the writer's `nan` for a
 level the run never reached.
 """
 
@@ -38,10 +38,11 @@ ALL_COLUMNS = COLUMNS + ITERATION_COLUMNS
 LEVELS = ("1e-4", "1e-6", "1e-8")
 
 
-# The engines that record the crossings. Only the CPU PDHG does today (src/pdhg/pdhg.cpp);
-# pdhg-cuda and pdhg-cuda-multi leave the writer's defaults, and reading those as "never
-# reached" would put "not reached" beside a verified optimum that passed 1e-6 on the way.
-RECORDING_ENGINES = ("pdhg-cpu",)
+# The engines that record the crossings: the CPU PDHG (src/pdhg/pdhg.cpp) and the single-card
+# CUDA PDHG (src/gpu/pdhg_gpu.cu). pdhg-cuda-multi leaves the writer's defaults, and reading
+# those as "never reached" would put "not reached" beside a verified optimum that passed
+# 1e-6 on the way.
+RECORDING_ENGINES = ("pdhg-cpu", "pdhg-cuda")
 
 
 def records_crossings(algorithm: str) -> bool:
