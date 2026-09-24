@@ -906,6 +906,27 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
                               : "no answer passed its check, " + *engine_ran + "'s is reported",
                           chosen.engine->name(), chosen.reason)
             : chosen.reason;
+    // #559: an infeasible answer whose certificate did not survive presolve is retried once
+    // against the ORIGINAL model, and the retry is adopted only when it is infeasible WITH a
+    // certificate that verifies; otherwise the first answer stands (see the two call sites).
+    const auto certify_by_retry = [&](const char* note) {
+      Solution retry = run_lp_engine(model);
+      retry.solve_seconds = timer.elapsed_seconds();
+      reconcile_status_with_measurement(&retry, options, logger, /*check_dual=*/true);
+      refuse_a_non_finite_answer(&retry, logger);
+      record_why_it_stopped(&retry);
+      say_which_engine_ran(&retry);
+      verify_and_keep_certificate(&retry, model, logger);
+      if (retry.status != SolveStatus::kInfeasible || retry.farkas_dual.empty()) {
+        logger.info(
+            "Certificate retry (#559): no verified certificate; the first answer stands");
+        return;
+      }
+      retry.engine_rule = solution.engine_rule;
+      retry.engine_reason = solution.engine_reason;
+      retry.message = retry.message.empty() ? std::string(note) : retry.message + "; " + note;
+      solution = std::move(retry);
+    };
     if (presolve_proved_it) {
       // #559: presolve's own infeasibility detection (a reduction that concludes a row or
       // column bound has crossed) does not yet build a certificate for every reduction that
@@ -918,22 +939,9 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       // let the engine avoid the numerical trouble the full-size original runs into, as it
       // does on gran), so the same "adopt only if at least as good" rule applies.
       if (solution.status == SolveStatus::kInfeasible && solution.farkas_dual.empty()) {
-        Solution retry = run_lp_engine(model);
-        retry.solve_seconds = timer.elapsed_seconds();
-        reconcile_status_with_measurement(&retry, options, logger, /*check_dual=*/true);
-        refuse_a_non_finite_answer(&retry, logger);
-        record_why_it_stopped(&retry);
-        say_which_engine_ran(&retry);
-        verify_and_keep_certificate(&retry, model, logger);
-        if (retry.status == SolveStatus::kInfeasible && !retry.farkas_dual.empty()) {
-          retry.engine_rule = solution.engine_rule;
-          retry.engine_reason = solution.engine_reason;
-          const std::string note =
-              "presolve proved infeasibility but found no certifiable proof; retried "
-              "directly against the original model and this is that retry's result";
-          retry.message = retry.message.empty() ? note : retry.message + "; " + note;
-          solution = std::move(retry);
-        }
+        certify_by_retry(
+            "presolve proved infeasibility but found no certifiable proof; retried directly "
+            "against the original model and this is that retry's result");
       }
       logger.info("Result: {} (proved during presolve)  {:.3f}s", to_string(solution.status),
                   solution.solve_seconds);
@@ -961,22 +969,9 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // LEAST as good, never as a straight replacement.
     if (solution.status == SolveStatus::kInfeasible && solution.farkas_dual.empty() && !race &&
         !warm_requested && options.get_bool("presolve")) {
-      Solution retry = run_lp_engine(model);
-      retry.solve_seconds = timer.elapsed_seconds();
-      reconcile_status_with_measurement(&retry, options, logger, /*check_dual=*/true);
-      refuse_a_non_finite_answer(&retry, logger);
-      record_why_it_stopped(&retry);
-      say_which_engine_ran(&retry);
-      verify_and_keep_certificate(&retry, model, logger);
-      if (retry.status == SolveStatus::kInfeasible && !retry.farkas_dual.empty()) {
-        retry.engine_rule = solution.engine_rule;
-        retry.engine_reason = solution.engine_reason;
-        const std::string note =
-            "presolve found no certifiable proof; retried directly against the original "
-            "model and this is that retry's result";
-        retry.message = retry.message.empty() ? note : retry.message + "; " + note;
-        solution = std::move(retry);
-      }
+      certify_by_retry(
+          "presolve found no certifiable proof; retried directly against the original model "
+          "and this is that retry's result");
     }
     // Sensitivity ranging runs on the ORIGINAL model after postsolve so the vectors are
     // full-size and the basis is expressed in terms of original column and row indices.
