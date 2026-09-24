@@ -545,8 +545,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       const double dy_norm = euclidean_norm(dy);
       if (dx_norm > 1e-12 && dy_norm > 1e-12) {
         const double theta = 0.5;
-        omega =
-            std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
+        omega = std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
         omega = std::clamp(omega, 1e-6, 1e6);
       }
       halpern_reset(x, y, last_halpern_res.fp_residual, halpern);
@@ -555,9 +554,10 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       last_restart = iteration;
       ++restarts;
       if (logger.profiler() != nullptr) logger.profiler()->count("pdhg restarts");
-      logger.verbose("halpern restart {} at iteration {}: FP residual {:.3e}, primal weight "
-                     "{:.3e}",
-                     restarts, iteration, last_halpern_res.fp_residual, omega);
+      logger.verbose(
+          "halpern restart {} at iteration {}: FP residual {:.3e}, primal weight "
+          "{:.3e}",
+          restarts, iteration, last_halpern_res.fp_residual, omega);
     } else if (!use_halpern && use_restarts) {
       // [PDLP] section 4.3. The exact normalised duality gap needs a trust-region
       // subproblem per candidate; the KKT error is the practical proxy the paper describes,

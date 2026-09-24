@@ -35,9 +35,9 @@ struct HalpernState {
 
 /// Result returned by pdhg_halpern_step.
 struct HalpernResult {
-  bool active = false;         ///< false when pdhg_halpern=false (no-op path)
-  double fp_residual = 0.0;   ///< ||T(z) - z||_P before the Halpern blend
-  bool should_restart = false; ///< true when the restart criterion is met
+  bool active = false;          ///< false when pdhg_halpern=false (no-op path)
+  double fp_residual = 0.0;     ///< ||T(z) - z||_P before the Halpern blend
+  bool should_restart = false;  ///< true when the restart criterion is met
 };
 
 /// Apply one Halpern combination step for the LP primal-dual iterate.
