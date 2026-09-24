@@ -117,6 +117,11 @@ constexpr int kRuizIterations = 10;
 /// floor the model-space ones do not move at all, so a short window loses nothing.
 constexpr int kModelSpaceStallIterations = 3;
 constexpr double kModelSpaceProgress = 0.9;
+/// Gondzio's correctors (#472) are tried only while one of the Mehrotra step lengths is below
+/// this: near the end both steps are close to 1 and a corrector can only trade the evenness
+/// of the products the convergence test needs for a longer step it does not (measured on
+/// Netlib stocfor2 and boeing1 in #472, which lost their proof without this).
+constexpr double kCentralityStepEnough = 0.9;
 
 class InteriorPoint {
  public:
@@ -907,12 +912,25 @@ void InteriorPoint::newton_direction() {
 // least kIpmCentralityAcceptance, otherwise the previous direction is restored and the loop
 // ends. How many are tried is capped by the option and by the factor's shape, never by a clock.
 void InteriorPoint::centrality_correctors(double sigma) {
+  // Not in the end game: once every measure is within kBarrierExhaustedSlack of its
+  // tolerance (the loop's own "nearly converged"), what is left is to even out the last
+  // products, which the Mehrotra step does and a corrector aiming at a longer step does not
+  // (a KKT oracle instance stalled for 60 iterations with its worst product at 1.2e-8).
+  const double relative_gap =
+      mu_ * static_cast<double>(bound_count_) / (1.0 + std::fabs(objective_));
+  if (primal_infeasibility_ <= kBarrierExhaustedSlack * kIpmTolerance &&
+      dual_infeasibility_ <= kBarrierExhaustedSlack * kIpmTolerance &&
+      relative_gap <= kBarrierExhaustedSlack * kIpmGap &&
+      max_product_ <= kBarrierExhaustedSlack * kIpmComplementarity) {
+    return;
+  }
   const int budget = corrector_budget(static_cast<double>(ldl_.factor_nonzeros()),
                                       static_cast<double>(ldl_.dimension()), corrector_cap_);
   double alpha_p = step_length(sl_, dsl_, su_, dsu_);
   double alpha_d = step_length(zl_, dzl_, zu_, dzu_);
   for (int k = 0; k < budget; ++k) {
-    if (alpha_p >= 1.0 && alpha_d >= 1.0) return;  // nothing left to lengthen
+    // Nothing left to lengthen: both steps already reach kCentralityStepEnough.
+    if (alpha_p >= kCentralityStepEnough && alpha_d >= kCentralityStepEnough) return;
     const std::vector<double> dx = dx_, dy = dy_, dsl = dsl_, dzl = dzl_, dsu = dsu_,
                               dzu = dzu_, rl = r_mu_l_, ru = r_mu_u_;
     const double target = sigma * mu_;
