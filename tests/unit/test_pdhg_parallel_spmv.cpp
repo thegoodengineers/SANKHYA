@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // SANKHYA - the row-parallel A x in PDHG (#487).
 //
-// The claim is determinism, not speed: with pdhg_parallel_spmv on, every output entry of
-// A x is written by exactly one thread in a fixed static partition, so the whole iteration
-// is bitwise the same at 1, 2 and 4 threads. The serial product is a column scatter in a
-// different summation order, so against it the parallel path is held to rounding, not to
-// the bit: the same status and iteration count, the objective to 1e-9 relative. Both
-// checks run on the committed Netlib instances, the same set the CUDA regression uses.
+// The claim is determinism, not speed: with pdhg_parallel_spmv on, every output
+// entry of A x is written by exactly one thread in a fixed static partition, so
+// the whole iteration is bitwise the same at 1, 2 and 4 threads. The serial
+// product is a column scatter in a different summation order, so against it the
+// parallel path is held to rounding, not to the bit: the same status and
+// iteration count, the objective to 1e-9 relative. Both checks run on the
+// committed Netlib instances, the same set the CUDA regression uses.
+
+#include <gtest/gtest.h>
 
 #include <cmath>
 #include <filesystem>
 #include <string>
 #include <vector>
-
-#include <gtest/gtest.h>
 
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
@@ -43,6 +44,26 @@ std::string netlib_path(const char* name) {
 
 const char* const kInstances[] = {"afiro", "adlittle", "sc50a", "sc105", "blend", "israel"};
 
+TEST(PdhgParallelSpmv, SerialIsReproducible) {
+  // Two back-to-back serial solves must produce the exact same bits: same
+  // objective, same iteration count, same column values.  This is the baseline
+  // against which the parallel path is compared in
+  // AgreesWithTheSerialProductToRounding below.
+  for (const char* name : kInstances) {
+    Model model;
+    ASSERT_TRUE(io::read_model(netlib_path(name), &model).ok) << name;
+    const Solution a = solve(model, pdhg_options(false, 1));
+    const Solution b = solve(model, pdhg_options(false, 1));
+    EXPECT_EQ(a.status, b.status) << name;
+    EXPECT_EQ(a.iterations, b.iterations) << name;
+    EXPECT_EQ(a.objective, b.objective) << name;
+    ASSERT_EQ(a.col_value.size(), b.col_value.size()) << name;
+    for (std::size_t j = 0; j < a.col_value.size(); ++j) {
+      ASSERT_EQ(a.col_value[j], b.col_value[j]) << name << " column " << j;
+    }
+  }
+}
+
 TEST(PdhgParallelSpmv, TheSameBitsAtOneTwoAndFourThreads) {
   for (const char* name : kInstances) {
     Model model;
@@ -71,8 +92,9 @@ TEST(PdhgParallelSpmv, AgreesWithTheSerialProductToRounding) {
     const Solution serial = solve(model, pdhg_options(false, 1));
     const Solution parallel = solve(model, pdhg_options(true, 4));
     EXPECT_EQ(serial.status, parallel.status) << name << ": " << parallel.message;
-    // A different summation order can move a restart decision by an ulp on a knife edge;
-    // it has not on these six, and if it ever does the iteration count says so here.
+    // A different summation order can move a restart decision by an ulp on a
+    // knife edge; it has not on these six, and if it ever does the iteration
+    // count says so here.
     EXPECT_EQ(serial.iterations, parallel.iterations) << name;
     EXPECT_NEAR(serial.objective, parallel.objective,
                 1e-9 * std::max(1.0, std::fabs(serial.objective)))
