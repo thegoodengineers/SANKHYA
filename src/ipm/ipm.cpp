@@ -265,10 +265,14 @@ class InteriorPoint {
   /// failed attempt leaves the iterate exactly as it was. On finnis the dual residual sat at
   /// 7.0e-6 in model units - 7.8e-9 in the loop's, where every per-term scale is replaced by
   /// 1 + ||c|| - for eight iterations; the purification is what makes that point a proof.
-  [[nodiscard]] bool model_space_holds_as_reported();
+  /// `throttled`: inside the loop, try the purification (a refactorization) only when the
+  /// model-space dual residual has improved by kModelSpaceProgress since the last try; the
+  /// final stops always try it.
+  [[nodiscard]] bool model_space_holds_as_reported(bool throttled = false);
   bool purified_ = false;
   double best_model_excess_ = std::numeric_limits<double>::infinity();
   int model_stalled_ = 0;
+  double last_purified_dual_ = std::numeric_limits<double>::infinity();
   const Scaling* scaling_ = nullptr;
   double mu_ = 0.0;
   double max_product_ = 0.0;
@@ -1021,10 +1025,18 @@ constexpr double kPurifyInteriorFraction =
 constexpr double kPurifyShift = 1e-8;  ///< diagonal shift on rows with no interior logical
 }  // namespace
 
-bool InteriorPoint::model_space_holds_as_reported() {
+bool InteriorPoint::model_space_holds_as_reported(bool throttled) {
   if (model_space_holds()) return true;
   // Purification moves y and z only; a primal failure is not its to repair.
   if (model_primal_infeasibility_ > tol::kPrimalFeasibility) return false;
+  // A purification is a full refactorization of the normal equations, and a failed one is
+  // rolled back but still paid for. Inside the loop it is retried only once the dual
+  // residual has moved by kModelSpaceProgress since the last try, the same progress the
+  // stall test asks for (review of #611); the final stops always try it.
+  if (throttled && model_dual_infeasibility_ >= kModelSpaceProgress * last_purified_dual_) {
+    return false;
+  }
+  last_purified_dual_ = model_dual_infeasibility_;
   const std::vector<double> y = y_;
   const std::vector<double> zl = zl_;
   const std::vector<double> zu = zu_;
@@ -1321,7 +1333,7 @@ Solution InteriorPoint::run() {
     const bool scaled_converged =
         primal_infeasibility_ <= kIpmTolerance && dual_infeasibility_ <= kIpmTolerance &&
         relative_gap <= kIpmGap && max_product_ <= kIpmComplementarity;
-    if (scaled_converged && model_space_holds_as_reported()) {
+    if (scaled_converged && model_space_holds_as_reported(/*throttled=*/true)) {
       return finish(SolveStatus::kOptimal,
                     barrier_retry_used_
                         ? fmt::format("converged at a relative gap of {:.1e} one step after "
@@ -1354,6 +1366,9 @@ Solution InteriorPoint::run() {
             iterations, timer.elapsed_seconds());
       }
     }
+    // The count is cumulative over the iterations where the scaled measures hold, not
+    // consecutive: on pilot87 those measures flicker in and out, and a consecutive count
+    // never reached three, so the loop ran to the time limit (review of #611, measured).
     if (iterations >= kMaxIterations || limits_.iterations_exhausted(iterations)) {
       restore_best();
       return finish(
