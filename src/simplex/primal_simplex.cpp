@@ -1961,6 +1961,7 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
                               NodeFactorCache* reuse) {
     Simplex simplex(problem, problem_options, logger, control);
     if (reuse != nullptr) simplex.use_factor_cache(reuse, cache.id);
+    simplex.count_distinct_costs_on(&model.col_cost);
     return engine == Engine::kDual ? simplex.run_dual(warm) : simplex.run(warm);
   };
   if (!cache.valid) return run_engine(model, options, nullptr);

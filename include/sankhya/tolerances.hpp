@@ -228,6 +228,27 @@ inline constexpr double kRatioTestFeasibility = 1e-9;
 /// point recompute_quality() would call feasible into one it calls infeasible.
 inline constexpr double kHarrisRelaxation = 0.1 * kPrimalFeasibility;
 
+/// The dual simplex's Harris relaxation (#465, dual_ratio_test=harris): pass one of the dual
+/// ratio test loosens every candidate's reduced cost by this much. The same tenth of the
+/// tolerance as the primal's kHarrisRelaxation, for the same reason: a column the step
+/// passes by at most this much ends with a wrong-signed reduced cost an order of magnitude
+/// inside kDualFeasibility, and the entering column's own wrong sign is removed by a cost
+/// shift rather than by a backward step (Koberstein 2005, ch. 6).
+inline constexpr double kDualHarrisRelaxation = 0.1 * kDualFeasibility;
+
+/// Cost perturbation at the start of the dual simplex (#465, dual_perturb_costs_at_start;
+/// Koberstein 2005, ch. 6). Applied only when the structural costs take fewer than
+/// kDualStartPerturbationDistinctFraction * n distinct values, the shape of a model whose
+/// ties the dual ratio test cannot break (brazil3, mostly zero costs). Each nonbasic
+/// structural cost moves by xi_j = kDualStartPerturbationAbsolute +
+/// kDualStartPerturbationRelative * |c_j|, times a per-column factor in [0.5, 1], in the
+/// direction that keeps its reduced cost dual feasible. The absolute part is 100 times the
+/// dual tolerance, so the shifts are distinct at the resolution the ratio test compares
+/// reduced costs at.
+inline constexpr double kDualStartPerturbationDistinctFraction = 0.25;
+inline constexpr double kDualStartPerturbationAbsolute = 100.0 * kDualFeasibility;
+inline constexpr double kDualStartPerturbationRelative = 1e-5;
+
 // ---------------------------------------------------------------------------------------
 // First-order method (PDHG)
 // ---------------------------------------------------------------------------------------

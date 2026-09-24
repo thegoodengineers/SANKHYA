@@ -331,6 +331,7 @@ set(SANKHYA_CORE_SOURCES
   src/gpu/gpu_memory.cpp
   src/gpu/ipm_cudss.cpp
   src/gpu/multi_device.cpp
+  src/simplex/dual_ratio.cpp
   src/simplex/dual_simplex.cpp
   src/simplex/primal_simplex.cpp
   src/simplex/crossover.cpp
