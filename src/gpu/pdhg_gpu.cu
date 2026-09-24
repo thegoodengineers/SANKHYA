@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,7 @@
 #include "../core/stop_controller.hpp"
 #include "../la/scaling.hpp"
 #include "device.hpp"
+#include "pdhg_graph.hpp"
 #include "sankhya/pdhg.hpp"
 #include "sankhya/solve_control.hpp"
 #include "sankhya/sparse.hpp"
@@ -220,6 +222,10 @@ struct GpuState {
   double *d_y{}, *d_yn{}, *d_dy{}, *d_ax{}, *d_adx{}, *d_ysum{};
   // Two-mat-vec (#479): A x_k and A x_{k+1}; allocated only when the option is on.
   double *d_axc{}, *d_axn{};
+  // Device loop (#478): the step state the adaptive rule reads and writes on the device.
+  double *d_eta{}, *d_omega{};
+  long long* d_accepted{};
+  int* d_accept_flag{};
   // Per-iteration scalar accumulators: [0]=movement_x, [1]=movement_y, [2]=interaction.
   // Zeroed by cudaMemset at the top of each iteration; updated via atomicAdd inside the
   // fused primal/dual kernels; downloaded in one transfer to avoid per-scalar sync stalls.
@@ -259,6 +265,10 @@ struct GpuState {
     cudaFree(d_ysum);
     cudaFree(d_axc);
     cudaFree(d_axn);
+    cudaFree(d_eta);
+    cudaFree(d_omega);
+    cudaFree(d_accepted);
+    cudaFree(d_accept_flag);
     cudaFree(d_scalars);
     cudaFree(d_cost);
     cudaFree(d_clo);
@@ -380,6 +390,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   const bool use_restarts = options.get_bool("pdhg_restart");
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
   const bool two_matvec = options.get_bool("pdhg_two_matvec");
+  bool device_loop = options.get_bool("gpu_on_device_loop");
 
   logger.info("Solving LP with CUDA restarted PDHG on {}: {} rows, {} columns, {} nonzeros",
               device_desc, rows, cols, model.num_nonzeros());
@@ -570,6 +581,47 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       gpu_error = true;  // the CPU fallback below takes over
     }
   }
+  // THE LOOP ON THE DEVICE (#478). One iteration captured as a CUDA graph, replayed
+  // kPdhgDeviceLoopBlock times per host synchronisation; the adaptive step rule and the
+  // commit of an accepted step run on the device. If the capture fails the per-iteration
+  // path below runs instead, and the log says so.
+  std::unique_ptr<DeviceLoop> loop;
+  Count accepted_at_restart = 0;
+  const double eta_ceil_device = 1.0e3 / std::max(spectral_norm, 1e-12);
+  if (device_loop && !gpu_error) {
+    bool ready = cudaMalloc(&g.d_eta, sizeof(double)) == cudaSuccess &&
+                 cudaMalloc(&g.d_omega, sizeof(double)) == cudaSuccess &&
+                 cudaMalloc(&g.d_accepted, sizeof(long long)) == cudaSuccess &&
+                 cudaMalloc(&g.d_accept_flag, sizeof(int)) == cudaSuccess;
+    const long long zero_count = 0;
+    ready = ready && hd_copy(&eta, g.d_eta, 1) && hd_copy(&omega, g.d_omega, 1) &&
+            hd_copy(&zero_count, g.d_accepted, 1) &&
+            cudaMemset(g.d_scalars, 0, 3 * sizeof(double)) == cudaSuccess;
+    if (ready) {
+      DeviceLoopBuffers b;
+      b.x = g.d_x; b.xn = g.d_xn; b.ext = g.d_ext; b.dx = g.d_dx; b.aty = g.d_aty;
+      b.xsum = g.d_xsum; b.y = g.d_y; b.yn = g.d_yn; b.dy = g.d_dy; b.ax = g.d_ax;
+      b.adx = g.d_adx; b.ysum = g.d_ysum; b.axc = g.d_axc; b.axn = g.d_axn;
+      b.cost = g.d_cost; b.col_lo = g.d_clo; b.col_hi = g.d_chi; b.row_lo = g.d_rlo;
+      b.row_hi = g.d_rhi; b.scalars = g.d_scalars; b.eta = g.d_eta; b.omega = g.d_omega;
+      b.accepted = g.d_accepted; b.accept_flag = g.d_accept_flag;
+      b.eta_ceil = eta_ceil_device; b.n = ni; b.m = mi; b.nnz = nnz;
+      b.two_matvec = two_matvec; b.cusparse = g.cs; b.matrix = g.mat; b.vec_n = g.vn;
+      b.vec_m = g.vm; b.spmv_buffer = g.d_spmv;
+      loop = std::make_unique<DeviceLoop>();
+      ready = loop->init(b, static_cast<int>(tol::kPdhgDeviceLoopBlock));
+    }
+    if (!ready) {
+      loop.reset();
+      cudaGetLastError();  // clear a failed capture's error before the host path runs
+      device_loop = false;
+      logger.warning("GPU PDHG: the device loop could not be captured; running the "
+                     "per-iteration path");
+    } else {
+      logger.info("GPU PDHG: device loop on, {} iterations per host synchronisation (#478)",
+                  tol::kPdhgDeviceLoopBlock);
+    }
+  }
   while (!gpu_error) {
     if (iteration >= iteration_limit) break;
     if (stop.should_stop(
@@ -584,6 +636,27 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
             &stop_status))
       break;
 
+    if (device_loop) {
+      if (!loop->run_block()) {
+        gpu_error = true;
+        break;
+      }
+      long long accepted_now = 0;
+      if (cudaMemcpy(&accepted_now, g.d_accepted, sizeof(long long),
+                     cudaMemcpyDeviceToHost) != cudaSuccess ||
+          !dh_copy(g.d_eta, &eta, 1)) {
+        gpu_error = true;
+        break;
+      }
+      const Count before = iteration;
+      iteration = static_cast<Count>(accepted_now);
+      averaged = iteration - accepted_at_restart;
+      // Evaluate when the accepted count crosses a multiple of the interval: a block can
+      // cover several accepted steps, so the host sees the count on a stride.
+      if (iteration == 0 || iteration / kEvaluationInterval == before / kEvaluationInterval) {
+        continue;
+      }
+    } else {
     const double tau = eta / omega;
     const double sigma = eta * omega;
 
@@ -688,6 +761,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     // 8. Convergence and restart check (CPU, every kEvaluationInterval accepted steps)
     if (iteration == 0) continue;
     if (iteration % kEvaluationInterval != 0 && !no_info) continue;
+    }  // per-iteration path
 
     // Download current iterates
     if (!dh_copy(g.d_x, h_x.data(), n) || !dh_copy(g.d_y, h_y.data(), m)) {
@@ -774,6 +848,14 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
 
         cudaMemset(g.d_xsum, 0, n * sizeof(double));
         cudaMemset(g.d_ysum, 0, m * sizeof(double));
+        if (device_loop) {
+          // The device reads omega in its kernels; the average restarts from here.
+          if (!hd_copy(&omega, g.d_omega, 1)) {
+            gpu_error = true;
+            break;
+          }
+          accepted_at_restart = iteration;
+        }
         averaged = 0;
         x_restart = h_x;
         y_restart = h_y;
