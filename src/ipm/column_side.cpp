@@ -341,7 +341,7 @@ ColumnSideReport ColumnSide::solve(const SparseLdl& ldl, double* rhs) const {
     if (residual <= 0.5 * checkpoint) {
       checkpoint = residual;
       since_checkpoint = 0;
-    } else if (++since_checkpoint >= tol::kIpmColumnSideStagnationSteps) {
+    } else if (++since_checkpoint >= tol::kIpmPcgStagnationSteps) {
       break;
     }
     precondition(ldl, r, &z);
