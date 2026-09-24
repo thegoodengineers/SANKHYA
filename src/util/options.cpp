@@ -1415,6 +1415,15 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"pdhg_geometric_evaluation",
+         OptionType::Bool,
+         false,
+         "Schedule early PDHG convergence evaluations geometrically (1, 2, 4, 8...) when "
+         "the interaction term is zero, rather than every iteration (#480). Default off.",
+         0.0,
+         0.0,
+         {}});
 
     // ---- Reporting ---------------------------------------------------------------------
     s.push_back({"log_level",

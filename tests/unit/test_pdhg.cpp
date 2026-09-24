@@ -11,6 +11,7 @@
 // enormously slower than the simplex, by design and by construction. Its value is at a scale
 // where a dense factorization cannot go, and on hardware this suite does not run on.
 
+#include <atomic>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -681,6 +682,43 @@ TEST(Pdhg, PolishDeclinesWhenTheFactorCapSaysSoAndTheFirstOrderAnswerStands) {
   EXPECT_EQ(rough.algorithm, "pdhg-cpu");
   EXPECT_EQ(rough.iterations, 20);
   EXPECT_NE(rough.message.find("declined"), std::string::npos) << rough.message;
+}
+
+}  // namespace
+
+namespace pdhg {
+extern std::atomic<int> pdhg_evaluations_for_testing;
+}
+namespace {
+TEST(Pdhg, OffTickEvaluationIsGeometricallyScheduled) {
+  // A small problem that exercises the no_information logic in PDHG. The model keeps
+  // the interaction term at zero for consecutive iterations. Restart is disabled so both
+  // solves follow the exact same trajectory. The legacy mode evaluates on every
+  // no-information iteration, while the geometric mode evaluates at consecutive
+  // no-information counts 1, 2, 4, ... The test intentionally compares the two evaluation
+  // counts rather than hard-coding an expected count.
+  const Model model = make_lp({{1.0}}, {-kInfinity}, {kInfinity}, {-1.0}, {1000.0});
+
+  Options options = pdhg_options(1e-8);
+  options.set_bool("pdhg_restart", false);
+  options.set_bool("presolve", false);
+
+  pdhg::pdhg_evaluations_for_testing = 0;
+  const Solution every = solve(model, options);
+  const int every_iteration = pdhg::pdhg_evaluations_for_testing.load();
+
+  options.set_bool("pdhg_geometric_evaluation", true);
+  pdhg::pdhg_evaluations_for_testing = 0;
+  const Solution geometric = solve(model, options);
+  const int geometric_count = pdhg::pdhg_evaluations_for_testing.load();
+
+  EXPECT_EQ(every.status, SolveStatus::kOptimal);
+  EXPECT_EQ(geometric.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(every.objective, geometric.objective,
+              1e-9 * std::max(1.0, std::fabs(every.objective)));
+  EXPECT_GE(every_iteration, 2) << "the no-information path did not run";
+  EXPECT_LT(geometric_count, every_iteration)
+      << "geometric " << geometric_count << " vs every iteration " << every_iteration;
 }
 
 }  // namespace

@@ -41,6 +41,7 @@
 #include "pdhg_evaluate.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -72,6 +73,10 @@ double project(double value, double lower, double upper) {
 }
 
 }  // namespace
+
+// A test seam (#480): the count of convergence evaluations in the last solve. Atomic
+// because the engine race runs engines on threads of their own.
+std::atomic<int> pdhg_evaluations_for_testing{0};
 
 Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
                     SolveControl* control) {
@@ -126,6 +131,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
                                     : static_cast<Count>(limits.iteration_limit());
   const bool use_restarts = options.get_bool("pdhg_restart");
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
+  const bool geometric_evaluation = options.get_bool("pdhg_geometric_evaluation");
   const bool two_matvec = options.get_bool("pdhg_two_matvec");
   // ROW-PARALLEL A x (#487). The serial product scatters column by column into y and
   // cannot be split across threads without a reduction; (A^T)^T x through the transpose
@@ -205,6 +211,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   double eta = spectral_norm > 0.0 ? 1.0 / spectral_norm : 1.0;
   double omega = 1.0;  // primal weight
   Count iteration = 0;
+  Count consecutive_no_information = 0;
   Count restarts = 0;
   Count last_restart = 0;
   double restart_kkt = std::numeric_limits<double>::infinity();
@@ -340,6 +347,11 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     // The step is trivially admissible when there is no interaction, so the honest response
     // is to accept it and leave eta exactly where it was.
     const bool no_information = interaction <= 0.0;
+    if (no_information) {
+      ++consecutive_no_information;
+    } else {
+      consecutive_no_information = 0;
+    }
     const double limit =
         no_information ? std::numeric_limits<double>::infinity() : movement / interaction;
     // AND THE FIRST ITERATION IS A SECOND ROUTE TO THE SAME COLLAPSE. The exponent below is
@@ -387,9 +399,22 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     // ---- Convergence and restart -----------------------------------------------------------
     // Evaluate on the periodic tick, and ALSO the moment the iterates stop moving: a small
     // problem can converge in fewer steps than the tick interval, and would otherwise spin
-    // to the iteration limit having already found the answer.
+    // to the iteration limit having already found the answer. Repeated off-tick evaluations
+    // are geometrically scheduled to prevent thrashing during a prolonged no-information phase
+    // (Issue #480).
     if (iteration == 0) continue;
-    if (iteration % kEvaluationInterval != 0 && !no_information) continue;
+
+    bool evaluate_now = (iteration % kEvaluationInterval == 0);
+    if (!evaluate_now && no_information) {
+      if (geometric_evaluation) {
+        evaluate_now = (consecutive_no_information & (consecutive_no_information - 1)) == 0;
+      } else {
+        evaluate_now = true;
+      }
+    }
+    if (!evaluate_now) continue;
+
+    ++pdhg_evaluations_for_testing;
 
     unscale(x, y);
     std::vector<double> current_x = x_unscaled;
