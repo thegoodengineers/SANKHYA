@@ -1087,6 +1087,7 @@ const char* cut_family_name(CutFamily family) noexcept {
     case CutFamily::kFlowCover: return "flow_cover";
     case CutFamily::kClique: return "clique";
     case CutFamily::kZeroHalf: return "zero_half";
+    case CutFamily::kImpliedBound: return "implied_bound";
     case CutFamily::kUnknown: break;
   }
   return "unknown";

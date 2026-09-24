@@ -36,6 +36,7 @@
 
 #include "branch_and_bound_internal.hpp"
 #include "combinatorial_cuts.hpp"
+#include "implied_bound_cuts.hpp"
 #include "mir_cuts.hpp"
 #include "presolve/probing.hpp"
 
@@ -207,6 +208,12 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   }
   std::vector<Cut> gmi = generate_gmi_cuts(working_, initial_relaxation);
   candidates.insert(candidates.end(), gmi.begin(), gmi.end());
+  // Implied-bound cuts (#499): the line through a two-variable row's two binary cases,
+  // tighter than the row when the continuous column's own bound caps one case.
+  if (options_.get_bool("mip_implied_bound_cuts")) {
+    std::vector<Cut> implied = implied_bound_cuts(working_, initial_relaxation.col_value);
+    candidates.insert(candidates.end(), implied.begin(), implied.end());
+  }
   // MIR cuts from the model's own rows (#221): built from original coefficients rather
   // than tableau rows, so they carry none of the Gomory cuts' numerical fragility.
   if (options_.get_bool("enable_mir_cuts")) {

@@ -170,7 +170,8 @@ enum class CutFamily {
   kMir,
   kFlowCover,
   kClique,
-  kZeroHalf
+  kZeroHalf,
+  kImpliedBound  ///< #499, implied_bound_cuts.hpp
 };
 
 [[nodiscard]] const char* cut_family_name(CutFamily family) noexcept;

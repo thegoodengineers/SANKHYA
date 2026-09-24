@@ -295,6 +295,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/certificate_writer.cpp
   src/mip/certificate_sections.cpp
   src/mip/flow_cover_cuts.cpp
+  src/mip/implied_bound_cuts.cpp
   src/mip/symmetry.cpp
   src/mip/cut_selection.cpp
   src/mip/checkpoint.cpp
