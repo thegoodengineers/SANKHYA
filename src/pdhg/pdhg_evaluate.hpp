@@ -84,4 +84,9 @@ struct Problem {
                                  const std::vector<double>& y, std::vector<double>& activity,
                                  std::vector<double>& reduced);
 
+/// FIRST CROSSINGS OF THE RELATIVE KKT ERROR (#486): the levels published PDLP figures and
+/// Mittelmann's feasibility page quote, recorded by both the CPU and the CUDA engine so one
+/// run yields all three times.
+inline constexpr double kKktCrossingLevels[3] = {1e-4, 1e-6, 1e-8};
+
 }  // namespace sankhya::pdhg

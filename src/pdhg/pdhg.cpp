@@ -245,7 +245,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   // FIRST CROSSINGS OF THE RELATIVE KKT ERROR (#486), at the levels published PDLP figures
   // and Mittelmann's feasibility page are quoted at, so one run yields the three times a
   // comparison needs instead of three runs at three tolerances.
-  constexpr double kKktLevels[3] = {1e-4, 1e-6, 1e-8};
+  const double* const kKktLevels = kKktCrossingLevels;
   double kkt_seconds[3] = {std::numeric_limits<double>::quiet_NaN(),
                            std::numeric_limits<double>::quiet_NaN(),
                            std::numeric_limits<double>::quiet_NaN()};

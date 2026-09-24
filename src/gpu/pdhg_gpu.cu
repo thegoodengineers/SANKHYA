@@ -566,6 +566,13 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   double omega = 1.0;
   Count iteration = 0, restarts = 0, last_restart = 0, averaged = 0;
   double restart_kkt = std::numeric_limits<double>::infinity();
+  // First crossings of the relative KKT error (#486), recorded as the CPU engine does and
+  // on the same measure (pdhg::evaluate), so a CUDA row in a runner CSV is not "never
+  // reached" beside a verified optimum.
+  double kkt_seconds[3] = {std::numeric_limits<double>::quiet_NaN(),
+                           std::numeric_limits<double>::quiet_NaN(),
+                           std::numeric_limits<double>::quiet_NaN()};
+  Count kkt_iterations[3] = {-1, -1, -1};
 
   Residuals best;
   best.primal = best.dual = best.gap = std::numeric_limits<double>::infinity();
@@ -802,6 +809,12 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     }
 
     const Residuals& better = *chosen;
+    for (int level = 0; level < 3; ++level) {
+      if (kkt_iterations[level] < 0 && better.worst() <= pdhg::kKktCrossingLevels[level]) {
+        kkt_iterations[level] = iteration;
+        kkt_seconds[level] = timer.elapsed_seconds();
+      }
+    }
     if (better.worst() < best.worst()) {
       best = better;
       best_x = *chosen_x;
@@ -902,6 +915,12 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
         sense * (-best_y[static_cast<std::size_t>(i)]);
 
   solution.iterations = iteration;
+  solution.kkt_1e4_seconds = kkt_seconds[0];
+  solution.kkt_1e6_seconds = kkt_seconds[1];
+  solution.kkt_1e8_seconds = kkt_seconds[2];
+  solution.kkt_1e4_iterations = kkt_iterations[0];
+  solution.kkt_1e6_iterations = kkt_iterations[1];
+  solution.kkt_1e8_iterations = kkt_iterations[2];
   solution.solve_seconds = timer.elapsed_seconds();
 
   const bool verifiable = converged && final_r.meets_project_standard();
