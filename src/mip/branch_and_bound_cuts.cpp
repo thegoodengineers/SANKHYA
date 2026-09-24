@@ -37,6 +37,7 @@
 #include "branch_and_bound_internal.hpp"
 #include "combinatorial_cuts.hpp"
 #include "mir_cuts.hpp"
+#include "presolve/probing.hpp"
 
 namespace sankhya::mip {
 
@@ -122,8 +123,23 @@ void BranchAndBound::add_combinatorial_cuts(const Solution& relaxation,
                                             std::vector<Cut>* candidates) {
   CombinatorialCutStats stats;
   if (options_.get_bool("enable_clique_cuts")) {
+    // Probing's conflicts (#512), once, on the model and global bounds of the first round:
+    // every conflict holds at every feasible point, so it stays valid as bounds tighten.
+    if (!probed_ && options_.get_bool("presolve_probing")) {
+      probed_ = true;
+      presolve::ProbingResult probed = presolve::probe_binaries(
+          working_, global_lower_, global_upper_, tol::kProbingWorkLimit);
+      if (!probed.infeasible) probed_conflicts_ = std::move(probed.conflicts);
+      logger_.info(
+          "Probing (#512): {} binaries probed, {} literal conflicts for the clique "
+          "separator",
+          probed.probed, probed_conflicts_.size());
+    }
     std::vector<Cut> cliques =
-        generate_clique_cuts(working_, relaxation, global_lower_, global_upper_, &stats);
+        generate_clique_cuts(working_, relaxation, global_lower_, global_upper_, &stats,
+                             probed_conflicts_.empty() ? nullptr : &probed_conflicts_);
+    logger_.verbose("clique cuts: {} conflict edges, {} violated cliques", stats.conflict_edges,
+                    cliques.size());
     clique_cuts_generated_ += static_cast<Count>(cliques.size());
     candidates->insert(candidates->end(), cliques.begin(), cliques.end());
   }

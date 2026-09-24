@@ -405,6 +405,16 @@ class Solution {
     Count dual_fixed_columns = 0;  ///< #412: fixed at a bound by cost and row signs alone
     Count parallel_rows = 0;       ///< #412: a scalar multiple of another row, merged into it
     Count dominated_columns = 0;   ///< #412: fixed at a bound because another column dominates
+    /// #512, binary probing: binaries probed within the work limit, binaries fixed because
+    /// one value was infeasible, bounds tightened (agreed by both values, or propagated from
+    /// a fixing), implications (a bound one probe moved), pairwise conflicts between
+    /// literals, and the cliques they were merged into.
+    Count probing_probed = 0;
+    Count probing_fixings = 0;
+    Count probing_tightenings = 0;
+    Count probing_implications = 0;
+    Count probing_conflicts = 0;
+    Count probing_cliques = 0;
     /// #412: the free_column_singletons whose column was implied free by its row rather than
     /// free in the model; a subset of that count, not an addition to it.
     Count implied_free_column_singletons = 0;

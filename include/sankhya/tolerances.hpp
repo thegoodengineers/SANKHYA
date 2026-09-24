@@ -332,4 +332,31 @@ inline constexpr double kQpIpmPivotShare = 0.1;
 /// matrix refactorized, at most kQpIpmRegularizationAttempts times.
 inline constexpr double kQpIpmRegularizationRaise = 100.0;
 inline constexpr int kQpIpmRegularizationAttempts = 8;
+
+/// Binary probing (#512; Savelsbergh 1994; Achterberg et al. 2020). A probe x_j = v is
+/// declared infeasible only when a row misses its bound by more than this, relative to
+/// max(1, |bound|), on top of the rounding the activity sum can carry: a probe wrongly called
+/// infeasible fixes a binary to the wrong value, so the test is ten times looser than the
+/// feasibility tolerance the solver accepts a point at.
+inline constexpr double kProbingInfeasibility = 1e-6;
+
+/// The rounding margin of a propagated bound, relative to max(1, the row's total magnitude)
+/// and divided by the column's coefficient: a continuous bound is loosened by it and an
+/// integer one rounded past it, so no deduction is stronger than the arithmetic supports.
+inline constexpr double kProbingSafety = 1e-9;
+
+/// A continuous bound moves only when it improves by more than this relative to max(1,
+/// |old bound|): below it propagation creeps geometrically along a cycle of rows forever.
+inline constexpr double kProbingBoundMinStep = 1e-3;
+
+/// A propagated bound larger in magnitude than this is not written: finite in name only.
+inline constexpr double kProbingMaxBound = 1e9;
+
+/// Matrix entries probing may visit in total, and in one probe. Probing is the most
+/// expensive MIP presolve reduction (Achterberg et al. 2020 cap it by work too); past the
+/// total the remaining binaries are left unprobed, past the per-probe cap a probe stops
+/// propagating, which only means it deduces less.
+inline constexpr std::int64_t kProbingWorkLimit = 20000000;
+inline constexpr std::int64_t kProbingProbeWorkLimit = 1000000;
+
 }  // namespace sankhya::tol

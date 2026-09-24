@@ -669,6 +669,10 @@ class BranchAndBound {
   Count objective_branches_ = 0;
   Count clique_cuts_generated_ = 0;     ///< #358, before the filter
   Count zero_half_cuts_generated_ = 0;  ///< #358, before the filter
+  /// #512: literal conflicts from probing the root model once, fed to the clique separator
+  /// alongside the row-derived graph; probed_ says the probe has run (it may find none).
+  std::vector<std::pair<Index, Index>> probed_conflicts_;
+  bool probed_ = false;
   std::string checkpoint_path_;
   Count checkpoint_nodes_ = 0;
   Count last_checkpoint_at_ = -1;

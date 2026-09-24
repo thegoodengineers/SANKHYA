@@ -47,23 +47,30 @@ bool is_binary(const Model& model, const std::vector<double>& lower,
 // ---- Clique cuts
 // -----------------------------------------------------------------------------
 
-std::vector<Cut> generate_clique_cuts(const Model& model, const Solution& solution,
-                                      const std::vector<double>& col_lower,
-                                      const std::vector<double>& col_upper,
-                                      CombinatorialCutStats* stats) {
+std::vector<Cut> generate_clique_cuts(
+    const Model& model, const Solution& solution, const std::vector<double>& col_lower,
+    const std::vector<double>& col_upper, CombinatorialCutStats* stats,
+    const std::vector<std::pair<Index, Index>>* extra_conflicts) {
   std::vector<Cut> cuts;
   const Index n = model.num_cols();
   const auto un = static_cast<std::size_t>(n);
   if (solution.col_value.size() != un) return cuts;
   const std::vector<double>& x = solution.col_value;
+  // Nodes are literals (#512): j for x_j = 1, n + j for x_j = 0. The rows below only ever
+  // give edges between positive literals; complemented ones come from extra_conflicts.
+  const auto column_of = [n](Index literal) { return literal < n ? literal : literal - n; };
+  const auto value = [&](Index literal) {
+    return literal < n ? x[static_cast<std::size_t>(literal)]
+                       : 1.0 - x[static_cast<std::size_t>(literal - n)];
+  };
 
   // ---- The conflict graph, from every row in <= orientation.
-  std::vector<std::vector<Index>> adjacent(un);
+  std::vector<std::vector<Index>> adjacent(2 * un);
   std::unordered_set<std::uint64_t> edge;
   const auto key = [n](Index p, Index q) {
     const Index a = std::min(p, q);
     const Index b = std::max(p, q);
-    return static_cast<std::uint64_t>(a) * static_cast<std::uint64_t>(n) +
+    return static_cast<std::uint64_t>(a) * static_cast<std::uint64_t>(2 * n) +
            static_cast<std::uint64_t>(b);
   };
   bool capped = false;
@@ -116,6 +123,25 @@ std::vector<Cut> generate_clique_cuts(const Model& model, const Solution& soluti
       }
     }
   }
+  // ---- Conflicts found elsewhere (#512), between literals of columns binary under these
+  // bounds; a pair on one column (x_j and 1 - x_j) is not a conflict and never enters.
+  if (extra_conflicts != nullptr) {
+    for (const auto& [a, b] : *extra_conflicts) {
+      if (capped) break;
+      if (a < 0 || b < 0 || a >= 2 * n || b >= 2 * n) continue;
+      const Index ca = column_of(a);
+      const Index cb = column_of(b);
+      if (ca == cb || !is_binary(model, col_lower, col_upper, static_cast<std::size_t>(ca)) ||
+          !is_binary(model, col_lower, col_upper, static_cast<std::size_t>(cb))) {
+        continue;
+      }
+      if (edge.insert(key(a, b)).second) {
+        adjacent[static_cast<std::size_t>(a)].push_back(b);
+        adjacent[static_cast<std::size_t>(b)].push_back(a);
+        if (static_cast<int>(edge.size()) >= kMaxConflictEdges) capped = true;
+      }
+    }
+  }
   if (stats != nullptr) {
     stats->conflict_edges = static_cast<int>(edge.size());
     stats->conflict_graph_capped = capped;
@@ -125,27 +151,28 @@ std::vector<Cut> generate_clique_cuts(const Model& model, const Solution& soluti
 
   // ---- Greedy separation from the largest LP values.
   std::vector<Index> order;
-  for (Index j = 0; j < n; ++j) {
-    const auto u = static_cast<std::size_t>(j);
-    if (is_binary(model, col_lower, col_upper, u) && x[u] > 1e-6 && !adjacent[u].empty()) {
-      order.push_back(j);
+  for (Index l = 0; l < 2 * n; ++l) {
+    const auto u = static_cast<std::size_t>(column_of(l));
+    if (is_binary(model, col_lower, col_upper, u) && value(l) > 1e-6 &&
+        !adjacent[static_cast<std::size_t>(l)].empty()) {
+      order.push_back(l);
     }
   }
   std::sort(order.begin(), order.end(), [&](Index l, Index r) {
-    const double xl = x[static_cast<std::size_t>(l)];
-    const double xr = x[static_cast<std::size_t>(r)];
+    const double xl = value(l);
+    const double xr = value(r);
     return xl > xr || (xl == xr && l < r);
   });
   std::set<std::vector<Index>> seen;
   const std::size_t starts = std::min<std::size_t>(order.size(), kCliqueStarts);
   for (std::size_t s = 0; s < starts; ++s) {
     std::vector<Index> clique{order[s]};
-    double weight = x[static_cast<std::size_t>(order[s])];
+    double weight = value(order[s]);
     for (const Index v : order) {
       if (v == order[s]) continue;
       if (std::all_of(clique.begin(), clique.end(), [&](Index c) { return conflict(v, c); })) {
         clique.push_back(v);
-        weight += x[static_cast<std::size_t>(v)];
+        weight += value(v);
       }
     }
     if (weight <= 1.0 + kMinViolation) continue;
@@ -164,8 +191,16 @@ std::vector<Cut> generate_clique_cuts(const Model& model, const Solution& soluti
     Cut cut;
     cut.family = CutFamily::kClique;
     cut.coeff.assign(un, 0.0);
-    for (const Index c : clique) cut.coeff[static_cast<std::size_t>(c)] = 1.0;
     cut.rhs = 1.0;
+    for (const Index c : clique) {
+      // A complemented literal contributes 1 - x_k: -1 on the column, and 1 off the rhs.
+      if (c < n) {
+        cut.coeff[static_cast<std::size_t>(c)] = 1.0;
+      } else {
+        cut.coeff[static_cast<std::size_t>(c - n)] = -1.0;
+        cut.rhs -= 1.0;
+      }
+    }
     cuts.push_back(std::move(cut));
   }
   return cuts;

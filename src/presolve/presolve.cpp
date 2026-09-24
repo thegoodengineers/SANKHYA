@@ -14,6 +14,7 @@
 #include <fmt/format.h>
 
 #include "presolve/coef_tightening.hpp"
+#include "presolve/probing.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -241,6 +242,12 @@ void log_presolve_report(const Solution::PresolveReport& report, Logger& logger)
   line("doubleton equations", report.doubleton_equations);
   line("dual fixed columns", report.dual_fixed_columns);
   line("parallel rows", report.parallel_rows);
+  line("probing: binaries probed", report.probing_probed);
+  line("probing: fixings", report.probing_fixings);
+  line("probing: tightenings", report.probing_tightenings);
+  line("probing: implications", report.probing_implications);
+  line("probing: conflicts", report.probing_conflicts);
+  line("probing: cliques", report.probing_cliques);
   line("integer bounds rounded", report.integer_bounds_rounded);
   line("coefficients tightened", report.coefficients_tightened);
   line("propagated bounds", report.propagated_bounds);
@@ -1367,6 +1374,31 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   }
   reduced.matrix.finalize();
 
+  // BINARY PROBING (#512; Savelsbergh 1994; Achterberg et al. 2020), on the reduced model
+  // after the passes, like a bound-only reduction: its fixings and tightenings hold at every
+  // feasible point (see probing.hpp), so they are written as the reduced model's bounds and
+  // need no postsolve record. The conflicts it finds go to the report here; the search
+  // probes its own model again to feed them to the clique separator, because the reduced
+  // Model has nowhere to carry them. A probe that proves the model infeasible changes
+  // nothing here: the engine proves it with a certificate this reduction does not build.
+  ProbingResult probing;
+  if (options.get_bool("presolve_probing") && reduced.has_integrality()) {
+    probing =
+        probe_binaries(reduced, reduced.col_lower, reduced.col_upper, tol::kProbingWorkLimit);
+    if (probing.infeasible) {
+      logger.verbose(
+          "  presolve: probing found both values of a binary infeasible; the model "
+          "is left for the engine to prove infeasible");
+    } else {
+      reduced.col_lower = probing.col_lower;
+      reduced.col_upper = probing.col_upper;
+    }
+    if (probing.work_limit_reached) {
+      logger.verbose("  presolve: probing stopped at its work limit after {} binaries",
+                     probing.probed);
+    }
+  }
+
   // THE QUADRATIC OBJECTIVE TRAVELS WITH THE MODEL (#301). This used to reset the Hessian to
   // empty, which is why presolve could only ever run on an LP: handing a QP's reduced model
   // to the engine would have dropped its curvature silently and solved a different problem.
@@ -1445,6 +1477,12 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   report.reduced_cols = reduced_cols;
   report.reduced_nonzeros = reduced.num_nonzeros();
   report.passes = passes_run;
+  report.probing_probed = probing.probed;
+  report.probing_fixings = probing.infeasible ? 0 : probing.fixings;
+  report.probing_tightenings = probing.infeasible ? 0 : probing.tightenings;
+  report.probing_implications = probing.implications;
+  report.probing_conflicts = static_cast<Count>(probing.conflicts.size());
+  report.probing_cliques = static_cast<Count>(probing.cliques.size());
   for (const Record& record : result.records) {
     switch (record.kind) {
       case Record::Kind::kEmptyRow: ++report.empty_rows; break;
