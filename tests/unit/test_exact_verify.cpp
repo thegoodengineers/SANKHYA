@@ -163,15 +163,69 @@ TEST(ExactVerify, ASingularBasisIsFailedNotCrashed) {
 }
 
 TEST(ExactVerify, AQuadraticObjectiveDeclines) {
-  Model model = tiny_lp();
-  model.hessian.reset(model.num_cols(), model.num_cols());
-  model.hessian.add_entry(0, 0, 1.0);
-  model.hessian.finalize();
+  // Called directly: through solve() a QP never reaches the exact check, so asserting on the
+  // solve's status could not fail (review of #622). Given an LP's own optimal basis, the same
+  // basis with a Hessian on the model must be declined, never verified.
+  const Model lp = tiny_lp();
+  const Solution solution = solve(lp, quiet_exact());
+  ASSERT_EQ(solution.status, SolveStatus::kOptimal);
+  Model qp = lp;
+  qp.hessian.reset(qp.num_cols(), qp.num_cols());
+  qp.hessian.add_entry(0, 0, 1.0);
+  qp.hessian.finalize();
+  const ExactResult result = verify_basis_exact(qp, solution);
+  EXPECT_EQ(result.verdict, ExactVerdict::kDeclined) << result.message;
+}
+
+TEST(ExactVerify, APrimalFeasibleButDualInfeasibleBasisFails) {
+  // x basic, row 1's slack basic, row 0 at its lower bound: x = 4, y = 0, a vertex of the
+  // feasible region with objective 4 against the optimum 8/3. The exact dual check must say so.
+  const Model model = tiny_lp();
+  Solution solution;
+  solution.allocate_for(model);
+  solution.status = SolveStatus::kOptimal;
+  solution.col_value = {4.0, 0.0};
+  solution.row_activity = {4.0, 8.0};
+  solution.col_status = {BasisStatus::kBasic, BasisStatus::kAtLower};
+  solution.row_status = {BasisStatus::kAtLower, BasisStatus::kBasic};
+  solution.objective = 4.0;
+  const ExactResult result = verify_basis_exact(model, solution);
+  EXPECT_EQ(result.verdict, ExactVerdict::kFailed) << result.message;
+}
+
+TEST(ExactVerify, AColumnLabelledFixedWithUnequalBoundsIsNotTakenAsFixed) {
+  // min -x1 + y s.t. y >= 1, x1 in [0, 10] in no row (review of #622). Postsolve labels a
+  // removed column kFixed whatever its bounds; taken at its lower bound with no sign check,
+  // x1 = 0 gave objective 1 and a VERIFIED stamp where the optimum is -9.
+  const Model model =
+      make_lp({{0.0, 1.0}}, {1.0}, {kInfinity}, {-1.0, 1.0}, {0.0, 0.0}, {10.0, kInfinity});
+  Solution solution;
+  solution.allocate_for(model);
+  solution.status = SolveStatus::kOptimal;
+  solution.col_value = {0.0, 1.0};
+  solution.row_activity = {1.0};
+  solution.col_status = {BasisStatus::kFixed, BasisStatus::kBasic};
+  solution.row_status = {BasisStatus::kAtLower};
+  solution.objective = 1.0;
+  const ExactResult result = verify_basis_exact(model, solution);
+  EXPECT_EQ(result.verdict, ExactVerdict::kFailed) << result.message;
+}
+
+TEST(ExactVerify, AFractionWiderThan64BitsIsWrittenInFull) {
+  // 0.1 and 0.3 are not dyadic, so their exact values carry large power-of-two denominators;
+  // min 0.1 x s.t. 0.3 x >= 0.1 has an exact objective whose denominator passes 2^64, and a
+  // cast to long long printed its low 64 bits (review of #622).
+  const Model model = make_lp({{0.3}}, {0.1}, {kInfinity}, {0.1}, {0.0}, {kInfinity});
   const Solution solution = solve(model, quiet_exact());
-  // solve() itself refuses a non-convex-checked or unsupported path in various ways depending
-  // on the QP engine's own scope; what matters here is only that exact verification, if it
-  // runs at all, never claims kVerified on a quadratic model.
-  EXPECT_NE(solution.exact_status, Solution::ExactVerification::kVerified);
+  ASSERT_EQ(solution.status, SolveStatus::kOptimal);
+  const ExactResult result = verify_basis_exact(model, solution);
+  if (result.verdict == ExactVerdict::kVerified) {
+    const std::string& text = result.exact_objective;
+    const auto slash = text.find('/');
+    ASSERT_NE(slash, std::string::npos) << text;
+    // The denominator is written in decimal digits, more than 19 of them (past 2^64).
+    EXPECT_GT(text.size() - slash - 1, 19U) << text;
+  }
 }
 
 TEST(ExactVerify, NoBasisIsDeclinedNotCrashed) {

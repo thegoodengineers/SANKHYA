@@ -41,9 +41,24 @@ using Sz = std::size_t;
 /// attempted.
 constexpr Index kMaxRowsForExactVerification = 300;
 
+/// An __int128 in decimal. fmt's and the standard library's formatters stop at 64 bits, and
+/// a cast to long long printed only the low 64 bits of a larger numerator or denominator
+/// (min 0.1 x s.t. 0.3 x >= 0.1 has a denominator near 3.9e32; review of #622).
+std::string to_decimal(Rational::Int value) {
+  if (value == 0) return "0";
+  const bool negative = value < 0;
+  std::string digits;
+  while (value != 0) {
+    const int digit = static_cast<int>(value % 10);
+    digits.push_back(static_cast<char>('0' + (negative ? -digit : digit)));
+    value /= 10;
+  }
+  if (negative) digits.push_back('-');
+  return std::string(digits.rbegin(), digits.rend());
+}
+
 std::string to_fraction_string(const Rational& value) {
-  return fmt::format("{}/{}", static_cast<long long>(value.numerator()),
-                     static_cast<long long>(value.denominator()));
+  return to_decimal(value.numerator()) + "/" + to_decimal(value.denominator());
 }
 
 /// Solve `matrix * x = rhs` exactly, `matrix` given as m row-vectors of m entries (a dense
@@ -89,6 +104,25 @@ std::optional<std::vector<Rational>> solve_dense_exact(
     x[i] = sum / matrix[row][i];
   }
   return x;
+}
+
+/// The status a nonbasic column or row-slack really has (review of #622). Postsolve labels a
+/// column it removed kFixed whatever its bounds, so kFixed is taken as fixed only when the
+/// bounds are equal; otherwise the variable is at whichever bound its reported value equals
+/// exactly, and at neither it is not a vertex this check can reconstruct. kNonbasicFree is
+/// accepted only when 0 lies inside the bounds. kUnknown means "cannot be resolved".
+BasisStatus resolved_status(BasisStatus status, double lower, double upper, double value) {
+  switch (status) {
+    case BasisStatus::kFixed:
+      if (lower == upper) return BasisStatus::kFixed;
+      if (value == lower) return BasisStatus::kAtLower;
+      if (value == upper) return BasisStatus::kAtUpper;
+      return BasisStatus::kUnknown;
+    case BasisStatus::kNonbasicFree:
+      return (lower <= 0.0 && 0.0 <= upper) ? BasisStatus::kNonbasicFree
+                                            : BasisStatus::kUnknown;
+    default: return status;
+  }
 }
 
 /// The exact value a nonbasic column or row-slack holds at its reported bound. kFixed uses
@@ -174,6 +208,43 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
       return result;
     }
   }
+  std::vector<BasisStatus> col_status(sn);
+  std::vector<BasisStatus> row_status(sm);
+  for (Index j = 0; j < n; ++j) {
+    const Sz sj = static_cast<Sz>(j);
+    col_status[sj] = pos_of[sj] != -1
+                         ? BasisStatus::kBasic
+                         : resolved_status(solution.col_status[sj], model.col_lower[sj],
+                                           model.col_upper[sj], solution.col_value[sj]);
+    if (col_status[sj] == BasisStatus::kUnknown) {
+      result.verdict = ExactVerdict::kFailed;
+      result.message = fmt::format(
+          "column {} is labelled {} but sits at neither of its bounds [{}, {}] (value {}), or "
+          "is "
+          "free-nonbasic outside them: not a vertex this check can reconstruct",
+          j, to_string(solution.col_status[sj]), model.col_lower[sj], model.col_upper[sj],
+          solution.col_value[sj]);
+      return result;
+    }
+  }
+  for (Index i = 0; i < m; ++i) {
+    const Sz si = static_cast<Sz>(i);
+    const double activity = si < solution.row_activity.size() ? solution.row_activity[si] : 0.0;
+    row_status[si] = pos_of[static_cast<Sz>(n + i)] != -1
+                         ? BasisStatus::kBasic
+                         : resolved_status(solution.row_status[si], model.row_lower[si],
+                                           model.row_upper[si], activity);
+    if (row_status[si] == BasisStatus::kUnknown) {
+      result.verdict = ExactVerdict::kFailed;
+      result.message = fmt::format(
+          "row {} is labelled {} but its activity {} sits at neither bound [{}, {}]", i,
+          to_string(solution.row_status[si]), activity, model.row_lower[si],
+          model.row_upper[si]);
+      return result;
+    }
+  }
+  {
+  }
 
   try {
     const double sense = model.sense_multiplier();
@@ -220,7 +291,7 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
       if (pos_of[static_cast<Sz>(j)] != -1) continue;  // basic, contributes through B itself
       const Sz sj = static_cast<Sz>(j);
       const Rational value =
-          nonbasic_value(solution.col_status[sj], model.col_lower[sj], model.col_upper[sj]);
+          nonbasic_value(col_status[sj], model.col_lower[sj], model.col_upper[sj]);
       if (value.is_zero()) continue;
       const ColumnView view = model.matrix.column(j);
       for (Index k = 0; k < view.size; ++k) {
@@ -232,7 +303,7 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
       if (pos_of[static_cast<Sz>(n + i)] != -1) continue;  // this row's slack is basic
       const Sz si = static_cast<Sz>(i);
       const Rational value =
-          nonbasic_value(solution.row_status[si], model.row_lower[si], model.row_upper[si]);
+          nonbasic_value(row_status[si], model.row_lower[si], model.row_upper[si]);
       // logical column i is -e_i, so its contribution to row i is -(-1)*value = +value.
       rhs[si] = rhs[si] + value;
     }
@@ -288,7 +359,7 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
         reduced_cost = reduced_cost - (*y)[static_cast<Sz>(view.rows[k])] *
                                           Rational::from_double(view.values[k]);
       }
-      const BasisStatus status = solution.col_status[sj];
+      const BasisStatus status = col_status[sj];
       const bool ok = status == BasisStatus::kFixed ||
                       (status == BasisStatus::kAtLower && reduced_cost.sign() >= 0) ||
                       (status == BasisStatus::kAtUpper && reduced_cost.sign() <= 0) ||
@@ -304,7 +375,7 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
       const Sz si = static_cast<Sz>(i);
       if (pos_of[static_cast<Sz>(n + i)] != -1) continue;  // basic
       const Rational reduced_cost = (*y)[si];  // logical column is -e_i, cost 0: 0-y*(-1)=y
-      const BasisStatus status = solution.row_status[si];
+      const BasisStatus status = row_status[si];
       const bool ok = status == BasisStatus::kFixed ||
                       (status == BasisStatus::kAtLower && reduced_cost.sign() >= 0) ||
                       (status == BasisStatus::kAtUpper && reduced_cost.sign() <= 0) ||
@@ -324,10 +395,10 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
     std::vector<Rational> col_value_exact(sn);
     for (Index j = 0; j < n; ++j) {
       const Sz sj = static_cast<Sz>(j);
-      col_value_exact[sj] = pos_of[sj] != -1
-                                ? (*x_basic)[static_cast<Sz>(pos_of[sj])]
-                                : nonbasic_value(solution.col_status[sj], model.col_lower[sj],
-                                                 model.col_upper[sj]);
+      col_value_exact[sj] =
+          pos_of[sj] != -1
+              ? (*x_basic)[static_cast<Sz>(pos_of[sj])]
+              : nonbasic_value(col_status[sj], model.col_lower[sj], model.col_upper[sj]);
       objective = objective + col_cost[sj] * col_value_exact[sj];
     }
 
