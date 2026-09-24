@@ -377,6 +377,88 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
     ++passes_run;
     bool changed = false;
 
+    // IMPLIED-INTEGER DETECTION (#513; Achterberg et al. 2020, sec. 1.13). A continuous
+    // variable x_j in an equality row is implied integer when every other live variable in
+    // that row is already integer (declared or promoted) with an integer coefficient, the RHS
+    // is integer, and x_j's own coefficient divides the RHS and every other coefficient
+    // evenly, i.e. dividing through by a_j leaves integers everywhere. Then x_j must equal
+    // an integer in every feasible solution and can be treated as integer from here on.
+    // Runs FIRST in each pass so the updated integer flags are visible to all subsequent
+    // reductions in the same pass. Running to a fixpoint: each newly promoted variable may
+    // unlock further detections in the same or another row.
+    if (implied_integer && !result.proved_infeasible) {
+      bool ii_changed = true;
+      while (ii_changed) {
+        ii_changed = false;
+        const auto is_integer_col = [&](Index j) {
+          const auto u = static_cast<std::size_t>(j);
+          return model.col_type[u] == VarType::kInteger || work.col_implied_integer[u];
+        };
+        for (Index i = 0; i < m; ++i) {
+          const auto r = static_cast<std::size_t>(i);
+          if (work.row_dead[r]) continue;
+          // Must be an equality row.
+          if (std::fabs(work.row_upper[r] - work.row_lower[r]) > feasibility) continue;
+          if (!finite(work.row_lower[r])) continue;
+          const double rhs = work.row_lower[r];
+          // RHS must be integer.
+          if (std::fabs(rhs - std::round(rhs)) > tol::kIntegrality) continue;
+          // Find the one non-integer live variable, if exactly one exists.
+          Index candidate = -1;
+          double candidate_coeff = 0.0;
+          bool all_others_integer = true;
+          for (const auto& [j, a] : work.rows[r]) {
+            if (work.col_dead[static_cast<std::size_t>(j)]) continue;
+            if (is_integer_col(j)) {
+              // Coefficient must be integer too.
+              if (std::fabs(a - std::round(a)) > tol::kIntegrality) {
+                all_others_integer = false;
+                break;
+              }
+            } else {
+              if (candidate >= 0) {
+                // More than one non-integer variable: cannot determine.
+                all_others_integer = false;
+                break;
+              }
+              candidate = j;
+              candidate_coeff = a;
+            }
+          }
+          if (!all_others_integer || candidate < 0) continue;
+          // candidate_coeff must divide evenly into an integer (i.e. rhs/a and every other
+          // a_other/a must be integer). Equivalent to: |a| divides gcd of rhs and all integer
+          // coefficients. The simplest sufficient check: |a| == 1.0 or rhs/a is integer and
+          // for all other live (integer) entries a_other/a is integer.
+          if (std::fabs(std::fabs(candidate_coeff) - 1.0) > tol::kIntegrality) {
+            // Check the general divisibility condition.
+            bool divides = true;
+            if (std::fabs(rhs / candidate_coeff - std::round(rhs / candidate_coeff)) >
+                tol::kIntegrality) {
+              divides = false;
+            }
+            if (divides) {
+              for (const auto& [j, a] : work.rows[r]) {
+                if (work.col_dead[static_cast<std::size_t>(j)]) continue;
+                if (j == candidate) continue;
+                if (std::fabs(a / candidate_coeff - std::round(a / candidate_coeff)) >
+                    tol::kIntegrality) {
+                  divides = false;
+                  break;
+                }
+              }
+            }
+            if (!divides) continue;
+          }
+          // Promote.
+          work.col_implied_integer[static_cast<std::size_t>(candidate)] = true;
+          ++result.report.implied_integers;
+          ii_changed = true;
+          changed = true;
+        }
+      }
+    }
+
     // --- columns -----------------------------------------------------------------------
     for (Index j = 0; j < n && !result.proved_infeasible; ++j) {
       const auto u = static_cast<std::size_t>(j);
@@ -1278,87 +1360,6 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           break;
         }
         if (!merged) bucket.push_back(row);
-      }
-    }
-
-    // IMPLIED-INTEGER DETECTION (#513; Achterberg et al. 2020, sec. 1.13). A continuous
-    // variable x_j in an equality row is implied integer when every other live variable in
-    // that row is already integer (declared or promoted) with an integer coefficient, the RHS
-    // is integer, and x_j's own coefficient divides the RHS and every other coefficient
-    // evenly, i.e. dividing through by a_j leaves integers everywhere. Then x_j must equal
-    // an integer in every feasible solution and can be treated as integer from here on.
-    // Running to a fixpoint: each newly promoted variable may unlock further detections in
-    // the same or another row.
-    if (implied_integer && !result.proved_infeasible) {
-      bool ii_changed = true;
-      while (ii_changed) {
-        ii_changed = false;
-        const auto is_integer_col = [&](Index j) {
-          const auto u = static_cast<std::size_t>(j);
-          return model.col_type[u] == VarType::kInteger || work.col_implied_integer[u];
-        };
-        for (Index i = 0; i < m; ++i) {
-          const auto r = static_cast<std::size_t>(i);
-          if (work.row_dead[r]) continue;
-          // Must be an equality row.
-          if (std::fabs(work.row_upper[r] - work.row_lower[r]) > feasibility) continue;
-          if (!finite(work.row_lower[r])) continue;
-          const double rhs = work.row_lower[r];
-          // RHS must be integer.
-          if (std::fabs(rhs - std::round(rhs)) > tol::kIntegrality) continue;
-          // Find the one non-integer live variable, if exactly one exists.
-          Index candidate = -1;
-          double candidate_coeff = 0.0;
-          bool all_others_integer = true;
-          for (const auto& [j, a] : work.rows[r]) {
-            if (work.col_dead[static_cast<std::size_t>(j)]) continue;
-            if (is_integer_col(j)) {
-              // Coefficient must be integer too.
-              if (std::fabs(a - std::round(a)) > tol::kIntegrality) {
-                all_others_integer = false;
-                break;
-              }
-            } else {
-              if (candidate >= 0) {
-                // More than one non-integer variable: cannot determine.
-                all_others_integer = false;
-                break;
-              }
-              candidate = j;
-              candidate_coeff = a;
-            }
-          }
-          if (!all_others_integer || candidate < 0) continue;
-          // candidate_coeff must divide evenly into an integer (i.e. rhs/a and every other
-          // a_other/a must be integer). Equivalent to: |a| divides gcd of rhs and all integer
-          // coefficients. The simplest sufficient check: |a| == 1.0 or rhs/a is integer and
-          // for all other live (integer) entries a_other/a is integer.
-          if (std::fabs(std::fabs(candidate_coeff) - 1.0) > tol::kIntegrality) {
-            // Check the general divisibility condition.
-            bool divides = true;
-            if (std::fabs(rhs / candidate_coeff - std::round(rhs / candidate_coeff)) >
-                tol::kIntegrality) {
-              divides = false;
-            }
-            if (divides) {
-              for (const auto& [j, a] : work.rows[r]) {
-                if (work.col_dead[static_cast<std::size_t>(j)]) continue;
-                if (j == candidate) continue;
-                if (std::fabs(a / candidate_coeff - std::round(a / candidate_coeff)) >
-                    tol::kIntegrality) {
-                  divides = false;
-                  break;
-                }
-              }
-            }
-            if (!divides) continue;
-          }
-          // Promote.
-          work.col_implied_integer[static_cast<std::size_t>(candidate)] = true;
-          ++result.report.implied_integers;
-          ii_changed = true;
-          changed = true;
-        }
       }
     }
 
