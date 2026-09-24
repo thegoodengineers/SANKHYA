@@ -416,6 +416,16 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"gmi_safety",
+                 OptionType::Bool,
+                 false,
+                 "Gomory mixed-integer cuts (#496; Cornuejols, Margot and Nannicini 2013): no "
+                 "cut from a source row whose basic value is within 0.01 of an integer, and "
+                 "every cut's right-hand side loosened by 1e-9 + 1e-9 |rhs|. Only read when "
+                 "enable_root_cuts is set. Off until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"root_cut_loop",
                  OptionType::Bool,
                  false,

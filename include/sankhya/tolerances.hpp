@@ -277,6 +277,20 @@ inline constexpr double kCutMaxCoefficientRatio = 1e6;
 /// the cut's constant, which is what keeps the cut valid; see src/mip/cuts.cpp.
 inline constexpr double kCutNoiseRelative = 1e-14;
 
+/// GMI safety, under `gmi_safety` (#496 item 4). Cornuejols, Margot and Nannicini, "On the
+/// safety of Gomory cut generators", Math. Programming Computation 5 (2013), measure what a
+/// GMI generator's parameters do to cut validity: among them the minimum fractionality of
+/// the source row's basic variable, the maximum dynamism of the cut and a relaxation of its
+/// right-hand side. The values here are conservative choices of ours, not tuned from that
+/// study. A source row whose basic value is within kGmiMinFractionality of an integer gives
+/// no cut: its f0 is the divisor of every coefficient, so a small f0 magnifies the tableau
+/// row's rounding by 1/f0. The emitted rhs is loosened by kGmiRhsRelaxAbsolute plus
+/// kGmiRhsRelaxRelative * |rhs|, which only weakens the cut. Dynamism is already capped for
+/// every family by kCutMaxCoefficientRatio in the filter.
+inline constexpr double kGmiMinFractionality = 0.01;
+inline constexpr double kGmiRhsRelaxAbsolute = 1e-9;
+inline constexpr double kGmiRhsRelaxRelative = 1e-9;
+
 /// Minimum root-LP violation for a cut to be accepted. Valid cuts that are not violated
 /// or barely violated are safely rejected to save LP solves.
 inline constexpr double kCutViolationTolerance = 1e-5;
