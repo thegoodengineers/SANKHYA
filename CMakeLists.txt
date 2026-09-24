@@ -325,6 +325,7 @@ set(SANKHYA_CORE_SOURCES
   src/presolve/probing.cpp
   src/ipm/ipm.cpp
   src/ipm/model_space.cpp
+  src/ipm/proximal_system.cpp
   src/pdhg/pdhg.cpp
   src/pdhg/pdhg_evaluate.cpp
   src/pdhg/pdhg_certificate.cpp
