@@ -431,4 +431,8 @@ inline constexpr double kRootCutStallFraction = 1e-3;
 /// every round is slow leaves the tree most of the time it was given.
 inline constexpr double kRootCutTimeShare = 0.2;
 
+/// GPU PDHG device loop (#478): iterations replayed on the device per host synchronisation.
+/// Larger amortises the synchronisation further but checks the iteration and time limits
+/// and the evaluation stride less often; 32 is under the evaluation interval of 40.
+inline constexpr Count kPdhgDeviceLoopBlock = 32;
 }  // namespace sankhya::tol

@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -218,6 +219,62 @@ TEST(PdhgCudaRegression, TheTwoMatvecPathOnTheDeviceAgreesWithTheCpuAtTheStoppin
   }
   EXPECT_GE(compared, 8);
   EXPECT_EQ(agreed, compared);
+}
+
+TEST(PdhgCudaRegression, TheDeviceLoopAgreesWithTheCpuAtTheStoppingTolerance) {
+  // #478: with gpu_on_device_loop one iteration is captured as a CUDA graph and replayed
+  // kPdhgDeviceLoopBlock times per host synchronisation, the adaptive step rule running on
+  // the device. Same bound as the per-iteration path, alone and with #479's two-mat-vec, and
+  // the log must say the loop ran: a silent fallback to the per-iteration path would pass the
+  // agreement check without testing anything.
+  const std::string probe_path = repository_path("data/netlib/afiro.mps");
+  Model probe_model;
+  ASSERT_TRUE(io::read_model(probe_path, &probe_model).ok) << probe_path;
+  Options probe_options = pdhg_regression_options(/*gpu=*/true);
+  probe_options.set_int("iteration_limit", 1);
+  if (!cuda_was_used(solve(probe_model, probe_options))) {
+    GTEST_SKIP() << "CUDA backend not in this build: skipped, not passed.";
+  }
+  for (const bool two_matvec : {false, true}) {
+    int agreed = 0;
+    int compared = 0;
+    for (const char* name : kNetlibInstances) {
+      Model model;
+      ASSERT_TRUE(
+          io::read_model(repository_path((std::string("data/netlib/") + name + ".mps").c_str()),
+                         &model)
+              .ok)
+          << name;
+      const Solution cpu = solve(model, pdhg_regression_options(/*gpu=*/false));
+      Options loop = pdhg_regression_options(/*gpu=*/true);
+      loop.set_bool("gpu_on_device_loop", true);
+      loop.set_bool("pdhg_two_matvec", two_matvec);
+      loop.set_bool("log_to_console", true);
+      ::testing::internal::CaptureStdout();
+      const Solution gpu = solve(model, loop);
+      std::fflush(stdout);
+      const std::string log = ::testing::internal::GetCapturedStdout();
+      ASSERT_TRUE(cuda_was_used(gpu)) << name << ": " << gpu.message;
+      EXPECT_NE(log.find("device loop on"), std::string::npos)
+          << name << ": the device loop did not run\n"
+          << log.substr(0, 2000);
+      const bool cpu_converged = cpu.status == SolveStatus::kOptimal;
+      const bool gpu_converged =
+          gpu.status == SolveStatus::kOptimal || gpu.status == SolveStatus::kFeasible;
+      if (!cpu_converged && !gpu_converged) continue;
+      ++compared;
+      EXPECT_TRUE(gpu_converged) << name << " device loop: " << gpu.message;
+      const double scale = std::max({1.0, std::fabs(cpu.objective), std::fabs(gpu.objective)});
+      const double diff = std::fabs(cpu.objective - gpu.objective);
+      EXPECT_LE(diff, kAgreementTol * scale)
+          << name << (two_matvec ? " (two-mat-vec)" : "") << ": CPU " << cpu.objective << " ("
+          << cpu.iterations << " iterations), CUDA device loop " << gpu.objective << " ("
+          << gpu.iterations << ")";
+      if (gpu_converged && diff <= kAgreementTol * scale) ++agreed;
+    }
+    EXPECT_GE(compared, 8) << (two_matvec ? "two-mat-vec" : "three products");
+    EXPECT_EQ(agreed, compared) << (two_matvec ? "two-mat-vec" : "three products");
+  }
 }
 
 }  // namespace

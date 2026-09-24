@@ -953,13 +953,12 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Bool,
                  false,
                  "Keep the PDHG iteration loop on the device via a CUDA Graph (#478): "
-                 "capture K=64 iterations (primal, dual, interaction kernels plus "
-                 "on-device step-size and KKT-residual kernels) once, replay with one "
-                 "cudaGraphLaunch per block, one small D->H copy per block for "
-                 "convergence. Eliminates the per-iteration host round-trip. "
-                 "CURRENTLY A STUB: pdhg_graph_block() returns 0; the existing "
-                 "per-iteration path in pdhg_gpu.cu is unchanged. Default OFF; "
-                 "enable after a clean A/B on main once the graph capture is written. "
+                 "capture one iteration (both products, the primal and dual kernels, the "
+                 "interaction, the adaptive step rule and the commit of an accepted "
+                 "step) and replay it 32 times per host synchronisation, instead of "
+                 "copying three scalars to the host every iteration. "
+                 "Default OFF until an A/B on a card; the per-iteration path is "
+                 "unchanged when off, and runs instead if the capture fails. "
                  "References: Lu & Yang, arXiv:2311.12180; NVIDIA CUDA Graphs guide.",
                  0.0,
                  0.0,
