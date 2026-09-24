@@ -115,6 +115,36 @@ TEST(NormalPattern, OneDenseColumnIsRefusedFromItsCountAlone) {
   EXPECT_EQ(q.nonzeros, m);
 }
 
+// A STORED ZERO IS NOT AN ENTRY OF THE PRODUCT. finalize(0.0) keeps an explicit zero, and
+// the assembly skips a pair whose row-side coefficient is one. A 3,000-row column that is
+// zero everywhere but two rows makes a normal-equations matrix of about 9,000 entries (the
+// two nonzero rows still pair with every stored row below them); counted by its stored
+// length it would be 4.5 million and refused under a 1e6 budget - a refusal of a model the
+// factor fits many times over.
+TEST(NormalPattern, StoredZerosDoNotCountTowardsARefusal) {
+  const Index m = 3000;
+  SparseMatrix a(m, m + 1);
+  for (Index i = 0; i < m; ++i) {
+    a.add_entry(i, i, 1.0);
+    a.add_entry(i, m, i < 2 ? 1.0 : 0.0);
+  }
+  a.finalize(0.0);
+  ASSERT_EQ(a.column(m).size, m);  // the zeros are stored
+  const std::int64_t truth = assembled_nonzeros(a, {});
+  EXPECT_LT(truth, 10000);
+  const NormalPrediction p = predict_normal_nonzeros(a, {}, 1000000);
+  EXPECT_FALSE(p.over_cap) << p.nonzeros;
+  EXPECT_GE(p.nonzeros, truth);
+  // Between the bounds the exact count is the assembled one.
+  const NormalPrediction tight = predict_normal_nonzeros(a, {}, truth);
+  EXPECT_FALSE(tight.over_cap) << tight.nonzeros;
+  EXPECT_TRUE(tight.exact);
+  EXPECT_EQ(tight.nonzeros, truth);
+  const NormalPrediction below = predict_normal_nonzeros(a, {}, truth - 1);
+  EXPECT_TRUE(below.over_cap);
+  EXPECT_LE(below.nonzeros, truth);
+}
+
 double relative_difference(const std::vector<double>& x, const std::vector<double>& y) {
   double diff = 0.0;
   double size = 0.0;

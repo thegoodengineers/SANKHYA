@@ -20,17 +20,28 @@ NormalPrediction predict_normal_nonzeros(const SparseMatrix& a, const std::vecto
   NormalPrediction out;
   const auto rows = static_cast<std::int64_t>(m);
 
-  // Stage 1 and 2: one pass over the column counts. A column with c entries is a clique of
-  // c rows, c (c - 1) / 2 strictly-lower entries that nothing can avoid (a lower bound on the
+  // Stage 1 and 2: one pass over the columns. A column with c entries is a clique of c
+  // rows, c (c - 1) / 2 strictly-lower entries that nothing can avoid (a lower bound on the
   // whole) and that at worst no other column shares (the sum is an upper bound).
+  //
+  // STORED ZEROS. normal_equations_lower() skips a pair (r, i) whose row-side coefficient
+  // a_ij is an exact zero, so a stored zero - which finalize(0.0) keeps, and a model built
+  // through the API can hold - is not a full member of its column's clique. The lower bound
+  // counts only the nonzero-valued entries (every pair of those IS assembled), the upper
+  // bound every stored entry; the lower bound is what refuses a model, so it must never
+  // count an entry the assembly would not make.
   std::int64_t largest_clique = 0;
   std::int64_t sum_of_cliques = 0;
   for (Index j = 0; j < n; ++j) {
     if (!kept(j)) continue;
-    const auto c = static_cast<std::int64_t>(a.column(j).size);
-    const std::int64_t strict = c * (c - 1) / 2;
-    largest_clique = std::max(largest_clique, strict);
-    sum_of_cliques += strict;
+    const ColumnView column = a.column(j);
+    const auto c = static_cast<std::int64_t>(column.size);
+    std::int64_t nonzero = 0;
+    for (Index q = 0; q < column.size; ++q) {
+      if (column.values[q] != 0.0) ++nonzero;
+    }
+    largest_clique = std::max(largest_clique, nonzero * (nonzero - 1) / 2);
+    sum_of_cliques += c * (c - 1) / 2;
   }
   const std::int64_t full_lower = rows * (rows + 1) / 2;
   const std::int64_t lower_bound = rows + largest_clique;
@@ -60,7 +71,8 @@ NormalPrediction predict_normal_nonzeros(const SparseMatrix& a, const std::vecto
     const ColumnView row = by_row.row(i);
     for (Index p = 0; p < row.size; ++p) {
       const Index j = row.rows[p];  // a CSR view stores COLUMN indices in `rows`
-      if (j < 0 || j >= n || !kept(j)) continue;
+      // As the assembly: a zero coefficient on the row side contributes no entry.
+      if (j < 0 || j >= n || !kept(j) || row.values[p] == 0.0) continue;
       const ColumnView column = a.column(j);
       for (Index q = 0; q < column.size; ++q) {
         const Index r = column.rows[q];
