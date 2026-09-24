@@ -242,6 +242,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_maros_meszaros.py
 
+      - name: The pooling instances match their published data and generator (#516)
+        # Hermetic: no download and no solve. The GAMS data parser, the committed models
+        # against pooling_models.py, sizes against MINLPLib, Haverly's optima as feasible
+        # points of all three formulations, the pass rule and the doc section.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_pooling.py
+
       - name: Kennington set parsing and pass rule (#530)
         # Pure Python, no network: the readme table and its published optima, the set
         # selection, and the pass rule shared with the Netlib full-set runner.
