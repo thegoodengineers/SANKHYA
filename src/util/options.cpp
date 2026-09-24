@@ -961,19 +961,18 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
-    s.push_back({"gpu_domain_prop",
-                 OptionType::Bool,
-                 false,
-                 "Run activity-based bound propagation on the GPU at each MIP node (#510). "
-                 "CURRENTLY A STUB: the kernel is not written and propagate_bounds() returns "
-                 "the input bounds unchanged, so the search behaves exactly as with the option "
-                 "off. The design is one CUDA thread per constraint row, atomic min/max on the "
-                 "column-bound arrays, iterated to convergence or a round limit. Default OFF; "
-                 "it earns a default by a clean A/B on main once the kernel exists. "
-                 "Reference: Sofranac, Gleixner & Pokutta, arXiv:2009.07785.",
-                 0.0,
-                 0.0,
-                 {}});
+    s.push_back(
+        {"gpu_domain_prop",
+         OptionType::Bool,
+         false,
+         "Activity-based bound propagation at the MIP root in synchronous rounds (#510; "
+         "Sofranac, Gleixner & Pokutta, arXiv:2009.07785): one CUDA thread per row "
+         "and per column when the build has CUDA and a card answers, otherwise the CPU "
+         "reference, which returns the same bounds. Up to kDomainPropagationRounds "
+         "rounds on the search's copy of the model. Default OFF until the A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"gpu_pump",
                  OptionType::Bool,
                  false,

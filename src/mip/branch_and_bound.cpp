@@ -39,6 +39,7 @@
 #include "../util/profiler.hpp"
 #include "branch_and_bound_internal.hpp"
 #include "cuts.hpp"
+#include "domain_propagation.hpp"
 #include "mir_cuts.hpp"
 #include "obbt.hpp"
 #include "parallel_search.hpp"
@@ -985,7 +986,12 @@ Solution solve_branch_and_bound(const Model& model, const Options& options, Logg
   const ObbtResult obbt_result = (!certify && options.get_bool("mip_obbt"))
                                      ? obbt_root(tightened, options, logger)
                                      : ObbtResult{};
-  const bool any_tightening = effect.rows_tightened > 0 || obbt_result.bounds_tightened > 0;
+  // Root domain propagation (#510): the synchronous propagator, on the GPU when there is one.
+  const Count propagated = (!certify && options.get_bool("gpu_domain_prop"))
+                               ? propagate_root_bounds(&tightened, logger)
+                               : 0;
+  const bool any_tightening =
+      effect.rows_tightened > 0 || obbt_result.bounds_tightened > 0 || propagated > 0;
   const Model& searched = any_tightening ? tightened : model;
   // The debug-solution check (#500): the model as received and after the rounding above, and
   // at the end the answer. Nothing happens unless `debug_solution` is set.
