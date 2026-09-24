@@ -361,6 +361,15 @@ inline constexpr double kQpIpmPivotShare = 0.1;
 inline constexpr double kQpIpmRegularizationRaise = 100.0;
 inline constexpr int kQpIpmRegularizationAttempts = 8;
 
+// ---- Gondzio's centrality correctors in the LP interior point (#472) ----------------------
+
+/// The products a corrector aims for: [kIpmCentralityBetaMin, kIpmCentralityBetaMax] times
+/// the target sigma mu, Gondzio's (1996) 0.1 and 10 (the issue's gamma = 0.1, and 1 / gamma).
+inline constexpr double kIpmCentralityBetaMin = 0.1;
+inline constexpr double kIpmCentralityBetaMax = 10.0;
+/// A corrector is kept only when alpha_p + alpha_d grows by this factor: 1% (the issue).
+inline constexpr double kIpmCentralityAcceptance = 1.01;
+
 /// Binary probing (#512; Savelsbergh 1994; Achterberg et al. 2020). A probe x_j = v is
 /// declared infeasible only when a row misses its bound by more than this, relative to
 /// max(1, |bound|), on top of the rounding the activity sum can carry: a probe wrongly called

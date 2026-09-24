@@ -1494,6 +1494,20 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"ipm_centrality_correctors",
+         OptionType::Int,
+         std::int64_t{0},
+         "Gondzio's multiple centrality correctors in the LP interior point (#472; Gondzio "
+         "1996, Colombo and Gondzio 2008): after the Mehrotra direction, up to this many "
+         "extra back-solves with the same factors push the complementarity products back "
+         "into [0.1, 10] sigma mu from the aspiration step min(1.5 alpha + 0.3, 1), each kept "
+         "only if it lengthens the step by 1%. The number actually tried also grows with the "
+         "factor's estimated factorization-to-solve cost ratio (one, plus one per doubling "
+         "past 2). 0 (the default) is off.",
+         0.0,
+         10.0,
+         {}});
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
                  tol::kPdhgLoose,

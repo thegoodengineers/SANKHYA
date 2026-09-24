@@ -323,6 +323,7 @@ set(SANKHYA_CORE_SOURCES
   src/presolve/coef_tightening.cpp
   src/presolve/presolve.cpp
   src/presolve/probing.cpp
+  src/ipm/centrality.cpp
   src/ipm/ipm.cpp
   src/ipm/model_space.cpp
   src/pdhg/pdhg.cpp

@@ -39,6 +39,7 @@
 #include <fmt/format.h>
 
 #include "core/resource_limits.hpp"
+#include "ipm/centrality.hpp"
 #include "ipm/model_space.hpp"
 #include "la/ldl.hpp"
 #include "la/scaling.hpp"
@@ -289,6 +290,15 @@ class InteriorPoint {
   std::vector<double> r_mu_l_, r_mu_u_;
   Count factorizations_ = 0;
   Count regularized_pivots_ = 0;
+  /// Gondzio's multiple centrality correctors (#472, ipm_centrality_correctors, 0 = off):
+  /// the cap from the option, and how many were tried and kept over the solve.
+  int corrector_cap_ = 0;
+  Count correctors_tried_ = 0;
+  Count correctors_kept_ = 0;
+  /// After the Mehrotra direction is in dx_ ... dzu_: try correctors that push the
+  /// complementarity products back towards [beta_min, beta_max] sigma mu, each one more
+  /// back-solve with the current factors, keeping one only while it lengthens the step.
+  void centrality_correctors(double sigma);
   /// The dual regularization the factorization runs with (#209). It starts at
   /// kDualRegularization and is raised when a Newton direction comes back non-finite near
   /// the end, where the barrier has left the normal equations rank deficient at working
@@ -888,6 +898,54 @@ void InteriorPoint::newton_direction() {
   }
 }
 
+// GONDZIO'S MULTIPLE CENTRALITY CORRECTORS (#472; Gondzio 1996, Colombo & Gondzio 2008, see
+// ipm/centrality.hpp). The Mehrotra direction is in hand with its step lengths. From a trial
+// point at the aspiration step min(1.5 alpha + 0.3, 1), the complementarity products outside
+// [beta_min, beta_max] sigma mu are pulled back towards that interval by adding the gap to the
+// r_mu terms and solving again with the SAME factors: by linearity the new direction is the
+// Mehrotra direction plus the corrector. It is kept when it lengthens alpha_p + alpha_d by at
+// least kIpmCentralityAcceptance, otherwise the previous direction is restored and the loop
+// ends. How many are tried is capped by the option and by the factor's shape, never by a clock.
+void InteriorPoint::centrality_correctors(double sigma) {
+  const int budget = corrector_budget(static_cast<double>(ldl_.factor_nonzeros()),
+                                      static_cast<double>(ldl_.dimension()), corrector_cap_);
+  double alpha_p = step_length(sl_, dsl_, su_, dsu_);
+  double alpha_d = step_length(zl_, dzl_, zu_, dzu_);
+  for (int k = 0; k < budget; ++k) {
+    if (alpha_p >= 1.0 && alpha_d >= 1.0) return;  // nothing left to lengthen
+    const std::vector<double> dx = dx_, dy = dy_, dsl = dsl_, dzl = dzl_, dsu = dsu_,
+                              dzu = dzu_, rl = r_mu_l_, ru = r_mu_u_;
+    const double target = sigma * mu_;
+    const double trial_p = aspiration_step(alpha_p);
+    const double trial_d = aspiration_step(alpha_d);
+    const Index corrected = add_centrality_term(sl_, dsl_, zl_, dzl_, has_lower_, trial_p,
+                                                trial_d, target, &r_mu_l_) +
+                            add_centrality_term(su_, dsu_, zu_, dzu_, has_upper_, trial_p,
+                                                trial_d, target, &r_mu_u_);
+    if (corrected == 0) return;
+    ++correctors_tried_;
+    newton_direction();
+    const double next_p = step_length(sl_, dsl_, su_, dsu_);
+    const double next_d = step_length(zl_, dzl_, zu_, dzu_);
+    if (direction_is_finite() &&
+        next_p + next_d >= tol::kIpmCentralityAcceptance * (alpha_p + alpha_d)) {
+      alpha_p = next_p;
+      alpha_d = next_d;
+      ++correctors_kept_;
+      continue;
+    }
+    dx_ = dx;
+    dy_ = dy;
+    dsl_ = dsl;
+    dzl_ = dzl;
+    dsu_ = dsu;
+    dzu_ = dzu;
+    r_mu_l_ = rl;
+    r_mu_u_ = ru;
+    return;
+  }
+}
+
 double InteriorPoint::step_length(const std::vector<double>& s, const std::vector<double>& ds,
                                   const std::vector<double>& t,
                                   const std::vector<double>& dt) const {
@@ -911,6 +969,10 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
   solution.solve_seconds = seconds;
   logger_.info("IPM: {} iterations, {} factorizations, {} regularized pivot(s) in total",
                iterations, factorizations_, regularized_pivots_);
+  if (corrector_cap_ > 0) {
+    logger_.verbose("interior point: {} centrality correctors tried, {} kept (#472)",
+                    correctors_tried_, correctors_kept_);
+  }
   // THE WORST ROWS AND VARIABLES, AT EVERY STOP THAT HANDS BACK A POINT (#582). A limit stop
   // restores the best iterate without re-measuring it, so it is measured here first: the
   // table must describe the point that is returned. On irish-electricity the stop that shows
@@ -1251,6 +1313,7 @@ Solution InteriorPoint::run() {
     }
   }
   build();
+  corrector_cap_ = static_cast<int>(options_.get_int("ipm_centrality_correctors"));
   logger_.verbose("interior point: built in {:.2f}s from the start of the solve",
                   timer.elapsed_seconds());
   // A polish arrives with most of its budget spent by the first-order phase; a build that
@@ -1538,6 +1601,7 @@ Solution InteriorPoint::run() {
     // PREDICTOR then CORRECTOR, as one step: the corrector's right-hand side carries the
     // predictor's products ds dz, so a predictor that is not finite poisons the corrector
     // whatever the factorization behind it, and a recovery has to redo both (#209).
+    double sigma_used = 0.0;
     const auto predictor_corrector = [&]() {
       // PREDICTOR: the affine-scaling direction (mu-terms = -s z).
       for (Index k = 0; k < total_; ++k) {
@@ -1560,6 +1624,7 @@ Solution InteriorPoint::run() {
       mu_aff = bound_count_ > 0 ? mu_aff / static_cast<double>(bound_count_) : 0.0;
       const double ratio = mu_ > 0.0 ? mu_aff / mu_ : 0.0;
       const double sigma = std::min(1.0, ratio * ratio * ratio);
+      sigma_used = sigma;
 
       // CORRECTOR: centering plus the second-order term from the predictor.
       for (Index k = 0; k < total_; ++k) {
@@ -1625,6 +1690,7 @@ Solution InteriorPoint::run() {
             iterations, timer.elapsed_seconds());
       }
     }
+    if (corrector_cap_ > 0) centrality_correctors(sigma_used);
     const double alpha_p = std::min(1.0, kStepToBoundary * step_length(sl_, dsl_, su_, dsu_));
     const double alpha_d = std::min(1.0, kStepToBoundary * step_length(zl_, dzl_, zu_, dzu_));
 
