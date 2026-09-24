@@ -236,6 +236,24 @@ TEST(FuzzAgainstOracle, DualHarrisAndStartPerturbationAgainstOracle) {
   EXPECT_GT(tally.compared(), 2400) << "the oracle abstained too often to prove anything";
 }
 
+TEST(FuzzAgainstOracle, HyperSparseSolvesAgainstOracle) {
+  // #464: the hyper-sparse FTRAN and BTRAN are opt-in; the exact oracle judges them with the
+  // option on, under product-form updates and under Forrest-Tomlin, whose first factorization
+  // (before any FT update) still takes the fast path (review of #665).
+  std::mt19937_64 rng(464464464);
+  GeneratorConfig config;
+  Tally tally;
+  const OptionList product = {{"lu_hyper_sparse", "true"}};
+  const OptionList forrest = {{"lu_hyper_sparse", "true"}, {"basis_update", "forrest-tomlin"}};
+  for (int trial = 0; trial < 500; ++trial) {
+    compare(random_lp(rng, config), &tally, product);
+    compare(degenerate_lp(rng, config), &tally, forrest);
+  }
+  report("1000 instances under lu_hyper_sparse, product-form and Forrest-Tomlin", tally);
+  EXPECT_EQ(tally.mismatched, 0);
+  EXPECT_GT(tally.compared(), 800) << "the oracle abstained too often to prove anything";
+}
+
 TEST(FuzzAgainstOracle, KktInstancesAgainstTheAnalyticOptimum) {
   // The float solver against an optimum known in closed form - no oracle in the loop at all,
   // so this cannot be fooled by the oracle and the solver sharing a mistake.
