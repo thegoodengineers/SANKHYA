@@ -141,6 +141,7 @@ struct HeuristicSchedule {
   bool pump = false;
   bool rins = false;
   bool rens = false;
+  bool fj = false;  ///< Feasibility Jump (#506), feasibility_jump.hpp
   bool dive[kDiveRules] = {false, false, false, false};  ///< by DiveRule
   bool dive_backtrack = false;
   Count rins_frequency = 0;
@@ -149,6 +150,7 @@ struct HeuristicSchedule {
   Count dive_frequency = 0;  ///< 0: the dives run at the root only
   int dive_lp_resolves = 0;
   int pump_rounds = 0;
+  Count fj_work = 0;
   bool seconds_budgets = true;  ///< false under deterministic=true (#288's rule)
 
   [[nodiscard]] static HeuristicSchedule from(const Options& options);

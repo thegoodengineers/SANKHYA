@@ -14,9 +14,12 @@
 // interior-point polish.
 
 #include "branch_and_bound_internal.hpp"
+#include "feasibility_jump.hpp"
+#include "parallel_search.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 
 #include <fmt/format.h>
@@ -41,6 +44,7 @@ enum Slot : std::size_t {
   kRins,
   kRens,
   kLocalMip,
+  kFeasibilityJump,
   kSlots
 };
 constexpr const char* kNames[kSlots] = {"rounding",
@@ -53,7 +57,8 @@ constexpr const char* kNames[kSlots] = {"rounding",
                                         "feasibility pump",
                                         "RINS",
                                         "RENS",
-                                        "local MIP"};
+                                        "local MIP",
+                                        "feasibility jump"};
 static_assert(kDiveGuided - kDiveFractional + 1 == kDiveRules);
 
 /// The options a sub-MIP (RINS, RENS) is solved with: the search's own, quiet, capped at
@@ -64,9 +69,10 @@ Options sub_mip_options(const Options& base, Count node_limit, double time_limit
   Options sub = base;
   sub.set_bool("log_to_console", false);
   sub.set_bool("mip_heuristics", false);
-  for (const char* name : {"mip_heur_lock_rounding", "mip_heur_repair", "mip_heur_pump",
-                           "mip_heur_rins", "mip_heur_rens", "mip_heur_dive_coefficient",
-                           "mip_heur_dive_vector_length", "mip_heur_dive_guided"}) {
+  for (const char* name :
+       {"mip_heur_lock_rounding", "mip_heur_repair", "mip_heur_pump", "mip_heur_rins",
+        "mip_heur_rens", "mip_heur_fj", "mip_heur_dive_coefficient",
+        "mip_heur_dive_vector_length", "mip_heur_dive_guided"}) {
     sub.set_string(name, "off");
   }
   sub.set_int("mip_dive_frequency", 0);
@@ -146,6 +152,9 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
     (void)offer_from(kLockRounding, lock_round(original_, locks_, integer_columns_, x));
     s.seconds += clock.elapsed_seconds();
   }
+
+  // FEASIBILITY JUMP from the rounded root relaxation (#506).
+  if (node_index == 0) run_feasibility_jump(&x);
 
   // REPAIR, at the root only: it is the most expensive of the no-LP heuristics, and its
   // value is an early incumbent, which only matters before the tree has found one.
@@ -369,6 +378,34 @@ void BranchAndBound::run_root_pump(const Solution& relaxation) {
   s.work += solves;
   if (!x.empty()) (void)offer_from(kPump, x);
   s.seconds += clock.elapsed_seconds();
+}
+
+// Feasibility Jump (#506; Luteberget and Sartor, Math. Programming Computation 15, 2023),
+// the search in feasibility_jump.cpp: before the root LP from the box point closest to zero
+// (`from` null), and from the rounded root relaxation. It reads original_ and nothing else
+// of the search, and every point it returns goes through offer_incumbent(). In a parallel
+// search only the worker holding the root runs it.
+void BranchAndBound::run_feasibility_jump(const std::vector<double>* from) {
+  if (!schedule_.fj || integer_columns_.empty()) return;
+  if (seed_ != nullptr && !seed_->is_root) return;
+  HeuristicStats& s = heuristic_stats_[kFeasibilityJump];
+  const Timer clock;
+  ++s.calls;
+  FeasibilityJumpSettings settings;
+  settings.work_limit = schedule_.fj_work;
+  settings.seed = static_cast<std::uint64_t>(options_.get_int("random_seed")) +
+                  static_cast<std::uint64_t>(s.calls);
+  settings.integrality_tolerance = integrality_tolerance_;
+  settings.use_objective = !quadratic_;
+  const FeasibilityJumpResult found = feasibility_jump(
+      original_, from != nullptr ? *from : feasibility_jump_zero_start(original_), settings);
+  for (const std::vector<double>& point : found.points)
+    (void)offer_from(kFeasibilityJump, point);
+  s.work += found.work;
+  s.seconds += clock.elapsed_seconds();
+  logger_.verbose("Feasibility jump ({}): {} point(s), {} move(s), {} weight update(s)",
+                  from != nullptr ? "from the root relaxation" : "before the root LP",
+                  found.points.size(), found.moves, found.weight_updates);
 }
 
 void BranchAndBound::report_heuristics() {

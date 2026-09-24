@@ -57,6 +57,15 @@ inline constexpr double kSubMipMinFixedFraction = 0.5;
 /// time one sub-MIP may take. A heuristic that out-spends the search it serves is not one.
 inline constexpr double kSubMipBudgetShare = 0.1;
 
+/// Feasibility Jump (#506; Luteberget and Sartor, Math. Programming Computation 15, 2023):
+/// the candidate jumps sampled per move, the paper's 25; the default work budget of one run
+/// in nonzero visits, the default of mip_fj_work; and the least decrease of the weighted
+/// violation a jump must bring to be taken, so rounding noise in the scores cannot keep the
+/// search cycling between two values of one column.
+inline constexpr int kFeasibilityJumpSample = 25;
+inline constexpr Count kFeasibilityJumpWork = 10'000'000;
+inline constexpr double kFeasibilityJumpMinScore = 1e-9;
+
 /// Reliability branching (#69; Achterberg, Koch & Martin, "Branching rules revisited",
 /// Operations Research Letters 33 (2005), 42-54). A column's pseudocost in a direction is
 /// trusted once it has been observed this many times; until then the column is a

@@ -391,6 +391,9 @@ class BranchAndBound {
   void unwind_to(std::size_t mark);
   /// The feasibility pump at the root, only when nothing else found an incumbent.
   void run_root_pump(const Solution& relaxation);
+  /// Feasibility Jump (#506): before the root LP when `from` is null, else from `from`
+  /// rounded; the root only, and only when mip_heur_fj resolves on.
+  void run_feasibility_jump(const std::vector<double>* from);
   void report_heuristics();
   // ---- Reduced-cost fixing and restarts (#418), in branch_and_bound_restart.cpp ---------
   /// Keep the root relaxation's reduced costs and basis: the material fixing works from.
