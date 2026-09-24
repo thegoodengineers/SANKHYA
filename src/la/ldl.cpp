@@ -532,7 +532,11 @@ bool SparseLdl::factorize_signed(const SparseMatrix& lower, double regularizatio
     }
   }
 
-  if (supernodal_) return factorize_supernodal(regularization, should_stop);
+  // The supernodal kernels apply the positive-definite pivot rule only. A quasi-definite
+  // factorization (`signs`, the QP interior point of #614) keeps the scalar path, whose
+  // pivot test knows each pivot's sign; routing it here would replace a correct negative
+  // pivot by +regularization (review of #624).
+  if (supernodal_ && signs == nullptr) return factorize_supernodal(regularization, should_stop);
 
   std::vector<double> x(static_cast<std::size_t>(n), 0.0);
   std::vector<Index> mark(static_cast<std::size_t>(n), -1);

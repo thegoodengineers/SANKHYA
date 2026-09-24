@@ -236,5 +236,36 @@ TEST(SupernodalLdl, PrintsTheFactorizationTimesOfBothPathsOnLargerNetlibModels) 
   }
 }
 
+TEST(SupernodalLdl, AQuasidefiniteFactorizationKeepsItsNegativePivots) {
+  // [-E, A'; A, F] with E = diag(2, 3), F = diag(4, 5), A dense 2x2: quasi-definite, so D is
+  // negative on the first block and positive on the second (#614). The supernodal kernels know
+  // only the positive-definite rule, so the signed factorization must stay on the scalar path
+  // with the flag on (review of #624): same pivots, none regularized.
+  SparseMatrix k;
+  k.reset(4, 4);
+  k.add_entry(0, 0, -2.0);
+  k.add_entry(1, 1, -3.0);
+  k.add_entry(2, 0, 1.0);
+  k.add_entry(2, 1, 2.0);
+  k.add_entry(3, 0, -1.0);
+  k.add_entry(3, 1, 1.0);
+  k.add_entry(2, 2, 4.0);
+  k.add_entry(3, 3, 5.0);
+  k.finalize();
+  const std::vector<signed char> signs = {-1, -1, 1, 1};
+  SparseLdl scalar;
+  ASSERT_TRUE(scalar.analyze(k));
+  ASSERT_TRUE(scalar.factorize_quasidefinite(k, signs, 1e-12));
+  SparseLdl super;
+  super.set_supernodal(true);
+  ASSERT_TRUE(super.analyze(k));
+  ASSERT_TRUE(super.factorize_quasidefinite(k, signs, 1e-12));
+  EXPECT_EQ(super.regularized_pivots(), 0);
+  ASSERT_EQ(super.pivots().size(), scalar.pivots().size());
+  for (std::size_t i = 0; i < scalar.pivots().size(); ++i) {
+    EXPECT_EQ(super.pivots()[i], scalar.pivots()[i]) << i;
+  }
+}
+
 }  // namespace
 }  // namespace sankhya
