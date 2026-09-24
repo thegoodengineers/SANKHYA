@@ -113,6 +113,61 @@ bool ColumnSide::assemble(const std::vector<double>& theta,
   return normal_equations_lower(transpose_, inverse_d, inverse_theta, 0.0, lower, should_stop);
 }
 
+namespace {
+
+/// Whether the lower triangle of B B^T (diagonal included) holds more than `cap` entries,
+/// B given twice: `outer` column i lists the columns of B in row i, `inner` column k lists
+/// the rows of B in column k. Rows `skip` marks count their diagonal only. Stops as soon as
+/// the count passes the cap; false when `should_stop` fires first.
+bool lower_product_exceeds(const SparseMatrix& outer, const SparseMatrix& inner,
+                           const std::vector<bool>* skip, std::int64_t cap,
+                           const SparseLdl::ShouldStop& should_stop) {
+  const Index size = outer.num_cols();
+  std::vector<Index> mark(static_cast<std::size_t>(size), -1);
+  std::int64_t count = 0;
+  std::size_t work = 0;
+  for (Index i = 0; i < size; ++i) {
+    std::int64_t row_count = 1;  // the diagonal
+    mark[static_cast<std::size_t>(i)] = i;
+    if (skip == nullptr || !(*skip)[static_cast<std::size_t>(i)]) {
+      const ColumnView row = outer.column(i);
+      for (Index p = 0; p < row.size; ++p) {
+        const ColumnView column = inner.column(row.rows[p]);
+        for (Index q = 0; q < column.size; ++q) {
+          const Index r = column.rows[q];
+          if (r <= i || mark[static_cast<std::size_t>(r)] == i) continue;
+          mark[static_cast<std::size_t>(r)] = i;
+          ++row_count;
+        }
+        work += static_cast<std::size_t>(column.size);
+        if (work >= (std::size_t{1} << 16)) {
+          work = 0;
+          if (should_stop && should_stop()) return false;
+        }
+      }
+    }
+    count += row_count;
+    if (count > cap) return true;
+  }
+  return false;
+}
+
+}  // namespace
+
+bool ColumnSide::row_side_exceeds(std::int64_t cap,
+                                  const SparseLdl::ShouldStop& should_stop) const {
+  // M = A A^T: row i's columns are column i of transpose_ (fixed columns already out), and
+  // column j's rows are column j of A.
+  return lower_product_exceeds(transpose_, *a_, nullptr, cap, should_stop);
+}
+
+bool ColumnSide::column_side_exceeds(std::int64_t cap,
+                                     const SparseLdl::ShouldStop& should_stop) const {
+  // N = A^T A: column j's rows are column j of A, and row i's columns are column i of
+  // transpose_. A fixed column is an identity row of N.
+  return lower_product_exceeds(*a_, transpose_, &fixed_, cap, should_stop);
+}
+
 void ColumnSide::multiply_m(const std::vector<double>& v, std::vector<double>* out) const {
   const auto n = static_cast<std::size_t>(a_->num_cols());
   std::vector<double> atv(n, 0.0);

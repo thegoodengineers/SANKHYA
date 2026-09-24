@@ -1475,15 +1475,74 @@ bool InteriorPoint::column_side_is_smaller() {
     if (fixed_[static_cast<std::size_t>(j)]) ones_x[static_cast<std::size_t>(j)] = 0.0;
   }
   const std::vector<double> ones_m(static_cast<std::size_t>(m_), 1.0);
+  // THE CHEAP BOUNDS FIRST. A row of A with r entries is an r x r dense block of N, a column
+  // with c entries a c x c block of M, and each factor holds at least its matrix's lower
+  // triangle. A side whose largest block alone is over the factor budget (for N) or over
+  // the other side's factor (for M) is decided without building it: on rmine15 building and
+  // ordering both sides unbounded took the working set past 4 GB.
+  std::int64_t row_clique = 0;
+  {
+    std::vector<std::int64_t> per_row(static_cast<std::size_t>(m_), 0);
+    for (Index j = 0; j < n_; ++j) {
+      if (fixed_[static_cast<std::size_t>(j)]) continue;
+      const ColumnView column = model_.matrix.column(j);
+      for (Index q = 0; q < column.size; ++q)
+        ++per_row[static_cast<std::size_t>(column.rows[q])];
+    }
+    for (const std::int64_t r : per_row) row_clique = std::max(row_clique, r * (r - 1) / 2);
+  }
+  if (max_factor_nonzeros_ >= 0 && n_ + row_clique > max_factor_nonzeros_) {
+    logger_.verbose(
+        "interior point: the column side's densest row alone makes N exceed the "
+        "factor budget {}; the row side is kept",
+        max_factor_nonzeros_);
+    return false;
+  }
+  if (max_factor_nonzeros_ >= 0 &&
+      column_side_.column_side_exceeds(max_factor_nonzeros_, should_stop_)) {
+    logger_.verbose(
+        "interior point: the column side's N alone holds more than the factor "
+        "budget {}; the row side is kept",
+        max_factor_nonzeros_);
+    return false;
+  }
   SparseMatrix pattern;
   if (!column_side_.assemble(ones_x, ones_m, dual_regularization_, &pattern, should_stop_)) {
     return false;
   }
   SparseLdl columns;
   columns.set_ordering_budget(ldl_.ordering_budget());
-  if (!columns.analyze(pattern, should_stop_)) return false;
+  columns.set_factor_budget(max_factor_nonzeros_);
+  if (!columns.analyze(pattern, should_stop_)) {
+    logger_.verbose(
+        "interior point: the column side's factor is over the budget or its "
+        "ordering was abandoned; the row side is kept");
+    return false;
+  }
   const auto column_factor =
       static_cast<std::int64_t>(columns.factor_nonzeros()) + columns.dimension();
+  std::int64_t column_clique = 0;
+  for (Index j = 0; j < n_; ++j) {
+    if (fixed_[static_cast<std::size_t>(j)]) continue;
+    const auto c = static_cast<std::int64_t>(model_.matrix.column(j).size);
+    column_clique = std::max(column_clique, c * (c - 1) / 2);
+  }
+  if (m_ + column_clique > column_factor) {
+    logger_.verbose(
+        "interior point: the row side's densest column alone makes M exceed the column "
+        "side's factor ({} nonzeros, {} x {}); the column side is taken",
+        column_factor, n_, n_);
+    return true;
+  }
+  // M's lower triangle is inside its factor: if the count alone passes the column side's
+  // factor, the column side is smaller, and M is never built.
+  if (column_side_.row_side_exceeds(column_factor, should_stop_)) {
+    logger_.verbose(
+        "interior point: the row side's normal equations alone hold more than the column "
+        "side's factor ({} nonzeros, {} x {}); the column side is taken",
+        column_factor, n_, n_);
+    return true;
+  }
   if (!normal_equations_lower(model_.matrix, ones_x, ones_m, dual_regularization_, &pattern,
                               should_stop_)) {
     return false;

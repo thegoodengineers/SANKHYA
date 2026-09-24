@@ -29,6 +29,7 @@
 // products with A and never formed: exact where D is well scaled, repaired where it is not.
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 #include "la/ldl.hpp"
@@ -59,6 +60,18 @@ class ColumnSide {
   /// Solve M dy = rhs in place for the m-side M of the last assemble(), with `ldl` holding
   /// the factors of that N.
   ColumnSideReport solve(const SparseLdl& ldl, double* rhs) const;
+
+  /// Whether the lower triangle of the m-side M = A Theta A^T + D (unfixed columns) holds
+  /// more than `cap` nonzeros, counted from the pattern of A with a marker array and
+  /// stopped as soon as it passes - M itself is never built. On supportcase10 M has 2.2e8
+  /// nonzeros and building it to order it took the working set past 3 GB. Returns false
+  /// when `should_stop` fires first. (The same count as #467's predict_normal_nonzeros, which
+  /// this can call once both are in.)
+  [[nodiscard]] bool row_side_exceeds(std::int64_t cap,
+                                      const SparseLdl::ShouldStop& should_stop) const;
+  /// The same for N = Theta^-1 + A^T D^-1 A, before assemble() builds it.
+  [[nodiscard]] bool column_side_exceeds(std::int64_t cap,
+                                         const SparseLdl::ShouldStop& should_stop) const;
 
  private:
   void multiply_m(const std::vector<double>& v, std::vector<double>* out) const;

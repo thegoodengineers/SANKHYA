@@ -116,6 +116,35 @@ TEST(InteriorPointColumnSide, TheDirectionIsTheRowSidesOnNetlib) {
   }
 }
 
+TEST(InteriorPointColumnSide, BothSidesAreCountedExactlyBeforeTheyAreBuilt) {
+  for (const char* name : {"afiro", "sc50a", "scagr7", "stocfor1", "israel"}) {
+    Model model;
+    ASSERT_TRUE(io::read_model(netlib(name), &model).ok) << name;
+    const SparseMatrix& a = model.matrix;
+    const auto n = static_cast<std::size_t>(a.num_cols());
+    const auto m = static_cast<std::size_t>(a.num_rows());
+    std::vector<bool> fixed(n, false);
+    std::vector<double> theta(n, 1.0);
+    for (std::size_t j = 2; j < n; j += 5) {
+      fixed[j] = true;
+      theta[j] = 0.0;
+    }
+    const std::vector<double> ones(m, 1.0);
+    SparseMatrix lower_m;
+    ASSERT_TRUE(normal_equations_lower(a, theta, ones, 0.0, &lower_m));
+    ipm::ColumnSide side;
+    side.set_matrix(a, fixed);
+    SparseMatrix lower_n;
+    ASSERT_TRUE(side.assemble(theta, ones, 1e-10, &lower_n, {}));
+    const std::int64_t count_m = lower_m.num_nonzeros();
+    const std::int64_t count_n = lower_n.num_nonzeros();
+    EXPECT_FALSE(side.row_side_exceeds(count_m, {})) << name;
+    EXPECT_TRUE(side.row_side_exceeds(count_m - 1, {})) << name;
+    EXPECT_FALSE(side.column_side_exceeds(count_n, {})) << name;
+    EXPECT_TRUE(side.column_side_exceeds(count_n - 1, {})) << name;
+  }
+}
+
 Options ipm_options(const char* side) {
   Options options;
   options.set_bool("log_to_console", false);
