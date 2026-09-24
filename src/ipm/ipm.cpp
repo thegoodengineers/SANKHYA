@@ -117,11 +117,6 @@ constexpr int kRuizIterations = 10;
 /// floor the model-space ones do not move at all, so a short window loses nothing.
 constexpr int kModelSpaceStallIterations = 3;
 constexpr double kModelSpaceProgress = 0.9;
-/// Gondzio's correctors (#472) are tried only while one of the Mehrotra step lengths is below
-/// this: near the end both steps are close to 1 and a corrector can only trade the evenness
-/// of the products the convergence test needs for a longer step it does not (measured on
-/// Netlib stocfor2 and boeing1 in #472, which lost their proof without this).
-constexpr double kCentralityStepEnough = 0.9;
 
 class InteriorPoint {
  public:
@@ -304,6 +299,15 @@ class InteriorPoint {
   /// complementarity products back towards [beta_min, beta_max] sigma mu, each one more
   /// back-solve with the current factors, keeping one only while it lengthens the step.
   void centrality_correctors(double sigma);
+  /// The complementarity products at the point the current direction reaches with the step
+  /// lengths the iteration would take (kStepToBoundary times alpha_p and alpha_d, at most 1):
+  /// the worst in the stopping test's measure s z / (1 + |x|), and the spread, the largest
+  /// product over their mean (1 when all are equal).
+  struct Centrality {
+    double worst = 0.0;
+    double spread = 0.0;
+  };
+  [[nodiscard]] Centrality centrality_after(double alpha_p, double alpha_d) const;
   /// The dual regularization the factorization runs with (#209). It starts at
   /// kDualRegularization and is raised when a Newton direction comes back non-finite near
   /// the end, where the barrier has left the normal equations rank deficient at working
@@ -911,26 +915,25 @@ void InteriorPoint::newton_direction() {
 // Mehrotra direction plus the corrector. It is kept when it lengthens alpha_p + alpha_d by at
 // least kIpmCentralityAcceptance, otherwise the previous direction is restored and the loop
 // ends. How many are tried is capped by the option and by the factor's shape, never by a clock.
+//
+// A LONGER STEP IS NOT ENOUGH. The correctors exist to make the products more even (Gondzio
+// 1996, sec. 1), and the stopping test bounds the worst of them. A corrector that lengthens
+// the step by leaving products behind is therefore refused as well: it is kept only when, at
+// the point the step reaches, neither the worst product in the stopping test's measure nor
+// the spread (the largest product over the mean) is larger than with the previous direction.
+// Each half was needed on its own (#472): with the step test alone a KKT oracle instance
+// reached mu 6.5e-9 with one product at 1.2e-8 and stalled there for 60 iterations; with the
+// worst product alone Netlib shell stalled with its largest product 100 times the mean (a
+// longer step lowers every product, so that test passes while the spread grows); with the
+// spread alone another oracle instance stalled.
 void InteriorPoint::centrality_correctors(double sigma) {
-  // Not in the end game: once every measure is within kBarrierExhaustedSlack of its
-  // tolerance (the loop's own "nearly converged"), what is left is to even out the last
-  // products, which the Mehrotra step does and a corrector aiming at a longer step does not
-  // (a KKT oracle instance stalled for 60 iterations with its worst product at 1.2e-8).
-  const double relative_gap =
-      mu_ * static_cast<double>(bound_count_) / (1.0 + std::fabs(objective_));
-  if (primal_infeasibility_ <= kBarrierExhaustedSlack * kIpmTolerance &&
-      dual_infeasibility_ <= kBarrierExhaustedSlack * kIpmTolerance &&
-      relative_gap <= kBarrierExhaustedSlack * kIpmGap &&
-      max_product_ <= kBarrierExhaustedSlack * kIpmComplementarity) {
-    return;
-  }
   const int budget = corrector_budget(static_cast<double>(ldl_.factor_nonzeros()),
                                       static_cast<double>(ldl_.dimension()), corrector_cap_);
   double alpha_p = step_length(sl_, dsl_, su_, dsu_);
   double alpha_d = step_length(zl_, dzl_, zu_, dzu_);
+  Centrality current = centrality_after(alpha_p, alpha_d);
   for (int k = 0; k < budget; ++k) {
-    // Nothing left to lengthen: both steps already reach kCentralityStepEnough.
-    if (alpha_p >= kCentralityStepEnough && alpha_d >= kCentralityStepEnough) return;
+    if (alpha_p >= 1.0 && alpha_d >= 1.0) return;  // nothing left to lengthen
     const std::vector<double> dx = dx_, dy = dy_, dsl = dsl_, dzl = dzl_, dsu = dsu_,
                               dzu = dzu_, rl = r_mu_l_, ru = r_mu_u_;
     const double target = sigma * mu_;
@@ -945,10 +948,13 @@ void InteriorPoint::centrality_correctors(double sigma) {
     newton_direction();
     const double next_p = step_length(sl_, dsl_, su_, dsu_);
     const double next_d = step_length(zl_, dzl_, zu_, dzu_);
-    if (direction_is_finite() &&
-        next_p + next_d >= tol::kIpmCentralityAcceptance * (alpha_p + alpha_d)) {
+    const bool finite = direction_is_finite();
+    const Centrality next = finite ? centrality_after(next_p, next_d) : current;
+    if (finite && next_p + next_d >= tol::kIpmCentralityAcceptance * (alpha_p + alpha_d) &&
+        next.worst <= current.worst && next.spread <= current.spread) {
       alpha_p = next_p;
       alpha_d = next_d;
+      current = next;
       ++correctors_kept_;
       continue;
     }
@@ -962,6 +968,28 @@ void InteriorPoint::centrality_correctors(double sigma) {
     r_mu_u_ = ru;
     return;
   }
+}
+
+InteriorPoint::Centrality InteriorPoint::centrality_after(double alpha_p,
+                                                          double alpha_d) const {
+  const double ap = std::min(1.0, kStepToBoundary * alpha_p);
+  const double ad = std::min(1.0, kStepToBoundary * alpha_d);
+  Centrality c;
+  double largest = 0.0;
+  double sum = 0.0;
+  const auto take = [&](double v, double x) {
+    c.worst = std::max(c.worst, v / (1.0 + std::fabs(x)));
+    largest = std::max(largest, v);
+    sum += v;
+  };
+  for (Index k = 0; k < total_; ++k) {
+    const auto u = static_cast<std::size_t>(k);
+    const double x = x_[u] + ap * dx_[u];
+    if (has_lower_[u]) take((sl_[u] + ap * dsl_[u]) * (zl_[u] + ad * dzl_[u]), x);
+    if (has_upper_[u]) take((su_[u] + ap * dsu_[u]) * (zu_[u] + ad * dzu_[u]), x);
+  }
+  if (sum > 0.0) c.spread = largest * static_cast<double>(bound_count_) / sum;
+  return c;
 }
 
 double InteriorPoint::step_length(const std::vector<double>& s, const std::vector<double>& ds,
@@ -1729,7 +1757,20 @@ Solution InteriorPoint::run() {
 
     // A method that stops moving is not converging; say so rather than spin to the limit.
     if (mu_ >= 0.999 * previous_mu && alpha_p < 1e-6 && alpha_d < 1e-6) {
-      if (++stalled >= 5) {
+      if (++stalled >= 5 && !barrier_retry_used_ &&
+          regularization_raises_ < kMaxRegularizationRaises &&
+          primal_infeasibility_ <= kBarrierExhaustedSlack * kIpmTolerance &&
+          dual_infeasibility_ <= kBarrierExhaustedSlack * kIpmTolerance &&
+          max_product_ <= kBarrierExhaustedSlack * kIpmComplementarity) {
+        barrier_retry_used_ = true;
+        dual_regularization_ *= kRegularizationRaise;
+        ++regularization_raises_;
+        logger_.verbose(
+            "interior point: stalled at iteration {} within a decade of every tolerance; "
+            "regularization raised for one more step",
+            iterations);
+        stalled = 0;
+      } else if (stalled >= 5) {
         // The best iterate is returned as a FEASIBLE point when it met the feasibility
         // tolerances, for the status guard to judge; otherwise as the numerical failure it
         // is. Never as optimal: the convergence test above is the only thing that says so.
