@@ -290,6 +290,10 @@ Solution BranchAndBound::run() {
                  : build_node_scaling(working_, node_options_);
   probe_options_ = node_options_;
   probe_options_.set_int("iteration_limit", tol::kStrongBranchingIterations);
+  // First factorizations kept across node LPs (#501): off by default until an A/B on main.
+  if (const std::int64_t entries = options_.get_int("mip_node_factor_cache"); entries > 0) {
+    factor_cache_ = std::make_unique<NodeFactorCache>(static_cast<std::size_t>(entries));
+  }
 
   logger_.info("Branch and bound: {} rows, {} columns, {} integer columns",
                original_.num_rows(), original_.num_cols(), integer_columns_.size());
@@ -879,6 +883,14 @@ Solution BranchAndBound::run() {
     profiler->count("nodes pruned", static_cast<std::int64_t>(nodes_pruned_));
     profiler->count("warm-started node LPs", static_cast<std::int64_t>(warm_node_solves_));
     profiler->count("cold node LPs", static_cast<std::int64_t>(cold_node_solves_));
+    if (factor_cache_ != nullptr) {
+      profiler->count("node LP factorizations reused", factor_cache_->hits());
+      profiler->count("node LP factorizations computed", factor_cache_->misses());
+    }
+  }
+  if (factor_cache_ != nullptr) {
+    logger_.info("Node LP factors (#501): {} first factorization(s) reused, {} computed",
+                 factor_cache_->hits(), factor_cache_->misses());
   }
   logger_.info(
       "Node selection {}: {} node(s) taken deepest-first, {} by the policy, deepest node at "

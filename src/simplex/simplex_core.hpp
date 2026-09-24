@@ -29,6 +29,7 @@
 
 #include "../la/lu.hpp"
 #include "../la/scaling.hpp"
+#include "factor_cache.hpp"
 
 namespace sankhya::detail {
 
@@ -188,6 +189,13 @@ class Simplex {
  public:
   Simplex(const Model& model, const Options& options, Logger& logger, SolveControl* control)
       : model_(model), options_(options), logger_(logger), control_(control) {}
+
+  /// Keep and reuse first factorizations in `cache` (#501). `matrix_id` must name the
+  /// matrix of the model this simplex was built on (NodeScaling::id); 0 disables it.
+  void use_factor_cache(NodeFactorCache* cache, std::uint64_t matrix_id) {
+    factor_cache_ = cache;
+    factor_cache_matrix_ = matrix_id;
+  }
 
   /// The primal simplex, from the slack basis or from `warm`.
   Solution run(const WarmStart* warm = nullptr);
@@ -451,6 +459,13 @@ class Simplex {
 
   /// Latched by refactorize() when the Markowitz ladder climbed past its default.
   bool basis_needed_stricter_threshold_ = false;
+  /// True when the last refactorize() succeeded at the default threshold without a repair:
+  /// the only factorizations NodeFactorCache keeps (#501).
+  bool last_factorization_plain_ = false;
+  NodeFactorCache* factor_cache_ = nullptr;
+  std::uint64_t factor_cache_matrix_ = 0;
+  /// The first factorization of prepare(), through factor_cache_ when one is set.
+  [[nodiscard]] bool first_factorization();
 
   /// Effort counters for the solve log. rejected_updates_ is the interesting one: a basis
   /// that keeps producing unsafe pivots is badly conditioned, and that is worth seeing.
@@ -616,7 +631,8 @@ class Simplex {
 [[nodiscard]] Solution solve_with_scaling(const Model& model, const Options& options,
                                           Logger& logger, const NodeScaling& cache,
                                           Engine engine, const WarmStart* warm,
-                                          SolveControl* control = nullptr);
+                                          SolveControl* control = nullptr,
+                                          NodeFactorCache* factors = nullptr);
 
 /// One row's candidate breakpoint, gathered in pass one of the Harris test and re-examined
 /// in pass two.
