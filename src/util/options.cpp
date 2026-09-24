@@ -1148,6 +1148,34 @@ const std::vector<OptionSpec>& Options::registry() {
                  1e-14,
                  0.1,
                  {}});
+    s.push_back({"qp_algorithm",
+                 OptionType::String,
+                 std::string("condat-vu"),
+                 "Convex QP engine: condat-vu (default; the first-order primal-dual splitting "
+                 "of src/qp/qp_condat_vu.cpp) or ipm (#490: a proximal interior point, "
+                 "Mehrotra predictor-corrector on the regularized quasi-definite augmented "
+                 "system with the sparse LDL^T; off by default until an A/B on main).",
+                 0.0,
+                 0.0,
+                 {"condat-vu", "ipm"}});
+    s.push_back({"qp_ipm_tolerance",
+                 OptionType::Double,
+                 1e-9,
+                 "qp_algorithm=ipm: relative primal residual, dual residual and duality gap "
+                 "at which the interior point stops (#490).",
+                 1e-14,
+                 0.1,
+                 {}});
+    s.push_back({"qp_ipm_regularization",
+                 OptionType::Double,
+                 1e-8,
+                 "qp_algorithm=ipm: the floor of the proximal parameters rho (primal) and "
+                 "delta (dual) that keep the augmented system quasi-definite (#490). They "
+                 "start here, are raised on a pivot of the wrong sign, and follow mu back "
+                 "down to it.",
+                 1e-14,
+                 1.0,
+                 {}});
     s.push_back({"pdhg_polish",
                  OptionType::Bool,
                  true,

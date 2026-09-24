@@ -21,4 +21,12 @@ namespace sankhya::qp {
                                        Logger& logger,
                                        sankhya::SolveControl* control = nullptr);
 
+/// The same problem by a proximal interior point (#490): Mehrotra predictor-corrector on the
+/// regularized, quasi-definite augmented system, factored by the project's sparse LDL^T.
+/// Chosen with qp_algorithm=ipm; the same convexity refusal comes first. See
+/// src/qp/qp_ipm.cpp for the method, its references and what this first slice leaves out.
+[[nodiscard]] Solution solve_convex_qp_ipm(const Model& model, const Options& options,
+                                           Logger& logger,
+                                           sankhya::SolveControl* control = nullptr);
+
 }  // namespace sankhya::qp

@@ -480,6 +480,26 @@ bool SparseLdl::analyze(const SparseMatrix& lower, const ShouldStop& should_stop
 // exactly the order the symbolic pattern listed them in.
 bool SparseLdl::factorize(const SparseMatrix& lower, double regularization,
                           const ShouldStop& should_stop) {
+  return factorize_signed(lower, regularization, nullptr, should_stop);
+}
+
+// A symmetric quasi-definite matrix [-E, A'; A, F] with E and F positive definite has an
+// LDL^T with D of fixed signs (negative on the E block, positive on the F block) under every
+// symmetric permutation (Vanderbei 1995), so the same up-looking pass computes it with the
+// AMD ordering unchanged. The only difference is the pivot test: the sign each pivot must
+// have is given, and a pivot of the wrong sign or smaller than `regularization` in magnitude
+// is replaced by sign * regularization and counted, exactly as the positive-definite rule
+// replaces a small pivot by +regularization. A caller that sees a nonzero count knows its
+// proximal parameters were too small for the arithmetic (#490).
+bool SparseLdl::factorize_quasidefinite(const SparseMatrix& lower,
+                                        const std::vector<signed char>& signs,
+                                        double regularization, const ShouldStop& should_stop) {
+  if (signs.size() != static_cast<std::size_t>(n_)) return false;
+  return factorize_signed(lower, regularization, signs.data(), should_stop);
+}
+
+bool SparseLdl::factorize_signed(const SparseMatrix& lower, double regularization,
+                                 const signed char* signs, const ShouldStop& should_stop) {
   stopped_early_ = false;
   if (!analyzed_ || lower.num_rows() != n_ || lower.num_cols() != n_) return false;
   const Index n = n_;
@@ -572,13 +592,21 @@ bool SparseLdl::factorize(const SparseMatrix& lower, double regularization,
     // replaced by it: the factors then belong to a matrix that differs from the given one
     // on that diagonal entry, by less than the threshold, which is the standard IPM remedy
     // for a normal-equations matrix that has become singular in the limit.
-    if (!(diagonal > regularization)) {
-      diagonal = regularization;
+    // With `signs`, the same rule on the pivot's expected sign (a quasi-definite matrix):
+    // the extremes below are then of |pivot|. Without it, every pivot is expected positive
+    // and the arithmetic is exactly what it always was.
+    const double sign =
+        signs == nullptr
+            ? 1.0
+            : static_cast<double>(
+                  signs[static_cast<std::size_t>(perm_[static_cast<std::size_t>(k)])]);
+    if (!(sign * diagonal > regularization)) {
+      diagonal = sign * regularization;
       ++regularized_;
     }
     d_[static_cast<std::size_t>(k)] = diagonal;
-    smallest_pivot_ = std::min(smallest_pivot_, diagonal);
-    largest_pivot_ = std::max(largest_pivot_, diagonal);
+    smallest_pivot_ = std::min(smallest_pivot_, sign * diagonal);
+    largest_pivot_ = std::max(largest_pivot_, sign * diagonal);
   }
   if (n == 0) smallest_pivot_ = 0.0;
   return true;
