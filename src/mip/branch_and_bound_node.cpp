@@ -82,6 +82,9 @@ bool BranchAndBound::propagate() {
       return false;  // the box is empty, so the node is: no LP is asked to solve it
     }
   }
+  // A certificate (#518) derives each leaf's bound over the box the branching decisions
+  // define; a node LP solved over a row-propagated box would give duals for a different one.
+  if (!certificate_path_.empty()) return true;
 
   // A handful of sweeps. Propagation to a fixed point can be slow and rarely pays for
   // itself at a node; Savelsbergh's observation is that most of the tightening happens in
