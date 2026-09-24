@@ -31,6 +31,7 @@
 
 #pragma once
 
+#include <utility>
 #include <vector>
 
 #include "cuts.hpp"
@@ -48,11 +49,19 @@ struct CombinatorialCutStats {
 /// Clique cuts violated at `solution.col_value`, from the conflict graph of the binaries.
 /// `col_lower` / `col_upper` are the bounds the conflicts are derived under: the GLOBAL ones,
 /// so a cut is valid at every node.
-[[nodiscard]] std::vector<Cut> generate_clique_cuts(const Model& model,
-                                                    const Solution& solution,
-                                                    const std::vector<double>& col_lower,
-                                                    const std::vector<double>& col_upper,
-                                                    CombinatorialCutStats* stats = nullptr);
+///
+/// `extra_conflicts` (#512) adds pairs of LITERALS found in conflict elsewhere - by probing,
+/// which sees what propagation through several rows implies and no single row shows. Literal
+/// j < n is x_j = 1 (value x_j), literal n + j is x_j = 0 (value 1 - x_j), and a pair says
+/// the two are never both true at a feasible point of the model. A clique over literals
+/// gives sum over positive x_j + sum over complemented (1 - x_k) <= 1, written as a cut with
+/// -1 on each complemented column and rhs 1 minus their count (Atamturk, Nemhauser &
+/// Savelsbergh 2000). With no extra conflicts the graph has no complemented literal and the
+/// cuts are exactly those of the row-derived graph alone.
+[[nodiscard]] std::vector<Cut> generate_clique_cuts(
+    const Model& model, const Solution& solution, const std::vector<double>& col_lower,
+    const std::vector<double>& col_upper, CombinatorialCutStats* stats = nullptr,
+    const std::vector<std::pair<Index, Index>>* extra_conflicts = nullptr);
 
 /// {0,1/2}-CG cuts violated at `solution.col_value`, from the pure-integer rows with integer
 /// data: single rows, pairs sharing a column, and sets of any size found by Gaussian

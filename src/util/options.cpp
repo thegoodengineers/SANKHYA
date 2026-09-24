@@ -280,6 +280,21 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"presolve_probing",
+                 OptionType::Bool,
+                 false,
+                 "Binary probing with a clique table (#512; Savelsbergh 1994; Atamturk, "
+                 "Nemhauser and Savelsbergh 2000): each binary, most constrained first and "
+                 "within a work limit, is fixed to 0 and to 1 and the rows propagated. One "
+                 "value infeasible fixes the other; a bound both values agree on is "
+                 "tightened; a binary one value fixes gives a conflict between two literals. "
+                 "In presolve the fixings and tightenings become the reduced model's bounds; "
+                 "in the search the conflicts, complemented literals included, are added to "
+                 "the graph the clique separator reads. Only for a model with integer "
+                 "columns. OFF until the MIPLIB re-run on main says what it changes.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"presolve_dominated_columns",
                  OptionType::Bool,
                  false,

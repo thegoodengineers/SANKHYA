@@ -83,6 +83,7 @@ add_executable(sankhya_tests
   unit/test_knapsack_cover_separation.cpp
   unit/test_cut_filter_policy.cpp
   unit/test_presolve_parallel_rows.cpp
+  unit/test_presolve_probing.cpp
   unit/test_dual_steepest_edge.cpp
   unit/test_node_factor_cache.cpp
   unit/test_objective_branching.cpp

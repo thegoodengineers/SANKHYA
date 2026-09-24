@@ -37,6 +37,7 @@
 #include "branch_and_bound_internal.hpp"
 #include "combinatorial_cuts.hpp"
 #include "mir_cuts.hpp"
+#include "presolve/probing.hpp"
 
 namespace sankhya::mip {
 
@@ -119,11 +120,30 @@ void BranchAndBound::resize_warm_starts(Index rows) {
 }
 
 void BranchAndBound::add_combinatorial_cuts(const Solution& relaxation,
-                                            std::vector<Cut>* candidates) {
+                                            std::vector<Cut>* candidates, bool root) {
   CombinatorialCutStats stats;
   if (options_.get_bool("enable_clique_cuts")) {
+    // Probing's conflicts (#512), once, in the ROOT round only, on the model and global
+    // bounds there: every conflict then holds at every feasible point, so it stays valid as
+    // bounds tighten. Never in a tree round, even if no root round ran (a search resumed from
+    // a checkpoint): working_ there carries the node's objective-row bounds from objective
+    // branching (#418), and conflicts implied by them hold only in that subtree, yet would
+    // become clique cuts for the whole tree (review of #623).
+    if (root && !probed_ && options_.get_bool("presolve_probing")) {
+      probed_ = true;
+      presolve::ProbingResult probed = presolve::probe_binaries(
+          working_, global_lower_, global_upper_, tol::kProbingWorkLimit);
+      if (!probed.infeasible) probed_conflicts_ = std::move(probed.conflicts);
+      logger_.info(
+          "Probing (#512): {} binaries probed, {} literal conflicts for the clique "
+          "separator",
+          probed.probed, probed_conflicts_.size());
+    }
     std::vector<Cut> cliques =
-        generate_clique_cuts(working_, relaxation, global_lower_, global_upper_, &stats);
+        generate_clique_cuts(working_, relaxation, global_lower_, global_upper_, &stats,
+                             probed_conflicts_.empty() ? nullptr : &probed_conflicts_);
+    logger_.verbose("clique cuts: {} conflict edges, {} violated cliques", stats.conflict_edges,
+                    cliques.size());
     clique_cuts_generated_ += static_cast<Count>(cliques.size());
     candidates->insert(candidates->end(), cliques.begin(), cliques.end());
   }
@@ -197,7 +217,7 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   // Clique and {0,1/2}-Chvatal-Gomory cuts (#358): the families built for the pure-integer,
   // unit-coefficient covering and packing rows MIR cannot separate. Derived under the
   // GLOBAL bounds, so they hold at every node.
-  add_combinatorial_cuts(initial_relaxation, &candidates);
+  add_combinatorial_cuts(initial_relaxation, &candidates, /*root=*/true);
   if (debug_.has_value()) {
     debug_round_ = "root round 1";
     debug_check_cuts(candidates, -1);  // #500: every candidate, before the filter
@@ -282,7 +302,7 @@ void BranchAndBound::tree_cut_round(Index depth, Solution* relaxation) {
   }
   std::vector<Cut> candidates = generate_mir_cuts(working_, *relaxation, global_lower_,
                                                   global_upper_, nullptr, mir_options());
-  add_combinatorial_cuts(*relaxation, &candidates);
+  add_combinatorial_cuts(*relaxation, &candidates, /*root=*/false);
   if (objective_row_ >= 0) {
     working_.row_lower[objective] = objective_lower;
     working_.row_upper[objective] = objective_upper;
