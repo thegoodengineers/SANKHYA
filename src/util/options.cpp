@@ -142,6 +142,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  // OptionsAndRegistry.AlgorithmChoicesAreAutoPlusTheRegistrysAlgorithmNames
                  // fails the moment the two disagree (#297).
                  {"auto", "simplex", "dual-simplex", "pdhg", "ipm"}});
+    s.push_back({"nonconvex",
+                 OptionType::String,
+                 std::string("refuse"),
+                 "Models with products of columns in their rows (MPS QCMATRIX sections): "
+                 "refuse (default; the reader refuses them, as a local method would return a "
+                 "local point) or global (#514: read them and solve by spatial branch and "
+                 "bound over McCormick relaxations; `optimal` only when the proven bound "
+                 "closes mip_relative_gap / mip_absolute_gap, otherwise `feasible` with the "
+                 "bound; continuous models, every column of a product bounded).",
+                 0.0,
+                 0.0,
+                 {"refuse", "global"}});
     s.push_back({"mip_branching",
                  OptionType::String,
                  std::string("reliability"),

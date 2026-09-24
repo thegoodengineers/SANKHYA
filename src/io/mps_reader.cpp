@@ -54,6 +54,7 @@ enum class Section {
   kRanges,
   kBounds,
   kQuadratic,  ///< QUADOBJ / QMATRIX / QSECTION - the QPS quadratic objective
+  kQcMatrix,   ///< QCMATRIX <row> - a quadratic row, read only when a sink is set (#514)
   kEnd
 };
 
@@ -370,69 +371,7 @@ bool MpsParser::do_rhs(std::string* error) {
 
 // ---- completion ---------------------------------------------------------------------
 
-bool MpsParser::do_quadratic(std::string* error) {
-  // QPS QUADOBJ: "colname1 colname2 value", giving one entry of the Hessian of the OBJECTIVE.
-  //
-  // THE CONVENTION, and it is the trap in this section. QPS states the objective as
-  //
-  //     c'x + 0.5 x' Q x
-  //
-  // and lists only the LOWER TRIANGLE of the symmetric Q. A stored off-diagonal entry
-  // therefore stands for TWO entries of Q, and the 0.5 is part of the objective rather than
-  // part of the data. `sankhya::Model` was defined in exactly this convention - see the note
-  // in model.hpp - so entries map across with no transformation at all. A reader that
-  // "helpfully" halved the off-diagonals, or mirrored them into both triangles, would produce
-  // a model that solves cleanly to the optimum of a different problem.
-  //
-  // Files differ on which order the two column names appear in, so the pair is normalised to
-  // (max, min) rather than trusted.
-  if (tok_.size() < 3) {
-    *error = reader_.error_at(fmt::format(
-        "QUADOBJ entry has {} field(s), expected 3 (column, column, value)", tok_.size()));
-    return false;
-  }
-
-  const Index first = find_column(tok_[0]);
-  const Index second = find_column(tok_[1]);
-  if (first < 0 || second < 0) {
-    *error = reader_.error_at(
-        fmt::format("QUADOBJ names column '{}' which never appeared in COLUMNS",
-                    first < 0 ? std::string(tok_[0]) : std::string(tok_[1])));
-    return false;
-  }
-
-  double value = 0.0;
-  if (!parse_double(tok_[2], &value)) {
-    *error = reader_.error_at(fmt::format("'{}' is not a number", tok_[2]));
-    return false;
-  }
-  if (!std::isfinite(value)) {
-    *error = reader_.error_at(fmt::format(
-        "Hessian entry for ('{}', '{}') is {}; it must be finite", tok_[0], tok_[1], value));
-    return false;
-  }
-
-  const Index row = std::max(first, second);
-  const Index col = std::min(first, second);
-  const auto key = (static_cast<std::uint64_t>(static_cast<std::uint32_t>(row)) << 32) |
-                   static_cast<std::uint64_t>(static_cast<std::uint32_t>(col));
-  if (!seen_quad_entries_.insert(key).second) {
-    // A file listing both (i, j) and (j, i) hits this, which is the point: the two name the
-    // same entry of a symmetric matrix, and summing them would double the coefficient.
-    *error = reader_.error_at(fmt::format(
-        "duplicate Hessian entry for columns '{}' and '{}'; QPS lists the lower triangle of a "
-        "symmetric matrix, so each pair may appear only once and has no accumulate semantics",
-        col_names_[static_cast<std::size_t>(row)], col_names_[static_cast<std::size_t>(col)]));
-    return false;
-  }
-
-  if (value != 0.0) {
-    quad_row_.push_back(row);
-    quad_col_.push_back(col);
-    quad_value_.push_back(value);
-  }
-  return true;
-}
+// do_quadratic() lives in mps_quadratic.cpp, beside QCMATRIX (#514).
 
 bool MpsParser::finish_rows(std::string* error) {
   const std::size_t m = row_type_.size();
@@ -570,11 +509,17 @@ ReadResult MpsParser::parse(const std::string& path) {
       // why. Reading the objective and dropping the constraint is not an option either: it
       // would be a different model, solved and reported as this one.
       if (to_upper(tok_[0]) == "QCMATRIX") {
-        error = reader_.error_at(
-            "QCMATRIX section: quadratic constraints are not supported. This solver reads a "
-            "quadratic OBJECTIVE only (QUADOBJ); a model with bilinear constraints, such as "
-            "a pooling problem, is refused rather than read with those terms dropped");
-        return ReadResult::refusal(error);
+        if (qc_sink_ == nullptr) {
+          error = reader_.error_at(
+              "QCMATRIX section: quadratic constraints are not supported. This solver reads "
+              "a quadratic OBJECTIVE only (QUADOBJ); a model with bilinear constraints, such "
+              "as a pooling problem, is refused rather than read with those terms dropped. "
+              "--option nonconvex=global reads it and solves it with the global method");
+          return ReadResult::refusal(error);
+        }
+        if (!begin_qcmatrix(&error)) return ReadResult::failure(error);
+        section = Section::kQcMatrix;
+        continue;
       }
       Section next = Section::kNone;
       if (section_from_keyword(tok_[0], &next)) {
@@ -634,6 +579,9 @@ ReadResult MpsParser::parse(const std::string& path) {
       case Section::kQuadratic:
         if (!do_quadratic(&error)) return ReadResult::failure(error);
         break;
+      case Section::kQcMatrix:
+        if (!do_qcmatrix(&error)) return ReadResult::failure(error);
+        break;
       case Section::kNone:
       case Section::kName:
       case Section::kObjsense:
@@ -656,6 +604,7 @@ ReadResult MpsParser::parse(const std::string& path) {
 
   if (!finish_rows(&error)) return ReadResult::failure(fmt::format("{}: {}", path, error));
   finish_model();
+  if (qc_sink_ != nullptr) finish_quadratic_rows();
 
   const std::string problem = model_->validate();
   if (!problem.empty()) {

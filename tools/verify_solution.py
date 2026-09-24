@@ -245,6 +245,8 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
             if abs(term) > row_scale[i]:
                 row_scale[i] = abs(term)
 
+    model.add_quadratic_rows(x, activity, row_scale)  # QCMATRIX rows (#514); none -> no-op
+
     worst, where, worst_abs = 0.0, "", 0.0
     for i, name in enumerate(model.row_names):
         violation = max(model.row_lower[i] - activity[i], activity[i] - model.row_upper[i], 0.0)
@@ -298,11 +300,13 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         report.note("duality", f"skipped: status is {solution.status}, not an optimality claim")
         return report
 
-    if integer_columns:
+    if integer_columns or model.qc_entries:
         # LP duality does not apply to a MILP: any reported duals belong to some node
-        # relaxation, not to the integer problem. What CAN be checked is the claim the
-        # search makes about itself.
-        report.note("duality", "skipped: LP duality does not apply to a MILP")
+        # relaxation, not to the integer problem. Nor to a model with quadratic rows, whose
+        # optimality the global method proves by a bound (#514). What CAN be checked is the
+        # claim the search makes about itself.
+        report.note("duality", "skipped: LP duality does not apply to a "
+                    + ("MILP" if integer_columns else "model with quadratic rows"))
 
         bound = solution.header_float("dual_bound")
         if bound is None or not math.isfinite(bound):
