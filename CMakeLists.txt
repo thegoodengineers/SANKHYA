@@ -276,6 +276,7 @@ set(SANKHYA_CORE_SOURCES
   src/la/lu.cpp
   src/la/lu_eliminate.cpp
   src/la/lu_hyper.cpp
+  src/la/normal_pattern.cpp
   src/la/scaling.cpp
   src/la/sparse.cpp
   src/simplex/dense_lu.cpp
@@ -324,6 +325,7 @@ set(SANKHYA_CORE_SOURCES
   src/presolve/coef_tightening.cpp
   src/presolve/presolve.cpp
   src/presolve/probing.cpp
+  src/ipm/dense_columns.cpp
   src/ipm/ipm.cpp
   src/ipm/model_space.cpp
   src/ipm/proximal_system.cpp

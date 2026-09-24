@@ -43,7 +43,9 @@
 #include "ipm/ipm_testing.hpp"
 #include "ipm/model_space.hpp"
 #include "ipm/proximal_system.hpp"
+#include "ipm/dense_columns.hpp"
 #include "la/ldl.hpp"
+#include "la/normal_pattern.hpp"
 #include "la/scaling.hpp"
 #include "util/profiler.hpp"
 
@@ -119,6 +121,10 @@ constexpr int kRuizIterations = 10;
 /// floor the model-space ones do not move at all, so a short window loses nothing.
 constexpr int kModelSpaceStallIterations = 3;
 constexpr double kModelSpaceProgress = 0.9;
+/// At most this many columns go to the dense-column correction (#467): each costs one solve
+/// with the sparse factor per factorization to build the Schur complement, and the k x k
+/// complement is factored densely. The densest are taken first.
+constexpr Index kMaxDenseColumns = 100;
 
 class InteriorPoint {
  public:
@@ -208,6 +214,21 @@ class InteriorPoint {
   /// building it.
   std::int64_t max_factor_nonzeros_ = -1;
   bool factor_too_large_ = false;
+  /// Set when the refusal came BEFORE assembly (#467): the normal equations alone would
+  /// hold this many lower-triangle nonzeros (at least), and the factor at least as many.
+  std::int64_t predicted_normal_nonzeros_ = -1;
+  /// The dense-column path (#467, option ipm_dense_columns): the columns split off the
+  /// normal equations and corrected for by Sherman-Morrison-Woodbury inside conjugate
+  /// gradients. Inactive (no columns) by default, and then nothing below changes.
+  DenseColumnCorrection dense_;
+  bool dense_schur_failed_ = false;
+  Count pcg_iterations_ = 0;
+  Count pcg_solves_ = 0;
+  double worst_pcg_residual_ = 0.0;
+  /// Solve the normal equations for the factors in ldl_: the plain LDL^T solve with
+  /// kRefinementSteps of iterative refinement against normal_lower_, or, on the dense-column
+  /// path, preconditioned conjugate gradients against the whole of A Theta A^T.
+  void solve_normal(std::vector<double>* rhs);
 
   Index n_ = 0;
   Index m_ = 0;
@@ -775,6 +796,39 @@ bool InteriorPoint::factorize() {
     }
   }
   Profiler* profiler = logger_.profiler();
+  // THE SIZE IS KNOWN BEFORE THE MATRIX IS BUILT (#467). The factor's pattern contains the
+  // lower triangle of the normal equations, so a normal-equations matrix over the factor
+  // budget is a factor over it too, and the ordering would refuse it - after an assembly
+  // that on Linf_520c took 112 s and 474 million nonzeros, and on bdry2 would need 7.9e9.
+  // Counting from the pattern of A costs at most the assembly's arithmetic and none of its
+  // memory, and usually one pass over the column counts.
+  if (!analyzed_ && max_factor_nonzeros_ >= 0) {
+    std::vector<char> skip(static_cast<std::size_t>(n_), 0);
+    for (Index j = 0; j < n_; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      skip[u] = fixed_[u] || (dense_.active() && dense_.mask()[u] != 0) ? 1 : 0;
+    }
+    const NormalPrediction prediction =
+        predict_normal_nonzeros(model_.matrix, skip, max_factor_nonzeros_, should_stop_);
+    if (prediction.stopped) {
+      assembly_stopped_ = true;
+      return false;
+    }
+    if (prediction.over_cap) {
+      factor_too_large_ = true;
+      predicted_normal_nonzeros_ = prediction.nonzeros;
+      return false;
+    }
+    logger_.verbose("interior point: normal equations predicted at {} {} nonzeros",
+                    prediction.exact ? "exactly" : "at most", prediction.nonzeros);
+  }
+  std::vector<double> theta_sparse;
+  std::vector<double> assembly_shift;
+  if (dense_.active()) {
+    dense_.sparse_theta(theta_x, &theta_sparse);
+    (void)dense_.preconditioner_shift(model_.matrix, theta_x, row_shift, dual_regularization_,
+                                      &assembly_shift);
+  }
   bool assembled = false;
   // The proximal path (#473) factors the augmented system instead; its Theta^-1 carries no
   // regularization, which the system adds itself as rho and delta.
@@ -798,8 +852,9 @@ bool InteriorPoint::factorize() {
     assembled = true;
   } else {
     ProfileScope timed(profiler, "normal equations", ProfileMode::kDetailed);
-    assembled = normal_equations_lower(model_.matrix, theta_x, row_shift, dual_regularization_,
-                                       &normal_lower_, should_stop_);
+    assembled = normal_equations_lower(model_.matrix, dense_.active() ? theta_sparse : theta_x,
+                                       dense_.active() ? assembly_shift : row_shift,
+                                       dual_regularization_, &normal_lower_, should_stop_);
   }
   const SparseMatrix& system = proximal_ != nullptr ? proximal_->matrix() : normal_lower_;
   if (!assembled) {
@@ -873,7 +928,53 @@ bool InteriorPoint::factorize() {
   }
   ++factorizations_;
   regularized_pivots_ += ldl_.regularized_pivots();
+  if (dense_.active() &&
+      !dense_.prepare(ldl_, model_.matrix, theta_x, row_shift, dual_regularization_)) {
+    dense_schur_failed_ = true;
+    return false;
+  }
   return true;
+}
+
+void InteriorPoint::solve_normal(std::vector<double>* rhs) {
+  if (dense_.active()) {
+    const PcgReport report = dense_.solve(rhs->data());
+    ++pcg_solves_;
+    pcg_iterations_ += report.iterations;
+    worst_pcg_residual_ = std::max(worst_pcg_residual_, report.relative_residual);
+    return;
+  }
+  // Solve with iterative refinement against the matrix actually built (the factors carry
+  // the regularization; the residual is measured against the unregularized-by-pivot M).
+  const std::vector<double> b = *rhs;
+  ldl_.solve(rhs->data());
+  const auto multiply_normal = [&](const std::vector<double>& v, std::vector<double>* out) {
+    // M is stored as its lower triangle: M v = L v + L^T v - diag v.
+    std::fill(out->begin(), out->end(), 0.0);
+    for (Index j = 0; j < m_; ++j) {
+      const ColumnView column = normal_lower_.column(j);
+      const double vj = v[static_cast<std::size_t>(j)];
+      double dot = 0.0;
+      for (Index p = 0; p < column.size; ++p) {
+        const Index i = column.rows[p];
+        const double a = column.values[p];
+        (*out)[static_cast<std::size_t>(i)] += a * vj;
+        if (i != j) dot += a * v[static_cast<std::size_t>(i)];
+      }
+      (*out)[static_cast<std::size_t>(j)] += dot;
+    }
+  };
+  std::vector<double> residual(static_cast<std::size_t>(m_));
+  for (int step = 0; step < kRefinementSteps; ++step) {
+    multiply_normal(*rhs, &residual);
+    for (Index i = 0; i < m_; ++i) {
+      residual[static_cast<std::size_t>(i)] =
+          b[static_cast<std::size_t>(i)] - residual[static_cast<std::size_t>(i)];
+    }
+    ldl_.solve(residual.data());
+    for (Index i = 0; i < m_; ++i)
+      (*rhs)[static_cast<std::size_t>(i)] += residual[static_cast<std::size_t>(i)];
+  }
 }
 
 /// One Newton direction for the current r_mu terms: solves the normal equations for dy,
@@ -899,37 +1000,8 @@ void InteriorPoint::newton_direction() {
   for (Index i = 0; i < m_; ++i)
     rhs[static_cast<std::size_t>(i)] += r_b_[static_cast<std::size_t>(i)];
 
-  // Solve with iterative refinement against the matrix actually built (the factors carry
-  // the regularization; the residual is measured against the unregularized-by-pivot M).
   dy_ = rhs;
-  ldl_.solve(dy_.data());
-  const auto multiply_normal = [&](const std::vector<double>& v, std::vector<double>* out) {
-    // M is stored as its lower triangle: M v = L v + L^T v - diag v.
-    std::fill(out->begin(), out->end(), 0.0);
-    for (Index j = 0; j < m_; ++j) {
-      const ColumnView column = normal_lower_.column(j);
-      const double vj = v[static_cast<std::size_t>(j)];
-      double dot = 0.0;
-      for (Index p = 0; p < column.size; ++p) {
-        const Index i = column.rows[p];
-        const double a = column.values[p];
-        (*out)[static_cast<std::size_t>(i)] += a * vj;
-        if (i != j) dot += a * v[static_cast<std::size_t>(i)];
-      }
-      (*out)[static_cast<std::size_t>(j)] += dot;
-    }
-  };
-  std::vector<double> residual(static_cast<std::size_t>(m_));
-  for (int step = 0; step < kRefinementSteps; ++step) {
-    multiply_normal(dy_, &residual);
-    for (Index i = 0; i < m_; ++i) {
-      residual[static_cast<std::size_t>(i)] =
-          rhs[static_cast<std::size_t>(i)] - residual[static_cast<std::size_t>(i)];
-    }
-    ldl_.solve(residual.data());
-    for (Index i = 0; i < m_; ++i)
-      dy_[static_cast<std::size_t>(i)] += residual[static_cast<std::size_t>(i)];
-  }
+  solve_normal(&dy_);
 
   // dx = Theta (Abar^T dy - g); ds_l = dx + r_l; ds_u = -dx + r_u;
   // dz_l = (r_mu_l - z_l ds_l)/s_l; dz_u = (r_mu_u - z_u ds_u)/s_u.
@@ -1019,6 +1091,12 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
     if (status != SolveStatus::kOptimal && status != SolveStatus::kNotSolved) {
       solution.message += (solution.message.empty() ? "" : "; ") + refinement;
     }
+  }
+  if (dense_.active()) {
+    logger_.info(
+        "IPM: dense-column correction over {} column(s): {} conjugate-gradient step(s) in {} "
+        "solve(s), worst relative residual {:.1e}",
+        dense_.columns().size(), pcg_iterations_, pcg_solves_, worst_pcg_residual_);
   }
   // THE WORST ROWS AND VARIABLES, AT EVERY STOP THAT HANDS BACK A POINT (#582). A limit stop
   // restores the best iterate without re-measuring it, so it is measured here first: the
@@ -1254,8 +1332,18 @@ bool InteriorPoint::purify_duals() {
       row_shift[static_cast<std::size_t>(k - n_)] = 1.0;
     }
   }
-  if (!normal_equations_lower(model_.matrix, theta_x, row_shift, dual_regularization_,
-                              &normal_lower_, should_stop_)) {
+  // On the dense-column path (#467) the dense columns stay out of the assembled matrix,
+  // whose pattern the analysis fixed, and come back through the correction.
+  std::vector<double> theta_sparse;
+  std::vector<double> assembly_shift;
+  if (dense_.active()) {
+    dense_.sparse_theta(theta_x, &theta_sparse);
+    (void)dense_.preconditioner_shift(model_.matrix, theta_x, row_shift, dual_regularization_,
+                                      &assembly_shift);
+  }
+  if (!normal_equations_lower(model_.matrix, dense_.active() ? theta_sparse : theta_x,
+                              dense_.active() ? assembly_shift : row_shift,
+                              dual_regularization_, &normal_lower_, should_stop_)) {
     return false;
   }
   SparseLdl& ldl = proximal_ != nullptr ? purify_ldl_ : ldl_;
@@ -1266,9 +1354,17 @@ bool InteriorPoint::purify_duals() {
   }
   if (!ldl.factorize(normal_lower_, dual_regularization_, should_stop_)) return false;
   ++factorizations_;
+  if (dense_.active() &&
+      !dense_.prepare(ldl_, model_.matrix, theta_x, row_shift, dual_regularization_)) {
+    return false;
+  }
 
   std::vector<double> dy = rhs;
-  ldl.solve(dy.data());
+  if (dense_.active()) {
+    (void)dense_.solve(dy.data());
+  } else {
+    ldl.solve(dy.data());
+  }
   if (!std::all_of(dy.begin(), dy.end(), [](double v) { return std::isfinite(v); }))
     return false;
 
@@ -1382,6 +1478,28 @@ Solution InteriorPoint::run() {
   }
   logger_.verbose("interior point: built in {:.2f}s from the start of the solve",
                   timer.elapsed_seconds());
+  if (options_.get_bool("ipm_dense_columns")) {
+    // A fixed column has Theta 0 and contributes nothing to the normal equations, so it is
+    // never dense in the sense that matters here.
+    std::vector<char> eligible(static_cast<std::size_t>(n_), 0);
+    for (Index j = 0; j < n_; ++j) {
+      eligible[static_cast<std::size_t>(j)] = fixed_[static_cast<std::size_t>(j)] ? 0 : 1;
+    }
+    dense_.set_columns(
+        model_.matrix,
+        find_dense_columns(model_.matrix, eligible,
+                           options_.get_double("ipm_dense_column_factor"), kMaxDenseColumns));
+    if (dense_.active()) {
+      Index largest = 0;
+      for (const Index j : dense_.columns()) {
+        largest = std::max(largest, model_.matrix.column(j).size);
+      }
+      logger_.info(
+          "Interior point: {} dense column(s) (the largest with {} entries) split off the "
+          "normal equations and corrected for by Sherman-Morrison-Woodbury (#467)",
+          dense_.columns().size(), largest);
+    }
+  }
   // A polish arrives with most of its budget spent by the first-order phase; a build that
   // already used the rest must not go on to assemble and order for nothing (#232).
   if (should_stop_ && should_stop_()) {
@@ -1517,6 +1635,27 @@ Solution InteriorPoint::run() {
           iterations, timer.elapsed_seconds());
     }
     if (!factorize()) {
+      if (factor_too_large_ && predicted_normal_nonzeros_ >= 0) {
+        return finish(
+            warm_ != nullptr ? SolveStatus::kNotSolved : SolveStatus::kNumericalError,
+            fmt::format(
+                "declined before assembly: the normal equations alone would hold at least {} "
+                "lower-triangle nonzeros, above {} = {}, and their factor at least as many "
+                "(#467); {}raise the option or use another engine",
+                predicted_normal_nonzeros_,
+                warm_ != nullptr ? "polish_max_factor_nonzeros" : "ipm_max_factor_nonzeros",
+                max_factor_nonzeros_,
+                dense_.active() || options_.get_bool("ipm_dense_columns")
+                    ? ""
+                    : "ipm_dense_columns=true splits dense columns off, or "),
+            iterations, timer.elapsed_seconds());
+      }
+      if (dense_schur_failed_) {
+        return finish(SolveStatus::kNumericalError,
+                      "the Schur complement of the dense-column correction was not "
+                      "numerically positive definite (#467)",
+                      iterations, timer.elapsed_seconds());
+      }
       if (factor_too_large_) {
         // A declined polish leaves the first-order answer standing, so it is not a failure;
         // a declined plain solve has nothing to fall back on and says so as one.

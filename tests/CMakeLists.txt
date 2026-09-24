@@ -45,6 +45,7 @@ add_executable(sankhya_tests
   unit/test_pdhg_kkt_crossings.cpp
   unit/test_ipm_scaling.cpp
   unit/test_ipm_model_space.cpp
+  unit/test_ipm_dense_columns.cpp
   unit/test_pdhg_parallel_spmv.cpp
   unit/test_pdhg_two_matvec.cpp
   unit/test_pdhg_halpern.cpp
