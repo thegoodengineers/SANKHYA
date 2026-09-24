@@ -535,6 +535,15 @@ class BranchAndBound {
   /// Count node solves in which each cut row was slack; free a row slack for too long.
   void age_cut_rows(const Solution& relaxation);
 
+  /// The filter's policy from the options (#496): both default to the filter's own
+  /// behaviour until the A/B on main says otherwise.
+  [[nodiscard]] CutFilterPolicy cut_filter_policy() const {
+    CutFilterPolicy policy;
+    policy.support_floor = static_cast<Index>(options_.get_int("cut_support_floor"));
+    policy.efficacy = options_.get_bool("cut_efficacy_test");
+    return policy;
+  }
+
   /// The root bounds and the cut counts onto the answer (#221).
   void report_root(Solution* solution) const {
     solution->cuts_applied = root_cuts_applied_ + tree_cuts_applied_;

@@ -1133,7 +1133,8 @@ std::string describe_cut_filter(const std::vector<FilteredCut>& filtered) {
 
 std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
                                                      const Solution& root_solution,
-                                                     const std::vector<Cut>& candidates) {
+                                                     const std::vector<Cut>& candidates,
+                                                     const CutFilterPolicy& policy) {
   std::vector<FilteredCut> results;
   results.reserve(candidates.size());
 
@@ -1189,7 +1190,11 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
     if (n > 0) {
       density = static_cast<double>(nonzero_count) / static_cast<double>(n);
     }
-    if (density > tol::kCutMaxDensity) {
+    // The floor (#496): on a 768-column model the fraction alone caps a cut at 153
+    // nonzeros and refuses every Gomory cut; a floor lets a small model take cuts that are
+    // dense in the fraction and small in the count, where a dense row costs nothing.
+    const bool under_floor = nonzero_count <= policy.support_floor;
+    if (density > tol::kCutMaxDensity && !under_floor) {
       fc.reason = CutFilterReason::kTooDense;
       results.push_back(fc);
       continue;
@@ -1210,7 +1215,17 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
              root_solution.col_value[static_cast<std::size_t>(j)];
     }
     double violation = lhs - c.rhs;
-    if (violation <= tol::kCutViolationTolerance) {
+    if (policy.efficacy) {
+      // Efficacy: the Euclidean distance from the point to the cut (#496). max_abs > 0
+      // here because the empty-support test passed, so the norm is positive.
+      double norm_sq = 0.0;
+      for (double val : c.coeff) norm_sq += val * val;
+      if (violation / std::sqrt(norm_sq) <= tol::kCutMinEfficacy) {
+        fc.reason = CutFilterReason::kInsufficientViolation;
+        results.push_back(fc);
+        continue;
+      }
+    } else if (violation <= tol::kCutViolationTolerance) {
       fc.reason = CutFilterReason::kInsufficientViolation;
       results.push_back(fc);
       continue;

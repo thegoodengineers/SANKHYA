@@ -197,7 +197,8 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   // GLOBAL bounds, so they hold at every node.
   add_combinatorial_cuts(initial_relaxation, &candidates);
 
-  auto filtered = filter_and_deduplicate_cuts(working_, initial_relaxation, candidates);
+  auto filtered = filter_and_deduplicate_cuts(working_, initial_relaxation, candidates,
+                                              cut_filter_policy());
   // WHAT THE FILTER DID, per family and reason (#496): the answer to "why 0 root cuts on
   // opt1217", carried on the Solution into the stats and the MIPLIB CSV.
   cut_filter_report_ = describe_cut_filter(filtered);
@@ -251,7 +252,8 @@ void BranchAndBound::tree_cut_round(Index depth, Solution* relaxation) {
   candidates.insert(candidates.end(), waiting_cuts_.begin(), waiting_cuts_.end());
   waiting_cuts_.clear();
   if (candidates.empty()) return;
-  auto filtered = filter_and_deduplicate_cuts(working_, *relaxation, candidates);
+  auto filtered =
+      filter_and_deduplicate_cuts(working_, *relaxation, candidates, cut_filter_policy());
   logger_.verbose("tree cut filter at depth {}: {}", depth, describe_cut_filter(filtered));
   std::vector<Cut> passing;
   for (auto& fc : filtered) {

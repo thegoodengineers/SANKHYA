@@ -663,6 +663,28 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"cut_support_floor",
+         OptionType::Int,
+         std::int64_t{0},
+         "A cut is refused as too dense only above max(this many nonzeros, 0.2 n) "
+         "(#496). 0 (the default) keeps the fraction alone, which on a 768-column model "
+         "refuses every Gomory cut at 154 nonzeros; 100 lets small models take cuts that "
+         "are dense in the fraction and small in the count. Off until the A/B on main.",
+         0.0,
+         1e9,
+         {}});
+    s.push_back(
+        {"cut_efficacy_test",
+         OptionType::Bool,
+         false,
+         "Test a cut by its efficacy, the violation over its Euclidean norm, against "
+         "1e-4, instead of the absolute violation against 1e-5 (#496): scale-free, so a "
+         "badly scaled row neither swamps nor starves the selection. Off until the A/B on "
+         "main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"enable_mir_cuts",
                  OptionType::Bool,
                  true,

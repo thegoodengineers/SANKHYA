@@ -226,8 +226,15 @@ inline constexpr double kPdhgTight = 1e-8;
 // ---------------------------------------------------------------------------------------
 
 /// Maximum density (nonzero structural coefficients / original structural columns) for a cut
-/// to be accepted. A performance/robustness filter to keep the LP relaxation sparse.
+/// to be accepted. A performance/robustness filter to keep the LP relaxation sparse. With
+/// cut_support_floor set, the cap is max(floor, this fraction of n) nonzeros (#496).
 inline constexpr double kCutMaxDensity = 0.2;
+
+/// Minimum efficacy (violation over the Euclidean norm of the cut) under cut_efficacy_test
+/// (#496): the distance from the LP point to the cut's hyperplane, which is scale-free
+/// where the absolute violation is not. Wesselmann & Suhl, *Implementing cutting plane
+/// management and selection techniques*, 2012.
+inline constexpr double kCutMinEfficacy = 1e-4;
 
 /// Maximum ratio of max(abs(coeff)) / min(abs(coeff)) for materially nonzero coefficients.
 /// Prevents extreme coefficient scaling from ruining the numerical stability of the LP.

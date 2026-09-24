@@ -244,8 +244,20 @@ struct FilteredCut {
 /// Enforces density, coefficient-ratio, and root-LP violation policies, and rejects numerical
 /// duplicates. Returns the complete set of candidates (accepted and rejected) without modifying
 /// their original mathematical representation.
+/// What the filter is asked to do beyond its fixed tests (#496). The defaults are the
+/// behaviour the filter always had; the search sets them from the options.
+struct CutFilterPolicy {
+  /// A cut is too dense only above max(support_floor, kCutMaxDensity * n) nonzeros; 0 is
+  /// the fraction alone (cut_support_floor).
+  Index support_floor = 0;
+  /// Test violation / ||coeff||_2 against kCutMinEfficacy instead of the absolute violation
+  /// against kCutViolationTolerance (cut_efficacy_test).
+  bool efficacy = false;
+};
+
 [[nodiscard]] std::vector<FilteredCut> filter_and_deduplicate_cuts(
-    const Model& model, const Solution& root_solution, const std::vector<Cut>& candidates);
+    const Model& model, const Solution& root_solution, const std::vector<Cut>& candidates,
+    const CutFilterPolicy& policy = {});
 
 [[nodiscard]] const char* cut_filter_reason_name(CutFilterReason reason) noexcept;
 
