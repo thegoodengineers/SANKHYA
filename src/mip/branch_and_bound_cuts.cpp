@@ -190,7 +190,8 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   // MIR cuts from the model's own rows (#221): built from original coefficients rather
   // than tableau rows, so they carry none of the Gomory cuts' numerical fragility.
   if (options_.get_bool("enable_mir_cuts")) {
-    std::vector<Cut> mir = generate_mir_cuts(working_, initial_relaxation);
+    std::vector<Cut> mir = generate_mir_cuts(working_, initial_relaxation, working_.col_lower,
+                                             working_.col_upper, nullptr, mir_options());
     candidates.insert(candidates.end(), mir.begin(), mir.end());
   }
   // Clique and {0,1/2}-Chvatal-Gomory cuts (#358): the families built for the pure-integer,
@@ -279,8 +280,8 @@ void BranchAndBound::tree_cut_round(Index depth, Solution* relaxation) {
     working_.row_lower[objective] = -kInfinity;
     working_.row_upper[objective] = kInfinity;
   }
-  std::vector<Cut> candidates =
-      generate_mir_cuts(working_, *relaxation, global_lower_, global_upper_);
+  std::vector<Cut> candidates = generate_mir_cuts(working_, *relaxation, global_lower_,
+                                                  global_upper_, nullptr, mir_options());
   add_combinatorial_cuts(*relaxation, &candidates);
   if (objective_row_ >= 0) {
     working_.row_lower[objective] = objective_lower;

@@ -48,12 +48,22 @@ struct MirStats {
   int cuts = 0;
   int aggregated_cuts = 0;
   int deepest = 0;
+  int variable_bound_rows = 0;  ///< #498: rows read as variable bounds (c-MIR only)
+};
+
+/// How the separation runs (#498). The default is the MIR described above.
+struct MirOptions {
+  /// c-MIR (mir_cmir.hpp, option `mir_cmir`): continuous columns substituted by their
+  /// closest simple or VARIABLE bound, divisor trials delta / 2, / 4, / 8 after the best
+  /// delta, complementation of the integer columns, the most efficacious cut kept.
+  bool cmir = false;
 };
 
 [[nodiscard]] std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
                                                  const std::vector<double>& col_lower,
                                                  const std::vector<double>& col_upper,
-                                                 MirStats* stats);
+                                                 MirStats* stats,
+                                                 const MirOptions& options = MirOptions{});
 
 /// The MIR inequality on one already bound-substituted base inequality, exposed for the
 /// textbook test: `coefficient[j]` and `is_integer[j]` describe sum a_j y_j <= rhs over

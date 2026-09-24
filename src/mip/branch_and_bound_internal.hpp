@@ -30,6 +30,7 @@
 #include "debug_solution.hpp"
 #include "flow_cover_cuts.hpp"
 #include "heuristics.hpp"
+#include "mir_cuts.hpp"
 #include "solution_pool.hpp"
 
 #include <algorithm>
@@ -536,6 +537,12 @@ class BranchAndBound {
   /// Count node solves in which each cut row was slack; free a row slack for too long.
   void age_cut_rows(const Solution& relaxation);
 
+  /// How MIR separates (#498): c-MIR when `mir_cmir` is set.
+  [[nodiscard]] MirOptions mir_options() const {
+    MirOptions mir;
+    mir.cmir = options_.get_bool("mir_cmir");
+    return mir;
+  }
   /// The filter's policy from the options (#496): both default to the filter's own
   /// behaviour until the A/B on main says otherwise.
   [[nodiscard]] CutFilterPolicy cut_filter_policy() const {
