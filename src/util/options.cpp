@@ -1548,6 +1548,20 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"ipm_proximal_regularization",
+         OptionType::Bool,
+         false,
+         "Proximal primal-dual regularization of the LP interior point (#473; Altman and "
+         "Gondzio 1999, Friedlander and Orban 2012): factor the regularized augmented "
+         "system [-(Theta^-1 + rho I), A'; A, delta I], quasi-definite for any rho, delta > "
+         "0, by the signed LDL^T the QP interior point uses, with rho = delta following mu "
+         "down to 1e-8 and raised when a pivot comes out wrong, and solve the UNREGULARIZED "
+         "Newton system from its factors by iterative refinement. Replaces the normal "
+         "equations and their fixed 1e-10 floor. Default OFF.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
                  tol::kPdhgLoose,

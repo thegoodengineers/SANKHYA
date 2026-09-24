@@ -396,6 +396,21 @@ inline constexpr double kQpIpmPivotShare = 0.1;
 inline constexpr double kQpIpmRegularizationRaise = 100.0;
 inline constexpr int kQpIpmRegularizationAttempts = 8;
 
+// ---- Proximal regularization of the LP interior point (#473, ipm_proximal_regularization) --
+
+/// rho = delta = max(floor, min(previous, kIpmProximalShare * mu)), starting from
+/// kIpmProximalStart: the regularization follows mu down and never rises except when a pivot
+/// comes out wrong (then by kQpIpmRegularizationRaise, at most kIpmProximalAttempts
+/// factorizations per iteration, the pivot threshold kQpIpmPivotShare of it - the QP interior
+/// point's rule, shared). The floor is 1e-8, the default path's primal regularization; below
+/// it the refinement against the unregularized system has nothing left to correct.
+inline constexpr double kIpmProximalStart = 1e-6;
+inline constexpr double kIpmProximalFloor = 1e-8;
+inline constexpr double kIpmProximalShare = 1e-2;
+inline constexpr int kIpmProximalAttempts = 3;
+/// Iterative-refinement corrections on the unregularized Newton system per solve, at most.
+inline constexpr int kIpmProximalRefinementSteps = 5;
+
 /// Binary probing (#512; Savelsbergh 1994; Achterberg et al. 2020). A probe x_j = v is
 /// declared infeasible only when a row misses its bound by more than this, relative to
 /// max(1, |bound|), on top of the rounding the activity sum can carry: a probe wrongly called
