@@ -19,6 +19,9 @@ namespace {
 /// exact maximum activity, and needs no margin on g; on MIPLIB that is most rows, and the
 /// tightened coefficients then stay integers.
 constexpr double kExactIntegerLimit = 1099511627776.0;  // 2^40
+/// Every partial sum of integers is exact while the sum of their magnitudes stays within the
+/// 53-bit mantissa; past it, a row of many large terms rounds even though each term is exact.
+constexpr double kExactSumLimit = 9007199254740992.0;  // 2^53
 
 [[nodiscard]] bool finite(double v) {
   return std::fabs(v) < kInfinity;
@@ -153,6 +156,9 @@ class Tightener {
         ++a.max_infinite;
       }
     }
+    // Exact terms are not enough: 10,000 terms near 1e12 sum past 2^53 and round, and a
+    // rounded maximum activity with no margin could make g small enough to cut a point off.
+    if (a.magnitude > kExactSumLimit) a.exact = false;
     return a;
   }
 
