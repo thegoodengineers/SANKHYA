@@ -634,6 +634,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"safe_bounds",
+                 OptionType::Bool,
+                 false,
+                 "MILP: prune every node on a rigorous bound (#519; Neumaier and Shcherbina, "
+                 "Math. Programming 99, 2004): the node LP's row duals turned into a lower "
+                 "bound by weak duality with outward rounding, valid whatever the LP's "
+                 "tolerances did; children inherit it. The log reports the largest gap between "
+                 "the believed bound (the primal objective) and the safe one. Off by default.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_symmetry",
                  OptionType::Bool,
                  false,

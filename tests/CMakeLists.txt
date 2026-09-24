@@ -106,6 +106,7 @@ add_executable(sankhya_tests
   oracles/lp_generator.cpp
   oracles/test_rational_oracle.cpp
   oracles/test_fuzz_against_oracle.cpp
+  oracles/test_safe_bound.cpp
   robustness/test_robustness.cpp)
 
 # nlohmann_json is PRIVATE to sankhya_objects, so the stats-blob test has to ask for it

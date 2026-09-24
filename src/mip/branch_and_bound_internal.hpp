@@ -174,6 +174,7 @@ class BranchAndBound {
       node_selection_ = NodeSelection::kHybrid;
     }
     reliability_branching_ = options.get_string("mip_branching") != "most-fractional";
+    safe_bounds_ = options.get_bool("safe_bounds");
     const auto columns = static_cast<std::size_t>(model.num_cols());
     pseudo_down_sum_.assign(columns, 0.0);
     pseudo_up_sum_.assign(columns, 0.0);
@@ -508,6 +509,19 @@ class BranchAndBound {
   [[nodiscard]] double integral_bound(double bound) const {
     return round_up_to_step(bound, objective_step_);
   }
+
+  // ---- Safe bounds (#519), in branch_and_bound_safe.cpp ----------------------------------
+  /// The Neumaier-Shcherbina bound on the entered node's LP from `relaxation`'s duals, in
+  /// minimise space without the offset, with its gap to `believed` recorded; -inf when none.
+  [[nodiscard]] double safe_node_bound(const Solution& relaxation, double believed);
+  void report_safe_bounds() const;
+  bool safe_bounds_ = false;
+  Count safe_bound_nodes_ = 0;     ///< node bounds computed
+  Count safe_bound_infinite_ = 0;  ///< of which -inf (no finite bound from those duals)
+  Count safe_bound_refusals_ = 0;  ///< the believed bound prunes and the safe one does not
+  /// max over nodes of believed - safe (finite ones; negative when safe was always higher)
+  double safe_bound_max_gap_ = -std::numeric_limits<double>::infinity();
+  double safe_bound_max_rel_gap_ = -std::numeric_limits<double>::infinity();
 
   // ---- Conflict analysis (branch_and_bound_conflicts.cpp, #292) -------------------------
 

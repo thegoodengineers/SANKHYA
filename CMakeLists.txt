@@ -243,6 +243,7 @@ set(SANKHYA_CORE_SOURCES
   src/api/c_api.cpp
   src/core/certificate.cpp
   src/exact/exact_verify.cpp
+  src/core/safe_bound.cpp
   src/core/iis.cpp
   src/core/model.cpp
   src/core/resource_limits.cpp
@@ -289,6 +290,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/debug_solution.cpp
   src/mip/branch_and_bound_heuristics.cpp
   src/mip/branch_and_bound_restart.cpp
+  src/mip/branch_and_bound_safe.cpp
   src/mip/flow_cover_cuts.cpp
   src/mip/symmetry.cpp
   src/mip/cut_selection.cpp
