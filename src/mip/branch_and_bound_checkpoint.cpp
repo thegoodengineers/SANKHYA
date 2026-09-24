@@ -131,6 +131,7 @@ std::string BranchAndBound::restore_checkpoint(const std::string& path) {
     nodes_[static_cast<std::size_t>(parent)].depth = saved.depth;
     open_.push_back(parent);
   }
+  rebuild_open_heap();  // mip_heap_open_list (#502): open_ was rebuilt wholesale
   pseudo_down_sum_ = c.pseudo_down_sum;
   pseudo_up_sum_ = c.pseudo_up_sum;
   pseudo_down_count_ = c.pseudo_down_count;

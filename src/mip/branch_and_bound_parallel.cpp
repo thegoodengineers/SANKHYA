@@ -231,7 +231,7 @@ void BranchAndBound::plant_seed() {
     leaf.warm.col_status.assign(seed_->warm.col_status.begin(), seed_->warm.col_status.end());
     leaf.warm.row_status.assign(seed_->warm.row_status.begin(), seed_->warm.row_status.end());
   }
-  open_.push_back(parent);
+  push_open(parent);
 
   // Start from what every worker has learned about the columns so far.
   const SharedSearch::Pseudocosts shared = shared_->pseudocosts();

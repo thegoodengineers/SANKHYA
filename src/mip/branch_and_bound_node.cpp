@@ -86,6 +86,8 @@ bool BranchAndBound::propagate() {
   // define; a node LP solved over a row-propagated box would give duals for a different one.
   if (!certificate_path_.empty()) return true;
 
+  if (incremental_propagation_) return propagate_to_fixpoint(by_row);
+
   // A handful of sweeps. Propagation to a fixed point can be slow and rarely pays for
   // itself at a node; Savelsbergh's observation is that most of the tightening happens in
   // the first pass or two.
@@ -94,93 +96,98 @@ bool BranchAndBound::propagate() {
     // Learned conflicts (#292) first: they are cheap, and a bound one implies feeds the rows.
     if (!conflicts_.entries().empty() && !propagate_conflicts(&changed)) return false;
     for (Index i = 0; i < rows; ++i) {
-      const auto ui = static_cast<std::size_t>(i);
-      const ColumnView row = by_row.row(i);
-
-      // Activity bounds implied by the current column bounds.
-      double min_activity = 0.0;
-      double max_activity = 0.0;
-      bool min_infinite = false;
-      bool max_infinite = false;
-      for (Index k = 0; k < row.size; ++k) {
-        const auto j = static_cast<std::size_t>(row.rows[k]);
-        const double a = row.values[k];
-        const double lo = working_.col_lower[j];
-        const double hi = working_.col_upper[j];
-        const double low_term = a > 0.0 ? a * lo : a * hi;
-        const double high_term = a > 0.0 ? a * hi : a * lo;
-        if (std::isinf(low_term))
-          min_infinite = true;
-        else
-          min_activity += low_term;
-        if (std::isinf(high_term))
-          max_infinite = true;
-        else
-          max_activity += high_term;
-      }
-
-      // Infeasible by activity alone: no assignment inside the current box can satisfy it.
-      if (!min_infinite && is_finite_bound(working_.row_upper[ui]) &&
-          min_activity > working_.row_upper[ui] + tol::kPrimalFeasibility) {
-        return false;
-      }
-      if (!max_infinite && is_finite_bound(working_.row_lower[ui]) &&
-          max_activity < working_.row_lower[ui] - tol::kPrimalFeasibility) {
-        return false;
-      }
-
-      // Implied column bounds. For a_j > 0 and a row upper bound:
-      //   a_j x_j <= ru - (min activity of the others)
-      for (Index k = 0; k < row.size; ++k) {
-        const auto j = static_cast<std::size_t>(row.rows[k]);
-        const double a = row.values[k];
-        if (a == 0.0) continue;
-        const double lo = working_.col_lower[j];
-        const double hi = working_.col_upper[j];
-        const double own_low = a > 0.0 ? a * lo : a * hi;
-        const double own_high = a > 0.0 ? a * hi : a * lo;
-
-        if (!min_infinite && is_finite_bound(working_.row_upper[ui]) && !std::isinf(own_low)) {
-          const double slack = working_.row_upper[ui] - (min_activity - own_low);
-          const double implied = slack / a;
-          if (a > 0.0 && implied < hi - 1e-9) {
-            tighten_upper(j, implied);
-            changed = true;
-          } else if (a < 0.0 && implied > lo + 1e-9) {
-            tighten_lower(j, implied);
-            changed = true;
-          }
-        }
-        if (!max_infinite && is_finite_bound(working_.row_lower[ui]) && !std::isinf(own_high)) {
-          const double slack = working_.row_lower[ui] - (max_activity - own_high);
-          const double implied = slack / a;
-          if (a > 0.0 && implied > lo + 1e-9) {
-            tighten_lower(j, implied);
-            changed = true;
-          } else if (a < 0.0 && implied < hi - 1e-9) {
-            tighten_upper(j, implied);
-            changed = true;
-          }
-        }
-
-        // An integer column may be tightened to whole numbers, which is where propagation
-        // earns most of its keep on a MILP.
-        if (working_.col_type[j] == VarType::kInteger) {
-          if (is_finite_bound(working_.col_lower[j])) {
-            const double rounded = std::ceil(working_.col_lower[j] - integrality_tolerance_);
-            if (rounded != working_.col_lower[j]) tighten_lower(j, rounded);
-          }
-          if (is_finite_bound(working_.col_upper[j])) {
-            const double rounded = std::floor(working_.col_upper[j] + integrality_tolerance_);
-            if (rounded != working_.col_upper[j]) tighten_upper(j, rounded);
-          }
-        }
-        if (working_.col_lower[j] > working_.col_upper[j] + tol::kPrimalFeasibility) {
-          return false;  // the box collapsed
-        }
-      }
+      if (!propagate_row(i, by_row, &changed)) return false;
     }
     if (!changed) break;
+  }
+  return true;
+}
+
+bool BranchAndBound::propagate_row(Index i, const CsrView& by_row, bool* changed) {
+  const auto ui = static_cast<std::size_t>(i);
+  const ColumnView row = by_row.row(i);
+
+  // Activity bounds implied by the current column bounds.
+  double min_activity = 0.0;
+  double max_activity = 0.0;
+  bool min_infinite = false;
+  bool max_infinite = false;
+  for (Index k = 0; k < row.size; ++k) {
+    const auto j = static_cast<std::size_t>(row.rows[k]);
+    const double a = row.values[k];
+    const double lo = working_.col_lower[j];
+    const double hi = working_.col_upper[j];
+    const double low_term = a > 0.0 ? a * lo : a * hi;
+    const double high_term = a > 0.0 ? a * hi : a * lo;
+    if (std::isinf(low_term))
+      min_infinite = true;
+    else
+      min_activity += low_term;
+    if (std::isinf(high_term))
+      max_infinite = true;
+    else
+      max_activity += high_term;
+  }
+
+  // Infeasible by activity alone: no assignment inside the current box can satisfy it.
+  if (!min_infinite && is_finite_bound(working_.row_upper[ui]) &&
+      min_activity > working_.row_upper[ui] + tol::kPrimalFeasibility) {
+    return false;
+  }
+  if (!max_infinite && is_finite_bound(working_.row_lower[ui]) &&
+      max_activity < working_.row_lower[ui] - tol::kPrimalFeasibility) {
+    return false;
+  }
+
+  // Implied column bounds. For a_j > 0 and a row upper bound:
+  //   a_j x_j <= ru - (min activity of the others)
+  for (Index k = 0; k < row.size; ++k) {
+    const auto j = static_cast<std::size_t>(row.rows[k]);
+    const double a = row.values[k];
+    if (a == 0.0) continue;
+    const double lo = working_.col_lower[j];
+    const double hi = working_.col_upper[j];
+    const double own_low = a > 0.0 ? a * lo : a * hi;
+    const double own_high = a > 0.0 ? a * hi : a * lo;
+
+    if (!min_infinite && is_finite_bound(working_.row_upper[ui]) && !std::isinf(own_low)) {
+      const double slack = working_.row_upper[ui] - (min_activity - own_low);
+      const double implied = slack / a;
+      if (a > 0.0 && implied < hi - tol::kPropagationMinChange) {
+        tighten_upper(j, implied);
+        *changed = true;
+      } else if (a < 0.0 && implied > lo + tol::kPropagationMinChange) {
+        tighten_lower(j, implied);
+        *changed = true;
+      }
+    }
+    if (!max_infinite && is_finite_bound(working_.row_lower[ui]) && !std::isinf(own_high)) {
+      const double slack = working_.row_lower[ui] - (max_activity - own_high);
+      const double implied = slack / a;
+      if (a > 0.0 && implied > lo + tol::kPropagationMinChange) {
+        tighten_lower(j, implied);
+        *changed = true;
+      } else if (a < 0.0 && implied < hi - tol::kPropagationMinChange) {
+        tighten_upper(j, implied);
+        *changed = true;
+      }
+    }
+
+    // An integer column may be tightened to whole numbers, which is where propagation
+    // earns most of its keep on a MILP.
+    if (working_.col_type[j] == VarType::kInteger) {
+      if (is_finite_bound(working_.col_lower[j])) {
+        const double rounded = std::ceil(working_.col_lower[j] - integrality_tolerance_);
+        if (rounded != working_.col_lower[j]) tighten_lower(j, rounded);
+      }
+      if (is_finite_bound(working_.col_upper[j])) {
+        const double rounded = std::floor(working_.col_upper[j] + integrality_tolerance_);
+        if (rounded != working_.col_upper[j]) tighten_upper(j, rounded);
+      }
+    }
+    if (working_.col_lower[j] > working_.col_upper[j] + tol::kPrimalFeasibility) {
+      return false;  // the box collapsed
+    }
   }
   return true;
 }
@@ -221,6 +228,18 @@ const char* to_string(NodeSelection selection) noexcept {
 // degenerate MILP is most of the tree - and a search that explores a different tree each time
 // cannot be debugged, benchmarked or reproduced.
 Index BranchAndBound::take_next_open_node(bool diving) {
+  if (open_is_heap()) {
+    // mip_heap_open_list (#502): the same node the scan below would choose - the heap's
+    // order is the scan's key with the same tie-break - in O(log n) instead of O(n).
+    std::pop_heap(open_.begin(), open_.end(),
+                  [this](Index a, Index b) { return open_after(a, b); });
+    const Index node_index = open_.back();
+    open_.pop_back();
+    ++selected_by_policy_;
+    ++heap_selections_;
+    deepest_node_ = std::max(deepest_node_, nodes_[static_cast<std::size_t>(node_index)].depth);
+    return node_index;
+  }
   std::size_t pick = open_.size() - 1;  // the newest node: depth-first, and the hybrid's dive
 
   const auto choose_smallest = [&](auto key) {
@@ -323,8 +342,11 @@ void BranchAndBound::record_pseudocost(Index column, bool downward, double gain,
 // bound at every iteration. The probes' gains are recorded as observations, so a column is
 // strong-branched a bounded number of times in the whole search. A probe that finds a
 // child infeasible scores that column above every other: that branch prunes one side at
-// once, which no pseudocost can promise.
-Index BranchAndBound::select_branching_column(const std::vector<double>& x, double node_bound) {
+// once, which no pseudocost can promise. Under mip_strong_branch_fix (#502) that side is
+// instead closed for the whole subtree: see select_branching_column() in
+// branch_and_bound_fixpoint.cpp.
+Index BranchAndBound::choose_branching_column(const std::vector<double>& x, double node_bound,
+                                              std::vector<DomainChange>* fixes) {
   constexpr double kEpsilon = 1e-6;
   struct Candidate {
     Index column;
@@ -414,6 +436,23 @@ Index BranchAndBound::select_branching_column(const std::vector<double>& x, doub
     }
   }
   current_warm_ = node_basis;
+
+  // A probe proved infeasible closes that side for the node and all of its subtree, so the
+  // column can be fixed to the other side (#502). Both sides closed fathoms the node. The
+  // column is still scored below as before: it is the caller's fallback if the re-solve
+  // after fixing cannot be used.
+  if (fixes != nullptr) {
+    for (std::size_t i = 0; i < candidates.size(); ++i) {
+      if (!infeasible_side[i]) continue;
+      const bool down_closed = std::isinf(measured_down[i]);
+      const bool up_closed = std::isinf(measured_up[i]);
+      if (down_closed && up_closed) return kBranchPruned;
+      const Index column = candidates[i].column;
+      const double floor_value = std::floor(x[static_cast<std::size_t>(column)]);
+      fixes->push_back(down_closed ? DomainChange{column, false, floor_value + 1.0}
+                                   : DomainChange{column, true, floor_value});
+    }
+  }
 
   // Global averages for columns with no observation at all in a direction.
   double average_down = 0.0;
@@ -571,7 +610,7 @@ bool BranchAndBound::split_integral_node(Index node_index, const Solution& relax
     if (open) child.warm = warm;  // a link is never solved and needs no basis
     nodes_.push_back(std::move(child));
     const auto index = static_cast<Index>(nodes_.size() - 1);
-    if (open) open_.push_back(index);
+    if (open) push_open(index);
     return index;
   };
   // `fixed` is the tail of a chain of links fixing the columns handled so far; enter() walks

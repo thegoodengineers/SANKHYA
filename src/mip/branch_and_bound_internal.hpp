@@ -93,6 +93,10 @@ enum class NodeSelection {
 
 [[nodiscard]] const char* to_string(NodeSelection selection) noexcept;
 
+/// select_branching_column()'s answers other than a column (#502).
+inline constexpr Index kBranchIntegral = -1;  ///< the (re-solved) relaxation is integral
+inline constexpr Index kBranchPruned = -2;    ///< the node is fathomed: infeasible or bounded
+
 struct TreeNode {
   Index parent = -1;
   DomainChange change;
@@ -262,6 +266,13 @@ class BranchAndBound {
   /// Tighten bounds from row activities until nothing moves. Returns false when the node is
   /// proved infeasible in the process, which fathoms it without an LP solve at all.
   bool propagate();
+  /// One row of propagate(): the activity test, then every column's implied bounds and
+  /// integer rounding. Returns false when the row proves the node infeasible; sets *changed
+  /// when an implied bound (not a rounding) moved, which is what the sweep loop counts.
+  bool propagate_row(Index row, const CsrView& by_row, bool* changed);
+  /// mip_incremental_propagation (#502): propagate() to a fixpoint through a worklist of the
+  /// rows whose columns moved, instead of three full sweeps. Same return contract.
+  bool propagate_to_fixpoint(const CsrView& by_row);
 
   /// Tighten a bound AND record the old value so leave() can undo it.
   ///
@@ -301,7 +312,24 @@ class BranchAndBound {
   /// strong branching on columns whose pseudocosts are not yet reliable. Requires the
   /// node's bounds to be entered and current_warm_ to hold its relaxation's basis. Returns
   /// -1 when the point is integral.
-  [[nodiscard]] Index select_branching_column(const std::vector<double>& x, double node_bound);
+  ///
+  /// With `fixes` non-null (mip_strong_branch_fix, #502), a candidate whose probe proved
+  /// one side infeasible is not scored: the bound that closes that side is appended to
+  /// *fixes instead, and a candidate with BOTH sides infeasible returns kBranchPruned.
+  [[nodiscard]] Index choose_branching_column(const std::vector<double>& x, double node_bound,
+                                              std::vector<DomainChange>* fixes);
+  /// The branching decision at a node: choose_branching_column(), and under
+  /// mip_strong_branch_fix the rounds of fixing and re-solving (#502). A round that fixes
+  /// anything replaces `relaxation`, `node_bound` and `prune_bound` with the re-solved
+  /// node's, leaves the fixes entered (on saved_, so leave() undoes them) and records them in
+  /// strong_fixes_ for the caller to hang the children under. Returns a column, or
+  /// kBranchIntegral / kBranchPruned when the re-solved node is integral / fathomed.
+  [[nodiscard]] Index select_branching_column(Solution& relaxation, double& node_bound,
+                                              double& prune_bound);
+  /// Hang strong_fixes_ under `node_index` as a chain of never-opened link nodes, the way
+  /// split_integral_node() chains its fixes, and return the tail: children created under
+  /// it inherit every fix through enter()'s walk to the root. `node_index` when none.
+  [[nodiscard]] Index link_strong_fixes(Index node_index, double bound);
 
   /// Fold one observed bound gain into a column's pseudocost.
   void record_pseudocost(Index column, bool downward, double gain, double fraction);
@@ -309,6 +337,26 @@ class BranchAndBound {
   /// Take the next open node under the configured policy (#293), removing it from `open_`.
   /// `diving` is the hybrid's signal that the previous node just produced children.
   [[nodiscard]] Index take_next_open_node(bool diving);
+  /// Add a node to `open_`, keeping the heap order under mip_heap_open_list (#502).
+  void push_open(Index node_index);
+  /// Restore the heap order after `open_` was rebuilt wholesale (a checkpoint restore).
+  void rebuild_open_heap();
+  /// mip_heap_open_list (#502): `open_` is kept as a binary heap under best-bound or
+  /// best-estimate, in one worker only (parallel donation erases from the middle of it).
+  [[nodiscard]] bool open_is_heap() const {
+    return heap_open_list_ && (node_selection_ == NodeSelection::kBestBound ||
+                               node_selection_ == NodeSelection::kBestEstimate);
+  }
+  /// The heap's ordering: `a` comes out AFTER `b`. The key is the policy's (bound or
+  /// estimate) and ties go to the smaller node index - exactly the linear scan's order.
+  [[nodiscard]] bool open_after(Index a, Index b) const {
+    const TreeNode& na = nodes_[static_cast<std::size_t>(a)];
+    const TreeNode& nb = nodes_[static_cast<std::size_t>(b)];
+    const bool by_bound = node_selection_ == NodeSelection::kBestBound;
+    const double ka = by_bound ? na.bound : na.estimate;
+    const double kb = by_bound ? nb.bound : nb.estimate;
+    return ka > kb || (ka == kb && a > b);
+  }
 
   /// Where the pseudocosts expect a node branched from this relaxation to end up: the node's
   /// own bound plus, for every column still fractional, the cheaper of the two directions
@@ -523,6 +571,9 @@ class BranchAndBound {
   /// minimise space without the offset, with its gap to `believed` recorded; -inf when none.
   [[nodiscard]] double safe_node_bound(const Solution& relaxation, double believed);
   void report_safe_bounds() const;
+  /// #502: what each option did, in the log and the profiler's counters, on every exit
+  /// path (an infeasible search returns before the other counters are written).
+  void report_branching_fixpoint() const;
   bool safe_bounds_ = false;
   // ---- Certificates (#518), in branch_and_bound_certificate.cpp -------------------------
   /// Keep what a solved node's LP proves: its duals (kDual) or Farkas multipliers (kFarkas).
@@ -674,6 +725,16 @@ class BranchAndBound {
   Options probe_options_;  ///< node_options_ with the strong-branching iteration cap
   Count strong_branch_solves_ = 0;
   Count strong_branch_iterations_ = 0;
+  /// #502, all three off by default until an A/B on main says otherwise.
+  bool strong_branch_fix_ = false;        ///< mip_strong_branch_fix
+  bool incremental_propagation_ = false;  ///< mip_incremental_propagation
+  bool heap_open_list_ = false;           ///< mip_heap_open_list (single worker only)
+  /// The current node's strong-branch fixes (#502), for link_strong_fixes().
+  std::vector<DomainChange> strong_fixes_;
+  Count strong_branch_fixes_ = 0;       ///< columns fixed that way over the search
+  Count strong_branch_fix_prunes_ = 0;  ///< nodes a re-solve after fixing fathomed
+  Count propagated_rows_ = 0;           ///< rows the fixpoint worklist processed
+  Count heap_selections_ = 0;           ///< nodes taken from the heap open list
   /// The basis to start the NEXT node LP from; empty means the slack basis (the root).
   WarmStart current_warm_;
   /// mip_node_factor_cache (#501): first factorizations kept for the next node LP that
