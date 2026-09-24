@@ -20,6 +20,7 @@
 // calls GTEST_SKIP so that "skipped" is distinguishable from "passed" in CI output.
 // Depends on #16 and #17.
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -173,6 +174,50 @@ TEST(PdhgCudaRegression, NineNetlibInstancesAgreeAtTheStoppingTolerance) {
             << static_cast<int>(kNetlibInstances.size())
             << " instances passed (tolerance=" << kAgreementTol << ")\n";
   EXPECT_EQ(failed, 0);
+}
+
+TEST(PdhgCudaRegression, TheTwoMatvecPathOnTheDeviceAgreesWithTheCpuAtTheStoppingTolerance) {
+  // #479 on the device: with pdhg_two_matvec the CUDA loop takes one A-product per iteration
+  // and derives A xbar and A dx from the cached A x_k. The derived vectors differ from the
+  // computed ones by rounding, so it is held to the same bound as the three-product path
+  // above: the CPU answer at the stopping tolerance, on the instances both converge on.
+  const std::string probe_path = repository_path("data/netlib/afiro.mps");
+  Model probe_model;
+  ASSERT_TRUE(io::read_model(probe_path, &probe_model).ok) << probe_path;
+  Options probe_options = pdhg_regression_options(/*gpu=*/true);
+  probe_options.set_int("iteration_limit", 1);
+  if (!cuda_was_used(solve(probe_model, probe_options))) {
+    GTEST_SKIP() << "CUDA backend not in this build: skipped, not passed.";
+  }
+  int agreed = 0;
+  int compared = 0;
+  for (const char* name : kNetlibInstances) {
+    Model model;
+    ASSERT_TRUE(
+        io::read_model(repository_path((std::string("data/netlib/") + name + ".mps").c_str()),
+                       &model)
+            .ok)
+        << name;
+    const Solution cpu = solve(model, pdhg_regression_options(/*gpu=*/false));
+    Options two = pdhg_regression_options(/*gpu=*/true);
+    two.set_bool("pdhg_two_matvec", true);
+    const Solution gpu = solve(model, two);
+    ASSERT_TRUE(cuda_was_used(gpu)) << name << ": " << gpu.message;
+    const bool cpu_converged = cpu.status == SolveStatus::kOptimal;
+    const bool gpu_converged =
+        gpu.status == SolveStatus::kOptimal || gpu.status == SolveStatus::kFeasible;
+    if (!cpu_converged && !gpu_converged) continue;  // share2b: neither, as above
+    ++compared;
+    EXPECT_TRUE(gpu_converged) << name << " two-mat-vec on CUDA: " << gpu.message;
+    const double scale = std::max({1.0, std::fabs(cpu.objective), std::fabs(gpu.objective)});
+    const double diff = std::fabs(cpu.objective - gpu.objective);
+    EXPECT_LE(diff, kAgreementTol * scale)
+        << name << ": CPU " << cpu.objective << " (" << cpu.iterations
+        << " iterations), CUDA two-mat-vec " << gpu.objective << " (" << gpu.iterations << ")";
+    if (gpu_converged && diff <= kAgreementTol * scale) ++agreed;
+  }
+  EXPECT_GE(compared, 8);
+  EXPECT_EQ(agreed, compared);
 }
 
 }  // namespace
