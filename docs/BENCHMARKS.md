@@ -323,43 +323,51 @@ instances of that size and name what happens. These are the eight smallest archi
 Mittelmann's LP test set (`bench/runners/fetch_mittelmann.py`, provenance in
 `data/mittelmann/reference.json`).
 
-Source CSV: `bench/results/mittelmann-65eecbc.csv`  
-Commit `65eecbc` · machine `Windows-AMD64` · time limit 300 s per instance, both solvers
+Source CSV: `bench/results/mittelmann-72123ff.csv`  
+Commit `72123ff` · machine `Windows-AMD64` · time limit 300 s per instance, both solvers
 
-**2 of 8** instances reached `optimal` inside the limit; **2 of 8** also passed the independent verifier and agree with HiGHS. HiGHS, run as a separate process under the same limit, finished **4 of 8**.
+**5 of 12** instances reached `optimal` inside the limit; **5 of 12** also passed the independent verifier and agree with HiGHS. HiGHS, run as a separate process under the same limit, finished **4 of 12**.
 
 These are the smallest archives in Mittelmann's LP directory; against Netlib's largest instance (dfl001, 6,071 rows, 35,632 nonzeros) they range from the same row count with 2.7x the nonzeros (qap15) to 62x the rows and 42x the nonzeros (bdry2). No published optimum exists for them, so there is no pass-against-a-number column: the outcome is the status, the verifier's verdict where a solution was written, and HiGHS's objective where HiGHS finished. `our objective` on a `time_limit` row is the last iterate's value, not a bound, and is printed only so that a later run can be compared with it.
 
 | instance | rows | cols | nonzeros | status | our objective | HiGHS objective | rel. diff | iters | solver time (s) | verified |
 |---|---:|---:|---:|---|---:|---:|---:|---:|---:|:--:|
-| `Linf_520c` | 93326 | 69004 | 566193 | time_limit | 0.180810452 | Time limit reached | - | 112642 | 300.0 | - |
-| `bdry2` | 376500 | 250998 | 1500003 | time_limit | 0.001999991456 | Time limit reached | - | 22699 | 258.8 | - |
-| `brazil3` | 14646 | 23968 | 133184 | optimal | 2 | 2 | 3.7e-11 | 15 | 2.7 | yes |
-| `chromaticindex1024-7` | 67583 | 73728 | 270324 | optimal | 3 | 3 | 2.6e-12 | 560 | 20.1 | yes |
-| `irish-electricity` | 104259 | 61728 | 523257 | time_limit | 2454384.009 | 2546254.563 | - | 109000 | 240.1 | - |
-| `qap15` | 6330 | 22275 | 94950 | time_limit | 1218.102164 | Time limit reached | - | 75820 | 300.0 | - |
-| `rmine15` | 358395 | 42438 | 879732 | time_limit | -5042.467038 | Time limit reached | - | 36957 | 216.4 | - |
-| `supportcase10` | 165684 | 14770 | 555082 | time_limit | 3.383923735 | 3.383923666 | - | 93920 | 216.7 | - |
+| `Linf_520c` | 93326 | 69004 | 566193 | time_limit | 0.7756970849 | Time limit reached | - | 24039 | 300.1 | - |
+| `bdry2` | 376500 | 250998 | 1500003 | time_limit | 0.001999991456 | Time limit reached | - | 7019 | 253.4 | - |
+| `brazil3` | 14646 | 23968 | 133184 | optimal | 2 | 2 | 3.7e-11 | 15 | 5.9 | yes |
+| `chromaticindex1024-7` | 67583 | 73728 | 270324 | optimal | 3 | 3 | 2.6e-12 | 560 | 57.9 | yes |
+| `datt256_lp` | 11077 | 262144 | 1503732 | optimal | 256 | Time limit reached | - | 10 | 153.0 | yes |
+| `ex10` | 69608 | 17680 | 1162000 | optimal | 100 | 100 | 3.0e-12 | 1480 | 77.6 | yes |
+| `irish-electricity` | 104259 | 61728 | 523257 | time_limit | 2454378.022 | Time limit reached | - | 36902 | 240.2 | - |
+| `physiciansched3-3` | 266227 | 79555 | 1062479 | time_limit | 1431579.932 | Time limit reached | - | 21399 | 216.8 | - |
+| `qap15` | 6330 | 22275 | 94950 | time_limit | 172.7930772 | Time limit reached | - | 23875 | 300.1 | - |
+| `rmine15` | 358395 | 42438 | 879732 | time_limit | -5042.486721 | Time limit reached | - | 20597 | 216.7 | - |
+| `s250r10` | 10962 | 273142 | 1318607 | optimal | -0.1726767184 | -0.1726770419 | 3.2e-07 | 116 | 185.0 | yes |
+| `supportcase10` | 165684 | 14770 | 555082 | time_limit | 3.383924801 | Time limit reached | - | 22080 | 220.7 | - |
 
-**Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `irish-electricity`, `qap15`, `rmine15`, `supportcase10`.
+**Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `irish-electricity`, `physiciansched3-3`, `qap15`, `rmine15`, `supportcase10`.
 
 #### The same eight under each engine
 
-Source CSVs: `bench/results/mittelmann-65eecbc.csv` (dual simplex), `bench/results/mittelmann-pdhg-5c7efbc.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
+Source CSVs: `bench/results/mittelmann-72123ff.csv` (dual simplex), `bench/results/mittelmann-pdhg-5c7efbc.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
 Same 300 s limit per instance and engine; HiGHS is not re-run here.
 
 | instance | dual simplex: status · verified · time (s) | PDHG: status · verified · time (s) | interior point: status · verified · time (s) |
 |---|---|---|---|
-| `Linf_520c` | time_limit · - · 300.0 | time_limit · - · 231.4 | not run |
-| `bdry2` | time_limit · - · 258.8 | time_limit · - · 241.1 | not run |
-| `brazil3` | optimal · yes · 2.7 | optimal · yes · 58.0 | optimal · yes · 2.7 |
-| `chromaticindex1024-7` | optimal · yes · 20.1 | optimal · yes · 0.7 | not run |
-| `irish-electricity` | time_limit · - · 240.1 | time_limit · - · 240.0 | not run |
-| `qap15` | time_limit · - · 300.0 | optimal · yes · 93.4 | not run |
-| `rmine15` | time_limit · - · 216.4 | time_limit · - · 216.2 | not run |
-| `supportcase10` | time_limit · - · 216.7 | time_limit · - · 220.9 | not run |
+| `Linf_520c` | time_limit · - · 300.1 | time_limit · - · 231.4 | not run |
+| `bdry2` | time_limit · - · 253.4 | time_limit · - · 241.1 | not run |
+| `brazil3` | optimal · yes · 5.9 | optimal · yes · 58.0 | optimal · yes · 2.7 |
+| `chromaticindex1024-7` | optimal · yes · 57.9 | optimal · yes · 0.7 | not run |
+| `datt256_lp` | optimal · yes · 153.0 | not run | not run |
+| `ex10` | optimal · yes · 77.6 | not run | not run |
+| `irish-electricity` | time_limit · - · 240.2 | time_limit · - · 240.0 | not run |
+| `physiciansched3-3` | time_limit · - · 216.8 | not run | not run |
+| `qap15` | time_limit · - · 300.1 | optimal · yes · 93.4 | not run |
+| `rmine15` | time_limit · - · 216.7 | time_limit · - · 216.2 | not run |
+| `s250r10` | optimal · yes · 185.0 | not run | not run |
+| `supportcase10` | time_limit · - · 220.7 | time_limit · - · 220.9 | not run |
 
-Finished and verified inside the limit: dual simplex **2 of 8**, PDHG **3 of 8**, interior point **1 of 8**.
+Finished and verified inside the limit: dual simplex **5 of 12**, PDHG **3 of 12**, interior point **1 of 12**.
 
 ### 1e. The first-order engine — PDHG
 
@@ -1100,51 +1108,50 @@ Chinneck's collection of infeasible LPs (`netlib.org/lp/infeas`, fetched and has
 alone proves nothing; a pass needs the Farkas certificate the solver wrote to survive
 `tools/verify_solution.py` (`bench/runners/netlib_infeasible.py`).
 
-Source CSV: `bench/results/netlib-infeasible-65eecbc.csv`  
-Commit `65eecbc` · machine `Windows-AMD64` · time limit 60 s per instance
+Source CSV: `bench/results/netlib-infeasible-2c212e0.csv`  
+Commit `2c212e0` · machine `Windows-AMD64` · time limit 60 s per instance
 
-**13 of 29** reported `infeasible` **and** wrote a Farkas certificate that `tools/verify_solution.py` accepted. A status of `infeasible` without a certificate is not counted: the verifier has nothing to check, so the verdict is unproven.
+**25 of 29** reported `infeasible` **and** wrote a Farkas certificate that `tools/verify_solution.py` accepted. A status of `infeasible` without a certificate is not counted: the verifier has nothing to check, so the verdict is unproven.
 
-**16 not passed**, every one named with its cause:
+**4 not passed**, every one named with its cause:
 
 | why | count | instances |
 |---|---:|---|
-| infeasible without a certificate (simplex-dual) | 6 | bgindy, box1, ex72a, ex73a, klein3, mondou2 |
-| infeasible without a certificate (simplex-dual+primal) | 6 | cplex1, gosh, pang, qual, refinery, vol1 |
-| infeasible without a certificate (presolve) | 3 | ceria3d, galenet, gran |
+| infeasible without a certificate (presolve) | 2 | ceria3d, gran |
 | no verdict: numerical_error | 1 | cplex2 |
+| no verdict: time_limit | 1 | gosh |
 
 | instance | rows | cols | status | engine | certificate | multipliers | time (s) | verified | the solver's message |
 |---|---:|---:|---|---|---|---:|---:|:--:|---|
-| `bgdbg1` | 348 | 407 | infeasible | presolve | farkas | 2 | 0.025 | yes | row 163 allows activity of at most 24 but the column bounds force at least 54; proved by presolve; proof: the rows aggre |
-| `bgetam` | 400 | 688 | infeasible | simplex-dual | farkas | 14 | 0.085 | yes | dual simplex: basic variable 808 is outside its bounds by 2.733e+03, far above the 1.0e-07 feasibility tolerance, and no |
-| `bgindy` | 2671 | 10116 | infeasible | simplex-dual | none | 0 | 0.118 | - | dual simplex: basic variable 12467 is outside its bounds by 7.134e+03, far above the 1.0e-07 feasibility tolerance, and  |
-| `bgprtr` | 20 | 34 | infeasible | simplex-dual+primal | farkas | 6 | 0.030 | yes | phase 1 terminated with max bound violation 2.343e+01, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
-| `box1` | 231 | 261 | infeasible | simplex-dual | none | 0 | 0.028 | - | dual simplex: basic variable 201 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
-| `ceria3d` | 3576 | 824 | infeasible | presolve | none | 0 | 0.038 | - | row 292 needs activity of at least 0.75 but the column bounds cap it at 0.5; proved by presolve; no machine-checkable ce |
-| `chemcom` | 288 | 720 | infeasible | simplex-dual | farkas | 7 | 0.048 | yes | dual simplex: basic variable 807 is outside its bounds by 2.909e+03, far above the 1.0e-07 feasibility tolerance, and no |
-| `cplex1` | 3005 | 3221 | infeasible | simplex-dual+primal | none | 0 | 0.269 | - | phase 1 terminated with max bound violation 6.834e+06, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
-| `cplex2` | 224 | 221 | numerical_error | simplex-dual+primal | none | 0 | 0.049 | - | phase 1 stalled at max bound violation 4.100e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as |
-| `ex72a` | 197 | 215 | infeasible | simplex-dual | none | 0 | 0.036 | - | dual simplex: basic variable 151 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
-| `ex73a` | 193 | 211 | infeasible | simplex-dual | none | 0 | 0.028 | - | dual simplex: basic variable 137 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
-| `forest6` | 66 | 95 | infeasible | simplex-dual | farkas | 65 | 0.065 | yes | dual simplex: basic variable 0 is outside its bounds by 3.252e+05, far above the 1.0e-07 feasibility tolerance, and no n |
-| `galenet` | 8 | 8 | infeasible | presolve | none | 0 | 0.030 | - | row 4 needs activity of at least 30 but the column bounds cap it at 20; proved by presolve; no machine-checkable certifi |
-| `gosh` | 3792 | 10733 | infeasible | simplex-dual+primal | none | 0 | 11.327 | - | phase 1 terminated with max bound violation 7.715e-02, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
-| `gran` | 2658 | 2520 | infeasible | presolve | none | 0 | 0.045 | - | row 1612 allows activity of at most 97.7 but the column bounds force at least 97.7; proved by presolve; no machine-check |
-| `greenbea` | 2393 | 5405 | infeasible | presolve | farkas | 1 | 0.054 | yes | row 1491 allows activity of at most 0 but the column bounds force at least 320; proved by presolve; proof: the rows aggr |
-| `itest2` | 9 | 4 | infeasible | presolve | farkas | 3 | 0.029 | yes | row 4 allows activity of at most 2 but the column bounds force at least 13; proved by presolve; proof: the rows aggregat |
-| `itest6` | 11 | 8 | infeasible | presolve | farkas | 3 | 0.033 | yes | row 3 needs activity of at least 50000 but the column bounds cap it at -30000; proved by presolve; proof: the rows aggre |
-| `klein1` | 54 | 54 | infeasible | simplex-dual | farkas | 52 | 0.091 | yes | dual simplex: basic variable 89 is outside its bounds by 2.056e+06, far above the 1.0e-07 feasibility tolerance, and no  |
-| `klein2` | 477 | 54 | infeasible | simplex-dual | farkas | 52 | 0.298 | yes | dual simplex: basic variable 258 is outside its bounds by 8.818e+05, far above the 1.0e-07 feasibility tolerance, and no |
-| `klein3` | 994 | 88 | infeasible | simplex-dual | none | 0 | 0.193 | - | dual simplex: basic variable 57 is outside its bounds by 7.183e+05, far above the 1.0e-07 feasibility tolerance, and no  |
-| `mondou2` | 312 | 604 | infeasible | simplex-dual | none | 0 | 0.030 | - | dual simplex: basic variable 296 is outside its bounds by 1.530e+04, far above the 1.0e-07 feasibility tolerance, and no |
-| `pang` | 361 | 459 | infeasible | simplex-dual+primal | none | 0 | 0.041 | - | phase 1 terminated with max bound violation 2.606e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
-| `pilot4i` | 410 | 1000 | infeasible | presolve | farkas | 1 | 0.036 | yes | row 390 needs activity of at least 15.17 but the column bounds cap it at 0; proved by presolve; proof: the rows aggregat |
-| `qual` | 323 | 464 | infeasible | simplex-dual+primal | none | 0 | 0.042 | - | phase 1 terminated with max bound violation 5.125e+05, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
-| `reactor` | 318 | 637 | infeasible | presolve | farkas | 1 | 0.032 | yes | row 116 needs activity of at least 0 but the column bounds cap it at -1; proved by presolve; proof: the rows aggregate t |
-| `refinery` | 323 | 464 | infeasible | simplex-dual+primal | none | 0 | 0.039 | - | phase 1 terminated with max bound violation 5.380e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
-| `vol1` | 323 | 464 | infeasible | simplex-dual+primal | none | 0 | 0.032 | - | phase 1 terminated with max bound violation 1.056e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
-| `woodinfe` | 35 | 89 | infeasible | presolve | farkas | 1 | 0.025 | yes | row 17 needs activity of at least 0 but the column bounds cap it at -5; proved by presolve; proof: the rows aggregate to |
+| `bgdbg1` | 348 | 407 | infeasible | presolve | farkas | 2 | 0.177 | yes | row 163 allows activity of at most 24 but the column bounds force at least 54; proved by presolve; proof: the rows aggre |
+| `bgetam` | 400 | 688 | infeasible | simplex-dual | farkas | 14 | 0.979 | yes | dual simplex: basic variable 808 is outside its bounds by 2.733e+03, far above the 1.0e-07 feasibility tolerance, and no |
+| `bgindy` | 2671 | 10116 | infeasible | simplex-dual | farkas | 3 | 53.782 | yes | dual simplex: basic variable 12627 is outside its bounds by 7.134e+03, far above the 1.0e-07 feasibility tolerance, and  |
+| `bgprtr` | 20 | 34 | infeasible | simplex-dual+primal | farkas | 6 | 0.340 | yes | phase 1 terminated with max bound violation 2.343e+01, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `box1` | 231 | 261 | infeasible | simplex-dual | farkas | 8 | 0.442 | yes | dual simplex: basic variable 271 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
+| `ceria3d` | 3576 | 824 | infeasible | presolve | none | 0 | 10.411 | - | row 292 needs activity of at least 0.75 but the column bounds cap it at 0.5; proved by presolve; no machine-checkable ce |
+| `chemcom` | 288 | 720 | infeasible | simplex-dual | farkas | 7 | 0.645 | yes | dual simplex: basic variable 807 is outside its bounds by 2.909e+03, far above the 1.0e-07 feasibility tolerance, and no |
+| `cplex1` | 3005 | 3221 | infeasible | simplex-dual+primal | farkas | 5 | 14.202 | yes | phase 1 terminated with max bound violation 6.834e+06, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `cplex2` | 224 | 221 | numerical_error | simplex-dual+primal | none | 0 | 0.473 | - | phase 1 stalled at max bound violation 4.100e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as |
+| `ex72a` | 197 | 215 | infeasible | simplex-dual | farkas | 58 | 0.655 | yes | dual simplex: basic variable 300 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
+| `ex73a` | 193 | 211 | infeasible | simplex-dual | farkas | 88 | 0.895 | yes | dual simplex: basic variable 262 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
+| `forest6` | 66 | 95 | infeasible | simplex-dual | farkas | 65 | 0.557 | yes | dual simplex: basic variable 0 is outside its bounds by 3.252e+05, far above the 1.0e-07 feasibility tolerance, and no n |
+| `galenet` | 8 | 8 | infeasible | simplex-dual | farkas | 2 | 0.238 | yes | dual simplex: basic variable 12 is outside its bounds by 1.500e+01, far above the 1.0e-07 feasibility tolerance, and no  |
+| `gosh` | 3792 | 10733 | time_limit | simplex-dual | none | 0 | 61.063 | - | stopped at the time limit of 29.9603s after 29.96s, 7028 iterations, 0 nodes; route: the scaled attempt returned time_li |
+| `gran` | 2658 | 2520 | infeasible | presolve | none | 0 | 18.650 | - | row 1612 allows activity of at most 97.7 but the column bounds force at least 97.7; proved by presolve; no machine-check |
+| `greenbea` | 2393 | 5405 | infeasible | presolve | farkas | 1 | 0.398 | yes | row 1491 allows activity of at most 0 but the column bounds force at least 320; proved by presolve; proof: the rows aggr |
+| `itest2` | 9 | 4 | infeasible | presolve | farkas | 3 | 0.331 | yes | row 4 allows activity of at most 2 but the column bounds force at least 13; proved by presolve; proof: the rows aggregat |
+| `itest6` | 11 | 8 | infeasible | presolve | farkas | 3 | 0.297 | yes | row 3 needs activity of at least 50000 but the column bounds cap it at -30000; proved by presolve; proof: the rows aggre |
+| `klein1` | 54 | 54 | infeasible | simplex-dual | farkas | 52 | 0.774 | yes | dual simplex: basic variable 89 is outside its bounds by 2.056e+06, far above the 1.0e-07 feasibility tolerance, and no  |
+| `klein2` | 477 | 54 | infeasible | simplex-dual | farkas | 52 | 3.193 | yes | dual simplex: basic variable 258 is outside its bounds by 8.818e+05, far above the 1.0e-07 feasibility tolerance, and no |
+| `klein3` | 994 | 88 | infeasible | simplex-dual | farkas | 83 | 24.911 | yes | dual simplex: basic variable 507 is outside its bounds by 1.133e+07, far above the 1.0e-07 feasibility tolerance, and no |
+| `mondou2` | 312 | 604 | infeasible | simplex-dual | farkas | 133 | 6.770 | yes | dual simplex: basic variable 702 is outside its bounds by 3.679e+03, far above the 1.0e-07 feasibility tolerance, and no |
+| `pang` | 361 | 459 | infeasible | simplex-dual+primal | farkas | 14 | 7.011 | yes | phase 1 terminated with max bound violation 2.613e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `pilot4i` | 410 | 1000 | infeasible | presolve | farkas | 1 | 0.210 | yes | row 390 needs activity of at least 15.17 but the column bounds cap it at 0; proved by presolve; proof: the rows aggregat |
+| `qual` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 163 | 18.518 | yes | phase 1 terminated with max bound violation 2.258e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `reactor` | 318 | 637 | infeasible | presolve | farkas | 1 | 0.230 | yes | row 116 needs activity of at least 0 but the column bounds cap it at -1; proved by presolve; proof: the rows aggregate t |
+| `refinery` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 140 | 13.012 | yes | phase 1 terminated with max bound violation 5.372e+03, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `vol1` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 179 | 22.158 | yes | phase 1 terminated with max bound violation 2.349e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `woodinfe` | 35 | 89 | infeasible | presolve | farkas | 1 | 0.238 | yes | row 17 needs activity of at least 0 but the column bounds cap it at -5; proved by presolve; proof: the rows aggregate to |
 
 No per-engine option run is committed yet (`--solver-option algorithm=simplex`, `dual-simplex`, `pdhg`).
 

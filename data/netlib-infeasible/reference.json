@@ -1,7 +1,7 @@
 {
   "available_instances": 29,
   "emps_sha256": "fee41f544f6873a5e12bc598947828dc9964ef0676162e4df55e915760e2be22",
-  "instance_set": "explicit",
+  "instance_set": "all",
   "instances": {
     "bgdbg1": {
       "expected_status": "infeasible",
