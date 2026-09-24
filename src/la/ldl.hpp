@@ -167,6 +167,21 @@ class SparseLdl {
   /// Solve (P^T L D L^T P) x = b in place.
   void solve(double* b) const;
 
+  /// The numeric factorization by supernodes (#470, ldl_supernodal.cpp): the same analysis,
+  /// the same pivot rule, the same factor written into the same layout, computed column
+  /// block by column block with dense kernels. Off by default; the scalar up-looking path
+  /// is the oracle it is tested against.
+  void set_supernodal(bool on) noexcept { supernodal_ = on; }
+  [[nodiscard]] bool supernodal() const noexcept { return supernodal_; }
+  /// Supernodes found by the last supernodal factorization since analyze() (0 before one).
+  [[nodiscard]] Index supernode_count() const noexcept {
+    return supernodes_built_ ? static_cast<Index>(super_start_.size()) - 1 : 0;
+  }
+  /// The factor as stored, for tests that compare the two paths entry by entry: the
+  /// strictly lower L by column in the analysed pattern, and D.
+  [[nodiscard]] const std::vector<double>& factor_values() const noexcept { return l_values_; }
+  [[nodiscard]] const std::vector<double>& pivots() const noexcept { return d_; }
+
   [[nodiscard]] Index dimension() const noexcept { return n_; }
   [[nodiscard]] Index factor_nonzeros() const noexcept {
     return static_cast<Index>(l_values_.size());
@@ -210,6 +225,19 @@ class SparseLdl {
   std::vector<Index> l_rows_;
   std::vector<double> l_values_;
   std::vector<double> d_;  ///< the diagonal of D
+
+  // The supernodal path (#470, ldl_supernodal.cpp). Built from the analysis on first use.
+  void build_supernodes();
+  [[nodiscard]] bool factorize_supernodal(double regularization, const ShouldStop& should_stop);
+  bool supernodal_ = false;
+  bool supernodes_built_ = false;
+  std::vector<Index> super_start_;   ///< supernode s is columns [super_start_[s], [s + 1])
+  std::vector<Index> super_of_;      ///< column -> its supernode
+  std::vector<Index> lower_starts_;  ///< permuted lower triangle by column: rows ...
+  std::vector<Index> lower_rows_;
+  std::vector<Index> lower_slots_;        ///< ... and each value's slot in a_values_
+  std::vector<std::size_t> block_start_;  ///< offset of each supernode's dense block
+  std::vector<double> blocks_;
   Index regularized_ = 0;
   double smallest_pivot_ = 0.0;
   double largest_pivot_ = 0.0;

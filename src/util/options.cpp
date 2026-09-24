@@ -1432,6 +1432,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  -1.0,
                  kNoLimit,
                  {}});
+    s.push_back(
+        {"ipm_supernodal",
+         OptionType::Bool,
+         false,
+         "Factor the interior point's normal equations by supernodes (#470): the same "
+         "analysis, pivot rule and factor as the scalar LDL^T, computed column block by "
+         "column block with dense kernels written here (no vendor BLAS), sequential. "
+         "Default OFF; the scalar path is the oracle it is tested against.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
                  tol::kPdhgLoose,

@@ -442,6 +442,7 @@ bool SparseLdl::symbolic_pattern(const ShouldStop& should_stop) {
 
 bool SparseLdl::analyze(const SparseMatrix& lower, const ShouldStop& should_stop) {
   analyzed_ = false;
+  supernodes_built_ = false;
   stopped_early_ = false;
   pattern_too_large_ = false;
   ordering_too_large_ = false;
@@ -530,6 +531,8 @@ bool SparseLdl::factorize_signed(const SparseMatrix& lower, double regularizatio
       a_values_[static_cast<std::size_t>(slot - a_rows_.begin())] += column.values[p];
     }
   }
+
+  if (supernodal_) return factorize_supernodal(regularization, should_stop);
 
   std::vector<double> x(static_cast<std::size_t>(n), 0.0);
   std::vector<Index> mark(static_cast<std::size_t>(n), -1);

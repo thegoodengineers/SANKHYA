@@ -36,6 +36,7 @@ add_executable(sankhya_tests
   unit/test_sparse_lu.cpp
   unit/test_sparse_lu_singletons.cpp
   unit/test_ldl.cpp
+  unit/test_ldl_supernodal.cpp
   unit/test_ipm.cpp
   unit/test_ipm_time_limit.cpp
   unit/test_pdhg_kkt_crossings.cpp
