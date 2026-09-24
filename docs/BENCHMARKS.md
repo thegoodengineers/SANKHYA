@@ -427,6 +427,11 @@ python bench/runners/fetch_mittelmann.py
 python bench/runners/gpu_real_instances.py --binary build_gpu/sankhya
 ```
 
+> **Requires a CUDA-capable GPU** (#446). The runner downloads Mittelmann instances and
+> solves each with both the CPU and GPU PDHG engines. Build with `-DSANKHYA_ENABLE_CUDA=ON`
+> and ensure the CUDA runtime is installed before running. A machine without a compatible GPU
+> will skip GPU solves and produce CPU-only output.
+
 ---
 
 ### 1f. Scale — how far up this goes
