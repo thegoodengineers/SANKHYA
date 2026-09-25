@@ -389,6 +389,21 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"presolve_bound_propagation",
+                 OptionType::Bool,
+                 false,
+                 "Bound propagation from row activity in presolve (#485; Cederberg and Boyd, "
+                 "arXiv 2604.23951; Andersen and Andersen 1995, sec. 3.1-3.2): for each live "
+                 "row and each column in that row, derives tighter bounds on the column from "
+                 "the row bounds and the activity range of every other entry. Covers column "
+                 "singletons in inequality rows and doubleton inequalities as special cases; "
+                 "applies to all row sizes. No new record kind: the tightened bounds are "
+                 "reflected directly into the workspace and the existing redundant-row check "
+                 "fires when a row becomes implied. Only read when presolve is on. OFF until "
+                 "a clean A/B on main confirms the Mittelmann improvement.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"presolve_coefficient_tightening",
                  OptionType::Bool,
                  false,
