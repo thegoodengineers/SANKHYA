@@ -185,7 +185,8 @@ bool device_ran(pdhg::BatchResult* out) {
 
 TEST(BatchPdhg, EveryBoundIsAtMostTheExactOptimumAtAnyBudget) {
   for (const Count iterations : {Count{0}, Count{7}, Count{64}, Count{300}, Count{3000}}) {
-    const Tally t = sweep(iterations, pdhg::BatchBackendKind::kCpu, 120, 5200 + iterations);
+    const Tally t = sweep(iterations, pdhg::BatchBackendKind::kCpu, 120,
+                          static_cast<std::uint64_t>(5200 + iterations));
     report("CPU", iterations, t);
     EXPECT_GT(t.optimal, 200);
     EXPECT_GT(t.unbounded + t.infeasible, 20);
@@ -201,7 +202,8 @@ TEST(BatchPdhg, DeviceBoundsAreAtMostTheExactOptimum) {
   pdhg::BatchResult probe;
   if (!device_ran(&probe)) GTEST_SKIP() << "no device: " << probe.note;
   for (const Count iterations : {Count{0}, Count{64}, Count{3000}}) {
-    const Tally t = sweep(iterations, pdhg::BatchBackendKind::kDevice, 60, 7700 + iterations);
+    const Tally t = sweep(iterations, pdhg::BatchBackendKind::kDevice, 60,
+                          static_cast<std::uint64_t>(7700 + iterations));
     report("device", iterations, t);
     EXPECT_GT(t.optimal, 100);
   }

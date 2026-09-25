@@ -143,8 +143,10 @@ std::map<std::string, std::int64_t> reaches_exact_optimum(const Options& options
     }
     const double expected = exact.objective.to_double();
     const bool stopped_on_gap = s.message.find("gap target") != std::string::npos;
-    ASSERT_TRUE(s.status == SolveStatus::kOptimal) << to_string(s.status) << "\n"
-                                                   << in.lp.to_text();
+    if (s.status != SolveStatus::kOptimal) {
+      ADD_FAILURE() << to_string(s.status) << "\n" << in.lp.to_text();
+      continue;
+    }
     const double scale = std::max(1.0, std::fabs(expected));
     if (stopped_on_gap) {
       // Optimal within the gap target: never better than the optimum, never worse than the
