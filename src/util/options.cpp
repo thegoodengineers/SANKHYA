@@ -1707,9 +1707,11 @@ const std::vector<OptionSpec>& Options::registry() {
          "Cache A*x_k between iterations and compute A*x_{k+1} once per step, deriving "
          "A*x_bar = 2*A*x_{k+1} - A*x_k and A*dx = A*x_{k+1} - A*x_k by vector ops, "
          "reducing three sparse mat-vecs per iteration to two (#479). A*x is recomputed "
-         "exactly at every restart to prevent rounding drift. "
-         "CURRENTLY A STUB: the optimisation is not active. Default OFF until the A/B "
-         "benchmark confirms per-iteration time savings on CPU and GPU.",
+         "exactly at every restart to prevent rounding drift. Active on the CPU engine "
+         "and on the CUDA engine, per-iteration and device-loop paths alike. The derived "
+         "products differ from computed ones by rounding, so the trajectory is not bitwise "
+         "the three-product one. Incompatible with pdhg_halpern. Default OFF until an A/B "
+         "on main confirms the per-iteration saving on CPU and GPU.",
          0.0,
          0.0,
          {}});

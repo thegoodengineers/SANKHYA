@@ -520,40 +520,50 @@ Source CSV: `bench/results/gpu-real-l4-fdc89c5.csv`
 Commit `fdc89c5` · machine `Linux-x86_64`  
 GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM)
 
-Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance. Report the result whichever way it goes.
+Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance. Report the result whichever way it goes. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and N threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
 
-| instance | rows | CPU 1e-4 (s) | GPU 1e-4 (s) | speedup | CPU 1e-8 (s) | GPU 1e-8 (s) | speedup |
-|----------|-----:|-------------:|-------------:|--------:|-------------:|-------------:|--------:|
-| `brazil3` | 14646 | 37.829 | 5.843 | 6.47× | 91.143 | 10.987 | 8.30× |
-| `chromaticindex1024-7` | 67583 | 1.114 | 0.395 | 2.82× | 1.109 | 0.382 | 2.91× |
-| `refinery_year` | 779640 | 300.411 | 300.477 | 1.00× | 300.441 | 300.458 | 1.00× |
+| instance | rows | tol | CPU 1 thread (s) | CPU N threads (s) | GPU (s) | GPU vs 1 thread | GPU vs N threads | GPU status | rel gap CPU 1t / CPU Nt / GPU | reference |
+|----------|-----:|----:|-------------:|-------------:|--------:|--------:|--------:|--------|--------|--------|
+| `refinery_year` | 779640 | 1e-04 | 300.411 | - | 300.477 | 1.00x | - | time_limit | - / - / - | - |
+| `refinery_year` | 779640 | 1e-08 | 300.441 | - | 300.458 | 1.00x | - | time_limit | - / - / - | - |
+| `chromaticindex1024-7` | 67583 | 1e-04 | 1.114 | - | 0.395 | 2.82x | - | feasible | - / - / - | - |
+| `chromaticindex1024-7` | 67583 | 1e-08 | 1.109 | - | 0.382 | 2.91x | - | feasible | - / - / - | - |
+| `brazil3` | 14646 | 1e-04 | 37.829 | - | 5.843 | 6.47x | - | feasible | - / - / - | - |
+| `brazil3` | 14646 | 1e-08 | 91.143 | - | 10.987 | 8.30x | - | feasible | - / - / - | - |
+
+> `gpu-real-l4-fdc89c5.csv` predates #488's fairness fix. Its runner passed no thread option, so its CPU arm is **one thread with the serial A x** - every speedup in it is against a single-threaded CPU - and it records no reference objective, so the N-thread and gap columns read '-'. Re-run `gpu_real_instances.py` on `main` for the three-arm table.
 
 The datacenter runner (`bench/runners/gpu_datacenter.py`, #488):
 
 `gpu-datacenter-l4-fdc89c5.csv` - NVIDIA L4 (compute 8.9, 22478 MiB VRAM), solver at `fdc89c5`, Linux-x86_64, 3 repeats per cell:
 
-| instance | mode | tol | forced iterations | status | objective | iterations | solver (s) | median wall (s) | spread (s) |
-|---|---|---:|---:|---|---:|---:|---:|---:|---:|
-| `chromaticindex1024-7` | cpu-16t | 0.0001 | - | feasible | 3.0000000022999487 | 480 | 1.103508 | 1.445666 | 0.129435 |
-| `chromaticindex1024-7` | gpu | 0.0001 | - | feasible | 3.0000000012276438 | 440 | 0.438591 | 0.853233 | 0.022590 |
-| `chromaticindex1024-7` | cpu-16t | 1e-06 | - | feasible | 3.0000000022999487 | 480 | 1.130150 | 1.417274 | 0.266043 |
-| `chromaticindex1024-7` | gpu | 1e-06 | - | feasible | 3.000000000165927 | 480 | 0.369944 | 0.825440 | 0.117898 |
-| `chromaticindex1024-7` | cpu-16t | 1e-08 | - | feasible | 3.0000000022999487 | 480 | 1.037373 | 1.502796 | 0.054597 |
-| `chromaticindex1024-7` | gpu | 1e-08 | - | feasible | 3.0000000005021317 | 440 | 0.379603 | 0.834822 | 0.111375 |
-| `chromaticindex1024-7` | cpu-16t | 1e-08 | 2000 | feasible | 3.0000000022999487 | 480 | 1.034538 | 1.445967 | 0.082200 |
-| `chromaticindex1024-7` | gpu | 1e-08 | 2000 | feasible | 3.0000000006988623 | 440 | 0.370927 | 0.847714 | 0.072507 |
-| `brazil3` | cpu-16t | 0.0001 | - | feasible | 1.999998811677631 | 80800 | 33.762208 | 34.172888 | 0.326525 |
-| `brazil3` | gpu | 0.0001 | - | feasible | 2.0000010287786005 | 58000 | 4.610044 | 5.553975 | 3.634450 |
-| `brazil3` | cpu-16t | 1e-06 | - | feasible | 2.0000000851361506 | 101600 | 42.906782 | 43.094890 | 0.681074 |
-| `brazil3` | gpu | 1e-06 | - | feasible | 1.9999995978437894 | 91320 | 7.212001 | 10.508593 | 4.449151 |
-| `brazil3` | cpu-16t | 1e-08 | - | feasible | 1.9999999975461507 | 194240 | 80.629251 | 79.984344 | 1.851811 |
-| `brazil3` | gpu | 1e-08 | - | feasible | 1.9999996940528124 | 129000 | 10.044387 | 10.431059 | 3.828625 |
-| `brazil3` | cpu-16t | 1e-08 | 2000 | iteration_limit | 0.0 | 2000 | 0.846638 | 1.165236 | 0.048787 |
-| `brazil3` | gpu | 1e-08 | 2000 | iteration_limit | 0.0 | 2000 | 0.315572 | 0.688317 | 0.193310 |
+| instance | mode | threads | parallel A x | tol | forced iterations | status | objective | rel gap | primal res | dual res | iterations | solver (s) | solver median (s) | median wall (s) | spread (s) |
+|---|---|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `chromaticindex1024-7` | cpu-16t | - | - | 0.0001 | - | feasible | 3.0000000022999487 | - | - | - | 480 | 1.103508 | - | 1.445666 | 0.129435 |
+| `chromaticindex1024-7` | gpu | - | - | 0.0001 | - | feasible | 3.0000000012276438 | - | - | - | 440 | 0.438591 | - | 0.853233 | 0.022590 |
+| `chromaticindex1024-7` | cpu-16t | - | - | 1e-06 | - | feasible | 3.0000000022999487 | - | - | - | 480 | 1.130150 | - | 1.417274 | 0.266043 |
+| `chromaticindex1024-7` | gpu | - | - | 1e-06 | - | feasible | 3.000000000165927 | - | - | - | 480 | 0.369944 | - | 0.825440 | 0.117898 |
+| `chromaticindex1024-7` | cpu-16t | - | - | 1e-08 | - | feasible | 3.0000000022999487 | - | - | - | 480 | 1.037373 | - | 1.502796 | 0.054597 |
+| `chromaticindex1024-7` | gpu | - | - | 1e-08 | - | feasible | 3.0000000005021317 | - | - | - | 440 | 0.379603 | - | 0.834822 | 0.111375 |
+| `chromaticindex1024-7` | cpu-16t | - | - | 1e-08 | 2000 | feasible | 3.0000000022999487 | - | - | - | 480 | 1.034538 | - | 1.445967 | 0.082200 |
+| `chromaticindex1024-7` | gpu | - | - | 1e-08 | 2000 | feasible | 3.0000000006988623 | - | - | - | 440 | 0.370927 | - | 0.847714 | 0.072507 |
+| `brazil3` | cpu-16t | - | - | 0.0001 | - | feasible | 1.999998811677631 | - | - | - | 80800 | 33.762208 | - | 34.172888 | 0.326525 |
+| `brazil3` | gpu | - | - | 0.0001 | - | feasible | 2.0000010287786005 | - | - | - | 58000 | 4.610044 | - | 5.553975 | 3.634450 |
+| `brazil3` | cpu-16t | - | - | 1e-06 | - | feasible | 2.0000000851361506 | - | - | - | 101600 | 42.906782 | - | 43.094890 | 0.681074 |
+| `brazil3` | gpu | - | - | 1e-06 | - | feasible | 1.9999995978437894 | - | - | - | 91320 | 7.212001 | - | 10.508593 | 4.449151 |
+| `brazil3` | cpu-16t | - | - | 1e-08 | - | feasible | 1.9999999975461507 | - | - | - | 194240 | 80.629251 | - | 79.984344 | 1.851811 |
+| `brazil3` | gpu | - | - | 1e-08 | - | feasible | 1.9999996940528124 | - | - | - | 129000 | 10.044387 | - | 10.431059 | 3.828625 |
+| `brazil3` | cpu-16t | - | - | 1e-08 | 2000 | iteration_limit | 0.0 | - | - | - | 2000 | 0.846638 | - | 1.165236 | 0.048787 |
+| `brazil3` | gpu | - | - | 1e-08 | 2000 | iteration_limit | 0.0 | - | - | - | 2000 | 0.315572 | - | 0.688317 | 0.193310 |
+
+> `gpu-datacenter-l4-fdc89c5.csv` predates #488's fairness fix. Its only CPU arm, `cpu-16t`, was run with `threads=16` and **without** `pdhg_parallel_spmv=true`: A^T y over 16 threads, A x serial. That is neither the one-thread default nor the parallel arm, so no speedup is computed from it here (its times are in the table above), and it records no reference objective or residuals, so those columns read '-'. Re-run `gpu_datacenter.py` on `main` for both CPU arms.
 
 #### 1g.4 What the CPU side does with its cores
 
-Every CPU column above is one thread. `pdhg_parallel_spmv` (#487) computes A x row-parallel
+The CPU column of the 1g crossover is one thread. The 1g.1 and 1g.3 files written since #488
+add an N-thread arm with the row-parallel A x; the older ones are one thread (the real
+instances) or 16 threads with a serial A x (the datacenter runner), as their notes say.
+`pdhg_parallel_spmv` (#487) computes A x row-parallel
 over the `threads` workers, bitwise the same at any thread count (the test holds it to the
 bit); this is what it buys, per instance, at a fixed iteration count:
 
@@ -587,6 +597,30 @@ Commit `5daee10` · machine `Windows-AMD64` · 2000 iterations per solve, PDHG a
 | `refinery_year` | 779640 | 2 | parallel | 85.705 | 1.201x |
 | `refinery_year` | 779640 | 4 | parallel | 81.997 | 1.255x |
 | `refinery_year` | 779640 | 8 | parallel | 88.361 | 1.165x |
+
+#### 1g.5 Root domain propagation, CPU against the device (#510)
+
+Activity-based bound propagation at the MIP root (`gpu_domain_prop=true`), the CPU
+reference against the CUDA propagator (one thread per row, one per column; Sofranac,
+Gleixner and Pokutta, arXiv:2009.07785). The two return the same bounds bit for bit
+(`tests/unit/test_domain_propagation.cpp`, on random models, Netlib and the fetched MIPLIB
+sets); this is what each costs, on generated knapsack-row models from 1,000 to 1,000,000
+rows (`bench/runners/gpu_domain_prop.py`).
+
+Source CSV: `gpu-domain-prop-43254f1.csv`  
+Commit `43254f1` · machine `Linux-x86_64` · GPU NVIDIA L4 (compute 8.9, 22478 MiB VRAM) · median of 5 run(s) per cell, the propagation time the solver logs (on the device: the row-major copy, the transfers and the rounds).
+
+| rows | columns | nonzeros | rounds | bounds tightened | CPU (s) | GPU (s) | GPU / CPU | same rounds and count |
+|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 1,000 | 1,000 | 5,000 | 2 | 797 | 0.000078 | 0.111028 | 1423.44x | yes |
+| 10,000 | 10,000 | 50,000 | 2 | 7,708 | 0.000796 | 0.118004 | 148.25x | yes |
+| 100,000 | 100,000 | 500,000 | 2 | 77,630 | 0.011387 | 0.118576 | 10.41x | yes |
+| 300,000 | 300,000 | 1,500,000 | 2 | 233,257 | 0.042926 | 0.145380 | 3.39x | yes |
+| 1,000,000 | 1,000,000 | 5,000,000 | 2 | 777,545 | 0.286252 | 0.345897 | 1.21x | yes |
+
+**The device loses at every measured size (5 of 5).** The CPU reference is faster from the smallest model to the largest; the GPU backend stays off by default (`gpu_domain_prop=false`, `domain_prop_backend=auto`).
+
+Each GPU cell is a fresh process, so it includes creating the process's CUDA context (with the other GPU options off, root propagation is the first thing in a MIP solve to touch the card); this CSV predates the runner's `context_seconds` column, so it cannot say how much of each GPU cell that is.
 
 ---
 
