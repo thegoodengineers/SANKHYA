@@ -183,6 +183,41 @@ TEST(MiqpNodeIpm, RandomConvexMiqpsReachTheEnumeratedOptimumOrAreInfeasible) {
   EXPECT_GT(infeasible, 3);
 }
 
+TEST(MiqpNodeIpm, ANodeOnlyItsLpProvesInfeasibleIsFathomedNotFatal) {
+  // min (z - 2.4)^2 over integer z in [0, 3] and continuous x, y in [0, 1e6] with
+  // x - y >= z - 1.5 and y - x >= z - 1.5, so z <= 1.5. The root relaxation sits at z = 1.5;
+  // its up child z >= 2 asks for x >= y + 0.5 and y >= x + 0.5, which bound propagation
+  // (three sweeps) only creeps towards by 0.5 a pass, and the interior point cannot detect.
+  // The node LP proves it infeasible; the answer is z = 1, (1 - 2.4)^2 = 1.96.
+  Model model;
+  model.sense = ObjSense::kMinimize;
+  model.col_lower = {0.0, 0.0, 0.0};
+  model.col_upper = {3.0, 1e6, 1e6};
+  model.col_type = {VarType::kInteger, VarType::kContinuous, VarType::kContinuous};
+  model.col_cost = {-4.8, 0.0, 0.0};
+  model.objective_offset = 5.76;
+  model.hessian.reset(3, 3);
+  model.hessian.add_entry(0, 0, 2.0);
+  model.hessian.finalize();
+  model.matrix.reset(2, 3);
+  model.matrix.add_entry(0, 0, -1.0);  // x - y - z >= -1.5
+  model.matrix.add_entry(0, 1, 1.0);
+  model.matrix.add_entry(0, 2, -1.0);
+  model.matrix.add_entry(1, 0, -1.0);  // y - x - z >= -1.5
+  model.matrix.add_entry(1, 1, -1.0);
+  model.matrix.add_entry(1, 2, 1.0);
+  model.matrix.finalize();
+  model.row_lower = {-1.5, -1.5};
+  model.row_upper = {kInfinity, kInfinity};
+  // columns are z, x, y
+  Options options = ipm_nodes();
+  options.set_bool("presolve", false);
+  const Solution solved = solve(model, options);
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+  EXPECT_NEAR(solved.objective, 1.96, 1e-6);
+  EXPECT_NEAR(solved.col_value[0], 1.0, 1e-6);
+}
+
 TEST(MiqpNodeIpm, ANodeLimitNeverReportsABoundPastTheOptimum) {
   std::mt19937 rng(4941);
   int limited = 0;
