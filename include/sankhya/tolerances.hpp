@@ -613,6 +613,29 @@ inline constexpr int kDomainPropagationRounds = 50;
 inline constexpr int kPdhgDetectionMinRestarts = 2;
 inline constexpr double kPdhgDetectionMinNorm = 1e-12;
 
+// ---- Restarted Halpern Condat-Vu and the PID primal weight for QP (#493) -------------------
+//
+/// A restart when the fixed-point residual ||T z - z|| has fallen to this share of its value at
+/// the period's first step; the sufficient-decay ratio of [PDLP] section 4.3 and of the LP
+/// engine's Halpern path (#481), carried over unchanged.
+inline constexpr double kQpRestartSufficientDecay = 0.2;
+/// ... or when the period has lasted this share of every iteration so far, [PDLP]'s
+/// artificial restart, as the LP engine uses it.
+inline constexpr double kQpRestartArtificialShare = 0.36;
+/// The reflection actually used, as a share of Condat's bound delta - 1 ([C13] Theorem 3.1
+/// states convergence for rho strictly below delta). The bound is computed from norms already
+/// inflated 5% over their power-iteration estimates; this keeps the step strictly inside it.
+inline constexpr double kQpHalpernReflectionShare = 0.99;
+/// The primal weight is held in this range, the LP engine's clamp.
+inline constexpr double kQpPrimalWeightMin = 1e-6;
+inline constexpr double kQpPrimalWeightMax = 1e6;
+/// Below this primal or dual movement over a period the ratio is rounding, and the weight is
+/// left alone (the LP engine's threshold).
+inline constexpr double kQpPrimalWeightMinMovement = 1e-12;
+/// Anti-windup on the controller's integral of log-errors: e^5 is a factor of about 150 in
+/// the weight, beyond which an integral term would only be remembering a transient.
+inline constexpr double kQpPidIntegralLimit = 5.0;
+
 // ---- Dense columns in the LP interior point's normal equations (#467, ipm_dense_columns) ---
 
 /// A column is dense when it has more than this times sqrt(rows) entries: the default of

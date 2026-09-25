@@ -1089,16 +1089,54 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"qp_halpern",
                  OptionType::Bool,
                  false,
-                 "Halpern restarts and PID primal weight for the first-order QP engine "
-                 "on CPU and GPU (#493): the Halpern anchor term added to the "
-                 "Condat-Vu step; Q x computed once per outer iteration (SpMV or "
-                 "cuSPARSE on GPU); PID controller updates sigma each restart. "
-                 "CURRENTLY A STUB: qp_halpern_step() returns false immediately. "
-                 "Default OFF; enable after Maros-Meszaros A/B once implemented. "
-                 "References: Lu & Yang PDQP, arXiv:2311.07710; "
-                 "HPR-QP, arXiv:2507.02470; PDHCG-II, arXiv:2602.23967.",
+                 "Restarted, reflected Halpern iteration in the first-order QP engine "
+                 "(qp_algorithm=condat-vu, CPU; #493): z <- w((1+rho) T z - rho z) + (1-w) "
+                 "z_anchor with w = (k+1)/(k+2), rho kept inside Condat's relaxation bound, "
+                 "and a restart (new anchor) when the fixed-point residual ||T z - z|| falls "
+                 "to 0.2 of the period's first, or artificially after 0.36 of all "
+                 "iterations. Convergence is measured and the answer reported at T z. "
+                 "Default OFF until a Maros-Meszaros A/B on main; off, the iteration is the "
+                 "plain Condat-Vu one, unchanged. References: Lu & Yang arXiv:2407.16144; "
+                 "PDQP arXiv:2311.07710; Condat JOTA 158 (2013).",
                  0.0,
                  0.0,
+                 {}});
+    s.push_back({"qp_primal_weight_pid",
+                 OptionType::Bool,
+                 false,
+                 "Primal weight omega = sqrt(sigma/tau) of the first-order QP engine moved at "
+                 "each restart by a PID controller on e = log(omega ||dx|| / ||dy||), the "
+                 "period's primal and dual movement (#493): log omega -= kp e + ki sum(e) + "
+                 "kd de, and tau, sigma recomputed from omega under Condat's step condition. "
+                 "Restarts are the qp_halpern ones; with qp_halpern off they are decided on "
+                 "the same fixed-point residual and only move the weight. No effect on a "
+                 "model with no rows. Default OFF until an A/B on main. References: Lu, Peng "
+                 "& Yang arXiv:2507.14051; Applegate et al. NeurIPS 2021 section 3.2.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"qp_pid_kp",
+                 OptionType::Double,
+                 0.5,
+                 "qp_primal_weight_pid: proportional gain. 0.5 with ki = kd = 0 is PDLP's "
+                 "smoothed primal-weight update (theta = 0.5).",
+                 0.0,
+                 2.0,
+                 {}});
+    s.push_back({"qp_pid_ki",
+                 OptionType::Double,
+                 0.0,
+                 "qp_primal_weight_pid: integral gain, on the clamped sum of log-errors.",
+                 0.0,
+                 2.0,
+                 {}});
+    s.push_back({"qp_pid_kd",
+                 OptionType::Double,
+                 0.0,
+                 "qp_primal_weight_pid: derivative gain, on the change of the log-error "
+                 "between restarts.",
+                 0.0,
+                 2.0,
                  {}});
     s.push_back({"gpu_cudss_ipm",
                  OptionType::Bool,
