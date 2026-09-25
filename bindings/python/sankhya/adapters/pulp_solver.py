@@ -32,6 +32,14 @@ import pulp
 
 import sankhya
 
+# PuLP 4.0 replaced the LpStatus* constants with the LpSolveStatus enum and reworked the
+# LpSolver interface this class implements. Refuse it with a clear message rather than fail
+# later with an AttributeError; the port to PuLP 4 is tracked as its own issue.
+if int(getattr(pulp, "__version__", "0").split(".")[0]) >= 4:
+    raise ImportError(
+        f"sankhya.adapters.pulp_solver supports PuLP 2.x and 3.x; PuLP {pulp.__version__} "
+        "changed the status codes and the solver interface. Install 'pulp<4'.")
+
 __all__ = ["SANKHYA"]
 
 # LpConstraintLE = -1, LpConstraintEQ = 0, LpConstraintGE = 1 in every PuLP release this was
