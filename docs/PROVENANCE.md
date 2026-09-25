@@ -296,6 +296,44 @@ Three artifacts on each platform: our own core, fmt, and the system zlib. CLI11 
 nlohmann/json are header-only and appear as includes rather than archives; they are in the
 dependency table above and visible in `CMakeLists.txt`.
 
+### 4.2b The opt-in cuDSS build (#489)
+
+Not the default and not what CI gates: a build configured with `-DSANKHYA_ENABLE_CUDA=ON
+-DSANKHYA_CUDA_ARCHITECTURES=70 -DSANKHYA_ENABLE_CUDSS=ON -DCUDSS_ROOT=<site-packages>/nvidia/cu12`
+at commit `40255e2`, on an NVIDIA V100 box (Ubuntu 22.04, GCC 11.4.0, CMake 3.22.1, CUDA 12.4,
+driver 550.127.08), cuDSS from NVIDIA's `nvidia-cudss-cu12` 0.8.0.10 wheel. The `libcudss.so`
+the link line names is a symlink made beside the wheel's `libcudss.so.0`; without it CMake finds
+`libcudss.so.0` itself.
+
+```
+$ ninja -C build-cudss -t commands sankhya | tail -1
+/usr/bin/c++ -O3 -DNDEBUG  CMakeFiles/sankhya-cli.dir/apps/sankhya-cli/main.cpp.o -o sankhya -L/usr/local/cuda/targets/x86_64-linux/lib -Wl,-rpath,/usr/local/cuda/lib64:/usr/local/lib/python3.10/dist-packages/nvidia/cu12/lib  libsankhya_core.a  _deps/fmt-build/libfmt.a  /usr/local/cuda/lib64/libcusparse.so  /usr/local/cuda/lib64/libcudart.so  /usr/local/lib/python3.10/dist-packages/nvidia/cu12/lib/libcudss.so  /usr/lib/x86_64-linux-gnu/libz.so  /usr/lib/gcc/x86_64-linux-gnu/11/libgomp.so  /usr/lib/x86_64-linux-gnu/libpthread.a  -lcudadevrt  -lcudart_static  -lrt  -lpthread  -ldl
+
+$ ldd build-cudss/sankhya
+        linux-vdso.so.1
+        libcusparse.so.12 => /usr/local/cuda/lib64/libcusparse.so.12
+        libcudart.so.12 => /usr/local/cuda/lib64/libcudart.so.12
+        libcudss.so.0 => /usr/local/lib/python3.10/dist-packages/nvidia/cu12/lib/libcudss.so.0
+        libz.so.1 => /lib/x86_64-linux-gnu/libz.so.1
+        libgomp.so.1 => /lib/x86_64-linux-gnu/libgomp.so.1
+        libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6
+        libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6
+        libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1
+        libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6
+        libnvJitLink.so.12 => /usr/local/cuda/lib64/libnvJitLink.so.12
+        libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0
+        librt.so.1 => /lib/x86_64-linux-gnu/librt.so.1
+        libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2
+        /lib64/ld-linux-x86-64.so.2
+        libcublas.so.12 => /usr/local/cuda/targets/x86_64-linux/lib/libcublas.so.12
+        libcublasLt.so.12 => /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.12
+```
+
+(load addresses dropped). Against the CUDA build, three more libraries: `libcudss.so.0` itself,
+and `libcublas.so.12` and `libcublasLt.so.12`, which cuDSS loads for its dense kernels (the
+cuBLAS row of section 2 still holds for our own code: nothing in `src/` calls cuBLAS). None
+matches the solver-name grep of 4.1.
+
 ### 4.3 SBOM
 
 An SPDX SBOM is generated in CI by the `provenance` job and attached as a build artifact
