@@ -230,6 +230,10 @@ std::vector<Interval> ExpressionGraph::ranges(ExprId root, const std::vector<dou
                        a.upper >= 0.0 ? std::sqrt(a.upper) : 0.0, bad};
         break;
       }
+      // [-1, 1] always holds; it is not the tightest range over a short argument interval,
+      // and a looser range is only ever more conservative for what reads it.
+      case Op::kSin:
+      case Op::kCos: out = Interval{-1.0, 1.0, undefined}; break;
     }
     if (std::isnan(out.lower) || std::isnan(out.upper))
       out = Interval{-kInf, kInf, out.may_be_undefined};
@@ -342,6 +346,10 @@ Curvature ExpressionGraph::curvature(ExprId root, const std::vector<double>& low
         }
         break;
       }
+      // Neither convex nor concave over any interval longer than pi, and the composition
+      // rules do not track where the argument sits within a period. Unknown, not guessed.
+      case Op::kSin:
+      case Op::kCos: out = Curvature::kUnknown; break;
     }
     c[static_cast<std::size_t>(id)] = out;
   }
@@ -378,7 +386,9 @@ int ExpressionGraph::degree(ExprId root) const {
         break;
       case Op::kExp:
       case Op::kLog:
-      case Op::kSqrt: out = kid(0) == 0 ? 0 : -1; break;
+      case Op::kSqrt:
+      case Op::kSin:
+      case Op::kCos: out = kid(0) == 0 ? 0 : -1; break;
     }
     d[static_cast<std::size_t>(id)] = out;
   }

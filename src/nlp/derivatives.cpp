@@ -14,14 +14,11 @@
 
 #include <fmt/format.h>
 
+#include "nlp/derivative_rules.hpp"
 #include "nlp/expression.hpp"
 
 namespace sankhya::nlp {
 namespace {
-
-bool is_integer(double value) {
-  return std::isfinite(value) && std::floor(value) == value;
-}
 
 Evaluation failure(EvalError error, ExprId at, std::string message) {
   Evaluation result;
@@ -32,54 +29,28 @@ Evaluation failure(EvalError error, ExprId at, std::string message) {
 }
 
 /// Every node's value, children first. Fills `values` (indexed by node id) for the ids on
-/// the tape; returns the first failure, or an ok Evaluation holding the root's value.
+/// the tape; returns the first failure, or an ok Evaluation holding the root's value. The
+/// rule for each operation is detail::apply (derivative_rules.hpp).
 Evaluation forward(const ExpressionGraph& graph, const std::vector<ExprId>& order,
                    const std::vector<double>& x, std::vector<double>* values) {
   values->assign(graph.size(), 0.0);
   std::vector<double>& v = *values;
+  std::vector<double> child;
+  std::string why;
   for (const ExprId id : order) {
     const Node& n = graph.node(id);
-    const auto at = [&](std::size_t k) { return v[static_cast<std::size_t>(n.children[k])]; };
     double result = 0.0;
-    switch (n.op) {
-      case Op::kConstant: result = n.value; break;
-      case Op::kVariable: result = x[static_cast<std::size_t>(n.variable)]; break;
-      case Op::kSum:
-        for (std::size_t k = 0; k < n.children.size(); ++k) result += at(k);
-        break;
-      case Op::kProduct: result = at(0) * at(1); break;
-      case Op::kNegate: result = -at(0); break;
-      case Op::kDivide:
-        if (at(1) == 0.0) return failure(EvalError::kDomain, id, "division by zero");
-        result = at(0) / at(1);
-        break;
-      case Op::kPower: {
-        const double base = at(0);
-        if (base < 0.0 && !is_integer(n.value)) {
-          return failure(
-              EvalError::kDomain, id,
-              fmt::format("{:g} raised to the non-integer power {:g}", base, n.value));
-        }
-        if (base == 0.0 && n.value < 0.0) {
-          return failure(EvalError::kDomain, id,
-                         fmt::format("0 raised to the negative power {:g}", n.value));
-        }
-        result = std::pow(base, n.value);
-        break;
+    if (n.op == Op::kVariable) {
+      result = x[static_cast<std::size_t>(n.variable)];
+    } else {
+      child.resize(n.children.size());
+      for (std::size_t k = 0; k < n.children.size(); ++k) {
+        child[k] = v[static_cast<std::size_t>(n.children[k])];
       }
-      case Op::kExp: result = std::exp(at(0)); break;
-      case Op::kLog:
-        if (at(0) <= 0.0) {
-          return failure(EvalError::kDomain, id, fmt::format("log of {:g}", at(0)));
-        }
-        result = std::log(at(0));
-        break;
-      case Op::kSqrt:
-        if (at(0) < 0.0) {
-          return failure(EvalError::kDomain, id, fmt::format("sqrt of {:g}", at(0)));
-        }
-        result = std::sqrt(at(0));
-        break;
+      if (!detail::apply(n, child.data(), &result, &why)) {
+        return failure(EvalError::kDomain, id,
+                       child.empty() ? why : fmt::format("{} (argument {:g})", why, child[0]));
+      }
     }
     if (!std::isfinite(result)) {
       return failure(EvalError::kNonFinite, id,
@@ -92,71 +63,26 @@ Evaluation forward(const ExpressionGraph& graph, const std::vector<ExprId>& orde
   return ok;
 }
 
-/// The partial derivative of node `id` with respect to its k-th child, and - when `tangent`
-/// is given - that partial's own derivative along the direction whose node tangents it holds.
-/// Returns false when the derivative does not exist at this point (sqrt at 0, x^0.5 at 0).
+/// detail::partial over values indexed by node id: the partial derivative of node `id` with
+/// respect to its k-th child, and - when `tangent` is given - that partial's own derivative
+/// along the direction whose node tangents it holds.
 bool partial(const ExpressionGraph& graph, ExprId id, std::size_t k,
              const std::vector<double>& v, const std::vector<double>* tangent, double* d,
              double* d_dot) {
   const Node& n = graph.node(id);
-  const auto val = [&](std::size_t c) { return v[static_cast<std::size_t>(n.children[c])]; };
-  const auto dot = [&](std::size_t c) {
-    return tangent == nullptr ? 0.0 : (*tangent)[static_cast<std::size_t>(n.children[c])];
-  };
-  double first = 0.0;
-  double second_along = 0.0;
-  switch (n.op) {
-    case Op::kConstant:
-    case Op::kVariable: return true;  // no children
-    case Op::kSum: first = 1.0; break;
-    case Op::kNegate: first = -1.0; break;
-    case Op::kProduct:
-      // d(ab)/da = b, whose derivative along the direction is b-dot; and symmetrically. For
-      // x*x both children are x, and the two contributions sum to 2x - the rule needs no case.
-      first = val(1 - k);
-      second_along = dot(1 - k);
-      break;
-    case Op::kDivide: {
-      const double a = val(0);
-      const double b = val(1);
-      if (k == 0) {
-        first = 1.0 / b;
-        second_along = -dot(1) / (b * b);
-      } else {
-        first = -a / (b * b);
-        second_along = -dot(0) / (b * b) + 2.0 * a * dot(1) / (b * b * b);
-      }
-      break;
-    }
-    case Op::kPower: {
-      const double a = val(0);
-      const double p = n.value;
-      first = p == 1.0 ? 1.0 : p * std::pow(a, p - 1.0);
-      if (tangent != nullptr && dot(0) != 0.0) {
-        const double curvature = p == 2.0 ? 2.0 : p * (p - 1.0) * std::pow(a, p - 2.0);
-        second_along = curvature * dot(0);
-      }
-      break;
-    }
-    case Op::kExp:
-      first = v[static_cast<std::size_t>(id)];
-      second_along = first * dot(0);
-      break;
-    case Op::kLog:
-      first = 1.0 / val(0);
-      second_along = -dot(0) / (val(0) * val(0));
-      break;
-    case Op::kSqrt: {
-      const double s = v[static_cast<std::size_t>(id)];
-      first = 0.5 / s;
-      second_along = -dot(0) / (4.0 * s * s * s);
-      break;
-    }
+  // Products and quotients read both children; everything else reads at most child 0. A
+  // sum's partial is 1 whatever the children are, so its children need not be gathered.
+  double child[2] = {0.0, 0.0};
+  double child_dot[2] = {0.0, 0.0};
+  const std::size_t gathered =
+      n.op == Op::kSum ? 0 : std::min<std::size_t>(n.children.size(), 2);
+  for (std::size_t c = 0; c < gathered; ++c) {
+    const auto at = static_cast<std::size_t>(n.children[c]);
+    child[c] = v[at];
+    if (tangent != nullptr) child_dot[c] = (*tangent)[at];
   }
-  if (!std::isfinite(first) || !std::isfinite(second_along)) return false;
-  *d = first;
-  if (d_dot != nullptr) *d_dot = second_along;
-  return true;
+  return detail::partial(n, k, v[static_cast<std::size_t>(id)], child,
+                         tangent == nullptr ? nullptr : child_dot, d, d_dot);
 }
 
 Evaluation no_derivative(const ExpressionGraph& graph, ExprId id) {

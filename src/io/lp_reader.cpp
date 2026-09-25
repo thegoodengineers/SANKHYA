@@ -656,6 +656,14 @@ ReadResult read_model(const std::string& path, Model* model) {
   if (lowered.size() >= 3 && lowered.compare(lowered.size() - 3, 3, ".lp") == 0) {
     return read_lp(path, model);
   }
+  // A .nl file is a NONLINEAR model and has no faithful linear Model: reading it here would
+  // either fail as malformed MPS or, worse, drop its expressions. It is refused by name; the
+  // nonlinear reader is sankhya::nlp::read_nl (src/nlp/nl_reader.hpp).
+  if (lowered.size() >= 3 && lowered.compare(lowered.size() - 3, 3, ".nl") == 0) {
+    return ReadResult::refusal(path +
+                               ": a .nl file is a nonlinear model; it is read by the nonlinear "
+                               "reader, not into a linear Model");
+  }
   return read_mps(path, model);
 }
 

@@ -61,6 +61,8 @@ enum class Op : std::uint8_t {
   kExp,
   kLog,  ///< natural logarithm
   kSqrt,
+  kSin,  ///< radians
+  kCos,  ///< radians
 };
 
 [[nodiscard]] const char* to_string(Op op) noexcept;
@@ -147,6 +149,16 @@ class ExpressionGraph {
   ExprId exp(ExprId a);
   ExprId log(ExprId a);
   ExprId sqrt(ExprId a);
+  ExprId sin(ExprId a);
+  ExprId cos(ExprId a);
+
+  /// Let the graph name columns [0, n). Only ever GROWS: every existing node stays valid,
+  /// because a column index that was in range stays in range. A C API caller may add a
+  /// column after building an expression (#NLP stage 1), and the graph follows it. A
+  /// smaller `n` is ignored.
+  void extend_variables(Index n) noexcept {
+    if (n > num_variables_) num_variables_ = n;
+  }
 
   /// `id` must be a node of this graph (see contains()).
   [[nodiscard]] const Node& node(ExprId id) const;
@@ -176,6 +188,15 @@ class ExpressionGraph {
   /// The exact Hessian at `x`, its lower triangle, sparse. The same failure convention.
   bool hessian(ExprId root, const std::vector<double>& x, std::vector<HessianEntry>* out,
                Evaluation* error) const;
+
+  /// The STRUCTURAL sparsity of the Hessian of `root`: every lower-triangle position
+  /// (row >= col) that can be nonzero at some point, sorted by (col, row). A superset of
+  /// what hessian() returns at any x - hessian() drops entries that happen to be zero there,
+  /// this does not - so a solver can fix the pattern of its factorization once (sparsity.cpp).
+  /// Index-domain propagation of nonlinear interactions: Walther, "Computing sparse Hessians
+  /// with automatic differentiation", ACM TOMS 34(1), 2008; Griewank and Walther, 2nd ed.,
+  /// ch. 7.
+  [[nodiscard]] std::vector<std::pair<Index, Index>> hessian_pattern(ExprId root) const;
 
   // ---- Structure (convexity.cpp).
   /// The range of `root` over the box [lower, upper], by interval arithmetic.
