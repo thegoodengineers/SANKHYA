@@ -119,18 +119,22 @@ jobs:
       fail-fast: false
       matrix:
         # Fields besides the build flags:
-        #   cache_key     the compiler cache and test timings this leg restores and saves
-        #   shard_index,  which part of the parallel test set this leg runs: ctest's
-        #   shard_count   -I index,,count, every count-th test from the index-th. Unset = all.
-        #   serial_tests  this leg runs the serial set (SERIAL_TESTS above)
-        #   after_tests   this leg runs the CLI smoke test, the synthetic LP and the case
-        #                 studies, the steps that ran on both Release and the ASan leg
+        #   cache_key       the compiler cache and test timings this leg restores
+        #   save_cache      this leg saves them back, on main
+        #   parallel_tests  this leg runs the parallel set (everything but SERIAL_TESTS)
+        #   shard_index,    which part of the parallel set: ctest's -I index,,count, every
+        #   shard_count     count-th test from the index-th. Unset = all of it.
+        #   serial_tests    this leg runs the serial set (SERIAL_TESTS above)
+        #   after_tests     this leg runs the CLI smoke test, the synthetic LP and the case
+        #                   studies, the steps that ran on both Release and the ASan leg
         include:
           - name: Release
             build_type: Release
             sanitize: OFF
             debug_flags: ""
             cache_key: Release
+            save_cache: true
+            parallel_tests: true
             serial_tests: true
             after_tests: true
           # -O1 rather than the Debug default -O0: the AddressSanitizer documentation
@@ -141,31 +145,53 @@ jobs:
           # (std_function.h), so that one warning stays a warning here; the Release leg still
           # builds everything with -Werror and the warning on.
           #
-          # SPLIT IN TWO. With the compiler cache warm (#673) this leg was 10 minutes, 7 of
-          # them one Test step (403 s parallel, 25 s serial) and 2.5 the case studies after
-          # it, which made it the job every merge waited for. Each half rebuilds from the
-          # same cache in about 15 s and runs every other test of the parallel set, so no
-          # test is dropped and none runs twice - the step "The shards cover every test
-          # exactly once" proves that on every run. The serial set goes to the first half and
-          # the post-test steps to the second, which balances them: 25 s of serial tests
-          # against 2.5 minutes of case studies would otherwise stack on one half.
+          # SPLIT THREE WAYS. With the compiler cache warm (#673) this leg was 10 minutes, 7
+          # of them one Test step (403 s parallel, 25 s serial) and 2.5 the case studies after
+          # it, which made it the job every merge waited for. Each part rebuilds from the same
+          # cache in about 15 s. (1/2) and (2/2) each run every other test of the parallel
+          # set, so no test is dropped and none runs twice - the step "The shards cover every
+          # test exactly once" proves that on every run. The third part runs the serial set
+          # and the post-test steps.
+          #
+          # Why a third part rather than putting those on one of the halves: -I deals tests
+          # by their position in the list, so which half the slowest test lands on flips
+          # whenever a test is added before it. On this change's first run one test,
+          # FeasibilityJump.TheSearchWithItOnAgreesWithTheExactOracle, was the whole of its
+          # half's 329 s; a half that also carried the 2.5 minutes of case studies would have
+          # been back near 9 minutes on every other pull request. With both halves holding
+          # only parallel tests, neither can be longer than its slowest test allows.
           - name: Debug+ASan+UBSan (1/2)
             build_type: Debug
             sanitize: ON
             debug_flags: "-g -O1 -Wno-error=maybe-uninitialized"
             cache_key: Debug+ASan+UBSan-1of2
+            save_cache: true
+            parallel_tests: true
             shard_index: 1
             shard_count: 2
-            serial_tests: true
+            serial_tests: false
             after_tests: false
           - name: Debug+ASan+UBSan (2/2)
             build_type: Debug
             sanitize: ON
             debug_flags: "-g -O1 -Wno-error=maybe-uninitialized"
             cache_key: Debug+ASan+UBSan-2of2
+            save_cache: true
+            parallel_tests: true
             shard_index: 2
             shard_count: 2
             serial_tests: false
+            after_tests: false
+          # Borrows (1/2)'s cache and saves none of its own: the compiler output is the same
+          # for every part, and timings only reorder a parallel run, which this part has not.
+          - name: Debug+ASan+UBSan (serial, end to end)
+            build_type: Debug
+            sanitize: ON
+            debug_flags: "-g -O1 -Wno-error=maybe-uninitialized"
+            cache_key: Debug+ASan+UBSan-1of2
+            save_cache: false
+            parallel_tests: false
+            serial_tests: true
             after_tests: true
 
     steps:
@@ -191,9 +217,10 @@ jobs:
       # only one half saved, the other half's times would stay frozen at whatever they were
       # when the split landed. Each half saving its own keeps both current, at the cost of a
       # second copy of the same ~150 MB compiler cache per merge. The second restore key is
-      # the name the unsplit leg saved under: it lets the first run after the split, and any
-      # half whose own key has been evicted, start from a warm cache instead of a 7-minute
-      # cold build. The timings file is per test name, so either half can use either file.
+      # the prefix every ASan key shares, including the one the unsplit leg saved under: it
+      # lets the first run after the split, and any part whose own key has been evicted,
+      # start from a warm cache instead of a 7-minute cold build. The timings file is per
+      # test name, so any part can use any part's file.
       - name: Restore the compiler cache and the test timings
         uses: actions/cache/restore@v4
         with:
@@ -231,8 +258,8 @@ jobs:
       # A split test run is only as good as the proof that it drops nothing. This lists the
       # tests (ctest -N runs none) that each half's parallel set and the serial set select,
       # and fails unless together they are exactly the full list: every test once, none
-      # twice, none missing. It checks every half, not only its own, so each half's log
-      # shows all the counts. ctest's -I numbers the FULL test list and -E then filters, so
+      # twice, none missing. It runs on both halves and checks every set, not only its own,
+      # so each half's log shows all the counts. ctest's -I numbers the FULL test list and -E then filters, so
       # a test added anywhere moves others between halves but can never fall between them.
       - name: The shards cover every test exactly once
         if: matrix.shard_count
@@ -274,12 +301,14 @@ jobs:
         # PdhgParallelSpmv took 649 s per test under ASan and ParallelTree's work-sharing count
         # came out 46 against its floor of 50 while every answer still agreed.
         #
-        # On a split leg the parallel set is this half's share (-I, see the matrix), and the
-        # serial set runs only on the half whose serial_tests is set.
+        # On the split ASan leg each half runs its share of the parallel set (-I, see the
+        # matrix) and the third part runs the serial set; Release runs both, whole.
         run: |
           set -euo pipefail
-          ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$SERIAL_TESTS" \
-            ${{ matrix.shard_count && format('-I {0},,{1}', matrix.shard_index, matrix.shard_count) || '' }}
+          if [ "${{ matrix.parallel_tests }}" = true ]; then
+            ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$SERIAL_TESTS" \
+              ${{ matrix.shard_count && format('-I {0},,{1}', matrix.shard_index, matrix.shard_count) || '' }}
+          fi
           if [ "${{ matrix.serial_tests }}" = true ]; then
             ctest --test-dir build --output-on-failure -R "$SERIAL_TESTS"
           fi
@@ -287,7 +316,7 @@ jobs:
       # After the tests, so the timings file holds this run's times. A failed run saves
       # nothing: `if: success()` is the default for a step.
       - name: Save the compiler cache and the test timings
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.save_cache
         uses: actions/cache/save@v4
         with:
           path: |
@@ -441,7 +470,8 @@ jobs:
           python3 bench/runners/check_result_stamps.py --base origin/main
 
       # The next four steps ran on both Release and the unsplit ASan leg; `after_tests` keeps
-      # them to Release and one ASan half, so each still runs exactly once per build type.
+      # them to Release and the ASan leg's third part, so each still runs exactly once per
+      # build type.
       #
       # Every other check in this job is a unit test. Without this step the command line
       # itself - argument handling, file loading, the writers, the exit codes - is covered
