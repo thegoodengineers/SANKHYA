@@ -138,7 +138,23 @@ jobs:
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev
+          sudo apt-get install -y ninja-build zlib1g-dev ccache
+
+      # The compiler cache and ctest's record of how long each test took, restored from the
+      # newest run of this leg on main. The Debug+ASan+UBSan leg is the one every merge
+      # waits for: 7 minutes of build, most of it recompiling files the change did not
+      # touch, and a test step whose three longest tests (192, 149 and 134 s under ASan)
+      # started last because a fresh build has no timings, so ctest could not schedule
+      # them first. With the timings file restored it starts the longest tests first.
+      # Saved only from main, so pull requests read main's cache and do not evict it.
+      - name: Restore the compiler cache and the test timings
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/ccache
+            build/Testing/Temporary/CTestCostData.txt
+          key: build-${{ matrix.name }}-${{ github.sha }}
+          restore-keys: build-${{ matrix.name }}-
 
       - name: Report compiler version
         run: g++ --version
@@ -149,10 +165,16 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DSANKHYA_SANITIZE=${{ matrix.sanitize }} \
             ${{ matrix.debug_flags && format('-DCMAKE_CXX_FLAGS_DEBUG="{0}"', matrix.debug_flags) || '' }} \
-            -DSANKHYA_BUILD_TESTS=ON
+            -DSANKHYA_BUILD_TESTS=ON             -DCMAKE_C_COMPILER_LAUNCHER=ccache             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build build -j
+        env:
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_MAXSIZE: 2G
+        run: |
+          ccache --zero-stats
+          cmake --build build -j
+          ccache --show-stats
 
       - name: Test
         env:
@@ -169,6 +191,17 @@ jobs:
           serial='^(ParallelTree|PdhgParallelSpmv|EngineConcurrency|EngineRace|EngineDeterminism|Deterministic)\.'
           ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$serial"
           ctest --test-dir build --output-on-failure -R "$serial"
+
+      # After the tests, so the timings file holds this run's times. A failed run saves
+      # nothing: `if: success()` is the default for a step.
+      - name: Save the compiler cache and the test timings
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cache/ccache
+            build/Testing/Temporary/CTestCostData.txt
+          key: build-${{ matrix.name }}-${{ github.sha }}
 
       # The bindings are pure ctypes over the shared library, so there is no extension to
       # build and no Python dependency to install - but that also means nothing else in CI

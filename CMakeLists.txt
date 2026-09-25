@@ -372,7 +372,10 @@ target_link_libraries(sankhya_objects
   # header-only, so PRIVATE keeps it out of every consumer's include path.
   PRIVATE nlohmann_json::nlohmann_json sankhya_flags)
 
-target_compile_definitions(sankhya_objects PRIVATE
+# On version.cpp alone, the only file that reads them. As target-wide definitions the
+# commit hash was on every compile line of the library, so each commit changed every
+# object's command line and a compiler cache (CI uses ccache) could never hit.
+set_property(SOURCE src/util/version.cpp PROPERTY COMPILE_DEFINITIONS
   SANKHYA_VERSION="${PROJECT_VERSION}"
   SANKHYA_GIT_COMMIT="${SANKHYA_GIT_COMMIT}"
   SANKHYA_BUILD_TYPE="$<CONFIG>"
