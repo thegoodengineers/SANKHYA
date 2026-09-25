@@ -159,6 +159,9 @@ TEST(PdhgParallelSpmv, TheVectorUpdatesGiveTheSameBitsAtOneTwoFourAndEightThread
     const Solution one = solve(model, updates_options(1, two_matvec));
     ASSERT_NE(one.status, SolveStatus::kNotSolved) << one.message;
     ASSERT_GT(one.iterations, 100) << one.message;
+    std::printf("spread_lp 6000 x 9000%s: %s after %lld iterations at every thread count\n",
+                two_matvec ? ", two-mat-vec" : "", to_string(one.status),
+                static_cast<long long>(one.iterations));
     for (const int threads : {2, 4, 8}) {
       const Solution other = solve(model, updates_options(threads, two_matvec));
       const std::string what = std::to_string(threads) + " threads" +
