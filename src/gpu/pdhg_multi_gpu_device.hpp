@@ -60,7 +60,8 @@ struct DeviceState {
   // A_k (local_m x n) and A_k^T (n x local_m), both CSR, 0-based.
   int *d_rp{}, *d_ci{}, *d_trp{}, *d_tci{};
   double *d_v{}, *d_tv{};
-  void* d_spmv{};
+  void* d_spmv{};    // workspace of the A_k product
+  void* d_spmv_t{};  // workspace of the A_k^T product
   cusparseHandle_t cs{};
   cusparseSpMatDescr_t mat{}, mat_t{};
   cusparseDnVecDescr_t vn{}, vm{};

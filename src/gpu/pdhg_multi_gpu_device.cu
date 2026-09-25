@@ -153,7 +153,7 @@ DeviceState::~DeviceState() {
                   static_cast<void*>(d_scalars), static_cast<void*>(d_rp),
                   static_cast<void*>(d_ci), static_cast<void*>(d_trp),
                   static_cast<void*>(d_tci), static_cast<void*>(d_v), static_cast<void*>(d_tv),
-                  d_spmv})
+                  d_spmv, d_spmv_t})
     if (p) cudaFree(p);
   if (stream) cudaStreamDestroy(stream);
 }
@@ -255,9 +255,10 @@ bool setup_device(DeviceState& d, const CsrView& full_csr, const Scaling& scalin
   MG_CS(cusparseDnVecSetValues(d.vn, d.d_partial));
   MG_CS(cusparseSpMV_bufferSize(d.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, d.mat_t, d.vm,
                                 &kZero, d.vn, CUDA_R_64F, CUSPARSE_SPMV_CSR_ALG2, &bytes_t));
-  // One workspace serves both products: they are serialized on the card's one stream.
-  const std::size_t bytes = std::max(bytes_a, bytes_t);
-  if (bytes > 0) MG_CUDA(cudaMalloc(&d.d_spmv, bytes));
+  // One workspace per matrix: an algorithm may keep per-matrix data in its buffer, so the two
+  // products never share one.
+  if (bytes_a > 0) MG_CUDA(cudaMalloc(&d.d_spmv, bytes_a));
+  if (bytes_t > 0) MG_CUDA(cudaMalloc(&d.d_spmv_t, bytes_t));
   return true;
 }
 
@@ -269,7 +270,7 @@ bool spmv_aty(DeviceState& d) {
   MG_CS(cusparseDnVecSetValues(d.vm, d.d_y));
   MG_CS(cusparseDnVecSetValues(d.vn, d.d_partial));
   MG_CS(cusparseSpMV(d.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, d.mat_t, d.vm, &kZero, d.vn,
-                     CUDA_R_64F, CUSPARSE_SPMV_CSR_ALG2, d.d_spmv));
+                     CUDA_R_64F, CUSPARSE_SPMV_CSR_ALG2, d.d_spmv_t));
   return true;
 }
 
