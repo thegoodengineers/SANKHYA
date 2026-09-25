@@ -306,6 +306,8 @@ struct FuzzTally {
   int checked = 0;
   std::int64_t cuts = 0;
   std::int64_t nodes = 0;
+  std::int64_t aged_out = 0;     ///< cut rows freed by age (#497)
+  std::int64_t reactivated = 0;  ///< freed cut rows re-imposed by the cut pool (#497)
   /// Root candidates per family, read off the filter's report: every one of them was checked
   /// against the optimum BEFORE the filter, so this is how much the check saw.
   std::map<std::string, std::int64_t> candidates;
@@ -313,7 +315,8 @@ struct FuzzTally {
 
 /// Enumerate `lp`; when its optimum is unique, solve it with every family on and that optimum
 /// as the debug solution. A cut or reduction that removes it aborts the process.
-void check_instance(const oracle::GeneratedLp& lp, int attempt, FuzzTally* tally) {
+void check_instance(const oracle::GeneratedLp& lp, int attempt, FuzzTally* tally,
+                    Options options = every_family_on()) {
   const std::string path = scratch_path("debug_fuzz_" + std::to_string(attempt) + ".sol");
   const Enumerated exact = enumerate(lp);
   if (!exact.usable) return;
@@ -334,7 +337,6 @@ void check_instance(const oracle::GeneratedLp& lp, int attempt, FuzzTally* tally
             exact_text(exact.x[static_cast<std::size_t>(j)].to_double()) + "\n";
   }
   write_text(path, text);
-  Options options = every_family_on();
   options.set_string("debug_solution", path);
   // A failure aborts the process, so the instance is printed first when asked for: a
   // failing instance nobody can reproduce is not evidence.
@@ -352,6 +354,8 @@ void check_instance(const oracle::GeneratedLp& lp, int attempt, FuzzTally* tally
   ++tally->checked;
   tally->cuts += s.cuts_applied;
   tally->nodes += s.nodes;
+  tally->aged_out += s.cut_rows_aged_out;
+  tally->reactivated += s.cuts_reactivated;
   static const std::regex family_count("([a-z_]+) ([0-9]+):");
   for (auto it = std::sregex_iterator(s.cut_filter_report.begin(), s.cut_filter_report.end(),
                                       family_count);
@@ -419,47 +423,55 @@ TEST(DebugSolution, FuzzRandomMilpsAgainstTheUniqueExactOptimum) {
       static_cast<long long>(tally.nodes));
 }
 
+/// A structured pure-binary instance, 8 to 12 columns: knapsack rows (sum a x <= b, a > 0)
+/// are what covers and cliques are built from, and covering rows (sum x >= 1) are what the
+/// zero-half cuts combine.
+oracle::GeneratedLp binary_rows_instance(std::mt19937_64& rng) {
+  std::uniform_int_distribution<Index> width(8, 12);
+  std::uniform_int_distribution<Index> height(2, 4);
+  std::uniform_int_distribution<std::int64_t> weight(1, 9);
+  std::uniform_int_distribution<std::int64_t> profit(1, 40);
+  std::uniform_int_distribution<int> percent(0, 99);
+  oracle::GeneratedLp lp;
+  lp.num_cols = width(rng);
+  const Index knapsacks = height(rng);
+  const Index covers = height(rng) - 1;
+  lp.num_rows = knapsacks + covers;
+  const auto n = static_cast<std::size_t>(lp.num_cols);
+  lp.integral.assign(n, 1);
+  lp.upper.assign(n, 1);
+  lp.c.resize(n);
+  for (std::size_t j = 0; j < n; ++j) lp.c[j] = -profit(rng);  // maximise profit
+  for (Index i = 0; i < knapsacks; ++i) {
+    std::vector<std::int64_t> row(n, 0);
+    std::int64_t sum = 0;
+    for (std::size_t j = 0; j < n; ++j) {
+      if (percent(rng) < 70) row[j] = weight(rng);
+      sum += row[j];
+    }
+    // sum a x <= b, as -a x >= -b, with b about half the row's weight.
+    for (std::int64_t& a : row) a = -a;
+    lp.a.push_back(row);
+    lp.b.push_back(-std::max<std::int64_t>(1, sum / 2));
+  }
+  for (Index i = 0; i < covers; ++i) {
+    std::vector<std::int64_t> row(n, 0);
+    for (std::size_t j = 0; j < n; ++j) row[j] = percent(rng) < 30 ? 1 : 0;
+    lp.a.push_back(row);
+    lp.b.push_back(1);
+  }
+  return lp;
+}
+
 TEST(DebugSolution, FuzzBinaryKnapsackAndCoveringRowsAgainstTheUniqueExactOptimum) {
   // Structured pure-binary instances, 8 to 12 columns: knapsack rows (sum a x <= b, a > 0)
   // are what covers and cliques are built from, and covering rows (sum x >= 1) are what the
   // zero-half cuts combine. At this width the density cap lets some cuts through, so the
   // appended-row path is checked on real separators and not only on the planted cut.
   std::mt19937_64 rng(20260925);
-  std::uniform_int_distribution<Index> width(8, 12);
-  std::uniform_int_distribution<Index> height(2, 4);
-  std::uniform_int_distribution<std::int64_t> weight(1, 9);
-  std::uniform_int_distribution<std::int64_t> profit(1, 40);
-  std::uniform_int_distribution<int> percent(0, 99);
   FuzzTally tally;
   for (int attempt = 0; attempt < 1200 && tally.checked < 150; ++attempt) {
-    oracle::GeneratedLp lp;
-    lp.num_cols = width(rng);
-    const Index knapsacks = height(rng);
-    const Index covers = height(rng) - 1;
-    lp.num_rows = knapsacks + covers;
-    const auto n = static_cast<std::size_t>(lp.num_cols);
-    lp.integral.assign(n, 1);
-    lp.upper.assign(n, 1);
-    lp.c.resize(n);
-    for (std::size_t j = 0; j < n; ++j) lp.c[j] = -profit(rng);  // maximise profit
-    for (Index i = 0; i < knapsacks; ++i) {
-      std::vector<std::int64_t> row(n, 0);
-      std::int64_t sum = 0;
-      for (std::size_t j = 0; j < n; ++j) {
-        if (percent(rng) < 70) row[j] = weight(rng);
-        sum += row[j];
-      }
-      // sum a x <= b, as -a x >= -b, with b about half the row's weight.
-      for (std::int64_t& a : row) a = -a;
-      lp.a.push_back(row);
-      lp.b.push_back(-std::max<std::int64_t>(1, sum / 2));
-    }
-    for (Index i = 0; i < covers; ++i) {
-      std::vector<std::int64_t> row(n, 0);
-      for (std::size_t j = 0; j < n; ++j) row[j] = percent(rng) < 30 ? 1 : 0;
-      lp.a.push_back(row);
-      lp.b.push_back(1);
-    }
+    const oracle::GeneratedLp lp = binary_rows_instance(rng);
     check_instance(lp, attempt, &tally);
     if (HasFatalFailure()) return;
   }
@@ -473,6 +485,32 @@ TEST(DebugSolution, FuzzBinaryKnapsackAndCoveringRowsAgainstTheUniqueExactOptimu
       "cut rows appended, %lld nodes; the unique optimum never cut off\n",
       tally.checked, seen.c_str(), static_cast<long long>(tally.cuts),
       static_cast<long long>(tally.nodes));
+}
+
+// The cut pool (#497) inside the same check: with an age limit of 1 a cut row is freed at
+// almost every node where it is slack, and re-imposed wherever a later node's point violates
+// it. Every node LP whose box holds the unique optimum is checked against it after the rows
+// come back, so a row re-imposed wrongly - the wrong right-hand side, the wrong row, a node
+// re-solve that goes astray - aborts naming the node. The tally must show the pool worked.
+TEST(DebugSolution, FuzzTheCutPoolAgainstTheUniqueExactOptimum) {
+  std::mt19937_64 rng(20260925);
+  Options options = every_family_on();
+  options.set_bool("mip_cut_pooling", true);
+  options.set_int("mip_cut_age_limit", 1);
+  FuzzTally tally;
+  for (int attempt = 0; attempt < 1200 && tally.checked < 150; ++attempt) {
+    const oracle::GeneratedLp lp = binary_rows_instance(rng);
+    check_instance(lp, attempt, &tally, options);
+    if (HasFatalFailure()) return;
+  }
+  EXPECT_GE(tally.checked, 40) << "too few instances with a unique exact optimum";
+  EXPECT_GT(tally.aged_out, 0) << "no cut row was ever freed";
+  EXPECT_GT(tally.reactivated, 0) << "no freed cut row was ever re-imposed";
+  std::printf(
+      "[  INFO    ] debug solution, cut pool: %d instances, %lld cut rows appended, %lld "
+      "freed by age, %lld re-imposed, %lld nodes; the unique optimum never cut off\n",
+      tally.checked, static_cast<long long>(tally.cuts), static_cast<long long>(tally.aged_out),
+      static_cast<long long>(tally.reactivated), static_cast<long long>(tally.nodes));
 }
 
 }  // namespace
