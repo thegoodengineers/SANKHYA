@@ -287,8 +287,11 @@ TEST(MultiGpuTwoCards, EvaluationOnTheCardsMatchesTheHostEvaluation) {
   host.set_bool("gpu_device_evaluation", false);
   const SyntheticLp lp = synthetic_kkt_lp(5000, 5000, 5, 4, 800, 478);
   int agreed = 0, compared = 0;
-  for (const std::string& name : {std::string("sc105"), std::string("stocfor1"),
-                                  std::string("israel"), std::string("synthetic")}) {
+  // Instances that meet the project standard inside the file's budget on both paths
+  // (stocfor1 and israel reach the iteration limit on either, which would compare nothing).
+  for (const std::string& name :
+       {std::string("afiro"), std::string("sc50a"), std::string("adlittle"),
+        std::string("blend"), std::string("sc105"), std::string("synthetic")}) {
     const Model model = name == "synthetic" ? lp.model : read_netlib(name);
     const Solution cards = gpu::solve_pdhg_multi_gpu(model, solve_options(), {0, 1}, silent);
     const Solution on_host = gpu::solve_pdhg_multi_gpu(model, host, {0, 1}, silent);
