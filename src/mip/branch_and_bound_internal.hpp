@@ -600,7 +600,8 @@ class BranchAndBound {
   void batch_remember_root(const Solution& relaxation);
   void report_batch() const;
   bool batch_nodes_ = false;   ///< gpu_batch_nodes
-  bool batch_strong_ = false;  ///< gpu_batch_strong_branching
+  bool batch_strong_ = false;  ///< gpu_batch_strong_branching is score or filter
+  bool batch_score_ = false;   ///< ... and is score: no simplex probe at all
   Index batch_size_ = 0;
   Count batch_iterations_ = 0;
   bool batch_device_ = false;  ///< gpu_batch_backend = auto

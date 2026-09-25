@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SANKHYA - branch and bound with batched PDHG bounds (#520), against the exact MILP oracle.
 //
-//  * With gpu_batch_nodes and gpu_batch_strong_branching on, the search reaches the exact
-//    optimum on the MILP fuzz instances, and the batch demonstrably ran and pruned.
+//  * With gpu_batch_nodes and gpu_batch_strong_branching on (score or filter), the search
+//    reaches the exact optimum on the MILP fuzz instances, and the batch demonstrably ran
+//    and pruned.
 //  * EVERY prune a batched bound made is re-checked in exact arithmetic: the LP optimum of
 //    the pruned box is at least the bound, and the MILP optimum of the box is at least the
 //    cutoff less the pruning margin - so nothing better than the incumbent was discarded.
@@ -60,10 +61,10 @@ Options quiet() {
   return o;
 }
 
-Options batched(const char* backend) {
+Options batched(const char* backend, const char* strong = "score") {
   Options o = quiet();
   o.set_bool("gpu_batch_nodes", true);
-  o.set_bool("gpu_batch_strong_branching", true);
+  o.set_string("gpu_batch_strong_branching", strong);
   o.set_string("gpu_batch_backend", backend);
   o.set_int("gpu_batch_size", 4);  // small, so the K-full trigger fires on small trees too
   o.set_int("gpu_batch_iterations", 400);
@@ -174,10 +175,14 @@ std::map<std::string, std::int64_t> reaches_exact_optimum(const Options& options
 }
 
 TEST(BatchBound, SearchReachesTheExactOptimumOnTheCpu) {
-  const auto counters = reaches_exact_optimum(batched("cpu"), 240, 20260925);
-  EXPECT_GT(counters.at("batch calls"), 0);
-  EXPECT_GT(counters.at("batch nodes pruned") + counters.at("batch children closed"), 0)
-      << "the batch never pruned, so this sweep proves nothing about its prunes";
+  // Both strong-branching modes: children scored by the batch, and children only filtered.
+  for (const char* strong : {"score", "filter"}) {
+    SCOPED_TRACE(strong);
+    const auto counters = reaches_exact_optimum(batched("cpu", strong), 240, 20260925);
+    EXPECT_GT(counters.at("batch calls"), 0);
+    EXPECT_GT(counters.at("batch nodes pruned"), 0);
+    EXPECT_GT(counters.at("batch children closed"), 0);
+  }
 }
 
 bool device_available() {
@@ -226,6 +231,7 @@ TEST(BatchBound, EveryBatchedPruneIsRecheckedByTheOracle) {
   int skipped = 0;
   for (int trial = 0; trial < 240; ++trial) {
     const Instance in = draw(rng, trial % 2 == 1);
+    options.set_string("gpu_batch_strong_branching", trial % 4 < 2 ? "score" : "filter");
     records.clear();
     (void)solve(in.model, options);
     for (const mip::BatchPruneRecord& r : records) {
@@ -292,11 +298,11 @@ bool same_solution(const Solution& a, const Solution& b) {
 TEST(BatchBound, OffByDefaultIsTheOldPathBitForBit) {
   const Options defaults = quiet();
   EXPECT_FALSE(defaults.get_bool("gpu_batch_nodes"));
-  EXPECT_FALSE(defaults.get_bool("gpu_batch_strong_branching"));
+  EXPECT_EQ(defaults.get_string("gpu_batch_strong_branching"), "off");
   // Off, with every other batch knob moved: none of them may be read.
   Options off = quiet();
   off.set_bool("gpu_batch_nodes", false);
-  off.set_bool("gpu_batch_strong_branching", false);
+  off.set_string("gpu_batch_strong_branching", "off");
   off.set_int("gpu_batch_size", 3);
   off.set_int("gpu_batch_iterations", 17);
   off.set_string("gpu_batch_backend", "cpu");

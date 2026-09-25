@@ -16,9 +16,10 @@
 //    node that can then be pruned leaves the open list without a simplex solve.
 //
 //  * gpu_batch_strong_branching: the 2K children of the K strong-branching candidates are
-//    one batch, started from the node's own point and duals; a child's batched bound is its
-//    score, and a child whose bound already prunes it is a closed side, as an infeasible
-//    probe is (#502).
+//    one batch, started from the node's own point and duals. A child whose bound already
+//    prunes it is a closed side, as an infeasible probe is (#502). Under "score" the other
+//    children's batched bounds are their scores (the issue's use 1); under "filter" they are
+//    probed by the dual simplex as before, and the batch only spares the closed ones.
 //
 // The simplex stays the node solver for every node that survives.
 //
@@ -32,6 +33,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <string>
 #include <vector>
 
 #include "../util/profiler.hpp"
@@ -62,7 +64,9 @@ pdhg::BatchSettings batch_settings(Count iterations, bool device, double time_li
 
 void BranchAndBound::init_batch() {
   batch_nodes_ = options_.get_bool("gpu_batch_nodes");
-  batch_strong_ = options_.get_bool("gpu_batch_strong_branching");
+  const std::string& strong = options_.get_string("gpu_batch_strong_branching");
+  batch_strong_ = strong != "off";
+  batch_score_ = strong == "score";
   batch_size_ = static_cast<Index>(options_.get_int("gpu_batch_size"));
   batch_iterations_ = options_.get_int("gpu_batch_iterations");
   batch_device_ = options_.get_string("gpu_batch_backend") == "auto";
@@ -77,6 +81,7 @@ void BranchAndBound::init_batch() {
     logger_.info("Batched PDHG bounds (#520) off: {}", declined);
     batch_nodes_ = false;
     batch_strong_ = false;
+    batch_score_ = false;
   }
 }
 

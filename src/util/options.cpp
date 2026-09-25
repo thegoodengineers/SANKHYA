@@ -1012,15 +1012,16 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          {}});
     s.push_back({"gpu_batch_strong_branching",
-                 OptionType::Bool,
-                 false,
-                 "MILP: score the strong-branching children in one batched PDHG run (#520) "
-                 "instead of one dual simplex probe each: a child's score is its safe bound, "
-                 "and a child whose bound reaches the incumbent is a closed side. Default OFF "
-                 "until a clean A/B on main.",
+                 OptionType::String,
+                 std::string("off"),
+                 "MILP: bound the strong-branching children in one batched PDHG run (#520); "
+                 "a child whose safe bound reaches the incumbent is a closed side, as an "
+                 "infeasible probe is. score: the other children are scored by their safe "
+                 "bounds and no dual simplex probe runs. filter: the other children are "
+                 "probed by the dual simplex as before. Default off until a clean A/B on main.",
                  0.0,
                  0.0,
-                 {}});
+                 {"off", "score", "filter"}});
     s.push_back({"gpu_batch_size",
                  OptionType::Int,
                  std::int64_t{32},
