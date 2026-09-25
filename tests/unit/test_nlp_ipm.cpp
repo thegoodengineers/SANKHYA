@@ -214,14 +214,17 @@ TEST(NlpIpm, MaximisationFixedColumnsAndAStartOutsideTheDomain) {
   expect_kkt(m, s);
 }
 
-TEST(NlpIpm, IntegerColumnsAreRefusedHere) {
+TEST(NlpIpm, IntegerColumnsGoToTheBranchAndBound) {
+  // min exp(x), x integer in [0, 3]: convex, so the NLP-based branch and bound (stage 3)
+  // takes it and reaches exp(0) = 1 at x = 0.
   Model base = columns(1, 0.0, 3.0);
   base.col_type[0] = VarType::kInteger;
   NonlinearModel m(std::move(base));
   m.objective = m.graph.exp(m.graph.variable(0));
   const Solution s = solve_nlp(m, quiet());
-  EXPECT_EQ(s.status, SolveStatus::kNotSolved);
-  EXPECT_NE(s.message.find("MINLP"), std::string::npos) << s.message;
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_NEAR(s.objective, 1.0, 1e-7);
+  EXPECT_EQ(s.algorithm, "minlp-nlp-bnb");
 }
 
 }  // namespace

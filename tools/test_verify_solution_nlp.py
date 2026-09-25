@@ -196,3 +196,54 @@ def run(check) -> None:
         expected = [x[1] * x[2] * x[3], x[0] * x[2] * x[3], x[0] * x[1] * x[3], x[0] * x[1] * x[2]]
         check(all(math.isclose(rows[0].g[j], expected[j], rel_tol=1e-14) for j in range(4)),
               "the product row's Jacobian by hand")
+
+
+# min (x0 - 0.6)^2, x0 integer in [0, 3] (header line 7: one integer column nonlinear only in
+# the objective). The integer optimum is x0 = 1, objective 0.16.
+INTEGER = """g3 1 1 0
+ 1 0 1 0 0
+ 0 1
+ 0 0
+ 0 1 0
+ 0 0 0 1
+ 0 0 0 0 1
+ 0 1
+ 0 0
+ 0 0 0 0 0
+O0 0
+o5
+o0
+v0
+n-0.6
+n2
+b
+0 0 3
+G0 1
+0 0
+"""
+
+
+def _minlp_solution(x, objective, bound) -> Solution:
+    s = Solution()
+    s.header = {"status": "optimal", "objective": repr(objective), "dual_bound": repr(bound),
+                "mip_relative_gap": "0.0001", "mip_absolute_gap": "1e-06"}
+    s.col_value = {"C0": x}
+    s.col_dual = {"C0": 0.0}
+    return s
+
+
+def run_minlp(check) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "integer.nl"
+        path.write_text(INTEGER)
+        model = read_nl(path)
+        check(model.integer == [True], "the ordering tables mark the column integer")
+        report = _verify(model, _minlp_solution(1.0, 0.16, 0.16))
+        check(report.failures == 0, "an integer optimum with its bound verifies",
+              f"{report.failures} failed")
+        report = _verify(model, _minlp_solution(1.0, 0.16, 0.5))
+        check(report.failures >= 1, "a 'bound' above the incumbent is rejected",
+              f"{report.failures} failed, as expected")
+        report = _verify(model, _minlp_solution(0.6, 0.0, 0.0))
+        check(report.failures >= 1, "a fractional integer column is rejected",
+              f"{report.failures} failed, as expected")
