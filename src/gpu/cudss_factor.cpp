@@ -107,6 +107,9 @@ struct CudssFactor::State {
 
   /// The analysed pattern, compared with every factorize() argument.
   std::vector<Index> pattern_starts;
+  std::vector<Index> pattern_rows;
+  /// The values of a matrix whose pattern is a strict subset, scattered into the analysed one.
+  std::vector<double> scattered;
   Index dimension = 0;
   Index nonzeros = 0;
   bool analyzed = false;
@@ -182,6 +185,7 @@ bool CudssFactor::analyze(const SparseMatrix& lower, std::string* reason) {
   s.dimension = lower.num_rows();
   s.nonzeros = lower.num_nonzeros();
   s.pattern_starts = lower.column_starts();
+  s.pattern_rows = lower.row_indices();
   const auto n = static_cast<std::size_t>(s.dimension);
   const auto nnz = static_cast<std::size_t>(s.nonzeros);
   if (!s.starts.allocate(n + 1, reason) || !s.indices.allocate(nnz, reason) ||
@@ -237,13 +241,38 @@ CudssOutcome CudssFactor::factorize(const SparseMatrix& lower, double regulariza
     if (reason != nullptr) *reason = "factorize() before analyze()";
     return CudssOutcome::kFailed;
   }
-  if (lower.num_rows() != s.dimension || lower.num_nonzeros() != s.nonzeros ||
-      lower.column_starts() != s.pattern_starts) {
-    if (reason != nullptr) *reason = "the matrix does not have the analysed pattern";
+  // THE SAME PATTERN OR A SUBSET OF IT, as la/ldl.hpp accepts: normal_equations_lower()
+  // leaves out a product whose Theta is exactly zero, so an iteration's matrix can hold fewer
+  // entries than the one analysed (seen on ganges and greenbea). Such a matrix is scattered
+  // into the analysed pattern with explicit zeros; an entry outside it is refused.
+  if (lower.num_rows() != s.dimension || lower.num_cols() != s.dimension) {
+    if (reason != nullptr) *reason = "the matrix does not have the analysed dimension";
     return CudssOutcome::kFailed;
   }
+  const double* values = lower.values().data();
+  if (lower.column_starts() != s.pattern_starts || lower.row_indices() != s.pattern_rows) {
+    s.scattered.assign(static_cast<std::size_t>(s.nonzeros), 0.0);
+    const std::vector<Index>& starts = lower.column_starts();
+    const std::vector<Index>& rows = lower.row_indices();
+    for (std::size_t j = 0; j < static_cast<std::size_t>(s.dimension); ++j) {
+      auto slot = static_cast<std::size_t>(s.pattern_starts[j]);
+      const auto slot_end = static_cast<std::size_t>(s.pattern_starts[j + 1]);
+      const auto end = static_cast<std::size_t>(starts[j + 1]);
+      for (auto p = static_cast<std::size_t>(starts[j]); p < end; ++p) {
+        while (slot < slot_end && s.pattern_rows[slot] < rows[p]) ++slot;
+        if (slot == slot_end || s.pattern_rows[slot] != rows[p]) {
+          if (reason != nullptr) {
+            *reason = fmt::format("entry ({}, {}) is outside the analysed pattern", rows[p], j);
+          }
+          return CudssOutcome::kFailed;
+        }
+        s.scattered[slot] = values[p];
+      }
+    }
+    values = s.scattered.data();
+  }
   const Timer clock;
-  if (!s.values.upload(lower.values().data(), static_cast<std::size_t>(s.nonzeros), reason) ||
+  if (!s.values.upload(values, static_cast<std::size_t>(s.nonzeros), reason) ||
       !cudss_ok(cudssConfigSet(s.config, CUDSS_CONFIG_PIVOT_EPSILON, &regularization,
                                sizeof(regularization)),
                 "pivot epsilon", reason) ||

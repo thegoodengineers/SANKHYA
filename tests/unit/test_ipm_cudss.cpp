@@ -187,9 +187,28 @@ TEST(IpmCudss, TheCpuPivotRuleSmallPivotsLiftedNegativeOnesDeclined) {
   EXPECT_NE(reason.find("negative pivot"), std::string::npos) << reason;
   double b[3] = {1.0, 2.0, 3.0};
   EXPECT_FALSE(device.solve(b, &reason));  // no usable factors after a decline
-  // A different pattern is refused, not factored with the wrong structure.
-  EXPECT_EQ(device.factorize(random_normal_equations(3, 4, 7), 1e-8, &reason),
-            gpu::CudssOutcome::kFailed);
+  // A pattern that is a subset of the analysed one (the (1, 0) entry left out, as
+  // normal_equations_lower() leaves out a product with Theta exactly 0) is scattered into it:
+  // diag(1, 2, 1), whose solve is b / diag.
+  SparseMatrix subset(3, 3);
+  subset.add_entry(0, 0, 1.0);
+  subset.add_entry(1, 1, 2.0);
+  subset.add_entry(2, 2, 1.0);
+  subset.finalize();
+  ASSERT_EQ(device.factorize(subset, 1e-8, &reason), gpu::CudssOutcome::kFactored) << reason;
+  ASSERT_TRUE(device.solve(b, &reason)) << reason;
+  EXPECT_DOUBLE_EQ(b[0], 1.0);
+  EXPECT_DOUBLE_EQ(b[1], 1.0);
+  EXPECT_DOUBLE_EQ(b[2], 3.0);
+  // An entry outside the analysed pattern is refused, not factored with the wrong structure.
+  SparseMatrix outside(3, 3);
+  outside.add_entry(0, 0, 1.0);
+  outside.add_entry(2, 0, 0.5);
+  outside.add_entry(1, 1, 2.0);
+  outside.add_entry(2, 2, 1.0);
+  outside.finalize();
+  EXPECT_EQ(device.factorize(outside, 1e-8, &reason), gpu::CudssOutcome::kFailed);
+  EXPECT_NE(reason.find("outside the analysed pattern"), std::string::npos) << reason;
 }
 
 TEST(IpmCudss, WithoutADeviceTheCpuFactorIsKeptBitForBit) {

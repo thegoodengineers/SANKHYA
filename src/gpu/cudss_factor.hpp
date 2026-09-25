@@ -82,7 +82,8 @@ class CudssFactor {
   /// layout of normal_equations_lower()) and run reordering and symbolic factorization.
   [[nodiscard]] bool analyze(const SparseMatrix& lower, std::string* reason);
 
-  /// Numeric factorization of a matrix with exactly the analysed pattern.
+  /// Numeric factorization of a matrix with the analysed pattern or a subset of it (the
+  /// missing entries are zeros), as SparseLdl::factorize() accepts; an entry outside it fails.
   [[nodiscard]] CudssOutcome factorize(const SparseMatrix& lower, double regularization,
                                        std::string* reason);
 
