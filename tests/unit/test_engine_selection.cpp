@@ -221,6 +221,9 @@ TEST(EngineSelection, AnInteriorPointThatDeclinesAboveTheRowLimitFallsBackToPdhg
   Options o = auto_options();
   o.set_bool("presolve", false);
   o.set_int("ipm_max_factor_nonzeros", 1);
+  // The CPU factor named, so the rule is size:ipm on a machine with a cuDSS device too
+  // (size:ipm-device there, #417); the fallback, not the device, is what is tested.
+  o.set_string("ipm_linear_solver", "cpu");
   const Solution s = solve(m, o);
   EXPECT_EQ(s.status, SolveStatus::kOptimal) << s.message;
   EXPECT_EQ(s.engine_rule, "size:ipm");
@@ -286,6 +289,8 @@ TEST(EngineSelection, AnInteriorPointThatRunsOutOfMemoryAboveTheRowLimitFallsBac
   Model m = shaped_lp(kDualSimplexRowLimit, 200, 2 * kDualSimplexRowLimit);
   Options o = auto_options();
   o.set_bool("presolve", false);
+  // size:ipm with or without a cuDSS device (#417): the fallback is what is tested.
+  o.set_string("ipm_linear_solver", "cpu");
   const Solution s = solve(m, o);
   EXPECT_EQ(s.status, SolveStatus::kOptimal) << s.message;
   EXPECT_EQ(s.engine_rule, "size:ipm");
