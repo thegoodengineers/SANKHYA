@@ -1636,6 +1636,8 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.polish_iterations = reduced.polish_iterations;
   solution.nodes = reduced.nodes;
   solution.cuts_applied = reduced.cuts_applied;
+  solution.cut_rows_aged_out = reduced.cut_rows_aged_out;
+  solution.cuts_reactivated = reduced.cuts_reactivated;
   solution.cut_filter_report = reduced.cut_filter_report;
   solution.kkt_1e4_seconds = reduced.kkt_1e4_seconds;
   solution.kkt_1e6_seconds = reduced.kkt_1e6_seconds;

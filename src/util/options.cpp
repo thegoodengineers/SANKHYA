@@ -407,12 +407,21 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"mip_cut_pooling",
                  OptionType::Bool,
                  false,
-                 "Cuts: remove aged rows from the LP into a pool, and re-add them when "
-                 "violated (#497). Aged cuts are logically freed rather than deleted to "
-                 "keep basis warm starts intact. Reactivates cuts that are violated by "
-                 "the node LP.",
+                 "The cut pool (#497; Achterberg 2007, ch. 8): a cut row freed by age "
+                 "(mip_cut_age_limit) is re-imposed, and the node LP re-solved, when a "
+                 "node's LP point violates it. Freed rows stay in the LP, so every stored "
+                 "basis stays valid; nothing is deleted. Only read when enable_root_cuts "
+                 "is set. OFF until the MIPLIB A/B on main says what it changes.",
                  0.0,
                  0.0,
+                 {}});
+    s.push_back({"mip_cut_age_limit",
+                 OptionType::Int,
+                 std::int64_t{tol::kCutRowAgeLimit},
+                 "Consecutive node solves a cut row may sit slack (its logical basic) "
+                 "before it is freed (#221, #497). Only read when enable_root_cuts is set.",
+                 1.0,
+                 1000000.0,
                  {}});
     s.push_back({"tree_cut_depth",
                  OptionType::Int,
@@ -420,7 +429,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  "Deepest tree node at which a cut round runs (#221); 0 keeps cuts at the "
                  "root only. Only read when enable_root_cuts is set. Tree rounds add MIR "
                  "cuts built on the global bounds, so every cut is valid for the whole "
-                 "tree and stays as a row; rows slack for 50 node solves are freed.",
+                 "tree and stays as a row; rows slack for mip_cut_age_limit node solves are "
+                 "freed.",
                  0.0,
                  1000.0,
                  {}});

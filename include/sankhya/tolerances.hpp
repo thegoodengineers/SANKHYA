@@ -378,6 +378,11 @@ inline constexpr double kCutMaxParallelism = 0.9;
 /// Cuts a round may keep waiting for a later round after selection; the best by score stay.
 inline constexpr int kCutWaitingLimit = 500;
 
+/// Node solves a cut row may sit slack (its logical basic) before it is freed, the default
+/// of `mip_cut_age_limit` (Achterberg 2007, sec. 8.10 uses a comparable age). With
+/// `mip_cut_pooling` a freed row is re-imposed when a later node LP point violates it (#497).
+inline constexpr int kCutRowAgeLimit = 50;
+
 /// Debug-solution check (#500): how far a known feasible point may sit outside a cut, a row
 /// or a bound, relative to max(1, |rhs|, the largest term of the activity), and still count
 /// as inside it. A valid cut computed in floating point can exclude a point on its boundary

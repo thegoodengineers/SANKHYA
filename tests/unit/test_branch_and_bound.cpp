@@ -614,6 +614,9 @@ struct FuzzTally {
   /// Cut rows the search reported applying, summed over the sweep: a cuts sweep in which
   /// this stays zero exercised no cut, whatever the options said.
   long long cuts_applied = 0;
+  /// Cut rows freed by age and freed rows re-imposed (#497), summed the same way.
+  long long cut_rows_aged_out = 0;
+  long long cuts_reactivated = 0;
   std::vector<std::string> failures;
 };
 
@@ -666,6 +669,8 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
     }
     const Solution s = solve(model, options);
     tally.cuts_applied += s.cuts_applied;
+    tally.cut_rows_aged_out += s.cut_rows_aged_out;
+    tally.cuts_reactivated += s.cuts_reactivated;
 
     const auto disagree = [&](const std::string& why) {
       ++mismatched;
@@ -740,7 +745,9 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
             << "  agreed infeasible   " << agreed_infeasible << "\n"
             << "  oracle abstained    " << oracle_abstained << "\n"
             << "  MISMATCHED          " << mismatched << "\n"
-            << "  cut rows applied    " << tally.cuts_applied << "\n";
+            << "  cut rows applied    " << tally.cuts_applied << "\n"
+            << "  cut rows aged out   " << tally.cut_rows_aged_out << "\n"
+            << "  cut rows re-imposed " << tally.cuts_reactivated << "\n";
   for (const std::string& failure : failures) {
     std::cout << "\n--- failing instance ---\n" << failure << "\n";
   }
@@ -811,6 +818,31 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTreeCuts) {
   const FuzzTally wide = run_milp_fuzz(wide_options, "tree cuts, wide instances", true, 600);
   expect_clean_sweep(wide, 200, 100);
   EXPECT_GT(wide.cuts_applied, 0) << "no cut row was ever applied: the sweep proved nothing";
+}
+
+// The cut pool (#497) under the exact oracle. A freed cut row the node's point violates is
+// re-imposed and the node re-solved; a row re-imposed with the wrong right-hand side, at the
+// wrong index, or on a basis the re-solve then mishandles is a wrong objective here. The
+// age limit is 1 so rows are freed and taken back at almost every node of these small
+// trees; at the default of 50 the sweep would free next to nothing, and the tally must show
+// both happened or the sweep proved nothing.
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheCutPool) {
+  Options options = mip_options();
+  options.set_bool("enable_root_cuts", true);
+  options.set_int("tree_cut_depth", 4);
+  options.set_bool("presolve", false);
+  options.set_bool("mip_cut_pooling", true);
+  options.set_int("mip_cut_age_limit", 1);
+  const FuzzTally pool = run_milp_fuzz(options, "cut pool, age 1, wide", true, 600);
+  expect_clean_sweep(pool, 200, 100);
+  EXPECT_GT(pool.cut_rows_aged_out, 0) << "no cut row was ever freed";
+  EXPECT_GT(pool.cuts_reactivated, 0) << "no freed row was ever re-imposed";
+  // The option off is the search it was before: rows are still freed, none comes back.
+  options.set_bool("mip_cut_pooling", false);
+  const FuzzTally off = run_milp_fuzz(options, "cut pool off, age 1, wide", true, 600);
+  expect_clean_sweep(off, 200, 100);
+  EXPECT_GT(off.cut_rows_aged_out, 0);
+  EXPECT_EQ(off.cuts_reactivated, 0) << "mip_cut_pooling=false re-imposed a row";
 }
 
 // The node factor cache (#501) under the exact oracle, with tree cuts on so the scaled
@@ -1052,73 +1084,6 @@ TEST(ObjectiveIntegrality, LeavesAFractionalObjectiveAlone) {
   ASSERT_EQ(with.status, SolveStatus::kOptimal) << with.message;
   EXPECT_NEAR(with.objective, without.objective, 1e-9);
   EXPECT_EQ(with.nodes, without.nodes) << "the search rounded a bound it had no right to";
-}
-TEST(TreeCuts, CutPoolingPreservesCorrectnessAndCountersSane) {
-  // Issue #497 regression: verify the cut pooling feature.
-  //
-  // Uses the same padded 16-column knapsack as TheRootBoundBeforeAndAfterCutsIsReported,
-  // which is proven to generate root cuts (cuts_applied > 0). Enables mip_cut_pooling and
-  // checks:
-  //   1. Correctness: same optimal objective with and without pooling.
-  //   2. Counter sanity: cut_rows_aged_out and cuts_reactivated are non-negative.
-  //   3. Option is honoured: mip_cut_pooling=false must produce cuts_reactivated=0.
-  //   4. Aging guard: if cuts were generated and >=kCutRowAgeLimit nodes explored,
-  //      at least one cut must have aged out (the aging call is proven by the source).
-  //
-  // The same capacity-8 instance (capacity 9 is integral at the root) that
-  // TheRootBoundBeforeAndAfterCutsIsReported uses. Twelve dummy columns with cost +1
-  // make it wide enough for the density filter to pass the cover cut.
-  std::vector<double> row{5.0, 4.0, 3.0, 2.0};
-  std::vector<double> cost{-10.0, -7.0, -4.0, -3.0};
-  std::vector<double> upper(4, 1.0);
-  std::vector<bool> integral(4, true);
-  for (int pad = 0; pad < 12; ++pad) {
-    row.push_back(0.0);
-    cost.push_back(1.0);
-    upper.push_back(1.0);
-    integral.push_back(true);
-  }
-  const Model model = make_milp({row}, {-kInfinity}, {8.0}, cost, upper, integral);
-
-  Options opts = mip_options();
-  opts.set_bool("presolve", false);
-  opts.set_bool("enable_root_cuts", true);
-  opts.set_bool("mip_heuristics", false);
-  opts.set_bool("mip_symmetry", false);
-  opts.set_int("node_limit", 20000);
-
-  // Baseline: no pooling.
-  opts.set_bool("mip_cut_pooling", false);
-  Solution sol_off = solve(model, opts);
-  ASSERT_EQ(sol_off.status, SolveStatus::kOptimal) << sol_off.message;
-  // Verify the base instance does generate cuts (requirement from theRootBound test).
-  ASSERT_GT(sol_off.cuts_applied, 0) << "The padded knapsack must generate root cuts";
-  // Baseline must have zero reactivations (feature off).
-  EXPECT_EQ(sol_off.cuts_reactivated, 0) << "mip_cut_pooling=false must not reactivate";
-
-  // With pooling on.
-  opts.set_bool("mip_cut_pooling", true);
-  Solution sol_on = solve(model, opts);
-  ASSERT_EQ(sol_on.status, SolveStatus::kOptimal) << sol_on.message;
-
-  // 1. Correctness: pooling must not change the optimal objective.
-  EXPECT_NEAR(sol_on.objective, sol_off.objective, 1e-9)
-      << "mip_cut_pooling changed the optimal objective (correctness failure)";
-
-  // 2. Counter sanity: counters must not go negative.
-  EXPECT_GE(sol_on.cut_rows_aged_out, 0);
-  EXPECT_GE(sol_on.cuts_reactivated, 0);
-
-  // 3. Aging check: if the search explored enough nodes for cuts to age out
-  //    (kCutRowAgeLimit = 50), the aging call in age_cut_rows must have freed at least one.
-  //    This instance has 4 real binary variables; without heuristics, the tree may be small.
-  //    The check is conditional so it fires only when the aging path is reachable.
-  if (sol_on.nodes >= 50 && sol_on.cuts_applied > 0) {
-    EXPECT_GT(sol_on.cut_rows_aged_out, 0)
-        << "cuts_applied=" << sol_on.cuts_applied
-        << ", nodes=" << sol_on.nodes
-        << ", but cut_rows_aged_out=0: aging may not be firing correctly";
-  }
 }
 
 }  // namespace sankhya
