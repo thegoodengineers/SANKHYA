@@ -16,6 +16,7 @@
 #include "branch_and_bound_internal.hpp"
 #include "feasibility_jump.hpp"
 #include "parallel_search.hpp"
+#include "pdhg_heuristics.hpp"
 
 #ifdef SANKHYA_ENABLE_CUDA
 #include "../gpu/gpu_fj.hpp"
@@ -49,6 +50,8 @@ enum Slot : std::size_t {
   kRens,
   kLocalMip,
   kFeasibilityJump,
+  kPdhgPump,
+  kFixAndPropagate,
   kSlots
 };
 constexpr const char* kNames[kSlots] = {"rounding",
@@ -62,7 +65,9 @@ constexpr const char* kNames[kSlots] = {"rounding",
                                         "RINS",
                                         "RENS",
                                         "local MIP",
-                                        "feasibility jump"};
+                                        "feasibility jump",
+                                        "PDHG feasibility pump",
+                                        "fix-and-propagate"};
 static_assert(kDiveGuided - kDiveFractional + 1 == kDiveRules);
 
 /// The options a sub-MIP (RINS, RENS) is solved with: the search's own, quiet, capped at
@@ -79,6 +84,8 @@ Options sub_mip_options(const Options& base, Count node_limit, double time_limit
         "mip_heur_dive_vector_length", "mip_heur_dive_guided"}) {
     sub.set_string(name, "off");
   }
+  sub.set_bool("gpu_pump", false);
+  sub.set_bool("gpu_fix_and_prop", false);
   sub.set_int("mip_dive_frequency", 0);
   sub.set_int("node_limit", node_limit);
   sub.set_bool("pool_complete", false);
@@ -382,6 +389,56 @@ void BranchAndBound::run_root_pump(const Solution& relaxation) {
   s.work += solves;
   if (!x.empty()) (void)offer_from(kPump, x);
   s.seconds += clock.elapsed_seconds();
+}
+
+// The PDHG heuristics (#509; pdhg_heuristics.hpp): the feasibility pump, then
+// fix-and-propagate when the pump found nothing, each from the first root relaxation and each
+// only while there is no incumbent. They read original_ and nothing else of the search, and
+// what they return goes through offer_incumbent() like every other heuristic's point. In a
+// parallel search only the worker holding the root runs them.
+void BranchAndBound::run_pdhg_heuristics(const Solution& relaxation) {
+  if (!schedule_.pdhg_pump && !schedule_.fix_and_propagate) return;
+  if (have_incumbent_ || quadratic_ || integer_columns_.empty()) return;
+  if (seed_ != nullptr && !seed_->is_root) return;
+  PdhgHeuristicSettings settings;
+  settings.use_device = schedule_.pdhg_device;
+  settings.pump_rounds = schedule_.pdhg_pump_rounds;
+  settings.backtracks = schedule_.fix_and_propagate_backtracks;
+  settings.integrality_tolerance = integrality_tolerance_;
+  settings.seed = static_cast<std::uint64_t>(options_.get_int("random_seed"));
+  settings.completion_options = node_options_;
+  if (schedule_.seconds_budgets && limits_.has_time_limit()) {
+    settings.pdhg_seconds =
+        std::max(0.0, 0.2 * limits_.remaining_seconds(timer_.elapsed_seconds()));
+  }
+  settings.should_stop = [this]() {
+    if (control_ != nullptr && control_->interruption_requested()) return true;
+    return schedule_.seconds_budgets && limits_.time_exhausted(timer_.elapsed_seconds());
+  };
+  static const std::vector<double> kNoStart;
+  const std::vector<double>& start =
+      relaxation.col_value.size() == static_cast<std::size_t>(original_.num_cols())
+          ? relaxation.col_value
+          : kNoStart;
+  const auto run = [&](std::size_t slot, bool pump) {
+    HeuristicStats& s = heuristic_stats_[slot];
+    const Timer clock;
+    ++s.calls;
+    const PdhgHeuristicResult got =
+        pump ? pdhg_feasibility_pump(original_, integer_columns_, start, settings)
+             : fix_and_propagate(original_, integer_columns_, start, settings);
+    s.work += got.pdhg_solves + got.completions + got.propagations;
+    const bool accepted = !got.x.empty() && offer_from(slot, got.x);
+    s.seconds += clock.elapsed_seconds();
+    logger_.info(
+        "{} (#509, {}): {} round(s), {} PDHG solve(s), {} completion LP(s), {} "
+        "propagation(s), {} perturbation(s), {} back-up(s) in {:.3f}s: {}{}",
+        kNames[slot], got.on_device ? "GPU" : "CPU", got.rounds, got.pdhg_solves,
+        got.completions, got.propagations, got.perturbations, got.backtracks,
+        clock.elapsed_seconds(), got.stopped, accepted ? "; accepted as the incumbent" : "");
+  };
+  if (schedule_.pdhg_pump) run(kPdhgPump, true);
+  if (schedule_.fix_and_propagate && !have_incumbent_) run(kFixAndPropagate, false);
 }
 
 // Feasibility Jump (#506; Luteberget and Sartor, Math. Programming Computation 15, 2023),

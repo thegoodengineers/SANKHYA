@@ -618,6 +618,23 @@ inline constexpr double kObbtCutoffEpsilon = 1e-6;
 /// converging chain (bounds creeping by a small amount each round) from running long.
 inline constexpr int kDomainPropagationRounds = 50;
 
+/// The PDHG heuristics (#509): the PDHG iteration cap of one projection (or relaxation) solve,
+/// solved to kPdhgLoose - a projection only has to say which way the rounding should move;
+/// the feasibility pump's perturbation, Fischetti, Glover & Lodi (2005) section 3 - a
+/// rounding repeated from the round before flips a random number of columns in [T/2, 3T/2]
+/// with T = kPumpFlips, and one repeated within the last kPumpCycleWindow rounds is restarted
+/// by adding a random amount in [kPumpRestartLow, kPumpRestartHigh] to each column's distance
+/// from its rounding and flipping those that pass one half; the LPs at most that complete the
+/// continuous columns of one pump; and the Feasibility Jump budget, in nonzero visits, of the
+/// fix-and-propagate repair.
+inline constexpr Count kPdhgHeuristicIterations = 20000;
+inline constexpr int kPumpFlips = 20;
+inline constexpr int kPumpCycleWindow = 3;
+inline constexpr double kPumpRestartLow = -0.3;
+inline constexpr double kPumpRestartHigh = 0.7;
+inline constexpr int kPumpCompletionLimit = 10;
+inline constexpr Count kFixPropRepairWork = 1'000'000;
+
 /// PDHG infeasibility detection (#484; Applegate, Lubin & Hinder 2024): a restart difference is
 /// tested only from the kPdhgDetectionMinRestarts-th restart on - the first "difference" is a
 /// single projected gradient step, not the converging ray the method relies on - and only

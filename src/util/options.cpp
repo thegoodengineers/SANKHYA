@@ -1034,31 +1034,67 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"gpu_pump",
                  OptionType::Bool,
                  false,
-                 "GPU feasibility pump for MIP (#509). CURRENTLY A STUB: the kernel is not "
-                 "written and feasibility_pump() returns nothing, so the search behaves "
-                 "exactly as with the option off. The design: PDHG on the device solves each "
-                 "L1 projection LP; the outer loop rounds to integer and repeats until "
-                 "feasible or a round limit. Default OFF; it earns a default by a clean A/B "
-                 "on main once the kernel exists. "
-                 "References: Fischetti, Glover & Lodi, Math. Prog. 104 (2005); "
-                 "Mexi et al., arXiv:2307.03466; Corduk et al., arXiv:2510.20499.",
+                 "Feasibility pump on PDHG projections at the MIP root (#509): round the "
+                 "root relaxation, project the rounding back onto the LP polytope in the L1 "
+                 "distance by restarted PDHG (general integers through one auxiliary column "
+                 "each), repeat; a repeated rounding is perturbed, a longer cycle restarted. "
+                 "The continuous columns of a mixed model are completed by an LP with the "
+                 "integer columns fixed, and every point is checked against the model's rows "
+                 "and bounds before it is offered to the search, which checks it again. Runs "
+                 "on the CUDA device when the build has one and a card answers (see "
+                 "gpu_heur_backend), otherwise on the CPU; only while there is no incumbent. "
+                 "Default OFF until an A/B on main. References: Fischetti, Glover & Lodi, "
+                 "Math. Prog. 104 (2005); Bertacco, Fischetti & Lodi, Discrete Optim. 4 "
+                 "(2007); Mexi et al., arXiv:2307.03466; Corduk et al., arXiv:2510.20499.",
                  0.0,
                  0.0,
+                 {}});
+    s.push_back({"gpu_pump_max_iter",
+                 OptionType::Int,
+                 std::int64_t{50},
+                 "Projections at most in one run of gpu_pump (#509); each is one PDHG solve "
+                 "capped at kPdhgHeuristicIterations iterations.",
+                 0.0,
+                 1e6,
                  {}});
     s.push_back(
         {"gpu_fix_and_prop",
          OptionType::Bool,
          false,
-         "GPU fix-and-propagate heuristic for MIP (#509). CURRENTLY A STUB: the kernel "
-         "is not written and fix_and_propagate() returns nothing, so the search behaves "
-         "exactly as with the option off. The design: fix near-integer columns from the "
-         "LP relaxation, run GPU domain propagation (#510) to tighten the rest, solve "
-         "the residual LP. Default OFF; it earns a default by a clean A/B on main once "
-         "the kernel exists. "
-         "Reference: Corduk et al., arXiv:2510.20499.",
+         "Fix-and-propagate at the MIP root (#509): fix the integer columns, least "
+         "fractional in the root relaxation first, to the integer nearest the relaxation "
+         "inside each column's current domain, in batches that double on success and halve "
+         "on a proved-empty box, with activity-based bound propagation (#510) after each "
+         "batch; back up at most gpu_fix_backtrack times; complete the continuous columns by "
+         "an LP; repair a failure with Feasibility Jump. Every point is checked against the "
+         "model before it is offered. Propagation on the CUDA device when the build has one "
+         "and a card answers (see gpu_heur_backend), otherwise the CPU reference - the same "
+         "bounds either way. Runs only while there is no incumbent, after gpu_pump when both "
+         "are on. Default OFF until an A/B on main. References: Gamrath, Berthold, Heinz & "
+         "Winkler, Optimization in the Real World, Springer 2016; Corduk et al., "
+         "arXiv:2510.20499.",
          0.0,
          0.0,
          {}});
+    s.push_back({"gpu_fix_backtrack",
+                 OptionType::Int,
+                 std::int64_t{5},
+                 "Back-ups at most in one run of gpu_fix_and_prop (#509): when both integers "
+                 "next to the relaxation's value of a column empty the box, the last committed "
+                 "fix is undone and changed; each costs one.",
+                 0.0,
+                 1e6,
+                 {}});
+    s.push_back({"gpu_heur_backend",
+                 OptionType::String,
+                 std::string("auto"),
+                 "Where gpu_pump and gpu_fix_and_prop run (#509): auto uses the CUDA device "
+                 "for the PDHG solves and the propagation when the build has CUDA and a card "
+                 "answers, cpu forces the CPU PDHG and the CPU propagator. cpu exists so the "
+                 "two can be compared on one machine.",
+                 0.0,
+                 0.0,
+                 {"auto", "cpu"}});
     s.push_back({"gpu_on_device_loop",
                  OptionType::Bool,
                  false,

@@ -124,6 +124,7 @@ add_executable(sankhya_tests
   unit/test_incumbent_trace.cpp
   unit/test_feasibility_jump.cpp
   unit/test_gpu_feasibility_jump.cpp
+  unit/test_pdhg_heuristics.cpp
   # The verification spine (Phase 3). The oracle is exact-arithmetic reference code
   # that lives only in the test binary; nothing in src/ can reach it.
   oracles/rational_simplex.cpp
