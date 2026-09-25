@@ -525,7 +525,7 @@ class Propagator {
 
  private:
   const Model& model_;
-  bool device_;
+  [[maybe_unused]] bool device_;  // read only by the CUDA build
   double integrality_;
   PdhgHeuristicResult* result_;
   RowMajor rows_;

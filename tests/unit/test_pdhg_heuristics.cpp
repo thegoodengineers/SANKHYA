@@ -46,15 +46,23 @@ namespace {
 /// so this changes the time only.
 class OneThread {
  public:
+  // User-provided in both builds, so a guard is never an "unused variable" without OpenMP.
+  OneThread() {
 #ifdef SANKHYA_HAVE_OPENMP
-  OneThread() : saved_(omp_get_max_threads()) { omp_set_num_threads(1); }
-  ~OneThread() { omp_set_num_threads(saved_); }
+    saved_ = omp_get_max_threads();
+    omp_set_num_threads(1);
+#endif
+  }
+  ~OneThread() {
+#ifdef SANKHYA_HAVE_OPENMP
+    omp_set_num_threads(saved_);
+#endif
+  }
+  OneThread(const OneThread&) = delete;
+  OneThread& operator=(const OneThread&) = delete;
 
  private:
-  int saved_;
-#else
-  OneThread() = default;
-#endif
+  [[maybe_unused]] int saved_ = 0;
 };
 
 /// Rows given densely; every column in [lower, upper], integer where `integer` says so.
