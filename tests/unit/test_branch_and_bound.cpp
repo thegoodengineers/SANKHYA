@@ -614,9 +614,6 @@ struct FuzzTally {
   /// Cut rows the search reported applying, summed over the sweep: a cuts sweep in which
   /// this stays zero exercised no cut, whatever the options said.
   long long cuts_applied = 0;
-  /// Cut rows freed by age and freed rows re-imposed (#497), summed the same way.
-  long long cut_rows_aged_out = 0;
-  long long cuts_reactivated = 0;
   std::vector<std::string> failures;
 };
 
@@ -669,8 +666,6 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
     }
     const Solution s = solve(model, options);
     tally.cuts_applied += s.cuts_applied;
-    tally.cut_rows_aged_out += s.cut_rows_aged_out;
-    tally.cuts_reactivated += s.cuts_reactivated;
 
     const auto disagree = [&](const std::string& why) {
       ++mismatched;
@@ -745,9 +740,7 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
             << "  agreed infeasible   " << agreed_infeasible << "\n"
             << "  oracle abstained    " << oracle_abstained << "\n"
             << "  MISMATCHED          " << mismatched << "\n"
-            << "  cut rows applied    " << tally.cuts_applied << "\n"
-            << "  cut rows aged out   " << tally.cut_rows_aged_out << "\n"
-            << "  cut rows re-imposed " << tally.cuts_reactivated << "\n";
+            << "  cut rows applied    " << tally.cuts_applied << "\n";
   for (const std::string& failure : failures) {
     std::cout << "\n--- failing instance ---\n" << failure << "\n";
   }
@@ -818,36 +811,6 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTreeCuts) {
   const FuzzTally wide = run_milp_fuzz(wide_options, "tree cuts, wide instances", true, 600);
   expect_clean_sweep(wide, 200, 100);
   EXPECT_GT(wide.cuts_applied, 0) << "no cut row was ever applied: the sweep proved nothing";
-}
-
-// The cut pool (#497) under the exact oracle. A freed cut row the node's point violates is
-// re-imposed and the node re-solved; a row re-imposed with the wrong right-hand side, at the
-// wrong index, or on a basis the re-solve then mishandles is a wrong objective here. The
-// age limit is 1 so rows are freed and taken back at almost every node of these small
-// trees; at the default of 50 the sweep would free next to nothing, and the tally must show
-// both happened or the sweep proved nothing.
-TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheCutPool) {
-  Options options = mip_options();
-  options.set_bool("enable_root_cuts", true);
-  options.set_int("tree_cut_depth", 4);
-  options.set_bool("presolve", false);
-  options.set_bool("mip_cut_pooling", true);
-  options.set_int("mip_cut_age_limit", 1);
-  options.set_int("cut_support_floor", 100);  // as the debug-solution fuzz: more rows
-  // Trees to age rows in: two cuts a round and no heuristics leave the root open.
-  options.set_int("cut_max_per_round", 2);
-  options.set_int("tree_cut_rows_per_round", 2);
-  options.set_bool("mip_heuristics", false);
-  const FuzzTally pool = run_milp_fuzz(options, "cut pool, age 1, wide", true, 600);
-  expect_clean_sweep(pool, 200, 100);
-  EXPECT_GT(pool.cut_rows_aged_out, 0) << "no cut row was ever freed";
-  EXPECT_GT(pool.cuts_reactivated, 0) << "no freed row was ever re-imposed";
-  // The option off is the search it was before: rows are still freed, none comes back.
-  options.set_bool("mip_cut_pooling", false);
-  const FuzzTally off = run_milp_fuzz(options, "cut pool off, age 1, wide", true, 600);
-  expect_clean_sweep(off, 200, 100);
-  EXPECT_GT(off.cut_rows_aged_out, 0);
-  EXPECT_EQ(off.cuts_reactivated, 0) << "mip_cut_pooling=false re-imposed a row";
 }
 
 // The node factor cache (#501) under the exact oracle, with tree cuts on so the scaled
@@ -1090,5 +1053,4 @@ TEST(ObjectiveIntegrality, LeavesAFractionalObjectiveAlone) {
   EXPECT_NEAR(with.objective, without.objective, 1e-9);
   EXPECT_EQ(with.nodes, without.nodes) << "the search rounded a bound it had no right to";
 }
-
 }  // namespace sankhya

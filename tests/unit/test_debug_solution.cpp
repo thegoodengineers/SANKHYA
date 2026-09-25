@@ -491,11 +491,11 @@ TEST(DebugSolution, FuzzBinaryKnapsackAndCoveringRowsAgainstTheUniqueExactOptimu
 // almost every node where it is slack, and re-imposed wherever a later node's point violates
 // it. Every node LP whose box holds the unique optimum is checked against it after the rows
 // come back, so a row re-imposed wrongly - the wrong right-hand side, the wrong row, a node
-// re-solve that goes astray - aborts naming the node. The tally must show the pool worked.
+// re-solve that goes astray - aborts naming the node, and the answer is compared with the
+// enumerated optimum. The tally must show the pool worked; the same sweep with the option
+// off frees the same kind of rows and must take none back.
 TEST(DebugSolution, FuzzTheCutPoolAgainstTheUniqueExactOptimum) {
-  std::mt19937_64 rng(20260925);
   Options options = every_family_on();
-  options.set_bool("mip_cut_pooling", true);
   options.set_int("mip_cut_age_limit", 1);
   // A tree to age rows in: at the settings above the root closes almost every one of these
   // instances, and a pool with no second node never re-imposes anything. Two cuts a round,
@@ -504,20 +504,29 @@ TEST(DebugSolution, FuzzTheCutPoolAgainstTheUniqueExactOptimum) {
   options.set_int("cut_max_per_round", 2);
   options.set_int("tree_cut_rows_per_round", 2);
   options.set_bool("mip_heuristics", false);
-  FuzzTally tally;
-  for (int attempt = 0; attempt < 1200 && tally.checked < 150; ++attempt) {
-    const oracle::GeneratedLp lp = binary_rows_instance(rng);
-    check_instance(lp, attempt, &tally, options);
-    if (HasFatalFailure()) return;
+  for (const bool pooling : {true, false}) {
+    options.set_bool("mip_cut_pooling", pooling);
+    std::mt19937_64 rng(20260925);
+    FuzzTally tally;
+    for (int attempt = 0; attempt < 1200 && tally.checked < 150; ++attempt) {
+      const oracle::GeneratedLp lp = binary_rows_instance(rng);
+      check_instance(lp, attempt, &tally, options);
+      if (HasFatalFailure()) return;
+    }
+    EXPECT_GE(tally.checked, 40) << "too few instances with a unique exact optimum";
+    EXPECT_GT(tally.aged_out, 0) << "no cut row was ever freed";
+    if (pooling) {
+      EXPECT_GT(tally.reactivated, 0) << "no freed cut row was ever re-imposed";
+    } else {
+      EXPECT_EQ(tally.reactivated, 0) << "mip_cut_pooling=false re-imposed a row";
+    }
+    std::printf(
+        "[  INFO    ] debug solution, cut pool %s: %d instances, %lld cut rows appended, %lld "
+        "freed by age, %lld re-imposed, %lld nodes; the unique optimum never cut off\n",
+        pooling ? "on" : "off", tally.checked, static_cast<long long>(tally.cuts),
+        static_cast<long long>(tally.aged_out), static_cast<long long>(tally.reactivated),
+        static_cast<long long>(tally.nodes));
   }
-  EXPECT_GE(tally.checked, 40) << "too few instances with a unique exact optimum";
-  EXPECT_GT(tally.aged_out, 0) << "no cut row was ever freed";
-  EXPECT_GT(tally.reactivated, 0) << "no freed cut row was ever re-imposed";
-  std::printf(
-      "[  INFO    ] debug solution, cut pool: %d instances, %lld cut rows appended, %lld "
-      "freed by age, %lld re-imposed, %lld nodes; the unique optimum never cut off\n",
-      tally.checked, static_cast<long long>(tally.cuts), static_cast<long long>(tally.aged_out),
-      static_cast<long long>(tally.reactivated), static_cast<long long>(tally.nodes));
 }
 
 }  // namespace
