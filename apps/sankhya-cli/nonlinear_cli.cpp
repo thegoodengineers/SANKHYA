@@ -95,6 +95,11 @@ int nonlinear_solve(const std::string& path, const Options& options,
   fmt::print("{:<22}{}\n", "algorithm",
              solution.algorithm.empty() ? "none" : solution.algorithm);
   fmt::print("{:<22}{}\n", "iterations", solution.iterations);
+  if (solution.nodes > 0) {
+    // A MINLP (NLP stage 3): the tree's size and the bound that backs an `optimal`.
+    fmt::print("{:<22}{}\n", "nodes", solution.nodes);
+    fmt::print("{:<22}{:.12g}\n", "dual bound", solution.dual_bound);
+  }
   fmt::print("{:<22}{:.4f}\n", "solve seconds", solution.solve_seconds);
   fmt::print("{:<22}{:.3e}\n", "primal infeasibility", solution.primal_infeasibility);
   fmt::print("{:<22}{:.3e}\n", "dual infeasibility", solution.dual_infeasibility);

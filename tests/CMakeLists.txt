@@ -131,6 +131,8 @@ add_executable(sankhya_tests
   unit/test_c_api_nlp.cpp
   unit/test_nlp_ipm.cpp
   unit/test_nlp_hock_schittkowski.cpp
+  unit/test_minlp.cpp
+  unit/test_minlp_minlplib.cpp
   unit/test_global.cpp
   unit/test_fractional_integer_bounds.cpp
   unit/test_deterministic.cpp

@@ -51,7 +51,7 @@ const std::filesystem::path kData =
 const std::map<std::string, std::string> kKnownMisses = {
     // Another local minimum, which a local method may legitimately reach from the published
     // start. Each is a KKT point that tools/verify_solution.py verified with its own reader and
-    // derivatives (bench/runners/nlp_hs.py), and each is labelled locally_optimal.
+    // derivatives (bench/runners/nlp_bench.py), and each is labelled locally_optimal.
     {"hs002",
      "x = (-1.22103, 1.5): the local minimum on the bound x2 >= 1.5 left of the "
      "origin, objective 4.94123; the published one is at x1 = 1.2244"},

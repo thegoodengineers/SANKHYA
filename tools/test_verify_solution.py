@@ -899,6 +899,7 @@ def main() -> int:
     test_verify_solution_qcqp.run(check)
     print("nonlinear models, .nl (NLP stage 2)")
     test_verify_solution_nlp.run(check)
+    test_verify_solution_nlp.run_minlp(check)
     print("the solution pool (#225)")
     test_a_valid_pool_verifies()
     test_a_pool_out_of_order_is_rejected()

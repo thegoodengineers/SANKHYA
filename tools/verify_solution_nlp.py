@@ -105,6 +105,13 @@ def verify_nlp(model: NlModel, solution: Solution, report, primal_tol: float, du
         report.check(gap <= 1e-9, "objective (recomputed)",
                      f"{objective.v:.12g} vs stated {stated:.12g}")
 
+    if any(model.integer):
+        # A MINLP (NLP stage 3): optimality is a claim about the branch and bound's bound, as
+        # for a MILP, not about KKT conditions - there are none at an integer point. So the
+        # checks are verify_solution.py's MILP ones: an `optimal` answer's objective within
+        # the stated gap targets of its dual bound, and the bound on the right side.
+        _verify_bound(model, solution, report, objective.v)
+        return
     if status not in STATUSES_CLAIMING_KKT:
         report.note("multipliers", f"status {status} claims no optimality; not checked")
         return
@@ -191,3 +198,31 @@ def main_nonlinear(args, report) -> int:
         return 0
     print(f"REJECTED: {report.failures} of {len(report.lines)} checks failed")
     return 1
+
+
+def _verify_bound(model: NlModel, solution: Solution, report, objective: float) -> None:
+    """The MILP bound checks of verify_solution.py, for a MINLP answer."""
+    bound = solution.header_float("dual_bound")
+    scale = max(1.0, abs(objective))
+    if bound is None or not math.isfinite(bound):
+        if solution.status == "optimal":
+            report.check(False, "optimality proof",
+                         "status is optimal but no finite bound backs the claim")
+        else:
+            report.note("optimality proof", "no finite dual bound reported")
+        return
+    slack = (objective - bound) if not model.maximize else (bound - objective)
+    if solution.status == "optimal":
+        absolute = solution.header_float("mip_absolute_gap")
+        relative = solution.header_float("mip_relative_gap")
+        allowed = max(1e-6 if absolute is None else absolute,
+                      (1e-4 if relative is None else relative) * scale)
+        gap = abs(objective - bound)
+        report.check(gap <= allowed + 1e-9 * scale, "optimality proof",
+                     f"objective {objective:.12e} vs dual bound {bound:.12e}, "
+                     f"gap {gap:.3e} against an allowed {allowed:.3e}")
+    report.check(slack >= -1e-6 * scale, "dual bound is a bound",
+                 f"incumbent {objective:.12e}, bound {bound:.12e}")
+    report.note("bound", "a MINLP's bound is the branch and bound's, from convex relaxations "
+                "the solver proved convex; this checker verifies the point and the gap, not "
+                "the tree")

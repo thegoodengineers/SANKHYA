@@ -11,6 +11,7 @@
 
 #include "nlp/barrier_nlp.hpp"
 #include "nlp/filter_ipm.hpp"
+#include "nlp/minlp_bnb.hpp"
 #include "nlp/nlp_kkt_check.hpp"
 #include "nlp/nlp_problem.hpp"
 #include "sankhya/timer.hpp"
@@ -210,6 +211,8 @@ Solution solve_nlp_relaxation(const NonlinearModel& model, const Options& option
 
 Solution solve_nlp(const NonlinearModel& model, const Options& options, SolveControl* control) {
   Logger logger(options.get_bool("log_to_console") ? stdout : nullptr);
+  LogLevel level = LogLevel::kInfo;
+  if (parse_log_level(options.get_string("log_level"), &level)) logger.set_level(level);
   const std::string problem = model.validate();
   if (!problem.empty()) {
     Solution out;
@@ -217,13 +220,9 @@ Solution solve_nlp(const NonlinearModel& model, const Options& options, SolveCon
     out.message = problem;
     return out;
   }
-  if (model.base.has_integrality()) {
-    Solution out;
-    out.status = SolveStatus::kNotSolved;
-    out.message =
-        "the model has integer columns (a MINLP); the NLP engine solves continuous models";
-    return out;
-  }
+  // A MINLP goes to the NLP-based branch and bound (NLP stage 3), which refuses one whose
+  // relaxation is not proved convex.
+  if (model.base.has_integrality()) return solve_minlp(model, options, control);
   return solve_nlp_relaxation(model, options, {}, control, logger);
 }
 

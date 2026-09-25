@@ -204,6 +204,12 @@ is section 13; the steps for adding one are `docs/ADDING_AN_ENGINE.md`.
   minimizer of the violation. Those two statuses are appended to `SolveStatus` (an explicit
   frozen-interface addition). `tools/verify_solution.py` checks a `.nl` answer with its own
   reader and derivatives.
+  A model with integer columns goes to NLP-based branch and bound (`src/nlp/minlp_bnb.cpp`,
+  NLP stage 3, Gupta & Ravindran 1985), which runs only when the continuous relaxation is
+  proved convex - the condition under which a node relaxation's value is a bound - and
+  refuses a nonconvex MINLP with the reason. It certifies an infeasible node by solving the
+  convex minimum-violation problem, reuses the MIP tree's gap test and limits, and reports
+  `optimal` only when every node was resolved with a certificate.
 - **Cutting planes** — already present, and off by default. Root GMI and lifted cover cuts
   landed in #159 (`src/mip/cuts.cpp`) and single-row MIR cuts in #221
   (`src/mip/mir_cuts.cpp`), appended as rows of the working model before the search

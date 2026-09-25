@@ -851,5 +851,10 @@ inline constexpr double kNlpRefinementTolerance = 1e-12;
 inline constexpr Count kNlpMaxIterations = 3000;
 /// A restoration phase that has not ended in this many of its own iterations has failed.
 inline constexpr Count kNlpMaxRestorationIterations = 500;
+/// NLP-based branch and bound (NLP stage 3): a node is certified EMPTY when the least total
+/// violation sum(p + n) over its box, solved to a global optimum of the convex minimum-
+/// violation problem, exceeds this. Ten times kPrimalFeasibility's worth per unit, so that a
+/// feasible node whose minimum sits at the solver's tolerance is never declared empty.
+inline constexpr double kMinlpEmptyViolation = 1e-6;
 
 }  // namespace sankhya::tol
