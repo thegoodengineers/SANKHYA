@@ -627,7 +627,10 @@ inline constexpr int kDomainPropagationRounds = 50;
 /// from its rounding and flipping those that pass one half; the LPs at most that complete the
 /// continuous columns of one pump; and the Feasibility Jump budget, in nonzero visits, of the
 /// fix-and-propagate repair.
-inline constexpr Count kPdhgHeuristicIterations = 20000;
+inline constexpr Count kPdhgHeuristicIterations = 5000;
+/// The share of the search's remaining time one run of either PDHG heuristic may spend, all
+/// its solves included, when the search has a time limit and is not deterministic.
+inline constexpr double kPdhgHeuristicTimeShare = 0.1;
 inline constexpr int kPumpFlips = 20;
 inline constexpr int kPumpCycleWindow = 3;
 inline constexpr double kPumpRestartLow = -0.3;

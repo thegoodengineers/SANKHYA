@@ -54,7 +54,9 @@ struct PdhgHeuristicSettings {
   int pump_rounds = 50;  ///< projections at most (gpu_pump_max_iter)
   int backtracks = 5;    ///< fix-and-propagate back-ups at most (gpu_fix_backtrack)
   Count pdhg_iterations = tol::kPdhgHeuristicIterations;  ///< per PDHG solve
-  double pdhg_seconds = -1.0;  ///< per PDHG or completion solve; negative: none
+  /// Seconds one run may spend in all, negative for none: every PDHG and completion solve is
+  /// limited to what is left of it, and the run stops between rounds once it is spent.
+  double seconds = -1.0;
   double integrality_tolerance = tol::kIntegrality;
   std::uint64_t seed = 0;
   Count repair_work = tol::kFixPropRepairWork;  ///< Feasibility Jump's budget; 0: no repair

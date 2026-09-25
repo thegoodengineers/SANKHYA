@@ -17,6 +17,7 @@
 #include "feasibility_jump.hpp"
 #include "sankhya/logging.hpp"
 #include "sankhya/pdhg.hpp"
+#include "sankhya/timer.hpp"
 
 #ifdef SANKHYA_ENABLE_CUDA
 #include "../gpu/device.hpp"
@@ -50,6 +51,21 @@ double clamp_inside(double v, double lower, double upper) {
   return v;
 }
 
+/// The seconds one run may spend (PdhgHeuristicSettings::seconds), measured from its start.
+class Budget {
+ public:
+  explicit Budget(double seconds) : seconds_(seconds) {}
+  [[nodiscard]] bool limited() const { return seconds_ >= 0.0; }
+  [[nodiscard]] double left() const {
+    return limited() ? std::max(0.0, seconds_ - clock_.elapsed_seconds())
+                     : std::numeric_limits<double>::infinity();
+  }
+
+ private:
+  double seconds_;
+  Timer clock_;
+};
+
 bool device_ready(const PdhgHeuristicSettings& settings) {
 #ifdef SANKHYA_ENABLE_CUDA
   return settings.use_device && gpu::device_available(nullptr);
@@ -61,13 +77,14 @@ bool device_ready(const PdhgHeuristicSettings& settings) {
 
 /// A PDHG solve for a heuristic: quiet, to kPdhgLoose, stopped at the request, capped in
 /// iterations and (when the caller has one) seconds. The point is a guide only.
-Solution solve_pdhg_for(const Model& lp, const PdhgHeuristicSettings& settings, bool device) {
+Solution solve_pdhg_for(const Model& lp, const PdhgHeuristicSettings& settings, bool device,
+                        const Budget& budget) {
   Options o;
   o.set_bool("log_to_console", false);
   o.set_double("pdhg_tolerance", tol::kPdhgLoose);
   o.set_bool("pdhg_stop_at_request", true);
   o.set_int("iteration_limit", settings.pdhg_iterations);
-  if (settings.pdhg_seconds >= 0.0) o.set_double("time_limit", settings.pdhg_seconds);
+  if (budget.limited()) o.set_double("time_limit", budget.left());
   Logger quiet(nullptr);
 #ifdef SANKHYA_ENABLE_CUDA
   if (device) return gpu::solve_pdhg_gpu(lp, o, quiet);
@@ -96,10 +113,11 @@ bool has_point(const Solution& s, Index cols) {
 
 /// The LP relaxation's point by PDHG, for a caller that has none.
 std::vector<double> relaxation_point(const Model& model, const PdhgHeuristicSettings& settings,
-                                     bool device, PdhgHeuristicResult* result) {
+                                     bool device, const Budget& budget,
+                                     PdhgHeuristicResult* result) {
   Model lp = model;
   std::fill(lp.col_type.begin(), lp.col_type.end(), VarType::kContinuous);
-  const Solution relaxed = solve_pdhg_for(lp, settings, device);
+  const Solution relaxed = solve_pdhg_for(lp, settings, device, budget);
   ++result->pdhg_solves;
   if (!has_point(relaxed, model.num_cols())) return {};
   return {relaxed.col_value.begin(), relaxed.col_value.begin() + model.num_cols()};
@@ -158,7 +176,7 @@ bool rows_can_hold(const Model& model, const std::vector<char>& is_integer,
 /// point_is_feasible(), or is empty.
 std::vector<double> complete(const Model& model, const std::vector<Index>& integer_columns,
                              const std::vector<double>& x,
-                             const PdhgHeuristicSettings& settings,
+                             const PdhgHeuristicSettings& settings, const Budget& budget,
                              PdhgHeuristicResult* result) {
   Model lp = model;
   for (const Index j : integer_columns) {
@@ -170,7 +188,7 @@ std::vector<double> complete(const Model& model, const std::vector<Index>& integ
   Options options = settings.completion_options;
   options.set_bool("log_to_console", false);
   options.set_bool("presolve", false);
-  if (settings.pdhg_seconds >= 0.0) options.set_double("time_limit", settings.pdhg_seconds);
+  if (budget.limited()) options.set_double("time_limit", budget.left());
   const Solution completed = solve(lp, options);
   ++result->completions;
   if (completed.status != SolveStatus::kOptimal ||
@@ -199,7 +217,8 @@ std::uint64_t rounding_hash(const std::vector<Index>& integer_columns,
   return h;
 }
 
-bool should_stop(const PdhgHeuristicSettings& settings) {
+bool should_stop(const PdhgHeuristicSettings& settings, const Budget& budget) {
+  if (budget.limited() && budget.left() <= 0.0) return true;
   return settings.should_stop && settings.should_stop();
 }
 
@@ -257,6 +276,7 @@ PdhgHeuristicResult pdhg_feasibility_pump(const Model& model,
                                           const std::vector<double>& start,
                                           const PdhgHeuristicSettings& settings) {
   PdhgHeuristicResult result;
+  const Budget budget(settings.seconds);
   const Index n = model.num_cols();
   const Index m = model.num_rows();
   const double tol_int = settings.integrality_tolerance;
@@ -341,7 +361,8 @@ PdhgHeuristicResult pdhg_feasibility_pump(const Model& model,
   lp.hessian.finalize();
 
   std::vector<double> x = start;
-  if (static_cast<Index>(x.size()) != n) x = relaxation_point(model, settings, device, &result);
+  if (static_cast<Index>(x.size()) != n)
+    x = relaxation_point(model, settings, device, budget, &result);
   if (static_cast<Index>(x.size()) != n) {
     result.stopped = "no relaxation point";
     return result;
@@ -373,7 +394,7 @@ PdhgHeuristicResult pdhg_feasibility_pump(const Model& model,
   std::deque<std::uint64_t> recent;
   std::vector<std::uint64_t> completed;  // roundings whose completion LP failed
   for (int round = 0;; ++round) {
-    if (should_stop(settings)) {
+    if (should_stop(settings, budget)) {
       result.stopped = "stopped by the interrupt or the time limit";
       return result;
     }
@@ -427,7 +448,8 @@ PdhgHeuristicResult pdhg_feasibility_pump(const Model& model,
     if (mixed && result.completions < tol::kPumpCompletionLimit &&
         std::find(completed.begin(), completed.end(), hash) == completed.end() &&
         rows_can_hold(model, is_integer, rounding)) {
-      std::vector<double> point = complete(model, integer_columns, rounding, settings, &result);
+      std::vector<double> point =
+          complete(model, integer_columns, rounding, settings, budget, &result);
       if (!point.empty()) {
         result.x = std::move(point);
         result.stopped = "found by completing the continuous columns";
@@ -454,7 +476,7 @@ PdhgHeuristicResult pdhg_feasibility_pump(const Model& model,
         lp.row_lower[static_cast<std::size_t>(m + 2 * aux + 1)] = rounding[u];
       }
     }
-    const Solution projected = solve_pdhg_for(lp, settings, device);
+    const Solution projected = solve_pdhg_for(lp, settings, device, budget);
     ++result.pdhg_solves;
     if (!has_point(projected, n)) {
       result.stopped = std::string("a projection returned no point: ") +
@@ -541,6 +563,7 @@ PdhgHeuristicResult fix_and_propagate(const Model& model,
                                       const std::vector<double>& start,
                                       const PdhgHeuristicSettings& settings) {
   PdhgHeuristicResult result;
+  const Budget budget(settings.seconds);
   const Index n = model.num_cols();
   const auto un = static_cast<std::size_t>(n);
   const double tol_int = settings.integrality_tolerance;
@@ -552,7 +575,7 @@ PdhgHeuristicResult fix_and_propagate(const Model& model,
   result.on_device = device;
   std::vector<double> x0 = start;
   if (static_cast<Index>(x0.size()) != n)
-    x0 = relaxation_point(model, settings, device, &result);
+    x0 = relaxation_point(model, settings, device, budget, &result);
   if (static_cast<Index>(x0.size()) != n) {
     result.stopped = "no relaxation point";
     return result;
@@ -634,7 +657,7 @@ PdhgHeuristicResult fix_and_propagate(const Model& model,
   std::size_t batch = 1;
   bool all_fixed = false;
   while (true) {
-    if (should_stop(settings)) {
+    if (should_stop(settings, budget)) {
       result.stopped = "stopped by the interrupt or the time limit";
       return result;
     }
@@ -718,7 +741,7 @@ PdhgHeuristicResult fix_and_propagate(const Model& model,
     }
     if (static_cast<Index>(integer_columns.size()) < n) {
       std::vector<double> completed =
-          complete(model, integer_columns, point, settings, &result);
+          complete(model, integer_columns, point, settings, budget, &result);
       if (!completed.empty()) {
         result.x = std::move(completed);
         result.stopped = "found by completing the continuous columns";
@@ -728,12 +751,12 @@ PdhgHeuristicResult fix_and_propagate(const Model& model,
     result.stopped = "every integer column fixed, but the point is not feasible";
   }
   // The repair (Corduk et al.): Feasibility Jump from the point, its own points re-checked.
-  if (settings.repair_work <= 0 || should_stop(settings)) return result;
+  if (settings.repair_work <= 0 || should_stop(settings, budget)) return result;
   FeasibilityJumpSettings jump;
   jump.work_limit = settings.repair_work;
   jump.seed = settings.seed;
   jump.integrality_tolerance = tol_int;
-  jump.should_stop = settings.should_stop;
+  jump.should_stop = [&settings, &budget]() { return should_stop(settings, budget); };
   const FeasibilityJumpResult repaired = feasibility_jump(model, point, jump);
   for (auto it = repaired.points.rbegin(); it != repaired.points.rend(); ++it) {
     if (point_is_feasible(model, integer_columns, *it, tol_int)) {

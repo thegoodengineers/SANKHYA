@@ -408,8 +408,8 @@ void BranchAndBound::run_pdhg_heuristics(const Solution& relaxation) {
   settings.seed = static_cast<std::uint64_t>(options_.get_int("random_seed"));
   settings.completion_options = node_options_;
   if (schedule_.seconds_budgets && limits_.has_time_limit()) {
-    settings.pdhg_seconds =
-        std::max(0.0, 0.2 * limits_.remaining_seconds(timer_.elapsed_seconds()));
+    settings.seconds = std::max(0.0, tol::kPdhgHeuristicTimeShare *
+                                         limits_.remaining_seconds(timer_.elapsed_seconds()));
   }
   settings.should_stop = [this]() {
     if (control_ != nullptr && control_->interruption_requested()) return true;

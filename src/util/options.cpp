@@ -1053,7 +1053,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Int,
                  std::int64_t{50},
                  "Projections at most in one run of gpu_pump (#509); each is one PDHG solve "
-                 "capped at kPdhgHeuristicIterations iterations.",
+                 "capped at kPdhgHeuristicIterations iterations, and the whole run, like one "
+                 "of gpu_fix_and_prop, at kPdhgHeuristicTimeShare of the time limit left.",
                  0.0,
                  1e6,
                  {}});
