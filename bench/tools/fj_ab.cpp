@@ -41,9 +41,9 @@ int main(int argc, char** argv) {
   const std::uint64_t seed = argc > 4 ? std::strtoull(argv[4], nullptr, 10) : 1;
   const int restarts = argc > 5 ? std::atoi(argv[5]) : 0;
   Model model;
-  const ReadResult read = read_model(argv[1], &model);
-  if (!read.ok) {
-    std::printf("status=read_error message=\"%s\"\n", read.error.c_str());
+  const io::ReadResult loaded = io::read_model(argv[1], &model);
+  if (!loaded.ok) {
+    std::printf("status=read_error message=\"%s\"\n", loaded.error.c_str());
     return 1;
   }
   const double sense = model.sense == ObjSense::kMaximize ? -1.0 : 1.0;
