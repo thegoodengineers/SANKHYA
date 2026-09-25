@@ -142,8 +142,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   const bool use_restarts = options.get_bool("pdhg_restart");
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
   const bool geometric_evaluation = options.get_bool("pdhg_geometric_evaluation");
-  const bool two_matvec = options.get_bool("pdhg_two_matvec");
   const bool use_halpern = options.get_bool("pdhg_halpern");
+  // pdhg_two_matvec (#479): "cpu", the default, is two products here unless Halpern is on,
+  // where the default falls back to three rather than refusing; only an explicit "true"
+  // with Halpern is refused below.
+  const std::string& two_matvec_mode = options.get_string("pdhg_two_matvec");
+  const bool two_matvec =
+      two_matvec_mode == "true" || (two_matvec_mode == "cpu" && !use_halpern);
   if (use_halpern && use_restarts) {
     solution.status = SolveStatus::kModelError;
     solution.message =

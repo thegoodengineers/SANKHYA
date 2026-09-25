@@ -201,7 +201,7 @@ TEST(PdhgCudaRegression, TheTwoMatvecPathOnTheDeviceAgreesWithTheCpuAtTheStoppin
         << name;
     const Solution cpu = solve(model, pdhg_regression_options(/*gpu=*/false));
     Options two = pdhg_regression_options(/*gpu=*/true);
-    two.set_bool("pdhg_two_matvec", true);
+    two.set_string("pdhg_two_matvec", "true");
     const Solution gpu = solve(model, two);
     ASSERT_TRUE(cuda_was_used(gpu)) << name << ": " << gpu.message;
     const bool cpu_converged = cpu.status == SolveStatus::kOptimal;
@@ -248,7 +248,7 @@ TEST(PdhgCudaRegression, TheDeviceLoopAgreesWithTheCpuAtTheStoppingTolerance) {
       const Solution cpu = solve(model, pdhg_regression_options(/*gpu=*/false));
       Options loop = pdhg_regression_options(/*gpu=*/true);
       loop.set_bool("gpu_on_device_loop", true);
-      loop.set_bool("pdhg_two_matvec", two_matvec);
+      loop.set_string("pdhg_two_matvec", two_matvec ? "true" : "false");
       loop.set_bool("log_to_console", true);
       ::testing::internal::CaptureStdout();
       const Solution gpu = solve(model, loop);

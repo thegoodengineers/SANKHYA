@@ -74,10 +74,27 @@ TEST(PdhgHalpern, TwoMatvecIsRefusedNotSilentlyWrong) {
   Model model;
   ASSERT_TRUE(io::read_model(netlib_path("afiro"), &model).ok);
   Options options = pdhg_options(true);
-  options.set_bool("pdhg_two_matvec", true);
+  options.set_string("pdhg_two_matvec", "true");
   const Solution s = solve(model, options);
   EXPECT_EQ(s.status, SolveStatus::kModelError) << s.message;
   EXPECT_NE(s.message.find("pdhg_two_matvec"), std::string::npos) << s.message;
+}
+
+TEST(PdhgHalpern, TheDefaultTwoMatvecFallsBackToThreeProducts) {
+  // pdhg_two_matvec's default "cpu" (#479) is not a request for two products under Halpern:
+  // it runs the three-product path, bit for bit an explicit false, instead of refusing.
+  Model model;
+  ASSERT_TRUE(io::read_model(netlib_path("afiro"), &model).ok);
+  Options by_default = pdhg_options(true);
+  ASSERT_EQ(by_default.get_string("pdhg_two_matvec"), "cpu");
+  Options three = pdhg_options(true);
+  three.set_string("pdhg_two_matvec", "false");
+  const Solution a = solve(model, by_default);
+  const Solution b = solve(model, three);
+  ASSERT_EQ(a.status, SolveStatus::kOptimal) << a.message;
+  EXPECT_EQ(a.status, b.status);
+  EXPECT_EQ(a.iterations, b.iterations);
+  EXPECT_EQ(a.objective, b.objective);
 }
 
 }  // namespace

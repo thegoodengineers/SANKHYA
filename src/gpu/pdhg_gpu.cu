@@ -429,7 +429,9 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       limits.iteration_limit() < 0 ? 1000000 : static_cast<Count>(limits.iteration_limit());
   const bool use_restarts = options.get_bool("pdhg_restart");
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
-  const bool two_matvec = options.get_bool("pdhg_two_matvec");
+  // pdhg_two_matvec (#479): the default "cpu" keeps three products on the device, where the
+  // A/B on main 58a8374 was mixed (pdhg-two-matvec-58a8374.csv); only "true" takes two here.
+  const bool two_matvec = options.get_string("pdhg_two_matvec") == "true";
   bool device_loop = options.get_bool("gpu_on_device_loop");
   // Bit-for-bit repeatable run to run (#383, #478): explicit A^T, CSR_ALG2 for both products.
   const bool deterministic = options.get_bool("deterministic");
