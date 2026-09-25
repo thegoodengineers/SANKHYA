@@ -568,7 +568,7 @@ over the `threads` workers, bitwise the same at any thread count (the test holds
 bit); this is what it buys, per instance, at a fixed iteration count:
 
 Source CSV: `pdhg-threads-5daee10.csv`  
-Commit `5daee10` · machine `Windows-AMD64` · 2000 iterations per solve, PDHG alone, `pdhg_parallel_spmv=true` except the `serial` rows.
+Commit `5daee10` · machine `Windows-AMD64` · 2000 iterations per solve, PDHG alone, `pdhg_parallel_spmv=true` except the `serial` rows; `+ updates` rows also run the vector updates and the step rule's sums over the threads (`pdhg_parallel_updates=true`).
 
 | instance | rows | threads | A x | solver (s) | speed-up over 1 thread |
 |---|---:|---:|---|---:|---:|
@@ -1119,6 +1119,29 @@ python bench/runners/pooling.py --time-limit 60
 
 ---
 
+## 2d. QPLIB, the convex continuous QPs
+
+The convex, continuous, linearly constrained (or box- or un-constrained) instances of QPLIB
+(Furini et al., *QPLIB: a library of quadratic programming instances*, Mathematical
+Programming Computation 11, 2019), selected from the site's own listing by
+`bench/runners/fetch_qplib.py`, which also reads each reference value from QPLIB's
+`qplib.solu` and the instance's page and records the sha256 of every file in
+`data/qplib/reference.json`. The `.qplib` files are converted to QPS by
+`bench/runners/qplib_format.py` and solved by `bench/runners/qplib.py` under the default QP
+engine and the interior point.
+
+Selection, read from QPLIB's listing: instances.html: Cvx ticked, O in {C, D}, V = C, C in {N, B, L} (doc.html PROBTYPE and CONVEX). **19 instances** of the 453 listed; 17 fetched (12 in the small tier, at most 100,000 stored coefficients), 2 over the size cap and not run: `QPLIB_8547`, `QPLIB_9008`. QPLIB publishes no solution point for `QPLIB_9002`: run, named, and outside the pass count. Convex continuous instances outside the selection, by type: LCD 13 (quadratic constraints: #514's set). Licence, as the site states it: QPLIB is licensed under CC-BY 4.0. (https://creativecommons.org/licenses/by/4.0/)
+
+Not yet run on `main`. Reproduce with:
+
+```
+python bench/runners/fetch_qplib.py
+python bench/runners/qplib.py                # the full selection, engines auto and ipm
+python bench/runners/qplib.py --tier small   # the instances of at most 100,000 coefficients
+```
+
+---
+
 ## 3. Correctness beyond the objective value
 
 An objective that matches a published number is necessary, not sufficient — it says nothing
@@ -1299,6 +1322,27 @@ Times are **solver-internal on both sides** - HiGHS's own `getRunTime()` against
 - per-instance ratio: median **2.12x**, worst **7.55x**, faster than HiGHS on **4 of 50** instances
 
 We are **2.62x slower** than HiGHS by this measure, and publish that rather than bury it. HiGHS is a decade of specialist work with presolve, a dual simplex and a mature pricing scheme. This solver now has a presolve (#43, #92) and a dual simplex (#65) of its own, both defaults, so what remains between the two is the pricing and the years. The part that has to be right first is that **the answers agree** - the problem statement asks us to compare, not to win.
+
+---
+
+## 4b. Agreement against size-limited commercial editions (#533)
+
+Gurobi Academic/Trial (≤2000 variables + constraints), CPLEX Community Edition (≤1000), and
+GLPK (no size limit), each invoked as a **separate process** over the same MPS files. No
+commercial code is linked into SANKHYA. Licence terms are recorded in `docs/PROVENANCE.md`.
+The point of this section is not timing: on Netlib-scale instances every modern solver is
+fast. What is being measured is **agreement of objective values and statuses** — because a
+solver that claims the same answer as three independent implementations is more credible than
+one that does not, regardless of how it compares on a wall clock.
+
+No commercial-agreement run has been committed yet. Reproduce with:
+
+```bash
+# install one or more of: gurobi_cl (Gurobi), cplex (CPLEX Community), glpsol (GLPK)
+python bench/runners/commercial_agreement.py --suite netlib --time-limit 60
+```
+
+Licence terms for each edition are checked in `docs/PROVENANCE.md` before any run.
 
 ---
 

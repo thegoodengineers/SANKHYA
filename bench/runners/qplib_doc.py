@@ -74,7 +74,7 @@ def selection_paragraph(manifest: dict | None) -> str:
                      + ", ".join(f"{code} {count}" for code, count in sorted(others.items()))
                      + " (quadratic constraints: #514's set).")
     licence = manifest.get("licence", {})
-    parts.append(f"QPLIB: {licence.get('licence_statement', '?')} "
+    parts.append(f"Licence, as the site states it: {licence.get('licence_statement', '?')} "
                  f"({licence.get('licence_url', '')})")
     return " ".join(parts)
 
