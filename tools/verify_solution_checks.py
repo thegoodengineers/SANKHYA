@@ -339,8 +339,10 @@ def verify_ray(model: Model, solution: Solution, report: Report, primal_tol: flo
 # no code with the solver, so they are kept in step by saying so in both places rather than by
 # a header. `unbounded` is here because since #191 it carries the feasible point its ray starts
 # from - a ray from outside the feasible region proves nothing.
+# `locally_optimal` (a nonlinear model's KKT point, NLP stage 2) hands back a point;
+# `locally_infeasible`, like `infeasible`, does not.
 STATUSES_WITH_A_POINT = ("optimal", "feasible", "unbounded", "iteration_limit", "time_limit",
-                         "node_limit", "interrupted")
+                         "node_limit", "interrupted", "locally_optimal")
 
 # Of those, the ones that assert the point is FEASIBLE. The distinction is the whole of what
 # a limit means: `optimal` and `feasible` say "here is a point inside the model", and a limit
@@ -352,7 +354,7 @@ STATUSES_WITH_A_POINT = ("optimal", "feasible", "unbounded", "iteration_limit", 
 # A limit is still checked, on the claim it DOES make: the solver reports its own
 # primal_infeasibility in the header, and that number has to be true. Understating it is the
 # failure worth catching, and it is the one a solver has an incentive to make.
-STATUSES_ASSERTING_FEASIBILITY = ("optimal", "feasible", "unbounded")
+STATUSES_ASSERTING_FEASIBILITY = ("optimal", "feasible", "unbounded", "locally_optimal")
 
 
 def limit_found_nothing(solution: Solution) -> bool:

@@ -771,4 +771,85 @@ inline constexpr double kBatchPdhgWeightSmoothing = 0.5;
 /// A restart moves the primal weight only when both iterates moved by more than this.
 inline constexpr double kBatchPdhgMinMove = 1e-10;
 
+// ---- The interior-point filter line-search method for general NLP (NLP stage 2) -----------
+//
+// Every value is the default of Wachter & Biegler, "On the implementation of an interior-
+// point filter line-search algorithm for large-scale nonlinear programming", Math.
+// Programming 106(1) (2006), named by the paper's symbol and section. None of them decides
+// whether an answer is accepted: that is the KKT check at the project tolerances above
+// (kPrimalFeasibility, kDualFeasibility, kComplementarity), made at the returned point.
+
+/// mu_0, the initial barrier parameter (sec. 3.1).
+inline constexpr double kNlpMuInit = 0.1;
+/// kappa_epsilon: the barrier subproblem is solved to kappa_epsilon * mu (eq. 7).
+inline constexpr double kNlpKappaEpsilon = 10.0;
+/// kappa_mu and theta_mu: mu+ = max(eps/10, min(kappa_mu mu, mu^theta_mu)) (eq. 7).
+inline constexpr double kNlpKappaMu = 0.2;
+inline constexpr double kNlpThetaMu = 1.5;
+/// tau_min: the fraction-to-the-boundary parameter is max(tau_min, 1 - mu) (eq. 8).
+inline constexpr double kNlpTauMin = 0.99;
+/// kappa_Sigma: the bound multipliers are kept within [mu / (kappa s), kappa mu / s] (eq. 16).
+inline constexpr double kNlpKappaSigma = 1e10;
+/// s_max: the scaling threshold of the optimality error (eq. 5).
+inline constexpr double kNlpScalingMax = 100.0;
+/// The filter's margins gamma_theta, gamma_phi (eq. 18), the switching condition's delta,
+/// s_theta, s_phi (eq. 19), the Armijo constant eta_phi (eq. 20) and gamma_alpha, the safety
+/// factor of the smallest step (eq. 23), all sec. 2.3 / 3.
+inline constexpr double kNlpGammaTheta = 1e-5;
+inline constexpr double kNlpGammaPhi = 1e-8;
+inline constexpr double kNlpSwitchDelta = 1.0;
+inline constexpr double kNlpSwitchSTheta = 1.1;
+inline constexpr double kNlpSwitchSPhi = 2.3;
+inline constexpr double kNlpEtaPhi = 1e-8;
+inline constexpr double kNlpGammaAlpha = 0.05;
+/// theta_max = kNlpThetaMaxFactor * max(1, theta(x_0)) and theta_min likewise (sec. 3.2).
+inline constexpr double kNlpThetaMaxFactor = 1e4;
+inline constexpr double kNlpThetaMinFactor = 1e-4;
+/// Pushing the starting point into the bounds' interior: kappa_1, kappa_2 (sec. 3.6).
+inline constexpr double kNlpBoundPush = 1e-2;
+inline constexpr double kNlpBoundFraction = 1e-2;
+/// lambda_max: a least-squares multiplier estimate larger than this is discarded (sec. 3.6).
+inline constexpr double kNlpLambdaMax = 1e3;
+/// Inertia correction, Algorithm IC (sec. 3.1): delta_w^min, delta_w^0, delta_w^max, the
+/// growth factors kappa_w^+ (after a first success), kappa_w^+-bar (the first time) and the
+/// decrease kappa_w^-, and delta_c-bar mu^kappa_c for a singular Jacobian.
+inline constexpr double kNlpDeltaWMin = 1e-20;
+inline constexpr double kNlpDeltaWInit = 1e-4;
+inline constexpr double kNlpDeltaWMax = 1e40;
+inline constexpr double kNlpKappaWPlus = 8.0;
+inline constexpr double kNlpKappaWPlusFirst = 100.0;
+inline constexpr double kNlpKappaWMinus = 1.0 / 3.0;
+inline constexpr double kNlpDeltaC = 1e-8;
+inline constexpr double kNlpKappaC = 0.25;
+/// The feasibility restoration phase ends once theta <= kappa_resto theta(x_R) and the point
+/// is acceptable to the filter (sec. 3.3); rho weighs the violation in its objective.
+inline constexpr double kNlpKappaResto = 0.9;
+inline constexpr double kNlpRestorationRho = 1000.0;
+/// The backtracking line search halves the step: alpha_{k,l} = 2^-l alpha_max (sec. 2.3).
+inline constexpr double kNlpBacktrack = 0.5;
+/// A step no larger than this many machine epsilons relative to every entry is taken whole,
+/// without the line search, which could only reject it for rounding. A project safeguard,
+/// not a parameter of the paper.
+inline constexpr double kNlpTinyStep = 10.0 * std::numeric_limits<double>::epsilon();
+
+// Not from the paper - this project's choices, argued where they are used (src/nlp/).
+
+/// A pivot of |d| below this, or of the wrong sign, makes the quasidefinite LDL^T report the
+/// factorization inexact, so its inertia is NOT certified and Algorithm IC regularizes further.
+/// The project's pivot tolerance (kZeroDrop).
+inline constexpr double kNlpPivotFloor = kZeroDrop;
+/// The (2,2) block always carries at least -kNlpDualRegularization, so the matrix is
+/// quasidefinite and needs no numerical pivoting (Vanderbei 1995); the unregularized system
+/// is then recovered by iterative refinement.
+inline constexpr double kNlpDualRegularization = 1e-10;
+/// Iterative refinement steps on the unregularized KKT system, and the relative residual that
+/// ends it.
+inline constexpr int kNlpRefinementSteps = 10;
+inline constexpr double kNlpRefinementTolerance = 1e-12;
+/// The default iteration budget of one NLP solve when iteration_limit is not set. A project
+/// choice: a safety cap well above what the Hock-Schittkowski tests need, not a tuned value.
+inline constexpr Count kNlpMaxIterations = 3000;
+/// A restoration phase that has not ended in this many of its own iterations has failed.
+inline constexpr Count kNlpMaxRestorationIterations = 500;
+
 }  // namespace sankhya::tol

@@ -127,6 +127,10 @@ _STATUS_TO_LPSOLVESTATUS = {
     "numerical_error": pulp.LpSolveStatus.NumericalError,
     "model_error": pulp.LpSolveStatus.Undefined,
     "infeasible_or_unbounded": pulp.LpSolveStatus.Undefined,
+    # NLP (#704): a KKT point with no convexity proof, and a local minimizer of the
+    # violation. Neither is a proof, so neither may read as Optimal or Infeasible.
+    "locally_optimal": pulp.LpSolveStatus.Undefined,
+    "locally_infeasible": pulp.LpSolveStatus.Undefined,
     "interrupted": pulp.LpSolveStatus.Interrupted,
     "not_solved": pulp.LpSolveStatus.NotSolved,
 } if _PULP4 else {}
@@ -138,6 +142,9 @@ _STATUS_TO_PULP = {} if _PULP4 else {
     "unbounded": pulp.LpStatusUnbounded,
     # Neither was proven, so it is not reported as unbounded: "undefined" is the honest word.
     "infeasible_or_unbounded": pulp.LpStatusUndefined,
+    # NLP local statuses (#704): not proofs, so not Optimal or Infeasible.
+    "locally_optimal": pulp.LpStatusUndefined,
+    "locally_infeasible": pulp.LpStatusUndefined,
     "model_error": pulp.LpStatusUndefined,
     "numerical_error": pulp.LpStatusUndefined,
     "not_solved": pulp.LpStatusNotSolved,
@@ -166,6 +173,8 @@ def _sol_status_map() -> dict[str, object]:
         "infeasible": pulp.LpSolutionInfeasible,
         "unbounded": pulp.LpSolutionUnbounded,
         "infeasible_or_unbounded": no_solution,
+        "locally_optimal": pulp.LpSolutionIntegerFeasible,
+        "locally_infeasible": no_solution,
         "model_error": no_solution,
         "numerical_error": no_solution,
         "not_solved": no_solution,

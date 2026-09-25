@@ -191,4 +191,36 @@ PointReport NonlinearModel::evaluate(const std::vector<double>& x) const {
   return report;
 }
 
+Model NonlinearModel::solution_frame() const {
+  Model frame = base;
+  const Index linear = base.num_rows();
+  const Index total = linear + static_cast<Index>(constraints.size());
+  const bool named = !base.row_names.empty() ||
+                     std::any_of(constraints.begin(), constraints.end(),
+                                 [](const NonlinearConstraint& c) { return !c.name.empty(); });
+  frame.resize_rows(total);
+  if (named) {
+    // Names are all-or-nothing in a Model; a missing one takes the writer's own default.
+    frame.row_names.resize(static_cast<std::size_t>(total));
+    for (Index i = 0; i < total; ++i) {
+      auto& name = frame.row_names[static_cast<std::size_t>(i)];
+      if (i >= linear) name = constraints[static_cast<std::size_t>(i - linear)].name;
+      if (name.empty()) name = fmt::format("R{}", i);
+    }
+  }
+  for (std::size_t k = 0; k < constraints.size(); ++k) {
+    frame.row_lower[static_cast<std::size_t>(linear) + k] = constraints[k].lower;
+    frame.row_upper[static_cast<std::size_t>(linear) + k] = constraints[k].upper;
+  }
+  SparseMatrix matrix(total, base.num_cols());
+  for (Index j = 0; j < base.num_cols(); ++j) {
+    const ColumnView column = base.matrix.column(j);
+    for (Index k = 0; k < column.size; ++k)
+      matrix.add_entry(column.rows[k], j, column.values[k]);
+  }
+  matrix.finalize();
+  frame.matrix = std::move(matrix);
+  return frame;
+}
+
 }  // namespace sankhya::nlp

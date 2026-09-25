@@ -72,15 +72,26 @@ TEST(CApiNonlinear, BuildsEvaluatesAndValidatesHs071) {
   EXPECT_NE(sankhya_model_set_start(m, start, 3), SANKHYA_OK) << "the wrong length is refused";
 }
 
-TEST(CApiNonlinear, ASolveSaysWhatItCannotDoInsteadOfSolvingTheLinearPart) {
+TEST(CApiNonlinear, ASolveReachesHs071sPublishedOptimumAndSaysItIsLocal) {
   ModelHandle m;
   build_hs071(m);
+  const double start[4] = {1, 5, 5, 1};
+  ASSERT_EQ(sankhya_model_set_start(m, start, 4), SANKHYA_OK);
+  sankhya_options* options = sankhya_options_create();
+  ASSERT_EQ(sankhya_options_set_bool(options, "log_to_console", 0), SANKHYA_OK);
   SolutionHandle s;
-  ASSERT_EQ(sankhya_solve(m, nullptr, &s.handle), SANKHYA_OK) << sankhya_last_error();
-  EXPECT_EQ(sankhya_solution_status(s.handle), SANKHYA_NOT_SOLVED);
-  EXPECT_EQ(sankhya_solution_claims_a_point(s.handle), 0);
-  const std::string message = sankhya_solution_message(s.handle);
-  EXPECT_NE(message.find("NLP"), std::string::npos) << message;
+  ASSERT_EQ(sankhya_solve(m, options, &s.handle), SANKHYA_OK) << sankhya_last_error();
+  sankhya_options_free(options);
+  // HS071 is not proved convex, so a KKT point is reported as LOCALLY optimal, with the
+  // published optimum 17.0140173 (Hock and Schittkowski 1981, problem 71).
+  EXPECT_EQ(sankhya_solution_status(s.handle), SANKHYA_LOCALLY_OPTIMAL)
+      << sankhya_solution_message(s.handle);
+  EXPECT_EQ(sankhya_solution_claims_a_point(s.handle), 1);
+  EXPECT_NEAR(sankhya_solution_objective(s.handle), 17.0140173, 1e-6);
+  // Row vectors hold the linear rows (none) then the nonlinear rows: two duals.
+  double duals[2] = {0, 0};
+  EXPECT_EQ(sankhya_solution_row_duals(s.handle, duals, 2), SANKHYA_OK) << sankhya_last_error();
+  EXPECT_GT(duals[0], 0.0) << "the product row sits at its lower bound 25";
 }
 
 TEST(CApiNonlinear, MisuseIsStickyAndNamed) {

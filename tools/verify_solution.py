@@ -651,6 +651,10 @@ def main() -> int:
     parser.add_argument("--quiet", action="store_true", help="print only the verdict")
     args = parser.parse_args()
 
+    # A nonlinear model (.nl, NLP stage 2) has its own reader, evaluator and checks.
+    if args.model.name.endswith((".nl", ".nl.gz")):
+        return main_nonlinear(args)
+
     try:
         model = parse_mps(args.model)
     except (OSError, ValueError) as error:
@@ -689,6 +693,12 @@ def main() -> int:
         return 0
     print(f"REJECTED: {report.failures} of {len(report.lines)} checks failed")
     return 1
+
+
+def main_nonlinear(args) -> int:
+    """The same verdict for a .nl model (verify_solution_nlp.py)."""
+    from verify_solution_nlp import main_nonlinear as run
+    return run(args, Report())
 
 
 if __name__ == "__main__":

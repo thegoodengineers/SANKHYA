@@ -361,7 +361,7 @@ int main(int argc, char** argv) {
 
   if (solve_cmd->parsed()) {
     if (sankhya::nlp::looks_like_nl(model_path)) {
-      return sankhya::cli::nonlinear_solve(model_path, options);
+      return sankhya::cli::nonlinear_solve(model_path, options, solution_path, stats_path);
     }
     sankhya::Model model;
     // Under nonconvex=global the model is read with its quadratic rows and solved by the

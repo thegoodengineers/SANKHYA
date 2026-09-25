@@ -31,6 +31,8 @@ const char* to_string(SolveStatus status) noexcept {
     case SolveStatus::kNumericalError: return "numerical_error";
     case SolveStatus::kModelError: return "model_error";
     case SolveStatus::kInterrupted: return "interrupted";
+    case SolveStatus::kLocallyOptimal: return "locally_optimal";
+    case SolveStatus::kLocallyInfeasible: return "locally_infeasible";
   }
   return "unknown";
 }

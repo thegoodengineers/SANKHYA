@@ -70,6 +70,10 @@ _STATUS_TO_CVXPY = {
     "model_error": cp.settings.SOLVER_ERROR,
     "numerical_error": cp.settings.SOLVER_ERROR,
     "not_solved": cp.settings.SOLVER_ERROR,
+    # NLP local statuses (#704): a point without an optimality proof, and no proof of
+    # infeasibility - the same honest words as `feasible` and an error.
+    "locally_optimal": cp.settings.USER_LIMIT,
+    "locally_infeasible": cp.settings.SOLVER_ERROR,
 }
 
 

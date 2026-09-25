@@ -325,7 +325,14 @@ set(SANKHYA_CORE_SOURCES
   src/nlp/convexity.cpp
   src/nlp/derivatives.cpp
   src/nlp/expression.cpp
+  src/nlp/barrier_nlp.cpp
+  src/nlp/filter_ipm.cpp
+  src/nlp/filter_ipm_restoration.cpp
+  src/nlp/filter_ipm_step.cpp
   src/nlp/nl_reader.cpp
+  src/nlp/nlp_kkt.cpp
+  src/nlp/nlp_kkt_check.cpp
+  src/nlp/nlp_solve.cpp
   src/nlp/nlp_problem.cpp
   src/nlp/nonlinear_model.cpp
   src/nlp/sparsity.cpp

@@ -98,6 +98,11 @@ _TERMINATION = {
     "numerical_error": TerminationCondition.error,
     "model_error": TerminationCondition.error,
     "not_solved": TerminationCondition.unknown,
+    # NLP local statuses (#704). A KKT point is what Pyomo means by convergence criteria
+    # satisfied (its solution status stays `feasible`, not `optimal`, below); a local
+    # minimizer of the violation proves nothing about the model.
+    "locally_optimal": TerminationCondition.convergenceCriteriaSatisfied,
+    "locally_infeasible": getattr(TerminationCondition, "locallyInfeasible", TerminationCondition.unknown),
 }
 
 _SOLUTION_STATUS = {
@@ -107,6 +112,7 @@ _SOLUTION_STATUS = {
     "time_limit": SolutionStatus.feasible,
     "node_limit": SolutionStatus.feasible,
     "interrupted": SolutionStatus.feasible,
+    "locally_optimal": SolutionStatus.feasible,
     "infeasible": SolutionStatus.infeasible,
 }
 
