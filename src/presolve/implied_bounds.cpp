@@ -93,27 +93,38 @@ void restore_implied_bound_basis(const Result& result, const Model& original,
       rows.build(original.matrix);
       have_rows = true;
     }
-    const Index row = record.index;
-    const auto r = static_cast<std::size_t>(row);
-    const ColumnView view = rows.row(row);  // `rows` holds COLUMN indices for a row view
+    // WHICH ENTRY LEAVES. Row i is active, so its logical can leave when it is basic. When
+    // it is not, some basic entry of row i sits on a bound (the point is degenerate there):
+    // a column on one of its original bounds leaves; a basic column on a bound that is not
+    // original (a singleton row's, another propagated one) is held there by ANOTHER active
+    // row, and the search moves on to that row. Breadth first from row i, over rows the
+    // search has not seen, to a fixed number of rows: the chains are a few rows long.
+    std::vector<Index> frontier{record.index};
+    std::vector<Index> seen{record.index};
     bool swapped = false;
-    if (row_status[r] == BasisStatus::kBasic) {
-      double activity = 0.0;
-      for (Index k = 0; k < view.size; ++k) {
-        activity +=
-            view.values[k] * solution->col_value[static_cast<std::size_t>(view.rows[k])];
+    for (std::size_t head = 0; head < frontier.size() && !swapped; ++head) {
+      if (head >= static_cast<std::size_t>(tol::kImpliedBoundBasisSearchRows)) break;
+      const Index row = frontier[head];
+      const auto r = static_cast<std::size_t>(row);
+      const ColumnView view = rows.row(row);  // `rows` holds COLUMN indices for a row view
+      if (row_status[r] == BasisStatus::kBasic) {
+        double activity = 0.0;
+        for (Index k = 0; k < view.size; ++k) {
+          activity +=
+              view.values[k] * solution->col_value[static_cast<std::size_t>(view.rows[k])];
+        }
+        if (on(activity, original.row_lower[r])) {
+          row_status[r] = BasisStatus::kAtLower;
+          swapped = true;
+        } else if (on(activity, original.row_upper[r])) {
+          row_status[r] = BasisStatus::kAtUpper;
+          swapped = true;
+        }
+        if (swapped) break;
       }
-      if (on(activity, original.row_lower[r])) {
-        row_status[r] = BasisStatus::kAtLower;
-        swapped = true;
-      } else if (on(activity, original.row_upper[r])) {
-        row_status[r] = BasisStatus::kAtUpper;
-        swapped = true;
-      }
-    } else {
       for (Index k = 0; k < view.size && !swapped; ++k) {
         const auto uk = static_cast<std::size_t>(view.rows[k]);
-        if (uk == c || col_status[uk] != BasisStatus::kBasic) continue;
+        if (uk == c || entered[uk] || col_status[uk] != BasisStatus::kBasic) continue;
         const double xk = solution->col_value[uk];
         if (on(xk, original.col_lower[uk])) {
           col_status[uk] = BasisStatus::kAtLower;
@@ -121,6 +132,14 @@ void restore_implied_bound_basis(const Result& result, const Model& original,
         } else if (on(xk, original.col_upper[uk])) {
           col_status[uk] = BasisStatus::kAtUpper;
           swapped = true;
+        } else {
+          const ColumnView rows_of_k = original.matrix.column(view.rows[k]);
+          for (Index t = 0; t < rows_of_k.size; ++t) {
+            const Index next = rows_of_k.rows[t];
+            if (std::find(seen.begin(), seen.end(), next) != seen.end()) continue;
+            seen.push_back(next);
+            frontier.push_back(next);
+          }
         }
       }
     }

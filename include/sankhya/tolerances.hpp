@@ -361,6 +361,12 @@ inline constexpr double kPresolveMaxPropagatedBound = 1e9;
 /// so the two alternate; the cap is a work limit, not a convergence test.
 inline constexpr int kPresolveCoefficientRounds = 20;
 
+/// Postsolve of propagated bounds (#485): how many rows the search for the basis entry that
+/// leaves for a column on a propagated bound visits before it gives up and leaves the
+/// statuses as the engine had them. The degenerate chains it walks (a column held by a
+/// singleton row, that row's logical basic) are a few rows long; the cap is a work limit.
+inline constexpr int kImpliedBoundBasisSearchRows = 64;
+
 /// Cut selection (#415; Wesselmann & Suhl, "Implementing cutting plane management and
 /// selection techniques", 2012; Achterberg 2007, ch. 8). A cut's score is the weighted sum
 /// of its efficacy (the Euclidean distance from the LP point to its hyperplane), its

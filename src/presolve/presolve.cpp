@@ -1002,9 +1002,16 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       //
       // Never tighter than the rows justify: `bounds` was computed before any of this row's
       // columns moved, and a bound that moved earlier in the loop only widens that range and
-      // weakens the implied bound; each implied bound is loosened by kPresolveCoefficientSafety
-      // relative to the row's magnitude, which covers the cancellation in max(activity) -
-      // a_ij u_j; an integer column's bound is rounded inward with the integrality tolerance.
+      // weakens the implied bound; each implied bound is loosened by a bound on the rounding
+      // error of computing it - every term of the activity, the row bound, the subtraction of
+      // a_ij u_j and the division round once each, which Higham's gamma_n puts within
+      // (terms + 3) eps of the row's magnitude - and by nothing when the data are integers
+      // small enough to be summed exactly and a_ij divides the result; an integer column's
+      // bound is rounded inward with the integrality tolerance. A margin much wider than the
+      // rounding (kPresolveCoefficientSafety's 1e-9 relative, tried first) is not free: a
+      // column fixed on a loosened bound folds the margin into its rows, and on a row of
+      // magnitude 144 that left an empty row demanding 1.44e-7, which presolve then called
+      // infeasible.
       // A continuous bound is written only when it improves by kPresolveBoundMinStep (a cycle
       // of rows otherwise converges forever) and only below kPresolveMaxPropagatedBound.
       //
@@ -1021,14 +1028,28 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           work.row_upper[r] - work.row_lower[r] > feasibility) {
         const double row_lower = work.row_lower[r];
         const double row_upper = work.row_upper[r];
+        // 2^40: products and sums of integers this small stay exact in a double, with room
+        // for 2^13 of them (the same argument as coef_tightening.cpp's).
+        constexpr double kExactInteger = 1099511627776.0;
+        const auto integral = [&](double v) {
+          return !finite(v) || (std::fabs(v) < kExactInteger && v == std::floor(v));
+        };
         double magnitude = std::max(finite(row_lower) ? std::fabs(row_lower) : 0.0,
                                     finite(row_upper) ? std::fabs(row_upper) : 0.0);
+        bool exact = integral(row_lower) && integral(row_upper);
+        double terms = 0.0;
         for (const auto& [j, a] : work.rows[r]) {
           const auto u = static_cast<std::size_t>(j);
           if (work.col_dead[u]) continue;
+          terms += 1.0;
           if (finite(work.col_lower[u])) magnitude += std::fabs(a * work.col_lower[u]);
           if (finite(work.col_upper[u])) magnitude += std::fabs(a * work.col_upper[u]);
+          exact = exact && integral(a) && integral(work.col_lower[u]) &&
+                  integral(work.col_upper[u]);
         }
+        exact = exact && magnitude < kExactInteger;
+        const double rounding =
+            (terms + 3.0) * std::numeric_limits<double>::epsilon() * std::max(1.0, magnitude);
         for (const auto& [j, a] : work.rows[r]) {
           const auto u = static_cast<std::size_t>(j);
           if (work.col_dead[u] || std::fabs(a) < tol::kZeroDrop) continue;
@@ -1043,19 +1064,28 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           const bool rest_max_finite = bounds.upper_finite && finite(own_max);
           const double rest_min = rest_min_finite ? bounds.lower - a * own_min : 0.0;
           const double rest_max = rest_max_finite ? bounds.upper - a * own_max : 0.0;
-          const double slack =
-              tol::kPresolveCoefficientSafety * std::max(1.0, magnitude) / std::fabs(a);
+          // (bound - rest) / a, loosened by `rounding` unless the arithmetic was exact.
+          const auto implied = [&](double bound, double rest, bool upward) {
+            const double numerator = bound - rest;
+            const double v = numerator / a;
+            const double slack =
+                exact && v * a == numerator
+                    ? 0.0
+                    : rounding / std::fabs(a) +
+                          std::numeric_limits<double>::epsilon() * std::fabs(v);
+            return upward ? v + slack : v - slack;
+          };
           // a x_j >= row_lower - rest_max and a x_j <= row_upper - rest_min.
           const bool from_row_lower = finite(row_lower) && rest_max_finite;
           const bool from_row_upper = finite(row_upper) && rest_min_finite;
           double implied_lower = -kInfinity;
           double implied_upper = kInfinity;
           if (a > 0.0) {
-            if (from_row_lower) implied_lower = (row_lower - rest_max) / a - slack;
-            if (from_row_upper) implied_upper = (row_upper - rest_min) / a + slack;
+            if (from_row_lower) implied_lower = implied(row_lower, rest_max, false);
+            if (from_row_upper) implied_upper = implied(row_upper, rest_min, true);
           } else {
-            if (from_row_upper) implied_lower = (row_upper - rest_min) / a - slack;
-            if (from_row_lower) implied_upper = (row_lower - rest_max) / a + slack;
+            if (from_row_upper) implied_lower = implied(row_upper, rest_min, false);
+            if (from_row_lower) implied_upper = implied(row_lower, rest_max, true);
           }
           const auto write = [&](double v, bool upper) {
             if (result.proved_infeasible) return;

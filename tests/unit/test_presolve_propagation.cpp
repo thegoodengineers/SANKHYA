@@ -256,8 +256,7 @@ TEST(PresolvePropagation, RandomLpsAgreeWithTheOracleAndVerifyOnTheOriginal) {
   }
   std::cout << "propagation fuzz: " << compared << " compared, " << verified
             << " verified on the original, " << wrong_without
-            << " already wrong without the reduction, " << propagated
-            << " bounds propagated\n";
+            << " already wrong without the reduction, " << propagated << " bounds propagated\n";
   EXPECT_GT(compared, 600);
   EXPECT_GT(verified, 200);
   EXPECT_GT(propagated, 100) << "the generator should give the reduction something to do";
