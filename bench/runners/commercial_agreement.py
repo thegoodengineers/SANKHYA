@@ -376,8 +376,18 @@ def run(args: argparse.Namespace) -> int:
         print("No instances found.", file=sys.stderr)
         return 1
 
-    # Choose solvers.
+    # Choose solvers — Gurobi requires --gurobi-academic (see PROVENANCE.md row 16).
     solver_names = args.solver if args.solver else list(SOLVERS.keys())
+    if "gurobi" in solver_names and not getattr(args, "gurobi_academic", False):
+        print(
+            "error: Gurobi's standard EULA forbids publishing benchmark results.\n"
+            "Only an academic licence waives that restriction.\n"
+            "Pass --gurobi-academic to confirm you hold one (see docs/PROVENANCE.md row 16).",
+            file=sys.stderr,
+        )
+        solver_names = [s for s in solver_names if s != "gurobi"]
+        if not solver_names:
+            return 1
 
     if args.dry_run:
         for solver in solver_names:
@@ -454,6 +464,11 @@ def main() -> int:
     ap.add_argument("instances", nargs="*", help="Named instances (default: all)")
     ap.add_argument("--solver", action="append", choices=list(SOLVERS.keys()),
                     help="Which solver(s) to compare against (default: all detected)")
+    ap.add_argument("--gurobi-academic", action="store_true",
+                    help="Confirm an academic Gurobi licence is in use (required to run "
+                         "Gurobi; the standard EULA forbids publishing benchmark results "
+                         "and only the academic licence waives that restriction — see "
+                         "docs/PROVENANCE.md row 16)")
     ap.add_argument("--suite", choices=list(DATA_DIRS.keys()),
                     help="Instance suite (default: all)")
     ap.add_argument("--binary", help="Path to the sankhya binary (default: build/sankhya)")
