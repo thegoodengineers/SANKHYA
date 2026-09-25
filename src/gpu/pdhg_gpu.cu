@@ -12,12 +12,24 @@
 //
 // CPU/GPU split:
 //   GPU  SpMVs (cuSPARSE), primal/dual coordinate updates, running-sum accumulation,
-//        movement and interaction reductions (CUB BlockReduce + atomicAdd, #280).
+//        movement and interaction reductions (CUB BlockReduce per block, then one block
+//        summing the block totals in a fixed order, pdhg_reduce.cuh, #478; no atomics).
 //   CPU  Preconditioning (one-off), convergence evaluation (every 40 iterations),
 //        restart logic and scalar step-size arithmetic.
 //
 // The CSR matrix is built on CPU from CsrView(scaling.matrix) and uploaded once.
 // The GPU VRAM ceiling on the primary test machine (RTX 5050) is 6 GB.
+//
+// DETERMINISM (#383, #478). With deterministic=true the same input gives the same bits every
+// run. Two things are needed and both are here: the step-rule scalars are summed in a fixed
+// order (pdhg_reduce.cuh; always on: one single-block kernel takes the place of the memset
+// that zeroed the atomic targets every iteration), and both sparse products run
+// as NON-TRANSPOSE products with CUSPARSE_SPMV_CSR_ALG2, which the cuSPARSE documentation
+// (cusparseSpMV, "Algorithms") states gives bit-wise identical results run to run for CSR
+// with opA = NON_TRANSPOSE only; a TRANSPOSE product is not covered. A^T y therefore runs on
+// A^T stored explicitly in CSR, which is the CSC form of A the scaling already holds, at the
+// cost of a second copy of the matrix on the device. Without deterministic=true the default
+// algorithm and cuSPARSE's transpose product are kept, as before.
 
 #include "pdhg_gpu.hpp"
 
@@ -26,7 +38,6 @@
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
-#include <cub/block/block_reduce.cuh>
 
 #include <algorithm>
 #include <cmath>
@@ -44,6 +55,7 @@
 #include "../la/scaling.hpp"
 #include "device.hpp"
 #include "pdhg_graph.hpp"
+#include "pdhg_reduce.cuh"
 #include "sankhya/pdhg.hpp"
 #include "sankhya/solve_control.hpp"
 #include "sankhya/sparse.hpp"
@@ -91,14 +103,12 @@ static const double kZero = 0.0;
 //   x_next = proj_[col_lo, col_hi](x - tau*(cost + at_y))
 //   extrapolated = 2*x_next - x    ([CP11] over-relaxation)
 //   dx = x_next - x
-//   d_mv_x += sum_j 0.5 * omega * dx[j]^2   (via CUB BlockReduce + atomicAdd)
+//   partials[block] = sum over the block of 0.5 * omega * dx[j]^2   (fixed order, #478)
 __global__ void k_primal_fused(const double* __restrict__ x, const double* __restrict__ at_y,
                                const double* __restrict__ cost, const double* __restrict__ col_lo,
                                const double* __restrict__ col_hi, double* __restrict__ x_next,
                                double* __restrict__ extrapolated, double* __restrict__ dx,
-                               double* d_mv_x, double tau, double omega, int n) {
-  using BlockReduce = cub::BlockReduce<double, kBlockSize>;
-  __shared__ typename BlockReduce::TempStorage temp;
+                               double* partials, double tau, double omega, int n) {
   const int j = blockIdx.x * blockDim.x + threadIdx.x;
   double mv_thread = 0.0;
   if (j < n) {
@@ -112,21 +122,18 @@ __global__ void k_primal_fused(const double* __restrict__ x, const double* __res
     dx[j] = dxj;
     mv_thread = 0.5 * omega * dxj * dxj;
   }
-  const double bsum = BlockReduce(temp).Sum(mv_thread);
-  if (threadIdx.x == 0) atomicAdd(d_mv_x, bsum);
+  detail::write_block_partial<kBlockSize>(mv_thread, partials);
 }
 
 // [CP11] Algorithm 1, dual half-step, fused with [PDLP] §3.1 movement_y reduction (#280).
 //   v = y + sigma * a_x
 //   y_next = v - sigma * proj_[row_lo, row_hi](v / sigma)   (Moreau identity)
 //   dy = y_next - y
-//   d_mv_y += sum_i 0.5 * dy[i]^2 / omega   (via CUB BlockReduce + atomicAdd)
+//   partials[block] = sum over the block of 0.5 * dy[i]^2 / omega   (fixed order, #478)
 __global__ void k_dual_fused(const double* __restrict__ y, const double* __restrict__ a_x,
                              const double* __restrict__ row_lo, const double* __restrict__ row_hi,
-                             double* __restrict__ y_next, double* __restrict__ dy, double* d_mv_y,
-                             double sigma, double omega, int m) {
-  using BlockReduce = cub::BlockReduce<double, kBlockSize>;
-  __shared__ typename BlockReduce::TempStorage temp;
+                             double* __restrict__ y_next, double* __restrict__ dy,
+                             double* partials, double sigma, double omega, int m) {
   const int i = blockIdx.x * blockDim.x + threadIdx.x;
   double mv_thread = 0.0;
   if (i < m) {
@@ -140,21 +147,29 @@ __global__ void k_dual_fused(const double* __restrict__ y, const double* __restr
     dy[i] = dyi;
     mv_thread = 0.5 * dyi * dyi / omega;
   }
-  const double bsum = BlockReduce(temp).Sum(mv_thread);
-  if (threadIdx.x == 0) atomicAdd(d_mv_y, bsum);
+  detail::write_block_partial<kBlockSize>(mv_thread, partials);
 }
 
-// [PDLP] §3.1 interaction: d_interaction += sum_i dy[i] * adx[i]
+// [PDLP] §3.1 interaction: partials[block] = sum over the block of dy[i] * adx[i]
 // Replaces the previous k_pointwise_mul + CUB DeviceReduce pair (#280).
 __global__ void k_interaction_fused(const double* __restrict__ dy,
-                                    const double* __restrict__ adx, double* d_interaction,
-                                    int m) {
-  using BlockReduce = cub::BlockReduce<double, kBlockSize>;
-  __shared__ typename BlockReduce::TempStorage temp;
+                                    const double* __restrict__ adx, double* partials, int m) {
   const int i = blockIdx.x * blockDim.x + threadIdx.x;
   const double val = (i < m) ? dy[i] * adx[i] : 0.0;
-  const double bsum = BlockReduce(temp).Sum(val);
-  if (threadIdx.x == 0) atomicAdd(d_interaction, bsum);
+  detail::write_block_partial<kBlockSize>(val, partials);
+}
+
+// The three block-partial arrays summed in a fixed order by one block (pdhg_reduce.cuh,
+// #478): scalars[0] movement x, [1] movement y, [2] interaction. Launched <<<1, kBlockSize>>>.
+__global__ void k_finish_scalars(const double* __restrict__ partials, int bn, int bm,
+                                 double* __restrict__ scalars) {
+  double totals[3] = {0.0, 0.0, 0.0};
+  detail::sum_step_partials<kBlockSize>(partials, bn, bm, totals);
+  if (threadIdx.x == 0) {
+    scalars[0] = totals[0];
+    scalars[1] = totals[1];
+    scalars[2] = totals[2];
+  }
 }
 
 // Two-mat-vec (#479): from A x_{k+1} and the cached A x_k derive both products the step
@@ -227,21 +242,27 @@ struct GpuState {
   double *d_eta{}, *d_omega{};
   long long* d_accepted{};
   int* d_accept_flag{};
-  // Per-iteration scalar accumulators: [0]=movement_x, [1]=movement_y, [2]=interaction.
-  // Zeroed by cudaMemset at the top of each iteration; updated via atomicAdd inside the
-  // fused primal/dual kernels; downloaded in one transfer to avoid per-scalar sync stalls.
+  // Per-iteration scalars: [0]=movement_x, [1]=movement_y, [2]=interaction, written by
+  // k_finish_scalars from the block partials (bn + 2 bm of them, one per block of the fused
+  // kernels, #478) and downloaded in one transfer to avoid per-scalar sync stalls.
   double* d_scalars{};
+  double* d_partials{};
   // Problem constants (device)
   double *d_cost{}, *d_clo{}, *d_chi{}, *d_rlo{}, *d_rhi{};
   // CSR matrix (device)
   int *d_rowptr{}, *d_colidx{};
   double* d_vals{};
+  // A^T in CSR (the CSC arrays of A), deterministic mode only (#478): n + 1 row offsets.
+  int *d_trowptr{}, *d_tcolidx{};
+  double* d_tvals{};
   // cuSPARSE SpMV buffer (single buffer, sized to max of NT and T)
   void* d_spmv{};
   std::size_t spmv_bytes{};
   // cuSPARSE handles
   cusparseHandle_t cs{};
   cusparseSpMatDescr_t mat{};
+  cusparseSpMatDescr_t mat_t{};  // A^T, n x m; null unless deterministic
+  cusparseSpMVAlg_t alg = CUSPARSE_SPMV_ALG_DEFAULT;
   cusparseDnVecDescr_t vn{};  // n-element dense vector
   cusparseDnVecDescr_t vm{};  // m-element dense vector
 
@@ -250,6 +271,7 @@ struct GpuState {
   ~GpuState() {
     if (vm) cusparseDestroyDnVec(vm);
     if (vn) cusparseDestroyDnVec(vn);
+    if (mat_t) cusparseDestroySpMat(mat_t);
     if (mat) cusparseDestroySpMat(mat);
     if (cs) cusparseDestroy(cs);
     cudaFree(d_x);
@@ -271,6 +293,7 @@ struct GpuState {
     cudaFree(d_accepted);
     cudaFree(d_accept_flag);
     cudaFree(d_scalars);
+    cudaFree(d_partials);
     cudaFree(d_cost);
     cudaFree(d_clo);
     cudaFree(d_chi);
@@ -279,12 +302,15 @@ struct GpuState {
     cudaFree(d_rowptr);
     cudaFree(d_colidx);
     cudaFree(d_vals);
+    cudaFree(d_trowptr);
+    cudaFree(d_tcolidx);
+    cudaFree(d_tvals);
     cudaFree(d_spmv);
   }
 
   [[nodiscard]] bool alloc_ok() const {
     return d_x && d_xn && d_ext && d_dx && d_aty && d_xsum && d_y && d_yn && d_dy && d_ax &&
-           d_adx && d_ysum && d_scalars && d_cost && d_clo && d_chi;
+           d_adx && d_ysum && d_scalars && d_partials && d_cost && d_clo && d_chi;
   }
 };
 
@@ -299,11 +325,12 @@ static bool spmv_nt(GpuState& g, double* d_in_n, double* d_out_m) {
   CS_CHECK(cusparseDnVecSetValues(g.vn, d_in_n));
   CS_CHECK(cusparseDnVecSetValues(g.vm, d_out_m));
   CS_CHECK(cusparseSpMV(g.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, g.mat, g.vn, &kZero,
-                        g.vm, CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT, g.d_spmv));
+                        g.vm, CUDA_R_64F, g.alg, g.d_spmv));
   return true;
 }
 
-// Transpose SpMV: d_out_n = A^T * d_in_m
+// Transpose SpMV: d_out_n = A^T * d_in_m. On the explicit A^T when it is held (deterministic
+// mode, #478), as a NON-TRANSPOSE product; otherwise cuSPARSE's transpose of A.
 static bool spmv_t(GpuState& g, double* d_in_m, double* d_out_n) {
   if (g.m == 0 || g.nnz == 0) {
     if (g.n > 0) cudaMemset(d_out_n, 0, static_cast<std::size_t>(g.n) * sizeof(double));
@@ -311,8 +338,13 @@ static bool spmv_t(GpuState& g, double* d_in_m, double* d_out_n) {
   }
   CS_CHECK(cusparseDnVecSetValues(g.vm, d_in_m));
   CS_CHECK(cusparseDnVecSetValues(g.vn, d_out_n));
+  if (g.mat_t != nullptr) {
+    CS_CHECK(cusparseSpMV(g.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, g.mat_t, g.vm, &kZero,
+                          g.vn, CUDA_R_64F, g.alg, g.d_spmv));
+    return true;
+  }
   CS_CHECK(cusparseSpMV(g.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOne, g.mat, g.vm, &kZero, g.vn,
-                        CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT, g.d_spmv));
+                        CUDA_R_64F, g.alg, g.d_spmv));
   return true;
 }
 
@@ -392,6 +424,8 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
   const bool two_matvec = options.get_bool("pdhg_two_matvec");
   bool device_loop = options.get_bool("gpu_on_device_loop");
+  // Bit-for-bit repeatable run to run (#383, #478): explicit A^T, CSR_ALG2 for both products.
+  const bool deterministic = options.get_bool("deterministic");
 
   logger.info("Solving LP with CUDA restarted PDHG on {}: {} rows, {} columns, {} nonzeros",
               device_desc, rows, cols, model.num_nonzeros());
@@ -423,6 +457,9 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   }
   g.d_ysum = dev_zeros(m);
   g.d_scalars = dev_zeros(3);  // [0]=mv_x, [1]=mv_y, [2]=interaction
+  const int part_n = (ni + kBlockSize - 1) / kBlockSize;
+  const int part_m = (mi + kBlockSize - 1) / kBlockSize;
+  g.d_partials = dev_zeros(static_cast<std::size_t>(std::max(1, part_n + 2 * part_m)));
   g.d_cost = dev_zeros(n);
   g.d_clo = dev_zeros(n);
   g.d_chi = dev_zeros(n);
@@ -434,8 +471,15 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   g.d_colidx = nnz > 0 ? dev_int(static_cast<std::size_t>(nnz)) : nullptr;
   g.d_vals = nnz > 0 ? dev_zeros(static_cast<std::size_t>(nnz)) : nullptr;
 
+  if (deterministic) {
+    g.d_trowptr = dev_int(n + 1);
+    g.d_tcolidx = nnz > 0 ? dev_int(static_cast<std::size_t>(nnz)) : nullptr;
+    g.d_tvals = nnz > 0 ? dev_zeros(static_cast<std::size_t>(nnz)) : nullptr;
+  }
+
   if (!g.alloc_ok() || !g.d_rowptr || (m > 0 && (!g.d_rlo || !g.d_rhi)) ||
-      (nnz > 0 && (!g.d_colidx || !g.d_vals))) {
+      (nnz > 0 && (!g.d_colidx || !g.d_vals)) ||
+      (deterministic && (!g.d_trowptr || (nnz > 0 && (!g.d_tcolidx || !g.d_tvals))))) {
     logger.warning("GPU PDHG: device allocation failed; falling back to CPU solver");
     return pdhg::solve_pdhg(model, options, logger, control);
   }
@@ -456,6 +500,20 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
                    !hd_copy(scaling.row_upper.data(), g.d_rhi, m)))) {
       logger.warning("GPU PDHG: data upload failed; falling back to CPU solver");
       return pdhg::solve_pdhg(model, options, logger, control);
+    }
+    // A^T in CSR is A in CSC: the scaled matrix's own column starts, row indices and values,
+    // uploaded as they are (#478). Index is int32, as for the CSR of A above.
+    if (deterministic) {
+      const auto& ts = scaling.matrix.column_starts();
+      const auto& ti = scaling.matrix.row_indices();
+      const auto& tv = scaling.matrix.values();
+      if (ts.size() != n + 1 || ti.size() != static_cast<std::size_t>(nnz) ||
+          !hd_copy(ts.data(), g.d_trowptr, ts.size()) ||
+          (nnz > 0 && (!hd_copy(ti.data(), g.d_tcolidx, ti.size()) ||
+                       !hd_copy(tv.data(), g.d_tvals, tv.size())))) {
+        logger.warning("GPU PDHG: transpose upload failed; falling back to CPU solver");
+        return pdhg::solve_pdhg(model, options, logger, control);
+      }
     }
 
     // Initial x: projection of 0 onto column bounds (same as CPU PDHG)
@@ -493,6 +551,14 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
                         CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO,
                         CUDA_R_64F) != CUSPARSE_STATUS_SUCCESS)
     return cs_failed();
+  if (deterministic) {
+    g.alg = CUSPARSE_SPMV_CSR_ALG2;
+    if (cusparseCreateCsr(&g.mat_t, static_cast<int64_t>(ni), static_cast<int64_t>(mi),
+                          static_cast<int64_t>(nnz), g.d_trowptr, g.d_tcolidx, g.d_tvals,
+                          CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO,
+                          CUDA_R_64F) != CUSPARSE_STATUS_SUCCESS)
+      return cs_failed();
+  }
 
   // Create dense vector descriptors; dimension is pinned at construction, data updated later.
   // vn: n-element (input to NT SpMV, output of T SpMV)
@@ -514,15 +580,18 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     cusparseDnVecSetValues(g.vn, g.d_ext);
     cusparseDnVecSetValues(g.vm, g.d_ax);
     if (cusparseSpMV_bufferSize(g.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, g.mat, g.vn,
-                                &kZero, g.vm, CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT,
+                                &kZero, g.vm, CUDA_R_64F, g.alg,
                                 &bytes_nt) != CUSPARSE_STATUS_SUCCESS)
       return cs_failed();
     cusparseDnVecSetValues(g.vm, g.d_y);
     cusparseDnVecSetValues(g.vn, g.d_aty);
-    if (cusparseSpMV_bufferSize(g.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOne, g.mat, g.vm, &kZero,
-                                g.vn, CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT,
-                                &bytes_t) != CUSPARSE_STATUS_SUCCESS)
-      return cs_failed();
+    const cusparseStatus_t sized_t =
+        g.mat_t != nullptr
+            ? cusparseSpMV_bufferSize(g.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, g.mat_t,
+                                      g.vm, &kZero, g.vn, CUDA_R_64F, g.alg, &bytes_t)
+            : cusparseSpMV_bufferSize(g.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOne, g.mat, g.vm,
+                                      &kZero, g.vn, CUDA_R_64F, g.alg, &bytes_t);
+    if (sized_t != CUSPARSE_STATUS_SUCCESS) return cs_failed();
     g.spmv_bytes = std::max(bytes_nt, bytes_t);
     if (g.spmv_bytes > 0) {
       if (cudaMalloc(&g.d_spmv, g.spmv_bytes) != cudaSuccess) return cs_failed();
@@ -580,6 +649,11 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   std::vector<double> best_x(n, 0.0), best_y(m, 0.0);
 
   bool converged = false, gpu_error = false, logged_table = false;
+  // The host's share of the run (#478 item 3): the evaluation below copies x, y and both
+  // running sums off the device and evaluates them on the CPU on the unscaled model. Timed
+  // so the log says what moving it onto the device could at most save.
+  double host_evaluation_seconds = 0.0;
+  Count host_evaluations = 0;
   StopController stop(control, timer, limits);
   SolveStatus stop_status = SolveStatus::kIterationLimit;
   const pdhg::IterateTraceHook trace = pdhg::iterate_trace_for_testing();
@@ -608,19 +682,18 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
                  cudaMalloc(&g.d_accept_flag, sizeof(int)) == cudaSuccess;
     const long long zero_count = 0;
     ready = ready && hd_copy(&eta, g.d_eta, 1) && hd_copy(&omega, g.d_omega, 1) &&
-            hd_copy(&zero_count, g.d_accepted, 1) &&
-            cudaMemset(g.d_scalars, 0, 3 * sizeof(double)) == cudaSuccess;
+            hd_copy(&zero_count, g.d_accepted, 1);
     if (ready) {
       DeviceLoopBuffers b;
       b.x = g.d_x; b.xn = g.d_xn; b.ext = g.d_ext; b.dx = g.d_dx; b.aty = g.d_aty;
       b.xsum = g.d_xsum; b.y = g.d_y; b.yn = g.d_yn; b.dy = g.d_dy; b.ax = g.d_ax;
       b.adx = g.d_adx; b.ysum = g.d_ysum; b.axc = g.d_axc; b.axn = g.d_axn;
       b.cost = g.d_cost; b.col_lo = g.d_clo; b.col_hi = g.d_chi; b.row_lo = g.d_rlo;
-      b.row_hi = g.d_rhi; b.scalars = g.d_scalars; b.eta = g.d_eta; b.omega = g.d_omega;
+      b.row_hi = g.d_rhi; b.partials = g.d_partials; b.eta = g.d_eta; b.omega = g.d_omega;
       b.accepted = g.d_accepted; b.accept_flag = g.d_accept_flag;
       b.eta_ceil = eta_ceil_device; b.n = ni; b.m = mi; b.nnz = nnz;
       b.two_matvec = two_matvec; b.cusparse = g.cs; b.matrix = g.mat; b.vec_n = g.vn;
-      b.vec_m = g.vm; b.spmv_buffer = g.d_spmv;
+      b.vec_m = g.vm; b.spmv_buffer = g.d_spmv; b.matrix_t = g.mat_t; b.spmv_alg = g.alg;
       loop = std::make_unique<DeviceLoop>();
       ready = loop->init(b, static_cast<int>(tol::kPdhgDeviceLoopBlock));
     }
@@ -634,6 +707,10 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       logger.info("GPU PDHG: device loop on, {} iterations per host synchronisation (#478)",
                   tol::kPdhgDeviceLoopBlock);
     }
+  }
+  if (deterministic && !gpu_error) {
+    logger.info("GPU PDHG: deterministic, fixed-order reductions and both products on CSR "
+                "with CUSPARSE_SPMV_CSR_ALG2 on an explicit A^T (#478)");
   }
   while (!gpu_error) {
     if (iteration >= iteration_limit) break;
@@ -673,12 +750,6 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     const double tau = eta / omega;
     const double sigma = eta * omega;
 
-    // Zero per-iteration scalar accumulators before the fused kernels write into them.
-    if (cudaMemset(g.d_scalars, 0, 3 * sizeof(double)) != cudaSuccess) {
-      gpu_error = true;
-      break;
-    }
-
     // 1. A^T y  [cuPDLP §3, transpose SpMV]
     if (!spmv_t(g, g.d_y, g.d_aty)) {
       gpu_error = true;
@@ -688,7 +759,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     // 2. Primal update + movement_x reduction  [CP11 Alg.1, PDLP §3.1]
     if (ni > 0)
       k_primal_fused<<<bn, kBlockSize>>>(g.d_x, g.d_aty, g.d_cost, g.d_clo, g.d_chi, g.d_xn,
-                                         g.d_ext, g.d_dx, g.d_scalars + 0, tau, omega, ni);
+                                         g.d_ext, g.d_dx, g.d_partials, tau, omega, ni);
     if (!launch_ok()) {
       gpu_error = true;
       break;
@@ -714,7 +785,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     // 4. Dual update + movement_y reduction  [CP11 Alg.1, PDLP §3.1]
     if (mi > 0)
       k_dual_fused<<<bm, kBlockSize>>>(g.d_y, g.d_ax, g.d_rlo, g.d_rhi, g.d_yn, g.d_dy,
-                                       g.d_scalars + 1, sigma, omega, mi);
+                                       g.d_partials + bn, sigma, omega, mi);
     if (!launch_ok()) {
       gpu_error = true;
       break;
@@ -726,14 +797,20 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       break;
     }
 
-    // 6. Interaction + download all three scalars in one transfer  [PDLP §3.1]
-    // movement_x (d_scalars[0]) and movement_y (d_scalars[1]) were accumulated by steps 2/4.
+    // 6. Interaction, then all three scalars from the block partials in a fixed order
+    // (#478), downloaded in one transfer  [PDLP §3.1]. Steps 2 and 4 wrote the movement
+    // partials; every slot is rewritten each iteration, so nothing needs zeroing.
     if (mi > 0) {
-      k_interaction_fused<<<bm, kBlockSize>>>(g.d_dy, g.d_adx, g.d_scalars + 2, mi);
+      k_interaction_fused<<<bm, kBlockSize>>>(g.d_dy, g.d_adx, g.d_partials + bn + bm, mi);
       if (!launch_ok()) {
         gpu_error = true;
         break;
       }
+    }
+    k_finish_scalars<<<1, kBlockSize>>>(g.d_partials, bn, bm, g.d_scalars);
+    if (!launch_ok()) {
+      gpu_error = true;
+      break;
     }
     double h_scalars[3] = {};
     if (!dh_copy(g.d_scalars, h_scalars, 3)) {
@@ -789,6 +866,8 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     if (iteration % kEvaluationInterval != 0 && !no_info) continue;
     }  // per-iteration path
 
+    const double evaluation_start = timer.elapsed_seconds();
+    ++host_evaluations;
     // Download current iterates
     if (!dh_copy(g.d_x, h_x.data(), n) || !dh_copy(g.d_y, h_y.data(), m)) {
       gpu_error = true;
@@ -827,6 +906,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       }
     }
 
+    host_evaluation_seconds += timer.elapsed_seconds() - evaluation_start;
     const Residuals& better = *chosen;
     for (int level = 0; level < 3; ++level) {
       if (kkt_iterations[level] < 0 && better.worst() <= pdhg::kKktCrossingLevels[level]) {
@@ -986,6 +1066,8 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   logger.info("Status: {}   objective {:.10e}   iterations {}   restarts {}   time {:.3f}s",
               to_string(solution.status), solution.objective, solution.iterations, restarts,
               solution.solve_seconds);
+  logger.info("Host evaluation: {} evaluations, {:.3f}s of {:.3f}s", host_evaluations,
+              host_evaluation_seconds, solution.solve_seconds);
   logger.info("Relative residuals: primal {:.3e}, dual {:.3e}, gap {:.3e}", final_r.primal,
               final_r.dual, final_r.gap);
   if (!solution.message.empty()) logger.info("{}", solution.message);
