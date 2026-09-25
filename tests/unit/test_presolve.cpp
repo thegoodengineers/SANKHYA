@@ -621,5 +621,69 @@ TEST(Presolve, PostsolvedStatusesAreABasisOfTheOriginalModel) {
   }
 }
 
+TEST(Presolve, ColumnSingletonInequalityTightensLowerBound) {
+  // min x0 + x1
+  // 2*x0 + x1 >= 6   (x0 is a singleton column in this one inequality row)
+  // x0 in [0, 10], x1 in [0, 2]
+  //
+  // The column-singleton-inequality reduction propagates:
+  //   2*x0 >= 6 - x1_max = 6 - 2 = 4  =>  x0 >= 2
+  // The reduced model should recognise x0's tightened lower bound.
+  // Optimal: x0=3, x1=0 (2*3+0=6), obj=3.
+  const Model model =
+      make_lp({{2.0, 1.0}}, {6.0}, {kInfinity}, {1.0, 1.0}, {0.0, 0.0}, {10.0, 2.0});
+  expect_agrees_with_unpresolved(model);
+  const Solution on = solve(model, with_presolve(true));
+  ASSERT_EQ(on.status, SolveStatus::kOptimal) << on.message;
+  EXPECT_NEAR(on.objective, 3.0, 1e-9);
+}
+
+TEST(Presolve, ColumnSingletonInequalityTightensUpperBound) {
+  // min x0 + x1
+  // x0 - x1 <= 3   (x0 singleton in this inequality row)
+  // x0 in [0, 10], x1 in [0, 5]
+  //
+  // Propagation: x0 <= 3 + x1_max = 3 + 5 = 8  (tightens UB from 10)
+  // Optimal: x0=0, x1=0, obj=0.  (optimal is not at the tightened bound)
+  const Model model =
+      make_lp({{1.0, -1.0}}, {-kInfinity}, {3.0}, {1.0, 1.0}, {0.0, 0.0}, {10.0, 5.0});
+  expect_agrees_with_unpresolved(model);
+  const Solution on = solve(model, with_presolve(true));
+  ASSERT_EQ(on.status, SolveStatus::kOptimal) << on.message;
+  EXPECT_NEAR(on.objective, 0.0, 1e-9);
+}
+
+TEST(Presolve, DoubletonInequalityTightensBounds) {
+  // min x0 + x1
+  // x0 + x1 >= 5   (doubleton inequality: exactly 2 entries, inequality)
+  // x0 in [0, 10], x1 in [0, 3]
+  //
+  // Doubleton inequality propagation:
+  //   From x1 in [0, 3]: x0 >= 5 - 3 = 2  (tightens lower bound of x0)
+  // Optimal: x0=5, x1=0 (or x0=2, x1=3), obj=5.
+  const Model model =
+      make_lp({{1.0, 1.0}}, {5.0}, {kInfinity}, {1.0, 1.0}, {0.0, 0.0}, {10.0, 3.0});
+  expect_agrees_with_unpresolved(model);
+  const Solution on = solve(model, with_presolve(true));
+  ASSERT_EQ(on.status, SolveStatus::kOptimal) << on.message;
+  EXPECT_NEAR(on.objective, 5.0, 1e-9);
+}
+
+TEST(Presolve, DoubletonInequalityBothBoundsTightened) {
+  // min x0 + x1
+  // x0 + x1 <= 4   (doubleton inequality)
+  // x0 + x1 >= 2   (doubleton inequality, separate row)
+  // x0 in [0, 10], x1 in [0, 10]
+  //
+  // Row 1 propagation: x0 <= 4 (from x1 >= 0), x1 <= 4 (from x0 >= 0)
+  // Optimal: x0=0, x1=2, obj=2.
+  const Model model = make_lp({{1.0, 1.0}, {1.0, 1.0}}, {2.0, -kInfinity}, {kInfinity, 4.0},
+                              {1.0, 1.0}, {0.0, 0.0}, {10.0, 10.0});
+  expect_agrees_with_unpresolved(model);
+  const Solution on = solve(model, with_presolve(true));
+  ASSERT_EQ(on.status, SolveStatus::kOptimal) << on.message;
+  EXPECT_NEAR(on.objective, 2.0, 1e-9);
+}
+
 }  // namespace
 }  // namespace sankhya

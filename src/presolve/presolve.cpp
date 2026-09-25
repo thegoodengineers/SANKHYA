@@ -278,6 +278,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   const bool dominated_columns = options.get_bool("presolve_dominated_columns");
   const bool implied_free = options.get_bool("presolve_implied_free");
   const bool implied_integer = options.get_bool("presolve_implied_integer");
+  const bool bound_propagation = options.get_bool("presolve_bound_propagation");
   const bool has_integer_columns =
       std::any_of(model.col_type.begin(), model.col_type.end(),
                   [](VarType type) { return type == VarType::kInteger; });
@@ -975,6 +976,60 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       }
 
       const ActivityBounds bounds = activity_bounds(work, i);
+
+      // Bound propagation from row activity (Cederberg & Boyd, arXiv 2604.23951;
+      // Andersen & Andersen 1995, sec. 3.1-3.2). For each live column j in row i, derive
+      // implied bounds on x_j from the row bounds and the activity range of every OTHER entry.
+      // Applies to all inequality rows (equality rows are handled by kDoubletonEquation and
+      // kSingletonRow). No record is emitted: the tightened bounds are reflected directly into
+      // the workspace, and the existing redundant-row check below then fires when a row
+      // becomes implied. Gated by presolve_bound_propagation (default OFF).
+      if (bound_propagation && work.row_upper[r] - work.row_lower[r] > feasibility) {
+        for (const auto& [j, a] : work.rows[r]) {
+          const auto u = static_cast<std::size_t>(j);
+          if (work.col_dead[u]) continue;
+          if (std::fabs(a) < tol::kZeroDrop) continue;
+          if (work.quadratic_col[u]) continue;
+          // Compute activity of row WITHOUT column j's contribution.
+          const double lo_j = work.col_lower[u];
+          const double up_j = work.col_upper[u];
+          // j contributes a*lo_j (if a>0) or a*up_j (if a<0) to bounds.lower.
+          const bool j_lo_finite = a > 0.0 ? finite(lo_j) : finite(up_j);
+          const bool j_hi_finite = a > 0.0 ? finite(up_j) : finite(lo_j);
+          const double j_lo_contrib = a > 0.0 ? a * lo_j : a * up_j;
+          const double j_hi_contrib = a > 0.0 ? a * up_j : a * lo_j;
+          const bool rest_lo_finite = bounds.lower_finite && j_lo_finite;
+          const bool rest_hi_finite = bounds.upper_finite && j_hi_finite;
+          const double rest_lo = rest_lo_finite ? bounds.lower - j_lo_contrib : -kInfinity;
+          const double rest_hi = rest_hi_finite ? bounds.upper - j_hi_contrib : kInfinity;
+          // Implied bounds on x_j: a*x_j in [row_lo - rest_hi, row_up - rest_lo].
+          double implied_lo = -kInfinity;
+          double implied_hi = kInfinity;
+          if (a > 0.0) {
+            if (finite(work.row_lower[r]) && rest_hi_finite)
+              implied_lo = (work.row_lower[r] - rest_hi) / a;
+            if (finite(work.row_upper[r]) && rest_lo_finite)
+              implied_hi = (work.row_upper[r] - rest_lo) / a;
+          } else {
+            if (finite(work.row_upper[r]) && rest_hi_finite)
+              implied_lo = (work.row_upper[r] - rest_hi) / a;
+            if (finite(work.row_lower[r]) && rest_lo_finite)
+              implied_hi = (work.row_lower[r] - rest_lo) / a;
+          }
+          if (model.col_type[u] == VarType::kInteger) {
+            if (finite(implied_lo)) implied_lo = round_integer_lower(implied_lo);
+            if (finite(implied_hi)) implied_hi = round_integer_upper(implied_hi);
+          }
+          if (finite(implied_lo) && implied_lo > work.col_lower[u] + feasibility) {
+            work.col_lower[u] = implied_lo;
+            changed = true;
+          }
+          if (finite(implied_hi) && implied_hi < work.col_upper[u] - feasibility) {
+            work.col_upper[u] = implied_hi;
+            changed = true;
+          }
+        }
+      }
 
       // Redundant row: whatever the variables do within their bounds, this row is satisfied.
       const bool lower_slack =
