@@ -136,7 +136,8 @@ _STATUS_TO_PULP = {} if _PULP4 else {
     "optimal": pulp.LpStatusOptimal,
     "infeasible": pulp.LpStatusInfeasible,
     "unbounded": pulp.LpStatusUnbounded,
-    "infeasible_or_unbounded": pulp.LpStatusUnbounded,
+    # Neither was proven, so it is not reported as unbounded: "undefined" is the honest word.
+    "infeasible_or_unbounded": pulp.LpStatusUndefined,
     "model_error": pulp.LpStatusUndefined,
     "numerical_error": pulp.LpStatusUndefined,
     "not_solved": pulp.LpStatusNotSolved,
