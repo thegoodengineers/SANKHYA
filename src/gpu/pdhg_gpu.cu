@@ -255,10 +255,13 @@ struct GpuState {
   // A^T in CSR (the CSC arrays of A), deterministic mode only (#478): n + 1 row offsets.
   int *d_trowptr{}, *d_tcolidx{};
   double* d_tvals{};
-  // cuSPARSE SpMV workspaces, one per product and never exchanged between them: with
-  // CUSPARSE_SPMV_CSR_ALG2 the first call leaves per-matrix state in its buffer, and a probe
-  // on CUDA 12.4 (#478) measured wrong products from the second call on when A and A^T shared
-  // one buffer. d_spmv serves A x, d_spmv_t serves A^T y.
+  // cuSPARSE SpMV workspaces, ONE PER MATRIX DESCRIPTOR, each passed to every product on
+  // its descriptor and to no other. A probe against the cuSPARSE of CUDA 12.4 on the L4
+  // (#478) found that a descriptor keeps state in the workspace of its first product: with
+  // the default algorithm as with CSR_ALG2, a later product on the same descriptor through a
+  // different workspace, or a second descriptor's product through the same workspace, came
+  // back wrong. d_spmv serves `mat` (A x, and A^T y as its transpose when A^T is not held);
+  // d_spmv_t serves `mat_t` (deterministic mode only).
   void* d_spmv{};
   void* d_spmv_t{};
   // cuSPARSE handles
@@ -344,11 +347,11 @@ static bool spmv_t(GpuState& g, double* d_in_m, double* d_out_n) {
   CS_CHECK(cusparseDnVecSetValues(g.vn, d_out_n));
   if (g.mat_t != nullptr) {
     CS_CHECK(cusparseSpMV(g.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, g.mat_t, g.vm, &kZero,
-                          g.vn, CUDA_R_64F, g.alg, g.d_spmv_t));
+                          g.vn, CUDA_R_64F, g.alg, g.d_spmv_t));  // mat_t's own workspace
     return true;
   }
   CS_CHECK(cusparseSpMV(g.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOne, g.mat, g.vm, &kZero, g.vn,
-                        CUDA_R_64F, g.alg, g.d_spmv_t));
+                        CUDA_R_64F, g.alg, g.d_spmv));  // mat's workspace, as for A x
   return true;
 }
 
@@ -578,7 +581,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       return cs_failed();
   }
 
-  // Query SpMV buffer sizes and allocate one buffer per product (see GpuState::d_spmv).
+  // Query SpMV buffer sizes and allocate one workspace per descriptor (see GpuState::d_spmv).
   if (m > 0 && nnz > 0) {
     std::size_t bytes_nt = 0, bytes_t = 0;
     cusparseDnVecSetValues(g.vn, g.d_ext);
@@ -596,8 +599,11 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
             : cusparseSpMV_bufferSize(g.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOne, g.mat, g.vm,
                                       &kZero, g.vn, CUDA_R_64F, g.alg, &bytes_t);
     if (sized_t != CUSPARSE_STATUS_SUCCESS) return cs_failed();
-    if (bytes_nt > 0 && cudaMalloc(&g.d_spmv, bytes_nt) != cudaSuccess) return cs_failed();
-    if (bytes_t > 0 && cudaMalloc(&g.d_spmv_t, bytes_t) != cudaSuccess) return cs_failed();
+    // Without A^T held, `mat` serves both products and its workspace is sized for both.
+    const std::size_t bytes_mat = g.mat_t != nullptr ? bytes_nt : std::max(bytes_nt, bytes_t);
+    if (bytes_mat > 0 && cudaMalloc(&g.d_spmv, bytes_mat) != cudaSuccess) return cs_failed();
+    if (g.mat_t != nullptr && bytes_t > 0 && cudaMalloc(&g.d_spmv_t, bytes_t) != cudaSuccess)
+      return cs_failed();
   }
 
   // ---- Main iteration loop -----------------------------------------------

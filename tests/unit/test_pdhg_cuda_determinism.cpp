@@ -143,7 +143,7 @@ TEST(PdhgCudaDeterminism, TwoSolvesGiveTheSameBitsOnBothDevicePaths) {
 TEST(PdhgCudaDeterminism, ThePerIterationPathAndTheDeviceLoopReachTheSameAnswer) {
   // #478 item 4. Each path is repeatable on its own (above); against each other they are held
   // to the stopping tolerance, not to the bit, and the iteration counts are printed rather
-  // than asserted equal. The two paths take the same step while no evaluation intervenes, but
+  // than asserted equal. The two paths apply the same formulas to the same products, but
   // (a) the per-iteration path evaluates at every 40th accepted step and the device loop at
   // the first 32-iteration block boundary past it, so restarts are decided at different
   // iterates, and (b) the step rule's pow() runs in the host libm on one path and in CUDA's

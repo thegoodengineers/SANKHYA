@@ -46,8 +46,11 @@ struct DeviceLoopBuffers {
   cusparseSpMatDescr_t matrix_t{};
   cusparseSpMVAlg_t spmv_alg = CUSPARSE_SPMV_ALG_DEFAULT;
   cusparseDnVecDescr_t vec_n{}, vec_m{};
-  void* spmv_buffer{};    ///< the A x product's cuSPARSE workspace
-  void* spmv_buffer_t{};  ///< the A^T y product's own; never shared with A x (CSR_ALG2, #478)
+  /// One cuSPARSE workspace per matrix descriptor, the same ones the per-iteration path
+  /// uses (a descriptor keeps state in the workspace of its first product, #478): `matrix`'s,
+  /// for A x and for A^T y as its transpose, and `matrix_t`'s when A^T is held.
+  void* spmv_buffer{};
+  void* spmv_buffer_t{};
 };
 
 /// One captured iteration replayed `block` times per run_block().
