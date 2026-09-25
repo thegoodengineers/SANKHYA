@@ -199,6 +199,8 @@ def test_layouts() -> None:
     value, reread = objective_via_qps(box, [-2.0, 3.0])
     check(close(value, 0.5 * 1.0 * -2.0 * 3.0 + 2.0) and reread.num_rows == 0,
           "**B model through QPS", repr(value))
+    check(fmt.read_solution("", box) == ([0.0, 0.0], 0.0),
+          "an empty .sol file is the origin with objective 0 (QPLIB_10038's)")
     free = fmt.parse("N\nDCN\nmaximize\n1\n1\n1 1 -2.0\n0.0\n0\n3.0\n"
                      "1.79769313486232E+308\n-1.79769313486232E+308\n0\n"
                      "1.79769313486232E+308\n0\n0.0\n0\n0.0\n0\n0\n0\n")

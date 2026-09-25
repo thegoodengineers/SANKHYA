@@ -331,11 +331,12 @@ def read_solution(text: str, model: QplibModel) -> tuple[list[float], float | No
 
     The names are the site's GAMS model's: `objvar` is the objective variable, which the GAMS
     model puts where x1 would be, and `x<k>` is the file's variable k - 1. A name the
-    .qplib file itself assigns (its non-default names) is also accepted. Absent means zero.
-    Returns (x, objvar)."""
+    .qplib file itself assigns (its non-default names) is also accepted. Absent means zero,
+    `objvar` included: QPLIB_10038's published point is the origin with objective 0, and its
+    .sol file is empty. Returns (x, objvar)."""
     x = [0.0] * model.n
     by_name = {name: j for j, name in model.var_names.items()}
-    objvar = None
+    objvar = 0.0
     for raw in text.splitlines():
         tokens = raw.split()
         if not tokens:
