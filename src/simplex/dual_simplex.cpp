@@ -304,8 +304,17 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
   pivot_row_btran_seconds_ += clock.elapsed_seconds();
   clock.reset();
 
+  // rho's support, and what a row-wise pass over it would cost: one entry per nonzero of
+  // each row it touches, plus the row's logical column.
   Index rho_nonzeros = 0;
-  for (const double v : rho_) rho_nonzeros += v != 0.0 ? 1 : 0;
+  double row_work = 0.0;
+  const std::vector<Index>& row_starts = by_row_.row_starts();
+  for (Index i = 0; i < m_; ++i) {
+    if (rho_[static_cast<std::size_t>(i)] == 0.0) continue;
+    ++rho_nonzeros;
+    row_work += 1.0 + static_cast<double>(row_starts[static_cast<std::size_t>(i) + 1] -
+                                          row_starts[static_cast<std::size_t>(i)]);
+  }
   rho_nonzeros_total_ += static_cast<double>(rho_nonzeros);
   ++pivot_rows_computed_;
 
@@ -352,11 +361,44 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
     return;
   }
 
-  // Dense rho: a gather per column, deterministic at any thread count (#57). Every entry
-  // is written, so the sparse pass's bookkeeping is cleared rather than trusted.
+  // Dense rho from here on. Every entry of pivot_row_ is written by either pass below, so
+  // the sparse pass's bookkeeping is cleared rather than trusted.
   for (const Index k : pivot_row_touched_) pivot_row_marked_[static_cast<std::size_t>(k)] = 0;
   pivot_row_touched_.clear();
   pivot_row_held_sparse_ = false;
+
+  // ROW-WISE INTO A DENSE ROW, WHEN THAT READS LESS OF A. The gather below reads every
+  // nonbasic column whole, O(nnz(A)) whatever rho looks like; the rows rho touches hold
+  // row_work entries, and at a third of the rows nonzero - the medium tier's usual density,
+  // above the sparse pass's 10% - that is well under nnz(A). The rows are scattered into a
+  // zeroed dense row with no touched-list bookkeeping, and the basic columns zeroed after.
+  // The numbers are the gather's to the bit: column j's entry is summed over ascending rows
+  // in both (the columns are stored sorted by row, SparseMatrix::finalize), the terms are
+  // the same products, and the gather's extra terms are the rho_i = 0 ones, which add a
+  // zero and change nothing. So the pivot path does not move; only the time does.
+  // Single-threaded only: the gather is the loop OpenMP splits (#57).
+  if (pivot_row_single_thread_ &&
+      row_work < static_cast<double>(model_.num_nonzeros()) + static_cast<double>(m_)) {
+    ++pivot_rows_row_wise_;
+    std::fill(pivot_row_.begin(), pivot_row_.end(), 0.0);
+    for (Index i = 0; i < m_; ++i) {
+      const double rho_i = rho_[static_cast<std::size_t>(i)];
+      if (rho_i == 0.0) continue;
+      // The logical column of row i is -e_i, so its entry is -rho_i.
+      pivot_row_[static_cast<std::size_t>(n_ + i)] = -rho_i;
+      const ColumnView row = by_row_.row(i);
+      for (Index q = 0; q < row.size; ++q) {
+        pivot_row_[static_cast<std::size_t>(row.rows[q])] += rho_i * row.values[q];
+      }
+    }
+    for (Index slot = 0; slot < m_; ++slot) {
+      pivot_row_[static_cast<std::size_t>(basis_[static_cast<std::size_t>(slot)])] = 0.0;
+    }
+    pivot_row_gather_seconds_ += clock.elapsed_seconds();
+    return;
+  }
+
+  // Otherwise a gather per column, deterministic at any thread count (#57).
 #ifdef SANKHYA_HAVE_OPENMP
 #pragma omp parallel for schedule(static)
 #endif
@@ -448,6 +490,10 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   pivot_row_touched_.clear();
   pivot_row_held_sparse_ = false;
   by_row_.build(model_.matrix);  // once per solve; the pattern never changes (#243)
+  pivot_row_single_thread_ = options_.get_int("threads") == 1;
+#ifndef SANKHYA_HAVE_OPENMP
+  pivot_row_single_thread_ = true;  // no thread pool: the gather is serial whatever was asked
+#endif
   compute_reduced_costs(false);
   make_dual_feasible();
   reset_dual_weights();
