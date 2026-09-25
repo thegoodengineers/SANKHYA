@@ -124,6 +124,9 @@ add_executable(sankhya_tests
   unit/test_expression.cpp
   unit/test_nonlinear_model.cpp
   unit/test_convex_nlp.cpp
+  unit/test_nlp_derivatives.cpp
+  unit/test_nl_reader.cpp
+  unit/test_c_api_nlp.cpp
   unit/test_global.cpp
   unit/test_fractional_integer_bounds.cpp
   unit/test_deterministic.cpp

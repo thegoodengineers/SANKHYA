@@ -1145,11 +1145,12 @@ Solution Simplex::finish(SolveStatus status, const std::string& message, Count i
     if (pivot_rows_computed_ > 0) {
       logger_.verbose(
           "pivot row split (#243): btran {:.2f}s, gather {:.2f}s; rho has {:.1f}% of the rows "
-          "nonzero on average; {} of {} pivot rows took the row-wise path",
+          "nonzero on average; {} of {} pivot rows took the row-wise path, and {} more the "
+          "row-wise pass into a dense row",
           pivot_row_btran_seconds_, pivot_row_gather_seconds_,
           100.0 * rho_nonzeros_total_ /
               (static_cast<double>(pivot_rows_computed_) * std::max<double>(1.0, m_)),
-          pivot_rows_sparse_, pivot_rows_computed_);
+          pivot_rows_sparse_, pivot_rows_computed_, pivot_rows_row_wise_);
     }
   }
   report_solve_densities();

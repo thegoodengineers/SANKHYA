@@ -136,6 +136,11 @@ class SparseMatrix {
   /// Largest magnitude entry, or 0.0 when empty.
   [[nodiscard]] double max_abs_value() const noexcept;
 
+  /// a_ij <- (a_ij * row_factor[i]) * column_factor[j], in place on a frozen matrix. The
+  /// pattern is untouched, so nothing is sorted or rebuilt: each pass of the diagonal
+  /// scaling (src/la/scaling.cpp) used to rebuild the matrix from triplets.
+  void scale(const std::vector<double>& row_factor, const std::vector<double>& column_factor);
+
  private:
   void ensure_frozen() const noexcept {
     assert(frozen_ && "SparseMatrix must be finalized before reading");

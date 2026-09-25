@@ -10,26 +10,19 @@
 namespace sankhya {
 namespace {
 
-/// Multiply the accumulated scaling by a new pass and rebuild the scaled matrix.
+/// Multiply the accumulated scaling by a new pass and apply it to the scaled matrix.
+///
+/// IN PLACE. This rebuilt the matrix from triplets - add_entry per nonzero, then a sort of
+/// every column in finalize() - for a pass that cannot change the pattern, once per Ruiz
+/// round and once for Pock-Chambolle on every scaled solve. SparseMatrix::scale() multiplies
+/// the stored values by the same (a_ij * r_i) * c_j, and the rebuild's finalize(0.0) dropped
+/// nothing and only added each value to an exact zero, so the scaled matrix is the same to
+/// the bit (short of the sign of a stored zero, which the reader never keeps).
 void apply_pass(const std::vector<double>& row_pass, const std::vector<double>& column_pass,
                 Scaling* scaling) {
   const Index rows = scaling->matrix.num_rows();
   const Index cols = scaling->matrix.num_cols();
-
-  SparseMatrix rebuilt(rows, cols);
-  rebuilt.reserve(static_cast<std::size_t>(scaling->matrix.num_nonzeros()));
-  for (Index j = 0; j < cols; ++j) {
-    const ColumnView column = scaling->matrix.column(j);
-    const double cj = column_pass[static_cast<std::size_t>(j)];
-    for (Index k = 0; k < column.size; ++k) {
-      const Index i = column.rows[k];
-      rebuilt.add_entry(i, j, column.values[k] * row_pass[static_cast<std::size_t>(i)] * cj);
-    }
-  }
-  // Drop tolerance zero: a scaling pass must never change the sparsity pattern, or the
-  // scaled problem stops being the same problem.
-  rebuilt.finalize(0.0);
-  scaling->matrix = std::move(rebuilt);
+  scaling->matrix.scale(row_pass, column_pass);
 
   for (Index i = 0; i < rows; ++i) {
     scaling->row[static_cast<std::size_t>(i)] *= row_pass[static_cast<std::size_t>(i)];
