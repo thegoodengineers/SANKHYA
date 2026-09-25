@@ -7,8 +7,11 @@
 // present in SANKHYA_ENABLE_CUDA builds.
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
+
+#include "sankhya/types.hpp"
 
 namespace sankhya::gpu {
 
@@ -24,6 +27,22 @@ struct RowPartition {
 // Remainder rows go one-per-device to the first (remainder) devices.
 [[nodiscard]] std::vector<RowPartition> partition_rows(int m,
                                                        const std::vector<int>& device_ids);
+
+// The work a row block costs one iteration of PDHG: its nonzeros (the two SpMVs with A_k and
+// the one with A_k^T each touch every one of them) plus one per row (the dual update, the
+// interaction product and the running dual sum each touch every row once).
+[[nodiscard]] std::int64_t partition_weight(const std::vector<Index>& row_starts,
+                                            const RowPartition& part);
+
+// Partition rows [0, m) into contiguous blocks, one per entry of device_ids, balanced by
+// partition_weight rather than by row count (#295): with m = row_starts.size() - 1 and
+// W = nnz + m the total weight, boundary k (k = 1..K-1) is the row r whose prefix weight is
+// nearest k * W / K, ties to the lower row, never before boundary k - 1. Every block is then
+// within one row's weight of W / K. row_starts is a CSR row-pointer array (m + 1 entries,
+// nondecreasing); an empty or malformed one partitions zero rows. An even split by rows, the
+// earlier scheme (partition_rows), puts a dense linking block on one card whole.
+[[nodiscard]] std::vector<RowPartition> partition_rows_by_nonzeros(
+    const std::vector<Index>& row_starts, const std::vector<int>& device_ids);
 
 // Parse comma-separated device IDs (e.g. "0,1,2"). Returns {0} for empty or "auto".
 // Negative values and non-integer tokens are silently skipped. Duplicates are removed.
