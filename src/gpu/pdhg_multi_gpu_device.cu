@@ -262,12 +262,12 @@ bool setup_device(DeviceState& d, const CsrView& full_csr, const Scaling& scalin
   return true;
 }
 
-bool spmv_aty(DeviceState& d) {
+bool spmv_aty(DeviceState& d, const double* y) {
   if (d.local_m == 0 || d.local_nnz == 0) {
     // Nothing here ever changes: the partial stays the zero it was allocated as.
     return true;
   }
-  MG_CS(cusparseDnVecSetValues(d.vm, d.d_y));
+  MG_CS(cusparseDnVecSetValues(d.vm, const_cast<double*>(y != nullptr ? y : d.d_y)));
   MG_CS(cusparseDnVecSetValues(d.vn, d.d_partial));
   MG_CS(cusparseSpMV(d.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, d.mat_t, d.vm, &kZero, d.vn,
                      CUDA_R_64F, CUSPARSE_SPMV_CSR_ALG2, d.d_spmv_t));

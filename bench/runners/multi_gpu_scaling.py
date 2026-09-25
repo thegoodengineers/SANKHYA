@@ -14,7 +14,7 @@ The scaling question is partitioned-2 against partitioned-1: the same arithmetic
 single-engine is there so the reader can see what the partitioned engine costs against the
 engine a one-card user actually runs. PDHG alone is timed (pdhg_polish=false), from the
 solver's own clock, and the partitioned engine's log line "Timing: ... us per attempt on
-the cards; host evaluation ..." gives the per-step device time with the host-side residual
+the cards; evaluation ..." gives the per-step device time with the residual
 evaluation and the setup taken out; the single engine prints no such line, so its per-step
 figure is its solve time over its iterations and includes its evaluation, its setup and the
 CUDA context creation. On a short fixed-step budget that overhead dominates (a 200-step
@@ -73,7 +73,7 @@ CSV_COLUMNS = [
 ]
 
 TIMING = re.compile(r"Timing: loop ([\d.]+)s, (\d+) step attempts, ([\d.]+) us per attempt "
-                    r"on the cards; host evaluation ([\d.]+)s")
+                    r"on the cards; (?:host )?evaluation ([\d.]+)s")
 TRANSPORT = re.compile(r"\((\d+) devices?, ([a-z-]+) exchange\)")
 
 

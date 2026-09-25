@@ -212,13 +212,23 @@ TEST(MultiGpuTwoCards, ALargerSyntheticLpMatchesOneCardAndItsKnownOptimum) {
   Logger silent(nullptr);
   // 20,000 x 20,000, five nonzeros a column plus eight linking rows of 2,000.
   const SyntheticLp lp = synthetic_kkt_lp(20000, 20000, 5, 8, 2000, 295);
-  const Solution two = gpu::solve_pdhg_multi_gpu(lp.model, solve_options(), {0, 1}, silent);
+  // The iteration BUDGET here is 1,000,000, not the file's 400,000; the tolerance is
+  // unchanged. What binds on this model is the project standard's complementarity bound
+  // (1e-6), which the run meets somewhere between roughly 270,000 and 420,000 iterations
+  // depending on where its restarts fall. On two A100s (#478 item 3): single engine 266,920
+  // (evaluation on the device) and 310,920 (on the host); two cards 415,240 (on the cards)
+  // and 360,240 (on the host); the device and host evaluations agreed to six digits at
+  // every checkpoint of the 415,240 run, complementarity included. A rounding-level
+  // difference in a restart decision moves the count by 100,000, so 400,000 was a coin toss.
+  Options budget = solve_options();
+  budget.set_int("iteration_limit", 1000000);
+  const Solution two = gpu::solve_pdhg_multi_gpu(lp.model, budget, {0, 1}, silent);
   ASSERT_EQ(two.algorithm, "pdhg-cuda-multi");
-  Options partitioned = solve_options();
+  Options partitioned = budget;
   partitioned.set_bool("gpu_partitioned", true);
   const Solution one_partitioned =
       gpu::solve_pdhg_multi_gpu(lp.model, partitioned, {0}, silent);
-  const Solution one_engine = gpu::solve_pdhg_gpu(lp.model, solve_options(), silent);
+  const Solution one_engine = gpu::solve_pdhg_gpu(lp.model, budget, silent);
   agrees(one_partitioned, two, "synthetic 20000x20000 (partitioned engine, one card)");
   agrees(one_engine, two, "synthetic 20000x20000 (single-GPU engine)");
   ASSERT_TRUE(converged(two)) << two.message;
@@ -264,6 +274,35 @@ TEST(MultiGpuTwoCards, HostStagedFallbackGivesTheSameBitsAsPeerToPeer) {
   }
 }
 
+TEST(MultiGpuTwoCards, EvaluationOnTheCardsMatchesTheHostEvaluation) {
+  // #478 item 3: the KKT residuals, gap and restart distances reduced on the cards (the
+  // default) against pdhg::evaluate on the host (gpu_device_evaluation=false, the
+  // reference). The two agree to rounding (test_pdhg_device_evaluation.cpp), so a restart can
+  // fall one evaluation apart and the runs are held to the stopping tolerance, not the bit;
+  // each is bitwise repeatable on its own (TwoRunsAndOneOrTwoCardsGiveTheSameBits runs the
+  // default, the cards).
+  REQUIRE_TWO_CARDS();
+  Logger silent(nullptr);
+  Options host = solve_options();
+  host.set_bool("gpu_device_evaluation", false);
+  const SyntheticLp lp = synthetic_kkt_lp(5000, 5000, 5, 4, 800, 478);
+  int agreed = 0, compared = 0;
+  // Instances that meet the project standard inside the file's budget on both paths
+  // (stocfor1 and israel reach the iteration limit on either, which would compare nothing).
+  for (const std::string& name :
+       {std::string("afiro"), std::string("sc50a"), std::string("adlittle"),
+        std::string("blend"), std::string("sc105"), std::string("synthetic")}) {
+    const Model model = name == "synthetic" ? lp.model : read_netlib(name);
+    const Solution cards = gpu::solve_pdhg_multi_gpu(model, solve_options(), {0, 1}, silent);
+    const Solution on_host = gpu::solve_pdhg_multi_gpu(model, host, {0, 1}, silent);
+    ASSERT_EQ(cards.algorithm, "pdhg-cuda-multi") << name;
+    ASSERT_EQ(on_host.algorithm, "pdhg-cuda-multi") << name;
+    ++compared;
+    agreed += agrees(on_host, cards, name + " (host evaluation against the cards)") ? 1 : 0;
+  }
+  EXPECT_EQ(agreed, compared);
+}
+
 #else  // no CUDA backend in this build: the same tests, visibly skipped
 
 TEST(MultiGpuTwoCards, NineNetlibInstancesMatchOneCardAtTheStoppingTolerance) {
@@ -276,6 +315,9 @@ TEST(MultiGpuTwoCards, TwoRunsAndOneOrTwoCardsGiveTheSameBits) {
   GTEST_SKIP() << "CUDA backend not compiled in (SANKHYA_ENABLE_CUDA=OFF)";
 }
 TEST(MultiGpuTwoCards, HostStagedFallbackGivesTheSameBitsAsPeerToPeer) {
+  GTEST_SKIP() << "CUDA backend not compiled in (SANKHYA_ENABLE_CUDA=OFF)";
+}
+TEST(MultiGpuTwoCards, EvaluationOnTheCardsMatchesTheHostEvaluation) {
   GTEST_SKIP() << "CUDA backend not compiled in (SANKHYA_ENABLE_CUDA=OFF)";
 }
 

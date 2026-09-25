@@ -82,8 +82,9 @@ struct DeviceState {
 // Everything below enqueues on d.stream and returns false on a launch or cuSPARSE error.
 // The caller has made d.device_id current.
 
-/// d_partial = A_k^T y_k.
-[[nodiscard]] bool spmv_aty(DeviceState& d);
+/// d_partial = A_k^T y_k, or A_k^T of `y` (this card's rows) when given: the convergence
+/// evaluation (#478) takes the product of the average through the same exchange.
+[[nodiscard]] bool spmv_aty(DeviceState& d, const double* y = nullptr);
 /// out (local_m) = A_k in (n).
 [[nodiscard]] bool spmv_ax(DeviceState& d, double* in_n, double* out_m);
 /// x_next, extrapolation and dx from d_aty; per-block movement sums into slot 0.
