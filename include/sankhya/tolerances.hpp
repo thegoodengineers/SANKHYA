@@ -872,5 +872,13 @@ inline constexpr double kMinlpEmptyViolation = 1e-6;
 /// rmine15 (7.8e6 assembled, its CPU ordering unfinished inside the set-up share) are over
 /// it. A system this large skips the CPU ordering: the device orders it.
 inline constexpr std::int64_t kIpmDeviceFactorFloor = 1'000'000;
+/// Under `ipm_linear_solver = auto` the device is not started with less than this many
+/// seconds left of the time limit: creating the cuDSS handle and running its analysis do not
+/// consult the deadline, and the CPU ordering does. Measured on the A100: a 3,000-row system
+/// whose normal equations are dense (4.5e6 nonzeros) returned time_limit 0.4 s later with the
+/// device than on the CPU factor under a 0.5 s limit (InteriorPointTimeLimit.
+/// ADenseColumnDoesNotCarryTheSolvePastItsTimeLimit, 0.9 s against 0.5 s), and 1.5 s later
+/// under a loaded ctest; two seconds covers both with room.
+inline constexpr double kIpmDeviceStartSeconds = 2.0;
 
 }  // namespace sankhya::tol
