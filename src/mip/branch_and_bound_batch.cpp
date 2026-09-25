@@ -186,7 +186,7 @@ void BranchAndBound::batch_bound_open_nodes() {
     const double bound = result.bound[k];
     if (!(bound > node.bound)) continue;
     const bool prunable_before = can_prune(node.bound);
-    node.bound = bound;
+    set_open_bound(bounded[k], bound);  // refiled in the bound index
     ++batch_bounds_raised_;
     changed = true;
     if (!can_prune(bound)) continue;
@@ -208,7 +208,7 @@ void BranchAndBound::batch_bound_open_nodes() {
   open_.erase(std::remove_if(open_.begin(), open_.end(),
                              [&](Index i) { return drop[static_cast<std::size_t>(i)] != 0; }),
               open_.end());
-  if (open_is_heap()) rebuild_open_heap();
+  rebuild_open_heap();  // the heap order under #502, and the bound index always
 }
 
 bool BranchAndBound::batch_strong_branch(const std::vector<double>& x,
