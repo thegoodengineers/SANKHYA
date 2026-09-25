@@ -1961,12 +1961,16 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   // disagree about which method they are running.
   // `factors` is handed only to the scaled attempt: its matrix is the one cache.id names.
   // The unscaled retry factorizes the caller's matrix, which no id identifies.
-  const auto run_engine = [&](const Model& problem, const Options& problem_options,
-                              NodeFactorCache* reuse) {
+  const auto run_engine_from = [&](const Model& problem, const Options& problem_options,
+                                   NodeFactorCache* reuse, const WarmStart* start) {
     Simplex simplex(problem, problem_options, logger, control);
     if (reuse != nullptr) simplex.use_factor_cache(reuse, cache.id);
     simplex.count_distinct_costs_on(&model.col_cost);
-    return engine == Engine::kDual ? simplex.run_dual(warm) : simplex.run(warm);
+    return engine == Engine::kDual ? simplex.run_dual(start) : simplex.run(start);
+  };
+  const auto run_engine = [&](const Model& problem, const Options& problem_options,
+                              NodeFactorCache* reuse) {
+    return run_engine_from(problem, problem_options, reuse, warm);
   };
   if (!cache.valid) return run_engine(model, options, nullptr);
 
@@ -2163,6 +2167,46 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
       return solution;
     }
     retry_options.set_double("time_limit", remaining);
+  }
+
+  // THE RETRY STARTS WHERE THE SCALED ATTEMPT STOPPED, WHEN THAT WAS AN OPTIMAL BASIS. A
+  // scaled optimum that does not survive unscaling is almost always a few 1e-7 away in
+  // original units - pilot4: optimal after 0.1 s, then 1,616 unscaled iterations from the
+  // slack basis to the same vertex; pilot87 under dual_ratio_test=harris: optimal after
+  // 29.6 s, then 46 s more from the slack basis. A basis is a set of columns, and scaling
+  // is a diagonal change of variable that leaves it a basis of the unscaled model, so the
+  // unscaled solve is started from it and needs only the pivots that clean up in original
+  // units. This is only a shortcut: its answer is kept when it is optimal and meets the
+  // same primal and dual tests the scaled attempt failed, which is the claim the status
+  // guard in solve.cpp would accept; anything less and the unscaled solve from the slack
+  // basis runs exactly as it did before, on whatever time is left.
+  if (solution.status == SolveStatus::kOptimal &&
+      solution.col_status.size() == static_cast<std::size_t>(n) &&
+      solution.row_status.size() == static_cast<std::size_t>(m)) {
+    logger.info(
+        "Scaled solve returned optimal but primal infeasibility {:.3e} and dual "
+        "infeasibility {:.3e} in original units; re-solving unscaled from its basis",
+        solution.primal_infeasibility_scaled, solution.dual_infeasibility_scaled);
+    WarmStart from_scaled;
+    from_scaled.col_status = solution.col_status;
+    from_scaled.row_status = solution.row_status;
+    Solution warm_retry = run_engine_from(model, retry_options, nullptr, &from_scaled);
+    if (warm_retry.status == SolveStatus::kOptimal &&
+        warm_retry.primal_infeasibility_scaled <= primal_tolerance &&
+        warm_retry.dual_infeasibility_scaled <= dual_tolerance) {
+      logger.info("Unscaled solve from the scaled basis succeeded in {} iteration(s)",
+                  warm_retry.iterations);
+      note_route(warm_retry, "the unscaled retry from its basis produced this answer");
+      return warm_retry;
+    }
+    if (limited) {
+      const double remaining = time_limit - budget.elapsed_seconds();
+      if (remaining <= 0.0) {
+        note_route(solution, "nothing was left for an unscaled retry");
+        return solution;
+      }
+      retry_options.set_double("time_limit", remaining);
+    }
   }
 
   logger.info("Scaled solve returned {} (primal infeasibility {:.3e}); retrying unscaled",
