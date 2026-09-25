@@ -34,6 +34,10 @@ inline constexpr int kMinComputeArch = SANKHYA_MIN_COMPUTE_ARCH;
 /// The function is intentionally conservative; a model near the limit may succeed in practice.
 [[nodiscard]] std::size_t estimate_pdhg_gpu_memory(Index rows, Index cols, Count nonzeros);
 
+/// The extra device bytes deterministic mode takes (#478): A^T held as a second CSR matrix,
+/// (cols + 1) int32 row offsets, nnz int32 column indices and nnz double values.
+[[nodiscard]] std::size_t estimate_pdhg_gpu_transpose_memory(Index cols, Count nonzeros);
+
 /// Return true when a device with the given compute capability (major.minor) meets the
 /// minimum architecture compiled into this build (kMinComputeArch).
 /// Pure arithmetic — no CUDA calls — so safe to call from CPU-only translation units.

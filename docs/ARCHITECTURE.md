@@ -268,14 +268,26 @@ deterministic mode and written to every stats blob as `model.fingerprint`. It ha
 patterns, so -0.0 and 0.0 are different inputs, and it ignores names, because two models
 that differ only in what their columns are called solve identically.
 
-The GPU path refuses `deterministic=true` (#383): the fused `atomicAdd` reductions in the
-CUDA kernels are order-dependent and cannot satisfy the bit-for-bit promise. When
-`deterministic=true` and the GPU path would otherwise be selected, `solve()` logs a warning
-and falls back to CPU PDHG. `docs/PS26119_COVERAGE.md` says what exists.
+The single-device GPU path honours `deterministic=true` since #478; #383 had refused it.
+Two things were order-dependent and both are gone under that flag. The step-rule scalars
+(movement and interaction, PDLP section 3.1) were summed by an `atomicAdd` of each block's
+total, in whatever order the blocks finished; every block now writes its total to its own
+slot and one block sums the slots in an order fixed by the thread index
+(`src/gpu/pdhg_reduce.cuh`, used on every GPU run, deterministic or not). And A^T y ran as
+cuSPARSE's transpose product, which the cuSPARSE documentation does not promise to be
+repeatable; under the flag both products run as non-transpose products with
+`CUSPARSE_SPMV_CSR_ALG2`, the one configuration that documentation states is bit-wise
+repeatable, with A^T held explicitly in CSR (the CSC arrays of A, a second copy of the
+matrix on the device, which the VRAM gate counts). `tests/unit/test_pdhg_cuda_determinism.cpp`
+solves twice on the card and compares the answers to the bit. The multi-GPU engine still
+sums with `atomicAdd`, so a deterministic request naming more than one device in
+`gpu_devices` falls back to CPU PDHG with a warning. `docs/PS26119_COVERAGE.md` says what
+exists.
 
-**GPU iteration counts vary run to run** (#448, open). The working hypothesis is the
-nondeterministic atomicAdd reductions above: they change the rounding in every dot product
-on every run, PDHG's restart schedule is driven by residual ratios computed from those dot
+**GPU iteration counts vary run to run** (#448) without `deterministic=true`: the default
+path keeps cuSPARSE's transpose product and its default algorithm. The working hypothesis
+was the nondeterministic atomicAdd reductions (removed by #478 on every path): they changed
+the rounding in every dot product on every run, PDHG's restart schedule is driven by residual ratios computed from those dot
 products, and a different restart decision is a different iteration count. It is a
 hypothesis, not a finding - #448 asks for the two paths to be instrumented on one instance
 and their traces diffed to the first divergence, and that has not been done. The effect is

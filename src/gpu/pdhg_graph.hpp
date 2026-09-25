@@ -28,7 +28,9 @@ struct DeviceLoopBuffers {
   double *y{}, *yn{}, *dy{}, *ax{}, *adx{}, *ysum{};
   double *axc{}, *axn{};  ///< two-mat-vec cache (#479); null when it is off
   const double *cost{}, *col_lo{}, *col_hi{}, *row_lo{}, *row_hi{};
-  double* scalars{};  ///< [0] movement x, [1] movement y, [2] interaction
+  /// One slot per block of the fused kernels: [0, bn) movement x, [bn, bn + bm) movement y,
+  /// [bn + bm, bn + 2 bm) interaction, summed in a fixed order by the step kernel (#478).
+  double* partials{};
   // Step state, on the device.
   double* eta{};          ///< step size
   double* omega{};        ///< primal weight (written by the host at a restart)
@@ -39,8 +41,16 @@ struct DeviceLoopBuffers {
   bool two_matvec = false;
   cusparseHandle_t cusparse{};
   cusparseSpMatDescr_t matrix{};
+  /// A^T held explicitly in CSR (deterministic mode, #478); A^T y then runs as a
+  /// non-transpose product on it. Null: cuSPARSE's transpose product of `matrix`.
+  cusparseSpMatDescr_t matrix_t{};
+  cusparseSpMVAlg_t spmv_alg = CUSPARSE_SPMV_ALG_DEFAULT;
   cusparseDnVecDescr_t vec_n{}, vec_m{};
+  /// One cuSPARSE workspace per matrix descriptor, the same ones the per-iteration path
+  /// uses (a descriptor keeps state in the workspace of its first product, #478): `matrix`'s,
+  /// for A x and for A^T y as its transpose, and `matrix_t`'s when A^T is held.
   void* spmv_buffer{};
+  void* spmv_buffer_t{};
 };
 
 /// One captured iteration replayed `block` times per run_block().
