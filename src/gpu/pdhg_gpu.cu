@@ -22,6 +22,7 @@
 #include "pdhg_gpu.hpp"
 
 #include "../pdhg/pdhg_evaluate.hpp"
+#include "../pdhg/pdhg_trace.hpp"
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -581,6 +582,11 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   bool converged = false, gpu_error = false, logged_table = false;
   StopController stop(control, timer, limits);
   SolveStatus stop_status = SolveStatus::kIterationLimit;
+  const pdhg::IterateTraceHook trace = pdhg::iterate_trace_for_testing();
+  std::vector<double> trace_x(trace.callback != nullptr ? n : 0);
+  std::vector<double> trace_y(trace.callback != nullptr ? m : 0);
+  std::vector<double> trace_axc(trace.callback != nullptr ? m : 0);
+  std::vector<double> trace_ax(trace.callback != nullptr ? m : 0);
 
   // Two-mat-vec (#479): the cache starts as A x0, filled once the SpMV buffers exist.
   if (two_matvec) {
@@ -761,6 +767,19 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       }
       ++averaged;
       ++iteration;
+      if (trace.callback != nullptr) {  // a test seam, null outside tests (#479)
+        // With two_matvec, d_ax is free until the next step derives into it, so A x_k is
+        // recomputed there for the test to hold against the cache.
+        const bool cached = two_matvec && mi > 0;
+        if (!dh_copy(g.d_x, trace_x.data(), n) || !dh_copy(g.d_y, trace_y.data(), m) ||
+            (cached && (!spmv_nt(g, g.d_x, g.d_ax) || !dh_copy(g.d_axc, trace_axc.data(), m) ||
+                        !dh_copy(g.d_ax, trace_ax.data(), m)))) {
+          gpu_error = true;
+          break;
+        }
+        trace.callback(trace.context, iteration, trace_x.data(), n, trace_y.data(), m,
+                       cached ? trace_axc.data() : nullptr, cached ? trace_ax.data() : nullptr);
+      }
     }
     const double eta_ceil = 1.0e3 / std::max(spectral_norm, 1e-12);
     if (!no_info) eta = std::clamp(proposed, 1e-12, eta_ceil);
