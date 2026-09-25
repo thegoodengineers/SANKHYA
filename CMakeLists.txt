@@ -469,6 +469,12 @@ target_link_libraries(sankhya-cli
 target_include_directories(sankhya-cli PRIVATE "${PROJECT_SOURCE_DIR}/src")
 set_target_properties(sankhya-cli PROPERTIES OUTPUT_NAME sankhya)
 
+# One Feasibility Jump run, CPU or GPU, for bench/runners/gpu_fj_ab.py (#508). Built only on
+# request (`--target sankhya-fj-ab`); it reaches into src/ for the heuristic as the tests do.
+add_executable(sankhya-fj-ab EXCLUDE_FROM_ALL bench/tools/fj_ab.cpp)
+target_link_libraries(sankhya-fj-ab PRIVATE sankhya_core sankhya_flags)
+target_include_directories(sankhya-fj-ab PRIVATE "${PROJECT_SOURCE_DIR}/src")
+
 # -----------------------------------------------------------------------------------------
 # Reader fuzz targets (#534)
 # -----------------------------------------------------------------------------------------
