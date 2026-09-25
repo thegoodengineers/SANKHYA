@@ -271,7 +271,8 @@ TEST(ConflictCutoff, AQuadraticObjectiveLearnsNothingFromACutoff) {
   std::stringstream text;
   text << in.rdbuf();
   if (text.str().empty()) return;  // nothing written means nothing learned
-  for (const nlohmann::json& conflict : nlohmann::json::parse(text.str())["conflicts"]) {
+  const nlohmann::json report = nlohmann::json::parse(text.str());
+  for (const nlohmann::json& conflict : report["conflicts"]) {
     EXPECT_NE(conflict["source"].get<std::string>(), "cutoff") << conflict.dump();
   }
 }
