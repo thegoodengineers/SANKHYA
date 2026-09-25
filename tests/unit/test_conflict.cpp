@@ -335,6 +335,10 @@ Options searching(bool conflicts, const std::string& out) {
   Options options;
   options.set_bool("log_to_console", false);
   options.set_bool("presolve", false);  // conflict indices are then the model's own
+  // And its rows: with symmetry on the search's model carries ordering rows (#413), which
+  // cut away all but one point of each orbit, so a conflict re-proved from them holds only
+  // on that smaller set, and the test below asks for validity over every feasible point.
+  options.set_bool("mip_symmetry", false);
   options.set_bool("conflict_analysis", conflicts);
   if (!out.empty()) options.set_string("conflict_out", out);
   return options;

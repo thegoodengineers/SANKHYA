@@ -2011,7 +2011,9 @@ const std::vector<OptionSpec>& Options::registry() {
          OptionType::String,
          std::string(""),
          "MILP: write the learned conflicts and their statistics as JSON to this file, in "
-         "the indices of the model the search ran on (presolved, if presolve ran).",
+         "the indices of the model the search ran on (presolved, if presolve ran). Each "
+         "conflict is proved over that model's rows, the ordering rows of mip_symmetry "
+         "included when it found any, so it holds for the points those rows keep.",
          0.0,
          0.0,
          {},
