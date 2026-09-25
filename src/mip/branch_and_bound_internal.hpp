@@ -64,6 +64,18 @@ struct DomainChange {
   double value = 0.0;
 };
 
+/// Primal/dual iterate from a QP IPM node solve, for warm-starting children (#494).
+/// col_value holds the primal solution in the working model's columns, row_dual the
+/// duals. Empty when miqp_node_ipm is off or the node did not solve to kOptimal.
+/// NOTE: passing this to solve_convex_qp_ipm requires a warm-start API from #490
+/// that is not yet wired; the struct is stored here so that API can read it without
+/// a tree change once it lands.
+struct IpmIterate {
+  std::vector<double> col_value;
+  std::vector<double> row_dual;
+  [[nodiscard]] bool empty() const { return col_value.empty(); }
+};
+
 /// A node holds only its OWN bound change and a link to its parent. The full domain is
 /// recovered by walking to the root, which is why the tree costs O(depth) per node instead
 /// of O(columns).
@@ -125,6 +137,8 @@ struct TreeNode {
   /// gpu_batch_nodes (#520): the node has been through one batched bound (whether or not it
   /// raised `bound`), so it is not put through another.
   bool batch_bounded = false;
+  /// QP IPM primal/dual iterate for warm-starting children (#494); empty when not used.
+  IpmIterate ipm_iterate;
 };
 
 /// Convergence tolerance for a QP node relaxation in an MIQP search.
@@ -218,6 +232,9 @@ class BranchAndBound {
       node_options_.set_double("qp_tolerance", kMiqpNodeTolerance);
       node_options_.set_int("iteration_limit", kMiqpNodeIterationLimit);
     }
+    // miqp_node_ipm (#494): use the proximal QP IPM as the node relaxation solver for MIQP
+    // problems. Only meaningful when quadratic_ is set.
+    miqp_node_ipm_ = quadratic_ && options.get_bool("miqp_node_ipm");
 
     for (Index j = 0; j < model.num_cols(); ++j) {
       if (model.col_type[static_cast<std::size_t>(j)] == VarType::kInteger) {
@@ -445,7 +462,15 @@ class BranchAndBound {
   [[nodiscard]] Solution solve_node() { return solve_node_with(node_options_); }
 
   [[nodiscard]] Solution solve_node_with(const Options& options) {
-    if (quadratic_) return qp::solve_convex_qp(working_, options, logger_, control_);
+    if (quadratic_) {
+      // miqp_node_ipm (#494): use the proximal QP IPM from #490 instead of the
+      // first-order Condat-Vu engine. current_ipm_warm_ holds the parent's iterate
+      // for warm-starting; passing it to solve_convex_qp_ipm requires the warm-start
+      // API from #490 that is not yet wired — the iterate is stored and will be passed
+      // once that API lands.
+      if (miqp_node_ipm_) return qp::solve_convex_qp_ipm(working_, options, logger_, control_);
+      return qp::solve_convex_qp(working_, options, logger_, control_);
+    }
     // WARM-STARTED DUAL SIMPLEX BELOW THE ROOT (#65). The basis in current_warm_ was
     // optimal for a problem that differs from this one by a bound or two, so it is dual
     // feasible here, which is exactly the state the dual simplex starts from. Measured
@@ -766,6 +791,8 @@ class BranchAndBound {
   /// The bounds are still scaled per node by solve_primal_simplex, because those are exactly
   /// what branching changes. Only the reusable part is cached.
   bool quadratic_ = false;  ///< the node relaxation is a QP, not an LP
+  bool miqp_node_ipm_ =
+      false;  ///< miqp_node_ipm: use the QP IPM as the MIQP node solver (#494)
 
   NodeScaling scaling_;
 
@@ -800,6 +827,9 @@ class BranchAndBound {
   Count heap_selections_ = 0;           ///< nodes taken from the heap open list
   /// The basis to start the NEXT node LP from; empty means the slack basis (the root).
   WarmStart current_warm_;
+  /// The QP IPM iterate from the parent node, for warm-starting the child solve (#494).
+  /// Moved from the parent's TreeNode::ipm_iterate at node entry; empty when off or root.
+  IpmIterate current_ipm_warm_;
   /// mip_node_factor_cache (#501): first factorizations kept for the next node LP that
   /// starts from the same basis. Null when the option is 0.
   std::unique_ptr<NodeFactorCache> factor_cache_;

@@ -753,6 +753,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  kNoLimit,
                  {}});
+    s.push_back({"miqp_node_ipm",
+                 OptionType::Bool,
+                 false,
+                 "MIQP: solve each node relaxation with the proximal QP interior point (#490) "
+                 "instead of the first-order Condat-Vu engine (#494). The primal/dual iterate "
+                 "is stored at each node and passed as a warm start to its children, reducing "
+                 "IPM iterations near the bottom of the tree. Off by default until an A/B on "
+                 "main. Full warm-starting requires the QP IPM warm-start API from #490.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_objective_branching",
                  OptionType::Bool,
                  false,
