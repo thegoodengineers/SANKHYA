@@ -319,6 +319,10 @@ TEST(PdhgHeuristics, TheSearchWithBothOnAgreesWithTheExactOracle) {
   options.set_bool("gpu_fix_and_prop", true);
   options.set_string("gpu_heur_backend", "cpu");
   options.set_int("gpu_pump_max_iter", 10);
+  // They run only when the root rounding and the dives found nothing; with the dives on, that
+  // was 3 of 148 searches here, so the other heuristics are off to put these to work.
+  options.set_bool("mip_heuristics", false);
+  options.set_string("mip_heur_dive_fractional", "off");
   options.set_bool("presolve", false);
   options.set_bool("log_to_console", true);
   options.set_double("mip_relative_gap", 0.0);
