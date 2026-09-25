@@ -63,26 +63,31 @@ void restore_implied_bound_basis(const Result& result, const Model& original,
 
   CsrView rows;
   bool have_rows = false;
+  // A column is brought into the basis once, whichever of its records reaches it first: a
+  // column propagated to a point from both sides has two records, and the second must not
+  // push a second entry out for it.
+  std::vector<bool> entered(n, false);
   for (std::size_t idx = records; idx-- > 0;) {
     const Record& record = result.records[idx];
     if (record.kind != Record::Kind::kImpliedBound) continue;
     const auto c = static_cast<std::size_t>(record.column);
+    if (entered[c]) continue;
     const double x = solution->col_value[c];
     if (!on(x, record.value)) continue;
     if (on(x, original.col_lower[c]) || on(x, original.col_upper[c])) continue;
-    if (column_removed_at[c] < records) {
-      // Replayed by its own record at the propagated bound: basic (dual fixing, dominated)
-      // or fixed, with no row restored alongside to pay for a basic entry. A column
-      // eliminated through a row is that row's basic entry already.
-      const Record::Kind removed_by = result.records[column_removed_at[c]].kind;
-      if (removed_by != Record::Kind::kFixedColumn &&
-          removed_by != Record::Kind::kDualFixedColumn &&
-          removed_by != Record::Kind::kDominatedColumn) {
-        continue;
-      }
-    } else if (col_status[c] == BasisStatus::kBasic) {
-      continue;
-    }
+    // Which columns still need an entry to leave the basis for them. A column in the reduced
+    // model the engine left nonbasic; a column fixed at the propagated bound (kFixedColumn)
+    // that nothing has made basic yet - a singleton row that priced it made it basic and
+    // put its own logical out in exchange; and a column dual fixing or dominance fixed there,
+    // which the replay makes basic with no row restored to pay for it. A column eliminated
+    // through a row is that row's basic entry already.
+    const bool removed = column_removed_at[c] < records;
+    const Record::Kind removed_by =
+        removed ? result.records[column_removed_at[c]].kind : Record::Kind::kImpliedBound;
+    const bool replayed_basic = removed_by == Record::Kind::kDualFixedColumn ||
+                                removed_by == Record::Kind::kDominatedColumn;
+    if (removed && !replayed_basic && removed_by != Record::Kind::kFixedColumn) continue;
+    if (!replayed_basic && col_status[c] == BasisStatus::kBasic) continue;
 
     if (!have_rows) {
       rows.build(original.matrix);
@@ -119,7 +124,10 @@ void restore_implied_bound_basis(const Result& result, const Model& original,
         }
       }
     }
-    if (swapped) col_status[c] = BasisStatus::kBasic;
+    if (swapped) {
+      col_status[c] = BasisStatus::kBasic;
+      entered[c] = true;
+    }
   }
 }
 

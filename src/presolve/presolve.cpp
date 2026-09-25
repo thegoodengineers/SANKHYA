@@ -2773,6 +2773,14 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     // zeroes d_j, and moves every other column of row i the admissible way, because each
     // sits at the end of its range the bound was computed from. The same transfer
     // process_singleton_row makes for a row with one column.
+    //
+    // ONLY THE SIGN THIS BOUND CAN CARRY. A lower bound holds a reduced cost that pushes the
+    // column down (sense * d > 0), an upper bound one that pushes it up; the other sign
+    // belongs to whatever bounds the column from the other side - another propagated bound,
+    // a singleton row - and moving it onto this row gives the row a multiplier of the wrong
+    // sign. The fuzz test found exactly that: x2 held at 4 by a singleton row from below and
+    // by a propagated bound from above, and the positive reduced cost another row's
+    // transfer left on it pushed onto the upper bound's row as -0.8 on a >= row.
     for (std::size_t idx = result.records.size(); idx-- > 0;) {
       const Record& record = result.records[idx];
       if (record.kind != Record::Kind::kImpliedBound) continue;
@@ -2784,13 +2792,13 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
       const auto c = static_cast<std::size_t>(record.column);
       const double x = solution.col_value[c];
       if (!at_bound(x, record.value)) continue;
-      const bool at_lower = at_bound(x, original.col_lower[c]);
-      const bool at_upper = at_bound(x, original.col_upper[c]);
       const double d = reduced_cost_of(record.column);
       const double signed_d = sense * d;
-      const bool needs_price = (!at_lower && !at_upper && d != 0.0) ||
-                               (at_lower && !at_upper && signed_d < 0.0) ||
-                               (at_upper && !at_lower && signed_d > 0.0);
+      // Carried by this bound, and not already admissible on the original bound on the same
+      // side (a propagated bound can coincide with the original one on the other side only).
+      const bool needs_price = record.implied_upper
+                                   ? signed_d < 0.0 && !at_bound(x, original.col_upper[c])
+                                   : signed_d > 0.0 && !at_bound(x, original.col_lower[c]);
       if (!needs_price) continue;
       implied_transfer[idx] = d / a;
       solution.row_dual[row] += implied_transfer[idx];
