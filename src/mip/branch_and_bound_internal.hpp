@@ -694,6 +694,9 @@ class BranchAndBound {
                               bool root);
   /// Count node solves in which each cut row was slack; free a row slack for too long.
   void age_cut_rows(const Solution& relaxation);
+  /// #497: re-impose every freed cut row the node LP point violates and re-solve the node;
+  /// true when rows were re-imposed and the re-solve was optimal (the caller repeats).
+  bool reactivate_pooled_cuts(Solution* relaxation);
 
   /// How MIR separates (#498): c-MIR when `mir_cmir` is set.
   [[nodiscard]] MirOptions mir_options() const {
@@ -729,6 +732,8 @@ class BranchAndBound {
   /// The root bounds and the cut counts onto the answer (#221).
   void report_root(Solution* solution) const {
     solution->cuts_applied = root_cuts_applied_ + tree_cuts_applied_;
+    solution->cut_rows_aged_out = cut_rows_aged_out_;  // #497
+    solution->cuts_reactivated = cuts_reactivated_;
     solution->cut_filter_report = cut_filter_report_;
     solution->incumbent_trace = incumbent_trace_;  // #504, not a root quantity but same exits
     if (std::isnan(root_bound_internal_)) return;
@@ -877,6 +882,7 @@ class BranchAndBound {
   /// Cut selection (#415): the root round's cap, the parallelism above which a cut waits,
   /// and the cuts that passed a round's filter but were not taken, offered again at the
   /// next round where the LP point has moved.
+  bool cut_pooling_ = false;
   Index cut_max_per_round_ = 30;
   double cut_max_parallelism_ = tol::kCutMaxParallelism;
   std::vector<Cut> waiting_cuts_;
@@ -889,9 +895,11 @@ class BranchAndBound {
   Count tree_cuts_applied_ = 0;
   Count tree_cut_rounds_ = 0;
   Count cut_rows_aged_out_ = 0;
-  /// Node solves a cut row may sit slack before it is freed (Achterberg 2007, sec. 8.10
-  /// uses a comparable age).
-  static constexpr Count kCutRowAgeLimit = 50;
+  Count cuts_reactivated_ = 0;
+  /// Node solves a cut row may sit slack before it is freed (`mip_cut_age_limit`, default
+  /// tol::kCutRowAgeLimit), and whether a freed row is re-imposed when a node LP point
+  /// violates it (#497, `mip_cut_pooling`).
+  Count cut_age_limit_ = tol::kCutRowAgeLimit;
   Count nodes_pruned_ = 0;
 
   /// Conflict analysis (#292): the learned conflicts, their statistics, and whether the

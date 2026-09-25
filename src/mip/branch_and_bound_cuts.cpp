@@ -18,12 +18,20 @@
 // open node's - is extended with one kBasic entry per new row and stays usable; without
 // that every open node would fall back to a cold solve (#65).
 //
-// AGEING. A cut row whose logical has been basic (the row slack) for kCutRowAgeLimit
+// AGEING. A cut row whose logical has been basic (the row slack) for `mip_cut_age_limit`
 // consecutive node solves is not doing anything. Removing the row would invalidate every
 // stored basis; making it FREE (both bounds infinite) keeps the structure, keeps every
 // basis valid because a free row's logical is basic anyway, and stops the row from ever
 // pivoting again. That is the pool this version has: bounded by the depth cap and the
 // per-round row cap, aged out in place.
+//
+// THE POOL (#497, `mip_cut_pooling`, off by default). A freed row keeps its Cut in
+// pool_cuts_, and at every node the LP point is checked against each freed cut; a violated
+// one gets its right-hand side back and the node is re-solved. Nothing is re-derived: the
+// row, its coefficients and its right-hand side are the ones append_cut_rows() imposed,
+// which were valid for the whole tree then and still are, so re-imposing one cannot cut off
+// an integer point the search may still need. The rows are not deleted from the LP, so this
+// saves no factorization work; it only takes back a row that should not have been freed.
 //
 // Marchand & Wolsey, "Aggregation and mixed integer rounding to solve MIPs", Operations
 // Research 49 (2001); Achterberg, "Constraint integer programming", PhD thesis, TU Berlin
@@ -411,7 +419,7 @@ void BranchAndBound::age_cut_rows(const Solution& relaxation) {
     if (cut_row_free_[k]) continue;
     const auto row = static_cast<std::size_t>(first_cut_row_) + k;
     if (relaxation.row_status[row] == BasisStatus::kBasic) {
-      if (++cut_row_slack_[k] >= kCutRowAgeLimit) {
+      if (++cut_row_slack_[k] >= cut_age_limit_) {
         working_.row_lower[row] = -kInfinity;
         working_.row_upper[row] = kInfinity;
         cut_row_free_[k] = true;
@@ -421,6 +429,60 @@ void BranchAndBound::age_cut_rows(const Solution& relaxation) {
       cut_row_slack_[k] = 0;
     }
   }
+}
+
+// #497: Achterberg, "Constraint Integer Programming" (thesis, TU Berlin, 2007), ch. 8 (the
+// cut pool and row ageing). A freed cut row whose cut the node's LP point violates by more
+// than the cut filter's violation tolerance gets its right-hand side back; the node is then
+// re-solved from its own optimal basis, in which a freed row's logical is basic, so the
+// start is dual feasible and only the re-imposed rows are primal infeasible - the same
+// warm start a tree cut round uses. A row whose logical is not basic is left alone: making
+// it basic would give the start one basic variable too many.
+bool BranchAndBound::reactivate_pooled_cuts(Solution* relaxation) {
+  if (first_cut_row_ < 0) return false;
+  if (relaxation->row_status.size() != static_cast<std::size_t>(working_.num_rows())) {
+    return false;
+  }
+  std::vector<std::size_t> reactivated;
+  for (std::size_t k = 0; k < pool_cuts_.size(); ++k) {
+    if (!cut_row_free_[k]) continue;
+    const auto row = static_cast<std::size_t>(first_cut_row_) + k;
+    if (relaxation->row_status[row] != BasisStatus::kBasic) continue;
+    const Cut& cut = pool_cuts_[k];
+    assert(cut.coeff.size() <= relaxation->col_value.size());
+    double activity = 0.0;
+    for (std::size_t j = 0; j < cut.coeff.size(); ++j) {
+      activity += cut.coeff[j] * relaxation->col_value[j];
+    }
+    if (activity - cut.rhs <= tol::kCutViolationTolerance) continue;
+    working_.row_lower[row] = -kInfinity;
+    working_.row_upper[row] = cut.rhs;
+    cut_row_free_[k] = false;
+    cut_row_slack_[k] = 0;
+    reactivated.push_back(k);
+  }
+  if (reactivated.empty()) return false;
+
+  current_warm_ = basis_of(*relaxation);
+  Solution after = solve_node();
+  if (after.status == SolveStatus::kOptimal) {
+    *relaxation = std::move(after);
+    cuts_reactivated_ += static_cast<Count>(reactivated.size());
+    return true;
+  }
+  // The re-solve did not finish: free the rows again and keep the node's optimal relaxation
+  // without them, which is a weaker bound but a correct one (as a tree cut round rolls back).
+  logger_.verbose("cut pool: re-imposing {} row(s) induced {}; rolled back", reactivated.size(),
+                  to_string(after.status));
+  for (const std::size_t k : reactivated) {
+    const auto row = static_cast<std::size_t>(first_cut_row_) + k;
+    working_.row_lower[row] = -kInfinity;
+    working_.row_upper[row] = kInfinity;
+    cut_row_free_[k] = true;
+    cut_row_slack_[k] = cut_age_limit_;
+  }
+  current_warm_ = basis_of(*relaxation);
+  return false;
 }
 
 }  // namespace sankhya::mip

@@ -546,6 +546,12 @@ class Solution {
   Count iterations = 0;  ///< simplex/IPM/PDHG iterations
   Count nodes = 0;       ///< branch-and-cut nodes
   Count cuts_applied = 0;
+  /// Cut rows freed because their slack stayed basic for `mip_cut_age_limit` node solves,
+  /// and freed rows re-imposed because a node LP point violated them (#497,
+  /// `mip_cut_pooling`). Counted by the search that owns the rows: with `mip_threads` > 1
+  /// that is the root search only, as for cuts_applied.
+  Count cut_rows_aged_out = 0;
+  Count cuts_reactivated = 0;
   /// The root cut filter's verdicts per family and reason, one line (#496):
   /// `gomory 12: 3 accepted, 9 insufficient_violation; mir 4: 4 too_dense`. Empty for an
   /// LP, or when no root round ran.

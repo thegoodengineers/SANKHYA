@@ -254,6 +254,8 @@ Solution BranchAndBound::run() {
   global_lower_ = working_.col_lower;
   global_upper_ = working_.col_upper;
   if (options_.get_bool("enable_root_cuts")) {
+    cut_pooling_ = options_.get_bool("mip_cut_pooling");
+    cut_age_limit_ = static_cast<Count>(options_.get_int("mip_cut_age_limit"));
     tree_cut_depth_ = static_cast<Index>(options_.get_int("tree_cut_depth"));
     if (certificate_mode() && tree_cut_depth_ > 0) {
       // A tree round separates with the objective row free and may add rows mid-tree; the
@@ -526,6 +528,15 @@ Solution BranchAndBound::run() {
       return solve_node();
     }();
     if (debug_inside) debug_after_node_lp(relaxation);
+
+    // The cut pool (#497): a freed cut row the node's point violates is re-imposed and the
+    // node re-solved, until no freed row is violated. Each pass re-imposes at least one row
+    // and none is freed again inside the loop, so it ends within the pool's size.
+    if (cut_pooling_ && relaxation.status == SolveStatus::kOptimal) {
+      while (reactivate_pooled_cuts(&relaxation)) {
+        if (debug_inside) debug_after_node_lp(relaxation);
+      }
+    }
 
     if (relaxation.status == SolveStatus::kInfeasible) {
       certificate_record(node_index, relaxation, CertificateTree::Proof::kFarkas);
@@ -915,6 +926,10 @@ Solution BranchAndBound::run() {
   if (tree_cut_rounds_ > 0) {
     logger_.info("Tree cuts: {} rounds below the root, {} rows added, {} aged out",
                  tree_cut_rounds_, tree_cuts_applied_, cut_rows_aged_out_);
+  }
+  if (cut_pooling_) {
+    logger_.info("Cut pool (#497): {} rows freed by age, {} re-imposed when violated",
+                 cut_rows_aged_out_, cuts_reactivated_);
   }
 
   if (pool_.enabled()) {
