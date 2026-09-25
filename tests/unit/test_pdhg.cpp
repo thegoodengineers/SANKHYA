@@ -409,7 +409,7 @@ TEST(SolveStatusGuard, AnInfeasiblePointIsNeverReportedAsOptimal) {
       << "the fabricated point is supposed to be infeasible";
 
   Logger silent(nullptr);
-  reconcile_status_with_measurement(&solution, options, silent, /*check_dual=*/true);
+  reconcile_status_with_measurement(model, &solution, options, silent, /*check_dual=*/true);
 
   EXPECT_NE(solution.status, SolveStatus::kOptimal);
   EXPECT_NE(solution.status, SolveStatus::kFeasible)
@@ -431,7 +431,7 @@ TEST(SolveStatusGuard, AFeasibleOptimalPointIsLeftAlone) {
   const double objective = solution.objective;
 
   Logger silent(nullptr);
-  reconcile_status_with_measurement(&solution, options, silent, /*check_dual=*/true);
+  reconcile_status_with_measurement(model, &solution, options, silent, /*check_dual=*/true);
   EXPECT_EQ(solution.status, SolveStatus::kOptimal);
   EXPECT_DOUBLE_EQ(solution.objective, objective);
 }
@@ -465,11 +465,49 @@ TEST(SolveStatusGuard, PrimalFeasibleButDualInfeasibleIsFeasibleNotOptimal) {
       << "expected the duals to be short of tolerance after invalidating the multipliers";
 
   Logger silent(nullptr);
-  reconcile_status_with_measurement(&solution, options, silent, /*check_dual=*/true);
+  reconcile_status_with_measurement(model, &solution, options, silent, /*check_dual=*/true);
 
   EXPECT_EQ(solution.status, SolveStatus::kFeasible);
   EXPECT_TRUE(claims_a_point(solution));
   EXPECT_NE(solution.message.find("dual feasibility"), std::string::npos) << solution.message;
+}
+
+TEST(SolveStatusGuard, OptimalFailsStrongDuality) {
+  // Construct a mathematically inconsistent primal-dual pair that passes primal bounds,
+  // dual bounds, and complementary slackness exactly, but has an unaccounted duality gap
+  // large enough to fail the strong duality check. (Issue #664).
+  Model model;
+  model.sense = ObjSense::kMinimize;
+  model.col_lower = {0.0};
+  model.col_upper = {kInfinity};
+  model.col_cost = {1.0 + 1e-7};
+  model.col_type = {VarType::kContinuous};
+  model.row_lower = {1e8};
+  model.row_upper = {kInfinity};
+  model.matrix.reset(1, 1);
+  model.matrix.add_entry(0, 0, 1.0);
+  model.matrix.finalize();
+
+  Solution solution;
+  solution.status = SolveStatus::kOptimal;
+  solution.col_value = {1e8};
+  solution.row_activity = {1e8};
+  solution.row_dual = {1.0};
+  solution.col_dual = {0.0};
+
+  solution.recompute_quality(model);
+
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_double("dual_feasibility_tolerance", 1e-6);
+  options.set_double("primal_feasibility_tolerance", 1e-6);
+
+  Logger silent(nullptr);
+  reconcile_status_with_measurement(model, &solution, options, silent, /*check_dual=*/true);
+
+  EXPECT_EQ(solution.status, SolveStatus::kFeasible);
+  EXPECT_NE(solution.message.find("accounted for by per-item violations"), std::string::npos)
+      << solution.message;
 }
 
 TEST(SolveStatusGuard, AConvergedPdhgSolveStillReportsOptimal) {
