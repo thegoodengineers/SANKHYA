@@ -56,11 +56,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-try:
-    import stamp  # type: ignore  # noqa: F401
-    _HAS_STAMP = True
-except ImportError:
-    _HAS_STAMP = False
+import stamp as _stamp
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIRS = {
@@ -148,15 +144,7 @@ def sha256_file(path: Path) -> str:
 
 
 def git_commit(binary: Optional[Path] = None) -> str:
-    if _HAS_STAMP:
-        import stamp as _stamp
-        return _stamp.stamp(str(binary) if binary else None)
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True
-        ).strip()
-    except Exception:
-        return "unknown"
+    return _stamp.stamp(str(binary) if binary else None)
 
 
 def machine_tag() -> str:
