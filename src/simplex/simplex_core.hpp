@@ -182,6 +182,16 @@ struct DualRatioResult {
   bool dual_unbounded = false;  ///< no candidate at all: the primal is infeasible
 };
 
+/// One breakpoint of the dual ratio test (dual_ratio.cpp): where column `column`'s reduced
+/// cost reaches zero along the dual step, exactly and with Harris's relaxation.
+struct DualBreakpoint {
+  Index column = -1;
+  double ratio = 0.0;    ///< exact breakpoint
+  double relaxed = 0.0;  ///< breakpoint with the reduced cost relaxed by kDualHarrisRelaxation
+  double alpha_abs = 0.0;
+  double range = 0.0;  ///< upper - lower when both are finite, else infinite
+};
+
 /// Which loop drives the shared state.
 enum class Engine { kPrimal, kDual };
 
@@ -273,6 +283,8 @@ class Simplex {
   /// the rule dual_ratio_test selects (dual_ratio.cpp).
   [[nodiscard]] DualRatioResult dual_ratio_test(Index leaving_slot,
                                                 bool leaving_to_upper) const;
+  /// Every column that could enter, with its breakpoints, into breakpoints_ (unordered).
+  void collect_dual_breakpoints(bool leaving_to_upper) const;
   [[nodiscard]] DualRatioResult dual_ratio_test_textbook(Index leaving_slot,
                                                          bool leaving_to_upper) const;
   /// Harris's two passes inside the bound-flipping test (#465; Harris 1973, Koberstein
@@ -643,6 +655,8 @@ class Simplex {
   /// the next can zero them without a pass over every column.
   CsrView by_row_;
   std::vector<Index> pivot_row_touched_;
+  /// The ratio test's candidates, kept across iterations so the loop does not allocate.
+  mutable std::vector<DualBreakpoint> breakpoints_;
   std::vector<char> pivot_row_marked_;
   bool pivot_row_held_sparse_ = false;  ///< the last pass left zeros everywhere but touched
   /// Where the pivot row's time goes, and how sparse rho is, for the verbose report.
