@@ -588,6 +588,30 @@ Commit `5daee10` · machine `Windows-AMD64` · 2000 iterations per solve, PDHG a
 | `refinery_year` | 779640 | 4 | parallel | 81.997 | 1.255x |
 | `refinery_year` | 779640 | 8 | parallel | 88.361 | 1.165x |
 
+#### 1g.5 Root domain propagation, CPU against the device (#510)
+
+Activity-based bound propagation at the MIP root (`gpu_domain_prop=true`), the CPU
+reference against the CUDA propagator (one thread per row, one per column; Sofranac,
+Gleixner and Pokutta, arXiv:2009.07785). The two return the same bounds bit for bit
+(`tests/unit/test_domain_propagation.cpp`, on random models, Netlib and the fetched MIPLIB
+sets); this is what each costs, on generated knapsack-row models from 1,000 to 1,000,000
+rows (`bench/runners/gpu_domain_prop.py`).
+
+Source CSV: `gpu-domain-prop-43254f1.csv`  
+Commit `43254f1` · machine `Linux-x86_64` · GPU NVIDIA L4 (compute 8.9, 22478 MiB VRAM) · median of 5 run(s) per cell, the propagation time the solver logs (on the device: the row-major copy, the transfers and the rounds).
+
+| rows | columns | nonzeros | rounds | bounds tightened | CPU (s) | GPU (s) | GPU / CPU | same rounds and count |
+|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 1,000 | 1,000 | 5,000 | 2 | 797 | 0.000078 | 0.111028 | 1423.44x | yes |
+| 10,000 | 10,000 | 50,000 | 2 | 7,708 | 0.000796 | 0.118004 | 148.25x | yes |
+| 100,000 | 100,000 | 500,000 | 2 | 77,630 | 0.011387 | 0.118576 | 10.41x | yes |
+| 300,000 | 300,000 | 1,500,000 | 2 | 233,257 | 0.042926 | 0.145380 | 3.39x | yes |
+| 1,000,000 | 1,000,000 | 5,000,000 | 2 | 777,545 | 0.286252 | 0.345897 | 1.21x | yes |
+
+**The device loses at every measured size (5 of 5).** The CPU reference is faster from the smallest model to the largest; the GPU backend stays off by default (`gpu_domain_prop=false`, `domain_prop_backend=auto`).
+
+Each GPU cell is a fresh process, so it includes creating the process's CUDA context (with the other GPU options off, root propagation is the first thing in a MIP solve to touch the card); this CSV predates the runner's `context_seconds` column, so it cannot say how much of each GPU cell that is.
+
 ---
 
 ### 1f. Scale — how far up this goes

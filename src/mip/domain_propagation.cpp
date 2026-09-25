@@ -167,6 +167,13 @@ Count propagate_root_bounds(Model* model, const Options& options, Logger& logger
         "Domain propagation (#510, GPU): {} round(s), {} bound(s) tightened in {:.6f}s{}",
         device.rounds, device.tightened, clock.elapsed_seconds(),
         device.infeasible ? "; the box is empty, left for the search to prove" : "");
+    // Where the device time went: the context is made once per process, so on a solve
+    // that has already touched the card it is the probe alone.
+    const gpu::PropPhases& t = device.phases;
+    logger.verbose(
+        "Domain propagation (#510, GPU) phases: context {:.6f}s, host copy {:.6f}s, allocate "
+        "{:.6f}s, upload {:.6f}s, rounds {:.6f}s, download {:.6f}s, release {:.6f}s",
+        t.context, t.host, t.allocate, t.upload, t.rounds, t.download, t.release);
     if (device.infeasible) return 0;
     model->col_lower = device.col_lb;
     model->col_upper = device.col_ub;
