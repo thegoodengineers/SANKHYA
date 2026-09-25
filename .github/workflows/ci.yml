@@ -208,6 +208,12 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_netlib_infeasible.py
 
+      - name: Netlib fetch falls back to the tracked copies when netlib.org is down
+        # No network: the base URL points at a closed local port. With --offline-fallback the
+        # tracked readme and instances are used unchanged; without it the outage still fails.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_fetch_offline.py
+
       - name: The relative-KKT crossing columns and their doc tables (#486)
         # Pure Python, no solve: blanks for a non-PDHG row, nan kept for a level never
         # reached, the ordering check, and the generated tables that label the 1e-6
@@ -511,14 +517,14 @@ jobs:
           key: netlib-v1-${{ hashFiles('bench/runners/fetch_data.py') }}
 
       # Downloads the instances and PARSES the reference optima out of Netlib's own
-      # readme. No expected value is stored in this repository, so the benchmark cannot
-      # be made to pass by editing a constant.
+      # readme, so while netlib.org answers the benchmark cannot be made to pass by editing
+      # the tracked readme or reference.json.
       #
-      # Still runs on a cache hit. It is cheap when the files are already present, it
-      # re-verifies every sha256 in reference.json, and it keeps the fetch path on the
-      # tested route rather than letting it rot behind a cache that always hits.
+      # --offline-fallback: when netlib.org does not answer (it timed out four times on
+      # #670 and failed a PR that only added a CSV), the tracked copies in data/netlib/ -
+      # every instance and the readme - are used with a warning, after a short probe.
       - name: Fetch the Netlib set and its published optima
-        run: python3 bench/runners/fetch_data.py
+        run: python3 bench/runners/fetch_data.py --offline-fallback
 
       # Gates on BOTH the published optimum and independent verification of every
       # solution. Exits non-zero if any instance fails either one.
@@ -579,7 +585,7 @@ jobs:
           key: netlib-medium-v1-${{ hashFiles('bench/runners/fetch_data.py') }}
 
       - name: Fetch the medium tier and its published optima
-        run: python3 bench/runners/fetch_data.py --set medium
+        run: python3 bench/runners/fetch_data.py --set medium --offline-fallback
 
       - name: Solve and verify every answer
         run: |
