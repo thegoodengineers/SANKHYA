@@ -30,7 +30,9 @@ std::size_t estimate_pdhg_gpu_memory(Index rows, Index cols, Count nonzeros) {
   //   d_rlo, d_rhi                             (row bounds)
   const std::size_t m_vecs = 8 * m * sizeof(double);
 
-  // d_scalars[3]: mv_x, mv_y, interaction (fused atomicAdd targets, #382)
+  // d_scalars[3]: mv_x, mv_y, interaction. The block partials they are summed from (#478,
+  // ceil(n/256) + 2 ceil(m/256) doubles, about 1/256 of one vector each) sit inside the
+  // library-overhead constant below.
   const std::size_t scalars = 3 * sizeof(double);
 
   // CSR matrix in device memory
@@ -43,6 +45,12 @@ std::size_t estimate_pdhg_gpu_memory(Index rows, Index cols, Count nonzeros) {
   constexpr std::size_t kLibraryOverhead = 16ULL * 1024 * 1024;  // 16 MiB
 
   return n_vecs + m_vecs + scalars + rowptr + colidx + vals + kLibraryOverhead;
+}
+
+std::size_t estimate_pdhg_gpu_transpose_memory(Index cols, Count nonzeros) {
+  const auto n = static_cast<std::size_t>(cols < 0 ? 0 : cols);
+  const auto nnz = static_cast<std::size_t>(nonzeros < 0 ? 0 : nonzeros);
+  return (n + 1) * sizeof(int) + nnz * sizeof(int) + nnz * sizeof(double);
 }
 
 std::size_t vram_reserve(std::size_t total_bytes) {

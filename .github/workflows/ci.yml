@@ -350,8 +350,11 @@ jobs:
       - name: The Pyomo, PuLP and CVXPY adapters solve through SANKHYA (#536)
         # Optional libraries, installed only here: importing sankhya never imports them.
         if: matrix.name == 'Release'
+        # pulp<4: PuLP 4.0.0 (25 Sep 2026) replaced the LpStatus* module constants with the
+        # LpSolveStatus enum and reworked the solver interface this adapter implements; the
+        # port is tracked separately. Until then the adapter refuses PuLP 4 with a clear message.
         run: |
-          pip install pulp pyomo cvxpy
+          pip install "pulp<4" pyomo cvxpy
           PYTHONPATH=bindings/python python3 bindings/python/test_adapters.py
 
       - name: Infeasibility repair - the repaired model verifies feasible (#523)

@@ -295,14 +295,15 @@ TEST(Deterministic, TheFingerprintSeparatesModelsThatDifferAnywhere) {
   EXPECT_NE(signed_zero.fingerprint(), reference) << "a negative zero bound";
 }
 
-// ---- GPU + deterministic (#383) ---------------------------------------------------------
+// ---- GPU + deterministic (#383, #478) -----------------------------------------------------
 
-TEST(Deterministic, GpuPdhgFallsBackToCpuWhenDeterministicIsRequested) {
-  // GPU PDHG uses atomicAdd reductions whose order is non-deterministic; requesting both
-  // gpu=true and deterministic=true is contradictory. solve() must refuse the GPU path and
-  // fall back to CPU PDHG. This is verifiable on CI with no CUDA device present because
-  // the fall-through produces "pdhg-cpu" in either case (no device → skip GPU; device +
-  // deterministic=true → also skip GPU with a warning).
+TEST(Deterministic, GpuPdhgUnderDeterministicReproducesBitForBit) {
+  // #383 refused the GPU under deterministic=true because its reductions were atomicAdd and
+  // order-dependent. Since #478 the single-device engine sums in a fixed order and runs both
+  // products as non-transpose CSR_ALG2 products on an explicit A^T, so the request is honoured
+  // on a card. Either way the promise is the same and is what is checked: two runs, the same
+  // bits. On a build without CUDA, or with no device, the engine is CPU PDHG; with one it
+  // is the CUDA engine, and tests/unit/test_pdhg_cuda_determinism.cpp checks it on Netlib.
   const Model lp = dense_lp(20);
   Options options = deterministic(true);
   options.set_bool("gpu", true);
@@ -310,11 +311,27 @@ TEST(Deterministic, GpuPdhgFallsBackToCpuWhenDeterministicIsRequested) {
 
   const Solution result = solve(lp, options);
   ASSERT_NE(result.status, SolveStatus::kNotSolved) << result.message;
-  EXPECT_EQ(result.algorithm, "pdhg-cpu")
-      << "GPU path must be refused when deterministic=true; got: " << result.algorithm;
+  const bool on_cpu = result.algorithm == "pdhg-cpu";
+  const bool on_cuda = result.algorithm.find("cuda") != std::string::npos;
+  EXPECT_TRUE(on_cpu || on_cuda) << "unexpected engine: " << result.algorithm;
+  expect_identical(result, solve(lp, options), "deterministic PDHG with gpu=true");
+}
 
-  // Also verify bit-for-bit reproducibility (the primary determinism guarantee).
-  expect_identical(result, solve(lp, options), "GPU refused → CPU PDHG must still reproduce");
+TEST(Deterministic, MultiGpuPdhgIsStillRefusedUnderDeterministic) {
+  // The multi-device engine keeps its atomicAdd reductions and cuSPARSE's transpose product
+  // (#383), so a deterministic request naming more than one device runs CPU PDHG. With no
+  // CUDA in the build the answer is CPU PDHG for the plainer reason.
+  const Model lp = dense_lp(20);
+  Options options = deterministic(true);
+  options.set_bool("gpu", true);
+  options.set_string("algorithm", "pdhg");
+  options.set_string("gpu_devices", "0,1");
+  const Solution result = solve(lp, options);
+  ASSERT_NE(result.status, SolveStatus::kNotSolved) << result.message;
+  EXPECT_EQ(result.algorithm, "pdhg-cpu")
+      << "a multi-device GPU solve must be refused when deterministic=true; got: "
+      << result.algorithm;
+  expect_identical(result, solve(lp, options), "multi-GPU refused, CPU PDHG reproduces");
 }
 
 }  // namespace
