@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SANKHYA - restarted Halpern iteration and a PID primal weight for the Condat-Vu QP engine
-// (#493, CPU). Both are off by default (qp_halpern, qp_primal_weight_pid); with both off
+// (#493, CPU). qp_primal_weight_pid is on by default, qp_halpern off; with both off
 // src/qp/qp_condat_vu.cpp runs the iteration it ran before, operation for operation.
 //
 // References
