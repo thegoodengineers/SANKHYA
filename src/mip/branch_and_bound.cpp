@@ -1005,8 +1005,25 @@ Solution BranchAndBound::run() {
   return solution;
 }
 
-Solution solve_branch_and_bound(const Model& model, const Options& options, Logger& logger,
+namespace {
+
+/// The options every LP inside branch and bound runs under. dual_ratio_test=auto means
+/// Harris for an LP solve and the textbook rule here: Harris became the LP default on its
+/// Netlib A/B (#712), and the node LPs keep the rule the MIP trees were measured with until
+/// a multi-seed MIPLIB run says otherwise. An explicit harris or textbook is honoured as set.
+Options with_node_lp_defaults(const Options& requested) {
+  Options options = requested;
+  if (options.get_string("dual_ratio_test") == "auto") {
+    options.set_string("dual_ratio_test", "textbook");
+  }
+  return options;
+}
+
+}  // namespace
+
+Solution solve_branch_and_bound(const Model& model, const Options& requested, Logger& logger,
                                 SolveControl* control) {
+  const Options options = with_node_lp_defaults(requested);
   // ROOT CUTS, applied once before the search rather than per node.
   //
   // Integer rounding tightens a row IN PLACE, so unlike a generated cut it adds no row, grows
