@@ -546,6 +546,8 @@ class Solution {
   Count iterations = 0;  ///< simplex/IPM/PDHG iterations
   Count nodes = 0;       ///< branch-and-cut nodes
   Count cuts_applied = 0;
+  Count cut_rows_aged_out = 0;
+  Count cuts_reactivated = 0;
   /// The root cut filter's verdicts per family and reason, one line (#496):
   /// `gomory 12: 3 accepted, 9 insufficient_violation; mir 4: 4 too_dense`. Empty for an
   /// LP, or when no root round ran.

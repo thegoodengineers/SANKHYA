@@ -655,6 +655,7 @@ class BranchAndBound {
                               bool root);
   /// Count node solves in which each cut row was slack; free a row slack for too long.
   void age_cut_rows(const Solution& relaxation);
+  bool reactivate_pooled_cuts(Solution* relaxation);
 
   /// How MIR separates (#498): c-MIR when `mir_cmir` is set.
   [[nodiscard]] MirOptions mir_options() const {
@@ -838,6 +839,7 @@ class BranchAndBound {
   /// Cut selection (#415): the root round's cap, the parallelism above which a cut waits,
   /// and the cuts that passed a round's filter but were not taken, offered again at the
   /// next round where the LP point has moved.
+  bool cut_pooling_ = false;
   Index cut_max_per_round_ = 30;
   double cut_max_parallelism_ = tol::kCutMaxParallelism;
   std::vector<Cut> waiting_cuts_;
@@ -850,6 +852,7 @@ class BranchAndBound {
   Count tree_cuts_applied_ = 0;
   Count tree_cut_rounds_ = 0;
   Count cut_rows_aged_out_ = 0;
+  Count cuts_reactivated_ = 0;
   /// Node solves a cut row may sit slack before it is freed (Achterberg 2007, sec. 8.10
   /// uses a comparable age).
   static constexpr Count kCutRowAgeLimit = 50;

@@ -423,4 +423,64 @@ void BranchAndBound::age_cut_rows(const Solution& relaxation) {
   }
 }
 
+// Issue #497: Achterberg, "Constraint Integer Programming" (thesis, 2007), ch. 8
+// (row aging and cut pool). Aged out (FREE) cuts are checked against the new LP
+// relaxation, and if violated, they are reactivated by restoring their bounds.
+bool BranchAndBound::reactivate_pooled_cuts(Solution* relaxation) {
+  if (first_cut_row_ < 0) return false;
+
+  bool any_reactivated = false;
+  std::vector<std::size_t> reactivated_indices;
+
+  for (std::size_t k = 0; k < pool_cuts_.size(); ++k) {
+    if (!cut_row_free_[k]) continue;
+
+    const Cut& c = pool_cuts_[k];
+    double lhs = 0.0;
+    for (std::size_t j = 0; j < static_cast<std::size_t>(working_.num_cols()); ++j) {
+      lhs += c.coeff[j] * relaxation->col_value[j];
+    }
+
+    if (lhs - c.rhs > tol::kCutViolationTolerance) {
+      const auto row = static_cast<std::size_t>(first_cut_row_) + k;
+      working_.row_lower[row] = -kInfinity;
+      working_.row_upper[row] = c.rhs;
+      cut_row_free_[k] = false;
+      cut_row_slack_[k] = 0;
+      any_reactivated = true;
+      reactivated_indices.push_back(k);
+    }
+  }
+
+  if (!any_reactivated) return false;
+
+  // Re-solve the node LP with the reactivated cuts.
+  // The basis is already warm-started (the previously FREE rows had their logicals as basic).
+  // We simply need to update current_warm_ and solve.
+  current_warm_ = basis_of(*relaxation);
+  for (std::size_t k : reactivated_indices) {
+    const auto row = static_cast<std::size_t>(first_cut_row_) + k;
+    current_warm_.row_status[row] = BasisStatus::kBasic;
+  }
+
+  Solution after = solve_node();
+  if (after.status == SolveStatus::kOptimal) {
+    *relaxation = std::move(after);
+    tree_cuts_applied_ += static_cast<Count>(reactivated_indices.size());
+    cuts_reactivated_ += static_cast<Count>(reactivated_indices.size());
+    return true;
+  }
+
+  // If the solve broke, roll back the reactivations
+  for (std::size_t k : reactivated_indices) {
+    const auto row = static_cast<std::size_t>(first_cut_row_) + k;
+    working_.row_lower[row] = -kInfinity;
+    working_.row_upper[row] = kInfinity;
+    cut_row_free_[k] = true;
+    cut_row_slack_[k] = kCutRowAgeLimit;
+  }
+  current_warm_ = basis_of(*relaxation);
+  return false;
+}
+
 }  // namespace sankhya::mip

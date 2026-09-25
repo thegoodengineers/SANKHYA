@@ -254,6 +254,7 @@ Solution BranchAndBound::run() {
   global_lower_ = working_.col_lower;
   global_upper_ = working_.col_upper;
   if (options_.get_bool("enable_root_cuts")) {
+    cut_pooling_ = options_.get_bool("mip_cut_pooling");
     tree_cut_depth_ = static_cast<Index>(options_.get_int("tree_cut_depth"));
     if (certificate_mode() && tree_cut_depth_ > 0) {
       // A tree round separates with the objective row free and may add rows mid-tree; the
@@ -519,6 +520,14 @@ Solution BranchAndBound::run() {
       return solve_node();
     }();
     if (debug_inside) debug_after_node_lp(relaxation);
+
+    if (cut_pooling_ && relaxation.status == SolveStatus::kOptimal) {
+      // Keep reactivating violated pooled cuts until none are violated or node breaks
+      while (reactivate_pooled_cuts(&relaxation)) {
+        if (debug_inside) debug_after_node_lp(relaxation);
+        if (relaxation.status != SolveStatus::kOptimal) break;
+      }
+    }
 
     if (relaxation.status == SolveStatus::kInfeasible) {
       certificate_record(node_index, relaxation, CertificateTree::Proof::kFarkas);
@@ -872,6 +881,8 @@ Solution BranchAndBound::run() {
     solution.symmetry_generators = symmetry_generators_;
     solution.solve_seconds = timer_.elapsed_seconds();
     report_root(&solution);
+    solution.cut_rows_aged_out = cut_rows_aged_out_;
+    solution.cuts_reactivated = cuts_reactivated_;
     return solution;
   }
 
@@ -903,6 +914,8 @@ Solution BranchAndBound::run() {
     solution.dual_bound = reported(final_bound);
   }
   solution.recompute_quality(original_);
+  solution.cut_rows_aged_out = cut_rows_aged_out_;
+  solution.cuts_reactivated = cuts_reactivated_;
   if (tree_cut_rounds_ > 0) {
     logger_.info("Tree cuts: {} rounds below the root, {} rows added, {} aged out",
                  tree_cut_rounds_, tree_cuts_applied_, cut_rows_aged_out_);

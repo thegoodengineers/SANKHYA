@@ -404,6 +404,16 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"mip_cut_pooling",
+                 OptionType::Bool,
+                 false,
+                 "Cuts: remove aged rows from the LP into a pool, and re-add them when "
+                 "violated (#497). Aged cuts are logically freed rather than deleted to "
+                 "keep basis warm starts intact. Reactivates cuts that are violated by "
+                 "the node LP.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"tree_cut_depth",
                  OptionType::Int,
                  std::int64_t{0},
