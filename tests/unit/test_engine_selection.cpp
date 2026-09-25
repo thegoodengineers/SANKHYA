@@ -3,6 +3,8 @@
 // src/core/engine_selection.hpp is pinned here with a model shaped to fire it, so a
 // changed threshold shows up as a failed test and not as a quietly different default.
 
+#include <utility>
+
 #include <gtest/gtest.h>
 
 #include "core/engine_selection.hpp"
@@ -111,6 +113,79 @@ TEST(EngineSelection, FromThePdhgFloorTheFirstOrderMethodIsChosen) {
   EXPECT_EQ(s.algorithm, "pdhg");
   EXPECT_EQ(s.rule, "size:pdhg");
   EXPECT_EQ(s.rows, kPdhgRowFloor);
+}
+
+/// shaped_lp() with its first column made dense: `count` entries in rows 0..count-1, which
+/// puts count^2 into the pattern bound on the normal equations (engine_features.hpp).
+Model with_dense_column(Index rows, Index cols, Count nonzeros, Index count) {
+  Model m = shaped_lp(rows, cols, nonzeros);
+  SparseMatrix a(rows, cols);
+  for (Index j = 0; j < cols; ++j) {
+    const ColumnView column = m.matrix.column(j);
+    for (Index p = 0; p < column.size; ++p) {
+      if (j == 0 && column.rows[p] < count) continue;  // re-added below, once
+      a.add_entry(column.rows[p], j, column.values[p]);
+    }
+  }
+  for (Index i = 0; i < count; ++i) a.add_entry(i, 0, 1.0);
+  a.finalize();
+  m.matrix = std::move(a);
+  return m;
+}
+
+TEST(EngineSelection, NormalEquationsOverTheCeilingGoToPdhgFromTheRowLimit) {
+  // chromaticindex1024-7's situation: 67,583 rows and a normal-equations bound of 6.0e8,
+  // declined by the interior point on both factors after its set-up share (#417). One
+  // column of 12,000 entries bounds the product by 1.44e8 on its own.
+  const Model dense = with_dense_column(kDualSimplexRowLimit, 100, 200, 12000);
+  const EngineSelection s = select_engine(dense, auto_options(), false);
+  EXPECT_EQ(s.algorithm, "pdhg");
+  EXPECT_EQ(s.rule, "normal:pdhg");
+  EXPECT_FALSE(s.use_gpu);
+  // The same shape without the column is the interior point's, as before.
+  EXPECT_EQ(
+      select_engine(shaped_lp(kDualSimplexRowLimit, 100, 200), auto_options(), false).rule,
+      "size:ipm");
+  // Below the row limit the bound does not decide: the dual simplex's rules run as before.
+  const Model small = with_dense_column(kDualSimplexRowLimit - 1, 100, 200, 12000);
+  EXPECT_NE(select_engine(small, auto_options(), false).rule, "normal:pdhg");
+}
+
+TEST(EngineSelection, WithADeviceFactorLargeAffordableModelsGoToTheInteriorPoint) {
+  // rmine15's situation: 358,395 rows, a bound of 1.9e7, optimal on the cuDSS interior point
+  // where PDHG stops short (#417). Only with the device factor; without it the row floor
+  // still sends the model to PDHG.
+  const Model large = shaped_lp(kPdhgRowFloor, 100, 200);
+  const EngineSelection device = select_engine(large, auto_options(), false, true, "Test GPU",
+                                               /*device_factor=*/true);
+  EXPECT_EQ(device.algorithm, "ipm");
+  EXPECT_EQ(device.rule, "size:ipm-device");
+  EXPECT_FALSE(device.use_gpu);
+  EXPECT_EQ(select_engine(large, auto_options(), false, true, "Test GPU").rule,
+            "size:pdhg-gpu");
+  // Over the ceiling the device changes nothing: PDHG, on the GPU when there is one.
+  const Model dense = with_dense_column(kPdhgRowFloor, 100, 200, 12000);
+  const EngineSelection over =
+      select_engine(dense, auto_options(), false, true, "Test GPU", /*device_factor=*/true);
+  EXPECT_EQ(over.rule, "size:pdhg-gpu");
+  // Below the row limit the device factor does not move a model off the dual simplex.
+  EXPECT_EQ(
+      select_engine(shaped_lp(2000, 5000, 30000), auto_options(), false, true, "Test GPU", true)
+          .rule,
+      "default:dual-simplex");
+}
+
+TEST(EngineSelection, PastTheDualSimplexWorkCeilingTheInteriorPointIsChosen) {
+  // qap15: 6,330 rows x 94,950 nonzeros = 6.0e8, under the row limit and the nonzero floor,
+  // a time limit on the dual simplex and optimal on the interior point (#417).
+  const EngineSelection qap =
+      select_engine(shaped_lp(6330, 22275, 94950), auto_options(), false);
+  EXPECT_EQ(qap.algorithm, "ipm");
+  EXPECT_EQ(qap.rule, "work:ipm");
+  // dfl001: 6,071 x 35,632 = 2.2e8, which the dual simplex solves in 47 s.
+  const EngineSelection dfl =
+      select_engine(shaped_lp(6071, 12230, 35632), auto_options(), false);
+  EXPECT_EQ(dfl.rule, "default:dual-simplex");
 }
 
 TEST(EngineSelection, TheAnswerCarriesTheRuleAndTheReason) {

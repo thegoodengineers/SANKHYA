@@ -6,10 +6,12 @@
 
 #include <fmt/format.h>
 
+#include "engine_features.hpp"
+
 namespace sankhya {
 
 EngineSelection select_engine(const Model& model, const Options& options, bool warm_start,
-                              bool gpu_available, std::string gpu_device) {
+                              bool gpu_available, std::string gpu_device, bool device_factor) {
   EngineSelection s;
   s.rows = model.num_rows();
   s.columns = model.num_cols();
@@ -34,6 +36,20 @@ EngineSelection select_engine(const Model& model, const Options& options, bool w
         fmt::format("a starting basis was given, and only a simplex can use one ({})", shape);
     return s;
   }
+  // One O(m + n + nnz) pass (engine_features.cpp) for the bound on the normal equations.
+  const EngineFeatures features = compute_engine_features(model);
+  const double normal_bound = features.normal_equations_nnz_bound;
+  const bool normal_affordable = normal_bound < kNormalEquationsCeiling;
+  if (device_factor && s.rows >= kDualSimplexRowLimit && normal_affordable) {
+    s.algorithm = "ipm";
+    s.rule = "size:ipm-device";
+    s.reason = fmt::format(
+        "{}: the normal equations are bounded by {:.3g} nonzeros, under {:.0e}, and this "
+        "build factors them on the device (cuDSS, #489); rmine15 at 358,395 rows is optimal "
+        "there in 137 s where PDHG stops short of the tolerance (#417)",
+        shape, normal_bound, kNormalEquationsCeiling);
+    return s;
+  }
   if (s.rows >= kPdhgRowFloor) {
     s.algorithm = "pdhg";
     if (gpu_available && !gpu_device.empty()) {
@@ -51,6 +67,17 @@ EngineSelection select_engine(const Model& model, const Options& options, bool w
           "scale-refinery-e134aeb.csv, docs/BENCHMARKS.md 1f)",
           shape, kPdhgRowFloor);
     }
+    return s;
+  }
+  if (s.rows >= kDualSimplexRowLimit && !normal_affordable) {
+    s.algorithm = "pdhg";
+    s.rule = "normal:pdhg";
+    s.reason = fmt::format(
+        "{}: the normal equations are bounded by {:.3g} nonzeros, over {:.0e}; every model "
+        "in the Mittelmann set that large had a factor the interior point declined after its "
+        "set-up share (chromaticindex1024-7, Linf_520c, supportcase10, bdry2), and PDHG "
+        "solves chromaticindex1024-7 in seconds (#417)",
+        shape, normal_bound, kNormalEquationsCeiling);
     return s;
   }
   if (s.rows >= kDualSimplexRowLimit) {
@@ -71,6 +98,17 @@ EngineSelection select_engine(const Model& model, const Options& options, bool w
         "point with crossover (maros-r7, 144,848 nonzeros: 14 s against the 120 s limit; "
         "netlib-full-b3f1660.csv)",
         shape);
+    return s;
+  }
+  const double work = static_cast<double>(s.rows) * static_cast<double>(s.nonzeros);
+  if (work >= kSimplexWorkCeiling) {
+    s.algorithm = "ipm";
+    s.rule = "work:ipm";
+    s.reason = fmt::format(
+        "{}: rows x nonzeros is {:.3g}, over {:.0e}, beyond the dual simplex's measured "
+        "reach (dfl001 at 2.2e8 solves on it in 47 s, qap15 at 6.0e8 times out at 300 s and "
+        "is optimal on the interior point; #417)",
+        shape, work, kSimplexWorkCeiling);
     return s;
   }
   s.algorithm = "dual-simplex";
