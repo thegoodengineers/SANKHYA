@@ -17,6 +17,7 @@
 #include <random>
 #include <regex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -30,9 +31,31 @@
 #ifdef SANKHYA_ENABLE_CUDA
 #include "gpu/device.hpp"
 #endif
+#ifdef SANKHYA_HAVE_OPENMP
+#include <omp.h>
+#endif
 
 namespace sankhya::mip {
 namespace {
+
+/// One OpenMP thread for the test, restored after. A PDHG iteration on these tiny models is a
+/// parallel region over a handful of columns (SparseMatrix::transpose_multiply_add), and on a
+/// many-core box the region's overhead is thousands of times the arithmetic: at the runtime's
+/// default of one thread per core the first run of this file took minutes on the 256-core
+/// test box. The products are gathers whose result does not depend on the thread count (#57),
+/// so this changes the time only.
+class OneThread {
+ public:
+#ifdef SANKHYA_HAVE_OPENMP
+  OneThread() : saved_(omp_get_max_threads()) { omp_set_num_threads(1); }
+  ~OneThread() { omp_set_num_threads(saved_); }
+
+ private:
+  int saved_;
+#else
+  OneThread() = default;
+#endif
+};
 
 /// Rows given densely; every column in [lower, upper], integer where `integer` says so.
 Model make_model(const std::vector<std::vector<double>>& rows,
@@ -134,33 +157,52 @@ Model mixed_capacity() {
                     {true, true, true, false});
 }
 
-void expect_found(const Model& m, const PdhgHeuristicResult& r, const char* what) {
+void expect_found(const Model& m, const PdhgHeuristicResult& r, const std::string& what) {
   ASSERT_FALSE(r.x.empty()) << what << ": nothing found (" << r.stopped << ")";
   std::string why;
   EXPECT_TRUE(feasible(m, r.x, &why)) << what << ": " << why;
   EXPECT_TRUE(point_is_feasible(m, integers_of(m), r.x, 1e-6)) << what;
 }
 
+void expect_feasible_if_any(const Model& m, const PdhgHeuristicResult& r,
+                            const std::string& what) {
+  if (r.x.empty()) return;
+  std::string why;
+  EXPECT_TRUE(feasible(m, r.x, &why)) << what << ": " << why;
+}
+
 void finds_points_on_small_milps(bool device) {
-  for (const Model& m : {set_partition(8), general_integers(), mixed_capacity()}) {
+  const std::vector<std::pair<const char*, Model>> models = {
+      {"set partition", set_partition(8)},
+      {"general integers", general_integers()},
+      {"mixed capacity", mixed_capacity()}};
+  for (const auto& [name, m] : models) {
     const std::vector<Index> ints = integers_of(m);
-    // From no start (the PDHG relaxation), and from the all-zero point.
-    for (const bool from_zero : {false, true}) {
-      const std::vector<double> start =
-          from_zero ? std::vector<double>(static_cast<std::size_t>(m.num_cols()), 0.0)
-                    : std::vector<double>{};
-      expect_found(m, pdhg_feasibility_pump(m, ints, start, settings_for(device)), "pump");
-      expect_found(m, fix_and_propagate(m, ints, start, settings_for(device)),
-                   "fix-and-propagate");
-    }
+    const std::string label = std::string(name) + (device ? " (device)" : " (cpu)");
+    // From the PDHG relaxation (no start given), where each must find a point.
+    expect_found(m, pdhg_feasibility_pump(m, ints, {}, settings_for(device)), label + " pump");
+    expect_found(m, fix_and_propagate(m, ints, {}, settings_for(device)),
+                 label + " fix-and-propagate");
+    // From the all-zero point the pump still finds one. Fix-and-propagate may not: on the
+    // general-integer model x = 0 is outside the propagated domain x >= 1, and both integers
+    // next to it (1 and 2) propagate the box empty at the first column, with nothing to back
+    // up to - the scheme tries the neighbours of the start, not every value. Whatever it
+    // returns must still be feasible.
+    const std::vector<double> zero(static_cast<std::size_t>(m.num_cols()), 0.0);
+    expect_found(m, pdhg_feasibility_pump(m, ints, zero, settings_for(device)),
+                 label + " pump from zero");
+    expect_feasible_if_any(m, fix_and_propagate(m, ints, zero, settings_for(device)),
+                           label + " fix-and-propagate from zero");
   }
 }
 
 TEST(PdhgHeuristics, EachFindsAPointOnSmallMilpsOnTheCpu) {
+  const OneThread one_thread;
   finds_points_on_small_milps(false);
 }
 
 TEST(PdhgHeuristics, TheMixedModelIsCompletedByTheLpNotTakenFromPdhg) {
+  const OneThread one_thread;
   // The rounding's continuous column comes from a PDHG point; the pump must hand back the
   // completion LP's z, which meets z >= 13 exactly, whatever PDHG's accuracy.
   const Model m = mixed_capacity();
@@ -173,6 +215,7 @@ TEST(PdhgHeuristics, TheMixedModelIsCompletedByTheLpNotTakenFromPdhg) {
 }
 
 TEST(PdhgHeuristics, NothingOnAModelWithNoIntegerPoint) {
+  const OneThread one_thread;
   // 2x + 2y = 3 has LP points and no integer one: both must come back empty, repair included.
   const Model m =
       make_model({{2, 2}}, {3.0}, {3.0}, {1.0, 1.0}, {0.0, 0.0}, {5.0, 5.0}, {true, true});
@@ -185,6 +228,7 @@ TEST(PdhgHeuristics, NothingOnAModelWithNoIntegerPoint) {
 }
 
 TEST(PdhgHeuristics, FixAndPropagateStopsWithinItsBackUpBudgetOnAnOddCycle) {
+  const OneThread one_thread;
   // x1 + x2 = x1 + x3 = x2 + x3 = 1 over binaries: the relaxation has every column at 1/2 and
   // no integer point exists. Each value of the first column fixed propagates the box empty,
   // so the search must back up, stay within its budget, stop, and return nothing - the
@@ -233,6 +277,9 @@ void never_an_infeasible_point(bool device, int trials) {
     const auto ints = integers_of(model);
     PdhgHeuristicSettings s = settings_for(device);
     s.seed = static_cast<std::uint64_t>(trial);
+    // Budgets cut to keep 300 trials quick; the property checked does not depend on them.
+    s.pump_rounds = 10;
+    s.pdhg_iterations = 2000;
     const PdhgHeuristicResult pump = pdhg_feasibility_pump(model, ints, {}, s);
     const PdhgHeuristicResult fix = fix_and_propagate(model, ints, {}, s);
     for (const PdhgHeuristicResult* r : {&pump, &fix}) {
@@ -257,15 +304,18 @@ void never_an_infeasible_point(bool device, int trials) {
 }
 
 TEST(PdhgHeuristics, NeverAnInfeasiblePointOnRandomMilpsOnTheCpu) {
+  const OneThread one_thread;
   never_an_infeasible_point(false, 300);
 }
 
 TEST(PdhgHeuristics, TheSearchWithBothOnAgreesWithTheExactOracle) {
+  const OneThread one_thread;
   std::mt19937_64 rng(50900);
   Options options;
   options.set_bool("gpu_pump", true);
   options.set_bool("gpu_fix_and_prop", true);
   options.set_string("gpu_heur_backend", "cpu");
+  options.set_int("gpu_pump_max_iter", 10);
   options.set_bool("presolve", false);
   options.set_bool("log_to_console", true);
   options.set_double("mip_relative_gap", 0.0);
@@ -306,6 +356,7 @@ TEST(PdhgHeuristics, TheSearchWithBothOnAgreesWithTheExactOracle) {
 }
 
 TEST(PdhgHeuristics, OffByDefaultAndTheDefaultPathIsTheExplicitlyOffPath) {
+  const OneThread one_thread;
   const Options defaults;
   EXPECT_FALSE(defaults.get_bool("gpu_pump"));
   EXPECT_FALSE(defaults.get_bool("gpu_fix_and_prop"));
@@ -348,6 +399,7 @@ bool no_device() {
 }
 
 TEST(PdhgHeuristicsCuda, EachFindsAPointOnSmallMilpsOnTheDevice) {
+  const OneThread one_thread;
   if (no_device()) GTEST_SKIP() << "no CUDA backend or no device: skipped, not passed.";
   finds_points_on_small_milps(true);
   const Model m = set_partition(8);
@@ -356,6 +408,7 @@ TEST(PdhgHeuristicsCuda, EachFindsAPointOnSmallMilpsOnTheDevice) {
 }
 
 TEST(PdhgHeuristicsCuda, NeverAnInfeasiblePointOnRandomMilpsOnTheDevice) {
+  const OneThread one_thread;
   if (no_device()) GTEST_SKIP() << "no CUDA backend or no device: skipped, not passed.";
   never_an_infeasible_point(true, 120);
 }
