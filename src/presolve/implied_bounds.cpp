@@ -143,6 +143,24 @@ void restore_implied_bound_basis(const Result& result, const Model& original,
         }
       }
     }
+    // Nothing on the chain: the engine's statuses are not a basis around this point to begin
+    // with (a crossover can hand back a basic column on a bound with a nonzero reduced cost,
+    // and a row with no basic entry at all). Any entry that is basic while sitting on an
+    // original bound with a nonzero multiplier is nonbasic in every basis the duals agree
+    // with, so it is the one that leaves.
+    const bool have_duals = solution->col_dual.size() == n && solution->row_dual.size() == m;
+    for (std::size_t k = 0; k < n && !swapped && have_duals; ++k) {
+      if (k == c || entered[k] || col_status[k] != BasisStatus::kBasic) continue;
+      if (std::fabs(solution->col_dual[k]) <= tol::kDualFeasibility) continue;
+      const double xk = solution->col_value[k];
+      if (on(xk, original.col_lower[k])) {
+        col_status[k] = BasisStatus::kAtLower;
+        swapped = true;
+      } else if (on(xk, original.col_upper[k])) {
+        col_status[k] = BasisStatus::kAtUpper;
+        swapped = true;
+      }
+    }
     if (swapped) {
       col_status[c] = BasisStatus::kBasic;
       entered[c] = true;
