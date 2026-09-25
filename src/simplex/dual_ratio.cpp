@@ -206,11 +206,11 @@ DualRatioResult Simplex::dual_ratio_test_textbook(Index leaving_slot,
   //
   // IN ORDER, WITHOUT SORTING. The breakpoints are needed in order only as far as the step
   // goes, but they were sorted in full here, and on a wide model that was most of the
-  // iteration - d6cube, 6,184 columns, spent 56% of its dual loop in this test. A heap is
-  // built in linear time and each breakpoint the step reaches costs a logarithmic pop, so an
-  // iteration pays for the breakpoints it reaches rather than for all of them. The sequence
-  // is a stable sort's: equal ratios by column index, where std::sort left them in whatever
-  // order its partitioning happened to produce.
+  // iteration - d6cube, 6,184 columns, spent 0.17 s of its 0.29 s engine time in this test. A
+  // heap is built in linear time and each breakpoint the step reaches costs a logarithmic pop,
+  // so an iteration pays for the breakpoints it reaches rather than for all of them. The
+  // sequence is a stable sort's: equal ratios by column index, where std::sort left them in
+  // whatever order its partitioning happened to produce.
   //
   // AND MOST ITERATIONS NEED NO ORDER AT ALL. When the first breakpoint cannot be passed -
   // no flip, the usual case - the answer is the largest pivot among the breakpoints tied
