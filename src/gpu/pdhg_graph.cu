@@ -210,6 +210,15 @@ bool DeviceLoop::init(const DeviceLoopBuffers& buffers, int block) {
   if (b_.nnz > 0 && cusparseSetStream(b_.cusparse, stream_) != CUSPARSE_STATUS_SUCCESS) {
     return false;
   }
+  // Each product once before the capture, into scratch every iteration overwrites (A^T y
+  // into aty, A x into ax): with CUSPARSE_SPMV_CSR_ALG2 (deterministic mode) the first call
+  // on a matrix sets up its state in the workspace, and that set-up belongs outside the graph
+  // rather than replayed in it (#478).
+  if (!spmv(b_, stream_, CUSPARSE_OPERATION_TRANSPOSE, b_.y, b_.aty) ||
+      !spmv(b_, stream_, CUSPARSE_OPERATION_NON_TRANSPOSE, b_.x, b_.ax) ||
+      cudaStreamSynchronize(stream_) != cudaSuccess) {
+    return false;
+  }
   // One iteration per recorded sequence, `block` of them in the graph: the host waits once
   // per block, not once per iteration.
   if (cudaStreamBeginCapture(stream_, cudaStreamCaptureModeThreadLocal) != cudaSuccess) {
