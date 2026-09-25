@@ -196,7 +196,7 @@ Index BranchAndBound::select_branching_column(Solution& relaxation, double& node
     strong_branch_fixes_ += static_cast<Count>(fixes.size());
     relaxation = std::move(fixed);
     node_bound = internal_objective(relaxation.col_value);
-    prune_bound = safe_bounds_ ? safe_node_bound(relaxation, node_bound) : node_bound;
+    prune_bound = prune_bound_of(relaxation, node_bound);
     current_warm_ = basis_of(relaxation);
     if (can_prune(prune_bound)) {
       ++strong_branch_fix_prunes_;

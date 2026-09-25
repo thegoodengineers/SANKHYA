@@ -506,10 +506,6 @@ Solution BranchAndBound::run() {
     // Moved, not copied: this node will not be solved twice, and the open list must not
     // hold a basis per closed node.
     current_warm_ = std::move(nodes_[static_cast<std::size_t>(node_index)].warm);
-    // QP IPM warm start (#494): take the parent's stored iterate for the child solve.
-    if (miqp_node_ipm_) {
-      current_ipm_warm_ = std::move(nodes_[static_cast<std::size_t>(node_index)].ipm_iterate);
-    }
     debug_node_ = node_index;
     const bool debug_inside = debug_node_contains();  // #500: false with no debug solution
 
@@ -626,12 +622,6 @@ Solution BranchAndBound::run() {
     // ordered raw; can_prune() and the gap test round it up to the next value an integer
     // solution can take (#221), so node selection is the same with or without the rounding.
     double node_bound = internal_objective(relaxation.col_value);
-    // Store the QP IPM primal/dual iterate for warm-starting this node's children (#494).
-    if (miqp_node_ipm_ && relaxation.status == SolveStatus::kOptimal) {
-      auto& stored = nodes_[static_cast<std::size_t>(node_index)].ipm_iterate;
-      stored.col_value = relaxation.col_value;
-      stored.row_dual = relaxation.row_dual;
-    }
     certificate_record(node_index, relaxation, CertificateTree::Proof::kDual);  // #518
     if (debug_inside) debug_after_node_lp(relaxation);  // the bound after the cut rounds
 
@@ -654,7 +644,8 @@ Solution BranchAndBound::run() {
     // SAFE BOUNDS (#519): with the option on, the node is pruned, and its children ordered,
     // on the Neumaier-Shcherbina bound from the node LP's duals rather than on the objective
     // of its primal point. The believed bound still drives the pseudocosts and branching.
-    double prune_bound = safe_bounds_ ? safe_node_bound(relaxation, node_bound) : node_bound;
+    // With miqp_node_ipm (#494) an MIQP node is pruned on the linearised bound likewise.
+    double prune_bound = prune_bound_of(relaxation, node_bound);
     if (can_prune(prune_bound)) {
       leave();
       ++nodes_pruned_;
@@ -778,11 +769,6 @@ Solution BranchAndBound::run() {
     // were branched from, and the branched column's own contribution is the one term the
     // branch is about to settle.
     const double child_estimate = estimate_from(relaxation.col_value, node_bound);
-    // Capture the parent's QP IPM iterate before link_strong_fixes() may grow nodes_ (#494).
-    IpmIterate parent_ipm;
-    if (miqp_node_ipm_) {
-      parent_ipm = nodes_[static_cast<std::size_t>(node_index)].ipm_iterate;
-    }
     // Read before link_strong_fixes() grows nodes_, which `node` refers into.
     const Index child_depth = node.depth + 1;
     const Index parent = link_strong_fixes(node_index, prune_bound);
@@ -795,7 +781,6 @@ Solution BranchAndBound::run() {
     down.parent_lp_bound = node_bound;
     down.depth = child_depth;
     down.warm = children_warm;
-    down.ipm_iterate = parent_ipm;  // warm start for QP IPM (#494)
     down.fraction = down_fraction;
     down.estimate = child_estimate;
 
@@ -807,7 +792,6 @@ Solution BranchAndBound::run() {
     up.parent_lp_bound = node_bound;
     up.depth = child_depth;
     up.warm = children_warm;
-    up.ipm_iterate = parent_ipm;  // warm start for QP IPM (#494)
     up.fraction = up_fraction;
     up.estimate = child_estimate;
 
@@ -843,6 +827,7 @@ Solution BranchAndBound::run() {
 
   report_conflicts();
   report_safe_bounds();
+  report_miqp_ipm();
   report_branching_fixpoint();
   report_batch();
   finish_certificate();  // #518: written here, whatever status the search ends in
