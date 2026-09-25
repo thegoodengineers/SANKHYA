@@ -42,16 +42,19 @@ namespace {
 
 /// Row-feasibility check for x on the original model (no LP solve).
 bool is_row_feasible(const Model& model, const std::vector<double>& x, double tol) {
-  const Index m = model.num_rows();
-  for (Index i = 0; i < m; ++i) {
-    double act = 0.0;
-    for (Index k = model.matrix.row_start()[static_cast<std::size_t>(i)];
-         k < model.matrix.row_start()[static_cast<std::size_t>(i) + 1]; ++k) {
-      act += model.matrix.value()[static_cast<std::size_t>(k)] *
-             x[static_cast<std::size_t>(model.matrix.column()[static_cast<std::size_t>(k)])];
+  // CSC matrix: accumulate row activities via A*x using column iteration.
+  std::vector<double> act(static_cast<std::size_t>(model.num_rows()), 0.0);
+  for (Index j = 0; j < model.num_cols(); ++j) {
+    const ColumnView col = model.matrix.column(j);
+    const double xj = x[static_cast<std::size_t>(j)];
+    for (Index k = 0; k < col.size; ++k) {
+      act[static_cast<std::size_t>(col.rows[k])] += col.values[k] * xj;
     }
-    if (act < model.row_lower[static_cast<std::size_t>(i)] - tol ||
-        act > model.row_upper[static_cast<std::size_t>(i)] + tol) {
+  }
+  for (Index i = 0; i < model.num_rows(); ++i) {
+    const double ai = act[static_cast<std::size_t>(i)];
+    if (ai < model.row_lower[static_cast<std::size_t>(i)] - tol ||
+        ai > model.row_upper[static_cast<std::size_t>(i)] + tol) {
       return false;
     }
   }
