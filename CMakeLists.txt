@@ -344,6 +344,7 @@ set(SANKHYA_CORE_SOURCES
   src/pdhg/pdhg_halpern.cpp
   src/pdhg/batch_pdhg.cpp
   src/pdhg/batch_pdhg_cpu.cpp
+  src/pdhg/pdhg_parallel.cpp
   src/gpu/gpu_memory.cpp
   src/gpu/cudss_factor.cpp
   src/gpu/multi_device.cpp

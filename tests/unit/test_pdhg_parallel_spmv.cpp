@@ -8,10 +8,18 @@
 // parallel path is held to rounding, not to the bit: the same status and
 // iteration count, the objective to 1e-9 relative. Both checks run on the
 // committed Netlib instances, the same set the CUDA regression uses.
+//
+// pdhg_parallel_updates (#487, src/pdhg/pdhg_parallel.hpp) moves the rest of the
+// iteration onto the workers: the projected updates and the step rule's sums, the
+// sums in fixed chunks of tol::kPdhgParallelChunk entries. The last two tests hold
+// it to the same two standards, on a generated model large enough that every sum
+// spans several chunks (a Netlib instance fits in one, which would test nothing).
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -19,6 +27,7 @@
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/tolerances.hpp"
 
 namespace sankhya {
 namespace {
@@ -99,6 +108,90 @@ TEST(PdhgParallelSpmv, AgreesWithTheSerialProductToRounding) {
     EXPECT_NEAR(serial.objective, parallel.objective,
                 1e-9 * std::max(1.0, std::fabs(serial.objective)))
         << name;
+  }
+}
+
+/// A feasible, bounded LP with three entries per column in rows j, j + m/3 and j + 2m/3
+/// (mod m), so no two coincide: maximise sum x subject to row sums <= b, 0 <= x <= 10.
+/// Deterministic in its size alone.
+Model spread_lp(Index rows, Index cols) {
+  Model model;
+  const auto n = static_cast<std::size_t>(cols);
+  const auto m = static_cast<std::size_t>(rows);
+  model.col_cost.assign(n, -1.0);
+  model.col_lower.assign(n, 0.0);
+  model.col_upper.assign(n, 10.0);
+  model.col_type.assign(n, VarType::kContinuous);
+  model.row_lower.assign(m, -kInfinity);
+  model.row_upper.assign(m, 0.0);
+  model.matrix.reset(rows, cols);
+  for (Index i = 0; i < rows; ++i) {
+    model.row_upper[static_cast<std::size_t>(i)] = 20.0 + static_cast<double>(i % 11);
+  }
+  for (Index j = 0; j < cols; ++j) {
+    for (Index k = 0; k < 3; ++k) {
+      const Index i = (j + k * (rows / 3)) % rows;
+      model.matrix.add_entry(i, j, 1.0 + static_cast<double>((j * 7 + k * 3) % 5));
+    }
+  }
+  model.matrix.finalize();
+  model.hessian.reset(cols, cols);
+  model.hessian.finalize();
+  return model;
+}
+
+Options updates_options(int threads, bool two_matvec) {
+  Options options = pdhg_options(true, threads);
+  options.set_bool("pdhg_parallel_updates", true);
+  options.set_bool("pdhg_two_matvec", two_matvec);
+  // A fixed iteration count: the claim is about the arithmetic, every step of which the
+  // bitwise comparison covers whether or not the solve has converged by then.
+  options.set_int("iteration_limit", 1500);
+  return options;
+}
+
+TEST(PdhgParallelSpmv, TheVectorUpdatesGiveTheSameBitsAtOneTwoFourAndEightThreads) {
+  // 6,000 rows and 9,000 columns: six and nine chunks, so the chunk order and not only the
+  // chunk contents is exercised.
+  const Model model = spread_lp(6000, 9000);
+  ASSERT_GT(model.num_rows(), 4 * tol::kPdhgParallelChunk);
+  for (const bool two_matvec : {false, true}) {
+    const Solution one = solve(model, updates_options(1, two_matvec));
+    ASSERT_NE(one.status, SolveStatus::kNotSolved) << one.message;
+    ASSERT_GT(one.iterations, 100) << one.message;
+    for (const int threads : {2, 4, 8}) {
+      const Solution other = solve(model, updates_options(threads, two_matvec));
+      const std::string what = std::to_string(threads) + " threads" +
+                               (two_matvec ? ", two-mat-vec" : ", three products");
+      EXPECT_EQ(one.status, other.status) << what;
+      EXPECT_EQ(one.iterations, other.iterations) << what;
+      EXPECT_EQ(one.objective, other.objective) << what;
+      EXPECT_EQ(one.col_value, other.col_value) << what << ": the primal points differ";
+      EXPECT_EQ(one.row_dual, other.row_dual) << what << ": the duals differ";
+    }
+  }
+}
+
+TEST(PdhgParallelSpmv, TheVectorUpdatesAgreeWithTheSerialLoopsToRounding) {
+  // Against the serial loops the three sums are taken in a different order, so the
+  // standard is rounding: the same status, and the objective to the stopping tolerance the
+  // two runs were asked for (1e-6), since a one-ulp difference in a sum may move a restart
+  // by an evaluation and two points that each stopped at 1e-6 are not closer than that.
+  // The iteration counts are printed so a drift is visible even where it is allowed.
+  for (const char* name : kInstances) {
+    Model model;
+    ASSERT_TRUE(io::read_model(netlib_path(name), &model).ok) << name;
+    const Solution serial = solve(model, pdhg_options(true, 4));
+    Options parallel_options = pdhg_options(true, 4);
+    parallel_options.set_bool("pdhg_parallel_updates", true);
+    const Solution parallel = solve(model, parallel_options);
+    EXPECT_EQ(serial.status, parallel.status) << name << ": " << parallel.message;
+    EXPECT_NEAR(serial.objective, parallel.objective,
+                1e-6 * std::max(1.0, std::fabs(serial.objective)))
+        << name;
+    std::printf("%s: serial updates %lld iterations, parallel updates %lld\n", name,
+                static_cast<long long>(serial.iterations),
+                static_cast<long long>(parallel.iterations));
   }
 }
 

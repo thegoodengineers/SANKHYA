@@ -1801,6 +1801,21 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          {}});
     s.push_back(
+        {"pdhg_parallel_updates",
+         OptionType::Bool,
+         false,
+         "Run the rest of a CPU PDHG iteration over the `threads` workers too (#487): the "
+         "projected primal and dual updates, the extrapolation, the step rule's movement and "
+         "interaction sums and the running sums of the average. The sums are taken in fixed "
+         "chunks whose size does not depend on the thread count, so the answer is bitwise "
+         "identical at any thread count; against the serial loops the summation order "
+         "differs, so the two agree to rounding, not to the bit. Pairs with "
+         "pdhg_parallel_spmv for a fully parallel iteration. Off by default until the A/B on "
+         "main; the thread-scaling runner is bench/runners/pdhg_threads.py.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
         {"pdhg_stop_at_request",
          OptionType::Bool,
          false,

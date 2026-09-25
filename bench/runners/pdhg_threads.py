@@ -15,6 +15,11 @@ instance), objective (identical across thread counts by construction: the test i
 tests/unit/test_pdhg_parallel_spmv.cpp holds it to the bit), solver seconds, wall seconds,
 speedup over one thread, and the machine. `--serial` adds a row per instance with the option
 off at one thread, the product PDHG used before #487, for the cost of the transpose.
+`--updates` adds `pdhg_parallel_updates=true` to every parallel row (#487: the vector updates
+and the step rule's sums over the same workers), recorded in the `parallel_updates` column.
+
+rows, cols and nnz are the solver's own count of the model it read (the stats blob's `model`
+section), not the generator's arguments: the refinery year's were once written as 0.
 """
 from __future__ import annotations
 
@@ -36,7 +41,8 @@ from gpu_report import SIZES, generate_lp  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 
-COLUMNS = ["instance", "rows", "cols", "nnz", "threads", "parallel_spmv", "iterations", "status",
+COLUMNS = ["instance", "rows", "cols", "nnz", "threads", "parallel_spmv", "parallel_updates",
+           "iterations", "status",
            "objective", "solver_seconds", "wall_seconds", "speedup_vs_one_thread", "git_commit",
            "machine", "timestamp_utc"]
 
@@ -45,13 +51,15 @@ COLUMNS = ["instance", "rows", "cols", "nnz", "threads", "parallel_spmv", "itera
 DEFAULT_ITERATIONS = 2000
 
 
-def solve(binary: Path, mps: Path, threads: int, parallel: bool, iterations: int) -> dict:
+def solve(binary: Path, mps: Path, threads: int, parallel: bool, iterations: int,
+          updates: bool = False) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         stats = Path(tmp) / "s.json"
         command = [str(binary), "solve", str(mps), "--stats", str(stats)]
         for option in ("log_to_console=false", "algorithm=pdhg", "pdhg_polish=false",
                        "pdhg_restart=true", "presolve=false", f"threads={threads}",
                        f"pdhg_parallel_spmv={'true' if parallel else 'false'}",
+                       f"pdhg_parallel_updates={'true' if updates else 'false'}",
                        f"iteration_limit={iterations}"):
             command += ["--option", option]
         started = time.perf_counter()
@@ -59,9 +67,10 @@ def solve(binary: Path, mps: Path, threads: int, parallel: bool, iterations: int
         wall = time.perf_counter() - started
         if not stats.exists():
             return {"status": "no_output", "objective": "", "iterations": "", "seconds": wall,
-                    "wall": wall}
+                    "wall": wall, "model": {}}
         blob = json.loads(stats.read_text())
         return {
+            "model": blob.get("model", {}),
             "status": blob.get("result", {}).get("status", "unknown"),
             "objective": blob.get("result", {}).get("objective", ""),
             "iterations": blob.get("effort", {}).get("iterations", ""),
@@ -77,6 +86,8 @@ def main() -> int:
     parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
     parser.add_argument("--serial", action="store_true",
                         help="also the serial product at one thread, per instance")
+    parser.add_argument("--updates", action="store_true",
+                        help="pdhg_parallel_updates=true on every parallel row")
     parser.add_argument("--no-refinery", action="store_true",
                         help="skip the 779,640-row refinery year")
     parser.add_argument("--seed", type=int, default=42)
@@ -115,13 +126,20 @@ def main() -> int:
             base = None
             plan = ([(1, False)] if args.serial else []) + [(t, True) for t in threads]
             for t, parallel in plan:
-                r = solve(args.binary, mps, t, parallel, args.iterations)
+                updates = parallel and args.updates
+                r = solve(args.binary, mps, t, parallel, args.iterations, updates)
+                # The solver's count of what it read wins over the generator's arguments.
+                dims = r["model"]
+                nrows = dims.get("rows", nrows)
+                ncols = dims.get("columns", ncols)
+                nnz = dims.get("nonzeros", nnz)
                 if parallel and t == 1:
                     base = r["seconds"]
                 speedup = "" if (base is None or not parallel) else f"{base / r['seconds']:.3f}"
                 row = {
                     "instance": name, "rows": nrows, "cols": ncols, "nnz": nnz, "threads": t,
-                    "parallel_spmv": int(parallel), "iterations": r["iterations"],
+                    "parallel_spmv": int(parallel), "parallel_updates": int(updates),
+                    "iterations": r["iterations"],
                     "status": r["status"], "objective": r["objective"],
                     "solver_seconds": f"{r['seconds']:.6f}", "wall_seconds": f"{r['wall']:.6f}",
                     "speedup_vs_one_thread": speedup, "git_commit": commit, "machine": machine,
@@ -129,7 +147,8 @@ def main() -> int:
                 }
                 writer.writerow(row)
                 handle.flush()
-                print(f"{name:>18} {t:>7} {'parallel' if parallel else 'serial':>8} "
+                mode = ("par+upd" if updates else "parallel") if parallel else "serial"
+                print(f"{name:>18} {t:>7} {mode:>8} "
                       f"{str(r['iterations']):>6} {r['seconds']:>9.3f} {speedup:>8}")
     print(f"\nwrote {out}")
     return 0

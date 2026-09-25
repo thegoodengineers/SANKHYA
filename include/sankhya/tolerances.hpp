@@ -590,6 +590,14 @@ inline constexpr double kRootCutRowShare = 1.0;
 /// and the evaluation stride less often; 32 is under the evaluation interval of 40.
 inline constexpr Count kPdhgDeviceLoopBlock = 32;
 
+/// CPU PDHG parallel vector updates (#487): the fixed chunk the movement and interaction
+/// sums are taken in. A constant, not a function of the thread count, which is what makes
+/// the sums the same bits at any thread count. The chunk is also the unit of work a thread
+/// takes, so it bounds the parallelism from above (a 10,000-column model has ten chunks);
+/// 1024 doubles (8 KiB) keeps a chunk's working set of three or four vectors in L1, and a
+/// vector shorter than one chunk runs on one thread. A choice, not a measurement.
+inline constexpr Count kPdhgParallelChunk = 1024;
+
 /// Feasibility Jump polls the caller's stop (interrupt, time limit) every this many work
 /// units: about a millisecond of work, so a stop is seen promptly and the poll costs nothing.
 inline constexpr Count kFeasibilityJumpPollWork = 65536;
