@@ -165,7 +165,15 @@ bool CudssFactor::initialize(std::string* reason) {
   // replaced by the static epsilon (set per factorization) rather than swapped away.
   const cudssPivotType_t pivot = CUDSS_PIVOT_NONE;
   const cudssPivotEpsilonAlg_t epsilon_rule = CUDSS_PIVOT_EPSILON_ALG_STATIC;
-  return cudss_ok(cudssConfigSet(s.config, CUDSS_CONFIG_PIVOT_TYPE, &pivot, sizeof(pivot)),
+  // Bit-wise identical factors on every run. Without it the V100 took stocfor1 in 89
+  // iterations on one run and 91 on the next, and pilot4 in 66 and 68: the interior point's
+  // end game amplifies a last-bit difference, and a solve that cannot be repeated cannot be
+  // checked.
+  const int deterministic = 1;
+  return cudss_ok(cudssConfigSet(s.config, CUDSS_CONFIG_DETERMINISTIC_MODE, &deterministic,
+                                 sizeof(deterministic)),
+                  "deterministic mode", reason) &&
+         cudss_ok(cudssConfigSet(s.config, CUDSS_CONFIG_PIVOT_TYPE, &pivot, sizeof(pivot)),
                   "pivot type", reason) &&
          cudss_ok(cudssConfigSet(s.config, CUDSS_CONFIG_PIVOT_EPSILON_ALG, &epsilon_rule,
                                  sizeof(epsilon_rule)),

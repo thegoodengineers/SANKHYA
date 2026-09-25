@@ -268,6 +268,12 @@ TEST(IpmCudss, NetlibOptimaMatchTheCpuFactor) {
       EXPECT_GT(std::stol(match[1].str()), 0) << name;
     }
     std::cout << "\n";
+    // Deterministic mode: the same solve twice is the same solve, to the last bit.
+    Solution again;
+    (void)solve_ipm_logged(model, ipm_options("cudss"), &again);
+    EXPECT_EQ(again.iterations, device.iterations) << name;
+    EXPECT_EQ(again.objective, device.objective) << name;
+    EXPECT_EQ(again.col_value, device.col_value) << name;
     // The CPU factor's verdict is the reference: where it proves optimality the device must
     // too, at the same optimum within the interior point's own accuracy.
     if (cpu.status != SolveStatus::kOptimal) continue;
