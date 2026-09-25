@@ -753,6 +753,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  kNoLimit,
                  {}});
+    s.push_back({"miqp_node_ipm",
+                 OptionType::Bool,
+                 false,
+                 "MIQP: solve each node relaxation with the proximal QP interior point (#490) "
+                 "instead of the first-order Condat-Vu engine (#494), and prune on the bound "
+                 "of the objective linearised at the node's point, priced by its row duals "
+                 "(valid for any iterate). A node the IPM does not finish is decided by its LP "
+                 "when infeasible, else re-solved by Condat-Vu. No warm start yet: every node "
+                 "starts cold. Off by default until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_objective_branching",
                  OptionType::Bool,
                  false,

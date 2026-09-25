@@ -298,6 +298,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/branch_and_bound_heuristics.cpp
   src/mip/branch_and_bound_restart.cpp
   src/mip/branch_and_bound_safe.cpp
+  src/mip/branch_and_bound_miqp.cpp
   src/mip/branch_and_bound_batch.cpp
   src/mip/branch_and_bound_certificate.cpp
   src/mip/certificate_writer.cpp

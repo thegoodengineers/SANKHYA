@@ -153,6 +153,9 @@ constexpr double kObjectiveIntegralitySlack = 1e-6;
 /// solve; this keeps a single pathological node from consuming the whole time limit while
 /// still being generous enough to reach kMiqpNodeTolerance on the node sizes this handles.
 constexpr std::int64_t kMiqpNodeIterationLimit = 2000000;
+/// The same for the QP interior point at a node (miqp_node_ipm, #494): the engine's own
+/// ceiling (#490), which a converging IPM does not approach.
+constexpr std::int64_t kMiqpNodeIpmIterationLimit = 200;
 
 /// Distance from the nearest integer.
 inline double fractionality(double value) {
@@ -217,6 +220,15 @@ class BranchAndBound {
       // node is only fathomed when it loses by more than the bound could be wrong by.
       node_options_.set_double("qp_tolerance", kMiqpNodeTolerance);
       node_options_.set_int("iteration_limit", kMiqpNodeIterationLimit);
+    }
+    // miqp_node_ipm (#494): the proximal QP IPM (#490) as the node relaxation solver, pruned
+    // on a bound valid for any iterate (branch_and_bound_miqp.cpp). Only meaningful for MIQP.
+    miqp_node_ipm_ = quadratic_ && options.get_bool("miqp_node_ipm");
+    if (miqp_node_ipm_) {
+      // The Condat-Vu cap above is two million iterations; an IPM iteration is a
+      // factorization, and a node the IPM cannot finish goes to the fallback instead.
+      node_ipm_options_ = node_options_;
+      node_ipm_options_.set_int("iteration_limit", kMiqpNodeIpmIterationLimit);
     }
 
     for (Index j = 0; j < model.num_cols(); ++j) {
@@ -448,7 +460,10 @@ class BranchAndBound {
   [[nodiscard]] Solution solve_node() { return solve_node_with(node_options_); }
 
   [[nodiscard]] Solution solve_node_with(const Options& options) {
-    if (quadratic_) return qp::solve_convex_qp(working_, options, logger_, control_);
+    if (quadratic_) {
+      if (miqp_node_ipm_) return solve_qp_node_ipm(options);  // #494
+      return qp::solve_convex_qp(working_, options, logger_, control_);
+    }
     // WARM-STARTED DUAL SIMPLEX BELOW THE ROOT (#65). The basis in current_warm_ was
     // optimal for a problem that differs from this one by a bound or two, so it is dual
     // feasible here, which is exactly the state the dual simplex starts from. Measured
@@ -580,6 +595,26 @@ class BranchAndBound {
   /// minimise space without the offset, with its gap to `believed` recorded; -inf when none.
   [[nodiscard]] double safe_node_bound(const Solution& relaxation, double believed);
   void report_safe_bounds() const;
+
+  // ---- MIQP nodes by the QP interior point (#494), in branch_and_bound_miqp.cpp ---------
+  /// The entered node's QP by the IPM; a node it cannot finish is decided by the node LP
+  /// (same feasible set) when that is infeasible, else re-solved by Condat-Vu.
+  [[nodiscard]] Solution solve_qp_node_ipm(const Options& options);
+  /// A lower bound on the entered node's QP from ANY primal point and row duals: the
+  /// objective linearised at the point, then the Neumaier-Shcherbina bound; -inf when none.
+  [[nodiscard]] double safe_qp_node_bound(const Solution& relaxation);
+  void report_miqp_ipm() const;
+  /// What the entered node is pruned on and its children inherit: the believed bound, or
+  /// with safe_bounds the safe LP bound (#519); with miqp_node_ipm the linearised QP bound
+  /// (#494), the larger of the two when both are on - each is a lower bound, so both are.
+  [[nodiscard]] double prune_bound_of(const Solution& relaxation, double node_bound) {
+    double bound = safe_bounds_ ? safe_node_bound(relaxation, node_bound) : node_bound;
+    if (miqp_node_ipm_) {
+      const double qp = safe_qp_node_bound(relaxation);
+      bound = safe_bounds_ ? std::max(bound, qp) : qp;
+    }
+    return bound;
+  }
   /// #502: what each option did, in the log and the profiler's counters, on every exit
   /// path (an infeasible search returns before the other counters are written).
   void report_branching_fixpoint() const;
@@ -769,6 +804,13 @@ class BranchAndBound {
   /// The bounds are still scaled per node by solve_primal_simplex, because those are exactly
   /// what branching changes. Only the reusable part is cached.
   bool quadratic_ = false;  ///< the node relaxation is a QP, not an LP
+  /// miqp_node_ipm (#494): the QP IPM as the MIQP node solver (branch_and_bound_miqp.cpp).
+  bool miqp_node_ipm_ = false;
+  Options node_ipm_options_;            ///< node_options_ with the IPM's iteration cap
+  Count miqp_ipm_nodes_ = 0;            ///< node QPs the IPM solved
+  Count miqp_ipm_fallbacks_ = 0;        ///< node QPs it did not, handed to the fallback
+  Count miqp_ipm_lp_infeasible_ = 0;    ///< of those, proved infeasible by the node LP
+  Count miqp_safe_bound_infinite_ = 0;  ///< IPM nodes with no finite safe bound
 
   NodeScaling scaling_;
 

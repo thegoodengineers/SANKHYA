@@ -644,7 +644,8 @@ Solution BranchAndBound::run() {
     // SAFE BOUNDS (#519): with the option on, the node is pruned, and its children ordered,
     // on the Neumaier-Shcherbina bound from the node LP's duals rather than on the objective
     // of its primal point. The believed bound still drives the pseudocosts and branching.
-    double prune_bound = safe_bounds_ ? safe_node_bound(relaxation, node_bound) : node_bound;
+    // With miqp_node_ipm (#494) an MIQP node is pruned on the linearised bound likewise.
+    double prune_bound = prune_bound_of(relaxation, node_bound);
     if (can_prune(prune_bound)) {
       leave();
       ++nodes_pruned_;
@@ -831,6 +832,7 @@ Solution BranchAndBound::run() {
 
   report_conflicts();
   report_safe_bounds();
+  report_miqp_ipm();
   report_branching_fixpoint();
   report_batch();
   finish_certificate();  // #518: written here, whatever status the search ends in
