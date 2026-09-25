@@ -347,14 +347,23 @@ jobs:
         if: matrix.name == 'Release'
         run: PYTHONPATH=bindings/python python3 bindings/python/test_bindings.py
 
-      - name: The Pyomo, PuLP and CVXPY adapters solve through SANKHYA (#536)
+      # The PuLP adapter runs under both PuLP majors (#690): 4.0 replaced the LpStatus*
+      # constants with LpSolveStatus and made actualSolve return LpSolveStats, and the adapter
+      # speaks both. Each leg asserts the major it installed, because a PuLP that fails to
+      # import turns every PuLP test into a SKIP and the suite would still pass.
+      - name: The Pyomo, PuLP 3.x and CVXPY adapters solve through SANKHYA (#536)
         # Optional libraries, installed only here: importing sankhya never imports them.
         if: matrix.name == 'Release'
-        # pulp<4: PuLP 4.0.0 (25 Sep 2026) replaced the LpStatus* module constants with the
-        # LpSolveStatus enum and reworked the solver interface this adapter implements; the
-        # port is tracked separately. Until then the adapter refuses PuLP 4 with a clear message.
         run: |
           pip install "pulp<4" pyomo cvxpy
+          python3 -c "import pulp, sys; v = pulp.__version__; print('PuLP', v); sys.exit(int(v.split('.')[0]) >= 4)"
+          PYTHONPATH=bindings/python python3 bindings/python/test_adapters.py
+
+      - name: The PuLP 4.x adapter solves through SANKHYA (#690)
+        if: matrix.name == 'Release'
+        run: |
+          pip install "pulp>=4,<5"
+          python3 -c "import pulp, sys; v = pulp.__version__; print('PuLP', v); sys.exit(int(v.split('.')[0]) != 4)"
           PYTHONPATH=bindings/python python3 bindings/python/test_adapters.py
 
       - name: Infeasibility repair - the repaired model verifies feasible (#523)
