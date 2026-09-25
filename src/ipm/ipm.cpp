@@ -362,6 +362,9 @@ class InteriorPoint {
   /// Create the device factor; false, with a log line, when there is none. `why` is the
   /// reason the log gives for it.
   bool start_device(bool automatic, const std::string& why);
+  /// Under ipm_linear_solver = auto: whether the time left covers the device's start-up and
+  /// analysis, which cuDSS runs without consulting the deadline (tol::kIpmDeviceStartSeconds).
+  [[nodiscard]] bool device_start_affordable() const;
   /// ipm_linear_solver = auto after a CPU analysis whose factor is at the floor: start the
   /// device and analyse there too, keeping ldl_'s analysis for any return to the CPU.
   void analyze_on_device_too();
@@ -999,7 +1002,8 @@ bool InteriorPoint::factorize() {
     // Under ipm_linear_solver = auto a system already at the floor goes to the device
     // before any CPU ordering: on rmine15 (7.8e6 nonzeros) that ordering does not finish
     // inside the set-up share, and the device orders the matrix itself.
-    if (device_auto_ && system.num_nonzeros() >= tol::kIpmDeviceFactorFloor) {
+    if (device_auto_ && system.num_nonzeros() >= tol::kIpmDeviceFactorFloor &&
+        device_start_affordable()) {
       device_auto_ = false;
       (void)start_device(true, fmt::format("ipm_linear_solver = auto, {} nonzeros in the "
                                            "normal equations",
@@ -1038,7 +1042,9 @@ bool InteriorPoint::factorize() {
       }
       if (device_auto_) {
         device_auto_ = false;
-        if (factor_size_ >= tol::kIpmDeviceFactorFloor) analyze_on_device_too();
+        if (factor_size_ >= tol::kIpmDeviceFactorFloor && device_start_affordable()) {
+          analyze_on_device_too();
+        }
       }
     }
   }
@@ -1124,6 +1130,17 @@ bool InteriorPoint::start_device(bool automatic, const std::string& why) {
   logger_.info("Interior point: normal equations factored on the device by cuDSS (#489; {})",
                why);
   return true;
+}
+
+bool InteriorPoint::device_start_affordable() const {
+  if (!limits_.has_time_limit() || run_clock_ == nullptr) return true;
+  const double left = limits_.time_limit() - run_clock_->elapsed_seconds();
+  if (left >= tol::kIpmDeviceStartSeconds) return true;
+  logger_.verbose(
+      "interior point: ipm_linear_solver = auto keeps the CPU factor: {:.2f}s left is under "
+      "the device's uninterruptible start-up allowance of {:g}s",
+      left, tol::kIpmDeviceStartSeconds);
+  return false;
 }
 
 void InteriorPoint::analyze_on_device_too() {
