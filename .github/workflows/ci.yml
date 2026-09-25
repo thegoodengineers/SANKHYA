@@ -16,9 +16,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A newer push to a PR branch makes its older run worthless, so that run is cancelled. A
+# push to main is a merge, and every merge must end in a real pass or fail: with the group
+# keyed on the ref, each merge cancelled the previous merge's run (7 of the last 20 runs on
+# main ended "cancelled"), which left main commits with no verdict and a red-looking X.
+# Keying main's runs on the commit puts every merge in its own group, so none is cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   thread-sanitizer:
