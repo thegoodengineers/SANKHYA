@@ -175,13 +175,19 @@ TEST(EngineSelection, WithADeviceFactorLargeAffordableModelsGoToTheInteriorPoint
       "default:dual-simplex");
 }
 
-TEST(EngineSelection, PastTheDualSimplexWorkCeilingTheInteriorPointIsChosen) {
+TEST(EngineSelection, PastTheDualSimplexWorkCeilingTheDualSimplexIsLeft) {
   // qap15: 6,330 rows x 94,950 nonzeros = 6.0e8, under the row limit and the nonzero floor,
-  // a time limit on the dual simplex and optimal on the interior point (#417).
+  // a time limit on the dual simplex (#417). Without the device factor it goes to PDHG
+  // (optimal in 126 s where the CPU factor times out), with it to the interior point (23 s).
   const EngineSelection qap =
       select_engine(shaped_lp(6330, 22275, 94950), auto_options(), false);
-  EXPECT_EQ(qap.algorithm, "ipm");
-  EXPECT_EQ(qap.rule, "work:ipm");
+  EXPECT_EQ(qap.algorithm, "pdhg");
+  EXPECT_EQ(qap.rule, "work:pdhg");
+  EXPECT_FALSE(qap.use_gpu);
+  const EngineSelection device = select_engine(shaped_lp(6330, 22275, 94950), auto_options(),
+                                               false, true, "Test GPU", /*device_factor=*/true);
+  EXPECT_EQ(device.algorithm, "ipm");
+  EXPECT_EQ(device.rule, "work:ipm-device");
   // dfl001: 6,071 x 35,632 = 2.2e8, which the dual simplex solves in 47 s.
   const EngineSelection dfl =
       select_engine(shaped_lp(6071, 12230, 35632), auto_options(), false);
