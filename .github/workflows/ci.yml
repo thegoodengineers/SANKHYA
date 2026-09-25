@@ -347,6 +347,11 @@ jobs:
         if: matrix.name == 'Release'
         run: PYTHONPATH=bindings/python python3 bindings/python/test_bindings.py
 
+      - name: Python nonlinear expressions (NLP stage 1)
+        # Release only, for the reason the step above gives.
+        if: matrix.name == 'Release'
+        run: PYTHONPATH=bindings/python python3 bindings/python/test_nonlinear.py
+
       # The PuLP adapter runs under both PuLP majors (#690): 4.0 replaced the LpStatus*
       # constants with LpSolveStatus and made actualSolve return LpSolveStats, and the adapter
       # speaks both. Each leg asserts the major it installed, because a PuLP that fails to

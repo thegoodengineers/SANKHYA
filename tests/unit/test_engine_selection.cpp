@@ -83,6 +83,18 @@ TEST(EngineSelection, ADenseModelBelowTheRowLimitGoesToTheInteriorPoint) {
   EXPECT_EQ(s.rule, "density:ipm");
 }
 
+TEST(EngineSelection, ADenseModelWithFewRowsStaysOnTheDualSimplex) {
+  // fit2d's shape after presolve: 25 rows, 10,500 columns, 129,018 nonzeros. No basis of
+  // 25 rows is expensive to factorize, which is the density rule's whole reason.
+  const EngineSelection s = select_engine(shaped_lp(25, 10500, 129018), auto_options(), false);
+  EXPECT_EQ(s.algorithm, "dual-simplex");
+  EXPECT_EQ(s.rule, "default:dual-simplex");
+  const EngineSelection at_floor = select_engine(
+      shaped_lp(kIpmDensityRowFloor, 10500, kIpmNonzeroFloor + 1), auto_options(), false);
+  EXPECT_EQ(at_floor.algorithm, "ipm");
+  EXPECT_EQ(at_floor.rule, "density:ipm");
+}
+
 TEST(EngineSelection, FromTheRowLimitTheInteriorPointIsChosen) {
   const EngineSelection s =
       select_engine(shaped_lp(kDualSimplexRowLimit, 100, 200), auto_options(), false);
@@ -144,7 +156,7 @@ TEST(EngineSelection, AnInteriorPointThatDeclinesAboveTheRowLimitFallsBackToPdhg
 TEST(EngineSelection, AnInteriorPointThatDeclinesBelowTheRowLimitFallsBackToTheDualSimplex) {
   // A dense model below the row limit is the interior point's by the density rule; when it
   // declines, the dual simplex is the engine measured to be right at that size.
-  Model m = shaped_lp(50, 2100, kIpmNonzeroFloor + 1);
+  Model m = shaped_lp(kIpmDensityRowFloor, 2100, kIpmNonzeroFloor + 1);
   Options o = auto_options();
   o.set_bool("presolve", false);
   o.set_int("ipm_max_factor_nonzeros", 1);
@@ -210,7 +222,7 @@ TEST(EngineSelection, AnInteriorPointThatRunsOutOfMemoryAboveTheRowLimitFallsBac
 TEST(EngineSelection,
      AnInteriorPointThatRunsOutOfMemoryBelowTheRowLimitFallsBackToTheDualSimplex) {
   const InteriorPointOutOfMemory seam;
-  Model m = shaped_lp(50, 2100, kIpmNonzeroFloor + 1);
+  Model m = shaped_lp(kIpmDensityRowFloor, 2100, kIpmNonzeroFloor + 1);
   Options o = auto_options();
   o.set_bool("presolve", false);
   const Solution s = solve(m, o);
