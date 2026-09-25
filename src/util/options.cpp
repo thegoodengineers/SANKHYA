@@ -1140,20 +1140,6 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  2.0,
                  {}});
-    s.push_back({"gpu_cudss_ipm",
-                 OptionType::Bool,
-                 false,
-                 "GPU interior-point method via NVIDIA cuDSS (#489, stretch): normal "
-                 "equations or augmented KKT system factored by cuDSS on the device; "
-                 "Newton iteration logic unchanged on the host; dense-column handling "
-                 "per #467 before the matrix reaches cuDSS. Requires "
-                 "SANKHYA_ENABLE_CUDSS=ON and the cuDSS licence to be verified and "
-                 "recorded in PROVENANCE.md (not yet done). CURRENTLY A STUB: "
-                 "solve_ipm_cudss() returns an empty Solution immediately. Default OFF. "
-                 "Reference: Shin et al., MadIPM GPU IPM, arXiv:2508.16094.",
-                 0.0,
-                 0.0,
-                 {}});
     s.push_back({"ranging",
                  OptionType::Bool,
                  false,
@@ -1645,6 +1631,23 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  kNoLimit,
                  {}});
+    s.push_back({"ipm_linear_solver",
+                 OptionType::String,
+                 std::string("cpu"),
+                 "Where the LP interior point factors its normal equations (#489): cpu (the "
+                 "sparse LDL^T every earlier version used) or cudss (NVIDIA cuDSS on the "
+                 "device: analysed once, refactorized every iteration, the Newton iteration "
+                 "and the iterative refinement unchanged on the host; the same pivot rule as "
+                 "the CPU factor). cudss needs a build with SANKHYA_ENABLE_CUDSS and a CUDA "
+                 "device; without either, and under ipm_proximal_regularization, "
+                 "ipm_dense_columns or the column side of ipm_normal_side, it warns and keeps "
+                 "the CPU factor. A device factorization that fails, or that leaves a negative "
+                 "pivot the CPU rule would have lifted, is redone on the CPU; a failed device "
+                 "solve moves the rest of the solve to the CPU. Default cpu. Reference: Shin "
+                 "et al., MadIPM GPU interior point, arXiv:2508.16094.",
+                 0.0,
+                 0.0,
+                 {"cpu", "cudss"}});
     s.push_back({"ipm_normal_side",
                  OptionType::String,
                  std::string("rows"),

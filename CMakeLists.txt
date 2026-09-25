@@ -34,6 +34,7 @@ endif()
 # -----------------------------------------------------------------------------------------
 
 option(SANKHYA_ENABLE_CUDA  "Build the CUDA backend (Phase 4)"          OFF)
+option(SANKHYA_ENABLE_CUDSS "Interior point normal equations factored by NVIDIA cuDSS (#489); needs SANKHYA_ENABLE_CUDA" OFF)
 option(SANKHYA_BUILD_PYTHON "Build the pybind11 bindings (Phase 10)"    OFF)
 option(SANKHYA_BUILD_TESTS  "Build the GoogleTest suite"                ON)
 option(SANKHYA_SANITIZE     "Build with AddressSanitizer + UBSan"       OFF)
@@ -340,7 +341,7 @@ set(SANKHYA_CORE_SOURCES
   src/pdhg/pdhg_certificate.cpp
   src/pdhg/pdhg_halpern.cpp
   src/gpu/gpu_memory.cpp
-  src/gpu/ipm_cudss.cpp
+  src/gpu/cudss_factor.cpp
   src/gpu/multi_device.cpp
   src/simplex/dual_ratio.cpp
   src/simplex/dual_simplex.cpp
@@ -427,6 +428,36 @@ if(SANKHYA_ENABLE_CUDA)
   target_compile_definitions(sankhya_objects PUBLIC SANKHYA_ENABLE_CUDA)
 endif()
 
+# cuDSS (#489): NVIDIA's sparse direct linear-system library, a vendor numerical library like
+# cuSPARSE, found on the system and never vendored (docs/PROVENANCE.md, judgement call 28).
+# Opt-in: without it src/gpu/cudss_factor.cpp compiles to a stub that always declines and the
+# interior point keeps its CPU factor. Found from CUDSS_ROOT (a directory holding include/
+# and lib/, e.g. the nvidia/cu12 directory of the nvidia-cudss-cu12 wheel), from a cudss
+# CMake package (NVIDIA's apt and tarball installs ship one), or from the default paths.
+if(SANKHYA_ENABLE_CUDSS)
+  if(NOT SANKHYA_ENABLE_CUDA)
+    message(FATAL_ERROR "SANKHYA_ENABLE_CUDSS=ON needs SANKHYA_ENABLE_CUDA=ON")
+  endif()
+  set(CUDSS_ROOT "$ENV{CUDSS_ROOT}" CACHE PATH "cuDSS install prefix (include/ and lib/)")
+  find_path(SANKHYA_CUDSS_INCLUDE_DIR cudss.h
+    HINTS "${CUDSS_ROOT}" "${cudss_DIR}/../../../include"
+    PATH_SUFFIXES include include/libcudss/12)
+  find_library(SANKHYA_CUDSS_LIBRARY NAMES cudss libcudss.so.0
+    HINTS "${CUDSS_ROOT}" "${cudss_DIR}/../.."
+    PATH_SUFFIXES lib lib64 lib/x86_64-linux-gnu/libcudss/12)
+  if(NOT SANKHYA_CUDSS_INCLUDE_DIR OR NOT SANKHYA_CUDSS_LIBRARY)
+    message(FATAL_ERROR
+      "SANKHYA_ENABLE_CUDSS=ON but cuDSS was not found (cudss.h: ${SANKHYA_CUDSS_INCLUDE_DIR}, "
+      "library: ${SANKHYA_CUDSS_LIBRARY}). Install it from NVIDIA (apt package libcudss0-cuda-12 "
+      "or pip nvidia-cudss-cu12) and pass -DCUDSS_ROOT=<prefix>.")
+  endif()
+  # SYSTEM: the vendor header is not held to this project's -Werror warning set.
+  target_include_directories(sankhya_objects SYSTEM PRIVATE "${SANKHYA_CUDSS_INCLUDE_DIR}")
+  target_link_libraries(sankhya_objects PUBLIC "${SANKHYA_CUDSS_LIBRARY}")
+  target_compile_definitions(sankhya_objects PUBLIC SANKHYA_ENABLE_CUDSS)
+  message(STATUS "SANKHYA: cuDSS ${SANKHYA_CUDSS_LIBRARY}")
+endif()
+
 if(SANKHYA_WITH_ZLIB AND SANKHYA_ZLIB_TARGET)
   target_link_libraries(sankhya_objects PUBLIC ${SANKHYA_ZLIB_TARGET})
   target_compile_definitions(sankhya_objects PUBLIC SANKHYA_WITH_ZLIB)
@@ -506,6 +537,7 @@ message(STATUS "  compiler   : ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VER
 message(STATUS "  CUDA       : ${SANKHYA_ENABLE_CUDA}")
 if(SANKHYA_ENABLE_CUDA)
   message(STATUS "  CUDA archs : ${SANKHYA_CUDA_ARCHITECTURES}")
+  message(STATUS "  cuDSS      : ${SANKHYA_ENABLE_CUDSS}")
 endif()
 message(STATUS "  sanitizers : ${SANKHYA_SANITIZE}")
 message(STATUS "  fuzzing    : ${SANKHYA_ENABLE_FUZZING}")

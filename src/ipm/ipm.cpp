@@ -40,6 +40,7 @@
 #include <fmt/format.h>
 
 #include "core/resource_limits.hpp"
+#include "gpu/cudss_factor.hpp"
 #include "ipm/centrality.hpp"
 #include "ipm/column_side.hpp"
 #include "ipm/dense_columns.hpp"
@@ -329,6 +330,32 @@ class InteriorPoint {
   SparseMatrix normal_lower_;
   SparseLdl ldl_;
   bool analyzed_ = false;
+
+  // THE DEVICE FACTOR (#489, option ipm_linear_solver = cudss). When set, the plain normal
+  // equations are factored and solved by cuDSS. ldl_ keeps its analysis - the factor budget,
+  // the corrector budget and the reporting read it - and factors any matrix the device
+  // declines. Null by default, and then nothing below changes.
+  std::unique_ptr<gpu::CudssFactor> device_;
+  /// The current factors of normal_lower_ are the device's, not ldl_'s.
+  bool device_factored_ = false;
+  /// Factorizations the device left with a negative pivot, redone on the CPU.
+  Count device_declined_ = 0;
+  /// The device's phase times, kept when a failure drops it mid-solve.
+  gpu::CudssTiming device_timing_;
+  bool device_used_ = false;
+  /// Turns the device on for ipm_linear_solver = cudss, after the side is chosen.
+  void choose_linear_solver();
+  /// A cuDSS failure: say so and finish the solve on the CPU factor.
+  void drop_device(const std::string& reason);
+  /// Factor normal_lower_ with dual_regularization_: on the device when it is on and
+  /// accepts the matrix, otherwise with ldl_ (analysed already).
+  [[nodiscard]] bool factor_normal(const SparseLdl::ShouldStop& stop);
+  /// One solve with the factors factor_normal() produced, in place.
+  void normal_solve(double* v);
+  /// Pivots the last factorization lifted to the regularization, from whichever factor ran.
+  [[nodiscard]] Count last_regularized_pivots() const {
+    return device_factored_ ? device_->regularized_pivots() : ldl_.regularized_pivots();
+  }
 
   // THE PROXIMAL PATH (#473, ipm_proximal_regularization, off by default): the regularized
   // augmented system of ipm/proximal_system.hpp in place of the normal equations. ldl_ then
@@ -972,6 +999,18 @@ bool InteriorPoint::factorize() {
       factor_too_large_ = true;
       return false;
     }
+    if (device_ != nullptr) {
+      ProfileScope timed(profiler, "cudss analysis", ProfileMode::kDetailed);
+      std::string reason;
+      if (device_->analyze(normal_lower_, &reason)) {
+        logger_.verbose(
+            "interior point: cuDSS analysed the normal equations in {:.2f}s, factor {} "
+            "nonzeros",
+            device_->timing().analysis, device_->factor_nonzeros());
+      } else {
+        drop_device(reason);
+      }
+    }
   }
   bool factored = false;
   {
@@ -982,7 +1021,7 @@ bool InteriorPoint::factorize() {
       factored = proximal_->factorize(ldl_, theta_inverse, &proximal_reg_, stop, &attempts);
       factorizations_ += attempts > 1 ? attempts - 1 : 0;
     } else {
-      factored = ldl_.factorize(normal_lower_, dual_regularization_, stop);
+      factored = factor_normal(stop);
     }
   }
   if (!factored) {
@@ -990,13 +1029,92 @@ bool InteriorPoint::factorize() {
     return false;
   }
   ++factorizations_;
-  regularized_pivots_ += ldl_.regularized_pivots();
+  regularized_pivots_ += last_regularized_pivots();
   if (dense_.active() &&
       !dense_.prepare(ldl_, model_.matrix, theta_x, row_shift, dual_regularization_)) {
     dense_schur_failed_ = true;
     return false;
   }
   return true;
+}
+
+void InteriorPoint::choose_linear_solver() {
+  if (options_.get_string("ipm_linear_solver") != "cudss") return;
+  // The device factors the plain normal equations only. The proximal path factors a signed
+  // augmented system, and the dense-column and column-side paths are built on ldl_'s own
+  // factors; each keeps the CPU, and the log says so.
+  const char* excluded = proximal_ != nullptr  ? "ipm_proximal_regularization"
+                         : dense_.active()     ? "ipm_dense_columns"
+                         : column_side_active_ ? "the column side of ipm_normal_side"
+                                               : nullptr;
+  if (excluded != nullptr) {
+    logger_.warning(
+        "interior point: ipm_linear_solver = cudss does not apply with {}; the CPU factor is "
+        "kept",
+        excluded);
+    return;
+  }
+  auto device = std::make_unique<gpu::CudssFactor>();
+  std::string reason;
+  if (!device->initialize(&reason)) {
+    logger_.warning(
+        "interior point: ipm_linear_solver = cudss is unavailable ({}); the CPU factor is kept",
+        reason);
+    return;
+  }
+  device_ = std::move(device);
+  device_used_ = true;
+  logger_.info("Interior point: normal equations factored on the device by cuDSS (#489)");
+}
+
+void InteriorPoint::drop_device(const std::string& reason) {
+  logger_.warning("interior point: cuDSS failed ({}); the rest of the solve factors on the CPU",
+                  reason);
+  device_timing_ = device_->timing();
+  device_.reset();
+  device_factored_ = false;
+}
+
+bool InteriorPoint::factor_normal(const SparseLdl::ShouldStop& stop) {
+  device_factored_ = false;
+  // cuDSS does not consult the deadline, so a deadline already past goes to ldl_, which
+  // reports it through stopped_early() as it always has.
+  if (device_ != nullptr && !(stop && stop())) {
+    std::string reason;
+    const gpu::CudssOutcome outcome =
+        device_->factorize(normal_lower_, dual_regularization_, &reason);
+    if (outcome == gpu::CudssOutcome::kFactored) {
+      device_factored_ = true;
+      return true;
+    }
+    if (outcome == gpu::CudssOutcome::kIndefinite) {
+      // The CPU rule lifts every pivot not above the regularization, a negative one too;
+      // cuDSS keeps a negative pivot larger than its epsilon. This matrix is factored by
+      // the rule the rest of the loop was written for, and the device takes the next one.
+      ++device_declined_;
+      logger_.verbose("interior point: cuDSS factor declined ({}); refactored on the CPU",
+                      reason);
+    } else {
+      drop_device(reason);
+    }
+  }
+  return ldl_.factorize(normal_lower_, dual_regularization_, stop);
+}
+
+void InteriorPoint::normal_solve(double* v) {
+  if (device_factored_) {
+    std::string reason;
+    if (device_->solve(v, &reason)) return;
+    drop_device(reason);
+    // The same matrix on the CPU. A factorization stopped by the deadline leaves no factor
+    // to solve with, and a non-finite direction is what the loop already recovers from.
+    ++factorizations_;
+    if (!ldl_.factorize(normal_lower_, dual_regularization_, should_stop_)) {
+      std::fill(v, v + m_, std::numeric_limits<double>::quiet_NaN());
+      return;
+    }
+  }
+  ldl_.solve(v);
 }
 
 void InteriorPoint::solve_normal(std::vector<double>* rhs) {
@@ -1042,7 +1160,7 @@ void InteriorPoint::solve_normal(std::vector<double>* rhs) {
   // Solve with iterative refinement against the matrix actually built (the factors carry
   // the regularization; the residual is measured against the unregularized-by-pivot M).
   const std::vector<double> b = *rhs;
-  ldl_.solve(rhs->data());
+  normal_solve(rhs->data());
   const auto multiply_normal = [&](const std::vector<double>& v, std::vector<double>* out) {
     // M is stored as its lower triangle: M v = L v + L^T v - diag v.
     std::fill(out->begin(), out->end(), 0.0);
@@ -1066,7 +1184,7 @@ void InteriorPoint::solve_normal(std::vector<double>* rhs) {
       residual[static_cast<std::size_t>(i)] =
           b[static_cast<std::size_t>(i)] - residual[static_cast<std::size_t>(i)];
     }
-    ldl_.solve(residual.data());
+    normal_solve(residual.data());
     for (Index i = 0; i < m_; ++i)
       (*rhs)[static_cast<std::size_t>(i)] += residual[static_cast<std::size_t>(i)];
   }
@@ -1318,6 +1436,14 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
     if (status != SolveStatus::kOptimal && status != SolveStatus::kNotSolved) {
       solution.message += (solution.message.empty() ? "" : "; ") + refinement;
     }
+  }
+  if (device_used_) {
+    const gpu::CudssTiming& t = device_ != nullptr ? device_->timing() : device_timing_;
+    logger_.info(
+        "IPM: cuDSS {} factorization(s) in {:.3f}s, {} solve(s) in {:.3f}s, analysis {:.3f}s; "
+        "{} declined and redone on the CPU; {}",
+        t.factorizations, t.factorization, t.solves, t.solve, t.analysis, device_declined_,
+        device_ != nullptr ? "on the device to the end" : "dropped mid-solve");
   }
   if (dense_.active()) {
     logger_.info(
@@ -1595,7 +1721,11 @@ bool InteriorPoint::purify_duals() {
     if (!ldl.analyze(normal_lower_, should_stop_)) return false;
     purify_analyzed_ = true;
   }
-  if (!ldl.factorize(normal_lower_, dual_regularization_, should_stop_)) return false;
+  // Without the proximal path ldl is ldl_, and the device factor (#489) takes it when on.
+  if (!(proximal_ != nullptr ? ldl.factorize(normal_lower_, dual_regularization_, should_stop_)
+                             : factor_normal(should_stop_))) {
+    return false;
+  }
   ++factorizations_;
   if (dense_.active() &&
       !dense_.prepare(ldl_, model_.matrix, theta_x, row_shift, dual_regularization_)) {
@@ -1609,6 +1739,8 @@ bool InteriorPoint::purify_duals() {
   } else if (dense_.active()) {
     // An unconverged solve is not a least-squares correction; the point stays as it is.
     if (!dense_.solve(dy.data()).converged) return false;
+  } else if (proximal_ == nullptr) {
+    normal_solve(dy.data());
   } else {
     ldl.solve(dy.data());
   }
@@ -1835,6 +1967,7 @@ Solution InteriorPoint::run() {
     Solution stopped;
     if (!choose_side(timer, &stopped)) return stopped;
   }
+  choose_linear_solver();
   // A polish arrives with most of its budget spent by the first-order phase; a build that
   // already used the rest must not go on to assemble and order for nothing (#232).
   if (should_stop_ && should_stop_()) {
@@ -2068,7 +2201,7 @@ Solution InteriorPoint::run() {
     // other optimal claim; on that model the guard finds its dual side 12% over the 1e-7
     // tolerance and reports it feasible at a relative error of 1.4e-8, which is what it is.
     {
-      const Count regularized_now = ldl_.regularized_pivots();
+      const Count regularized_now = last_regularized_pivots();
       const auto spike_threshold = std::max<Count>(
           kBarrierExhaustedPivots,
           static_cast<Count>(kBarrierExhaustedFraction * static_cast<double>(m_)));
