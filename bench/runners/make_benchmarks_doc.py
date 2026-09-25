@@ -2326,13 +2326,16 @@ def pdhg_threads_section(path: Path | None) -> str:
     first = rows[0]
     out = [f"Source CSV: `{path.name}`  \nCommit `{first.get('git_commit', '?')}` · machine "
            f"`{first.get('machine', '?')}` · {first.get('iterations', '?')} iterations per solve, "
-           "PDHG alone, `pdhg_parallel_spmv=true` except the `serial` rows.\n",
+           "PDHG alone, `pdhg_parallel_spmv=true` except the `serial` rows; `+ updates` rows "
+           "also run the vector updates and the step rule's sums over the threads "
+           "(`pdhg_parallel_updates=true`).\n",
            "| instance | rows | threads | A x | solver (s) | speed-up over 1 thread |",
            "|---|---:|---:|---|---:|---:|"]
     for r in rows:
         speedup = r.get("speedup_vs_one_thread") or ""
         out.append(f"| `{r.get('instance', '')}` | {r.get('rows', '')} | {r.get('threads', '')} | "
-                   f"{'parallel' if r.get('parallel_spmv') == '1' else 'serial'} | "
+                   f"{'parallel' if r.get('parallel_spmv') == '1' else 'serial'}"
+                   f"{' + updates' if r.get('parallel_updates') == '1' else ''} | "
                    f"{float(r.get('solver_seconds') or 0):.3f} | "
                    f"{speedup + 'x' if speedup else '-'} |")
     return "\n".join(out) + "\n"

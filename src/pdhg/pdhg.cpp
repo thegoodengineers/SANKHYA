@@ -41,6 +41,7 @@
 #include "pdhg_certificate.hpp"
 #include "pdhg_evaluate.hpp"
 #include "pdhg_halpern.hpp"
+#include "pdhg_parallel.hpp"
 #include "pdhg_trace.hpp"
 
 #include <algorithm>
@@ -178,6 +179,10 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     }
   };
 
+  // The elementwise halves of the step over the same workers (#487, pdhg_parallel.hpp): the
+  // sums in fixed chunks, so the answer does not depend on the thread count.
+  const bool parallel_updates = options.get_bool("pdhg_parallel_updates");
+
   logger.info("Solving LP with restarted PDHG: {} rows, {} columns, {} nonzeros", rows, cols,
               model.num_nonzeros());
   logger.info("Scaled matrix entries in [{:.3e}, {:.3e}], estimated ||A||_2 = {:.4e}",
@@ -185,6 +190,12 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   logger.info("Target relative tolerance {:.1e}, restarts {}, A x {}", tolerance,
               use_halpern ? "halpern-fp" : (use_restarts ? "on" : "off"),
               parallel_spmv ? "row-parallel over the thread pool (#487)" : "serial");
+  if (parallel_updates) {
+    logger.info(
+        "Vector updates and the step rule's sums over the thread pool, in fixed "
+        "chunks of {} (#487)",
+        tol::kPdhgParallelChunk);
+  }
 
   // ---- Iterates, in SCALED space ----------------------------------------------------------
   const auto n = static_cast<std::size_t>(cols);
@@ -207,6 +218,12 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   // A*xbar and A*dx are derived by vector ops instead of extra mat-vecs (#479).
   std::vector<double> a_x_cached(m, 0.0);
   std::vector<double> a_x_new(m, 0.0);
+  // pdhg_parallel_updates: x_next - x from the primal pass and A of it, kept across
+  // iterations instead of allocated in each (#487).
+  std::vector<double> step_dx(parallel_updates ? n : 0, 0.0);
+  std::vector<double> step_adx(parallel_updates ? m : 0, 0.0);
+  double movement_x = 0.0;
+  double movement_y = 0.0;
 
   // Running average since the last restart. PDLP restarts to whichever of the average and
   // the current iterate has the better KKT error.
@@ -309,15 +326,27 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     // Primal: x' = proj_X( x - tau (c + A'y) )
     {
       ProfileScope timed(logger.profiler(), "primal step", ProfileMode::kDetailed);
-      for (Index j = 0; j < cols; ++j) at_y[static_cast<std::size_t>(j)] = 0.0;
+      // transpose_multiply fills at_y before it adds, and with no rows at_y stays the zero
+      // it was allocated as, so the parallel path skips the serial clearing pass (#487).
+      if (!parallel_updates) {
+        for (Index j = 0; j < cols; ++j) at_y[static_cast<std::size_t>(j)] = 0.0;
+      }
       if (rows > 0) scaling.matrix.transpose_multiply(y.data(), at_y.data());
-      for (Index j = 0; j < cols; ++j) {
-        const auto u = static_cast<std::size_t>(j);
-        const double gradient = scaling.cost[u] + at_y[u];
-        x_next[u] = project(x[u] - tau * gradient, scaling.col_lower[u], scaling.col_upper[u]);
-        // two_matvec derives A*xbar from A*x_{k+1} and A*x_k, so the extrapolated
-        // vector itself is not needed in that path.
-        if (!two_matvec) extrapolated[u] = 2.0 * x_next[u] - x[u];  // the [CP11] extrapolation
+      if (parallel_updates) {
+        movement_x = parallel_primal_step(scaling, x, at_y, tau, omega, x_next,
+                                          two_matvec ? nullptr : &extrapolated,
+                                          two_matvec ? nullptr : &step_dx);
+      } else {
+        for (Index j = 0; j < cols; ++j) {
+          const auto u = static_cast<std::size_t>(j);
+          const double gradient = scaling.cost[u] + at_y[u];
+          x_next[u] =
+              project(x[u] - tau * gradient, scaling.col_lower[u], scaling.col_upper[u]);
+          // two_matvec derives A*xbar from A*x_{k+1} and A*x_k, so the extrapolated
+          // vector itself is not needed in that path.
+          if (!two_matvec)
+            extrapolated[u] = 2.0 * x_next[u] - x[u];  // the [CP11] extrapolation
+        }
       }
     }
 
@@ -329,35 +358,56 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
           // A*x_{k+1} computed once; A*xbar = 2*A*x_{k+1} - A*x_k by vector ops.
           std::fill(a_x_new.begin(), a_x_new.end(), 0.0);
           a_times(x_next.data(), a_x_new.data());
-          for (std::size_t i = 0; i < m; ++i) a_x[i] = 2.0 * a_x_new[i] - a_x_cached[i];
+          if (parallel_updates) {
+            parallel_extrapolate_product(a_x_new, a_x_cached, a_x);
+          } else {
+            for (std::size_t i = 0; i < m; ++i) a_x[i] = 2.0 * a_x_new[i] - a_x_cached[i];
+          }
         } else {
           a_times(extrapolated.data(), a_x.data());
         }
       }
-      for (Index i = 0; i < rows; ++i) {
-        const auto u = static_cast<std::size_t>(i);
-        const double v = y[u] + sigma * a_x[u];
-        y_next[u] = v - sigma * project(v / sigma, scaling.row_lower[u], scaling.row_upper[u]);
+      if (parallel_updates) {
+        movement_y = parallel_dual_step(scaling, y, a_x, sigma, omega, y_next);
+      } else {
+        for (Index i = 0; i < rows; ++i) {
+          const auto u = static_cast<std::size_t>(i);
+          const double v = y[u] + sigma * a_x[u];
+          y_next[u] =
+              v - sigma * project(v / sigma, scaling.row_lower[u], scaling.row_upper[u]);
+        }
       }
     }
 
     // ---- Adaptive step size, [PDLP] section 3.1 ------------------------------------------
     // The step is admissible while eta <= (movement) / (interaction). Both are measured on
     // the step just taken, so a rejected step costs one matvec and is retried smaller.
+    // With pdhg_parallel_updates both halves were summed in the passes that moved them.
     double movement = 0.0;
-    for (Index j = 0; j < cols; ++j) {
-      const double d = x_next[static_cast<std::size_t>(j)] - x[static_cast<std::size_t>(j)];
-      movement += 0.5 * omega * d * d;
-    }
-    for (Index i = 0; i < rows; ++i) {
-      const double d = y_next[static_cast<std::size_t>(i)] - y[static_cast<std::size_t>(i)];
-      movement += 0.5 * d * d / omega;
+    if (parallel_updates) {
+      movement = movement_x + movement_y;
+    } else {
+      for (Index j = 0; j < cols; ++j) {
+        const double d = x_next[static_cast<std::size_t>(j)] - x[static_cast<std::size_t>(j)];
+        movement += 0.5 * omega * d * d;
+      }
+      for (Index i = 0; i < rows; ++i) {
+        const double d = y_next[static_cast<std::size_t>(i)] - y[static_cast<std::size_t>(i)];
+        movement += 0.5 * d * d / omega;
+      }
     }
 
     double interaction = 0.0;
     if (rows > 0) {
       // (y' - y)' A (x' - x)
-      if (two_matvec) {
+      if (parallel_updates) {
+        if (two_matvec) {
+          interaction = parallel_interaction(y_next, y, a_x_new, &a_x_cached);
+        } else {
+          a_times(step_dx.data(), step_adx.data());
+          interaction = parallel_interaction(y_next, y, step_adx, nullptr);
+        }
+      } else if (two_matvec) {
         // A*(x_next - x) = a_x_new - a_x_cached; no extra mat-vec (#479).
         for (std::size_t i = 0; i < m; ++i)
           interaction += (y_next[i] - y[i]) * (a_x_new[i] - a_x_cached[i]);
@@ -427,7 +477,11 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       x.swap(x_next);
       y.swap(y_next);
       if (two_matvec) a_x_cached.swap(a_x_new);
-      if (!use_halpern) {
+      if (!use_halpern && parallel_updates) {
+        parallel_accumulate(x_sum, x);
+        parallel_accumulate(y_sum, y);
+        ++averaged;
+      } else if (!use_halpern) {
         for (Index j = 0; j < cols; ++j) {
           x_sum[static_cast<std::size_t>(j)] += x[static_cast<std::size_t>(j)];
         }
