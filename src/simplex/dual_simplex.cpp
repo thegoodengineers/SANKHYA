@@ -60,8 +60,8 @@
 //
 // THE RATIO TEST'S PIVOT FLOOR IS RELATIVE TO THE ROW (#244), and the optimal exit sums
 // what its wrong-signed reduced costs price before it claims anything (see the loop). The
-// ratio tests - the textbook one and, behind dual_ratio_test=harris, Harris's two passes
-// with cost shifting (#465) - and the cost perturbation against dual degeneracy live in
+// ratio tests - Harris's two passes with cost shifting (#465; dual_ratio_test=harris, the
+// default) and the textbook one - and the cost perturbation against dual degeneracy live in
 // dual_ratio.cpp: a stall perturbs the nonbasic costs and iterates on (or, behind
 // dual_perturb_costs_at_start, the costs are perturbed before the first pivot), and only a
 // stall that survives that hands the basis to the primal loop, which has its own
@@ -497,7 +497,8 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   compute_reduced_costs(false);
   make_dual_feasible();
   reset_dual_weights();
-  // #465, both off by default until their A/B on main.
+  // #465: the Harris ratio test is the default since its A/B; the start perturbation is
+  // still off by default until its own.
   dual_harris_ = options_.get_string("dual_ratio_test") == "harris";
   if (options_.get_bool("dual_perturb_costs_at_start")) perturb_costs_at_start();
 

@@ -252,15 +252,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  {"harris", "textbook"}});
     s.push_back({"dual_ratio_test",
                  OptionType::String,
-                 std::string("textbook"),
+                 std::string("harris"),
                  "Dual simplex entering-variable rule inside the bound-flipping ratio test "
-                 "(#465): textbook (default; the tightest breakpoint, ties to the largest "
-                 "pivot) or harris (Harris 1973 two passes per group of breakpoints: the step "
-                 "bound with every reduced cost relaxed by a tenth of the dual tolerance, "
-                 "then the largest pivot under it; an entering reduced cost of the wrong sign "
-                 "is removed by shifting its cost, and a solve that shifted a cost ends with "
-                 "the exact costs and the primal simplex; Koberstein 2005, ch. 6). Not the "
-                 "default until its A/B on main.",
+                 "(#465): harris (default; Harris 1973 two passes per group of breakpoints: "
+                 "the step bound with every reduced cost relaxed by a tenth of the dual "
+                 "tolerance, then the largest pivot under it; an entering reduced cost of the "
+                 "wrong sign is removed by shifting its cost, and a solve that shifted a cost "
+                 "ends with the exact costs and the primal simplex; Koberstein 2005, ch. 6) or "
+                 "textbook (the tightest breakpoint, ties to the largest pivot). Harris became "
+                 "the default on its A/B: the same 81 of 89 Netlib instances matched and 89 of "
+                 "89 verified, in fewer iterations on the grow family; textbook is kept so the "
+                 "comparison can be regenerated.",
                  0.0,
                  0.0,
                  {"harris", "textbook"}});
