@@ -41,6 +41,7 @@
 #include "pdhg_certificate.hpp"
 #include "pdhg_evaluate.hpp"
 #include "pdhg_halpern.hpp"
+#include "pdhg_trace.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -80,6 +81,11 @@ double project(double value, double lower, double upper) {
 // A test seam (#480): the count of convergence evaluations in the last solve. Atomic
 // because the engine race runs engines on threads of their own.
 std::atomic<int> pdhg_evaluations_for_testing{0};
+
+IterateTraceHook& iterate_trace_for_testing() {
+  static IterateTraceHook hook;
+  return hook;
+}
 
 Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
                     SolveControl* control) {
@@ -271,6 +277,8 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
 
   StopController stop(control, timer, limits);
   SolveStatus stop_status = SolveStatus::kIterationLimit;
+  const IterateTraceHook trace = iterate_trace_for_testing();  // null outside tests (#479)
+  std::vector<double> trace_ax(trace.callback != nullptr ? m : 0);
 
   while (true) {
     // Time outranks the counters when both are exhausted at one safe point (#289), so the
@@ -429,6 +437,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         ++averaged;
       }
       ++iteration;
+      if (trace.callback != nullptr) {
+        const bool cached = two_matvec && rows > 0;
+        if (cached) a_times(x.data(), trace_ax.data());
+        trace.callback(trace.context, iteration, x.data(), n, y.data(), m,
+                       cached ? a_x_cached.data() : nullptr,
+                       cached ? trace_ax.data() : nullptr);
+      }
     }
     // Whether accepted or not, the step size moves to the proposal. A rejected step is
     // therefore always retried smaller, which is what makes the rule terminate. The upper
