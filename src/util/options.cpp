@@ -998,19 +998,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  {},
                  {},
                  {}});
-    s.push_back(
-        {"gpu_batch_nodes",
-         OptionType::Bool,
-         false,
-         "Bound and score a slab of open B&B nodes in one batched GPU PDHG pass (#520, "
-         "off by default): K node LPs sharing the same constraint matrix are solved "
-         "simultaneously via cusparseSpMM (n x K and m x K block iterates); safe "
-         "dual bounds (#519) are extracted every gpu_batch_check_every iterations and "
-         "nodes whose bound exceeds the incumbent are pruned without a simplex solve. "
-         "Falls back to sequential node LPs when no CUDA device is present.",
-         0.0,
-         0.0,
-         {}});
+    s.push_back({"gpu_batch_nodes",
+                 OptionType::Bool,
+                 false,
+                 "Bound and score a slab of open B&B nodes in one batched GPU PDHG pass (#520, "
+                 "off by default): K node LPs sharing the same constraint matrix are solved "
+                 "simultaneously via cusparseSpMM (n x K and m x K block iterates); safe "
+                 "dual bounds (#519) are extracted every gpu_batch_check_every iterations and "
+                 "nodes whose bound exceeds the incumbent are pruned without a simplex solve. "
+                 "Falls back to sequential node LPs when no CUDA device is present.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"gpu_batch_max_iter",
                  OptionType::Int,
                  std::int64_t{400},
@@ -1039,21 +1038,20 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"auto", "cpu"}});
-    s.push_back(
-        {"gpu_pump",
-         OptionType::Bool,
-         false,
-         "GPU feasibility pump for MIP (#509). CURRENTLY A STUB: the kernel is not "
-         "written and feasibility_pump() returns nothing, so the search behaves "
-         "exactly as with the option off. The design: PDHG on the device solves each "
-         "L1 projection LP; the outer loop rounds to integer and repeats until "
-         "feasible or a round limit. Default OFF; it earns a default by a clean A/B "
-         "on main once the kernel exists. "
-         "References: Fischetti, Glover & Lodi, Math. Prog. 104 (2005); "
-         "Mexi et al., arXiv:2307.03466; Corduk et al., arXiv:2510.20499.",
-         0.0,
-         0.0,
-         {}});
+    s.push_back({"gpu_pump",
+                 OptionType::Bool,
+                 false,
+                 "GPU feasibility pump for MIP (#509). CURRENTLY A STUB: the kernel is not "
+                 "written and feasibility_pump() returns nothing, so the search behaves "
+                 "exactly as with the option off. The design: PDHG on the device solves each "
+                 "L1 projection LP; the outer loop rounds to integer and repeats until "
+                 "feasible or a round limit. Default OFF; it earns a default by a clean A/B "
+                 "on main once the kernel exists. "
+                 "References: Fischetti, Glover & Lodi, Math. Prog. 104 (2005); "
+                 "Mexi et al., arXiv:2307.03466; Corduk et al., arXiv:2510.20499.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back(
         {"gpu_fix_and_prop",
          OptionType::Bool,

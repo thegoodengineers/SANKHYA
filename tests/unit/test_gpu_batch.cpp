@@ -86,8 +86,8 @@ TEST(GpuBatch, PrunesNodesWhoseBoundExceedsIncumbent) {
   ASSERT_EQ(static_cast<int>(res.size()), K);
   for (int k = 0; k < K; ++k) {
     EXPECT_TRUE(res[static_cast<std::size_t>(k)].pruned)
-        << "node " << k << " should be pruned (bound " << res[static_cast<std::size_t>(k)].dual_bound
-        << " > incumbent " << incumbent << ")";
+        << "node " << k << " should be pruned (bound "
+        << res[static_cast<std::size_t>(k)].dual_bound << " > incumbent " << incumbent << ")";
   }
 #endif
 }
