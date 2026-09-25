@@ -1242,22 +1242,26 @@ const std::vector<OptionSpec>& Options::registry() {
                  "and a restart (new anchor) when the fixed-point residual ||T z - z|| falls "
                  "to 0.2 of the period's first, or artificially after 0.36 of all "
                  "iterations. Convergence is measured and the answer reported at T z. "
-                 "Default OFF until a Maros-Meszaros A/B on main; off, the iteration is the "
-                 "plain Condat-Vu one, unchanged. References: Lu & Yang arXiv:2407.16144; "
+                 "Default OFF: in the Maros-Meszaros A/B on main 58a8374 (30 s) it passes 16 "
+                 "of 138 together with qp_primal_weight_pid against 19 for the PID weight "
+                 "alone; off, the iteration is the plain Condat-Vu one. References: Lu & Yang "
+                 "arXiv:2407.16144; "
                  "PDQP arXiv:2311.07710; Condat JOTA 158 (2013).",
                  0.0,
                  0.0,
                  {}});
     s.push_back({"qp_primal_weight_pid",
                  OptionType::Bool,
-                 false,
+                 true,
                  "Primal weight omega = sqrt(sigma/tau) of the first-order QP engine moved at "
                  "each restart by a PID controller on e = log(omega ||dx|| / ||dy||), the "
                  "period's primal and dual movement (#493): log omega -= kp e + ki sum(e) + "
                  "kd de, and tau, sigma recomputed from omega under Condat's step condition. "
                  "Restarts are the qp_halpern ones; with qp_halpern off they are decided on "
                  "the same fixed-point residual and only move the weight. No effect on a "
-                 "model with no rows. Default OFF until an A/B on main. References: Lu, Peng "
+                 "model with no rows. Default ON since the Maros-Meszaros A/B on main "
+                 "58a8374 (30 s, qp_tolerance=1e-6: 19 of 138 pass against 2 off; hs76 is "
+                 "lost); the gains below are untuned defaults. References: Lu, Peng "
                  "& Yang arXiv:2507.14051; Applegate et al. NeurIPS 2021 section 3.2.",
                  0.0,
                  0.0,

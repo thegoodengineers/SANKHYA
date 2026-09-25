@@ -207,8 +207,9 @@ reference on 44, verifier-accepted on 39, and **six labelled `optimal` that the 
 answers as `feasible`, and the next run measures that. The first-order QP engine alone, at 30 s
 and `qp_tolerance=1e-6` (#493, `bench/results/maros-meszaros-493-{off,pid,both}-58a8374.csv`):
 the PID primal weight (`qp_primal_weight_pid=true`) passes **19 of 138** against 2 without it;
-adding Halpern restarts passes 16, and both legs lose `hs76`, which the plain engine passes. Both
-stay off by default: the PID gains are not yet tuned on a set disjoint from these instances. The engine race (#476) on the same binary:
+adding Halpern restarts passes 16, and both legs lose `hs76`, which the plain engine passes. The
+PID weight is on by default since that A/B, with its gains left at their untuned defaults
+(kp 0.5, ki = kd = 0, PDLP's smoothed update); Halpern restarts stay off. The engine race (#476) on the same binary:
 3 of 8 Mittelmann against `auto`'s 2, the same 89 of 89 on Netlib as the plain run but 182.9 s of
 solver time against 108.0 s, which is why it stays off by default.
 

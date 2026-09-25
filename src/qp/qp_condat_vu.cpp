@@ -39,14 +39,14 @@
 // ENGINEERING_RULES.md is explicit that a wrong answer scores zero, and the LP path is the
 // thing most of the project's evidence rests on.
 //
-// ACCELERATION (#493, both off by default). qp_halpern replaces z <- T z by the restarted,
-// reflected Halpern iteration of Lu & Yang (arXiv:2407.16144), carried to this operator as
-// their PDQP (arXiv:2311.07710) carries PDHG to QP; qp_primal_weight_pid moves the primal
-// weight sigma / tau at each restart by a PID controller on the log of the primal-dual
-// movement ratio (Lu, Peng & Yang, arXiv:2507.14051). Restarts are decided on the
-// fixed-point residual ||T z - z||. The machinery and its derivation from Condat's
-// relaxation bound are in qp_first_order_accel.hpp. Convergence is checked, and the answer
-// reported, at T z - a point of the box - never at the anchored combination.
+// ACCELERATION (#493; the PID weight on by default, Halpern off). qp_halpern replaces
+// z <- T z by the restarted, reflected Halpern iteration of Lu & Yang (arXiv:2407.16144),
+// carried to this operator as their PDQP (arXiv:2311.07710) carries PDHG to QP;
+// qp_primal_weight_pid moves the primal weight sigma / tau at each restart by a PID controller
+// on the log of the primal-dual movement ratio (Lu, Peng & Yang, arXiv:2507.14051). Restarts
+// are decided on the fixed-point residual ||T z - z||. The machinery and its derivation from
+// Condat's relaxation bound are in qp_first_order_accel.hpp. Convergence is checked, and the
+// answer reported, at T z - a point of the box - never at the anchored combination.
 
 #include "sankhya/qp.hpp"
 #include "sankhya/solve_control.hpp"

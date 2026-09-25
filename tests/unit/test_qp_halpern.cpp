@@ -2,14 +2,14 @@
 // SANKHYA - restarted Halpern iteration and the PID primal weight in the first-order QP engine
 // (#493, CPU).
 //
-// Three things are pinned. Off, the engine is the one it was: the defaults are off and an
-// explicit off (with the controller's gains moved, which must then be ignored) reproduces the
-// default run bit for bit. On, each switch alone and both together reach the optimum the
-// interior point (#490) reaches, on hand-derived QPs and on seeded random ones, and every
-// answer passes the in-process KKT check (the same conditions tools/verify_solution.py
-// re-derives). And the step-size algebra the controller relies on - that the default steps are
-// the weight formula at the default weight, that Condat's condition holds at every weight, and
-// that kp = 0.5 alone is PDLP's smoothing - is checked directly.
+// Three things are pinned. The defaults: the PID weight on (since the A/B on main 58a8374),
+// Halpern off, and the default run is an explicit PID-only run bit for bit; an explicit off
+// ignores the controller's gains, bit for bit. On, each switch alone and both together reach
+// the optimum the interior point (#490) reaches, on hand-derived QPs and on seeded random ones,
+// and every answer passes the in-process KKT check (the same conditions
+// tools/verify_solution.py re-derives). And the step-size algebra the controller relies on -
+// that the default steps are the weight formula at the default weight, that Condat's condition
+// holds at every weight, and that kp = 0.5 alone is PDLP's smoothing - is checked directly.
 
 #include <algorithm>
 #include <cmath>
@@ -199,23 +199,39 @@ void expect_matches_ipm(const Model& model, bool halpern, bool pid, const std::s
 }
 
 // =========================================================================================
-// Off is what it was
+// The defaults, and off is inert
 // =========================================================================================
 
-TEST(QpHalpern, BothSwitchesAreOffByDefault) {
+TEST(QpHalpern, ThePidWeightIsOnAndHalpernOffByDefault) {
+  // The PID weight is on since the Maros-Meszaros A/B on main 58a8374 (#493:
+  // maros-meszaros-493-{off,pid,both}-58a8374.csv, 19 of 138 against 2); Halpern stays off.
   const Options options;
   EXPECT_FALSE(options.get_bool("qp_halpern"));
-  EXPECT_FALSE(options.get_bool("qp_primal_weight_pid"));
+  EXPECT_TRUE(options.get_bool("qp_primal_weight_pid"));
   EXPECT_EQ(options.get_string("qp_algorithm"), "condat-vu");
 }
 
-TEST(QpHalpern, AnExplicitOffIsTheDefaultRunBitForBit) {
+TEST(QpHalpern, TheDefaultRunIsAnExplicitPidOnlyRunBitForBit) {
   for (const unsigned seed : {1u, 2u}) {
     const Model model = random_qp(seed, 16, 8);
     Logger logger(nullptr);
     const Solution base = qp::solve_convex_qp(model, quiet(), logger);
+    const Solution again = qp::solve_convex_qp(model, with(false, true), logger);
+    EXPECT_EQ(base.status, again.status);
+    EXPECT_EQ(base.iterations, again.iterations);
+    EXPECT_TRUE(bitwise_equal(base.col_value, again.col_value));
+    EXPECT_TRUE(bitwise_equal(base.row_dual, again.row_dual));
+    EXPECT_TRUE(bitwise_equal(base.col_dual, again.col_dual));
+  }
+}
+
+TEST(QpHalpern, TheGainsOfASwitchedOffControllerChangeNothing) {
+  for (const unsigned seed : {1u, 2u}) {
+    const Model model = random_qp(seed, 16, 8);
+    Logger logger(nullptr);
+    const Solution base = qp::solve_convex_qp(model, with(false, false), logger);
     Options off = with(false, false);
-    off.set_double("qp_pid_kp", 1.3);  // gains of a switched-off controller change nothing
+    off.set_double("qp_pid_kp", 1.3);
     off.set_double("qp_pid_ki", 0.4);
     off.set_double("qp_pid_kd", 0.2);
     const Solution again = qp::solve_convex_qp(model, off, logger);
@@ -231,7 +247,7 @@ TEST(QpHalpern, ThePrimalWeightIsInertWithoutRows) {
   // No rows, no dual, nothing for a weight to balance: the switch is ignored, bit for bit.
   const Model model = coupled_bound_qp();
   Logger logger(nullptr);
-  const Solution base = qp::solve_convex_qp(model, quiet(), logger);
+  const Solution base = qp::solve_convex_qp(model, with(false, false), logger);
   const Solution pid = qp::solve_convex_qp(model, with(false, true), logger);
   EXPECT_EQ(base.iterations, pid.iterations);
   EXPECT_TRUE(bitwise_equal(base.col_value, pid.col_value));
@@ -296,7 +312,7 @@ TEST(QpHalpern, AMaximizationIsReportedInItsOwnSense) {
 TEST(QpHalpern, TheSwitchIsLiveThroughSolve) {
   // Through the dispatcher and presolve, on: the same answer, reached by a different path.
   const Model model = random_qp(21, 24, 12);
-  const Solution off = solve(model, quiet());
+  const Solution off = solve(model, with(false, false));
   const Solution on = solve(model, with(true, false));
   ASSERT_EQ(off.status, SolveStatus::kOptimal) << off.message;
   ASSERT_EQ(on.status, SolveStatus::kOptimal) << on.message;
