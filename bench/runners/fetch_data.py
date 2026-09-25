@@ -102,6 +102,12 @@ SUMMARY_ROW = re.compile(
 )
 
 
+# With --offline-fallback there is a tracked copy to fall back to, so a dead netlib.org is
+# detected with one short retry instead of four two-minute timeouts per file.
+OFFLINE_PROBE_TIMEOUT = 30
+OFFLINE_PROBE_ATTEMPTS = 2
+
+
 def download(url: str, timeout: int = 120, attempts: int = 4) -> bytes:
     """Fetch a URL, retrying on transport failures.
 
@@ -376,12 +382,38 @@ def main() -> int:
                              f"rows <= {MEDIUM_MAX_ROWS}), or full (everything listed)")
     parser.add_argument("--all", action="store_true",
                         help="deprecated alias for --set full")
+    parser.add_argument("--offline-fallback", action="store_true",
+                        help="when netlib.org does not answer, use the copies tracked in "
+                             "data/netlib/ (the readme and the .mps files) with a warning, "
+                             "instead of failing; CI passes this")
     args = parser.parse_args()
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+    # OFFLINE FALLBACK (--offline-fallback, what CI passes). Every instance and Netlib's
+    # readme are tracked in data/netlib/, so an outage at netlib.org need not turn a CI job
+    # red for a reason unrelated to the change under review (it did, on #670: four two-minute
+    # timeouts on the readme). When netlib.org answers, the LIVE readme is parsed, as before,
+    # and written over the tracked copy, so an edit to the tracked readme cannot change a
+    # published optimum while Netlib is up. Only when it does not answer are the tracked
+    # copies used, with a warning, after a short probe rather than the full retry budget.
+    readme_path = DATA_DIR / "readme"
+    offline = False
+    fallback = args.offline_fallback
+    probe = {"timeout": OFFLINE_PROBE_TIMEOUT, "attempts": OFFLINE_PROBE_ATTEMPTS} if fallback else {}
     print(f"reading the published summary table from {NETLIB_BASE}/readme")
-    readme_bytes = download(f"{NETLIB_BASE}/readme")
+    try:
+        readme_bytes = download(f"{NETLIB_BASE}/readme", **probe)
+    except SystemExit as error:
+        if not fallback or not readme_path.exists():
+            raise
+        print(f"WARNING: {error}; netlib.org is not answering, so the tracked copies in "
+              f"{DATA_DIR.relative_to(REPO_ROOT)} are used", file=sys.stderr)
+        readme_bytes = readme_path.read_bytes()
+        offline = True
+    else:
+        if not readme_path.exists() or readme_path.read_bytes() != readme_bytes:
+            readme_path.write_bytes(readme_bytes)
     published = parse_summary_table(readme_bytes.decode("latin-1"))
     print(f"  {len(published)} instances listed with a published optimal value")
     if not published:
@@ -431,28 +463,53 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
-        print("building Netlib's emps decoder")
-        emps, emps_digest = build_emps(work)
-        manifest["emps_sha256"] = emps_digest
+        emps = None
+        if not offline:
+            # The decoder's source comes from netlib.org too; offline, nothing is decoded.
+            print("building Netlib's emps decoder")
+            try:
+                emps, emps_digest = build_emps(work)
+            except SystemExit as error:
+                if not fallback:
+                    raise
+                print(f"WARNING: emps.c: {error}; netlib.org stopped answering, the tracked "
+                      f"copies are used", file=sys.stderr)
+                offline = True
+            else:
+                manifest["emps_sha256"] = emps_digest
+                print(f"  emps.c sha256 {emps_digest}")
         manifest["readme_sha256"] = sha256(readme_bytes)
-        print(f"  emps.c sha256 {emps_digest}")
 
         failures = []
         for name in wanted:
             entry = dict(published[name])
-            try:
-                packed_bytes = download(f"{NETLIB_BASE}/{name}")
-            except Exception as error:  # noqa: BLE001 - report and continue
-                print(f"  {name:<10} DOWNLOAD FAILED: {error}")
-                failures.append(name)
-                continue
-
-            packed = work / name
-            packed.write_bytes(packed_bytes)
-            entry["packed_sha256"] = sha256(packed_bytes)
-
             target = DATA_DIR / f"{name}.mps"
-            decompress(emps, packed, target)
+            packed_bytes = None
+            if not offline:
+                try:
+                    packed_bytes = download(f"{NETLIB_BASE}/{name}", **probe)
+                except (Exception, SystemExit) as error:  # noqa: BLE001 - report and continue
+                    if not (fallback and target.exists()):
+                        print(f"  {name:<10} DOWNLOAD FAILED: {error}")
+                        failures.append(name)
+                        continue
+                    print(f"WARNING: {name}: {error}; netlib.org stopped answering, the "
+                          f"tracked copies are used from here on", file=sys.stderr)
+                    offline = True
+            if packed_bytes is None:
+                if not target.exists():
+                    print(f"  {name:<10} NOT TRACKED, and netlib.org is not answering")
+                    failures.append(name)
+                    continue
+                previous = manifest["instances"].get(name, {})
+                if "packed_sha256" in previous:
+                    entry["packed_sha256"] = previous["packed_sha256"]
+                entry["source"] = "tracked copy (netlib.org not answering)"
+            else:
+                packed = work / name
+                packed.write_bytes(packed_bytes)
+                entry["packed_sha256"] = sha256(packed_bytes)
+                decompress(emps, packed, target)
             mps_bytes = target.read_bytes()
             entry["mps_sha256"] = sha256(mps_bytes)
             entry["mps_bytes"] = len(mps_bytes)
