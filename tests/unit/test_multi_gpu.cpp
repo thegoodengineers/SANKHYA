@@ -317,7 +317,7 @@ TEST(MultiGpu, PeerAccessSelfIsTrue) {
 //
 // Uses device_ids = {0, 0}: two virtual partitions on the same physical GPU.
 // This exercises the full multi-GPU code path (row partitioning, per-device cuSPARSE
-// SpMVs, host-mediated allreduce) without needing a second physical GPU.
+// SpMVs, the A^T y exchange between the two slots) without needing a second physical GPU.
 // The result is compared against the single-GPU solver to prove correctness.
 TEST(MultiGpu, SolveTwoVirtualDevicesMatchesSingleGpu) {
   if (gpu::device_count() == 0) {
