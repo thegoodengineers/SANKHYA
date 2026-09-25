@@ -54,8 +54,14 @@ def test_hs071_is_built_and_evaluated() -> None:
     check(objective.value([1, 5, 5, 1]) == 11.0, "objective expression at the start", "11")
     m.set_start([1, 5, 5, 1])
     result = m.solve(log_to_console=False)
-    check(result.status == "not_solved" and not result.claims_a_point,
-          "stage 1 says it has no engine instead of solving the linear part", result.message)
+    # HS071 is not proved convex: a KKT point is LOCALLY optimal, at the published 17.0140173.
+    check(result.status == "locally_optimal", "the NLP engine answers, and says local",
+          result.message)
+    check(abs(result.objective - 17.0140173) < 1e-6, "HS071's published optimum",
+          f"{result.objective:.9f}")
+    check(len(result.row_duals) == 2 and result.row_duals[0] > 0,
+          "one dual per nonlinear row; the product row prices its lower bound",
+          f"{result.row_duals}")
 
 
 def test_numbers_mix_and_functions_are_exact() -> None:

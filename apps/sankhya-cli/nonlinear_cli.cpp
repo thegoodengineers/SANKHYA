@@ -12,7 +12,9 @@
 
 #include "nlp/nl_reader.hpp"
 #include "nlp/nlp_problem.hpp"
+#include "nlp/nlp_solve.hpp"
 #include "nlp/nonlinear_model.hpp"
+#include "sankhya/io.hpp"
 
 namespace sankhya::cli {
 namespace {
@@ -76,8 +78,8 @@ int nonlinear_info(const std::string& path) {
   return 0;
 }
 
-int nonlinear_solve(const std::string& path, const Options& options) {
-  (void)options;
+int nonlinear_solve(const std::string& path, const Options& options,
+                    const std::string& solution_path, const std::string& stats_path) {
   const std::unique_ptr<nlp::NonlinearModel> model = read_or_report(path);
   if (!model) return 3;
   const std::string problem = model->validate();
@@ -85,14 +87,41 @@ int nonlinear_solve(const std::string& path, const Options& options) {
     fmt::print(stderr, "error: {}\n", problem);
     return 5;
   }
-  // Stage 1 reads and differentiates nonlinear models; the engine that solves a general one
-  // is not in this build, and solving the linear part alone would be a different problem.
-  fmt::print("\n{:<22}{}\n", "status", to_string(SolveStatus::kNotSolved));
-  fmt::print(
-      "{:<22}model class {}: this build represents and differentiates it but has no "
-      "engine for it\n",
-      "message", nlp::to_string(model->classify()));
-  return 5;
+  model->base.source_path = path;
+  const Solution solution = nlp::solve_nlp(*model, options);
+  fmt::print("\n{:<22}{}\n", "status", to_string(solution.status));
+  fmt::print("{:<22}{}\n", "class", nlp::to_string(model->classify()));
+  if (claims_a_point(solution)) fmt::print("{:<22}{:.12g}\n", "objective", solution.objective);
+  fmt::print("{:<22}{}\n", "algorithm",
+             solution.algorithm.empty() ? "none" : solution.algorithm);
+  fmt::print("{:<22}{}\n", "iterations", solution.iterations);
+  fmt::print("{:<22}{:.4f}\n", "solve seconds", solution.solve_seconds);
+  fmt::print("{:<22}{:.3e}\n", "primal infeasibility", solution.primal_infeasibility);
+  fmt::print("{:<22}{:.3e}\n", "dual infeasibility", solution.dual_infeasibility);
+  if (!solution.message.empty()) fmt::print("{:<22}{}\n", "message", solution.message);
+
+  // The writer needs names and bounds per row of the NLP form: the frame supplies them.
+  const Model frame = model->solution_frame();
+  std::string error;
+  if (!solution_path.empty() &&
+      !io::write_solution(solution_path, frame, solution, options, &error)) {
+    fmt::print(stderr, "error: {}\n", error);
+    return 4;
+  }
+  if (!stats_path.empty() &&
+      !io::write_stats_json(stats_path, frame, solution, &error, &options)) {
+    fmt::print(stderr, "error: {}\n", error);
+    return 4;
+  }
+  // The linear path's exit codes (main.cpp), with a local optimum a success like an optimum.
+  switch (solution.status) {
+    case SolveStatus::kOptimal:
+    case SolveStatus::kLocallyOptimal: return 0;
+    case SolveStatus::kNumericalError:
+    case SolveStatus::kModelError:
+    case SolveStatus::kNotSolved: return 5;
+    default: return 1;
+  }
 }
 
 }  // namespace sankhya::cli

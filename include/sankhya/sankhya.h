@@ -65,7 +65,11 @@ typedef enum sankhya_solve_status {
   SANKHYA_NUMERICAL_ERROR = 8,
   SANKHYA_MODEL_ERROR = 9,
   /** 10 is INFEASIBLE_OR_UNBOUNDED above. */
-  SANKHYA_INTERRUPTED = 11
+  SANKHYA_INTERRUPTED = 11,
+  /** A nonlinear model not proved convex: a KKT point, a LOCAL optimum, no global claim. */
+  SANKHYA_LOCALLY_OPTIMAL = 12,
+  /** A nonlinear model: a local minimizer of the violation, NOT a proof of infeasibility. */
+  SANKHYA_LOCALLY_INFEASIBLE = 13
 } sankhya_solve_status;
 
 /* ---- Opaque handles -------------------------------------------------------------------- */

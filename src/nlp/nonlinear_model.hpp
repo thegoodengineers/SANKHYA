@@ -8,9 +8,9 @@
 // no second variable model to keep in step with the first (#296 item 5), and an LP or MILP
 // never passes through an expression tree it does not need (item 1).
 //
-// NO ENGINE READS THIS YET. It is the representation #226 (a convex NLP engine behind the
-// solve() seam) will consume; classifying a model as NLP says what it is, not that anything
-// here can solve it.
+// WHO READS IT. The convex Condat-Vu engine for linear constraints (#226, convex_nlp.hpp) and
+// the general NLP interior point (NLP stage 2, nlp_solve.hpp). Classifying a model says what
+// it is; which engine can solve it is those entry points' decision, each stated there.
 
 #pragma once
 
@@ -87,6 +87,12 @@ class NonlinearModel {
   [[nodiscard]] std::vector<std::string> domain_risks() const;
 
   [[nodiscard]] PointReport evaluate(const std::vector<double>& x) const;
+
+  /// The model as the solution writer sees it (NLP stage 2): base's columns, then one row per
+  /// row of the NLP form - base's linear rows with their coefficients, then each nonlinear
+  /// constraint with its name and bounds and no coefficients. A frame for names, bounds and
+  /// sizes, not a model to solve: it has lost every expression.
+  [[nodiscard]] Model solution_frame() const;
 };
 
 }  // namespace sankhya::nlp

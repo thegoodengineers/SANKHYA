@@ -18,6 +18,7 @@
 
 #include "api/c_api_internal.hpp"
 #include "nlp/nl_reader.hpp"
+#include "nlp/nlp_solve.hpp"
 #include "nlp/nonlinear_model.hpp"
 
 namespace sankhya::capi {
@@ -101,23 +102,11 @@ sankhya_status read_nl_into(sankhya_model* model, const char* path) {
 
 bool solve_nonlinear(sankhya_model* model, const Model& built, const Options& options,
                      SolveControl* control, Solution* out) {
-  (void)options;
-  (void)control;
   if (!model->nonlinear || model->nonlinear->empty()) return false;
   const nlp::NonlinearModel whole = assemble(*model, built);
-  const std::string problem = whole.validate();
-  out->status = SolveStatus::kModelError;
-  if (!problem.empty()) {
-    out->message = problem;
-    return true;
-  }
-  // Stage 1 builds and reads nonlinear models; the engine that solves a general one is not in
-  // this build. Saying so is the whole answer: solving the linear part alone would be solving
-  // a different problem.
-  out->status = SolveStatus::kNotSolved;
-  out->message = fmt::format(
-      "model class {}: this build represents and differentiates it but has no engine for it",
-      nlp::to_string(whole.classify()));
+  // Never the linear part alone: that would be solving a different problem. The row vectors
+  // of the answer hold the linear rows, then the nonlinear rows (sankhya_nonlinear.h).
+  *out = nlp::solve_nlp(whole, options, control);
   return true;
 }
 
