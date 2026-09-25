@@ -9,7 +9,12 @@ build-*/
 # instance sha256 and reference.json records the upstream readme hash.
 data/miplib/
 data/miplib-tier2/
-data/qplib/
+# QPLIB (#492) is fetched by bench/runners/fetch_qplib.py: the pages, .qplib files, published
+# solution points and the converted QPS files are not committed, the manifest
+# (reference.json: every file's URL and sha256, the parsed references, the conversion check)
+# is.
+data/qplib/*
+!data/qplib/reference.json
 # Netlib's infeasible collection (#529) is fetched by bench/runners/fetch_netlib_infeasible.py;
 # the manifest (reference.json, with the sha256 of every file and its source URL) is
 # committed, the decoded MPS files are not.

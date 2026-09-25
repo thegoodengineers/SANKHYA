@@ -39,6 +39,7 @@ MANIFEST_EXCLUSIONS = (
     ":!data/netlib-infeasible/reference.json",
     ":!data/maros-meszaros/reference.json",
     ":!data/miplib/reference.json",
+    ":!data/qplib/reference.json",
 )
 _VERSION_SHA = re.compile(r"\(([0-9a-fA-F]{7,40})[,)]")
 
