@@ -167,7 +167,9 @@ TEST(PdhgHeuristics, TheMixedModelIsCompletedByTheLpNotTakenFromPdhg) {
   const PdhgHeuristicResult r =
       pdhg_feasibility_pump(m, integers_of(m), {}, settings_for(false));
   expect_found(m, r, "pump");
-  if (!r.x.empty()) EXPECT_GE(r.x[3], 13.0 - 1e-7);
+  if (!r.x.empty()) {
+    EXPECT_GE(r.x[3], 13.0 - 1e-7);
+  }
 }
 
 TEST(PdhgHeuristics, NothingOnAModelWithNoIntegerPoint) {
