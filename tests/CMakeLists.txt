@@ -77,6 +77,7 @@ add_executable(sankhya_tests
   unit/test_gpu_device.cpp
   unit/test_gpu_memory.cpp
   unit/test_multi_gpu.cpp
+  unit/test_multi_gpu_solve.cpp
   unit/test_qp.cpp
   unit/test_convexity_sparse.cpp
   unit/test_branch_and_bound.cpp

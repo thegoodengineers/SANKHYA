@@ -7,40 +7,46 @@
 //   [cuPDLP] Lu & Yang, arXiv:2311.12180.
 //
 // Partitioning scheme:
-//   - Rows of A are split into K disjoint blocks: device k owns rows [r_k, r_{k+1}).
-//   - Primal vector x (n-element) and problem constants are REPLICATED on every device.
-//   - Dual vector y (m-element) is PARTITIONED: device k holds y[r_k..r_{k+1}).
+//   - Rows of A are split into K contiguous blocks balanced by nonzeros plus rows
+//     (partition_rows_by_nonzeros): card k owns rows [r_k, r_{k+1}).
+//   - The primal x (n) and the problem constants are REPLICATED, bit-identical, on every card.
+//   - The dual y (m) is PARTITIONED: card k holds y[r_k..r_{k+1}).
 //
-// Per-iteration communication (host-mediated):
-//   1. A^T * y_k  → partial_aty_k (n-vector) — download, sum on CPU, upload to all.
-//   2. Two scalars: movement_y_k, interaction_k — download from each, sum on CPU.
+// Per-iteration communication:
+//   1. A^T y = sum_k A_k^T y_k: an all-gather of the n-vector partials, card to card over
+//      P2P where every pair allows it, else staged through pinned host memory; each card sums
+//      the partials in slot order (multi_gpu_exchange.hpp).
+//   2. Three scalars per card (movement and interaction partials), downloaded and summed on
+//      the host in slot order: the step-size rule needs them on the host anyway.
+// Every reduction is order-fixed (pdhg_multi_gpu_device.hpp), so a run is reproducible bit for
+// bit, and the same device list on one card or on K cards of one architecture gives the same
+// bits.
 //
-// Fallback: if K==1 or device setup fails, delegates to solve_pdhg_gpu().
+// Fallback: one device (unless gpu_partitioned), or any device setup failure, delegates to
+// solve_pdhg_gpu(); a CUDA error mid-solve hands the remaining budget to the CPU PDHG.
 
 #include "pdhg_multi_gpu.hpp"
 
-#include "../pdhg/pdhg_evaluate.hpp"
-
 #include <cuda_runtime.h>
-#include <cusparse.h>
-#include <cub/block/block_reduce.cuh>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
 // fmt/format.h uses Unicode string literals that nvcc cannot parse; use snprintf instead.
-#include <cstdio>
-#include <string>
 
 #include "../core/resource_limits.hpp"
 #include "../core/stop_controller.hpp"
 #include "../la/scaling.hpp"
-#include "device.hpp"
+#include "../pdhg/pdhg_evaluate.hpp"
 #include "multi_device.hpp"
+#include "multi_gpu_exchange.hpp"
 #include "pdhg_gpu.hpp"
+#include "pdhg_multi_gpu_device.hpp"
 #include "sankhya/pdhg.hpp"
 #include "sankhya/solve_control.hpp"
 #include "sankhya/sparse.hpp"
@@ -52,339 +58,26 @@ namespace sankhya::gpu {
 namespace {
 
 constexpr Count kEvaluationInterval = 40;
-constexpr int kBlockSize = 256;
 
-// ---- Error-check macros --------------------------------------------------
-#define CUDA_CHECK(expr)                     \
-  do {                                       \
-    if ((expr) != cudaSuccess) return false; \
-  } while (0)
-
-#define CS_CHECK(expr)                                   \
-  do {                                                   \
-    if ((expr) != CUSPARSE_STATUS_SUCCESS) return false; \
-  } while (0)
-
-static bool launch_ok() { return cudaPeekAtLastError() == cudaSuccess; }
-
-static const double kOne = 1.0;
-static const double kZero = 0.0;
-
-// ---- CUDA kernels (identical math to pdhg_gpu.cu; separate TU) ----------
-
-__global__ void k_primal_fused_mg(const double* __restrict__ x, const double* __restrict__ at_y,
-                                   const double* __restrict__ cost,
-                                   const double* __restrict__ col_lo,
-                                   const double* __restrict__ col_hi, double* __restrict__ x_next,
-                                   double* __restrict__ extrapolated, double* __restrict__ dx,
-                                   double* d_mv_x, double tau, double omega, int n) {
-  using BlockReduce = cub::BlockReduce<double, kBlockSize>;
-  __shared__ typename BlockReduce::TempStorage temp;
-  const int j = blockIdx.x * blockDim.x + threadIdx.x;
-  double mv_thread = 0.0;
-  if (j < n) {
-    double xnj = x[j] - tau * (cost[j] + at_y[j]);
-    if (!isinf(col_lo[j]) && xnj < col_lo[j]) xnj = col_lo[j];
-    if (!isinf(col_hi[j]) && xnj > col_hi[j]) xnj = col_hi[j];
-    x_next[j] = xnj;
-    const double dxj = xnj - x[j];
-    extrapolated[j] = 2.0 * xnj - x[j];
-    dx[j] = dxj;
-    mv_thread = 0.5 * omega * dxj * dxj;
-  }
-  const double bsum = BlockReduce(temp).Sum(mv_thread);
-  if (threadIdx.x == 0) atomicAdd(d_mv_x, bsum);
-}
-
-__global__ void k_dual_fused_mg(const double* __restrict__ y, const double* __restrict__ a_x,
-                                 const double* __restrict__ row_lo,
-                                 const double* __restrict__ row_hi, double* __restrict__ y_next,
-                                 double* __restrict__ dy, double* d_mv_y, double sigma,
-                                 double omega, int m) {
-  using BlockReduce = cub::BlockReduce<double, kBlockSize>;
-  __shared__ typename BlockReduce::TempStorage temp;
-  const int i = blockIdx.x * blockDim.x + threadIdx.x;
-  double mv_thread = 0.0;
-  if (i < m) {
-    const double v = y[i] + sigma * a_x[i];
-    double pv = v / sigma;
-    if (!isinf(row_lo[i]) && pv < row_lo[i]) pv = row_lo[i];
-    if (!isinf(row_hi[i]) && pv > row_hi[i]) pv = row_hi[i];
-    const double yni = v - sigma * pv;
-    y_next[i] = yni;
-    const double dyi = yni - y[i];
-    dy[i] = dyi;
-    mv_thread = 0.5 * dyi * dyi / omega;
-  }
-  const double bsum = BlockReduce(temp).Sum(mv_thread);
-  if (threadIdx.x == 0) atomicAdd(d_mv_y, bsum);
-}
-
-__global__ void k_interaction_fused_mg(const double* __restrict__ dy,
-                                        const double* __restrict__ adx, double* d_interaction,
-                                        int m) {
-  using BlockReduce = cub::BlockReduce<double, kBlockSize>;
-  __shared__ typename BlockReduce::TempStorage temp;
-  const int i = blockIdx.x * blockDim.x + threadIdx.x;
-  const double val = (i < m) ? dy[i] * adx[i] : 0.0;
-  const double bsum = BlockReduce(temp).Sum(val);
-  if (threadIdx.x == 0) atomicAdd(d_interaction, bsum);
-}
-
-__global__ void k_accum_n_mg(const double* __restrict__ v, double* __restrict__ s, int n) {
-  const int j = blockIdx.x * blockDim.x + threadIdx.x;
-  if (j < n) s[j] += v[j];
-}
-
-__global__ void k_accum_m_mg(const double* __restrict__ v, double* __restrict__ s, int m) {
-  const int i = blockIdx.x * blockDim.x + threadIdx.x;
-  if (i < m) s[i] += v[i];
-}
-
-// ---- Device-memory helpers -----------------------------------------------
-
-static double* dev_zeros_mg(std::size_t count) {
-  if (count == 0) return nullptr;
-  double* p = nullptr;
-  if (cudaMalloc(&p, count * sizeof(double)) != cudaSuccess) return nullptr;
-  if (cudaMemset(p, 0, count * sizeof(double)) != cudaSuccess) {
-    cudaFree(p);
-    return nullptr;
-  }
-  return p;
-}
-
-static int* dev_int_mg(std::size_t count) {
-  if (count == 0) return nullptr;
-  int* p = nullptr;
-  if (cudaMalloc(&p, count * sizeof(int)) != cudaSuccess) return nullptr;
-  return p;
-}
-
-template <typename T>
-static bool hd_copy_mg(const T* host, T* dev, std::size_t count) {
-  if (count == 0) return true;
-  return cudaMemcpy(dev, host, count * sizeof(T), cudaMemcpyHostToDevice) == cudaSuccess;
-}
-
-static bool dh_copy_mg(const double* dev, double* host, std::size_t count) {
-  if (count == 0) return true;
-  return cudaMemcpy(host, dev, count * sizeof(double), cudaMemcpyDeviceToHost) == cudaSuccess;
-}
-
-// ---- Per-device state ---------------------------------------------------
-
-struct DeviceState {
-  // Full primal vectors (n-length, REPLICATED on every device)
-  double *d_x{}, *d_xn{}, *d_ext{}, *d_dx{}, *d_aty{}, *d_xsum{};
-  // Scalar accumulators: [0]=mv_x, [1]=mv_y_partial, [2]=interaction_partial
-  double* d_scalars{};
-  // Problem constants (n-length, replicated)
-  double *d_cost{}, *d_clo{}, *d_chi{};
-  // Local dual vectors (local_m-length, PARTITIONED)
-  double *d_y{}, *d_yn{}, *d_dy{}, *d_ax{}, *d_adx{}, *d_ysum{};
-  // Local row bounds (local_m-length)
-  double *d_rlo{}, *d_rhi{};
-  // Local CSR row slice
-  int *d_rowptr{}, *d_colidx{};
-  double* d_vals{};
-  // cuSPARSE
-  void* d_spmv{};
-  std::size_t spmv_bytes{};
-  cusparseHandle_t cs{};
-  cusparseSpMatDescr_t mat{};
-  cusparseDnVecDescr_t vn{};  // n-element
-  cusparseDnVecDescr_t vm{};  // local_m-element
-
-  int device_id = -1;
-  int n{}, local_m{}, local_nnz{};
-  int row_start{};
-
-  DeviceState() = default;
-  DeviceState(const DeviceState&) = delete;
-  DeviceState& operator=(const DeviceState&) = delete;
-
-  ~DeviceState() {
-    if (device_id < 0) return;
-    cudaSetDevice(device_id);
-    if (vm) cusparseDestroyDnVec(vm);
-    if (vn) cusparseDestroyDnVec(vn);
-    if (mat) cusparseDestroySpMat(mat);
-    if (cs) cusparseDestroy(cs);
-    cudaFree(d_x);    cudaFree(d_xn);   cudaFree(d_ext);  cudaFree(d_dx);
-    cudaFree(d_aty);  cudaFree(d_xsum); cudaFree(d_scalars);
-    cudaFree(d_cost); cudaFree(d_clo);  cudaFree(d_chi);
-    cudaFree(d_y);    cudaFree(d_yn);   cudaFree(d_dy);
-    cudaFree(d_ax);   cudaFree(d_adx);  cudaFree(d_ysum);
-    cudaFree(d_rlo);  cudaFree(d_rhi);
-    cudaFree(d_rowptr); cudaFree(d_colidx); cudaFree(d_vals);
-    cudaFree(d_spmv);
-  }
-
-  [[nodiscard]] bool alloc_ok() const {
-    return d_x && d_xn && d_ext && d_dx && d_aty && d_xsum && d_scalars && d_cost && d_clo &&
-           d_chi;
-  }
-};
-
-// ---- cuSPARSE SpMV on DeviceState ----------------------------------------
-// Uses local_m for the row dimension.
-
-static bool spmv_nt_mg(DeviceState& d, double* d_in_n, double* d_out_m) {
-  if (d.local_m == 0 || d.local_nnz == 0) {
-    if (d.local_m > 0)
-      cudaMemset(d_out_m, 0, static_cast<std::size_t>(d.local_m) * sizeof(double));
-    return true;
-  }
-  CS_CHECK(cusparseDnVecSetValues(d.vn, d_in_n));
-  CS_CHECK(cusparseDnVecSetValues(d.vm, d_out_m));
-  CS_CHECK(cusparseSpMV(d.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, d.mat, d.vn, &kZero,
-                        d.vm, CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT, d.d_spmv));
-  return true;
-}
-
-static bool spmv_t_mg(DeviceState& d, double* d_in_m, double* d_out_n) {
-  if (d.local_m == 0 || d.local_nnz == 0) {
-    if (d.n > 0)
-      cudaMemset(d_out_n, 0, static_cast<std::size_t>(d.n) * sizeof(double));
-    return true;
-  }
-  CS_CHECK(cusparseDnVecSetValues(d.vm, d_in_m));
-  CS_CHECK(cusparseDnVecSetValues(d.vn, d_out_n));
-  CS_CHECK(cusparseSpMV(d.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOne, d.mat, d.vm, &kZero, d.vn,
-                        CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT, d.d_spmv));
-  return true;
-}
-
+using multi::DeviceState;
 using pdhg::euclidean_norm;
 using pdhg::evaluate;
 using pdhg::Problem;
 using pdhg::Residuals;
 
-// ---- Device setup --------------------------------------------------------
-// Build a local CSR slice for rows [row_start, row_end) from the full scaled CsrView.
-
-static bool setup_device(DeviceState& d, const CsrView& full_csr, const Scaling& scaling,
-                          const std::vector<double>& x0_scaled, int row_start, int row_end,
-                          int n_cols) {
-  cudaSetDevice(d.device_id);
-
-  const int lm = row_end - row_start;
-  d.n = n_cols;
-  d.local_m = lm;
-  d.row_start = row_start;
-
-  // Allocate primal vectors (full n, replicated)
-  const std::size_t n = static_cast<std::size_t>(n_cols);
-  d.d_x = dev_zeros_mg(n);
-  d.d_xn = dev_zeros_mg(n);
-  d.d_ext = dev_zeros_mg(n);
-  d.d_dx = dev_zeros_mg(n);
-  d.d_aty = dev_zeros_mg(n);
-  d.d_xsum = dev_zeros_mg(n);
-  d.d_scalars = dev_zeros_mg(3);
-  d.d_cost = dev_zeros_mg(n);
-  d.d_clo = dev_zeros_mg(n);
-  d.d_chi = dev_zeros_mg(n);
-  if (!d.alloc_ok()) return false;
-
-  // Upload problem constants
-  if (!hd_copy_mg(scaling.cost.data(), d.d_cost, n) ||
-      !hd_copy_mg(scaling.col_lower.data(), d.d_clo, n) ||
-      !hd_copy_mg(scaling.col_upper.data(), d.d_chi, n) ||
-      !hd_copy_mg(x0_scaled.data(), d.d_x, n))
-    return false;
-
-  // Allocate local dual vectors
-  const std::size_t lm_sz = static_cast<std::size_t>(lm);
-  if (lm > 0) {
-    d.d_y = dev_zeros_mg(lm_sz);
-    d.d_yn = dev_zeros_mg(lm_sz);
-    d.d_dy = dev_zeros_mg(lm_sz);
-    d.d_ax = dev_zeros_mg(lm_sz);
-    d.d_adx = dev_zeros_mg(lm_sz);
-    d.d_ysum = dev_zeros_mg(lm_sz);
-    d.d_rlo = dev_zeros_mg(lm_sz);
-    d.d_rhi = dev_zeros_mg(lm_sz);
-    if (!d.d_y || !d.d_yn || !d.d_dy || !d.d_ax || !d.d_adx || !d.d_ysum || !d.d_rlo ||
-        !d.d_rhi)
-      return false;
-    if (!hd_copy_mg(scaling.row_lower.data() + row_start, d.d_rlo, lm_sz) ||
-        !hd_copy_mg(scaling.row_upper.data() + row_start, d.d_rhi, lm_sz))
-      return false;
+// Pinned host memory for the per-card scalars, so their downloads are truly asynchronous.
+struct PinnedDoubles {
+  double* p = nullptr;
+  explicit PinnedDoubles(std::size_t count) {
+    if (cudaMallocHost(reinterpret_cast<void**>(&p), count * sizeof(double)) != cudaSuccess)
+      p = nullptr;
   }
-
-  // Build local CSR slice: rows [row_start, row_end) of full_csr
-  const auto& full_rp = full_csr.row_starts();
-  const auto& full_ci = full_csr.column_indices();
-  const auto& full_cv = full_csr.values();
-
-  const int nnz_start = full_rp[static_cast<std::size_t>(row_start)];
-  const int nnz_end =
-      (row_end <= static_cast<int>(full_rp.size()) - 1)
-          ? full_rp[static_cast<std::size_t>(row_end)]
-          : static_cast<int>(full_ci.size());
-  d.local_nnz = nnz_end - nnz_start;
-
-  // Build local row-pointer array (re-based to local coordinates)
-  std::vector<int> local_rp(static_cast<std::size_t>(lm + 1));
-  for (int i = 0; i <= lm; ++i)
-    local_rp[static_cast<std::size_t>(i)] =
-        full_rp[static_cast<std::size_t>(row_start + i)] - nnz_start;
-
-  d.d_rowptr = dev_int_mg(static_cast<std::size_t>(lm + 1));
-  if (!d.d_rowptr) return false;
-  if (!hd_copy_mg(local_rp.data(), d.d_rowptr, static_cast<std::size_t>(lm + 1))) return false;
-
-  if (d.local_nnz > 0) {
-    const std::size_t lnnz = static_cast<std::size_t>(d.local_nnz);
-    d.d_colidx = dev_int_mg(lnnz);
-    d.d_vals = dev_zeros_mg(lnnz);
-    if (!d.d_colidx || !d.d_vals) return false;
-    if (!hd_copy_mg(full_ci.data() + nnz_start, d.d_colidx, lnnz) ||
-        !hd_copy_mg(full_cv.data() + nnz_start, d.d_vals, lnnz))
-      return false;
+  PinnedDoubles(const PinnedDoubles&) = delete;
+  PinnedDoubles& operator=(const PinnedDoubles&) = delete;
+  ~PinnedDoubles() {
+    if (p) cudaFreeHost(p);
   }
-
-  // cuSPARSE
-  if (cusparseCreate(&d.cs) != CUSPARSE_STATUS_SUCCESS) return false;
-  if (cusparseCreateCsr(&d.mat, static_cast<int64_t>(lm), static_cast<int64_t>(n_cols),
-                        static_cast<int64_t>(d.local_nnz), d.d_rowptr, d.d_colidx, d.d_vals,
-                        CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO,
-                        CUDA_R_64F) != CUSPARSE_STATUS_SUCCESS)
-    return false;
-
-  void* vn_init = d.d_x ? d.d_x : d.d_scalars;
-  void* vm_init = (lm > 0 && d.d_y) ? d.d_y : d.d_scalars;
-  if (cusparseCreateDnVec(&d.vn, static_cast<int64_t>(n_cols), vn_init, CUDA_R_64F) !=
-      CUSPARSE_STATUS_SUCCESS)
-    return false;
-  if (lm > 0) {
-    if (cusparseCreateDnVec(&d.vm, static_cast<int64_t>(lm), vm_init, CUDA_R_64F) !=
-        CUSPARSE_STATUS_SUCCESS)
-      return false;
-  }
-
-  // SpMV buffer
-  if (lm > 0 && d.local_nnz > 0) {
-    std::size_t bytes_nt = 0, bytes_t = 0;
-    cusparseDnVecSetValues(d.vn, d.d_ext);
-    cusparseDnVecSetValues(d.vm, d.d_ax);
-    if (cusparseSpMV_bufferSize(d.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, d.mat, d.vn,
-                                &kZero, d.vm, CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT,
-                                &bytes_nt) != CUSPARSE_STATUS_SUCCESS)
-      return false;
-    cusparseDnVecSetValues(d.vm, d.d_y);
-    cusparseDnVecSetValues(d.vn, d.d_aty);
-    if (cusparseSpMV_bufferSize(d.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOne, d.mat, d.vm, &kZero,
-                                d.vn, CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT,
-                                &bytes_t) != CUSPARSE_STATUS_SUCCESS)
-      return false;
-    d.spmv_bytes = std::max(bytes_nt, bytes_t);
-    if (d.spmv_bytes > 0 && cudaMalloc(&d.d_spmv, d.spmv_bytes) != cudaSuccess) return false;
-  }
-  return true;
-}
+};
 
 }  // anonymous namespace
 
@@ -393,15 +86,21 @@ static bool setup_device(DeviceState& d, const CsrView& full_csr, const Scaling&
 Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
                                const std::vector<int>& device_ids, Logger& logger,
                                SolveControl* control) {
-  // Single-device: delegate directly to the single-GPU solver.
-  if (device_ids.size() <= 1) {
+  // One device: the single-card engine, unless the partitioned engine is asked for by name
+  // (gpu_partitioned), which is how its one-card baseline is measured (#295).
+  if (device_ids.empty() || (device_ids.size() == 1 && !options.get_bool("gpu_partitioned"))) {
+    return solve_pdhg_gpu(model, options, logger, control);
+  }
+  if (device_ids.size() > static_cast<std::size_t>(multi::kMaxDevices)) {
+    logger.warning("Multi-GPU PDHG: {} devices requested, at most {} supported; single-GPU",
+                   device_ids.size(), multi::kMaxDevices);
     return solve_pdhg_gpu(model, options, logger, control);
   }
 
-  // Validate each requested device exists and meets architecture requirements.
+  // Every requested device must exist.
   const int total_devices = device_count();
   for (int id : device_ids) {
-    if (id >= total_devices) {
+    if (id < 0 || id >= total_devices) {
       logger.warning(
           "Multi-GPU PDHG: device {} requested but only {} devices are present; "
           "falling back to single-GPU",
@@ -428,7 +127,6 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   const auto n = static_cast<std::size_t>(cols);
   const auto m = static_cast<std::size_t>(rows);
   const int ni = static_cast<int>(n);
-  const int mi = static_cast<int>(m);
   const int K = static_cast<int>(device_ids.size());
 
   // ---- Unscaled problem --------------------------------------------------
@@ -481,39 +179,50 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     x0_scaled[u] = v;
   }
 
-  // ---- Row partitioning --------------------------------------------------
-  const std::vector<RowPartition> parts = partition_rows(mi, device_ids);
+  // ---- Row partitioning, balanced by nonzeros (#295) ---------------------
+  const std::vector<RowPartition> parts =
+      partition_rows_by_nonzeros(full_csr.row_starts(), device_ids);
+  const bool allow_peer = options.get_bool("gpu_peer_access");
 
   logger.info(
       "Solving LP with CUDA multi-GPU ({} devices) restarted PDHG: {} rows, {} columns, {} "
       "nonzeros",
       K, rows, cols, model.num_nonzeros());
-  for (int k = 0; k < K; ++k)
-    logger.verbose("  device {}: rows [{}, {})", parts[static_cast<std::size_t>(k)].device_id,
-                   parts[static_cast<std::size_t>(k)].row_start,
-                   parts[static_cast<std::size_t>(k)].row_end);
+  for (const RowPartition& part : parts)
+    logger.info("  device {}: rows [{}, {}), {} nonzeros", part.device_id, part.row_start,
+                part.row_end, partition_weight(full_csr.row_starts(), part) - part.local_m());
   logger.info("Estimated ||A||_2 = {:.4e}, target tolerance {:.1e}, restarts {}", spectral_norm,
               tolerance, use_restarts ? "on" : "off");
 
-  // ---- Allocate and set up per-device state ------------------------------
-  std::vector<DeviceState> devices(static_cast<std::size_t>(K));
+  // ---- Per-card state and the exchange -----------------------------------
+  // The cards are declared before the exchange so that the exchange, which synchronizes the
+  // cards' streams when it goes, is destroyed first.
+  std::vector<std::unique_ptr<DeviceState>> cards;
+  std::vector<DeviceState*> card_ptrs;
   bool setup_ok = true;
   for (int k = 0; k < K && setup_ok; ++k) {
     const RowPartition& part = parts[static_cast<std::size_t>(k)];
-    devices[static_cast<std::size_t>(k)].device_id = part.device_id;
-    setup_ok = setup_device(devices[static_cast<std::size_t>(k)], full_csr, scaling, x0_scaled,
-                             part.row_start, part.row_end, ni);
+    cards.push_back(std::make_unique<DeviceState>());
+    DeviceState& c = *cards.back();
+    c.device_id = part.device_id;
+    c.slot = k;
+    c.num_slots = K;
+    card_ptrs.push_back(&c);
+    setup_ok =
+        multi::setup_device(c, full_csr, scaling, x0_scaled, part.row_start, part.row_end, ni);
   }
-  if (!setup_ok) {
+  multi::PartialSumExchange exchange;
+  std::string transport_reason;
+  if (setup_ok) setup_ok = exchange.init(card_ptrs, allow_peer, &transport_reason);
+  PinnedDoubles host_scalars(3 * static_cast<std::size_t>(K));
+  if (!setup_ok || host_scalars.p == nullptr) {
     logger.warning(
         "Multi-GPU PDHG: device setup failed; falling back to single-GPU on device {}",
         device_ids[0]);
     return solve_pdhg_gpu(model, options, logger, control);
   }
-
-  // ---- Host buffers for allreduce ----------------------------------------
-  std::vector<double> h_partial_aty(n, 0.0);  // scratch for each device's A^T y partial
-  std::vector<double> h_aty(n, 0.0);          // accumulated sum
+  const char* transport = multi::to_string(exchange.transport());
+  logger.info("A^T y exchange: {} ({})", transport, transport_reason);
 
   // ---- CPU-side iterate buffers ------------------------------------------
   std::vector<double> h_x(n), h_xsum(n);
@@ -533,26 +242,22 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
 
   // Assemble full y from partitioned device memory into h_y.
   auto gather_y = [&](bool use_ysum, std::vector<double>& dest) -> bool {
-    for (int k = 0; k < K; ++k) {
-      const DeviceState& d = devices[static_cast<std::size_t>(k)];
-      if (d.local_m == 0) continue;
-      cudaSetDevice(d.device_id);
-      double* src = use_ysum ? d.d_ysum : d.d_y;
-      if (!dh_copy_mg(src, dest.data() + d.row_start,
-                      static_cast<std::size_t>(d.local_m)))
+    for (const auto& c : cards) {
+      if (c->local_m == 0) continue;
+      if (cudaSetDevice(c->device_id) != cudaSuccess) return false;
+      if (!multi::download(*c, use_ysum ? c->d_ysum : c->d_y, dest.data() + c->row_start,
+                           static_cast<std::size_t>(c->local_m)))
         return false;
     }
     return true;
   };
 
-  // ---- Grid dimensions ---------------------------------------------------
-  const int bn = (ni + kBlockSize - 1) / kBlockSize;
-
   // ---- PDHG main loop ----------------------------------------------------
   double eta = spectral_norm > 0.0 ? 1.0 / spectral_norm : 1.0;
   double omega = 1.0;
-  Count iteration = 0, restarts = 0, last_restart = 0, averaged = 0;
+  Count iteration = 0, restarts = 0, last_restart = 0, averaged = 0, attempts = 0;
   double restart_kkt = std::numeric_limits<double>::infinity();
+  double evaluation_seconds = 0.0;
 
   Residuals best;
   best.primal = best.dual = best.gap = std::numeric_limits<double>::infinity();
@@ -561,6 +266,17 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   bool converged = false, gpu_error = false, logged_table = false;
   StopController stop(control, timer, limits);
   SolveStatus stop_status = SolveStatus::kIterationLimit;
+
+  // Run fn on every card in slot order with that card's device current; false on any error.
+  auto on_every_card = [&](auto&& fn) -> bool {
+    for (const auto& c : cards) {
+      if (cudaSetDevice(c->device_id) != cudaSuccess) return false;
+      if (!fn(*c)) return false;
+    }
+    return true;
+  };
+  DeviceState& c0 = *cards[0];
+  const double loop_start = timer.elapsed_seconds();
 
   while (!gpu_error) {
     if (iteration >= iteration_limit) break;
@@ -579,138 +295,43 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     const double tau = eta / omega;
     const double sigma = eta * omega;
 
-    // -- Step 1: A_k^T * y_k → d_aty (partial) on each device, then allreduce --
-    // Launch transpose SpMV on all devices simultaneously.
-    for (int k = 0; k < K; ++k) {
-      DeviceState& d = devices[static_cast<std::size_t>(k)];
-      cudaSetDevice(d.device_id);
-      if (d.local_m > 0) {
-        if (!spmv_t_mg(d, d.d_y, d.d_aty)) {
-          gpu_error = true;
-          break;
-        }
-      } else {
-        if (d.n > 0) cudaMemset(d.d_aty, 0, n * sizeof(double));
-      }
+    // One iteration, enqueued on every card's stream [cuPDLP sec. 3]:
+    //   A_k^T y_k -> exchange -> primal step -> A_k x_ext -> dual step -> A_k dx ->
+    //   interaction -> scalars to the host.
+    const bool enqueued =
+        on_every_card([](DeviceState& c) { return multi::spmv_aty(c); }) &&
+        exchange.enqueue() &&
+        on_every_card([&](DeviceState& c) { return multi::launch_primal(c, tau, omega); }) &&
+        on_every_card([](DeviceState& c) { return multi::spmv_ax(c, c.d_ext, c.d_ax); }) &&
+        on_every_card([&](DeviceState& c) { return multi::launch_dual(c, sigma, omega); }) &&
+        on_every_card([](DeviceState& c) { return multi::spmv_ax(c, c.d_dx, c.d_adx); }) &&
+        on_every_card([&](DeviceState& c) {
+          return multi::launch_interaction_and_scalars(
+              c, host_scalars.p + 3 * static_cast<std::size_t>(c.slot));
+        }) &&
+        // The one host synchronization per iteration. It also guarantees that no card starts
+        // the next iteration's A_k^T y_k, or its staging copy, while another card may still be
+        // reading this iteration's partial.
+        on_every_card(
+            [](DeviceState& c) { return cudaStreamSynchronize(c.stream) == cudaSuccess; });
+    if (!enqueued) {
+      gpu_error = true;
+      break;
     }
-    if (gpu_error) break;
+    ++attempts;
 
-    // Download partial A^T y from each device, sum on CPU, upload sum to all devices.
-    std::fill(h_aty.begin(), h_aty.end(), 0.0);
-    for (int k = 0; k < K; ++k) {
-      DeviceState& d = devices[static_cast<std::size_t>(k)];
-      cudaSetDevice(d.device_id);
-      cudaDeviceSynchronize();
-      if (!dh_copy_mg(d.d_aty, h_partial_aty.data(), n)) {
-        gpu_error = true;
-        break;
-      }
-      for (std::size_t j = 0; j < n; ++j) h_aty[j] += h_partial_aty[j];
+    // mv_x is computed identically on every card (replicated x): card 0's is used. The dual
+    // movement and the interaction are summed over the cards in slot order.
+    const double h_mv_x = host_scalars.p[0];
+    double h_mv_y = 0.0, h_interaction = 0.0;
+    for (std::size_t k = 0; k < static_cast<std::size_t>(K); ++k) {
+      h_mv_y += host_scalars.p[3 * k + 1];
+      h_interaction += host_scalars.p[3 * k + 2];
     }
-    if (gpu_error) break;
-    for (int k = 0; k < K; ++k) {
-      DeviceState& d = devices[static_cast<std::size_t>(k)];
-      cudaSetDevice(d.device_id);
-      if (!hd_copy_mg(h_aty.data(), d.d_aty, n)) {
-        gpu_error = true;
-        break;
-      }
-    }
-    if (gpu_error) break;
-
-    // -- Step 2: zero scalars and run primal update on all devices --
-    for (int k = 0; k < K; ++k) {
-      DeviceState& d = devices[static_cast<std::size_t>(k)];
-      cudaSetDevice(d.device_id);
-      if (cudaMemset(d.d_scalars, 0, 3 * sizeof(double)) != cudaSuccess) {
-        gpu_error = true;
-        break;
-      }
-      if (ni > 0)
-        k_primal_fused_mg<<<bn, kBlockSize>>>(d.d_x, d.d_aty, d.d_cost, d.d_clo, d.d_chi,
-                                               d.d_xn, d.d_ext, d.d_dx, d.d_scalars + 0, tau,
-                                               omega, ni);
-      if (!launch_ok()) {
-        gpu_error = true;
-        break;
-      }
-    }
-    if (gpu_error) break;
-
-    // -- Step 3: A_k * ext → ax_k (local dual input) --
-    for (int k = 0; k < K; ++k) {
-      DeviceState& d = devices[static_cast<std::size_t>(k)];
-      cudaSetDevice(d.device_id);
-      if (!spmv_nt_mg(d, d.d_ext, d.d_ax)) {
-        gpu_error = true;
-        break;
-      }
-    }
-    if (gpu_error) break;
-
-    // -- Step 4: dual update + A_k * dx → adx_k --
-    for (int k = 0; k < K; ++k) {
-      DeviceState& d = devices[static_cast<std::size_t>(k)];
-      cudaSetDevice(d.device_id);
-      const int bm = (d.local_m + kBlockSize - 1) / kBlockSize;
-      if (d.local_m > 0) {
-        k_dual_fused_mg<<<bm, kBlockSize>>>(d.d_y, d.d_ax, d.d_rlo, d.d_rhi, d.d_yn, d.d_dy,
-                                             d.d_scalars + 1, sigma, omega, d.local_m);
-        if (!launch_ok()) {
-          gpu_error = true;
-          break;
-        }
-      }
-    }
-    if (gpu_error) break;
-
-    for (int k = 0; k < K; ++k) {
-      DeviceState& d = devices[static_cast<std::size_t>(k)];
-      cudaSetDevice(d.device_id);
-      if (!spmv_nt_mg(d, d.d_dx, d.d_adx)) {
-        gpu_error = true;
-        break;
-      }
-    }
-    if (gpu_error) break;
-
-    // -- Step 5: interaction reduction, download scalars, reduce across devices --
-    for (int k = 0; k < K; ++k) {
-      DeviceState& d = devices[static_cast<std::size_t>(k)];
-      cudaSetDevice(d.device_id);
-      const int bm = (d.local_m + kBlockSize - 1) / kBlockSize;
-      if (d.local_m > 0) {
-        k_interaction_fused_mg<<<bm, kBlockSize>>>(d.d_dy, d.d_adx, d.d_scalars + 2, d.local_m);
-        if (!launch_ok()) {
-          gpu_error = true;
-          break;
-        }
-      }
-    }
-    if (gpu_error) break;
-
-    // Download scalars from all devices and reduce.
-    // mv_x: identical on all devices (replicated primal update) — use device 0.
-    // mv_y, interaction: sum partial contributions.
-    double h_mv_x = 0.0, h_mv_y = 0.0, h_interaction = 0.0;
-    for (int k = 0; k < K; ++k) {
-      DeviceState& d = devices[static_cast<std::size_t>(k)];
-      cudaSetDevice(d.device_id);
-      double h_sc[3] = {};
-      if (!dh_copy_mg(d.d_scalars, h_sc, 3)) {
-        gpu_error = true;
-        break;
-      }
-      if (k == 0) h_mv_x = h_sc[0];
-      h_mv_y += h_sc[1];
-      h_interaction += h_sc[2];
-    }
-    if (gpu_error) break;
-
     const double movement = h_mv_x + h_mv_y;
     const double interaction = std::fabs(h_interaction);
 
-    // -- Step 6: adaptive step size [PDLP §3.1] --
+    // Adaptive step size [PDLP sec. 3.1].
     const bool no_info = (interaction <= 0.0);
     const double limit =
         no_info ? std::numeric_limits<double>::infinity() : movement / interaction;
@@ -720,39 +341,29 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     const double proposed = std::min(shrink * limit, grow * eta);
 
     if (eta <= limit) {
-      // Accept: pointer-swap x and y on all devices, accumulate running sums.
-      for (int k = 0; k < K; ++k) {
-        DeviceState& d = devices[static_cast<std::size_t>(k)];
-        cudaSetDevice(d.device_id);
-        std::swap(d.d_x, d.d_xn);
-        std::swap(d.d_y, d.d_yn);
-        if (ni > 0) k_accum_n_mg<<<bn, kBlockSize>>>(d.d_x, d.d_xsum, ni);
-        const int bm = (d.local_m + kBlockSize - 1) / kBlockSize;
-        if (d.local_m > 0) k_accum_m_mg<<<bm, kBlockSize>>>(d.d_y, d.d_ysum, d.local_m);
-        if (!launch_ok()) {
-          gpu_error = true;
-          break;
-        }
+      // Accept: swap the iterates on every card and accumulate the running sums.
+      if (!on_every_card([](DeviceState& c) {
+            std::swap(c.d_x, c.d_xn);
+            std::swap(c.d_y, c.d_yn);
+            return multi::launch_accumulate(c);
+          })) {
+        gpu_error = true;
+        break;
       }
-      if (gpu_error) break;
       ++averaged;
       ++iteration;
     }
     const double eta_ceil = 1.0e3 / std::max(spectral_norm, 1e-12);
     if (!no_info) eta = std::clamp(proposed, 1e-12, eta_ceil);
 
-    // -- Step 7: convergence check (CPU, every kEvaluationInterval) --
+    // Convergence check on the host every kEvaluationInterval iterations.
     if (iteration == 0) continue;
     if (iteration % kEvaluationInterval != 0 && !no_info) continue;
+    const double evaluation_start = timer.elapsed_seconds();
 
-    // Download x from device 0 (same on all), gather y from all devices.
-    const DeviceState& d0 = devices[0];
-    cudaSetDevice(d0.device_id);
-    if (!dh_copy_mg(d0.d_x, h_x.data(), n)) {
-      gpu_error = true;
-      break;
-    }
-    if (!gather_y(false, h_y)) {
+    // x from card 0 (bit-identical on all), y gathered from every card.
+    if (cudaSetDevice(c0.device_id) != cudaSuccess || !multi::download(c0, c0.d_x, h_x.data(), n) ||
+        !gather_y(false, h_y)) {
       gpu_error = true;
       break;
     }
@@ -768,12 +379,8 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     Residuals avg;
     std::vector<double> avg_x, avg_y;
     if (averaged > 0) {
-      cudaSetDevice(d0.device_id);
-      if (!dh_copy_mg(d0.d_xsum, h_xsum.data(), n)) {
-        gpu_error = true;
-        break;
-      }
-      if (!gather_y(true, h_ysum)) {
+      if (cudaSetDevice(c0.device_id) != cudaSuccess ||
+          !multi::download(c0, c0.d_xsum, h_xsum.data(), n) || !gather_y(true, h_ysum)) {
         gpu_error = true;
         break;
       }
@@ -813,10 +420,11 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
       best_x = *chosen_x;
       best_y = *chosen_y;
       converged = true;
+      evaluation_seconds += timer.elapsed_seconds() - evaluation_start;
       break;
     }
 
-    // Restart logic [PDLP §4.3]
+    // Restart logic [PDLP sec. 4.3].
     if (use_restarts) {
       const double kkt = better.worst();
       const Count since = iteration - last_restart;
@@ -834,13 +442,18 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
           omega = std::exp(theta * std::log(dyn / dxn) + (1.0 - theta) * std::log(omega));
           omega = std::clamp(omega, 1e-6, 1e6);
         }
-        // Zero running sums on all devices.
-        for (int k = 0; k < K; ++k) {
-          DeviceState& d = devices[static_cast<std::size_t>(k)];
-          cudaSetDevice(d.device_id);
-          cudaMemset(d.d_xsum, 0, n * sizeof(double));
-          if (d.local_m > 0)
-            cudaMemset(d.d_ysum, 0, static_cast<std::size_t>(d.local_m) * sizeof(double));
+        // Zero the running sums on every card.
+        if (!on_every_card([&](DeviceState& c) {
+              if (n > 0 &&
+                  cudaMemsetAsync(c.d_xsum, 0, n * sizeof(double), c.stream) != cudaSuccess)
+                return false;
+              return c.local_m == 0 ||
+                     cudaMemsetAsync(c.d_ysum, 0,
+                                     static_cast<std::size_t>(c.local_m) * sizeof(double),
+                                     c.stream) == cudaSuccess;
+            })) {
+          gpu_error = true;
+          break;
         }
         averaged = 0;
         x_restart = h_x;
@@ -852,7 +465,9 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
                        iteration, kkt, omega);
       }
     }
+    evaluation_seconds += timer.elapsed_seconds() - evaluation_start;
   }  // end while
+  const double loop_seconds = timer.elapsed_seconds() - loop_start;
 
   if (gpu_error) {
     Options remaining = options;
@@ -884,31 +499,33 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   const bool verifiable = converged && final_r.meets_project_standard();
   if (verifiable) {
     solution.status = SolveStatus::kOptimal;
-    char buf[256];
+    char buf[384];
     std::snprintf(buf, sizeof(buf),
-        "CUDA multi-GPU PDHG (%d devices) converged after %lld iterations and %lld restarts; "
+        "CUDA multi-GPU PDHG (%d devices, %s exchange) converged after %lld iterations and %lld restarts; "
         "absolute primal %.3e, dual %.3e, relative gap %.3e",
-        K, (long long)iteration, (long long)restarts, final_r.absolute_primal, final_r.absolute_dual,
+        K, transport, (long long)iteration, (long long)restarts, final_r.absolute_primal,
+        final_r.absolute_dual,
         final_r.gap_as_verified);
     solution.message = buf;
   } else if (converged) {
     solution.status = SolveStatus::kFeasible;
-    char buf[256];
+    char buf[384];
     std::snprintf(buf, sizeof(buf),
-        "CUDA multi-GPU PDHG (%d devices) met requested tolerance %.1e after %lld iterations "
+        "CUDA multi-GPU PDHG (%d devices, %s exchange) met requested tolerance %.1e after %lld iterations "
         "but NOT project standard",
-        K, tolerance, (long long)iteration);
+        K, transport, tolerance, (long long)iteration);
     solution.message = buf;
   } else {
     solution.status =
         (stop_status == SolveStatus::kTimeLimit || stop_status == SolveStatus::kInterrupted)
             ? stop_status
             : SolveStatus::kIterationLimit;
-    char buf[256];
+    char buf[384];
     std::snprintf(buf, sizeof(buf),
-        "CUDA multi-GPU PDHG (%d devices) stopped at relative primal %.3e, dual %.3e, "
+        "CUDA multi-GPU PDHG (%d devices, %s exchange) stopped at relative primal %.3e, dual %.3e, "
         "gap %.3e after %lld iterations and %lld restarts (target %.1e)",
-        K, final_r.primal, final_r.dual, final_r.gap, (long long)iteration, (long long)restarts, tolerance);
+        K, transport, final_r.primal, final_r.dual, final_r.gap, (long long)iteration,
+        (long long)restarts, tolerance);
     solution.message = buf;
   }
 
@@ -926,6 +543,16 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
       solution.solve_seconds);
   logger.info("Relative residuals: primal {:.3e}, dual {:.3e}, gap {:.3e}", final_r.primal,
               final_r.dual, final_r.gap);
+  // The split the scaling measurements (#295) need: the device loop per step attempt
+  // (accepted or rejected), with the host-side evaluation every kEvaluationInterval
+  // iterations taken out, and that evaluation on its own.
+  const double device_seconds = loop_seconds - evaluation_seconds;
+  logger.info(
+      "Timing: loop {:.3f}s, {} step attempts, {:.1f} us per attempt on the cards; host "
+      "evaluation {:.3f}s",
+      loop_seconds, attempts,
+      attempts > 0 ? 1e6 * device_seconds / static_cast<double>(attempts) : 0.0,
+      evaluation_seconds);
   if (!solution.message.empty()) logger.info("{}", solution.message);
   return solution;
 }

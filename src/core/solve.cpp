@@ -745,7 +745,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           const std::vector<int> gpu_dev_ids =
               gpu::parse_device_ids(options.get_string("gpu_devices"));
           Solution first;
-          if (gpu_dev_ids.size() > 1) {
+          if (gpu_dev_ids.size() > 1 || options.get_bool("gpu_partitioned")) {
             first = gpu::solve_pdhg_multi_gpu(target, first_pass, gpu_dev_ids, logger, control);
           } else {
             first = gpu::solve_pdhg_gpu(target, first_pass, logger, control);

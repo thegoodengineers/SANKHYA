@@ -1011,10 +1011,34 @@ const std::vector<OptionSpec>& Options::registry() {
                  std::string("auto"),
                  "Comma-separated CUDA device IDs for multi-GPU PDHG (#295). 'auto' uses "
                  "device 0 (single-GPU path). Two or more IDs (e.g. '0,1') enable the "
-                 "row-partitioned multi-GPU path: each device owns one row block of the "
-                 "constraint matrix; the primal iterate is replicated; a host-mediated "
-                 "allreduce synchronises A^T*y each iteration. Devices that fail the "
-                 "architecture check or are absent cause a fallback to the single-GPU path.",
+                 "row-partitioned multi-GPU path: each device owns one contiguous row block "
+                 "of the constraint matrix, balanced by nonzeros; the primal iterate is "
+                 "replicated; A^T*y is summed across the devices each iteration, device to "
+                 "device where peer access allows (see gpu_peer_access), in a fixed order so "
+                 "that a run is bitwise reproducible. Absent devices cause a fallback to the "
+                 "single-GPU path.",
+                 {},
+                 {},
+                 {}});
+    s.push_back({"gpu_peer_access",
+                 OptionType::Bool,
+                 true,
+                 "Multi-GPU PDHG (#295): move the per-device A^T*y partials device to device "
+                 "(cudaDeviceEnablePeerAccess, cudaMemcpyPeerAsync over NVLink or PCIe P2P) "
+                 "when every pair of listed devices supports it. False, or any pair without "
+                 "P2P, stages them through pinned host memory instead. Both transports feed "
+                 "the same fixed-order sum, so the answer is bitwise the same; only the time "
+                 "differs.",
+                 {},
+                 {},
+                 {}});
+    s.push_back({"gpu_partitioned",
+                 OptionType::Bool,
+                 false,
+                 "Run the row-partitioned multi-GPU PDHG engine even when gpu_devices names a "
+                 "single device (#295). Off, one device runs the single-GPU engine. On, one "
+                 "device is the partitioned engine's own one-card baseline, the like-for-like "
+                 "reference its multi-card scaling is measured against.",
                  {},
                  {},
                  {}});
