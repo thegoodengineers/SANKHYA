@@ -110,9 +110,9 @@ SparseMatrix three_by_three(double d) {
   return lower;
 }
 
-TEST(IpmCudss, TheOptionDefaultsToTheCpuFactor) {
+TEST(IpmCudss, TheOptionDefaultsToAuto) {
   const Options options;
-  EXPECT_EQ(options.get_string("ipm_linear_solver"), "cpu");
+  EXPECT_EQ(options.get_string("ipm_linear_solver"), "auto");
 }
 
 TEST(IpmCudss, WithoutTheBackendEveryCallDeclinesWithAReason) {
@@ -225,6 +225,48 @@ TEST(IpmCudss, WithoutADeviceTheCpuFactorIsKeptBitForBit) {
     EXPECT_EQ(asked.iterations, cpu.iterations) << name;
     EXPECT_EQ(asked.objective, cpu.objective) << name;
     EXPECT_EQ(asked.col_value, cpu.col_value) << name;
+  }
+}
+
+// AUTO BELOW THE FLOOR IS THE CPU FACTOR, in every build: these systems and their factors are
+// all far under tol::kIpmDeviceFactorFloor, so the device is never started and the answer is
+// the CPU factor's to the last bit, with nothing said about cuDSS.
+TEST(IpmCudss, AutoBelowTheFloorIsTheCpuFactorBitForBit) {
+  for (const char* name : {"afiro", "adlittle", "sc50a", "blend", "israel", "25fv47"}) {
+    const Model model = committed_netlib(name);
+    Solution cpu;
+    Solution automatic;
+    (void)solve_ipm_logged(model, ipm_options("cpu"), &cpu);
+    const std::string log = solve_ipm_logged(model, ipm_options("auto"), &automatic);
+    EXPECT_EQ(log.find("cuDSS"), std::string::npos) << name << "\n" << log;
+    EXPECT_EQ(log.find("ipm_linear_solver"), std::string::npos) << name << "\n" << log;
+    EXPECT_EQ(automatic.status, cpu.status) << name;
+    EXPECT_EQ(automatic.iterations, cpu.iterations) << name;
+    EXPECT_EQ(automatic.objective, cpu.objective) << name;
+    EXPECT_EQ(automatic.col_value, cpu.col_value) << name;
+  }
+}
+
+// AUTO AT THE FLOOR, on a device: maros-r7's normal equations hold 3.3e5 nonzeros and its
+// CPU factor 1.3e6, so the CPU orders it and the device takes the factorizations; fit2p's
+// hold 4.5e6, so the device takes it before any CPU ordering. Both are optimal on the CPU
+// factor (bench/results/ipm-cudss-ab-netlib-cpu-58a8374.csv) and must stay so.
+TEST(IpmCudss, AutoAtTheFloorFactorsOnTheDevice) {
+  std::string reason;
+  if (!device_ready(&reason)) GTEST_SKIP() << reason;
+  const std::pair<const char*, const char*> cases[] = {
+      {"maros-r7", "ipm_linear_solver = auto, a "},
+      {"fit2p", "nonzeros in the normal equations"}};
+  for (const auto& [name, why] : cases) {
+    const Model model = committed_netlib(name);
+    Solution automatic;
+    const std::string log = solve_ipm_logged(model, ipm_options("auto"), &automatic);
+    EXPECT_NE(log.find("normal equations factored on the device by cuDSS"), std::string::npos)
+        << name << "\n"
+        << log;
+    EXPECT_NE(log.find(why), std::string::npos) << name << "\n" << log;
+    EXPECT_NE(log.find("on the device to the end"), std::string::npos) << name << "\n" << log;
+    EXPECT_EQ(automatic.status, SolveStatus::kOptimal) << name << ": " << automatic.message;
   }
 }
 
