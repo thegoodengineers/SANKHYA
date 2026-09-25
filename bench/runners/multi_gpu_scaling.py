@@ -15,8 +15,11 @@ single-engine is there so the reader can see what the partitioned engine costs a
 engine a one-card user actually runs. PDHG alone is timed (pdhg_polish=false), from the
 solver's own clock, and the partitioned engine's log line "Timing: ... us per attempt on
 the cards; host evaluation ..." gives the per-step device time with the host-side residual
-evaluation taken out; the single engine prints no such line, so its per-step figure is its
-solve time over its iterations and includes its evaluation.
+evaluation and the setup taken out; the single engine prints no such line, so its per-step
+figure is its solve time over its iterations and includes its evaluation, its setup and the
+CUDA context creation. On a short fixed-step budget that overhead dominates (a 200-step
+check on a 2,000-row instance gave 1.6 ms a step against 82 us a step to tolerance), so
+compare the single engine on the tolerance budget only.
 
 Two budgets per instance: a fixed step count (--iterations; the per-step time is the number
 that scales) and, when --tolerance is given, a solve to that tolerance with
