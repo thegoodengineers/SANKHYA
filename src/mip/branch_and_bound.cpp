@@ -288,6 +288,10 @@ Solution BranchAndBound::run() {
     if (certificate_mode()) {
       logger_.info(
           "Certificate (#518): formulation symmetry is off in this mode (mip_symmetry)");
+    } else if (pool_complete_) {
+      // pool_complete (#225) promises every assignment within the pool gap, and the ordering
+      // rows exist to cut all but one of each orbit away.
+      logger_.info("pool_complete: formulation symmetry is off (mip_symmetry)");
     } else {
       append_symmetry_rows();
     }
