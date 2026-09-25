@@ -981,20 +981,21 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
-    s.push_back({"gpu_pump",
-                 OptionType::Bool,
-                 false,
-                 "GPU feasibility pump for MIP (#509). CURRENTLY A STUB: the kernel is not "
-                 "written and feasibility_pump() returns nothing, so the search behaves "
-                 "exactly as with the option off. The design: PDHG on the device solves each "
-                 "L1 projection LP; the outer loop rounds to integer and repeats until "
-                 "feasible or a round limit. Default OFF; it earns a default by a clean A/B "
-                 "on main once the kernel exists. "
-                 "References: Fischetti, Glover & Lodi, Math. Prog. 104 (2005); "
-                 "Mexi et al., arXiv:2307.03466; Corduk et al., arXiv:2510.20499.",
-                 0.0,
-                 0.0,
-                 {}});
+    s.push_back(
+        {"gpu_pump",
+         OptionType::Bool,
+         false,
+         "GPU feasibility pump for MIP (#509). CURRENTLY A STUB: the kernel is not "
+         "written and feasibility_pump() returns nothing, so the search behaves "
+         "exactly as with the option off. The design: PDHG on the device solves each "
+         "L1 projection LP; the outer loop rounds to integer and repeats until "
+         "feasible or a round limit. Default OFF; it earns a default by a clean A/B "
+         "on main once the kernel exists. "
+         "References: Fischetti, Glover & Lodi, Math. Prog. 104 (2005); "
+         "Mexi et al., arXiv:2307.03466; Corduk et al., arXiv:2510.20499.",
+         0.0,
+         0.0,
+         {}});
     s.push_back(
         {"gpu_fix_and_prop",
          OptionType::Bool,

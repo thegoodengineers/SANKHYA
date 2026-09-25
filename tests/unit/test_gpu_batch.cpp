@@ -21,9 +21,10 @@
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 
+#include "gpu/pdhg_batch.hpp"  // always available; returns empty without CUDA
+
 #ifdef SANKHYA_ENABLE_CUDA
 #include "gpu/device.hpp"
-#include "gpu/pdhg_batch.hpp"
 #endif
 
 namespace sankhya {
