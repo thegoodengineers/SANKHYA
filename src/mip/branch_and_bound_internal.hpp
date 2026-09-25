@@ -935,7 +935,12 @@ class BranchAndBound {
   /// Conflict analysis (#292): the learned conflicts, their statistics, and whether the
   /// search is inside an analysis (whose trial propagations must not count as uses).
   bool conflicts_enabled_ = false;
+  /// conflict_cutoff (#503): also analyse nodes pruned by bound.
   bool conflict_cutoff_ = false;
+  /// A cutoff conflict has been stored (#503). From then on propagation - and so every
+  /// later proof - may lean on one, and what any later conflict proves holds only for points
+  /// better than the cutoff at the time; it is stored with that cutoff.
+  bool cutoff_conflicts_held_ = false;
   bool conflict_minimize_ = true;
   /// conflict_use: what the search does with a learned conflict (#292's ablation).
   enum class ConflictUse { kNone, kPrune, kPropagate };

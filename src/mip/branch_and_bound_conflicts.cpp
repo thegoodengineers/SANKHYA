@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <limits>
 #include <map>
 #include <string>
 #include <utility>
@@ -17,6 +18,7 @@
 #include "../util/profiler.hpp"
 #include "branch_and_bound_internal.hpp"
 #include "conflict.hpp"
+#include "core/safe_bound.hpp"
 
 namespace sankhya::mip {
 
@@ -69,6 +71,24 @@ bool BranchAndBound::propagate_conflicts(bool* changed) {
 void BranchAndBound::analyze_conflict(Index node_index, ConflictSource source,
                                       const std::vector<double>* farkas) {
   if (!conflicts_enabled_ || node_index == 0) return;
+  // A NODE PRUNED BY BOUND (#503) is analysed against the cutoff it lost to: the incumbent
+  // less the absolute gap target, the margin can_prune() allows. The proof is linear in the
+  // objective (a Neumaier-Shcherbina bound of the row duals), so an MIQP node is not
+  // analysed; nor is a search filling a complete pool, which prunes on the pool's cutoff and
+  // wants points no better than the incumbent. Rounding the bound up to the next integral
+  // objective value (#221) is not used here: a conflict proved without it is only weaker.
+  double cutoff = std::numeric_limits<double>::infinity();
+  if (source == ConflictSource::kCutoff) {
+    if (quadratic_ || pool_complete_ || !have_incumbent_ || farkas == nullptr ||
+        farkas->size() != static_cast<std::size_t>(working_.num_rows())) {
+      return;
+    }
+    cutoff = incumbent_internal_ - absolute_gap_target_;
+  } else if (cutoff_conflicts_held_) {
+    // An infeasibility proved with a cutoff conflict's help is an infeasibility only among
+    // points better than that conflict's cutoff, which is no lower than today's.
+    cutoff = incumbent_internal_ - absolute_gap_target_;
+  }
   // THE ANALYSIS HAS A BUDGET IN WORK, NOT IN SECONDS, so a rerun learns the same conflicts
   // (#288): verification calls in total may not run far ahead of the nodes the search has
   // explored. A search that finds infeasible nodes cheaply should not spend its time here.
@@ -120,7 +140,14 @@ void BranchAndBound::analyze_conflict(Index node_index, ConflictSource source,
 
   // The check every stored conflict passes, run from the GLOBAL bounds (the caller has left
   // the node): the literals, then propagation - which may itself prove the box empty - then
-  // the Farkas proof, if there is one, on the box propagation left.
+  // the Farkas proof, if there is one, on the box propagation left. A cutoff (#503) is
+  // proved instead by the safe bound of the node LP's row duals over that box exceeding the
+  // cutoff: weak duality for the Lagrangian with the multipliers fixed, rounded outward, so
+  // it holds for any multipliers whatever the LP's tolerances did (Neumaier & Shcherbina,
+  // Math. Programming 99, 2004).
+  //
+  // saved_ is cleared here, so the node must already have been left: an analysis run inside
+  // a node would drop the node's own undo entries and leave its bounds on the whole search.
   FarkasProof proof;
   analysing_ = true;
   const auto verify = [&](const std::vector<ConflictLiteral>& literals) {
@@ -138,12 +165,15 @@ void BranchAndBound::analyze_conflict(Index node_index, ConflictSource source,
     if (!proved && proof.usable) {
       proved = farkas_contradicts(proof, working_.col_lower, working_.col_upper);
     }
+    if (!proved && source == ConflictSource::kCutoff) {
+      proved = safe_dual_bound(working_, *farkas).value > cutoff;
+    }
     leave();
     return proved;
   };
 
   bool proved = false;
-  if (source == ConflictSource::kLp || source == ConflictSource::kCutoff) {
+  if (source == ConflictSource::kLp) {
     if (farkas != nullptr && !farkas->empty()) {
       // Engines differ in the sign they report the multipliers with; the proof is checked
       // either way round, and only a proof that holds is used.
@@ -197,8 +227,9 @@ void BranchAndBound::analyze_conflict(Index node_index, ConflictSource source,
   }
   const std::size_t size = literals.size();
   if (conflicts_.add(canonical(std::move(literals)), source,
-                     static_cast<std::int64_t>(nodes_explored_))) {
+                     static_cast<std::int64_t>(nodes_explored_), cutoff)) {
     ++conflict_stats_.learned;
+    if (source == ConflictSource::kCutoff) cutoff_conflicts_held_ = true;
     if (size < chain.size()) ++conflict_stats_.minimized;
     conflict_stats_.sizes.push_back(static_cast<std::int64_t>(size));
   }

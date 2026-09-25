@@ -25,11 +25,21 @@
 // the LP's word - shows the rows cannot be met inside the propagated box. Neither argument
 // is weaker than the one that pruned the original node. Removing a stored conflict only
 // ever weakens pruning, which is why the database may forget.
+//
+// A CONFLICT FROM A NODE PRUNED BY BOUND (#503, conflict_cutoff) says less: no point that
+// meets the rows and the literals has an objective at or below the CUTOFF the search held
+// when it was learned (the incumbent less the absolute gap target). It is proved the same
+// way, from the global bounds, by propagation or by the Neumaier-Shcherbina bound of the
+// node LP's row duals over the literal box (src/core/safe_bound.hpp) exceeding the cutoff.
+// The incumbent only improves, so the cutoff only falls, and a conflict that excluded no
+// point better than an earlier cutoff excludes none better than a later one: it prunes only
+// what bound pruning would. The cutoff is kept with the conflict and written out with it.
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <set>
 #include <string>
 #include <vector>
@@ -55,7 +65,8 @@ struct ConflictLiteral {
   }
 };
 
-/// What proved the node infeasible.
+/// What proved the node infeasible, or (kCutoff, #503) that it holds no point better than
+/// the incumbent.
 enum class ConflictSource { kPropagation, kLp, kCutoff };
 
 [[nodiscard]] const char* to_string(ConflictSource source) noexcept;
@@ -143,6 +154,9 @@ class ConflictStore {
     std::int64_t created = 0;    ///< the node count when learned
     std::int64_t last_used = 0;  ///< the node count when it last pruned or tightened
     std::int64_t uses = 0;       ///< prunings plus tightenings
+    /// kCutoff (#503): the minimise-space objective no point in the conflict reaches. +inf
+    /// for an infeasibility conflict, which excludes every point.
+    double cutoff = std::numeric_limits<double>::infinity();
   };
 
   ConflictStore() = default;
@@ -151,7 +165,8 @@ class ConflictStore {
   /// Store a canonical conflict. Returns false for an exact duplicate of a stored one.
   /// A full store first evicts the least useful tenth: fewest uses, then longest unused,
   /// then oldest - a total order, so the same run evicts the same conflicts.
-  bool add(std::vector<ConflictLiteral> literals, ConflictSource source, std::int64_t node);
+  bool add(std::vector<ConflictLiteral> literals, ConflictSource source, std::int64_t node,
+           double cutoff = std::numeric_limits<double>::infinity());
 
   [[nodiscard]] std::size_t size() const { return entries_.size(); }
   [[nodiscard]] std::size_t capacity() const { return capacity_; }

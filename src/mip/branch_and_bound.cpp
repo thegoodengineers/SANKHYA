@@ -656,11 +656,13 @@ Solution BranchAndBound::run() {
     // of its primal point. The believed bound still drives the pseudocosts and branching.
     double prune_bound = safe_bounds_ ? safe_node_bound(relaxation, node_bound) : node_bound;
     if (can_prune(prune_bound)) {
-      if (conflict_cutoff_ && !relaxation.row_dual.empty()) {
-        analyze_conflict(node_index, ConflictSource::kCutoff, &relaxation.row_dual);
-      }
       leave();
       ++nodes_pruned_;
+      // #503: what the node's decisions cost, learned from the global bounds - so after
+      // leave(), exactly as for a node the LP proved infeasible.
+      if (conflict_cutoff_) {
+        analyze_conflict(node_index, ConflictSource::kCutoff, &relaxation.row_dual);
+      }
       continue;
     }
 

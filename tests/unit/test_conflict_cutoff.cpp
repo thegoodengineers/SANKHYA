@@ -179,18 +179,18 @@ TEST(ConflictCutoff, NoCutoffConflictHoldsAtAPointBetterThanItsCutoffAndTheOptim
     used +=
         report["nodes_pruned"].get<std::int64_t>() + report["tightenings"].get<std::int64_t>();
     for (const nlohmann::json& conflict : report["conflicts"]) {
-      const bool from_cutoff = conflict["source"].get<std::string>() == "cutoff";
-      if (from_cutoff) {
+      if (conflict["source"].get<std::string>() == "cutoff") {
         ++cutoff_learned;
         ASSERT_TRUE(conflict.contains("cutoff")) << conflict.dump();
       }
+      // A conflict learned once a cutoff conflict is held may have leaned on one, and carries
+      // a cutoff too; one without holds at no feasible point at all.
+      const bool relative = conflict.contains("cutoff");
       for (const std::vector<double>& x : points) {
         if (!literals_hold(conflict, x)) continue;
-        // An infeasibility conflict may hold at no feasible point; a cutoff conflict at no
-        // feasible point whose objective is at or below the cutoff it was proved against.
-        if (from_cutoff) {
+        if (relative) {
           ASSERT_GT(internal_objective(model, x), conflict["cutoff"].get<double>())
-              << "trial " << trial << ": cutoff conflict " << conflict.dump()
+              << "trial " << trial << ": conflict " << conflict.dump()
               << " holds at a point that beats its cutoff";
         } else {
           FAIL() << "trial " << trial << ": conflict " << conflict.dump()
