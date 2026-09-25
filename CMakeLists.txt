@@ -270,6 +270,7 @@ set(SANKHYA_CORE_SOURCES
   src/diagnose/diagnose.cpp
   src/qp/convexity.cpp
   src/qp/qp_condat_vu.cpp
+  src/qp/qp_first_order_accel.cpp
   src/qp/qp_ipm.cpp
   src/qp/qp_ipm_system.cpp
   src/la/ldl.cpp

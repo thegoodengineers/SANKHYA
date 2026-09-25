@@ -38,6 +38,15 @@
 // restart logic would put the LP path at risk to save duplication in a first QP engine.
 // ENGINEERING_RULES.md is explicit that a wrong answer scores zero, and the LP path is the
 // thing most of the project's evidence rests on.
+//
+// ACCELERATION (#493, both off by default). qp_halpern replaces z <- T z by the restarted,
+// reflected Halpern iteration of Lu & Yang (arXiv:2407.16144), carried to this operator as
+// their PDQP (arXiv:2311.07710) carries PDHG to QP; qp_primal_weight_pid moves the primal
+// weight sigma / tau at each restart by a PID controller on the log of the primal-dual
+// movement ratio (Lu, Peng & Yang, arXiv:2507.14051). Restarts are decided on the
+// fixed-point residual ||T z - z||. The machinery and its derivation from Condat's
+// relaxation bound are in qp_first_order_accel.hpp. Convergence is checked, and the answer
+// reported, at T z - a point of the box - never at the anchored combination.
 
 #include "sankhya/qp.hpp"
 #include "sankhya/solve_control.hpp"
@@ -56,6 +65,7 @@
 #include "sankhya/tolerances.hpp"
 
 #include "convexity.hpp"
+#include "qp_first_order_accel.hpp"
 
 namespace sankhya::qp {
 namespace {
@@ -203,8 +213,8 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
   const double margin = 1.05;
   const double l = margin * norm_q;
   const double a2 = margin * margin * std::max(norm_a * norm_a, 1e-12);
-  const double tau = 1.0 / (l / 2.0 + std::sqrt(a2) + 1e-12);
-  const double sigma = (m > 0) ? (1.0 / tau - l / 2.0) / (2.0 * a2) : 0.0;
+  double tau = 1.0 / (l / 2.0 + std::sqrt(a2) + 1e-12);
+  double sigma = (m > 0) ? (1.0 / tau - l / 2.0) / (2.0 * a2) : 0.0;
 
   logger.verbose("QP step sizes: ||A|| ~ {:.4g}, ||Q|| ~ {:.4g}, tau {:.4g}, sigma {:.4g}",
                  norm_a, norm_q, tau, sigma);
@@ -217,6 +227,7 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
   }
   std::vector<double> y(um, 0.0);
   std::vector<double> x_next(un, 0.0);
+  std::vector<double> y_next(um, 0.0);
   std::vector<double> extrapolated(un, 0.0);
   std::vector<double> qx(un, 0.0);
   std::vector<double> at_y(un, 0.0);
@@ -235,6 +246,41 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
 
   StopController stop(control, timer, limits);
   SolveStatus stop_status;
+
+  // ---- #493: Halpern restarts and the PID primal weight, both off by default ---------------
+  // With both off none of this is touched and the loop below is the plain iteration, the
+  // same arithmetic in the same order. The weight only means something with rows to price.
+  const bool use_halpern = options.get_bool("qp_halpern");
+  const bool use_pid = options.get_bool("qp_primal_weight_pid") && m > 0;
+  const bool use_restarts = use_halpern || use_pid;
+  const PidGains gains{options.get_double("qp_pid_kp"), options.get_double("qp_pid_ki"),
+                       options.get_double("qp_pid_kd")};
+  PidState pid;
+  double omega = m > 0 ? condat_vu_weight_of(tau, sigma) : 0.0;
+  double reflection =
+      use_halpern ? tol::kQpHalpernReflectionShare * condat_vu_reflection_max(l, tau) : 0.0;
+  std::vector<double> x_anchor;
+  std::vector<double> y_anchor;
+  std::vector<double> x_restart;
+  std::vector<double> y_restart;
+  if (use_halpern) {
+    x_anchor = x;
+    y_anchor = y;
+  }
+  if (use_pid) {
+    x_restart = x;
+    y_restart = y;
+  }
+  Count period_steps = 0;
+  Count restarts = 0;
+  double period_residual = 0.0;  // ||T z - z|| at the period's first step
+  double fixed_point_residual = 0.0;
+  if (use_restarts) {
+    logger.verbose(
+        "QP acceleration: halpern {}, pid primal weight {} (kp {}, ki {}, kd {}), "
+        "initial weight {:.4g}, reflection {:.4g}",
+        use_halpern, use_pid, gains.kp, gains.ki, gains.kd, omega, reflection);
+  }
 
   while (true) {
     // Time outranks the counters when both are exhausted at one safe point (#289).
@@ -274,10 +320,40 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
       for (Index i = 0; i < m; ++i) {
         const auto u = static_cast<std::size_t>(i);
         const double v = y[u] + sigma * ax[u];
-        y[u] = v - sigma * project(v / sigma, model.row_lower[u], model.row_upper[u]);
+        y_next[u] = v - sigma * project(v / sigma, model.row_lower[u], model.row_upper[u]);
       }
     }
-    x.swap(x_next);
+
+    if (use_restarts) {
+      // ||T z - z|| in the diagonal of Condat's metric, diag(I / tau, I / sigma). The period's
+      // first value is the reference the restart test compares against, in the same norm.
+      double dx2 = 0.0;
+      for (std::size_t u = 0; u < un; ++u) {
+        const double d = x_next[u] - x[u];
+        dx2 += d * d;
+      }
+      double dy2 = 0.0;
+      for (std::size_t u = 0; u < um; ++u) {
+        const double d = y_next[u] - y[u];
+        dy2 += d * d;
+      }
+      fixed_point_residual = std::sqrt(dx2 / tau + (m > 0 ? dy2 / sigma : 0.0));
+      if (period_steps == 0) period_residual = fixed_point_residual;
+      ++period_steps;
+    }
+    if (use_halpern) {
+      // z <- w ((1 + rho) T z - rho z) + (1 - w) z_anchor. T z stays in x_next / y_next,
+      // which is where convergence is measured and what is reported.
+      const auto k = static_cast<double>(period_steps - 1);
+      halpern_blend(&x, x_next, x_anchor, k, reflection);
+      halpern_blend(&y, y_next, y_anchor, k, reflection);
+    } else {
+      x.swap(x_next);
+      y.swap(y_next);
+    }
+    // The point every test below is made at: T z, in the box. Without Halpern it is z itself.
+    const std::vector<double>& x_eval = use_halpern ? x_next : x;
+    const std::vector<double>& y_eval = use_halpern ? y_next : y;
 
     // ---- termination, every 50 iterations -------------------------------------------------
     if (iterations % 50 != 0) continue;
@@ -302,7 +378,7 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
     // Primal residual: the worst row-bound violation.
     double primal_residual = 0.0;
     if (m > 0) {
-      model.matrix.multiply(x.data(), ax.data());
+      model.matrix.multiply(x_eval.data(), ax.data());
       for (Index i = 0; i < m; ++i) {
         const auto u = static_cast<std::size_t>(i);
         const double projected = project(ax[u], model.row_lower[u], model.row_upper[u]);
@@ -312,15 +388,16 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
 
     // Dual residual: the projected-gradient stationarity measure. At an optimum, taking a
     // unit gradient step and projecting back changes nothing.
-    hessian_multiply(model, x, &qx);
+    hessian_multiply(model, x_eval, &qx);
     std::fill(at_y.begin(), at_y.end(), 0.0);
-    if (m > 0) model.matrix.transpose_multiply_add(y.data(), at_y.data());
+    if (m > 0) model.matrix.transpose_multiply_add(y_eval.data(), at_y.data());
     double dual_residual = 0.0;
     for (Index j = 0; j < n; ++j) {
       const auto u = static_cast<std::size_t>(j);
       const double gradient = sense * model.col_cost[u] + sense * qx[u] + at_y[u];
-      const double stepped = project(x[u] - gradient, model.col_lower[u], model.col_upper[u]);
-      dual_residual = std::max(dual_residual, std::fabs(x[u] - stepped));
+      const double stepped =
+          project(x_eval[u] - gradient, model.col_lower[u], model.col_upper[u]);
+      dual_residual = std::max(dual_residual, std::fabs(x_eval[u] - stepped));
     }
 
     if (primal_residual <= tolerance && dual_residual <= tolerance) {
@@ -328,13 +405,69 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
       break;
     }
     if (iterations % 5000 == 0) {
-      logger.iteration(iterations, model.evaluate_objective(x.data()), primal_residual,
+      logger.iteration(iterations, model.evaluate_objective(x_eval.data()), primal_residual,
                        dual_residual, timer.elapsed_seconds());
+    }
+
+    // ---- #493: restart on the fixed-point residual ----------------------------------------
+    if (use_restarts) {
+      const bool sufficient =
+          fixed_point_residual <= tol::kQpRestartSufficientDecay * period_residual;
+      const bool artificial =
+          period_steps >=
+          std::max<Count>(50, static_cast<Count>(tol::kQpRestartArtificialShare *
+                                                 static_cast<double>(iterations)));
+      if (sufficient || artificial) {
+        // Restart at T z, the point the residual was measured at.
+        if (use_halpern) {
+          x = x_next;
+          y = y_next;
+        }
+        if (use_pid) {
+          double dx2 = 0.0;
+          for (std::size_t u = 0; u < un; ++u) {
+            const double d = x[u] - x_restart[u];
+            dx2 += d * d;
+          }
+          double dy2 = 0.0;
+          for (std::size_t u = 0; u < um; ++u) {
+            const double d = y[u] - y_restart[u];
+            dy2 += d * d;
+          }
+          omega = pid_primal_weight(omega, std::sqrt(dx2), std::sqrt(dy2), gains, &pid);
+          const CondatVuSteps steps = condat_vu_steps_at_weight(l, a2, omega);
+          tau = steps.tau;
+          sigma = steps.sigma;
+          if (use_halpern) reflection = tol::kQpHalpernReflectionShare * steps.reflection_max;
+          x_restart = x;
+          y_restart = y;
+        }
+        if (use_halpern) {
+          x_anchor = x;
+          y_anchor = y;
+        }
+        period_steps = 0;
+        ++restarts;
+        logger.verbose(
+            "QP restart {} at iteration {} ({}): fixed-point residual {:.3e}, weight {:.4g}, "
+            "tau {:.4g}, sigma {:.4g}",
+            restarts, iterations, sufficient ? "decay" : "artificial", fixed_point_residual,
+            omega, tau, sigma);
+      }
     }
   }
 
   if (status == SolveStatus::kIterationLimit && message.empty()) {
     message = limits.describe(LimitReason::kIterations, timer.elapsed_seconds(), iterations, 0);
+  }
+
+  // Halpern's report is T z from the last step taken; before any step there is only z.
+  if (use_halpern && iterations > 0) {
+    x.swap(x_next);
+    y.swap(y_next);
+  }
+  if (use_restarts) {
+    logger.verbose("QP acceleration: {} restarts, final weight {:.4g}", restarts, omega);
   }
 
   solution.status = status;
