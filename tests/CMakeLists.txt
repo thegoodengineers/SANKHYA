@@ -110,6 +110,7 @@ add_executable(sankhya_tests
   unit/test_presolve_parallel_rows.cpp
   unit/test_presolve_probing.cpp
   unit/test_presolve_implied_integer.cpp
+  unit/test_presolve_propagation.cpp
   unit/test_dual_steepest_edge.cpp
   unit/test_node_factor_cache.cpp
   unit/test_objective_branching.cpp

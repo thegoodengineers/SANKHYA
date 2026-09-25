@@ -14,6 +14,7 @@
 #include <fmt/format.h>
 
 #include "presolve/coef_tightening.hpp"
+#include "presolve/implied_bounds.hpp"
 #include "presolve/probing.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
@@ -104,6 +105,16 @@ struct Workspace {
   /// own col_type so a column that the model defined as continuous but that the pass marked can
   /// be distinguished from one the model always declared integer.
   std::vector<bool> col_implied_integer;
+  /// #485: rows whose workspace entries or bounds are no longer the original row's alone -
+  /// a doubleton's fill-in subtracted a multiple of another row from it, or a parallel row
+  /// merged its bounds into it. A bound propagated from such a row is implied by a
+  /// COMBINATION of original rows, and postsolve's transfer, which prices one row, could not
+  /// hand its reduced cost back; bound propagation leaves these rows alone.
+  std::vector<bool> row_combined;
+  /// #485: rows a kImpliedBound record was derived from. Postsolve may move a reduced cost
+  /// onto such a row, so the implied-free substitution, whose postsolve prices the row from
+  /// its eliminated column alone, declines it.
+  std::vector<bool> row_propagated;
 };
 
 [[nodiscard]] bool finite(double v) {
@@ -311,6 +322,8 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   work.upper_coef.assign(static_cast<std::size_t>(n), 0.0);
   work.singleton_row_touched.assign(static_cast<std::size_t>(n), false);
   work.col_implied_integer.assign(static_cast<std::size_t>(n), false);
+  work.row_combined.assign(static_cast<std::size_t>(m), false);
+  work.row_propagated.assign(static_cast<std::size_t>(m), false);
   work.extra_row_delta.assign(static_cast<std::size_t>(n), {});
   work.extra_new_rows.assign(static_cast<std::size_t>(n), {});
 
@@ -686,6 +699,9 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         }
         if (row < 0 || std::fabs(a) < tol::kZeroDrop) return false;
         const auto r = static_cast<std::size_t>(row);
+        // A row bound propagation priced a column from (#485) cannot also be priced from
+        // this column alone at postsolve.
+        if (work.row_propagated[r]) return false;
         // The activity range of the row's OTHER live columns, the pattern activity_bounds()
         // uses with x_j left out.
         ActivityBounds rest;
@@ -977,58 +993,118 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
 
       const ActivityBounds bounds = activity_bounds(work, i);
 
-      // Bound propagation from row activity (Cederberg & Boyd, arXiv 2604.23951;
-      // Andersen & Andersen 1995, sec. 3.1-3.2). For each live column j in row i, derive
-      // implied bounds on x_j from the row bounds and the activity range of every OTHER entry.
-      // Applies to all inequality rows (equality rows are handled by kDoubletonEquation and
-      // kSingletonRow). No record is emitted: the tightened bounds are reflected directly into
-      // the workspace, and the existing redundant-row check below then fires when a row
-      // becomes implied. Gated by presolve_bound_propagation (default OFF).
-      if (bound_propagation && work.row_upper[r] - work.row_lower[r] > feasibility) {
+      // BOUND PROPAGATION FROM ROW ACTIVITY (#485; Brearley, Mitra & Williams 1975; Andersen
+      // & Andersen 1995; one of the reductions Cederberg & Boyd list for first-order
+      // methods). For column j of row i, a_ij x_j lies in [row_lower - max(rest), row_upper -
+      // min(rest)], where rest is the activity range of the row's OTHER live columns; the
+      // division by a_ij swaps the two when a_ij < 0. A column singleton in an inequality row
+      // and a doubleton inequality are the cases with no other column and with one.
+      //
+      // Never tighter than the rows justify: `bounds` was computed before any of this row's
+      // columns moved, and a bound that moved earlier in the loop only widens that range and
+      // weakens the implied bound; each implied bound is loosened by kPresolveCoefficientSafety
+      // relative to the row's magnitude, which covers the cancellation in max(activity) -
+      // a_ij u_j; an integer column's bound is rounded inward with the integrality tolerance.
+      // A continuous bound is written only when it improves by kPresolveBoundMinStep (a cycle
+      // of rows otherwise converges forever) and only below kPresolveMaxPropagatedBound.
+      //
+      // THE DUAL. The bound is in the reduced model's box and not in the original's. When the
+      // engine leaves x_j on it with reduced cost d_j, x_j is inside its original box, where
+      // d_j must be zero: each kImpliedBound record lets postsolve move d_j onto row i
+      // (y_i += d_j / a_ij). That is admissible because x_j on the bound means row i is active
+      // and every other column of the row sits at the end of its range the bound was computed
+      // from. Rows that are no longer one original row (fill-in, a parallel merge) and columns
+      // in a doubleton fold, whose prices postsolve solves by formulas of their own, are left
+      // alone. Singleton rows are the singleton-row reduction's; equality rows are not
+      // propagated here.
+      if (bound_propagation && work.row_count[r] >= 2 && !work.row_combined[r] &&
+          work.row_upper[r] - work.row_lower[r] > feasibility) {
+        const double row_lower = work.row_lower[r];
+        const double row_upper = work.row_upper[r];
+        double magnitude = std::max(finite(row_lower) ? std::fabs(row_lower) : 0.0,
+                                    finite(row_upper) ? std::fabs(row_upper) : 0.0);
         for (const auto& [j, a] : work.rows[r]) {
           const auto u = static_cast<std::size_t>(j);
           if (work.col_dead[u]) continue;
-          if (std::fabs(a) < tol::kZeroDrop) continue;
-          if (work.quadratic_col[u]) continue;
-          // Compute activity of row WITHOUT column j's contribution.
-          const double lo_j = work.col_lower[u];
-          const double up_j = work.col_upper[u];
-          // j contributes a*lo_j (if a>0) or a*up_j (if a<0) to bounds.lower.
-          const bool j_lo_finite = a > 0.0 ? finite(lo_j) : finite(up_j);
-          const bool j_hi_finite = a > 0.0 ? finite(up_j) : finite(lo_j);
-          const double j_lo_contrib = a > 0.0 ? a * lo_j : a * up_j;
-          const double j_hi_contrib = a > 0.0 ? a * up_j : a * lo_j;
-          const bool rest_lo_finite = bounds.lower_finite && j_lo_finite;
-          const bool rest_hi_finite = bounds.upper_finite && j_hi_finite;
-          const double rest_lo = rest_lo_finite ? bounds.lower - j_lo_contrib : -kInfinity;
-          const double rest_hi = rest_hi_finite ? bounds.upper - j_hi_contrib : kInfinity;
-          // Implied bounds on x_j: a*x_j in [row_lo - rest_hi, row_up - rest_lo].
-          double implied_lo = -kInfinity;
-          double implied_hi = kInfinity;
-          if (a > 0.0) {
-            if (finite(work.row_lower[r]) && rest_hi_finite)
-              implied_lo = (work.row_lower[r] - rest_hi) / a;
-            if (finite(work.row_upper[r]) && rest_lo_finite)
-              implied_hi = (work.row_upper[r] - rest_lo) / a;
-          } else {
-            if (finite(work.row_upper[r]) && rest_hi_finite)
-              implied_lo = (work.row_upper[r] - rest_hi) / a;
-            if (finite(work.row_lower[r]) && rest_lo_finite)
-              implied_hi = (work.row_lower[r] - rest_lo) / a;
-          }
-          if (model.col_type[u] == VarType::kInteger) {
-            if (finite(implied_lo)) implied_lo = round_integer_lower(implied_lo);
-            if (finite(implied_hi)) implied_hi = round_integer_upper(implied_hi);
-          }
-          if (finite(implied_lo) && implied_lo > work.col_lower[u] + feasibility) {
-            work.col_lower[u] = implied_lo;
-            changed = true;
-          }
-          if (finite(implied_hi) && implied_hi < work.col_upper[u] - feasibility) {
-            work.col_upper[u] = implied_hi;
-            changed = true;
-          }
+          if (finite(work.col_lower[u])) magnitude += std::fabs(a * work.col_lower[u]);
+          if (finite(work.col_upper[u])) magnitude += std::fabs(a * work.col_upper[u]);
         }
+        for (const auto& [j, a] : work.rows[r]) {
+          const auto u = static_cast<std::size_t>(j);
+          if (work.col_dead[u] || std::fabs(a) < tol::kZeroDrop) continue;
+          if (work.quadratic_col[u] || work.doubleton_touched[u]) continue;
+          if (result.proved_infeasible) break;
+          const bool integer =
+              model.col_type[u] == VarType::kInteger || work.col_implied_integer[u];
+          // j's own share of `bounds`, taken out to leave the rest of the row.
+          const double own_min = a > 0.0 ? work.col_lower[u] : work.col_upper[u];
+          const double own_max = a > 0.0 ? work.col_upper[u] : work.col_lower[u];
+          const bool rest_min_finite = bounds.lower_finite && finite(own_min);
+          const bool rest_max_finite = bounds.upper_finite && finite(own_max);
+          const double rest_min = rest_min_finite ? bounds.lower - a * own_min : 0.0;
+          const double rest_max = rest_max_finite ? bounds.upper - a * own_max : 0.0;
+          const double slack =
+              tol::kPresolveCoefficientSafety * std::max(1.0, magnitude) / std::fabs(a);
+          // a x_j >= row_lower - rest_max and a x_j <= row_upper - rest_min.
+          const bool from_row_lower = finite(row_lower) && rest_max_finite;
+          const bool from_row_upper = finite(row_upper) && rest_min_finite;
+          double implied_lower = -kInfinity;
+          double implied_upper = kInfinity;
+          if (a > 0.0) {
+            if (from_row_lower) implied_lower = (row_lower - rest_max) / a - slack;
+            if (from_row_upper) implied_upper = (row_upper - rest_min) / a + slack;
+          } else {
+            if (from_row_upper) implied_lower = (row_upper - rest_min) / a - slack;
+            if (from_row_lower) implied_upper = (row_lower - rest_max) / a + slack;
+          }
+          const auto write = [&](double v, bool upper) {
+            if (result.proved_infeasible) return;
+            if (!std::isfinite(v) || std::fabs(v) > tol::kPresolveMaxPropagatedBound) return;
+            if (integer) v = upper ? round_integer_upper(v) : round_integer_lower(v);
+            const double old = upper ? work.col_upper[u] : work.col_lower[u];
+            const double step =
+                integer ? 0.0 : tol::kPresolveBoundMinStep * std::max(1.0, std::fabs(old));
+            const bool improves = !finite(old) || (upper ? v < old - step : v > old + step);
+            if (!improves) return;
+            const double other = upper ? work.col_lower[u] : work.col_upper[u];
+            if (finite(other) && (upper ? v < other : v > other)) {
+              // Past the opposite bound by more than the feasibility tolerance is a proof of
+              // infeasibility; within it, the column is fixed there.
+              if (std::fabs(v - other) >
+                  tol::kPrimalFeasibility * std::max(1.0, std::fabs(other))) {
+                infeasible(fmt::format(
+                    "row {} implies {} {:.6g} for column {}, past its other bound {:.6g}", i,
+                    upper ? "x <=" : "x >=", v, j, other));
+                return;
+              }
+              v = other;
+              if (upper ? v >= old : v <= old) return;
+            }
+            Record record;
+            record.kind = Record::Kind::kImpliedBound;
+            record.index = i;
+            record.column = j;
+            record.coefficient = a;
+            record.value = v;
+            record.implied_upper = upper;
+            result.records.push_back(record);
+            work.row_propagated[r] = true;
+            // The Farkas candidate (#253) leans on this row for this bound from now on.
+            if (upper) {
+              work.col_upper[u] = v;
+              work.upper_row[u] = i;
+              work.upper_coef[u] = a;
+            } else {
+              work.col_lower[u] = v;
+              work.lower_row[u] = i;
+              work.lower_coef[u] = a;
+            }
+            changed = true;
+          };
+          write(implied_lower, false);
+          write(implied_upper, true);
+        }
+        if (result.proved_infeasible) break;
       }
 
       // Redundant row: whatever the variables do within their bounds, this row is satisfied.
@@ -1290,6 +1366,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           if (std::fabs(a_other) < tol::kZeroDrop) continue;
 
           const double factor = a_other / a;  // a_i'e / a
+          work.row_combined[orr] = true;
           if (finite(work.row_lower[orr])) work.row_lower[orr] -= factor * rhs;
           if (finite(work.row_upper[orr])) work.row_upper[orr] -= factor * rhs;
 
@@ -1411,6 +1488,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           record.upper_from_removed = scaled_upper < work.row_upper[kr];
           work.row_lower[kr] = new_lower;
           work.row_upper[kr] = new_upper;
+          work.row_combined[kr] = true;
           result.records.push_back(record);
           kill_row(&work, row);
           changed = true;
@@ -1651,13 +1729,14 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         if (record.implied_free) ++report.implied_free_column_singletons;
         break;
       case Record::Kind::kDoubletonEquation: ++report.doubleton_equations; break;
+      case Record::Kind::kImpliedBound: ++report.propagated_bounds; break;
       case Record::Kind::kForcingRow: break;
     }
   }
   // A singleton row's whole effect is a tightened column bound, so it is counted as one as
   // well as under its own name; the integer roundings are already counted where they fire.
   report.coefficients_tightened = tightening.coefficients_tightened;
-  report.propagated_bounds = tightening.bounds_tightened;
+  report.propagated_bounds += tightening.bounds_tightened;
   report.bounds_tightened =
       report.singleton_rows + report.integer_bounds_rounded + report.propagated_bounds;
   report.seconds = presolve_clock.elapsed_seconds();
@@ -1989,6 +2068,10 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
         }
         break;
       }
+      case Record::Kind::kImpliedBound:
+        // The column stays in the reduced model and the row with it; only the dual moves,
+        // in the passes below.
+        break;
       case Record::Kind::kDualFixedColumn:
       case Record::Kind::kDominatedColumn: {
         // At a bound of the ORIGINAL box when the value is one, which is what dual fixing
@@ -2426,6 +2509,17 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   // must show up as a wrong certificate and not as a hang.
   constexpr int kMaxDualPasses = 8;
   std::vector<const Record*> deferred_singleton_rows;
+  // kImpliedBound (#485): the price each record has moved onto its row, so a repeat pass
+  // takes its own contribution back out before deciding again, and the ORIGINAL coefficient
+  // it moves it with - the one the verifier's c - A^T y uses (the row had no fill-in, see
+  // row_combined in presolve()).
+  std::vector<double> implied_transfer(result.records.size(), 0.0);
+  std::vector<double> implied_coefficient(result.records.size(), 0.0);
+  for (std::size_t idx = 0; idx < result.records.size(); ++idx) {
+    const Record& record = result.records[idx];
+    if (record.kind != Record::Kind::kImpliedBound) continue;
+    implied_coefficient[idx] = original.matrix.at(record.index, record.column);
+  }
   for (int pass = 0; pass < kMaxDualPasses; ++pass) {
     const std::vector<double> row_dual_before = solution.row_dual;
     std::fill(dual_finalized.begin(), dual_finalized.end(), false);
@@ -2671,6 +2765,37 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
       process_singleton_row(*rec);
     }
 
+    // Propagated bounds (#485), in reverse record order: a bound derived from another
+    // propagated bound was recorded after it, so its row is priced first and the reduced
+    // cost it hands the earlier column is there when that column's record is reached. A
+    // column on its propagated bound is inside its ORIGINAL box, or on it with the wrong
+    // sign, and the row that implied the bound takes the reduced cost: y_i += d_j / a_ij
+    // zeroes d_j, and moves every other column of row i the admissible way, because each
+    // sits at the end of its range the bound was computed from. The same transfer
+    // process_singleton_row makes for a row with one column.
+    for (std::size_t idx = result.records.size(); idx-- > 0;) {
+      const Record& record = result.records[idx];
+      if (record.kind != Record::Kind::kImpliedBound) continue;
+      const auto row = static_cast<std::size_t>(record.index);
+      solution.row_dual[row] -= implied_transfer[idx];
+      implied_transfer[idx] = 0.0;
+      const double a = implied_coefficient[idx];
+      if (std::fabs(a) <= tol::kZeroDrop) continue;
+      const auto c = static_cast<std::size_t>(record.column);
+      const double x = solution.col_value[c];
+      if (!at_bound(x, record.value)) continue;
+      const bool at_lower = at_bound(x, original.col_lower[c]);
+      const bool at_upper = at_bound(x, original.col_upper[c]);
+      const double d = reduced_cost_of(record.column);
+      const double signed_d = sense * d;
+      const bool needs_price = (!at_lower && !at_upper && d != 0.0) ||
+                               (at_lower && !at_upper && signed_d < 0.0) ||
+                               (at_upper && !at_lower && signed_d > 0.0);
+      if (!needs_price) continue;
+      implied_transfer[idx] = d / a;
+      solution.row_dual[row] += implied_transfer[idx];
+    }
+
     double largest_change = 0.0;
     for (std::size_t r = 0; r < solution.row_dual.size(); ++r) {
       largest_change =
@@ -2738,6 +2863,14 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
       recompute[static_cast<std::size_t>(row_view.rows[k])] = true;
     }
   }
+  // A row a propagated bound moved a price onto (#485) prices every column in it anew.
+  for (std::size_t idx = 0; idx < result.records.size(); ++idx) {
+    if (implied_transfer[idx] == 0.0) continue;
+    const ColumnView row_view = original_rows.row(result.records[idx].index);
+    for (Index k = 0; k < row_view.size; ++k) {
+      recompute[static_cast<std::size_t>(row_view.rows[k])] = true;
+    }
+  }
   for (Index j = 0; j < original.num_cols(); ++j) {
     const auto u = static_cast<std::size_t>(j);
     if (!recompute[u]) continue;
@@ -2748,6 +2881,7 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     }
     solution.col_dual[u] = d;
   }
+  restore_implied_bound_basis(result, original, column_removed_at, implied_transfer, &solution);
 
   // Activities, the objective and every quality measure are recomputed against the ORIGINAL
   // model rather than carried across. That is the whole safety net: if a reduction or its

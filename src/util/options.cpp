@@ -392,15 +392,16 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"presolve_bound_propagation",
                  OptionType::Bool,
                  false,
-                 "Bound propagation from row activity in presolve (#485; Cederberg and Boyd, "
-                 "arXiv 2604.23951; Andersen and Andersen 1995, sec. 3.1-3.2): for each live "
-                 "row and each column in that row, derives tighter bounds on the column from "
-                 "the row bounds and the activity range of every other entry. Covers column "
-                 "singletons in inequality rows and doubleton inequalities as special cases; "
-                 "applies to all row sizes. No new record kind: the tightened bounds are "
-                 "reflected directly into the workspace and the existing redundant-row check "
-                 "fires when a row becomes implied. Only read when presolve is on. OFF until "
-                 "a clean A/B on main confirms the Mittelmann improvement.",
+                 "Bound propagation from row activity in presolve (#485; Brearley, Mitra and "
+                 "Williams 1975; Andersen and Andersen 1995; Cederberg and Boyd, arXiv "
+                 "2604.23951): on each live inequality row with two or more columns, each "
+                 "column's bounds implied by the row's bounds and the activity range of the "
+                 "other columns, loosened by a safety margin, rounded inward on an integer "
+                 "column. Column singletons in inequality rows and doubleton inequalities are "
+                 "special cases. Every tightened bound leaves a record: when the engine ends a "
+                 "column on it, postsolve moves the column's reduced cost onto the row that "
+                 "implied it, so the duals hold on the original model. Only read when presolve "
+                 "is on. Off until an A/B on main.",
                  0.0,
                  0.0,
                  {}});
