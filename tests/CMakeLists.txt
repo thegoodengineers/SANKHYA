@@ -83,6 +83,7 @@ add_executable(sankhya_tests
   unit/test_node_selection.cpp
   unit/test_solution_pool.cpp
   unit/test_conflict.cpp
+  unit/test_conflict_cutoff.cpp
   unit/test_heuristics.cpp
   unit/test_local_mip.cpp
   unit/test_restarts.cpp
