@@ -18,7 +18,9 @@
 namespace sankhya::mip {
 
 const char* to_string(ConflictSource source) noexcept {
-  return source == ConflictSource::kLp ? "lp" : "propagation";
+  if (source == ConflictSource::kLp) return "lp";
+  if (source == ConflictSource::kCutoff) return "cutoff";
+  return "propagation";
 }
 
 std::vector<ConflictLiteral> canonical(std::vector<ConflictLiteral> literals) {
@@ -151,7 +153,7 @@ std::vector<ConflictLiteral> minimize_conflict(
 }
 
 bool ConflictStore::add(std::vector<ConflictLiteral> literals, ConflictSource source,
-                        std::int64_t node) {
+                        std::int64_t node, double cutoff) {
   if (capacity_ == 0) return false;
   if (known_.count(literals) > 0) {
     ++duplicates_;
@@ -162,6 +164,7 @@ bool ConflictStore::add(std::vector<ConflictLiteral> literals, ConflictSource so
   Entry entry;
   entry.literals = std::move(literals);
   entry.source = source;
+  entry.cutoff = cutoff;
   entry.id = next_id_++;
   entry.created = node;
   entry.last_used = node;
@@ -213,8 +216,12 @@ std::string conflicts_to_json(const ConflictStore& store, const ConflictStats& s
   for (const ConflictStore::Entry& entry : store.entries()) {
     out += first ? "\n" : ",\n";
     first = false;
-    out += fmt::format("    {{\"id\": {}, \"source\": \"{}\", \"uses\": {}, \"literals\": [",
-                       entry.id, to_string(entry.source), entry.uses);
+    out += fmt::format("    {{\"id\": {}, \"source\": \"{}\", \"uses\": {}, ", entry.id,
+                       to_string(entry.source), entry.uses);
+    // A cutoff conflict (#503) excludes only points at or below its cutoff; the export says
+    // which, so a reader can check it (tests/unit/test_conflict_cutoff.cpp does).
+    if (std::isfinite(entry.cutoff)) out += fmt::format("\"cutoff\": {:.17g}, ", entry.cutoff);
+    out += "\"literals\": [";
     for (std::size_t k = 0; k < entry.literals.size(); ++k) {
       const ConflictLiteral& literal = entry.literals[k];
       out += fmt::format("{}[{}, \"{}\", {:.17g}]", k == 0 ? "" : ", ", literal.column,

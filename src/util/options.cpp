@@ -1468,6 +1468,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"conflict_cutoff",
+         OptionType::Bool,
+         false,
+         "MILP, with conflict_analysis on: also learn conflicts from nodes pruned by bound, "
+         "not only from infeasible ones (#503). A conflict is kept only when the safe "
+         "(Neumaier-Shcherbina) bound of the node LP's row duals over its literals, from the "
+         "global bounds, exceeds the incumbent less mip_absolute_gap. Not used for MIQP or "
+         "pool_complete. Off by default until a clean A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"conflict_minimize",
                  OptionType::Bool,
                  true,

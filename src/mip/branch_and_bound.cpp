@@ -648,6 +648,11 @@ Solution BranchAndBound::run() {
     if (can_prune(prune_bound)) {
       leave();
       ++nodes_pruned_;
+      // #503: what the node's decisions cost, learned from the global bounds - so after
+      // leave(), exactly as for a node the LP proved infeasible.
+      if (conflict_cutoff_) {
+        analyze_conflict(node_index, ConflictSource::kCutoff, &relaxation.row_dual);
+      }
       continue;
     }
 
