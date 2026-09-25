@@ -80,6 +80,7 @@
 #include <fmt/format.h>
 
 #include "../core/stop_controller.hpp"
+#include "../util/profiler.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -497,9 +498,18 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   compute_reduced_costs(false);
   make_dual_feasible();
   reset_dual_weights();
-  // #465: the Harris ratio test is the default since its A/B; the start perturbation is
-  // still off by default until its own.
-  dual_harris_ = options_.get_string("dual_ratio_test") == "harris";
+  // #465: the Harris ratio test is the LP default since its A/B ("auto"; branch and bound
+  // resolves "auto" to textbook for its own LPs, mip::with_node_lp_defaults); the start
+  // perturbation is still off by default until its own.
+  const std::string ratio_rule = options_.get_string("dual_ratio_test");
+  dual_harris_ = ratio_rule == "harris" || ratio_rule == "auto";
+  // Which rule each dual solve ran under, for whoever reads the counters: the test that
+  // pins LP solves to Harris and branch-and-bound LPs to textbook reads exactly these.
+  if (Profiler* profiler = logger_.profiler();
+      profiler != nullptr && profiler->records(ProfileMode::kBasic)) {
+    profiler->count(dual_harris_ ? "dual solves, harris ratio test"
+                                 : "dual solves, textbook ratio test");
+  }
   if (options_.get_bool("dual_perturb_costs_at_start")) perturb_costs_at_start();
 
   int degenerate_run = 0;
