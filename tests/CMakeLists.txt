@@ -74,6 +74,7 @@ add_executable(sankhya_tests
   unit/test_memory.cpp
   unit/test_pdhg_cuda_regression.cpp
   unit/test_pdhg_cuda_determinism.cpp
+  unit/test_pdhg_device_evaluation.cpp
   unit/test_pdhg_infeasibility_detection.cpp
   unit/test_gpu_device.cpp
   unit/test_gpu_memory.cpp

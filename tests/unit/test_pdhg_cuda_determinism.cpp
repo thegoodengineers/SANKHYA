@@ -118,6 +118,10 @@ TEST(PdhgCudaDeterminism, TwoSolvesGiveTheSameBitsOnBothDevicePaths) {
       EXPECT_NE(first.log.find("GPU PDHG: deterministic"), std::string::npos)
           << what << ": the deterministic device path did not run\n"
           << first.log.substr(0, 2000);
+      // The default since #478 item 3: the evaluation on the device, whose reductions are
+      // fixed-order too, so the bits below cover it.
+      EXPECT_NE(first.log.find("Evaluation on the device"), std::string::npos)
+          << what << ": the device evaluation did not run";
       if (device_loop) {
         EXPECT_NE(first.log.find("device loop on"), std::string::npos)
             << what << ": the device loop did not run";

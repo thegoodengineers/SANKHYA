@@ -1218,6 +1218,20 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"gpu_device_evaluation",
+                 OptionType::Bool,
+                 true,
+                 "Evaluate the CUDA PDHG engines' convergence and restart criteria on the "
+                 "device (#478 item 3): the unscaled KKT residuals, the duality gap and the "
+                 "restart distances of the current and the average iterate are reduced on "
+                 "the card in a fixed order and only a few scalars reach the host per "
+                 "evaluation, instead of x, y and both running sums every 40 iterations. "
+                 "false runs the host evaluation (pdhg::evaluate), which stays the "
+                 "reference; the two agree to rounding. The final point is judged on the "
+                 "host either way.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"gpu_feasibility_jump",
                  OptionType::Bool,
                  false,
