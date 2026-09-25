@@ -18,6 +18,13 @@
 //      the partials in slot order (multi_gpu_exchange.hpp).
 //   2. Three scalars per card (movement and interaction partials), downloaded and summed on
 //      the host in slot order: the step-size rule needs them on the host anyway.
+//
+// Convergence evaluation (every 40 accepted steps), with gpu_device_evaluation (the default,
+// #478 item 3): each card reduces the row side of the KKT residuals over its own rows, card
+// 0 the column side from A^T y formed by the same fixed-order exchange, and only
+// eval::kSumsPerPoint doubles per point per card reach the host, where the row sums are added
+// in slot order (pdhg_device_eval.cuh). The best point and the restart reference stay on the
+// cards. Without it, x and the gathered y go to the host for pdhg::evaluate, the reference.
 // Every reduction is order-fixed (pdhg_multi_gpu_device.hpp), so a run is reproducible bit for
 // bit, and the same device list on one card or on K cards of one architecture gives the same
 // bits.
@@ -47,6 +54,7 @@
 #include "multi_gpu_exchange.hpp"
 #include "pdhg_gpu.hpp"
 #include "pdhg_multi_gpu_device.hpp"
+#include "pdhg_multi_gpu_eval.cuh"
 #include "sankhya/pdhg.hpp"
 #include "sankhya/solve_control.hpp"
 #include "sankhya/sparse.hpp"
@@ -224,6 +232,22 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   const char* transport = multi::to_string(exchange.transport());
   logger.info("A^T y exchange: {} ({})", transport, transport_reason);
 
+  // THE EVALUATION ON THE CARDS (#478 item 3, pdhg_multi_gpu_eval.cuh): one evaluator per
+  // card over its rows, the column side on card 0 (x is replicated on every card).
+  std::unique_ptr<multi::CardEvaluation> card_evaluation;
+  if (options.get_bool("gpu_device_evaluation")) {
+    card_evaluation = std::make_unique<multi::CardEvaluation>();
+    if (!card_evaluation->init(card_ptrs, &exchange, prob, scaling)) {
+      card_evaluation.reset();
+      cudaGetLastError();
+      logger.warning("Multi-GPU PDHG: the device evaluation could not be set up; evaluating "
+                     "on the host");
+    } else {
+      logger.info("Multi-GPU PDHG: convergence evaluated on the cards, scalars to the host "
+                  "(#478)");
+    }
+  }
+
   // ---- CPU-side iterate buffers ------------------------------------------
   std::vector<double> h_x(n), h_xsum(n);
   std::vector<double> h_y(m), h_ysum(m);
@@ -276,6 +300,7 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     return true;
   };
   DeviceState& c0 = *cards[0];
+  const bool on_cards = card_evaluation != nullptr;
   const double loop_start = timer.elapsed_seconds();
 
   while (!gpu_error) {
@@ -360,50 +385,58 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     if (iteration == 0) continue;
     if (iteration % kEvaluationInterval != 0 && !no_info) continue;
     const double evaluation_start = timer.elapsed_seconds();
-
-    // x from card 0 (bit-identical on all), y gathered from every card.
-    if (cudaSetDevice(c0.device_id) != cudaSuccess || !multi::download(c0, c0.d_x, h_x.data(), n) ||
-        !gather_y(false, h_y)) {
-      gpu_error = true;
-      break;
-    }
-
-    unscale(h_x, h_y);
-    std::vector<double> cur_x = x_unscaled, cur_y = y_unscaled;
-    const Residuals cur = evaluate(prob, cur_x, cur_y, activity, reduced_costs);
-
-    const Residuals* chosen = &cur;
-    const std::vector<double>* chosen_x = &cur_x;
-    const std::vector<double>* chosen_y = &cur_y;
-
-    Residuals avg;
-    std::vector<double> avg_x, avg_y;
-    if (averaged > 0) {
-      if (cudaSetDevice(c0.device_id) != cudaSuccess ||
-          !multi::download(c0, c0.d_xsum, h_xsum.data(), n) || !gather_y(true, h_ysum)) {
+    const bool have_average = averaged > 0;
+    Residuals cur, avg;
+    double restart_dx = 0.0, restart_dy = 0.0;  // on the cards: formed with the current point
+    std::vector<double> cur_x, cur_y, avg_x, avg_y;  // host path only
+    if (on_cards) {
+      if (!card_evaluation->evaluate(have_average ? static_cast<double>(averaged) : 0.0, &cur,
+                                     &avg, &restart_dx, &restart_dy)) {
         gpu_error = true;
         break;
       }
-      const double cnt = static_cast<double>(averaged);
-      std::vector<double> xav(n), yav(m);
-      for (std::size_t j = 0; j < n; ++j) xav[j] = h_xsum[j] / cnt;
-      for (std::size_t i = 0; i < m; ++i) yav[i] = h_ysum[i] / cnt;
-      unscale(xav, yav);
-      avg_x = x_unscaled;
-      avg_y = y_unscaled;
-      avg = evaluate(prob, avg_x, avg_y, activity, reduced_costs);
-      if (avg.worst() < cur.worst()) {
-        chosen = &avg;
-        chosen_x = &avg_x;
-        chosen_y = &avg_y;
+    } else {
+      // x from card 0 (bit-identical on all), y gathered from every card.
+      if (cudaSetDevice(c0.device_id) != cudaSuccess ||
+          !multi::download(c0, c0.d_x, h_x.data(), n) || !gather_y(false, h_y)) {
+        gpu_error = true;
+        break;
+      }
+      unscale(h_x, h_y);
+      cur_x = x_unscaled;
+      cur_y = y_unscaled;
+      cur = evaluate(prob, cur_x, cur_y, activity, reduced_costs);
+      if (have_average) {
+        if (cudaSetDevice(c0.device_id) != cudaSuccess ||
+            !multi::download(c0, c0.d_xsum, h_xsum.data(), n) || !gather_y(true, h_ysum)) {
+          gpu_error = true;
+          break;
+        }
+        const double cnt = static_cast<double>(averaged);
+        std::vector<double> xav(n), yav(m);
+        for (std::size_t j = 0; j < n; ++j) xav[j] = h_xsum[j] / cnt;
+        for (std::size_t i = 0; i < m; ++i) yav[i] = h_ysum[i] / cnt;
+        unscale(xav, yav);
+        avg_x = x_unscaled;
+        avg_y = y_unscaled;
+        avg = evaluate(prob, avg_x, avg_y, activity, reduced_costs);
       }
     }
+    const bool use_average = have_average && avg.worst() < cur.worst();
+    auto keep_chosen = [&]() -> bool {
+      if (on_cards) return card_evaluation->keep_best(use_average);
+      best_x = use_average ? avg_x : cur_x;
+      best_y = use_average ? avg_y : cur_y;
+      return true;
+    };
 
-    const Residuals& better = *chosen;
+    const Residuals& better = use_average ? avg : cur;
     if (better.worst() < best.worst()) {
       best = better;
-      best_x = *chosen_x;
-      best_y = *chosen_y;
+      if (!keep_chosen()) {
+        gpu_error = true;
+        break;
+      }
     }
 
     if (!logged_table) {
@@ -417,9 +450,8 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
         better.meets_request(tolerance) && (stop_at_request || better.meets_project_standard());
     if (stop_here) {
       best = better;
-      best_x = *chosen_x;
-      best_y = *chosen_y;
-      converged = true;
+      gpu_error = !keep_chosen();
+      converged = !gpu_error;
       evaluation_seconds += timer.elapsed_seconds() - evaluation_start;
       break;
     }
@@ -433,10 +465,14 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
           since >= std::max<Count>(kEvaluationInterval,
                                    static_cast<Count>(0.36 * static_cast<double>(iteration)));
       if (sufficient || artificial) {
-        std::vector<double> dx_rs(n), dy_rs(m);
-        for (std::size_t j = 0; j < n; ++j) dx_rs[j] = h_x[j] - x_restart[j];
-        for (std::size_t i = 0; i < m; ++i) dy_rs[i] = h_y[i] - y_restart[i];
-        const double dxn = euclidean_norm(dx_rs), dyn = euclidean_norm(dy_rs);
+        double dxn = restart_dx, dyn = restart_dy;
+        if (!on_cards) {
+          std::vector<double> dx_rs(n), dy_rs(m);
+          for (std::size_t j = 0; j < n; ++j) dx_rs[j] = h_x[j] - x_restart[j];
+          for (std::size_t i = 0; i < m; ++i) dy_rs[i] = h_y[i] - y_restart[i];
+          dxn = euclidean_norm(dx_rs);
+          dyn = euclidean_norm(dy_rs);
+        }
         if (dxn > 1e-12 && dyn > 1e-12) {
           constexpr double theta = 0.5;
           omega = std::exp(theta * std::log(dyn / dxn) + (1.0 - theta) * std::log(omega));
@@ -456,8 +492,15 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
           break;
         }
         averaged = 0;
-        x_restart = h_x;
-        y_restart = h_y;
+        if (on_cards) {
+          if (!card_evaluation->set_restart()) {
+            gpu_error = true;
+            break;
+          }
+        } else {
+          x_restart = h_x;
+          y_restart = h_y;
+        }
         restart_kkt = kkt;
         last_restart = iteration;
         ++restarts;
@@ -468,6 +511,19 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     evaluation_seconds += timer.elapsed_seconds() - evaluation_start;
   }  // end while
   const double loop_seconds = timer.elapsed_seconds() - loop_start;
+
+  // On the cards the best point stayed there, scaled: x from card 0, y from every card's
+  // rows, unscaled as the host path does.
+  if (on_cards && !gpu_error) {
+    std::vector<double> xs(n), ys(m);
+    if (!card_evaluation->download_best(&xs, &ys)) {
+      gpu_error = true;
+    } else {
+      unscale(xs, ys);
+      best_x = x_unscaled;
+      best_y = y_unscaled;
+    }
+  }
 
   if (gpu_error) {
     Options remaining = options;
@@ -544,15 +600,15 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   logger.info("Relative residuals: primal {:.3e}, dual {:.3e}, gap {:.3e}", final_r.primal,
               final_r.dual, final_r.gap);
   // The split the scaling measurements (#295) need: the device loop per step attempt
-  // (accepted or rejected), with the host-side evaluation every kEvaluationInterval
-  // iterations taken out, and that evaluation on its own.
+  // (accepted or rejected), with the evaluation every kEvaluationInterval iterations taken
+  // out, and that evaluation on its own, on the cards or on the host.
   const double device_seconds = loop_seconds - evaluation_seconds;
   logger.info(
-      "Timing: loop {:.3f}s, {} step attempts, {:.1f} us per attempt on the cards; host "
-      "evaluation {:.3f}s",
+      "Timing: loop {:.3f}s, {} step attempts, {:.1f} us per attempt on the cards; "
+      "evaluation {:.3f}s on the {}",
       loop_seconds, attempts,
       attempts > 0 ? 1e6 * device_seconds / static_cast<double>(attempts) : 0.0,
-      evaluation_seconds);
+      evaluation_seconds, on_cards ? "cards" : "host");
   if (!solution.message.empty()) logger.info("{}", solution.message);
   return solution;
 }

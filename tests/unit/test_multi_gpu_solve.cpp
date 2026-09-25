@@ -264,6 +264,32 @@ TEST(MultiGpuTwoCards, HostStagedFallbackGivesTheSameBitsAsPeerToPeer) {
   }
 }
 
+TEST(MultiGpuTwoCards, EvaluationOnTheCardsMatchesTheHostEvaluation) {
+  // #478 item 3: the KKT residuals, gap and restart distances reduced on the cards (the
+  // default) against pdhg::evaluate on the host (gpu_device_evaluation=false, the
+  // reference). The two agree to rounding (test_pdhg_device_evaluation.cpp), so a restart can
+  // fall one evaluation apart and the runs are held to the stopping tolerance, not the bit;
+  // each is bitwise repeatable on its own (TwoRunsAndOneOrTwoCardsGiveTheSameBits runs the
+  // default, the cards).
+  REQUIRE_TWO_CARDS();
+  Logger silent(nullptr);
+  Options host = solve_options();
+  host.set_bool("gpu_device_evaluation", false);
+  const SyntheticLp lp = synthetic_kkt_lp(5000, 5000, 5, 4, 800, 478);
+  int agreed = 0, compared = 0;
+  for (const std::string& name : {std::string("sc105"), std::string("stocfor1"),
+                                  std::string("israel"), std::string("synthetic")}) {
+    const Model model = name == "synthetic" ? lp.model : read_netlib(name);
+    const Solution cards = gpu::solve_pdhg_multi_gpu(model, solve_options(), {0, 1}, silent);
+    const Solution on_host = gpu::solve_pdhg_multi_gpu(model, host, {0, 1}, silent);
+    ASSERT_EQ(cards.algorithm, "pdhg-cuda-multi") << name;
+    ASSERT_EQ(on_host.algorithm, "pdhg-cuda-multi") << name;
+    ++compared;
+    agreed += agrees(on_host, cards, name + " (host evaluation against the cards)") ? 1 : 0;
+  }
+  EXPECT_EQ(agreed, compared);
+}
+
 #else  // no CUDA backend in this build: the same tests, visibly skipped
 
 TEST(MultiGpuTwoCards, NineNetlibInstancesMatchOneCardAtTheStoppingTolerance) {
@@ -276,6 +302,9 @@ TEST(MultiGpuTwoCards, TwoRunsAndOneOrTwoCardsGiveTheSameBits) {
   GTEST_SKIP() << "CUDA backend not compiled in (SANKHYA_ENABLE_CUDA=OFF)";
 }
 TEST(MultiGpuTwoCards, HostStagedFallbackGivesTheSameBitsAsPeerToPeer) {
+  GTEST_SKIP() << "CUDA backend not compiled in (SANKHYA_ENABLE_CUDA=OFF)";
+}
+TEST(MultiGpuTwoCards, EvaluationOnTheCardsMatchesTheHostEvaluation) {
   GTEST_SKIP() << "CUDA backend not compiled in (SANKHYA_ENABLE_CUDA=OFF)";
 }
 
