@@ -89,12 +89,11 @@ Model build_pump_model(const Model& original, const std::vector<Index>& int_cols
   const Index d_start = n_orig;
   pump.matrix.reset(pump.num_rows() + n_int, pump.num_cols());
   // Rebuild matrix with original entries first, then auxiliary rows.
-  // Copy original matrix.
-  for (Index i = 0; i < original.num_rows(); ++i) {
-    for (Index p = original.matrix.row_start()[static_cast<std::size_t>(i)];
-         p < original.matrix.row_start()[static_cast<std::size_t>(i) + 1]; ++p) {
-      pump.matrix.add_entry(i, original.matrix.column()[static_cast<std::size_t>(p)],
-                            original.matrix.value()[static_cast<std::size_t>(p)]);
+  // Copy original matrix (CSC: iterate columns, read ColumnView).
+  for (Index j = 0; j < original.num_cols(); ++j) {
+    const ColumnView col = original.matrix.column(j);
+    for (Index k = 0; k < col.size; ++k) {
+      pump.matrix.add_entry(col.rows[k], j, col.values[k]);
     }
   }
   // Add auxiliary rows.
@@ -134,7 +133,7 @@ feasibility_pump(const Model& model, const Options& options) {
   Options lp_opts;
   lp_opts.set_bool("log_to_console", false);
   lp_opts.set_bool("presolve", false);
-  Logger silent = Logger::null();
+  Logger silent(nullptr);
   // Treat the model as a pure LP (set all columns continuous) for the relaxation.
   Model relaxed = model;
   for (auto& t : relaxed.col_type) t = VarType::kContinuous;
@@ -228,7 +227,7 @@ fix_and_propagate(const Model& model, const Options& options) {
   Options lp_opts;
   lp_opts.set_bool("log_to_console", false);
   lp_opts.set_bool("presolve", false);
-  Logger silent = Logger::null();
+  Logger silent(nullptr);
   Model relaxed = model;
   for (auto& t : relaxed.col_type) t = VarType::kContinuous;
   const Solution init = solve_pdhg_gpu(relaxed, lp_opts, silent);

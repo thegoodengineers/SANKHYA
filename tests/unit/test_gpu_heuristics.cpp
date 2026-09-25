@@ -109,7 +109,8 @@ TEST(GpuHeuristics, FixAndPropFindsAFeasiblePointOnSetPartition) {
   Options o = base_options();
   o.set_bool("gpu_fix_and_prop", true);
   const auto sol = gpu::fix_and_propagate(model, o);
-  ASSERT_TRUE(sol.has_value()) << "fix-and-prop should find a feasible point on set-partition(8)";
+  ASSERT_TRUE(sol.has_value())
+      << "fix-and-prop should find a feasible point on set-partition(8)";
   double sum = 0.0;
   for (double v : sol->x) sum += v;
   EXPECT_NEAR(sum, 1.0, 1e-6);
