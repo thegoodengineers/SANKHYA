@@ -102,15 +102,17 @@ bool comes_before(const DualBreakpoint& x, const DualBreakpoint& y) {
 /// replaces its choice only on a strictly larger pivot.
 template <typename InGroup>
 Index largest_pivot(const std::vector<DualBreakpoint>& breakpoints, InGroup in_group) {
-  const DualBreakpoint* best = nullptr;
-  for (const DualBreakpoint& b : breakpoints) {
+  std::size_t best = breakpoints.size();
+  for (std::size_t i = 0; i < breakpoints.size(); ++i) {
+    const DualBreakpoint& b = breakpoints[i];
     if (!in_group(b)) continue;
-    if (best == nullptr || b.alpha_abs > best->alpha_abs ||
-        (b.alpha_abs == best->alpha_abs && comes_before(b, *best))) {
-      best = &b;
+    if (best == breakpoints.size() || b.alpha_abs > breakpoints[best].alpha_abs ||
+        (b.alpha_abs == breakpoints[best].alpha_abs && comes_before(b, breakpoints[best]))) {
+      best = i;
     }
   }
-  return best->column;
+  // Never empty where it is called: the group always holds the breakpoint that bounds it.
+  return best == breakpoints.size() ? Index{-1} : breakpoints[best].column;
 }
 
 }  // namespace
