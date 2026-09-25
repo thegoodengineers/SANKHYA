@@ -25,27 +25,44 @@ namespace {
 constexpr const char* kHarris = "dual solves, harris ratio test";
 constexpr const char* kTextbook = "dual solves, textbook ratio test";
 
-/// max 5 x1 + 4 x2 + 3 x3 over three knapsack rows, x in [0, 10]; integer when `integer`.
-/// The relaxation's optimum is fractional, so the MIP has to branch.
-Model knapsack(bool integer) {
+/// A model whose search must branch below the root, so that node LPs run: integer a in
+/// [0, 5] and continuous b in [-10, 10] with a + b >= 2.5 and a - b >= 0.5 (so a >= 1.5,
+/// which no single row shows), minimising a; and a c-block of three integer c in [0, 1]
+/// and a continuous s >= 0 with 2 c1 + 2 c2 + 2 c3 - s <= 3, maximising the c at a cost on
+/// s, fractional wherever it is branched. The same model #502's tests branch on.
+/// Continuous throughout when `integer` is false.
+Model branching_model(bool integer) {
   Model m;
-  m.sense = ObjSense::kMaximize;
-  m.col_cost = {5.0, 4.0, 3.0};
-  m.col_lower.assign(3, 0.0);
-  m.col_upper.assign(3, 10.0);
-  m.col_type.assign(3, integer ? VarType::kInteger : VarType::kContinuous);
-  const double a[3][3] = {{2.0, 3.0, 1.0}, {4.0, 1.0, 2.0}, {3.0, 4.0, 2.0}};
-  m.matrix.reset(3, 3);
-  for (Index i = 0; i < 3; ++i) {
-    for (Index j = 0; j < 3; ++j) m.matrix.add_entry(i, j, a[i][j]);
-  }
-  m.row_lower.assign(3, -kInfinity);
-  m.row_upper = {5.5, 11.0, 8.5};
+  m.col_cost = {1.0, 0.0, -10.0, -10.0, -10.0, 7.0};
+  m.col_lower = {0.0, -10.0, 0.0, 0.0, 0.0, 0.0};
+  m.col_upper = {5.0, 10.0, 1.0, 1.0, 1.0, 100.0};
+  m.col_type = {VarType::kInteger, VarType::kContinuous, VarType::kInteger,
+                VarType::kInteger, VarType::kInteger,    VarType::kContinuous};
+  if (!integer) m.col_type.assign(6, VarType::kContinuous);
+  m.matrix.reset(3, 6);
+  m.matrix.add_entry(0, 0, 1.0);
+  m.matrix.add_entry(0, 1, 1.0);
+  m.matrix.add_entry(1, 0, 1.0);
+  m.matrix.add_entry(1, 1, -1.0);
+  for (Index j = 2; j <= 4; ++j) m.matrix.add_entry(2, j, 2.0);
+  m.matrix.add_entry(2, 5, -1.0);
+  m.row_lower = {2.5, 0.5, -kInfinity};
+  m.row_upper = {kInfinity, kInfinity, 3.0};
   m.matrix.finalize();
-  m.hessian.reset(3, 3);
+  m.hessian.reset(6, 6);
   m.hessian.finalize();
   EXPECT_EQ(m.validate(), "");
   return m;
+}
+
+/// Presolve, root cuts and objective integrality off: each would close these small models
+/// before a node LP ran, and a test of the node LPs' rule needs node LPs.
+Options bare() {
+  Options o;
+  o.set_bool("presolve", false);
+  o.set_bool("enable_root_cuts", false);
+  o.set_bool("mip_objective_integrality", false);
+  return o;
 }
 
 struct Profiled {
@@ -56,8 +73,6 @@ struct Profiled {
 Profiled solve_profiled(const Model& model, Options options) {
   testing::TempFile file("", ".json");
   options.set_bool("log_to_console", false);
-  // Presolve would solve models this small outright, and no simplex would run at all.
-  options.set_bool("presolve", false);
   options.set_string("profile", "basic");
   options.set_string("profile_out", file.path());
   Profiled out;
@@ -75,38 +90,39 @@ std::int64_t counter(const Profiled& p, const char* name) {
 }
 
 TEST(DualRatioDefault, AnLpSolveRunsUnderHarris) {
-  const Profiled lp = solve_profiled(knapsack(false), Options());
+  const Profiled lp = solve_profiled(branching_model(false), bare());
   ASSERT_EQ(lp.solution.status, SolveStatus::kOptimal) << lp.solution.message;
   EXPECT_GT(counter(lp, kHarris), 0) << lp.counters.dump(2);
   EXPECT_EQ(counter(lp, kTextbook), 0) << lp.counters.dump(2);
 }
 
 TEST(DualRatioDefault, BranchAndBoundLpsKeepTheTextbookRule) {
-  const Profiled mip = solve_profiled(knapsack(true), Options());
+  const Profiled mip = solve_profiled(branching_model(true), bare());
   ASSERT_EQ(mip.solution.status, SolveStatus::kOptimal) << mip.solution.message;
+  ASSERT_GT(mip.solution.nodes, 1) << "the test needs the search to branch";
   EXPECT_GT(counter(mip, kTextbook), 0) << mip.counters.dump(2);
   EXPECT_EQ(counter(mip, kHarris), 0) << mip.counters.dump(2);
 }
 
 TEST(DualRatioDefault, AnExplicitRuleAppliesToBoth) {
-  Options harris;
+  Options harris = bare();
   harris.set_string("dual_ratio_test", "harris");
-  const Profiled mip = solve_profiled(knapsack(true), harris);
+  const Profiled mip = solve_profiled(branching_model(true), harris);
   ASSERT_EQ(mip.solution.status, SolveStatus::kOptimal) << mip.solution.message;
   EXPECT_GT(counter(mip, kHarris), 0) << mip.counters.dump(2);
   EXPECT_EQ(counter(mip, kTextbook), 0) << mip.counters.dump(2);
 
-  Options textbook;
+  Options textbook = bare();
   textbook.set_string("dual_ratio_test", "textbook");
-  const Profiled lp = solve_profiled(knapsack(false), textbook);
+  const Profiled lp = solve_profiled(branching_model(false), textbook);
   ASSERT_EQ(lp.solution.status, SolveStatus::kOptimal) << lp.solution.message;
   EXPECT_GT(counter(lp, kTextbook), 0) << lp.counters.dump(2);
   EXPECT_EQ(counter(lp, kHarris), 0) << lp.counters.dump(2);
 
   // And the two defaults reach the same optimum as the explicit rules.
-  EXPECT_NEAR(solve_profiled(knapsack(false), Options()).solution.objective,
+  EXPECT_NEAR(solve_profiled(branching_model(false), bare()).solution.objective,
               lp.solution.objective, 1e-9);
-  EXPECT_NEAR(solve_profiled(knapsack(true), Options()).solution.objective,
+  EXPECT_NEAR(solve_profiled(branching_model(true), bare()).solution.objective,
               mip.solution.objective, 1e-9);
 }
 
