@@ -32,13 +32,7 @@ import pulp
 
 import sankhya
 
-# PuLP 4.0 replaced the LpStatus* constants with the LpSolveStatus enum and reworked the
-# LpSolver interface this class implements. Refuse it with a clear message rather than fail
-# later with an AttributeError; the port to PuLP 4 is tracked as its own issue.
-if int(getattr(pulp, "__version__", "0").split(".")[0]) >= 4:
-    raise ImportError(
-        f"sankhya.adapters.pulp_solver supports PuLP 2.x and 3.x; PuLP {pulp.__version__} "
-        "changed the status codes and the solver interface. Install 'pulp<4'.")
+# (The PuLP 4.x version restriction was removed in #690; capability detection is used instead)
 
 __all__ = ["SANKHYA"]
 
@@ -68,7 +62,12 @@ class SANKHYA(pulp.LpSolver):
     def available(self) -> bool:
         return True
 
-    def actualSolve(self, lp: "pulp.LpProblem") -> int:
+    def actualSolve(self, lp: "pulp.LpProblem", **kwargs: object) -> object:
+        is_pulp_4 = hasattr(pulp, "LpSolveStatus")
+        if is_pulp_4:
+            from pulp.apis.core import clocks
+            start = clocks()
+
         # mip=False means "solve the LP relaxation": no column is marked integer, so the
         # model IS the relaxation rather than a MILP solve() would have to be told to relax.
         model, var_index = _build_model(lp, relax_integers=not self.mip)
@@ -79,13 +78,32 @@ class SANKHYA(pulp.LpSolver):
             solver_options.setdefault("time_limit", float(self.timeLimit))
 
         options = sankhya.Options(**solver_options)
-        start = None
+        warm_start = None
         if self._warm_start:
-            start = getattr(lp, "_sankhya_last_result", None)
-        result = model.solve(options, start=start)
+            warm_start = getattr(lp, "_sankhya_last_result", None)
+        result = model.solve(options, start=warm_start)
         lp._sankhya_last_result = result
 
         _assign_values(lp, var_index, result)
+
+        if is_pulp_4:
+            status_map = {
+                "optimal": pulp.LpSolveStatus.Optimal,
+                "infeasible": pulp.LpSolveStatus.Infeasible,
+                "unbounded": pulp.LpSolveStatus.Unbounded,
+                "infeasible_or_unbounded": pulp.LpSolveStatus.Unbounded,
+                "model_error": pulp.LpSolveStatus.Undefined,
+                "numerical_error": pulp.LpSolveStatus.NumericalError,
+                "not_solved": pulp.LpSolveStatus.NotSolved,
+                "feasible": pulp.LpSolveStatus.Stopped,
+                "iteration_limit": pulp.LpSolveStatus.IterationLimit,
+                "time_limit": pulp.LpSolveStatus.TimeLimit,
+                "node_limit": pulp.LpSolveStatus.NodeLimit,
+                "interrupted": pulp.LpSolveStatus.Interrupted,
+            }
+            status = status_map.get(result.status, pulp.LpSolveStatus.Undefined)
+            return self.buildStats(lp, status, has_solution=result.claims_a_point, start=start)
+
         lp.status = _STATUS_TO_PULP.get(result.status, pulp.LpStatusUndefined)
         # solutionStatus (added in newer PuLP) distinguishes "not proven" cases the plain
         # status cannot; set it when the attribute exists so callers that read it get the
@@ -97,21 +115,21 @@ class SANKHYA(pulp.LpSolver):
 
 
 _STATUS_TO_PULP = {
-    "optimal": pulp.LpStatusOptimal,
-    "infeasible": pulp.LpStatusInfeasible,
-    "unbounded": pulp.LpStatusUnbounded,
-    "infeasible_or_unbounded": pulp.LpStatusUnbounded,
-    "model_error": pulp.LpStatusUndefined,
-    "numerical_error": pulp.LpStatusUndefined,
-    "not_solved": pulp.LpStatusNotSolved,
+    "optimal": getattr(pulp, "LpStatusOptimal", 1),
+    "infeasible": getattr(pulp, "LpStatusInfeasible", -1),
+    "unbounded": getattr(pulp, "LpStatusUnbounded", -2),
+    "infeasible_or_unbounded": getattr(pulp, "LpStatusUnbounded", -2),
+    "model_error": getattr(pulp, "LpStatusUndefined", -3),
+    "numerical_error": getattr(pulp, "LpStatusUndefined", -3),
+    "not_solved": getattr(pulp, "LpStatusNotSolved", 0),
     # A point exists but optimality (feasible) or even a point (the limits without one) was
     # not proven: PuLP's closest word is "not solved", not "optimal" - see the module
     # docstring's STATUS MAPPING note.
-    "feasible": pulp.LpStatusNotSolved,
-    "iteration_limit": pulp.LpStatusNotSolved,
-    "time_limit": pulp.LpStatusNotSolved,
-    "node_limit": pulp.LpStatusNotSolved,
-    "interrupted": pulp.LpStatusNotSolved,
+    "feasible": getattr(pulp, "LpStatusNotSolved", 0),
+    "iteration_limit": getattr(pulp, "LpStatusNotSolved", 0),
+    "time_limit": getattr(pulp, "LpStatusNotSolved", 0),
+    "node_limit": getattr(pulp, "LpStatusNotSolved", 0),
+    "interrupted": getattr(pulp, "LpStatusNotSolved", 0),
 }
 
 
@@ -167,7 +185,11 @@ def _build_model(lp: "pulp.LpProblem", relax_integers: bool = False):
     if lp.objective is not None:
         model.set_objective_offset(float(lp.objective.constant))
 
-    for name, constraint in lp.constraints.items():
+    constraints = lp.constraints() if callable(lp.constraints) else lp.constraints.items()
+    if callable(lp.constraints):
+        constraints = [(c.name, c) for c in lp.constraints()]
+
+    for name, constraint in constraints:
         coefficients = {
             var_index[var.name]: float(coeff) for var, coeff in constraint.items()
         }
