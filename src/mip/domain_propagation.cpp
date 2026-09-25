@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <limits>
 
+#include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
 #ifdef SANKHYA_ENABLE_CUDA
@@ -146,16 +147,33 @@ JacobiPropagation propagate_jacobi(const Model& model, const RowMajor& rows,
   return result;
 }
 
-Count propagate_root_bounds(Model* model, Logger& logger) {
+Count propagate_root_bounds(Model* model, const Options& options, Logger& logger) {
   const int rounds = tol::kDomainPropagationRounds;
   const double integrality = tol::kIntegrality;
+  // Wall time of the whole propagation as the search pays for it: on the device that
+  // includes building the row-major copy and the transfers to and from the card.
+  const Timer clock;
+#ifndef SANKHYA_ENABLE_CUDA
+  (void)options;  // only the CUDA build has a backend to choose
+#endif
 #ifdef SANKHYA_ENABLE_CUDA
+  const bool device_allowed = options.get_string("domain_prop_backend") != "cpu";
   const gpu::PropResult device =
-      gpu::propagate_bounds(*model, model->col_lower, model->col_upper, rounds, integrality);
+      device_allowed ? gpu::propagate_bounds(*model, model->col_lower, model->col_upper, rounds,
+                                             integrality)
+                     : gpu::PropResult{};
   if (device.ran) {
-    logger.info("Domain propagation (#510, GPU): {} round(s), {} bound(s) tightened{}",
-                device.rounds, device.tightened,
-                device.infeasible ? "; the box is empty, left for the search to prove" : "");
+    logger.info(
+        "Domain propagation (#510, GPU): {} round(s), {} bound(s) tightened in {:.6f}s{}",
+        device.rounds, device.tightened, clock.elapsed_seconds(),
+        device.infeasible ? "; the box is empty, left for the search to prove" : "");
+    // Where the device time went: the context is made once per process, so on a solve
+    // that has already touched the card it is the probe alone.
+    const gpu::PropPhases& t = device.phases;
+    logger.verbose(
+        "Domain propagation (#510, GPU) phases: context {:.6f}s, host copy {:.6f}s, allocate "
+        "{:.6f}s, upload {:.6f}s, rounds {:.6f}s, download {:.6f}s, release {:.6f}s",
+        t.context, t.host, t.allocate, t.upload, t.rounds, t.download, t.release);
     if (device.infeasible) return 0;
     model->col_lower = device.col_lb;
     model->col_upper = device.col_ub;
@@ -166,11 +184,9 @@ Count propagate_root_bounds(Model* model, Logger& logger) {
   std::vector<double> upper = model->col_upper;
   const JacobiPropagation cpu =
       propagate_jacobi(*model, row_major(*model), &lower, &upper, rounds, integrality);
-  logger.info(
-      "Domain propagation (#510, CPU: no CUDA device): {} round(s), {} bound(s) "
-      "tightened{}",
-      cpu.rounds, cpu.tightened,
-      cpu.infeasible ? "; the box is empty, left for the search to prove" : "");
+  logger.info("Domain propagation (#510, CPU): {} round(s), {} bound(s) tightened in {:.6f}s{}",
+              cpu.rounds, cpu.tightened, clock.elapsed_seconds(),
+              cpu.infeasible ? "; the box is empty, left for the search to prove" : "");
   if (cpu.infeasible) return 0;
   model->col_lower = std::move(lower);
   model->col_upper = std::move(upper);

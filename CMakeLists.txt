@@ -251,6 +251,7 @@ set(SANKHYA_CORE_SOURCES
   src/core/deterministic_mode.cpp
   src/core/presolve_pipeline.cpp
   src/core/engine_selection.cpp
+  src/core/engine_features.cpp
   src/core/engine_race.cpp
   src/core/kkt_check.cpp
   src/solver_engine/solver_engine.cpp
@@ -275,6 +276,8 @@ set(SANKHYA_CORE_SOURCES
   src/la/ldl_supernodal.cpp
   src/la/lu.cpp
   src/la/lu_eliminate.cpp
+  src/la/lu_hyper.cpp
+  src/la/normal_pattern.cpp
   src/la/scaling.cpp
   src/la/sparse.cpp
   src/simplex/dense_lu.cpp
@@ -295,6 +298,8 @@ set(SANKHYA_CORE_SOURCES
   src/mip/branch_and_bound_safe.cpp
   src/mip/branch_and_bound_certificate.cpp
   src/mip/certificate_writer.cpp
+  src/mip/certificate_cuts.cpp
+  src/mip/cut_derivation.cpp
   src/mip/certificate_sections.cpp
   src/mip/branch_and_bound_fixpoint.cpp
   src/mip/flow_cover_cuts.cpp
@@ -323,18 +328,25 @@ set(SANKHYA_CORE_SOURCES
   src/presolve/coef_tightening.cpp
   src/presolve/presolve.cpp
   src/presolve/probing.cpp
+  src/ipm/dense_columns.cpp
+  src/ipm/column_side.cpp
+  src/ipm/centrality.cpp
   src/ipm/ipm.cpp
   src/ipm/model_space.cpp
+  src/ipm/proximal_system.cpp
   src/pdhg/pdhg.cpp
   src/pdhg/pdhg_evaluate.cpp
+  src/pdhg/pdhg_certificate.cpp
   src/pdhg/pdhg_halpern.cpp
   src/gpu/gpu_memory.cpp
   src/gpu/ipm_cudss.cpp
   src/gpu/multi_device.cpp
+  src/simplex/dual_ratio.cpp
   src/simplex/dual_simplex.cpp
   src/simplex/primal_simplex.cpp
   src/simplex/crossover.cpp
   src/simplex/simplex_push.cpp
+  src/simplex/simplex_report.cpp
   src/simplex/ranging.cpp
   src/simplex/factor_cache.cpp
   src/util/logging.cpp
@@ -360,7 +372,10 @@ target_link_libraries(sankhya_objects
   # header-only, so PRIVATE keeps it out of every consumer's include path.
   PRIVATE nlohmann_json::nlohmann_json sankhya_flags)
 
-target_compile_definitions(sankhya_objects PRIVATE
+# On version.cpp alone, the only file that reads them. As target-wide definitions the
+# commit hash was on every compile line of the library, so each commit changed every
+# object's command line and a compiler cache (CI uses ccache) could never hit.
+set_property(SOURCE src/util/version.cpp PROPERTY COMPILE_DEFINITIONS
   SANKHYA_VERSION="${PROJECT_VERSION}"
   SANKHYA_GIT_COMMIT="${SANKHYA_GIT_COMMIT}"
   SANKHYA_BUILD_TYPE="$<CONFIG>"

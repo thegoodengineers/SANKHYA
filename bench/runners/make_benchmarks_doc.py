@@ -33,6 +33,7 @@ import kkt_crossings  # the relative-KKT crossing tables (#486)
 import latest_result
 import maros_meszaros_doc  # the QP section (#491), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
+from gpu_doc import gpu_datacenter_table, gpu_real_section  # 1g.1 and 1g.3 (#488)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
@@ -2282,106 +2283,7 @@ def gpu_section(path: Path | None) -> str:
     return chr(10).join(lines)
 
 
-def gpu_real_section(path: Path | None) -> str:
-    """CPU vs GPU PDHG on non-synthetic instances (#446)."""
-    if path is None:
-        return chr(10).join([
-            "Not yet run on this tier (the datacenter card's run is in 1g.3). Reproduce with:",
-            "",
-            "```",
-            "python bench/runners/fetch_mittelmann.py",
-            "python bench/runners/gpu_real_instances.py --binary build_gpu/sankhya",
-            "```",
-            "",
-            "> **Needs a CUDA-capable card and a CUDA build** (`-DSANKHYA_ENABLE_CUDA=ON`, the "
-            "CUDA runtime installed). On a build without CUDA, or a machine whose card fails the "
-            "device checks, `gpu=true` warns and runs on the CPU, so both arms of the runner "
-            "would be CPU solves and the GPU column would mean nothing: do not run it there.",
-            "",
-        ])
-    rows = read_csv(path)
-    if not rows:
-        return "No GPU real-instance results yet." + chr(10)
-
-    commit = rows[0].get("git_commit", "unknown")
-    machine = rows[0].get("machine", "unknown")
-    gpu = rows[0].get("gpu", "") or "not recorded"
-    if "-dirty" in commit:
-        return (f"`{path.name}` is stamped `{commit}`: produced from a modified tree. "
-                "Re-run on a clean checkout of a main commit." + chr(10))
-    instances = sorted({r["instance"] for r in rows})
-
-    def lookup_real(instance: str, alg: str, tol: float) -> dict | None:
-        for r in rows:
-            try:
-                same_tol = abs(float(r.get("tolerance", "nan")) - tol) <= 1e-3 * tol
-            except ValueError:
-                same_tol = False
-            if r.get("instance") == instance and r.get("algorithm") == alg and same_tol:
-                return r
-        return None
-
-    def fmt_s(r: dict | None) -> str:
-        return f"{float(r['seconds']):.3f}" if r else "—"
-
-    def fmt_speedup(cpu: dict | None, gpu_r: dict | None) -> str:
-        if not cpu or not gpu_r:
-            return "—"
-        try:
-            s = float(cpu["seconds"]) / float(gpu_r["seconds"])
-            return f"{s:.2f}×"
-        except (ZeroDivisionError, ValueError):
-            return "—"
-
-    lines = [
-        f"Source CSV: `bench/results/{path.name}`  ",
-        f"Commit `{commit}` · machine `{machine}`  ",
-        f"GPU: {gpu}",
-        "",
-        "Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance. "
-        "Report the result whichever way it goes.",
-        "",
-        "| instance | rows | CPU 1e-4 (s) | GPU 1e-4 (s) | speedup | CPU 1e-8 (s) | GPU 1e-8 (s) | speedup |",
-        "|----------|-----:|-------------:|-------------:|--------:|-------------:|-------------:|--------:|",
-    ]
-    for inst in instances:
-        cpu4 = lookup_real(inst, "pdhg-cpu", 1e-4)
-        gpu4 = lookup_real(inst, "pdhg-cuda", 1e-4)
-        cpu8 = lookup_real(inst, "pdhg-cpu", 1e-8)
-        gpu8 = lookup_real(inst, "pdhg-cuda", 1e-8)
-        nrows = cpu4.get("rows", "") if cpu4 else ""
-        lines.append(
-            f"| `{inst}` | {nrows} | {fmt_s(cpu4)} | {fmt_s(gpu4)} | {fmt_speedup(cpu4, gpu4)} "
-            f"| {fmt_s(cpu8)} | {fmt_s(gpu8)} | {fmt_speedup(cpu8, gpu8)} |"
-        )
-    lines.append("")
-    return chr(10).join(lines)
-
-
 GPU_CARDS = ("l4", "l40s", "a100", "h100", "h200", "v100")
-
-
-def gpu_datacenter_table(path: Path) -> str:
-    """The datacenter runner's CSV (#488) as a table: one row per instance, mode and
-    tolerance; the solver's own clock from the last repeat beside the median WALL of the
-    repeats (process start-up and, on the card, context creation included) with their
-    spread; and the forced-count pair (iteration_limit set) that isolates the
-    per-iteration ratio from the iteration count."""
-    rows = read_csv(path)
-    if not rows:
-        return "The CSV is empty.\n"
-    first = rows[0]
-    out = [f"`{path.name}` - {first.get('gpu', '?')}, solver at `{first.get('git_commit', '?')}`, "
-           f"{first.get('machine', '?')}, {first.get('repeats', '?')} repeats per cell:\n",
-           "| instance | mode | tol | forced iterations | status | objective | iterations "
-           "| solver (s) | median wall (s) | spread (s) |",
-           "|---|---|---:|---:|---|---:|---:|---:|---:|---:|"]
-    for r in rows:
-        out.append(f"| `{r.get('instance', '')}` | {r.get('mode', '')} | {r.get('tol', '')} "
-                   f"| {r.get('iteration_limit', '') or '-'} | {r.get('status', '')} "
-                   f"| {r.get('objective', '')} | {r.get('iterations', '')} "
-                   f"| {r.get('seconds', '')} | {r.get('wall_median_s', '')} | {r.get('wall_spread_s', '')} |")
-    return "\n".join(out) + "\n"
 
 
 def gpu_cards_section() -> str:
@@ -2433,6 +2335,81 @@ def pdhg_threads_section(path: Path | None) -> str:
                    f"{'parallel' if r.get('parallel_spmv') == '1' else 'serial'} | "
                    f"{float(r.get('solver_seconds') or 0):.3f} | "
                    f"{speedup + 'x' if speedup else '-'} |")
+    return "\n".join(out) + "\n"
+
+
+def gpu_domain_prop_section(path: Path | None) -> str:
+    """1g.5: root domain propagation, the CPU reference against the CUDA propagator, over
+    model size (#510), from bench/runners/gpu_domain_prop.py. The verdict is counted from the
+    rows, never written by hand: at how many sizes the device was faster."""
+    if path is None:
+        return ("Not yet run on `main`. Reproduce on a CUDA build with `python "
+                "bench/runners/gpu_domain_prop.py --binary build/sankhya`.\n")
+    rows = read_csv(path)
+    if not rows:
+        return "The CSV is empty.\n"
+    first = rows[0]
+    by_size: dict[str, dict[str, dict]] = {}
+    for r in rows:
+        by_size.setdefault(r.get("instance", ""), {})[r.get("backend", "")] = r
+    has_split = any((r.get("context_seconds") or "").strip() for r in rows)
+    header = ("| rows | columns | nonzeros | rounds | bounds tightened | CPU (s) | GPU (s) "
+              "| GPU / CPU |")
+    rule = "|---:|---:|---:|---:|---:|---:|---:|---:|"
+    if has_split:
+        header += " GPU context (s) | GPU without context (s) |"
+        rule += "---:|---:|"
+    header += " same rounds and count |"
+    rule += "---|"
+    out = [f"Source CSV: `{path.name}`  \nCommit `{first.get('git_commit', '?')}` · machine "
+           f"`{first.get('machine', '?')}` · GPU {first.get('gpu', '') or 'not recorded'} · "
+           f"median of {first.get('repeats', '?')} run(s) per cell, the propagation time the "
+           "solver logs (on the device: the row-major copy, the transfers and the rounds).\n",
+           header, rule]
+    measured = 0
+    device_faster = 0
+    for name in sorted(by_size, key=lambda k: int(by_size[k].get("cpu", by_size[k].get(
+            "gpu", {})).get("rows") or 0)):
+        cpu = by_size[name].get("cpu")
+        gpu = by_size[name].get("gpu")
+        if cpu is None or gpu is None:
+            continue
+        cpu_s = as_float(cpu, "seconds")
+        gpu_s = as_float(gpu, "seconds")
+        ratio = f"{gpu_s / cpu_s:.2f}x" if cpu_s and gpu_s is not None else "-"
+        if cpu_s is not None and gpu_s is not None:
+            measured += 1
+            device_faster += int(gpu_s < cpu_s)
+        line = (f"| {int(cpu.get('rows') or 0):,} | {int(cpu.get('cols') or 0):,} | "
+                f"{int(cpu.get('nnz') or 0):,} | {cpu.get('rounds', '')} | "
+                f"{int(cpu.get('tightened') or 0):,} | {cpu.get('seconds') or '-'} | "
+                f"{gpu.get('seconds') or '-'} | {ratio} |")
+        if has_split:
+            line += (f" {gpu.get('context_seconds') or '-'} | "
+                     f"{gpu.get('seconds_without_context') or '-'} |")
+        line += f" {gpu.get('agrees_with_cpu') or '-'} |"
+        out.append(line)
+    out.append("")
+    if measured and device_faster == 0:
+        out.append(f"**The device loses at every measured size ({measured} of {measured}).** "
+                   "The CPU reference is faster from the smallest model to the largest; the "
+                   "GPU backend stays off by default (`gpu_domain_prop=false`, "
+                   "`domain_prop_backend=auto`).")
+    elif measured:
+        out.append(f"The device is faster at {device_faster} of {measured} measured sizes.")
+    if has_split:
+        warm = [(as_float(by_size[k].get("cpu", {}), "seconds"),
+                 as_float(by_size[k].get("gpu", {}), "seconds_without_context"))
+                for k in by_size]
+        warm = [(c, g) for c, g in warm if c is not None and g is not None]
+        out.append(f"Without the context (a process that has already touched the card), the "
+                   f"device is faster at {sum(g < c for c, g in warm)} of {len(warm)}.")
+    if not has_split:
+        out.append("")
+        out.append("Each GPU cell is a fresh process, so it includes creating the process's "
+                   "CUDA context (with the other GPU options off, root propagation is the "
+                   "first thing in a MIP solve to touch the card); this CSV predates the runner's `context_seconds` column, "
+                   "so it cannot say how much of each GPU cell that is.")
     return "\n".join(out) + "\n"
 
 
@@ -2641,6 +2618,7 @@ def main() -> int:
     pooling_csv = newest("pooling-*.csv", prefix="pooling")
     gpu_pdlp_csv = newest("gpu-pdlp-*.csv")
     commercial_csv = newest("commercial-agreement-*.csv")
+    gpu_domain_prop_csv = newest("gpu-domain-prop-*.csv", prefix="gpu-domain-prop")
 
     # Legacy untagged CSVs predate the tier tag; fall back so an old results directory still
     # generates something rather than failing.
@@ -2779,11 +2757,24 @@ machine's own CPU, so a ratio here is card against host, not card against the la
 {gpu_cards_section()}
 #### 1g.4 What the CPU side does with its cores
 
-Every CPU column above is one thread. `pdhg_parallel_spmv` (#487) computes A x row-parallel
+The CPU column of the 1g crossover is one thread. The 1g.1 and 1g.3 files written since #488
+add an N-thread arm with the row-parallel A x; the older ones are one thread (the real
+instances) or 16 threads with a serial A x (the datacenter runner), as their notes say.
+`pdhg_parallel_spmv` (#487) computes A x row-parallel
 over the `threads` workers, bitwise the same at any thread count (the test holds it to the
 bit); this is what it buys, per instance, at a fixed iteration count:
 
 {pdhg_threads_section(pdhg_threads_csv)}
+#### 1g.5 Root domain propagation, CPU against the device (#510)
+
+Activity-based bound propagation at the MIP root (`gpu_domain_prop=true`), the CPU
+reference against the CUDA propagator (one thread per row, one per column; Sofranac,
+Gleixner and Pokutta, arXiv:2009.07785). The two return the same bounds bit for bit
+(`tests/unit/test_domain_propagation.cpp`, on random models, Netlib and the fetched MIPLIB
+sets); this is what each costs, on generated knapsack-row models from 1,000 to 1,000,000
+rows (`bench/runners/gpu_domain_prop.py`).
+
+{gpu_domain_prop_section(gpu_domain_prop_csv)}
 ---
 
 ### 1f. Scale — how far up this goes

@@ -1,4 +1,4 @@
-* SANKHYA demo instance - the Haverly pooling problem, which this solver does NOT read.
+* SANKHYA demo instance - the Haverly pooling problem, a model with bilinear constraints.
 *
 * Haverly, C.A. (1978). Studies of the behavior of recursion for the pooling problem.
 * ACM SIGMAP Bulletin 25, 19-28. Case 1.
@@ -15,18 +15,21 @@
 * Columns: A, B (into the pool), PX, PY (pool to X, Y), CX, CY (C to X, Y), Q (pool % S).
 *   BALANCE   A + B - PX - PY = 0
 *   QUALITY   3 A + B - Q*PX - Q*PY = 0                                        (bilinear)
-*   SPECX     Q*PX + 2 CX <= 2.5 (PX + CX)   ->   Q*PX - 0.5 PX - 0.5 CX <= 0   (bilinear)
-*   SPECY     Q*PY + 2 CY <= 1.5 (PY + CY)   ->   Q*PY + 0.5 PY + 0.5 CY <= 0   (bilinear)
+*   SPECX     Q*PX + 2 CX <= 2.5 (PX + CX)   ->   Q*PX - 2.5 PX - 0.5 CX <= 0   (bilinear)
+*   SPECY     Q*PY + 2 CY <= 1.5 (PY + CY)   ->   Q*PY - 1.5 PY + 0.5 CY <= 0   (bilinear)
 *   DEMX      PX + CX <= 100          DEMY      PY + CY <= 200
 *
 * The bilinear terms are written in QCMATRIX sections, the CPLEX/Gurobi QPS extension for
 * quadratic constraints: one section per row, the full symmetric matrix listed, so a term
 * Q*PX with coefficient c appears as the two entries (Q, PX) and (PX, Q) of c/2 each.
 *
-* SANKHYA reads a quadratic OBJECTIVE only. A QCMATRIX section is refused at read time,
-* by name, with a message saying why - not skipped, which would silently solve a different
-* (linear) model and report its optimum as this one. demo/run_sih_demo.sh section 3 shows
-* the refusal. The data are from the paper; none of it is real MRPL data.
+* By default SANKHYA reads a quadratic OBJECTIVE only: a QCMATRIX section is refused at
+* read time, by name, with a message saying why - not skipped, which would silently solve a
+* different (linear) model and report its optimum as this one. Under
+* --option nonconvex=global (#514) the rows are read and the model is solved by spatial
+* branch and bound over McCormick relaxations, to the global optimum, a profit of 400:
+* B = 100 through the pool (Q = 1) to Y, and 100 of C to Y. demo/run_sih_demo.sh
+* section 3 shows both. The data are from the paper; none of it is real MRPL data.
 NAME          HAVERLY1
 OBJSENSE
     MAXIMIZE
@@ -44,9 +47,9 @@ COLUMNS
     B         PROFIT     -16.00   BALANCE      1.00
     B         QUALITY      1.00
     PX        PROFIT       9.00   BALANCE     -1.00
-    PX        SPECX       -0.50   DEMX         1.00
+    PX        SPECX       -2.50   DEMX         1.00
     PY        PROFIT      15.00   BALANCE     -1.00
-    PY        SPECY        0.50   DEMY         1.00
+    PY        SPECY       -1.50   DEMY         1.00
     CX        PROFIT      -1.00   SPECX       -0.50
     CX        DEMX         1.00
     CY        PROFIT       5.00   SPECY        0.50

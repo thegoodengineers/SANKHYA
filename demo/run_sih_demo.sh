@@ -371,8 +371,8 @@ echo
 cat <<"POOLING"
     The pooling problem itself - Haverly (1978), demo/pooling_haverly.mps, where the pool
     quality is a variable and the sulphur it carries into a product is quality TIMES flow -
-    is bilinear in its CONSTRAINTS, and outside the class this solver reads at all. Its
-    QCMATRIX sections are refused at read time, by name, rather than read with the
+    is bilinear in its CONSTRAINTS. By default the solver does not read that class at all:
+    its QCMATRIX sections are refused at read time, by name, rather than read with the
     bilinear terms dropped, which would solve a linear model and report it as this one:
 POOLING
 echo
@@ -385,9 +385,38 @@ if [ "$rc" -ne 3 ] || ! grep -q "QCMATRIX" "$WORK/pooling.out"; then
   exit 1
 fi
 echo
-echo "    What would change this: a global solver for non-convex QP and bilinear programs -"
-echo "    spatial branch and bound over McCormick relaxations - is the MINLP layer the roadmap"
-echo "    has not attempted (docs/PS26119_COVERAGE.md). Until it exists, the refusal stands."
+cat <<"GLOBAL"
+    Asked for by name, --option nonconvex=global (#514), the same file is read with its
+    quadratic rows and solved by spatial branch and bound (src/global/): McCormick envelopes
+    of every product over the current box, bound tightening at every node, a node bound from
+    the LP multipliers by weak duality, and an incumbent accepted only once it is checked
+    against the ORIGINAL bilinear rows. "optimal" means the proven bound met the incumbent,
+    the test a MILP answer is held to. Recursion from a poor start stops at a local optimum,
+    which is the trap Haverly's paper is about; this is checked against the global one:
+GLOBAL
+echo
+solve_case pooling_global demo/pooling_haverly.mps --option nonconvex=global
+echo "    SANKHYA: status $(field pooling_global result status), objective $(field pooling_global result objective), bound $(field pooling_global result dual_bound), $(field pooling_global effort nodes) nodes"
+echo
+echo "    Checked independently by tools/verify_solution.py, which reads the QCMATRIX rows"
+echo "    itself and adds each product to its row's activity - no code shared with the solver:"
+echo
+"$PYTHON" tools/verify_solution.py demo/pooling_haverly.mps "$WORK/pooling_global.sol" --quiet | sed 's/^/        /'
+echo
+"$PYTHON" - "$WORK/pooling_global.json" data/pooling/reference.json <<'PYPOOL'
+import json, sys
+obj = json.load(open(sys.argv[1]))["result"]["objective"]
+ref = json.load(open(sys.argv[2]))["instances"]["haverly1"]
+# The reference file states the optimum as a MINIMUM COST (-400, MINLPLib's pooling_haverly1pq);
+# this demo file maximizes profit, so the same optimum is +400. Read, not typed.
+published = -ref["reference_objective"]
+rel = abs(obj - published) / max(1.0, abs(published))
+source = ref["paper"].split(",")[0] + " 1978, via data/pooling/reference.json"
+print("    published global optimum:        {:g}  ({})".format(published, source))
+print("    relative difference:             {:.3e}".format(rel))
+print("    The two agree." if rel <= 1e-6 else "    THEY DISAGREE - see demo/pooling_haverly.mps.")
+sys.exit(0 if rel <= 1e-6 else 1)
+PYPOOL
 
 # -------------------------------------------------------------------------------------------
 echo
@@ -538,6 +567,35 @@ print("    " + ("AGREES with the exhaustive oracle ({:.6f}) to 1e-9.".format(wan
 sys.exit(0 if ok else 1)
 PYCHK
 
+# -------------------------------------------------------------------------------------------
+echo
+echo "--- A MILP optimum with a proof a separate program checks in exact arithmetic ------"
+echo
+cat <<'VIPR'
+Exhaustion settles a model this small; a real one needs a proof. With write_certificate
+(#518) the branch and bound writes its whole tree as a VIPR certificate: every leaf's bound
+derived from its LP duals as a safe bound (#519), every branching step, and the rounding
+that closes the gap. tools/verify_certificate.py re-reads the MPS file itself and checks
+every derivation in exact rational arithmetic. Root cuts are switched off here because the
+writer does not yet derive cut rows, and the point is checked to 1e-9 because its values are
+decimals of doubles: the BOUND is checked exactly.
+
+VIPR
+solve_case lot_cert "$CASES/lot_sizing.mps" --option enable_root_cuts=false \
+  --option write_certificate="$WORK/lot_sizing.vipr"
+echo "    SANKHYA: status $(field lot_cert result status), objective $(field lot_cert result objective), $(field lot_cert effort nodes) nodes"
+# The checker's verdict is captured and TESTED, not only printed: a certificate that fails
+# must stop the demo, and under `set -e` a failing checker would stop it with no word why.
+CERT_OUT="$("$PYTHON" tools/verify_certificate.py "$WORK/lot_sizing.vipr" \
+  --mps "$CASES/lot_sizing.mps" --feas-tol 1e-9 2>&1)" || true
+echo "$CERT_OUT" | grep -E "^(derivations checked|proved bound|solution objective|VERIFIED)" \
+  | sed 's/^/    /' || true
+if ! echo "$CERT_OUT" | grep -q "^VERIFIED"; then
+  echo "$CERT_OUT" | sed 's/^/    /'
+  echo "    THE CERTIFICATE WAS NOT VERIFIED. See src/mip/certificate_writer.cpp."
+  exit 1
+fi
+
 # ===========================================================================================
 rule "4. Numerical robustness, on the three hazards PS26119 names"
 # ===========================================================================================
@@ -671,6 +729,13 @@ FULL_SUMMARY="$("$PYTHON" bench/runners/latest_result.py "netlib-full-*.csv" --s
 FULL_FAILURES="$("$PYTHON" bench/runners/latest_result.py "netlib-full-*.csv" --failures)"
 FULL_EXTREMES="$("$PYTHON" bench/runners/latest_result.py "netlib-full-*.csv" --extremes)"
 
+# Everything else section 6 states is READ as well, each figure from the committed CSV
+# named beside it, by a script, when this runs: Kennington, Netlib's infeasible set,
+# Maros-Meszaros, the engine race, both GPU cards, the cut A/B and Mittelmann. A CSV that
+# is missing ends the demo here rather than letting a sentence print without its number.
+EVIDENCE="$WORK/evidence.txt"
+"$PYTHON" demo/evidence.py bench/results >"$EVIDENCE"
+
 # The instance count in section 6 is READ, not typed. It said "eight" until someone
 # fetched a ninth instance, at which point the closing paragraph contradicted the table
 # printed directly above it. Same reasoning as MEDIUM_SUMMARY.
@@ -686,14 +751,18 @@ rule "6. What PS26119 asks for that we do NOT yet have"
 # ===========================================================================================
 # The `g` flags matter: @NCOUNT@ appears twice on one line ("not the 9/9 above"), and
 # without them sed substitutes only the first occurrence per line.
+# Every KEY=value line of $EVIDENCE becomes one more @KEY@ substitution (demo/evidence.py
+# guarantees no value carries a | or an & that sed would read as syntax).
+sed 's/^\([A-Z0-9_]*\)=\(.*\)$/s|@\1@|\2|g/' "$EVIDENCE" >"$WORK/evidence.sed"
 fill_gaps() {
   sed -e "s|@FULL@|${FULL_SUMMARY}|g" -e "s|@MEDIUM@|${MEDIUM_SUMMARY}|g" \
       -e "s|@NCOUNT@|${NETLIB_COUNT}|g" -e "s|@MIPLIB@|${MIPLIB_SUMMARY}|g" \
-      -e "s|@FAILURES@|${FULL_FAILURES}|g"
+      -e "s|@FAILURES@|${FULL_FAILURES}|g" -f "$WORK/evidence.sed"
 }
 cat <<'GAPS' | fill_gaps
     Stating these is the point. A solver that is vague about its limits is not one an
-    industrial user can plan around.
+    industrial user can plan around. Every figure below is read from the committed CSV
+    named beside it when this script runs; none is typed here.
 
     MIQP                Implemented: branch and bound with the convex QP engine as the node
                         solver. The caveat is the BOUND, and it is worth stating because it
@@ -703,36 +772,77 @@ cat <<'GAPS' | fill_gaps
                         bound, and an optimistic bound can fathom the subtree holding the
                         optimum, the node tolerance is tightened to 1e-10 and the pruning
                         margin widened by the same amount rather than pruning on the
-                        optimistic side. That is the safe direction and it costs nodes. With
-                        root cuts off by default (#159) as well, expect MIQP to show the same
-                        weakness the MIPLIB line below reports: incumbents found, optimality
-                        proved on fewer.
-    Non-convex QP       REFUSED, deliberately. src/qp/convexity.cpp decides semidefiniteness
-                        of sense * Q by LDL^T before any arithmetic starts, and returns a
-                        negative pivot as a certificate. A local optimum reported as a global
-                        one is the failure mode we will not ship.
-    Interior point      Implemented and OPT-IN (--option algorithm=ipm, issue #56): Mehrotra
-                        predictor-corrector over a from-scratch sparse LDL^T. It produces no
-                        basis, so it cannot warm-start branch and bound and cannot certify
-                        infeasibility, and on the full Netlib set it verifies fewer instances
-                        than the dual simplex. The default continuous engine stays the
-                        simplex (exact, gives a basis); restarted PDHG is the first-order one.
-    Cutting planes      EXIST, OFF BY DEFAULT. Root Gomory mixed-integer and lifted knapsack
-                        cover cuts landed in #159 (--option enable_root_cuts=true), validity
-                        gated against the exact rational optimum. Off because the A/B on the
-                        30 MIPLIB instances at 60 s proves the same 9 either way, cuts nodes
-                        to 0.918x, and costs one published match - noswot, -39 with cuts
-                        against -41 without, because a cut row makes every node LP dearer
-                        (bench/results/miplib-cuts-{off,on}.csv).
-                        No MIR cuts, and none below the root. Branch and bound itself has
-                        reliability branching (#69) and warm-starts every node LP in the
-                        dual simplex (#65).
-    GPU acceleration    ON MAIN, NOT YET MEASURED. The CUDA port of the first-order engine
-                        (src/gpu/, #329 to #373) is on main and compiles in CI. It has not
-                        run on a card, so there is no GPU number and no speed-up is claimed
-                        until #19's CSV exists. --gpu on a build without CUDA warns and runs
-                        on the CPU; on a CUDA build it falls back to the CPU when the device
-                        fails its checks.
+                        optimistic side. That is the safe direction and it costs nodes.
+                        Expect MIQP to show the same weakness the MIPLIB line below reports:
+                        incumbents found, optimality proved on fewer.
+    Non-convex QP       REFUSED BY DEFAULT, deliberately. src/qp/convexity.cpp decides
+                        semidefiniteness of sense * Q by LDL^T before any arithmetic starts,
+                        and returns a negative pivot as a certificate; a file with bilinear
+                        rows is refused at read time. A local optimum reported as a global
+                        one is the failure mode we will not ship. The GLOBAL method exists
+                        behind --option nonconvex=global (#514): spatial branch and bound
+                        over McCormick relaxations for bilinear and quadratic rows, which
+                        section 3 runs on Haverly's pooling problem. It is a first slice: it
+                        refuses integer columns and any column left unbounded in a product,
+                        and on the harder pooling formulations it stops with a gap rather
+                        than claim an optimum. No committed CSV measures it yet.
+    Interior point      LP: implemented and OPT-IN (--option algorithm=ipm, issue #56):
+                        Mehrotra predictor-corrector over a from-scratch sparse LDL^T, with
+                        crossover to a vertex. On the full Netlib set it verifies fewer
+                        instances than the dual simplex, so the default continuous engine
+                        stays the dual simplex (exact, gives a basis); restarted PDHG is the
+                        first-order one.
+                        QP: a proximal interior point on the quasi-definite augmented system
+                        (#614, --option qp_algorithm=ipm) is on main and OFF by default. It
+                        has no committed CSV. The Maros-Meszaros CSV that exists measures the
+                        default first-order QP engine, and it is weak:
+                            @MM@
+                            (@MM_CSV@)
+    Engine race         --option engine_race=true (#563) runs the dual simplex, the interior
+                        point and PDHG at once and keeps the first answer that passes an
+                        independent check. On Mittelmann's smallest LPs, solved and
+                        verified:
+                            @RACE_MM@
+                            (@RACE_MM_CSV@)
+                        On the full Netlib set:
+                            @RACE_NETLIB@
+                            (@RACE_NETLIB_CSV@)
+                        Off by default: where the dual simplex wins anyway, the other two
+                        engines only cost time.
+    Cutting planes      ON BY DEFAULT AT THE ROOT since 0018254: Gomory mixed-integer, lifted
+                        knapsack cover, MIR, clique and {0,1/2}-Chvatal-Gomory cuts, each
+                        validity-gated against the exact rational oracle, with cut selection
+                        by efficacy and parallelism (#415). The A/B that decided it, at 60 s
+                        on the 30 MIPLIB instances:
+                            @CUTS_OFF@
+                            @CUTS_ON@
+                            @CUTS_TREE@
+                            (@CUTS_AB_CSV@)
+                        OFF BY DEFAULT, each for a reason, each until its A/B on main: c-MIR
+                        (#625), flow cover (#419) and implied-bound cuts (#630), which no A/B
+                        has measured yet; cut rounds below the root (tree_cut_depth), because
+                        the tree leg above lost the proof the root round gained; and the root
+                        separation loop (#621), which repeats the root round until the bound
+                        stalls, because every row it adds is paid for at every node LP and
+                        no A/B on main has weighed the two yet.
+    GPU acceleration    MEASURED, on two cards, PDHG alone, CPU time over GPU time on
+                        synthetic LPs with a known optimum, by size (rows):
+                            @GPU_LAPTOP_CARD@ (@GPU_LAPTOP_CSV@)
+                                1e-4: @GPU_LAPTOP_4@
+                                1e-8: @GPU_LAPTOP_8@
+                            @GPU_L4_CARD@ (@GPU_L4_CSV@)
+                                1e-4: @GPU_L4_4@
+                                1e-8: @GPU_L4_8@
+                        The GPU loses below the crossover, where launch and transfer costs
+                        are not amortised, and wins above it. On real LPs on the L4, CPU
+                        seconds against GPU seconds (@GPU_REAL_CSV@):
+                            @GPU_REAL_1@
+                            @GPU_REAL_2@
+                            @GPU_REAL_3@
+                        Each of those is PDHG alone reaching the requested tolerance, not a
+                        certified optimum. What is not measured: the real instances on the
+                        laptop card, a comparison with another GPU solver, and a multi-GPU
+                        number.
     Scale               Section 2.5 above solves one 5000 x 5000 instance, which is the
                         largest thing here by two orders of magnitude and is checked against
                         an optimum known by construction - but ONE generated instance is a
@@ -772,33 +882,57 @@ GAPS
 # substituted into one line of it.
 echo "$FULL_EXTREMES" | sed 's/^/                            /'
 cat <<'GAPS' | fill_gaps
-                        On Mittelmann's eight
-                        smallest LPs, 6330 to 376500 rows, the result is 0 of 8 inside 300s
+                        Mittelmann's LP benchmark, its smallest instances:
+                            @MITT_SMALL@
+                            (@MITT_SMALL_CSV@)
+                        and the medium set, which adds the next size class to them:
+                            @MITT_MEDIUM@
+                            (@MITT_MEDIUM_CSV@)
                         (bench/runners/mittelmann.py) - which is the honest shape of it:
                         correct wherever we finish, and both curves bend well before
                         "millions of variables". That is issue #198. Reproduce with:
                             python bench/runners/fetch_data.py --set full
                             python bench/runners/netlib.py --time-limit 120
+    Other LP sets       Kennington's large LPs:
+                            @KENN@
+                            (@KENN_CSV@)
+                        Netlib's infeasible set, where the right answer is a proof of
+                        infeasibility, not a point:
+                            @INFEAS@
+                            (@INFEAS_CSV@)
+                        The rest stop on a numerical error or without a certificate the
+                        verifier accepts, which is what the count separates.
     MIPLIB              PS26119 names MIPLIB before Netlib, and this demo does not run it.
                         We do have results:
                             @MIPLIB@
                         They are the weakest numbers in the project: branch and bound reaches
                         a feasible incumbent on most of the set but PROVES optimality on few.
-                        Root cuts (#159) exist and are off by default because at 60 s they
-                        prove no more and cost a published match; reliability branching
-                        (#69) moved the count by one each way. Stated here rather than left
-                        out - a reader who opens bench/results/ finds it either way, and #54
-                        is the tracker.
+                        Root cuts are on (above); what the instances that hold the optimum
+                        without proving it need is the tree bound (#221). Stated here rather
+                        than left out - a reader who opens bench/results/ finds it either
+                        way, and #54 is the tracker.
+    MILP extras         On main, each behind its own option and OFF by default, none with a
+                        committed CSV yet, so none is claimed as a gain here: the Feasibility
+                        Jump primal heuristic (#635, mip_heur_fj), safe dual bounds that hold
+                        in exact arithmetic whatever the LP's rounding (#636, safe_bounds),
+                        and a MILP optimality certificate in the VIPR format, checked by an
+                        independent exact-arithmetic checker (#639, write_certificate),
+                        which section 3 runs live on the lot-sizing model.
+    MINLP               NOT ATTEMPTED. The global method refuses integer columns, and the
+                        convex NLP layer (src/nlp/) has no branch and bound over it. A model
+                        with both integers and nonlinear terms has no engine here.
     Parallelism         Single-threaded by default. --option threads=N runs an iteration's
                         column loops under OpenMP, deterministically (bit-identical results at
                         1 and 8 threads), and at Netlib scale it is measured to buy nothing:
-                        an iteration is too short to amortize the fork (#57). A switch that
-                        preserves correctness, not a speed claim.
+                        an iteration is too short to amortize the fork (#57). The branch and
+                        bound tree runs on --option mip_threads=N workers (#403), default 1
+                        until its A/B on main. A switch that preserves correctness, not a
+                        speed claim.
 
     On speed against HiGHS, section 5 above prints the measured ratio for this run rather
     than repeating a number here that would go stale - and it is a narrow comparison either
     way: @NCOUNT@ small instances settle nothing about large models. HiGHS is a decade of
-    specialist work, including a mature dual simplex, which we do not have. Presolve is no
+    specialist work, and its dual simplex is far more mature than ours. Presolve is no
     longer part of that gap: ours is in src/presolve and runs by default (#43).
     The claim we do make is narrower and checkable: on every instance we report as solved,
     the answer matches the published optimum AND survives an independent verifier that
