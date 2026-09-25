@@ -59,6 +59,8 @@ sankhya_solve_status to_c_status(sankhya::SolveStatus status) {
     case sankhya::SolveStatus::kNumericalError: return SANKHYA_NUMERICAL_ERROR;
     case sankhya::SolveStatus::kModelError: return SANKHYA_MODEL_ERROR;
     case sankhya::SolveStatus::kInterrupted: return SANKHYA_INTERRUPTED;
+    case sankhya::SolveStatus::kLocallyOptimal: return SANKHYA_LOCALLY_OPTIMAL;
+    case sankhya::SolveStatus::kLocallyInfeasible: return SANKHYA_LOCALLY_INFEASIBLE;
   }
   return SANKHYA_NOT_SOLVED;
 }

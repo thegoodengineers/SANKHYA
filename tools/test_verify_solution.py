@@ -21,6 +21,7 @@ import verify_solution as vs  # noqa: E402
 from verify_solution_mps import _parse_mps  # noqa: E402
 import test_verify_solution_limits  # noqa: E402
 import test_verify_solution_names  # noqa: E402
+import test_verify_solution_nlp  # noqa: E402
 import test_verify_solution_qcqp  # noqa: E402
 
 FAILURES = 0
@@ -896,6 +897,8 @@ def main() -> int:
     test_verify_solution_names.run(check)
     print("quadratic rows, QCMATRIX (#514)")
     test_verify_solution_qcqp.run(check)
+    print("nonlinear models, .nl (NLP stage 2)")
+    test_verify_solution_nlp.run(check)
     print("the solution pool (#225)")
     test_a_valid_pool_verifies()
     test_a_pool_out_of_order_is_rejected()

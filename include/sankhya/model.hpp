@@ -85,7 +85,21 @@ enum class SolveStatus : std::uint8_t {
   kModelError,
   /// Stopped by the caller - a progress callback that returned non-zero, SolveControl::
   /// interrupt(), or SIGINT on the CLI. Carries a point exactly as kTimeLimit does.
-  kInterrupted
+  kInterrupted,
+  // ---- Nonlinear verdicts (NLP stage 2). An ADDITION to this frozen interface, made
+  // deliberately and called out here and in the commit, as farkas_dual was in #191: two
+  // values appended after every existing one, so no existing value changes number. Only the
+  // nonlinear engine (src/nlp/) produces them; every LP, MILP, QP and MIQP path is unchanged.
+  /// A point that satisfies the first-order (KKT) conditions to the project tolerances, of a
+  /// model NOT proved convex, reached by a descent method with inertia correction: a local
+  /// optimum in the sense nonlinear solvers use the word. Second-order conditions are not
+  /// verified, and nothing is claimed about global optimality. A nonlinear model proved
+  /// convex reports kOptimal instead, where a KKT point is a global optimum.
+  kLocallyOptimal,
+  /// The method converged to a local minimizer of the constraint violation with the
+  /// violation positive. Unlike kInfeasible this proves nothing about the whole domain, and
+  /// it reports no point.
+  kLocallyInfeasible
 };
 
 [[nodiscard]] constexpr bool claims_a_point(SolveStatus status) noexcept;
@@ -673,7 +687,9 @@ class Solution {
     case SolveStatus::kIterationLimit:
     case SolveStatus::kTimeLimit:
     case SolveStatus::kNodeLimit:
-    case SolveStatus::kInterrupted: return true;
+    case SolveStatus::kInterrupted:
+    case SolveStatus::kLocallyOptimal: return true;
+    case SolveStatus::kLocallyInfeasible:
     case SolveStatus::kNotSolved:
     case SolveStatus::kInfeasible:
     case SolveStatus::kInfeasibleOrUnbounded:

@@ -588,7 +588,9 @@ ReadResult read_nl(const std::string& path, std::unique_ptr<NonlinearModel>* out
     c.expression = g.sum(terms);
     c.lower = lower[r];
     c.upper = upper[r];
-    c.name = r < row_names.size() ? row_names[r] : fmt::format("c{}", r);
+    // Unnamed without a .row file: the solution writer then names it R<i>, a rule the
+    // independent checker can apply to the .nl file alone.
+    c.name = r < row_names.size() ? row_names[r] : std::string();
     model->constraints.push_back(std::move(c));
   }
   if (n_obj > 0) {

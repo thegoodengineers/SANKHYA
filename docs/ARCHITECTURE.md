@@ -195,9 +195,15 @@ is section 13; the steps for adding one are `docs/ADDING_AN_ENGINE.md`.
   Python (`sankhya.nonlinear`); `sankhya info model.nl` reports its class, size, derivative
   sparsity and whether its relaxation is proved convex. The engines are separate entry points
   beside `solve()`, as `solve_global()` is for quadratic rows: the convex Condat-Vu engine for
-  linear constraints (#226), and nothing yet for general nonlinear constraints or integer
-  columns - a `.nl` solve and a nonlinear C API solve say so and return `not_solved` rather
-  than solve the linear part alone.
+  linear constraints (#226), and `nlp::solve_nlp()` (`src/nlp/nlp_solve.cpp`, NLP stage 2), a
+  primal-dual interior point with a filter line search after Wachter & Biegler (2006) for
+  general smooth nonlinear constraints, reached from `sankhya solve model.nl`, the C API and
+  Python. Its status is decided by a KKT check at the project tolerances in the model's own
+  terms: `optimal` only when the model is also proved convex (a global optimum),
+  `locally_optimal` otherwise, `locally_infeasible` when the restoration phase finds a local
+  minimizer of the violation. Those two statuses are appended to `SolveStatus` (an explicit
+  frozen-interface addition). `tools/verify_solution.py` checks a `.nl` answer with its own
+  reader and derivatives.
 - **Cutting planes** — already present, and off by default. Root GMI and lifted cover cuts
   landed in #159 (`src/mip/cuts.cpp`) and single-row MIR cuts in #221
   (`src/mip/mir_cuts.cpp`), appended as rows of the working model before the search

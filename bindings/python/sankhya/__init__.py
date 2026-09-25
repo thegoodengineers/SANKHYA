@@ -126,6 +126,8 @@ _STATUS_NAMES = {
     9: "model_error",
     10: "infeasible_or_unbounded",
     11: "interrupted",
+    12: "locally_optimal",
+    13: "locally_infeasible",
 }
 
 

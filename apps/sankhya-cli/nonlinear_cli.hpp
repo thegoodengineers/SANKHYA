@@ -15,7 +15,10 @@ namespace sankhya::cli {
 /// Returns the CLI exit code.
 int nonlinear_info(const std::string& path);
 
-/// `sankhya solve model.nl`. Returns the CLI exit code.
-int nonlinear_solve(const std::string& path, const Options& options);
+/// `sankhya solve model.nl`: the NLP interior point (src/nlp/nlp_solve.hpp), the summary the
+/// linear path prints, and the .sol / stats files over the model's solution frame. Returns the
+/// CLI exit code.
+int nonlinear_solve(const std::string& path, const Options& options,
+                    const std::string& solution_path, const std::string& stats_path);
 
 }  // namespace sankhya::cli
