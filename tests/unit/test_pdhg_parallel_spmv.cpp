@@ -145,8 +145,9 @@ Options updates_options(int threads, bool two_matvec) {
   options.set_bool("pdhg_parallel_updates", true);
   options.set_bool("pdhg_two_matvec", two_matvec);
   // A fixed iteration count: the claim is about the arithmetic, every step of which the
-  // bitwise comparison covers whether or not the solve has converged by then. A tolerance
-  // no run meets, so every run takes all of them (at 1e-6 this model stops after 640).
+  // bitwise comparison covers whether or not the solve has converged by then. The tolerance
+  // is far below the other tests' 1e-6 so the comparison covers more of the run: on an L4
+  // box this model stopped at 640 iterations at 1e-6 and at 880 at this one.
   options.set_double("pdhg_tolerance", 1e-13);
   options.set_int("iteration_limit", 1500);
   return options;
