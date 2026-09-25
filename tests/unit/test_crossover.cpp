@@ -10,7 +10,6 @@
 // keep, so that is the first model.
 
 #include <cmath>
-#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -25,6 +24,7 @@
 #include "sankhya/options.hpp"
 #include "sankhya/tolerances.hpp"
 #include "simplex/crossover.hpp"
+#include "simplex/simplex_core.hpp"
 
 namespace sankhya {
 namespace {
@@ -158,8 +158,10 @@ TEST(Crossover, GetsWhatTheTimeLimitHasLeftAfterTheInteriorPointNotLessTwice) {
 TEST(Crossover, ThePushStopsAtTheTimeLimit) {
   // #417: run_push() armed its deadline before the time limit was read, so the push had no
   // deadline and ran every superbasic to a bound whatever was left: 244 s against 143 s on
-  // rmine15. Here the crossover is handed 0.1 ms, which is gone before the first push step on
-  // a model with superbasics; it must stop with no pivot made, and report no vertex.
+  // rmine15, and only the primal loop after it noticed the limit. Here the push itself is
+  // given a limit that is gone at once, from the interior point's answer on a degenerate
+  // Netlib model; it must stop with no pivot made. Without the fix it made them all and
+  // reported the limit after them.
   Model model;
   const std::string path =
       (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
@@ -168,36 +170,27 @@ TEST(Crossover, ThePushStopsAtTheTimeLimit) {
   const io::ReadResult read = io::read_model(path, &model);
   ASSERT_TRUE(read.ok) << path << ": " << read.error;
   Logger quiet(nullptr);
-  Solution interior = ipm::solve_ipm(model, ipm_options(false), quiet);
+  const Solution interior = ipm::solve_ipm(model, ipm_options(false), quiet);
   ASSERT_EQ(interior.status, SolveStatus::kOptimal) << interior.message;
+  const CrossoverGuess guess = crossover_guess(model, interior);
+  ASSERT_EQ(guess.basic, model.num_rows());
+  WarmStart warm;
+  warm.col_status = guess.col_status;
+  warm.row_status = guess.row_status;
 
-  std::FILE* stream = std::tmpfile();
-  ASSERT_NE(stream, nullptr);
-  Options options = ipm_options(true);
-  options.set_double("time_limit", 1e-4);
-  Solution after;
-  {
-    Logger logger(stream, LogLevel::kInfo);
-    const Timer timer;
-    after = crossover_to_vertex(model, interior, options, logger, nullptr, timer);
-  }
-  std::fflush(stream);
-  std::rewind(stream);
-  std::string log;
-  char buffer[4096];
-  while (std::fgets(buffer, sizeof(buffer), stream) != nullptr) log += buffer;
-  std::fclose(stream);
-  if (log.find("no time left for crossover") != std::string::npos) {
-    GTEST_SKIP() << "the 0.1 ms were gone before the push started on this machine";
-  }
-  // Stopped before a single push pivot: in the set-up of the push (its first factorization
-  // asks the deadline too) or at the push's first check. With no deadline the push ran every
-  // superbasic to a bound and only the primal loop after it noticed the limit.
-  EXPECT_EQ(after.algorithm.find("crossover"), std::string::npos) << after.message;
-  EXPECT_NE(after.message.find("crossover did not reach a vertex (time_limit after 0 pivots"),
-            std::string::npos)
-      << after.message << "\n"
-      << log;
+  // The same push with no limit makes pivots, so a stop at zero is the deadline's doing.
+  Options unlimited = ipm_options(true);
+  unlimited.set_string("algorithm", "dual-simplex");
+  detail::Simplex free_run(model, unlimited, quiet, nullptr);
+  const Solution pushed = free_run.run_push(warm, interior.col_value, interior.row_activity);
+  ASSERT_GT(pushed.iterations, 0) << pushed.message;
+
+  Options limited = unlimited;
+  limited.set_double("time_limit", 1e-9);
+  detail::Simplex timed(model, limited, quiet, nullptr);
+  const Solution stopped = timed.run_push(warm, interior.col_value, interior.row_activity);
+  EXPECT_EQ(stopped.status, SolveStatus::kTimeLimit) << stopped.message;
+  EXPECT_EQ(stopped.iterations, 0) << stopped.message;
 }
 
 TEST(Crossover, OffLeavesTheInteriorPointsAnswerAlone) {
