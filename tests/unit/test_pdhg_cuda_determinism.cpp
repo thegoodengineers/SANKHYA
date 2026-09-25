@@ -53,14 +53,14 @@ bool cuda_ran(const Solution& s) {
   return s.algorithm.find("cuda") != std::string::npos;
 }
 
-struct Run {
+struct LoggedRun {
   Solution solution;
   std::string log;
 };
 
-Run solve_logged(const Model& model, const Options& options) {
+LoggedRun solve_logged(const Model& model, const Options& options) {
   ::testing::internal::CaptureStdout();
-  Run run;
+  LoggedRun run;
   run.solution = solve(model, options);
   std::fflush(stdout);
   run.log = ::testing::internal::GetCapturedStdout();
@@ -110,8 +110,8 @@ TEST(PdhgCudaDeterminism, TwoSolvesGiveTheSameBitsOnBothDevicePaths) {
     ASSERT_TRUE(read.ok) << instance.path << ": " << read.error;
     for (const bool device_loop : {false, true}) {
       const Options options = deterministic_gpu(device_loop, instance.iteration_limit);
-      const Run first = solve_logged(model, options);
-      const Run second = solve_logged(model, options);
+      const LoggedRun first = solve_logged(model, options);
+      const LoggedRun second = solve_logged(model, options);
       const std::string what =
           std::string(instance.label) + (device_loop ? " (device loop)" : " (per-iteration)");
       ASSERT_TRUE(cuda_ran(first.solution)) << what << ": " << first.solution.message;
