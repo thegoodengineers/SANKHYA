@@ -200,6 +200,12 @@ def verify_farkas(model: Model, solution: Solution, report: Report) -> Report:
     prefers, which makes M infinite and proves nothing.
     """
     y = [solution.farkas.get(name, 0.0) for name in model.row_names]
+    # Scaled to unit infinity-norm: a certificate proves the same at any positive scale, and
+    # the zero floor below is absolute (max(1, ...)), so a tiny vector would otherwise
+    # aggregate to 0 on every column and "prove" a feasible model infeasible (review of #652).
+    largest = max((abs(v) for v in y), default=0.0)
+    if largest > 0.0 and math.isfinite(largest):
+        y = [v / largest for v in y]
     if not any(y):
         # NOT a failure. Presolve proves infeasibility from bound arithmetic and does not
         # keep the chain of tightenings that would make a Farkas vector, so it says
@@ -247,6 +253,9 @@ def verify_farkas(model: Model, solution: Solution, report: Report) -> Report:
                 free.append(model.col_names[j])
             else:
                 reachable += d[j] * model.col_lower[j]
+        elif d[j] != 0.0 and math.isfinite(model.col_lower[j])                 and math.isfinite(model.col_upper[j]):
+            # Zero for its sign, but what it could still add counts against the proof.
+            reachable += abs(d[j]) * max(abs(model.col_lower[j]), abs(model.col_upper[j]))
     if not report.check(not free, "aggregate is bounded above",
                         "every column the aggregate uses is bounded in that direction"
                         if not free
@@ -285,6 +294,9 @@ def verify_ray(model: Model, solution: Solution, report: Report, primal_tol: flo
                     + (solution.header.get("message", "the solver gave no reason")))
         return report
     d = [solution.ray.get(name, 0.0) for name in model.col_names]
+    largest = max((abs(v) for v in d), default=0.0)
+    if largest > 0.0 and math.isfinite(largest):
+        d = [v / largest for v in d]  # unit infinity-norm, as the C++ checker (#652 review)
     if not report.check(any(d), "ray is a direction",
                         f"{sum(1 for v in d if v != 0.0)} of {model.num_cols} columns move"
                         if any(d) else "the ray is all zeros, which is not a direction"):

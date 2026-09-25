@@ -14,6 +14,7 @@
 
 #include "mir_cuts.hpp"
 
+#include "cut_derivation.hpp"
 #include "mir_cmir.hpp"
 
 #include <algorithm>
@@ -77,15 +78,57 @@ struct BaseRow {
   std::vector<Index> columns;
   std::vector<double> values;
   double rhs = 0.0;
+  /// The rows it is the sum of, in the `<=` orientation (w > 0 on a row's upper side),
+  /// for a certificate's derivation (#518).
+  std::vector<std::pair<Index, double>> multipliers;
 };
+
+/// The split an MIR cut on `base` rests on (#518; Nemhauser and Wolsey 1990): with the base
+/// divided by `divisor`, b = rhs / divisor, f0 = frac(b), and the integer y_k rounded down
+/// when f_k <= f0 and up otherwise, the cut follows from pi.y <= floor(b) alone (side 0,
+/// multiplier 1) and from the base times 1 / (divisor (1 - f0)) together with
+/// pi.y >= floor(b) + 1 times -f0 / (1 - f0) (side 1). Written in x, y = x - l or u - x.
+std::shared_ptr<const CutDerivation> mir_derivation(
+    const BaseRow& base, const std::vector<Index>& live_columns, const std::vector<double>& a,
+    const std::vector<bool>& is_int, const std::vector<bool>& complemented,
+    const std::vector<double>& col_lower, const std::vector<double>& col_upper, double b,
+    double divisor) {
+  const double scaled = b / divisor;
+  const double f0 = scaled - std::floor(scaled);
+  if (!(f0 > 0.0 && f0 < 1.0)) return nullptr;
+  auto d = std::make_shared<CutDerivation>();
+  d->kind = CutDerivation::Kind::kSplit;
+  double rhs = std::floor(scaled);
+  for (std::size_t k = 0; k < a.size(); ++k) {
+    if (!is_int[k]) continue;
+    const double v = a[k] / divisor;
+    const double fk = v - std::floor(v);
+    const double pi = fk <= f0 ? std::floor(v) : std::ceil(v);
+    if (pi == 0.0) continue;
+    const auto j = static_cast<std::size_t>(live_columns[k]);
+    if (complemented[k]) {
+      d->disjunction.emplace_back(live_columns[k], -pi);  // pi (u - x)
+      rhs -= pi * std::round(col_upper[j]);
+    } else {
+      d->disjunction.emplace_back(live_columns[k], pi);  // pi (x - l)
+      rhs += pi * std::round(col_lower[j]);
+    }
+  }
+  d->disjunction_rhs = rhs;
+  d->mu[0] = 1.0;
+  const double scale = 1.0 / (divisor * (1.0 - f0));
+  for (const auto& [i, w] : base.multipliers) d->rows[1].emplace_back(i, w * scale);
+  d->mu[1] = -f0 / (1.0 - f0);
+  return d;
+}
 
 /// The MIR separation on one base inequality at the LP point, with the bounds to
 /// substitute given explicitly. Returns the most violated member of the divisor family in
 /// the original variables, or nothing.
 std::optional<Cut> separate_from_base(const Model& model, const Solution& solution,
                                       const std::vector<double>& col_lower,
-                                      const std::vector<double>& col_upper,
-                                      const BaseRow& base) {
+                                      const std::vector<double>& col_upper, const BaseRow& base,
+                                      bool derive) {
   const Index n = model.num_cols();
   std::vector<Index> live_columns;  // the base's columns with a nonzero coefficient
   std::vector<double> a;            // coefficient on y_j in the base inequality
@@ -174,6 +217,10 @@ std::optional<Cut> separate_from_base(const Model& model, const Solution& soluti
       }
     }
     cut.rhs = rhs_x;
+    if (derive) {
+      cut.derivation = mir_derivation(base, live_columns, a, is_int, complemented, col_lower,
+                                      col_upper, b, divisor);
+    }
     best_violation = violation;
     best = std::move(cut);
   }
@@ -239,6 +286,7 @@ bool aggregate_row(const Model& model, const std::vector<RowEntries>& rows, Inde
     }
   }
   base->rhs += lambda * bound;
+  base->multipliers.emplace_back(i, lambda);
   // The eliminated column is exactly cancelled in exact arithmetic; make it so here.
   for (std::size_t k = 0; k < base->columns.size(); ++k) {
     if (base->columns[k] == eliminate) base->values[k] = 0.0;
@@ -302,7 +350,8 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
   const auto separate = [&](const BaseRow& base) {
     return options.cmir ? separate_cmir(model, solution, col_lower, col_upper, base.columns,
                                         base.values, base.rhs, variable_bounds, kMinViolation)
-                        : separate_from_base(model, solution, col_lower, col_upper, base);
+                        : separate_from_base(model, solution, col_lower, col_upper, base,
+                                             options.derive);
   };
 
   // Which rows contain a fractional integer column: only those can start an aggregation.
@@ -331,6 +380,7 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
       base.values.reserve(row.values.size());
       for (const double v : row.values) base.values.push_back(sign * v);
       base.rhs = sign * bound;
+      base.multipliers = {{i, sign}};
 
       std::fill(used.begin(), used.end(), 0);
       used[ui] = 1;

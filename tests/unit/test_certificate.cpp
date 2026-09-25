@@ -279,5 +279,24 @@ TEST(Certificate, AnInfeasibilityPresolveProvesWithoutAProofIsRetriedForOne) {
       << solution.message;
 }
 
+TEST(Certificate, ATinyFarkasVectorOnAFeasibleModelIsNotAProof) {
+  // Review of #652. x >= 1e6 with x in [0, 2e6] is feasible. The multiplier 1e-12 aggregates
+  // to d = 1e-12, under the absolute zero floor, so the aggregate read as 0 >= 1e-6 and was
+  // accepted. Scaled to unit size first, it is x >= 1e6 against a reachable 2e6.
+  const Model feasible = make_lp({{1.0}}, {1e6}, {kInfinity}, {0.0}, {0.0}, {2e6});
+  std::string why;
+  EXPECT_FALSE(farkas_proves_infeasible(feasible, {1e-12}, &why));
+  // And a real certificate still proves at any scale.
+  EXPECT_TRUE(farkas_proves_infeasible(contradictory_pair(), {1e-9, -1e-9}, &why)) << why;
+}
+
+TEST(Certificate, ATinyRayOnABoundedModelIsNotAProof) {
+  // min -x with x >= 0 and the row x <= 10: bounded. The ray 1e-8 moved the row by less than
+  // the absolute 1e-7 and was accepted; at unit size it crosses the row's upper bound.
+  const Model bounded = make_lp({{1.0}}, {-kInfinity}, {10.0}, {-1.0}, {0.0}, {kInfinity});
+  std::string why;
+  EXPECT_FALSE(ray_proves_unbounded(bounded, {1e-8}, &why));
+}
+
 }  // namespace
 }  // namespace sankhya

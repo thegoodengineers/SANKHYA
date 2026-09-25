@@ -136,7 +136,7 @@ Options every_family_on() {
         "enable_flow_cover_cuts", "presolve_dual_fixing", "presolve_parallel_rows",
         "presolve_dominated_columns", "presolve_implied_free", "mip_symmetry",
         "mip_reduced_cost_fixing", "mip_objective_branching", "conflict_analysis",
-        "root_cut_loop"}) {
+        "root_cut_loop", "gmi_safety"}) {
     options.set_bool(name, true);
   }
   options.set_int("tree_cut_depth", 4);

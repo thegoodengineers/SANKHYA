@@ -178,6 +178,7 @@ bool SparseLu::factorize(const std::vector<LuColumn>& columns, Index m, double p
   }
   build_column_u();
   build_row_l();
+  build_step_inverses();
   base_nonzeros_ = factor_nonzeros();
   return true;
 }
@@ -334,6 +335,11 @@ void SparseLu::apply_etas(double* b) const {
 
 void SparseLu::solve(double* b) const {
   if (m_ == 0) return;
+  // #464: the same passes over the reached steps alone, when the reach is small enough.
+  if (hyper_sparse_ && !ft_active_ && solve_hyper(b)) {
+    apply_etas(b);
+    return;
+  }
   forward_l(b);
 
   if (ft_active_) {
@@ -350,10 +356,13 @@ void SparseLu::solve(double* b) const {
     // No zero-fill: ft_back_substitute() visits every position exactly once and writes
     // ft_scratch_ at every one, so a prior call's contents are fully overwritten regardless.
     ft_back_substitute(work_.data(), ft_scratch_.data());
+    Index nonzeros = 0;
     for (Index s = 0; s < m_; ++s) {
-      b[static_cast<std::size_t>(pivot_col_[static_cast<std::size_t>(s)])] =
-          ft_scratch_[static_cast<std::size_t>(s)];
+      const double value = ft_scratch_[static_cast<std::size_t>(s)];
+      nonzeros += value != 0.0 ? 1 : 0;
+      b[static_cast<std::size_t>(pivot_col_[static_cast<std::size_t>(s)])] = value;
     }
+    record_density(stats_.ftran_bins, nonzeros, m_);
     return;
   }
 
@@ -378,10 +387,13 @@ void SparseLu::solve(double* b) const {
       work_[static_cast<std::size_t>(uc_steps_[up])] -= uc_values_[up] * value;
     }
   }
+  Index nonzeros = 0;
   for (Index k = 0; k < m_; ++k) {
-    b[static_cast<std::size_t>(pivot_col_[static_cast<std::size_t>(k)])] =
-        work_[static_cast<std::size_t>(k)];
+    const double value = work_[static_cast<std::size_t>(k)];
+    nonzeros += value != 0.0 ? 1 : 0;
+    b[static_cast<std::size_t>(pivot_col_[static_cast<std::size_t>(k)])] = value;
   }
+  record_density(stats_.ftran_bins, nonzeros, m_);
 
   apply_etas(b);
 }
@@ -496,6 +508,8 @@ void SparseLu::solve_transpose(double* b) const {
     ft_apply_retas_transposed(work_.data());
   } else {
     apply_etas_transposed(b);
+    // #464: the same passes over the reached steps alone, when the reach is small enough.
+    if (hyper_sparse_ && solve_transpose_hyper(b)) return;
 
     // work_ is indexed by step from here to the end: the right-hand side enters through the
     // pivot columns and the answer leaves through the pivot rows, and both triangular
@@ -510,10 +524,13 @@ void SparseLu::solve_transpose(double* b) const {
 
   // The L^T pass (lr_, untouched by either update scheme) and the final scatter are shared.
   apply_transposed_l();
+  Index nonzeros = 0;
   for (Index k = 0; k < m_; ++k) {
-    b[static_cast<std::size_t>(pivot_row_[static_cast<std::size_t>(k)])] =
-        work_[static_cast<std::size_t>(k)];
+    const double value = work_[static_cast<std::size_t>(k)];
+    nonzeros += value != 0.0 ? 1 : 0;
+    b[static_cast<std::size_t>(pivot_row_[static_cast<std::size_t>(k)])] = value;
   }
+  record_density(stats_.btran_bins, nonzeros, m_);
 }
 
 void SparseLu::solve_transpose_reference(double* b) const {

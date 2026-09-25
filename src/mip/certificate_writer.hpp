@@ -22,6 +22,8 @@
 // about: 0.1 in an MPS file is written as the 55-digit decimal of the double nearest 0.1.
 #pragma once
 
+#include <functional>
+#include <memory>
 #include <ostream>
 #include <string>
 #include <utility>
@@ -30,6 +32,8 @@
 #include "sankhya/model.hpp"
 
 namespace sankhya::mip {
+
+struct CutProof;  // cut_derivation.hpp
 
 /// The search tree as the certificate needs it. Node 0 is the root.
 struct CertificateTree {
@@ -49,9 +53,17 @@ struct CertificateTree {
     Index down = -1;
     Index up = -1;
     Proof proof = Proof::kNone;
-    std::vector<std::pair<Index, double>> y;  ///< sparse, rows of the model
+    std::vector<std::pair<Index, double>> y;  ///< sparse: the model's rows, then the cuts'
   };
   std::vector<Node> nodes;
+  /// The cut rows every node LP carried after the model's, in order, each with its
+  /// certified derivation (cut_derivation.hpp): sum coefficients x <= rhs.
+  struct CutRow {
+    std::vector<std::pair<Index, double>> coefficients;
+    double rhs = 0.0;
+    std::shared_ptr<const CutProof> proof;
+  };
+  std::vector<CutRow> cuts;
 };
 
 struct CertificateOutcome {
@@ -88,6 +100,16 @@ void write_model(std::ostream& out, const Model& model, Index num_con);
 /// model's sense.
 void write_claim(std::ostream& out, const Model& model, const std::vector<double>& incumbent,
                  double proved);
+/// The DER lines deriving each cut row (certificate_cuts.cpp): a Chvatal-Gomory `rnd`, or a
+/// split's two assumptions, a `lin` under each and the `uns` that discharges them. `emit`
+/// writes one line and returns its index; `con_lower` / `con_upper` map every row to the
+/// constraint holding its side, and receive each cut row's (row model_rows + k).
+void emit_cut_derivations(const std::vector<CertificateTree::CutRow>& cuts, Index model_rows,
+                          const std::function<Index(const std::string&)>& emit,
+                          std::vector<Index>* con_lower, std::vector<Index>* con_upper);
+/// The model with the cut rows appended after its own, `<=` rows: what every node LP was.
+[[nodiscard]] Model with_cut_rows(const Model& model,
+                                  const std::vector<CertificateTree::CutRow>& cuts);
 }  // namespace detail
 
 }  // namespace sankhya::mip

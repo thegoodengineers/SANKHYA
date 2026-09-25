@@ -589,6 +589,20 @@ class BranchAndBound {
   void finish_certificate();
   /// True when y or -y proves the entered node's LP infeasible, by the safe test (#519).
   [[nodiscard]] bool farkas_proves(const std::vector<double>& y) const;
+  /// The rows a certificate states the node LPs had: the model's, then every cut row in
+  /// order, each `<=` its right-hand side (certificate_writer.hpp's with_cut_rows).
+  [[nodiscard]] Model certificate_rows() const;
+  [[nodiscard]] std::vector<CertificateTree::CutRow> certificate_cut_rows() const;
+  /// True when working_ is the model's rows plus certified cut rows; refuses otherwise.
+  bool certificate_rows_match();
+  /// Certificate mode: keep only the cuts of a round whose derivation certify_cuts() can
+  /// prove (cut_derivation.hpp), and say what was dropped. No-op otherwise.
+  void certify_round_cuts(std::vector<Cut>* accepted);
+  /// Certificate mode: the cut families that state no derivation are not separated; the
+  /// first root round logs which ones were on.
+  [[nodiscard]] bool certificate_mode() const { return !certificate_path_.empty(); }
+  Count certificate_cuts_derived_ = 0;
+  Count certificate_cuts_dropped_ = 0;
   Count certificate_farkas_resolves_ = 0;
   std::string certificate_path_;  ///< write_certificate; empty when off
   std::string certificate_refusal_;
@@ -646,7 +660,9 @@ class BranchAndBound {
   /// How MIR separates (#498): c-MIR when `mir_cmir` is set.
   [[nodiscard]] MirOptions mir_options() const {
     MirOptions mir;
-    mir.cmir = options_.get_bool("mir_cmir");
+    // c-MIR states no derivation (#518), so a certificate's search uses the plain MIR.
+    mir.cmir = options_.get_bool("mir_cmir") && certificate_path_.empty();
+    mir.derive = !certificate_path_.empty();
     return mir;
   }
   /// The filter's policy from the options (#496): both default to the filter's own

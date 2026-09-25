@@ -3,6 +3,7 @@
 // and for the references each family is written from.
 
 #include "cuts.hpp"
+#include "cut_derivation.hpp"
 
 #include <fmt/format.h>
 
@@ -11,6 +12,7 @@
 #include <cmath>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "la/lu.hpp"
@@ -1049,7 +1051,8 @@ std::optional<detail::ReconstructedTableauRow> RootGmiContext::tableau_row(
   return row;
 }
 
-std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution) {
+std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution, bool safe,
+                                   bool derive) {
   std::vector<Cut> cuts;
   RootGmiContext context(model, solution);
   if (!context.is_valid) return cuts;
@@ -1063,13 +1066,30 @@ std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution)
 
     double val = solution.col_value[static_cast<std::size_t>(basic_index)];
     double f0 = val - std::floor(val);
-    if (f0 <= tol::kIntegrality || f0 >= 1.0 - tol::kIntegrality) continue;
+    // Safety (#496; Cornuejols, Margot and Nannicini 2013): every coefficient is divided by
+    // f0 or 1 - f0, so a source row this close to integral magnifies its own rounding.
+    const double away = safe ? tol::kGmiMinFractionality : tol::kIntegrality;
+    if (f0 <= away || f0 >= 1.0 - away) continue;
 
     auto row_opt = context.tableau_row(model, solution, slot);
     if (!row_opt) continue;
+    if (safe) {
+      // The cut divides by the reconstructed row's own f0, which can differ from the one read
+      // off col_value above: gate on that one too, so no cut divides by less than the floor.
+      const double f_row = row_opt->rhs - std::floor(row_opt->rhs);
+      if (f_row <= away || f_row >= 1.0 - away) continue;
+    }
 
     auto cut_opt = compute_gmi_from_tableau(model, *row_opt);
-    if (cut_opt) cuts.push_back(*cut_opt);
+    if (!cut_opt) continue;
+    if (safe) {
+      // A larger rhs of  coeff . x <= rhs  only weakens the cut, so this cannot cut off a
+      // point the unrelaxed cut kept; it buys margin against the derivation's rounding.
+      cut_opt->rhs +=
+          tol::kGmiRhsRelaxAbsolute + tol::kGmiRhsRelaxRelative * std::abs(cut_opt->rhs);
+    }
+    if (derive) cut_opt->derivation = gmi_derivation(model, *row_opt);  // #518
+    cuts.push_back(std::move(*cut_opt));
   }
 
   return cuts;

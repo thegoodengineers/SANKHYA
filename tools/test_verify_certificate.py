@@ -277,24 +277,19 @@ def end_to_end() -> None:
         code, out = run_checker_on(cert, "--mps", str(mps)) if cert.exists() else (-1, log)
         check(code == 0 and "proved infeasible" in out, "an infeasible MILP: proved infeasible",
               out.strip()[-200:])
-        # With cuts on the search adds rows the model does not have: no certificate.
-        mps = Path(tmp) / "knap.mps"
-        mps.write_text(KNAPSACK.format(sense="MIN", c1=-5, c2=-4, c3=-3, cz=0))
-        cert = Path(tmp) / "cuts.vipr"
-        log = solve(binary, mps, cert, "enable_root_cuts=true")
-        # Either branch can fail: a written certificate must verify against the MPS, and a
-        # refusal must be one the log states.
-        if cert.exists():
-            code, out = run_checker_on(cert, "--mps", str(mps))
-            check(code == 0, "with cuts on, a written certificate verifies", out.strip()[-200:])
-        else:
-            check("not written" in log, "with cuts on, a refusal is stated in the log",
-                  log.strip()[-200:])
+        # With cuts on, the cut rows are derived in the certificate: see
+        # test_verify_certificate_cuts.py.
 
 
 def main() -> int:
+    global FAILURES
     hand_written()
     end_to_end()
+    # Cut rows (#518): their own file, which imports this one as a module, so its count of
+    # failures lives there.
+    import test_verify_certificate_cuts as cuts
+    cuts.main()
+    FAILURES += cuts.base.FAILURES
     print("all passed" if FAILURES == 0 else f"{FAILURES} failure(s)")
     return 0 if FAILURES == 0 else 1
 
