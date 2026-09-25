@@ -62,6 +62,11 @@ class NonlinearModel {
   /// Added to base's objective. kNoExpr when the objective has no nonlinear part.
   ExprId objective = kNoExpr;
   std::vector<NonlinearConstraint> constraints;
+  /// A starting point from the model's source (the `x` segment of a .nl file, NLP stage 1):
+  /// num_cols entries, a column the source gave no value being 0, AMPL's convention. Empty
+  /// when the source gave none. A local method's answer depends on where it starts, so the
+  /// published starting point of a test problem is part of the problem.
+  std::vector<double> start;
 
   /// Empty when well formed, otherwise the first problem: base's own validation, a malformed
   /// expression, a constraint with lower > upper, an expression from nowhere.

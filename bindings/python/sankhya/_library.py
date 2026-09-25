@@ -253,6 +253,31 @@ def _declare(lib: ctypes.CDLL) -> None:
     ]
     lib.sankhya_solution_pool_col_values.restype = ctypes.c_int
 
+    # Nonlinear expressions (include/sankhya/sankhya_nonlinear.h, NLP stage 1). The builders
+    # return an int handle, -1 on failure.
+    lib.sankhya_expr_constant.argtypes = [model_p, ctypes.c_double]
+    lib.sankhya_expr_variable.argtypes = [model_p, ctypes.c_int]
+    lib.sankhya_expr_unary.argtypes = [model_p, ctypes.c_int, ctypes.c_int]
+    lib.sankhya_expr_binary.argtypes = [model_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+    lib.sankhya_expr_power.argtypes = [model_p, ctypes.c_int, ctypes.c_double]
+    lib.sankhya_expr_sum.argtypes = [model_p, ctypes.c_int, c_int_p]
+    for name in ("sankhya_expr_constant", "sankhya_expr_variable", "sankhya_expr_unary",
+                 "sankhya_expr_binary", "sankhya_expr_power", "sankhya_expr_sum"):
+        getattr(lib, name).restype = ctypes.c_int
+    lib.sankhya_model_set_nonlinear_objective.argtypes = [model_p, ctypes.c_int]
+    lib.sankhya_model_set_nonlinear_objective.restype = ctypes.c_int
+    lib.sankhya_model_add_nonlinear_row.argtypes = [
+        model_p, ctypes.c_int, ctypes.c_double, ctypes.c_double, ctypes.c_char_p, c_int_p,
+    ]
+    lib.sankhya_model_add_nonlinear_row.restype = ctypes.c_int
+    lib.sankhya_model_num_nonlinear_rows.argtypes = [model_p]
+    lib.sankhya_model_num_nonlinear_rows.restype = ctypes.c_int
+    lib.sankhya_model_set_start.argtypes = [model_p, c_double_p, ctypes.c_int]
+    lib.sankhya_model_set_start.restype = ctypes.c_int
+    lib.sankhya_expr_evaluate.argtypes = [model_p, ctypes.c_int, c_double_p, ctypes.c_int,
+                                          c_double_p]
+    lib.sankhya_expr_evaluate.restype = ctypes.c_int
+
 
 _cached: ctypes.CDLL | None = None
 

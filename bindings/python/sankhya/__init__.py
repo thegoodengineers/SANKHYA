@@ -34,6 +34,7 @@ import ctypes
 from typing import Iterable, Mapping, Sequence
 
 from ._library import SankhyaError, load
+from .nonlinear import NonlinearModelMixin
 import collections
 
 Progress = collections.namedtuple("Progress", [
@@ -497,8 +498,9 @@ class Result:
         self.close()
 
 
-class Model:
-    """A linear, mixed-integer or convex quadratic program."""
+class Model(NonlinearModelMixin):
+    """A linear, mixed-integer or convex quadratic program, optionally with nonlinear parts
+    (see sankhya.nonlinear)."""
 
     def __init__(self, maximize: bool = False) -> None:
         self._handle = _library().sankhya_model_create()
@@ -509,7 +511,8 @@ class Model:
 
     @classmethod
     def read(cls, path: str) -> "Model":
-        """Read an MPS, QPS or LP file. Raises SankhyaError with the parser's message."""
+        """Read an MPS, QPS, LP or (text) .nl file. Raises SankhyaError with the parser's
+        message."""
         model = cls()
         _check(_library().sankhya_model_read(model._handle, str(path).encode()),
                f"reading {path!r}")
@@ -693,7 +696,7 @@ class Model:
         if callback_exc is not None:
             raise callback_exc
 
-        return Result(handle.value, self.num_cols, self.num_rows)
+        return Result(handle.value, self.num_cols, self.num_rows + self.num_nonlinear_rows)
 
     def __repr__(self) -> str:
         return (f"<sankhya.Model {self.num_rows} rows x {self.num_cols} columns, "

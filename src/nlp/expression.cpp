@@ -25,6 +25,8 @@ const char* to_string(Op op) noexcept {
     case Op::kExp: return "exp";
     case Op::kLog: return "log";
     case Op::kSqrt: return "sqrt";
+    case Op::kSin: return "sin";
+    case Op::kCos: return "cos";
   }
   return "unknown";
 }
@@ -291,6 +293,12 @@ double apply_log(double v) {
 double apply_sqrt(double v) {
   return std::sqrt(v);
 }
+double apply_sin(double v) {
+  return std::sin(v);
+}
+double apply_cos(double v) {
+  return std::cos(v);
+}
 }  // namespace
 
 ExprId ExpressionGraph::exp(ExprId a) {
@@ -326,6 +334,27 @@ ExprId ExpressionGraph::sqrt(ExprId a) {
   if (is_constant(a, &c) && atom.defined(c)) return constant(atom.apply(c));
   Node n;
   n.op = atom.op;
+  n.children = {a};
+  return intern(std::move(n));
+}
+
+// sin and cos are defined and finite everywhere, so a constant argument always folds.
+ExprId ExpressionGraph::sin(ExprId a) {
+  if (!usable(a, "sin")) return kNoExpr;
+  double c = 0.0;
+  if (is_constant(a, &c)) return constant(apply_sin(c));
+  Node n;
+  n.op = Op::kSin;
+  n.children = {a};
+  return intern(std::move(n));
+}
+
+ExprId ExpressionGraph::cos(ExprId a) {
+  if (!usable(a, "cos")) return kNoExpr;
+  double c = 0.0;
+  if (is_constant(a, &c)) return constant(apply_cos(c));
+  Node n;
+  n.op = Op::kCos;
   n.children = {a};
   return intern(std::move(n));
 }
@@ -383,6 +412,8 @@ std::string ExpressionGraph::to_string(ExprId root) const {
     case Op::kExp: return fmt::format("exp({})", to_string(n.children[0]));
     case Op::kLog: return fmt::format("log({})", to_string(n.children[0]));
     case Op::kSqrt: return fmt::format("sqrt({})", to_string(n.children[0]));
+    case Op::kSin: return fmt::format("sin({})", to_string(n.children[0]));
+    case Op::kCos: return fmt::format("cos({})", to_string(n.children[0]));
   }
   return "<unknown>";
 }
