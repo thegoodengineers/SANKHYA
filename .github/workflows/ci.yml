@@ -168,8 +168,11 @@ jobs:
             -DSANKHYA_BUILD_TESTS=ON             -DCMAKE_C_COMPILER_LAUNCHER=ccache             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
+        # No CCACHE_BASEDIR: it rewrites absolute source paths to relative ones, so __FILE__
+        # becomes "../tests/unit/...", and the tests that find data/netlib/ from __FILE__
+        # stop finding it (121 failures on the first run of this change). The runner checks
+        # out to the same absolute path every time, so the cache hits without it.
         env:
-          CCACHE_BASEDIR: ${{ github.workspace }}
           CCACHE_MAXSIZE: 2G
         run: |
           ccache --zero-stats
