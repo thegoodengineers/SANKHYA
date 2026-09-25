@@ -115,6 +115,12 @@ struct Workspace {
   /// onto such a row, so the implied-free substitution, whose postsolve prices the row from
   /// its eliminated column alone, declines it.
   std::vector<bool> row_propagated;
+  /// #485: columns a kImpliedBound record tightened. A doubleton or a free-column-singleton
+  /// fold prices such a column by its own formula, against the ORIGINAL box, while the
+  /// record moves its reduced cost onto the implying row: two rules for one price, which
+  /// the dual passes do not reconcile (scrs8's PCHTRB10 came back with -257 on a column at
+  /// its lower bound). Both folds decline these columns.
+  std::vector<bool> col_propagated;
 };
 
 [[nodiscard]] bool finite(double v) {
@@ -324,6 +330,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   work.col_implied_integer.assign(static_cast<std::size_t>(n), false);
   work.row_combined.assign(static_cast<std::size_t>(m), false);
   work.row_propagated.assign(static_cast<std::size_t>(m), false);
+  work.col_propagated.assign(static_cast<std::size_t>(n), false);
   work.extra_row_delta.assign(static_cast<std::size_t>(n), {});
   work.extra_new_rows.assign(static_cast<std::size_t>(n), {});
 
@@ -741,7 +748,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       };
       const bool free_in_the_model = !finite(work.col_lower[u]) && !finite(work.col_upper[u]);
       const bool implied_free_here = !free_in_the_model && implied_free_singleton(j);
-      if (work.col_count[u] == 1 && !work.quadratic_col[u] &&
+      if (work.col_count[u] == 1 && !work.quadratic_col[u] && !work.col_propagated[u] &&
           model.col_type[u] != VarType::kInteger && (free_in_the_model || implied_free_here)) {
         // The live row's coefficient is read from `original` and then patched by
         // extra_row_delta[j] - a doubleton's fill-in can have adjusted it already, and using
@@ -1119,6 +1126,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
             record.implied_upper = upper;
             result.records.push_back(record);
             work.row_propagated[r] = true;
+            work.col_propagated[u] = true;
             // The Farkas candidate (#253) leans on this row for this bound from now on.
             if (upper) {
               work.col_upper[u] = v;
@@ -1294,6 +1302,8 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         // comment on doubleton_touched above). Leave this row as an ordinary two-entry
         // equality instead.
         if (work.doubleton_touched[ue] || work.doubleton_touched[uk]) continue;
+        // Nor a column bound propagation priced (#485, see col_propagated).
+        if (work.col_propagated[ue] || work.col_propagated[uk]) continue;
 
         // Neither column may carry curvature (#301). Substituting x_elim = (rhs - b*x_keep)/a
         // into 0.5 x'Qx produces a square and a cross term in x_keep that the reduced model
