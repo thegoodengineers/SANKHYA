@@ -3,14 +3,19 @@
 //
 // Four obligations: the rule itself on a case worked by hand; validity, checked against every
 // integer point of small random boxes (no point that satisfies the rows may be cut off); the
-// CUDA propagator returns the SAME bounds as the CPU reference on random models and on the
-// Netlib models in the repository (skipped, and said so, without a card); and a search with
-// root propagation on reaches the exact MILP optimum.
+// CUDA propagator returns the SAME bounds as the CPU reference, bit for bit, on random models,
+// on the Netlib models in the repository and on every MIPLIB instance fetched into
+// data/miplib and data/miplib-tier2 (bench/runners/fetch_miplib.py; skipped, and said so,
+// without a card or without the files); and a search with root propagation on reaches the
+// exact MILP optimum.
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <random>
 #include <string>
@@ -136,28 +141,48 @@ TEST(DomainPropagation, NoIntegerPointOfTheRowsIsCutOff) {
   EXPECT_GT(points, 1000) << boxes << " boxes";
 }
 
+#ifdef SANKHYA_ENABLE_CUDA
+const std::filesystem::path kRepo =
+    std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+
+/// The device and the CPU reference from the same box, `rounds_limit` rounds at most: the same
+/// verdict, rounds and count, and every bound the same 64 bits (so -0.0 against 0.0, which
+/// operator== would accept, is a difference). Returns what the CPU reference did.
+JacobiPropagation same_bounds(const Model& model, const std::string& name, int rounds_limit) {
+  std::vector<double> lo = model.col_lower;
+  std::vector<double> hi = model.col_upper;
+  const JacobiPropagation cpu =
+      propagate_jacobi(model, row_major(model), &lo, &hi, rounds_limit, tol::kIntegrality);
+  const gpu::PropResult device = gpu::propagate_bounds(model, model.col_lower, model.col_upper,
+                                                       rounds_limit, tol::kIntegrality);
+  EXPECT_TRUE(device.ran) << name;
+  if (!device.ran) return cpu;
+  EXPECT_EQ(device.infeasible, cpu.infeasible) << name;
+  if (cpu.infeasible || device.infeasible) return cpu;
+  EXPECT_EQ(device.rounds, cpu.rounds) << name;
+  EXPECT_EQ(device.tightened, cpu.tightened) << name;
+  int differing = 0;
+  for (std::size_t j = 0; j < lo.size(); ++j) {
+    const bool lower_same =
+        std::bit_cast<std::uint64_t>(device.col_lb[j]) == std::bit_cast<std::uint64_t>(lo[j]);
+    const bool upper_same =
+        std::bit_cast<std::uint64_t>(device.col_ub[j]) == std::bit_cast<std::uint64_t>(hi[j]);
+    if (lower_same && upper_same) continue;
+    if (++differing <= 5) {
+      ADD_FAILURE() << name << " column " << j << ": device [" << device.col_lb[j] << ", "
+                    << device.col_ub[j] << "], CPU [" << lo[j] << ", " << hi[j] << "]";
+    }
+  }
+  EXPECT_EQ(differing, 0) << name << ": columns whose bounds differ in any bit";
+  return cpu;
+}
+#endif
+
 TEST(DomainPropagation, TheGpuReturnsTheCpuBounds) {
 #ifndef SANKHYA_ENABLE_CUDA
   GTEST_SKIP() << "CUDA backend not in this build: skipped, not passed.";
 #else
   if (!gpu::device_available(nullptr)) GTEST_SKIP() << "no CUDA device: skipped, not passed.";
-  const auto same = [](const Model& model, const std::string& name) {
-    std::vector<double> lo = model.col_lower;
-    std::vector<double> hi = model.col_upper;
-    const JacobiPropagation cpu =
-        propagate_jacobi(model, row_major(model), &lo, &hi, 50, tol::kIntegrality);
-    const gpu::PropResult device =
-        gpu::propagate_bounds(model, model.col_lower, model.col_upper, 50, tol::kIntegrality);
-    ASSERT_TRUE(device.ran) << name;
-    ASSERT_EQ(device.infeasible, cpu.infeasible) << name;
-    if (cpu.infeasible) return;
-    EXPECT_EQ(device.rounds, cpu.rounds) << name;
-    EXPECT_EQ(device.tightened, cpu.tightened) << name;
-    for (std::size_t j = 0; j < lo.size(); ++j) {
-      EXPECT_EQ(device.col_lb[j], lo[j]) << name << " column " << j;
-      EXPECT_EQ(device.col_ub[j], hi[j]) << name << " column " << j;
-    }
-  };
   std::mt19937_64 rng(5101);
   std::uniform_real_distribution<double> value(-5.0, 5.0);
   std::uniform_int_distribution<int> pick(0, 3);
@@ -176,19 +201,64 @@ TEST(DomainPropagation, TheGpuReturnsTheCpuBounds) {
     }
     Model model = integer_model(a, row_lo, row_hi, 0.0, 9.0);
     for (std::size_t j = 0; j < n; j += 3) model.col_type[j] = VarType::kContinuous;
-    same(model, "random " + std::to_string(trial));
+    same_bounds(model, "random " + std::to_string(trial), 50);
   }
-  const std::filesystem::path netlib =
-      std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "data/netlib";
+  const std::filesystem::path netlib = kRepo / "data/netlib";
   int compared = 0;
   for (const char* name : {"afiro", "sc50a", "sc105", "blend", "stocfor1", "adlittle",
                            "share2b", "scagr7", "boeing2", "brandy"}) {
     Model model;
     if (!io::read_model((netlib / (std::string(name) + ".mps")).string(), &model).ok) continue;
-    same(model, name);
+    same_bounds(model, name, 50);
     ++compared;
   }
   EXPECT_GE(compared, 5);
+#endif
+}
+
+TEST(DomainPropagation, TheGpuReturnsTheCpuBoundsOnMiplib) {
+  // The issue's acceptance item: "identical fixpoint bounds to the CPU propagator on the
+  // MIPLIB set". MIPLIB is fetched, not tracked (data/miplib* is gitignored), so this runs
+  // over whatever `bench/runners/fetch_miplib.py` (and `--tier 2`) put there, every file of
+  // it, with a round cap far above the solver's own so each model is taken to its fixpoint.
+#ifndef SANKHYA_ENABLE_CUDA
+  GTEST_SKIP() << "CUDA backend not in this build: skipped, not passed.";
+#else
+  if (!gpu::device_available(nullptr)) GTEST_SKIP() << "no CUDA device: skipped, not passed.";
+  std::vector<std::filesystem::path> files;
+  for (const char* dir : {"data/miplib", "data/miplib-tier2"}) {
+    std::error_code error;
+    for (const auto& entry : std::filesystem::directory_iterator(kRepo / dir, error)) {
+      const std::string file = entry.path().filename().string();
+      if (file.ends_with(".mps.gz") || file.ends_with(".mps")) files.push_back(entry.path());
+    }
+  }
+  if (files.empty()) {
+    GTEST_SKIP() << "no MIPLIB instance under data/miplib or data/miplib-tier2 (run "
+                    "bench/runners/fetch_miplib.py): skipped, not passed.";
+  }
+  std::sort(files.begin(), files.end());
+  constexpr int kRoundCap = 1000;
+  int compared = 0;
+  int at_fixpoint = 0;
+  for (const auto& path : files) {
+    Model model;
+    const std::string name = path.filename().string();
+    const auto read = io::read_model(path.string(), &model);
+    ASSERT_TRUE(read.ok) << name << ": " << read.error;
+    const JacobiPropagation cpu = same_bounds(model, name, kRoundCap);
+    ++compared;
+    if (cpu.rounds < kRoundCap) ++at_fixpoint;
+    std::printf("[ miplib    ] %-28s %6d rows %6d cols %4d round(s) %6lld tightened%s\n",
+                name.c_str(), static_cast<int>(model.num_rows()),
+                static_cast<int>(model.num_cols()), cpu.rounds,
+                static_cast<long long>(cpu.tightened), cpu.infeasible ? " (box empty)" : "");
+  }
+  std::printf(
+      "[ miplib    ] %d instance(s) compared bit for bit, %d at a fixpoint within %d "
+      "rounds\n",
+      compared, at_fixpoint, kRoundCap);
+  EXPECT_EQ(compared, static_cast<int>(files.size()));
 #endif
 }
 

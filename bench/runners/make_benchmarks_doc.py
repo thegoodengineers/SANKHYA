@@ -2436,6 +2436,81 @@ def pdhg_threads_section(path: Path | None) -> str:
     return "\n".join(out) + "\n"
 
 
+def gpu_domain_prop_section(path: Path | None) -> str:
+    """1g.5: root domain propagation, the CPU reference against the CUDA propagator, over
+    model size (#510), from bench/runners/gpu_domain_prop.py. The verdict is counted from the
+    rows, never written by hand: at how many sizes the device was faster."""
+    if path is None:
+        return ("Not yet run on `main`. Reproduce on a CUDA build with `python "
+                "bench/runners/gpu_domain_prop.py --binary build/sankhya`.\n")
+    rows = read_csv(path)
+    if not rows:
+        return "The CSV is empty.\n"
+    first = rows[0]
+    by_size: dict[str, dict[str, dict]] = {}
+    for r in rows:
+        by_size.setdefault(r.get("instance", ""), {})[r.get("backend", "")] = r
+    has_split = any((r.get("context_seconds") or "").strip() for r in rows)
+    header = ("| rows | columns | nonzeros | rounds | bounds tightened | CPU (s) | GPU (s) "
+              "| GPU / CPU |")
+    rule = "|---:|---:|---:|---:|---:|---:|---:|---:|"
+    if has_split:
+        header += " GPU context (s) | GPU without context (s) |"
+        rule += "---:|---:|"
+    header += " same rounds and count |"
+    rule += "---|"
+    out = [f"Source CSV: `{path.name}`  \nCommit `{first.get('git_commit', '?')}` · machine "
+           f"`{first.get('machine', '?')}` · GPU {first.get('gpu', '') or 'not recorded'} · "
+           f"median of {first.get('repeats', '?')} run(s) per cell, the propagation time the "
+           "solver logs (on the device: the row-major copy, the transfers and the rounds).\n",
+           header, rule]
+    measured = 0
+    device_faster = 0
+    for name in sorted(by_size, key=lambda k: int(by_size[k].get("cpu", by_size[k].get(
+            "gpu", {})).get("rows") or 0)):
+        cpu = by_size[name].get("cpu")
+        gpu = by_size[name].get("gpu")
+        if cpu is None or gpu is None:
+            continue
+        cpu_s = as_float(cpu, "seconds")
+        gpu_s = as_float(gpu, "seconds")
+        ratio = f"{gpu_s / cpu_s:.2f}x" if cpu_s and gpu_s is not None else "-"
+        if cpu_s is not None and gpu_s is not None:
+            measured += 1
+            device_faster += int(gpu_s < cpu_s)
+        line = (f"| {int(cpu.get('rows') or 0):,} | {int(cpu.get('cols') or 0):,} | "
+                f"{int(cpu.get('nnz') or 0):,} | {cpu.get('rounds', '')} | "
+                f"{int(cpu.get('tightened') or 0):,} | {cpu.get('seconds') or '-'} | "
+                f"{gpu.get('seconds') or '-'} | {ratio} |")
+        if has_split:
+            line += (f" {gpu.get('context_seconds') or '-'} | "
+                     f"{gpu.get('seconds_without_context') or '-'} |")
+        line += f" {gpu.get('agrees_with_cpu') or '-'} |"
+        out.append(line)
+    out.append("")
+    if measured and device_faster == 0:
+        out.append(f"**The device loses at every measured size ({measured} of {measured}).** "
+                   "The CPU reference is faster from the smallest model to the largest; the "
+                   "GPU backend stays off by default (`gpu_domain_prop=false`, "
+                   "`domain_prop_backend=auto`).")
+    elif measured:
+        out.append(f"The device is faster at {device_faster} of {measured} measured sizes.")
+    if has_split:
+        warm = [(as_float(by_size[k].get("cpu", {}), "seconds"),
+                 as_float(by_size[k].get("gpu", {}), "seconds_without_context"))
+                for k in by_size]
+        warm = [(c, g) for c, g in warm if c is not None and g is not None]
+        out.append(f"Without the context (a process that has already touched the card), the "
+                   f"device is faster at {sum(g < c for c, g in warm)} of {len(warm)}.")
+    if not has_split:
+        out.append("")
+        out.append("Each GPU cell is a fresh process, so it includes creating the process's "
+                   "CUDA context (with the other GPU options off, root propagation is the "
+                   "first thing in a MIP solve to touch the card); this CSV predates the runner's `context_seconds` column, "
+                   "so it cannot say how much of each GPU cell that is.")
+    return "\n".join(out) + "\n"
+
+
 def gpu_pdlp_section(path: Path | None) -> str:
     """GPU PDHG vs OR-Tools PDLP head-to-head (#447)."""
     if path is None:
@@ -2563,6 +2638,7 @@ def main() -> int:
     # is pooling-partial-<sha>.csv and the prefix filter keeps it out (#516).
     pooling_csv = newest("pooling-*.csv", prefix="pooling")
     gpu_pdlp_csv = newest("gpu-pdlp-*.csv")
+    gpu_domain_prop_csv = newest("gpu-domain-prop-*.csv", prefix="gpu-domain-prop")
 
     # Legacy untagged CSVs predate the tier tag; fall back so an old results directory still
     # generates something rather than failing.
@@ -2706,6 +2782,16 @@ over the `threads` workers, bitwise the same at any thread count (the test holds
 bit); this is what it buys, per instance, at a fixed iteration count:
 
 {pdhg_threads_section(pdhg_threads_csv)}
+#### 1g.5 Root domain propagation, CPU against the device (#510)
+
+Activity-based bound propagation at the MIP root (`gpu_domain_prop=true`), the CPU
+reference against the CUDA propagator (one thread per row, one per column; Sofranac,
+Gleixner and Pokutta, arXiv:2009.07785). The two return the same bounds bit for bit
+(`tests/unit/test_domain_propagation.cpp`, on random models, Netlib and the fetched MIPLIB
+sets); this is what each costs, on generated knapsack-row models from 1,000 to 1,000,000
+rows (`bench/runners/gpu_domain_prop.py`).
+
+{gpu_domain_prop_section(gpu_domain_prop_csv)}
 ---
 
 ### 1f. Scale — how far up this goes

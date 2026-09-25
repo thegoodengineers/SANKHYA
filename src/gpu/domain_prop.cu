@@ -17,6 +17,7 @@
 
 #include <cuda_runtime.h>
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -142,13 +143,15 @@ __global__ void k_cols(double* lo, double* hi, const double* __restrict__ cand_l
 }
 
 template <class T>
-bool upload(T** device, const T* host, std::size_t count) {
-  if (cudaMalloc(reinterpret_cast<void**>(device), (count == 0 ? 1 : count) * sizeof(T)) !=
-      cudaSuccess) {
-    return false;
-  }
+bool allocate(T** device, std::size_t count) {
+  return cudaMalloc(reinterpret_cast<void**>(device), (count == 0 ? 1 : count) * sizeof(T)) ==
+         cudaSuccess;
+}
+
+template <class T>
+bool upload(T* device, const T* host, std::size_t count) {
   return count == 0 ||
-         cudaMemcpy(*device, host, count * sizeof(T), cudaMemcpyHostToDevice) == cudaSuccess;
+         cudaMemcpy(device, host, count * sizeof(T), cudaMemcpyHostToDevice) == cudaSuccess;
 }
 
 struct DeviceBuffers {
@@ -156,29 +159,96 @@ struct DeviceBuffers {
   double *value{}, *row_lo{}, *row_hi{}, *lo{}, *hi{}, *cand_lo{}, *cand_hi{};
   char* integer{};
   unsigned long long* changed{};
-  ~DeviceBuffers() {
-    cudaFree(start);
-    cudaFree(column);
-    cudaFree(infeasible);
-    cudaFree(value);
-    cudaFree(row_lo);
-    cudaFree(row_hi);
-    cudaFree(lo);
-    cudaFree(hi);
-    cudaFree(cand_lo);
-    cudaFree(cand_hi);
-    cudaFree(integer);
-    cudaFree(changed);
+  DeviceBuffers() = default;
+  DeviceBuffers(const DeviceBuffers&) = delete;
+  DeviceBuffers& operator=(const DeviceBuffers&) = delete;
+  ~DeviceBuffers() { release(); }
+  void release() {
+    // cudaFree(nullptr) is a no-op, so a partly allocated or released set frees cleanly.
+    for (void* p : {static_cast<void*>(start), static_cast<void*>(column),
+                    static_cast<void*>(infeasible), static_cast<void*>(value),
+                    static_cast<void*>(row_lo), static_cast<void*>(row_hi),
+                    static_cast<void*>(lo), static_cast<void*>(hi),
+                    static_cast<void*>(cand_lo), static_cast<void*>(cand_hi),
+                    static_cast<void*>(integer), static_cast<void*>(changed)}) {
+      cudaFree(p);
+    }
+    start = column = infeasible = nullptr;
+    value = row_lo = row_hi = lo = hi = cand_lo = cand_hi = nullptr;
+    integer = nullptr;
+    changed = nullptr;
   }
 };
+
+/// Seconds on the host's steady clock since `*mark`, moving the mark to now.
+double lap(std::chrono::steady_clock::time_point* mark) {
+  const auto now = std::chrono::steady_clock::now();
+  const double seconds = std::chrono::duration<double>(now - *mark).count();
+  *mark = now;
+  return seconds;
+}
+
+/// The rounds on the device, from uploaded buffers. False when a CUDA call failed. Every
+/// round ends in a synchronous read-back, so the host clock around this covers the kernels.
+bool run_rounds(const DeviceBuffers& d, int m, int n, int rounds_limit, double integrality,
+                PropResult* result) {
+  const int row_blocks = (m + kBlock - 1) / kBlock;
+  const int col_blocks = (n + kBlock - 1) / kBlock;
+  for (int round = 0; round < rounds_limit; ++round) {
+    ++result->rounds;
+    if (n > 0) k_reset<<<col_blocks, kBlock>>>(d.cand_lo, d.cand_hi, n);
+    if (m > 0) {
+      k_rows<<<row_blocks, kBlock>>>(d.start, d.column, d.value, d.row_lo, d.row_hi, d.lo, d.hi,
+                                     d.cand_lo, d.cand_hi, d.infeasible, m,
+                                     tol::kPrimalFeasibility);
+    }
+    int infeasible = 0;
+    if (cudaMemcpy(&infeasible, d.infeasible, sizeof(int), cudaMemcpyDeviceToHost) !=
+        cudaSuccess) {
+      return false;
+    }
+    if (infeasible != 0) {
+      result->infeasible = true;
+      return true;
+    }
+    if (cudaMemset(d.changed, 0, sizeof(unsigned long long)) != cudaSuccess) return false;
+    if (n > 0) {
+      k_cols<<<col_blocks, kBlock>>>(d.lo, d.hi, d.cand_lo, d.cand_hi, d.integer, d.infeasible,
+                                     d.changed, n, tol::kPropagationMinChange, integrality,
+                                     tol::kPrimalFeasibility);
+    }
+    unsigned long long changed = 0;
+    if (cudaMemcpy(&changed, d.changed, sizeof(changed), cudaMemcpyDeviceToHost) != cudaSuccess ||
+        cudaMemcpy(&infeasible, d.infeasible, sizeof(int), cudaMemcpyDeviceToHost) !=
+            cudaSuccess) {
+      return false;
+    }
+    if (infeasible != 0) {
+      result->infeasible = true;
+      return true;
+    }
+    result->tightened += static_cast<long long>(changed);
+    if (changed == 0) break;
+  }
+  return true;
+}
 
 }  // namespace
 
 PropResult propagate_bounds(const Model& model, const std::vector<double>& col_lb,
                             const std::vector<double>& col_ub, int rounds_limit,
                             double integrality) {
-  PropResult result{col_lb, col_ub, false, false, 0, 0};
-  if (!device_available(nullptr)) return result;
+  PropResult result;
+  result.col_lb = col_lb;
+  result.col_ub = col_ub;
+  auto mark = std::chrono::steady_clock::now();
+  // The CUDA runtime makes the process's context lazily, on the first call that needs one.
+  // cudaFree(nullptr) is such a call and does nothing else, so that cost is timed here and
+  // not inside the first allocation. It is paid once per process: a later call finds the
+  // context already made and this phase drops to the probe alone.
+  const bool device = device_available(nullptr) && cudaFree(nullptr) == cudaSuccess;
+  result.phases.context = lap(&mark);
+  if (!device) return result;
   const mip::RowMajor rows = mip::row_major(model);
   const int m = static_cast<int>(rows.rows);
   const int n = static_cast<int>(rows.cols);
@@ -189,67 +259,44 @@ PropResult propagate_bounds(const Model& model, const std::vector<double>& col_l
     integer[static_cast<std::size_t>(j)] =
         model.col_type[static_cast<std::size_t>(j)] == VarType::kInteger ? 1 : 0;
   }
+  result.phases.host = lap(&mark);
   DeviceBuffers d;
+  const auto cols = static_cast<std::size_t>(n);
+  const bool allocated =
+      allocate(&d.start, start.size()) && allocate(&d.column, column.size()) &&
+      allocate(&d.value, rows.value.size()) && allocate(&d.row_lo, model.row_lower.size()) &&
+      allocate(&d.row_hi, model.row_upper.size()) && allocate(&d.lo, col_lb.size()) &&
+      allocate(&d.hi, col_ub.size()) && allocate(&d.integer, integer.size()) &&
+      allocate(&d.infeasible, 1) && allocate(&d.changed, 1) && allocate(&d.cand_lo, cols) &&
+      allocate(&d.cand_hi, cols);
+  result.phases.allocate = lap(&mark);
+  if (!allocated) return result;
   const int zero = 0;
   const unsigned long long zero_count = 0;
-  const bool ok =
-      upload(&d.start, start.data(), start.size()) &&
-      upload(&d.column, column.data(), column.size()) &&
-      upload(&d.value, rows.value.data(), rows.value.size()) &&
-      upload(&d.row_lo, model.row_lower.data(), model.row_lower.size()) &&
-      upload(&d.row_hi, model.row_upper.data(), model.row_upper.size()) &&
-      upload(&d.lo, col_lb.data(), col_lb.size()) && upload(&d.hi, col_ub.data(), col_ub.size()) &&
-      upload(&d.integer, integer.data(), integer.size()) &&
-      upload(&d.infeasible, &zero, 1) && upload(&d.changed, &zero_count, 1) &&
-      cudaMalloc(reinterpret_cast<void**>(&d.cand_lo), (n == 0 ? 1 : n) * sizeof(double)) ==
-          cudaSuccess &&
-      cudaMalloc(reinterpret_cast<void**>(&d.cand_hi), (n == 0 ? 1 : n) * sizeof(double)) ==
-          cudaSuccess;
-  if (!ok) return result;
-  const int row_blocks = (m + kBlock - 1) / kBlock;
-  const int col_blocks = (n + kBlock - 1) / kBlock;
-  for (int round = 0; round < rounds_limit; ++round) {
-    ++result.rounds;
-    if (n > 0) k_reset<<<col_blocks, kBlock>>>(d.cand_lo, d.cand_hi, n);
-    if (m > 0) {
-      k_rows<<<row_blocks, kBlock>>>(d.start, d.column, d.value, d.row_lo, d.row_hi, d.lo, d.hi,
-                                     d.cand_lo, d.cand_hi, d.infeasible, m,
-                                     tol::kPrimalFeasibility);
-    }
-    int infeasible = 0;
-    if (cudaMemcpy(&infeasible, d.infeasible, sizeof(int), cudaMemcpyDeviceToHost) !=
-        cudaSuccess) {
-      return result;
-    }
-    if (infeasible != 0) {
-      result.infeasible = true;
-      result.ran = true;
-      return result;
-    }
-    if (cudaMemset(d.changed, 0, sizeof(unsigned long long)) != cudaSuccess) return result;
-    if (n > 0) {
-      k_cols<<<col_blocks, kBlock>>>(d.lo, d.hi, d.cand_lo, d.cand_hi, d.integer, d.infeasible,
-                                     d.changed, n, tol::kPropagationMinChange, integrality,
-                                     tol::kPrimalFeasibility);
-    }
-    unsigned long long changed = 0;
-    if (cudaMemcpy(&changed, d.changed, sizeof(changed), cudaMemcpyDeviceToHost) != cudaSuccess ||
-        cudaMemcpy(&infeasible, d.infeasible, sizeof(int), cudaMemcpyDeviceToHost) !=
-            cudaSuccess) {
-      return result;
-    }
-    if (infeasible != 0) {
-      result.infeasible = true;
-      result.ran = true;
-      return result;
-    }
-    result.tightened += static_cast<long long>(changed);
-    if (changed == 0) break;
-  }
-  if (n > 0 && (cudaMemcpy(result.col_lb.data(), d.lo, static_cast<std::size_t>(n) * sizeof(double),
-                           cudaMemcpyDeviceToHost) != cudaSuccess ||
-                cudaMemcpy(result.col_ub.data(), d.hi, static_cast<std::size_t>(n) * sizeof(double),
-                           cudaMemcpyDeviceToHost) != cudaSuccess)) {
+  const bool uploaded =
+      upload(d.start, start.data(), start.size()) &&
+      upload(d.column, column.data(), column.size()) &&
+      upload(d.value, rows.value.data(), rows.value.size()) &&
+      upload(d.row_lo, model.row_lower.data(), model.row_lower.size()) &&
+      upload(d.row_hi, model.row_upper.data(), model.row_upper.size()) &&
+      upload(d.lo, col_lb.data(), col_lb.size()) && upload(d.hi, col_ub.data(), col_ub.size()) &&
+      upload(d.integer, integer.data(), integer.size()) && upload(d.infeasible, &zero, 1) &&
+      upload(d.changed, &zero_count, 1);
+  result.phases.upload = lap(&mark);
+  if (!uploaded) return result;
+  const bool finished = run_rounds(d, m, n, rounds_limit, integrality, &result);
+  result.phases.rounds = lap(&mark);
+  if (!finished) return result;
+  const bool downloaded =
+      result.infeasible || n == 0 ||
+      (cudaMemcpy(result.col_lb.data(), d.lo, cols * sizeof(double), cudaMemcpyDeviceToHost) ==
+           cudaSuccess &&
+       cudaMemcpy(result.col_ub.data(), d.hi, cols * sizeof(double), cudaMemcpyDeviceToHost) ==
+           cudaSuccess);
+  result.phases.download = lap(&mark);
+  d.release();
+  result.phases.release = lap(&mark);
+  if (!downloaded) {
     result.col_lb = col_lb;
     result.col_ub = col_ub;
     return result;
