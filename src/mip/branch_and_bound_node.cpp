@@ -384,12 +384,46 @@ Index BranchAndBound::choose_branching_column(const std::vector<double>& x, doub
   std::vector<double> measured_down(candidates.size(), -1.0);
   std::vector<double> measured_up(candidates.size(), -1.0);
   std::vector<bool> infeasible_side(candidates.size(), false);
-  for (const std::size_t i : to_probe) {
+  // BATCHED STRONG BRANCHING (#520): every probe child in one batched PDHG run. A child the
+  // safe bound already prunes is a closed side, as an infeasible probe is. Under "score" the
+  // other children are scored by their safe bounds (one with no finite bound keeps its
+  // pseudocost estimate) and no simplex probe runs; under "filter" only the closed children
+  // skip their probe, and the rest are probed by the dual simplex exactly as before.
+  bool batched = false;
+  if (batch_strong_ && !to_probe.empty()) {
+    std::vector<Index> columns;
+    for (const std::size_t i : to_probe) columns.push_back(candidates[i].column);
+    std::vector<double> down_bound;
+    std::vector<double> up_bound;
+    batched = batch_strong_branch(x, columns, &down_bound, &up_bound);
+    for (std::size_t p = 0; batched && p < to_probe.size(); ++p) {
+      const std::size_t i = to_probe[p];
+      for (int direction = 0; direction < 2; ++direction) {
+        const bool downward = direction == 0;
+        const double bound = downward ? down_bound[p] : up_bound[p];
+        double& measured = downward ? measured_down[i] : measured_up[i];
+        if (can_prune(bound)) {
+          infeasible_side[i] = true;
+          measured = std::numeric_limits<double>::infinity();
+          continue;
+        }
+        if (!batch_score_ || !std::isfinite(bound)) continue;
+        measured = std::max(bound - node_bound, 0.0);
+        const double fraction =
+            downward ? candidates[i].fraction : 1.0 - candidates[i].fraction;
+        if (fraction > 0.0)
+          record_pseudocost(candidates[i].column, downward, measured, fraction);
+      }
+    }
+  }
+  for (const std::size_t i : batched&& batch_score_ ? std::vector<std::size_t>{} : to_probe) {
     const Candidate& candidate = candidates[i];
     const auto u = static_cast<std::size_t>(candidate.column);
     const double v = x[u];
     for (int direction = 0; direction < 2; ++direction) {
       const bool downward = direction == 0;
+      // Under "filter", a side the batch closed needs no probe.
+      if (batched && std::isinf(downward ? measured_down[i] : measured_up[i])) continue;
       const std::size_t saved_before = saved_.size();
       if (downward) {
         tighten_upper(u, std::floor(v));

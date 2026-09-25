@@ -303,6 +303,7 @@ Solution BranchAndBound::run() {
   if (const std::int64_t entries = options_.get_int("mip_node_factor_cache"); entries > 0) {
     factor_cache_ = std::make_unique<NodeFactorCache>(static_cast<std::size_t>(entries));
   }
+  init_batch();  // #520, off by default until an A/B on main
 
   logger_.info("Branch and bound: {} rows, {} columns, {} integer columns",
                original_.num_rows(), original_.num_cols(), integer_columns_.size());
@@ -483,6 +484,12 @@ Solution BranchAndBound::run() {
 
     // Which node to take next is the configured policy's decision (#293), and only the
     // order it decides: the tree, the bounds and the incumbent test are the same either way.
+    // BATCHED NODE BOUNDS (#520), between nodes: open nodes bounded together by the batched
+    // PDHG's safe bounds, and those it closes dropped before any of them is solved.
+    if (batch_nodes_) {
+      batch_bound_open_nodes();
+      if (open_.empty()) continue;
+    }
     const Index node_index = take_next_open_node(dive);
     dive = false;
 
@@ -591,6 +598,7 @@ Solution BranchAndBound::run() {
     // The root relaxation after cuts is what reduced-cost fixing (#418) reasons from: its
     // reduced costs bound what every integer solution must pay to move a column.
     if (node_index == 0) remember_root_relaxation(relaxation);
+    if (node_index == 0) batch_remember_root(relaxation);  // #520's starting point
     // Cuts below the root (#221): shallow nodes only, on the global bounds, kept for the
     // whole tree. The node's bound is taken after the round, so a cut that moved it
     // counts for pruning and for the pseudocosts alike.
@@ -803,6 +811,7 @@ Solution BranchAndBound::run() {
   report_conflicts();
   report_safe_bounds();
   report_branching_fixpoint();
+  report_batch();
   finish_certificate();  // #518: written here, whatever status the search ends in
   // A search stopped by a limit is exactly the one worth resuming (#287).
   if (limit_hit && !open_.empty()) save_checkpoint();
