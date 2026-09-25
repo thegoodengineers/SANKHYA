@@ -1411,10 +1411,11 @@ const std::vector<OptionSpec>& Options::registry() {
         {"conflict_cutoff",
          OptionType::Bool,
          false,
-         "MILP: also learn conflicts from nodes pruned by bound (not only from infeasible "
-         "nodes); the LP's dual solution at the cutoff acts as a Farkas-like proof that "
-         "the branching decisions cannot improve on the incumbent (#503). Off by default "
-         "until a clean A/B on main.",
+         "MILP, with conflict_analysis on: also learn conflicts from nodes pruned by bound, "
+         "not only from infeasible ones (#503). A conflict is kept only when the safe "
+         "(Neumaier-Shcherbina) bound of the node LP's row duals over its literals, from the "
+         "global bounds, exceeds the incumbent less mip_absolute_gap. Not used for MIQP or "
+         "pool_complete. Off by default until a clean A/B on main.",
          0.0,
          0.0,
          {}});
