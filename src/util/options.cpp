@@ -1325,6 +1325,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"conflict_cutoff",
+         OptionType::Bool,
+         false,
+         "MILP: also learn conflicts from nodes pruned by bound (not only from infeasible "
+         "nodes); the LP's dual solution at the cutoff acts as a Farkas-like proof that "
+         "the branching decisions cannot improve on the incumbent (#503). Off by default "
+         "until a clean A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"conflict_minimize",
                  OptionType::Bool,
                  true,

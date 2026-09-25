@@ -858,6 +858,7 @@ class BranchAndBound {
   /// Conflict analysis (#292): the learned conflicts, their statistics, and whether the
   /// search is inside an analysis (whose trial propagations must not count as uses).
   bool conflicts_enabled_ = false;
+  bool conflict_cutoff_ = false;
   bool conflict_minimize_ = true;
   /// conflict_use: what the search does with a learned conflict (#292's ablation).
   enum class ConflictUse { kNone, kPrune, kPropagate };
