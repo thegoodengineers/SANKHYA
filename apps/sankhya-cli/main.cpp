@@ -31,6 +31,9 @@
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 #include "sankhya/qcqp.hpp"
+
+#include "nlp/nl_reader.hpp"
+#include "nonlinear_cli.hpp"
 #include "sankhya/solve_control.hpp"
 #include "sankhya/version.hpp"
 
@@ -241,7 +244,7 @@ int main(int argc, char** argv) {
 
   CLI::App* solve_cmd = app.add_subcommand("solve", "Solve a model file");
   std::string model_path;
-  solve_cmd->add_option("file", model_path, "Model file (.mps, .lp)")->required();
+  solve_cmd->add_option("file", model_path, "Model file (.mps, .lp, .nl)")->required();
   solve_cmd->add_option("--option", option_assignments, "Set a solver option (name=value)");
   double time_limit = -1.0;
   solve_cmd->add_option("--time-limit", time_limit, "Wall-clock limit in seconds");
@@ -266,7 +269,7 @@ int main(int argc, char** argv) {
 
   CLI::App* info_cmd = app.add_subcommand("info", "Report the dimensions of a model file");
   std::string info_path;
-  info_cmd->add_option("file", info_path, "Model file (.mps, .lp)")->required();
+  info_cmd->add_option("file", info_path, "Model file (.mps, .lp, .nl)")->required();
   info_cmd->add_option("--option", option_assignments, "Set a solver option (name=value)");
   bool info_features = false;
   info_cmd->add_flag("--features", info_features,
@@ -313,6 +316,7 @@ int main(int argc, char** argv) {
   if (compute_ranging) options.set_bool("ranging", true);
 
   if (info_cmd->parsed()) {
+    if (sankhya::nlp::looks_like_nl(info_path)) return sankhya::cli::nonlinear_info(info_path);
     sankhya::Model model;
     if (!load_model(info_path, options, &model)) return 3;
     if (info_features) {
@@ -356,6 +360,9 @@ int main(int argc, char** argv) {
   }
 
   if (solve_cmd->parsed()) {
+    if (sankhya::nlp::looks_like_nl(model_path)) {
+      return sankhya::cli::nonlinear_solve(model_path, options);
+    }
     sankhya::Model model;
     // Under nonconvex=global the model is read with its quadratic rows and solved by the
     // global method (#514); `model` then holds the linear part, for names and the writers.

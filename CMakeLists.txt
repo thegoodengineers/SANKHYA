@@ -242,6 +242,7 @@ endif()
 
 set(SANKHYA_CORE_SOURCES
   src/api/c_api.cpp
+  src/api/c_api_nlp.cpp
   src/core/certificate.cpp
   src/exact/exact_verify.cpp
   src/core/safe_bound.cpp
@@ -324,7 +325,11 @@ set(SANKHYA_CORE_SOURCES
   src/nlp/convexity.cpp
   src/nlp/derivatives.cpp
   src/nlp/expression.cpp
+  src/nlp/nl_reader.cpp
+  src/nlp/nlp_problem.cpp
   src/nlp/nonlinear_model.cpp
+  src/nlp/sparsity.cpp
+  src/nlp/tape.cpp
   src/global/fbbt.cpp
   src/global/local_search.cpp
   src/global/qcqp_model.cpp
@@ -507,7 +512,7 @@ set_target_properties(sankhya_shared PROPERTIES
 # CLI
 # -----------------------------------------------------------------------------------------
 
-add_executable(sankhya-cli apps/sankhya-cli/main.cpp)
+add_executable(sankhya-cli apps/sankhya-cli/main.cpp apps/sankhya-cli/nonlinear_cli.cpp)
 target_link_libraries(sankhya-cli
   PRIVATE sankhya_core CLI11::CLI11 nlohmann_json::nlohmann_json sankhya_flags)
 # `diagnose` is part of the CLI rather than of the public headers, so the front end reaches

@@ -36,6 +36,17 @@ std::string NonlinearModel::validate() const {
     return fmt::format("the expressions are over {} columns and the model has {}",
                        graph.num_variables(), base.num_cols());
   }
+  if (!start.empty()) {
+    if (start.size() != static_cast<std::size_t>(base.num_cols())) {
+      return fmt::format("the starting point has {} entries and the model {} columns",
+                         start.size(), base.num_cols());
+    }
+    for (std::size_t j = 0; j < start.size(); ++j) {
+      if (!std::isfinite(start[j])) {
+        return fmt::format("the starting point's entry {} is {}", j, start[j]);
+      }
+    }
+  }
   if (objective != kNoExpr && !graph.contains(objective)) {
     return fmt::format("the nonlinear objective names node {}, which is not in the graph",
                        objective);
