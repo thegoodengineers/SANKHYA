@@ -115,14 +115,33 @@ jobs:
   build-and-test:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    # The suites that start their own threads, or assert on how threads shared work. They run
+    # after the parallel set, one at a time (see the Test step for why). Named once here
+    # because the Test step and the shard coverage check below must agree on it exactly.
+    env:
+      SERIAL_TESTS: '^(ParallelTree|PdhgParallelSpmv|EngineConcurrency|EngineRace|EngineDeterminism|Deterministic)\.'
     strategy:
       fail-fast: false
       matrix:
+        # Fields besides the build flags:
+        #   cache_key       the compiler cache and test timings this leg restores
+        #   save_cache      this leg saves them back, on main
+        #   parallel_tests  this leg runs the parallel set (everything but SERIAL_TESTS)
+        #   shard_index,    which part of the parallel set: ctest's -I index,,count, every
+        #   shard_count     count-th test from the index-th. Unset = all of it.
+        #   serial_tests    this leg runs the serial set (SERIAL_TESTS above)
+        #   after_tests     this leg runs the CLI smoke test, the synthetic LP and the case
+        #                   studies, the steps that ran on both Release and the ASan leg
         include:
           - name: Release
             build_type: Release
             sanitize: OFF
             debug_flags: ""
+            cache_key: Release
+            save_cache: true
+            parallel_tests: true
+            serial_tests: true
+            after_tests: true
           # -O1 rather than the Debug default -O0: the AddressSanitizer documentation
           # recommends it for reasonable performance, every check still runs, and the build
           # stays Debug so assert() is still compiled in. At -O0 this leg took 15 to 20
@@ -130,10 +149,55 @@ jobs:
           # known false positive, maybe-uninitialized, inside libstdc++'s own std::regex
           # (std_function.h), so that one warning stays a warning here; the Release leg still
           # builds everything with -Werror and the warning on.
-          - name: Debug+ASan+UBSan
+          #
+          # SPLIT THREE WAYS. With the compiler cache warm (#673) this leg was 10 minutes, 7
+          # of them one Test step (403 s parallel, 25 s serial) and 2.5 the case studies after
+          # it, which made it the job every merge waited for. Each part rebuilds from the same
+          # cache in about 15 s. (1/2) and (2/2) each run every other test of the parallel
+          # set, so no test is dropped and none runs twice - the step "The shards cover every
+          # test exactly once" proves that on every run. The third part runs the serial set
+          # and the post-test steps.
+          #
+          # Why a third part rather than putting those on one of the halves: -I deals tests
+          # by their position in the list, so which half the slowest test lands on flips
+          # whenever a test is added before it. On this change's first run one test,
+          # FeasibilityJump.TheSearchWithItOnAgreesWithTheExactOracle, was the whole of its
+          # half's 329 s; a half that also carried the 2.5 minutes of case studies would have
+          # been back near 9 minutes on every other pull request. With both halves holding
+          # only parallel tests, neither can be longer than its slowest test allows.
+          - name: Debug+ASan+UBSan (1/2)
             build_type: Debug
             sanitize: ON
             debug_flags: "-g -O1 -Wno-error=maybe-uninitialized"
+            cache_key: Debug+ASan+UBSan-1of2
+            save_cache: true
+            parallel_tests: true
+            shard_index: 1
+            shard_count: 2
+            serial_tests: false
+            after_tests: false
+          - name: Debug+ASan+UBSan (2/2)
+            build_type: Debug
+            sanitize: ON
+            debug_flags: "-g -O1 -Wno-error=maybe-uninitialized"
+            cache_key: Debug+ASan+UBSan-2of2
+            save_cache: true
+            parallel_tests: true
+            shard_index: 2
+            shard_count: 2
+            serial_tests: false
+            after_tests: false
+          # Borrows (1/2)'s cache and saves none of its own: the compiler output is the same
+          # for every part, and timings only reorder a parallel run, which this part has not.
+          - name: Debug+ASan+UBSan (serial, end to end)
+            build_type: Debug
+            sanitize: ON
+            debug_flags: "-g -O1 -Wno-error=maybe-uninitialized"
+            cache_key: Debug+ASan+UBSan-1of2
+            save_cache: false
+            parallel_tests: false
+            serial_tests: true
+            after_tests: true
 
     steps:
       - uses: actions/checkout@v4
@@ -152,14 +216,26 @@ jobs:
       # started last because a fresh build has no timings, so ctest could not schedule
       # them first. With the timings file restored it starts the longest tests first.
       # Saved only from main, so pull requests read main's cache and do not evict it.
+      #
+      # One key per ASan half, not one shared key. ctest rewrites the timings file after a
+      # run with fresh times for the tests it ran and the old entries for the rest, so if
+      # only one half saved, the other half's times would stay frozen at whatever they were
+      # when the split landed. Each half saving its own keeps both current, at the cost of a
+      # second copy of the same ~150 MB compiler cache per merge. The second restore key is
+      # the prefix every ASan key shares, including the one the unsplit leg saved under: it
+      # lets the first run after the split, and any part whose own key has been evicted,
+      # start from a warm cache instead of a 7-minute cold build. The timings file is per
+      # test name, so any part can use any part's file.
       - name: Restore the compiler cache and the test timings
         uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cache/ccache
             build/Testing/Temporary/CTestCostData.txt
-          key: build-${{ matrix.name }}-${{ github.sha }}
-          restore-keys: build-${{ matrix.name }}-
+          key: build-${{ matrix.cache_key }}-${{ github.sha }}
+          restore-keys: |
+            build-${{ matrix.cache_key }}-
+            build-${{ matrix.build_type == 'Debug' && 'Debug+ASan+UBSan' || 'Release' }}-
 
       - name: Report compiler version
         run: g++ --version
@@ -184,6 +260,41 @@ jobs:
           cmake --build build -j
           ccache --show-stats
 
+      # A split test run is only as good as the proof that it drops nothing. This lists the
+      # tests (ctest -N runs none) that each half's parallel set and the serial set select,
+      # and fails unless together they are exactly the full list: every test once, none
+      # twice, none missing. It runs on both halves and checks every set, not only its own,
+      # so each half's log shows all the counts. ctest's -I numbers the FULL test list and -E then filters, so
+      # a test added anywhere moves others between halves but can never fall between them.
+      - name: The shards cover every test exactly once
+        if: matrix.shard_count
+        env:
+          SHARD_COUNT: ${{ matrix.shard_count }}
+        run: |
+          set -euo pipefail
+          names() { ctest --test-dir build -N "$@" | sed -n 's/^ *Test *#[0-9]*: //p'; }
+          names > "$RUNNER_TEMP/all.txt"
+          : > "$RUNNER_TEMP/union.txt"
+          for i in $(seq 1 "$SHARD_COUNT"); do
+            names -E "$SERIAL_TESTS" -I "$i,,$SHARD_COUNT" > "$RUNNER_TEMP/shard-$i.txt"
+            echo "shard $i/$SHARD_COUNT, parallel set: $(wc -l < "$RUNNER_TEMP/shard-$i.txt") tests"
+            cat "$RUNNER_TEMP/shard-$i.txt" >> "$RUNNER_TEMP/union.txt"
+          done
+          names -R "$SERIAL_TESTS" > "$RUNNER_TEMP/serial.txt"
+          echo "serial set:              $(wc -l < "$RUNNER_TEMP/serial.txt") tests"
+          cat "$RUNNER_TEMP/serial.txt" >> "$RUNNER_TEMP/union.txt"
+          echo "sum of the above:        $(wc -l < "$RUNNER_TEMP/union.txt") tests"
+          echo "unsplit run (ctest -N):  $(wc -l < "$RUNNER_TEMP/all.txt") tests"
+          twice=$(sort "$RUNNER_TEMP/union.txt" | uniq -d)
+          if [ -n "$twice" ]; then
+            echo "FAIL: selected by more than one set:"; echo "$twice"; exit 1
+          fi
+          if ! diff <(sort "$RUNNER_TEMP/all.txt") <(sort "$RUNNER_TEMP/union.txt"); then
+            echo "FAIL: the sets above differ from the unsplit list (< missing, > extra)"
+            exit 1
+          fi
+          echo "OK: every test is in exactly one set"
+
       - name: Test
         env:
           # halt_on_error keeps a sanitizer report from being buried under later output.
@@ -194,22 +305,29 @@ jobs:
         # other tests they fight for the same cores, and on the first parallel run
         # PdhgParallelSpmv took 649 s per test under ASan and ParallelTree's work-sharing count
         # came out 46 against its floor of 50 while every answer still agreed.
+        #
+        # On the split ASan leg each half runs its share of the parallel set (-I, see the
+        # matrix) and the third part runs the serial set; Release runs both, whole.
         run: |
           set -euo pipefail
-          serial='^(ParallelTree|PdhgParallelSpmv|EngineConcurrency|EngineRace|EngineDeterminism|Deterministic)\.'
-          ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$serial"
-          ctest --test-dir build --output-on-failure -R "$serial"
+          if [ "${{ matrix.parallel_tests }}" = true ]; then
+            ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$SERIAL_TESTS" \
+              ${{ matrix.shard_count && format('-I {0},,{1}', matrix.shard_index, matrix.shard_count) || '' }}
+          fi
+          if [ "${{ matrix.serial_tests }}" = true ]; then
+            ctest --test-dir build --output-on-failure -R "$SERIAL_TESTS"
+          fi
 
       # After the tests, so the timings file holds this run's times. A failed run saves
       # nothing: `if: success()` is the default for a step.
       - name: Save the compiler cache and the test timings
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.save_cache
         uses: actions/cache/save@v4
         with:
           path: |
             ~/.cache/ccache
             build/Testing/Temporary/CTestCostData.txt
-          key: build-${{ matrix.name }}-${{ github.sha }}
+          key: build-${{ matrix.cache_key }}-${{ github.sha }}
 
       # The bindings are pure ctypes over the shared library, so there is no extension to
       # build and no Python dependency to install - but that also means nothing else in CI
@@ -356,12 +474,17 @@ jobs:
           python3 bench/runners/test_check_result_stamps.py
           python3 bench/runners/check_result_stamps.py --base origin/main
 
+      # The next four steps ran on both Release and the unsplit ASan leg; `after_tests` keeps
+      # them to Release and the ASan leg's third part, so each still runs exactly once per
+      # build type.
+      #
       # Every other check in this job is a unit test. Without this step the command line
       # itself - argument handling, file loading, the writers, the exit codes - is covered
       # by nothing and could break completely while CI stayed green. This runs the pipeline
       # the way a judge will: read a file, solve it, write the outputs, and check the number
       # against a value verified by hand outside the solver.
       - name: CLI end-to-end smoke test
+        if: matrix.after_tests
         run: |
           set -euo pipefail
           ./build/sankhya version
@@ -422,6 +545,7 @@ jobs:
       # is the load-bearing claim and needs no third party; numpy is used only for the SVD
       # behind the condition number, and the script says so plainly when it is absent.
       - name: numpy, for the condition number only
+        if: matrix.after_tests
         run: pip install numpy
 
       # The synthetic generator (#18). Small on purpose - this is a smoke test that the
@@ -430,6 +554,7 @@ jobs:
       # where the two engines diverge cost a minute of simplex time each and belong in a
       # benchmark run, not on every pull request.
       - name: Synthetic large LP generator
+        if: matrix.after_tests
         run: |
           set -euo pipefail
           mkdir -p bench/large
@@ -479,6 +604,7 @@ jobs:
           done
 
       - name: PS26119 case studies
+        if: matrix.after_tests
         run: |
           set -euo pipefail
 
@@ -729,7 +855,54 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ON A PULL REQUEST, ONLY WHEN IT CAN MATTER. This job builds from scratch and runs the
+      # whole evidence chain, 9 to 10 minutes, the longest job once the ASan leg was split.
+      # What it catches on a pull request is a change to how a fresh machine builds and runs
+      # the project: the build files, the scripts and runners a judge types, the tools they
+      # call, the bindings, Python packaging, and this workflow. It also compares the pass
+      # rates in docs/BENCHMARKS.md with the ones it measures, so the document, the results
+      # CSVs it is generated from, the committed Netlib instances and the demo count too. A
+      # pull request touching none of those (a solver change in src/, a test, a doc) skips
+      # the steps below, and the push to main after the merge runs them all, as does
+      # workflow_dispatch. The check is a step rather than a job-level `if` so the job still
+      # ends "success" rather than "skipped" under the same name, which is what a required
+      # status check would need if main's protection ever names this job.
+      - name: Does this pull request touch what a fresh machine builds and runs?
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            echo "$GITHUB_EVENT_NAME: the full reproduction always runs"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Three dots: what the branch changed since it left main, not what main has
+          # gained since. If the diff cannot be taken, run everything rather than nothing.
+          if ! changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA"); then
+            echo "::warning::could not diff against the base; running the full reproduction"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The top-level CMakeLists.txt only: tests/CMakeLists.txt changes in most pull
+          # requests, and the Release and ASan legs already configure it from nothing.
+          scope='^CMakeLists\.txt$|^cmake/|^scripts/|^bench/runners/|^tools/|^third_party/'
+          scope+='|^\.github/workflows/|^apps/|^bindings/|(^|/)requirements[^/]*$|(^|/)pyproject[^/]*$'
+          scope+='|^demo/|^docs/BENCHMARKS\.md$|^bench/results/|^data/netlib/'
+          hits=$(printf '%s\n' "$changed" | grep -E "$scope" || true)
+          if [ -n "$hits" ]; then
+            echo "the full reproduction runs, because this pull request changes:"
+            printf '%s\n' "$hits" | sed 's/^/  /'
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::fresh-machine reproduction not needed: nothing this pull request changes is in its scope; it runs on the push to main"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install what a judge would install
+        if: steps.scope.outputs.run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build
@@ -742,6 +915,7 @@ jobs:
       # committed Netlib instances make that possible, and --fetch-medium is deliberately not
       # passed so this job does not depend on netlib.org being up.
       - name: scripts/reproduce.sh, from a clone that has never been built
+        if: steps.scope.outputs.run == 'true'
         run: |
           set -o pipefail
           scripts/reproduce.sh 2>&1 | tee "$RUNNER_TEMP/reproduce.log"
@@ -750,6 +924,7 @@ jobs:
       # better served by partial evidence than by a stack trace. That makes its exit code the
       # wrong thing to gate on: the assertion that matters is that the list of skips is empty.
       - name: Nothing may have been skipped
+        if: steps.scope.outputs.run == 'true'
         run: |
           if grep -q 'Nothing was skipped' "$RUNNER_TEMP/reproduce.log"; then
             echo "the whole evidence chain ran on a machine that had never built it"
@@ -765,6 +940,7 @@ jobs:
       # claims something this machine did not measure. Comparing the counts rather than
       # filtering the diff keeps this from failing on an unrelated wording change.
       - name: The regenerated document may differ only in timings
+        if: steps.scope.outputs.run == 'true'
         run: |
           # Scratch files go to RUNNER_TEMP, never the workspace: a later step diffs the
           # tree, and a stray file there is noise at best and a false signal at worst.
@@ -786,7 +962,7 @@ jobs:
           PY
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.scope.outputs.run == 'true'
         with:
           name: fresh-machine-reproduction
           path: |
