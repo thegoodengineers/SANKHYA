@@ -321,5 +321,50 @@ TEST(CsrView, FuzzRowsAgainstDenseReference) {
   }
 }
 
+TEST(SparseMatrix, ScaleInPlaceIsTheTripletRebuildToTheBit) {
+  // The diagonal scaling used to rebuild the matrix from triplets on every pass; scale()
+  // multiplies the stored values instead. The rebuild is the reference: the same products,
+  // assembled through add_entry() and finalize(0.0), must come out identical, bit for bit,
+  // with the pattern unchanged.
+  std::mt19937 rng(20260926);
+  std::uniform_real_distribution<double> value(-1e3, 1e3);
+  std::uniform_real_distribution<double> factor(1e-3, 1e3);
+  std::bernoulli_distribution present(0.3);
+  const Index rows = 37;
+  const Index cols = 53;
+  SparseMatrix a(rows, cols);
+  for (Index j = 0; j < cols; ++j) {
+    for (Index i = 0; i < rows; ++i) {
+      if (present(rng)) a.add_entry(i, j, value(rng));
+    }
+  }
+  a.finalize();
+  std::vector<double> r(static_cast<std::size_t>(rows));
+  std::vector<double> c(static_cast<std::size_t>(cols));
+  for (double& x : r) x = factor(rng);
+  for (double& x : c) x = factor(rng);
+
+  SparseMatrix rebuilt(rows, cols);
+  for (Index j = 0; j < cols; ++j) {
+    const ColumnView column = a.column(j);
+    for (Index k = 0; k < column.size; ++k) {
+      const Index i = column.rows[k];
+      rebuilt.add_entry(
+          i, j,
+          column.values[k] * r[static_cast<std::size_t>(i)] * c[static_cast<std::size_t>(j)]);
+    }
+  }
+  rebuilt.finalize(0.0);
+
+  SparseMatrix scaled = a;
+  scaled.scale(r, c);
+  EXPECT_EQ(scaled.column_starts(), rebuilt.column_starts());
+  EXPECT_EQ(scaled.row_indices(), rebuilt.row_indices());
+  ASSERT_EQ(scaled.values().size(), rebuilt.values().size());
+  for (std::size_t p = 0; p < scaled.values().size(); ++p) {
+    EXPECT_EQ(scaled.values()[p], rebuilt.values()[p]) << "entry " << p;
+  }
+}
+
 }  // namespace
 }  // namespace sankhya
