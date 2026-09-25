@@ -651,8 +651,10 @@ class Simplex {
   double rho_nonzeros_total_ = 0.0;
   Count pivot_rows_computed_ = 0;
   Count pivot_rows_sparse_ = 0;
-  std::vector<char> artificial_lower_;  ///< lower_[k] is an artificial bound
-  std::vector<char> artificial_upper_;  ///< upper_[k] is an artificial bound
+  Count pivot_rows_row_wise_ = 0;        ///< dense rho, scattered row-wise into a dense row
+  bool pivot_row_single_thread_ = true;  ///< the row-wise dense pass is serial; see there
+  std::vector<char> artificial_lower_;   ///< lower_[k] is an artificial bound
+  std::vector<char> artificial_upper_;   ///< upper_[k] is an artificial bound
   Count dual_iterations_ = 0;
   Count bound_flips_ = 0;
   Count dual_weight_resets_ = 0;

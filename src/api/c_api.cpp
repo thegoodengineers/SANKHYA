@@ -17,6 +17,9 @@
 #include <memory>
 #include "sankhya/sankhya.h"
 
+#include "api/c_api_internal.hpp"
+#include "nlp/nl_reader.hpp"
+
 #include <exception>
 #include <map>
 #include <mutex>
@@ -38,15 +41,9 @@ namespace {
 // belonging to a model it has never seen.
 thread_local std::string g_error;
 
-sankhya_status fail(sankhya_status code, std::string message) {
-  g_error = std::move(message);
-  return code;
-}
-
-sankhya_status ok() {
-  g_error.clear();
-  return SANKHYA_OK;
-}
+using sankhya::capi::fail;
+using sankhya::capi::guarded;
+using sankhya::capi::ok;
 
 sankhya_solve_status to_c_status(sankhya::SolveStatus status) {
   switch (status) {
@@ -104,20 +101,8 @@ sankhya_status check_option(const char* name, sankhya::OptionType wanted) {
 
 }  // namespace
 
-// The handles. Defined here so the header can keep them opaque.
-struct sankhya_model {
-  sankhya::Model model;
-  // (row, col) -> value, pending until the matrix is materialised.
-  std::map<std::pair<int, int>, double> entries;
-  std::map<std::pair<int, int>, double> quadratic;
-
-  std::mutex control_mutex;
-  std::shared_ptr<sankhya::SolveControl> active_control;
-  sankhya::ProgressCallback progress_callback;
-
-  sankhya_model() = default;
-};
-
+// The options and solution handles. Defined here so the header can keep them opaque; the
+// model handle is in c_api_internal.hpp, which c_api_nlp.cpp shares.
 struct sankhya_options {
   sankhya::Options options;
 };
@@ -126,30 +111,18 @@ struct sankhya_solution {
   sankhya::Solution solution;
 };
 
-namespace {
-
-/// Run `body`, converting any exception into a status code.
-///
-/// An exception crossing into C is undefined behaviour, so every escape route has to be
-/// closed - including ones this file does not know about, hence the bare `catch (...)`.
-///
-/// A template rather than the macro this started as. A function-like macro splits its
-/// argument on commas, so a body containing `entries[{row, col}]` arrives as two arguments
-/// and the preprocessor rejects it - which it duly did, in four places.
-template <typename Body>
-sankhya_status guarded(Body&& body) {
-  try {
-    return body();
-  } catch (const std::bad_alloc&) {
-    return fail(SANKHYA_ERROR_MEMORY, "out of memory");
-  } catch (const std::exception& error) {
-    return fail(SANKHYA_ERROR_INTERNAL, error.what());
-  } catch (...) {
-    return fail(SANKHYA_ERROR_INTERNAL, "an unknown exception crossed the C API");
-  }
+// fail() and ok() write this file's thread-local error; declared in c_api_internal.hpp.
+namespace sankhya::capi {
+sankhya_status fail(sankhya_status code, std::string message) {
+  g_error = std::move(message);
+  return code;
 }
 
-}  // namespace
+sankhya_status ok() {
+  g_error.clear();
+  return SANKHYA_OK;
+}
+}  // namespace sankhya::capi
 
 extern "C" {
 
@@ -194,6 +167,7 @@ sankhya_status sankhya_model_read(sankhya_model* model, const char* path) {
   if (model == nullptr || path == nullptr) {
     return fail(SANKHYA_ERROR_ARGUMENT, "model or path is null");
   }
+  if (sankhya::nlp::looks_like_nl(path)) return sankhya::capi::read_nl_into(model, path);
   return guarded([&]() -> sankhya_status {
     sankhya::Model fresh;
     const sankhya::io::ReadResult result = sankhya::io::read_model(path, &fresh);
@@ -203,6 +177,7 @@ sankhya_status sankhya_model_read(sankhya_model* model, const char* path) {
     model->model = std::move(fresh);
     model->entries.clear();
     model->quadratic.clear();
+    model->nonlinear.reset();
     return ok();
   });
 }
@@ -404,7 +379,8 @@ sankhya_status sankhya_model_validate(const sankhya_model* model) {
   return guarded([&]() -> sankhya_status {
     sankhya::Model built;
     materialise(*model, &built);
-    const std::string problem = built.validate();
+    std::string problem = built.validate();
+    if (problem.empty()) problem = sankhya::capi::validate_nonlinear(*model, built);
     if (!problem.empty()) return fail(SANKHYA_ERROR_MODEL, problem);
     return ok();
   });
@@ -568,7 +544,10 @@ sankhya_status sankhya_solve_from(sankhya_model* model, const sankhya_options* o
     } clearer{model};
 
     auto* result = new sankhya_solution();
-    result->solution = sankhya::solve(built, effective, control.get());
+    if (!sankhya::capi::solve_nonlinear(model, built, effective, control.get(),
+                                        &result->solution)) {
+      result->solution = sankhya::solve(built, effective, control.get());
+    }
     *solution = result;
     return ok();
   });

@@ -184,12 +184,20 @@ is section 13; the steps for adding one are `docs/ADDING_AN_ENGINE.md`.
   bound.
 - **MIQP** — already present: the branch-and-bound node relaxation is a QP when the model
   has a Hessian, and the node bound is quadratic (`src/mip/branch_and_bound.cpp`).
-- **NLP / MINLP** — the frozen interface is the constraint: a `Model` today is linear
-  constraints with an optional quadratic objective. A nonlinear engine would extend `Model`
-  with constraint functions and gradients (an explicit interface change, per the rule in
-  §3) and plug in at the same dispatcher seam; the MILP tree needs no change to search over
-  it, since it only reads `col_value` and the bound. Nothing of this exists yet, and
-  `docs/PS26119_COVERAGE.md` says so.
+- **NLP / MINLP** — `Model` stays frozen. A nonlinear model is `nlp::NonlinearModel`
+  (`src/nlp/`): the frozen `Model` for columns, bounds, integrality, linear rows and the
+  linear/quadratic objective, plus an expression graph over the same columns for a nonlinear
+  objective term and nonlinear rows (#296). `nlp::NlpProblem` presents it as the smooth NLP
+  an optimizer iterates on, with exact derivatives: the gradient, the Jacobian on a fixed
+  pattern, and the Hessian of the Lagrangian on a fixed lower-triangle pattern found by
+  index-domain propagation (NLP stage 1). Models reach it from AMPL's text `.nl` format
+  (`src/nlp/nl_reader.cpp`), from the C API (`include/sankhya/sankhya_nonlinear.h`) and from
+  Python (`sankhya.nonlinear`); `sankhya info model.nl` reports its class, size, derivative
+  sparsity and whether its relaxation is proved convex. The engines are separate entry points
+  beside `solve()`, as `solve_global()` is for quadratic rows: the convex Condat-Vu engine for
+  linear constraints (#226), and nothing yet for general nonlinear constraints or integer
+  columns - a `.nl` solve and a nonlinear C API solve say so and return `not_solved` rather
+  than solve the linear part alone.
 - **Cutting planes** — already present, and off by default. Root GMI and lifted cover cuts
   landed in #159 (`src/mip/cuts.cpp`) and single-row MIR cuts in #221
   (`src/mip/mir_cuts.cpp`), appended as rows of the working model before the search

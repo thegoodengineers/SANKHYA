@@ -340,6 +340,21 @@ double SparseMatrix::max_abs_value() const noexcept {
   return best;
 }
 
+void SparseMatrix::scale(const std::vector<double>& row_factor,
+                         const std::vector<double>& column_factor) {
+  ensure_frozen();
+  assert(row_factor.size() == static_cast<std::size_t>(num_rows_));
+  assert(column_factor.size() == static_cast<std::size_t>(num_cols_));
+  for (Index j = 0; j < num_cols_; ++j) {
+    const double cj = column_factor[static_cast<std::size_t>(j)];
+    const auto begin = static_cast<std::size_t>(column_starts_[static_cast<std::size_t>(j)]);
+    const auto end = static_cast<std::size_t>(column_starts_[static_cast<std::size_t>(j) + 1]);
+    for (std::size_t p = begin; p < end; ++p) {
+      values_[p] = values_[p] * row_factor[static_cast<std::size_t>(row_indices_[p])] * cj;
+    }
+  }
+}
+
 // =========================================================================================
 // CsrView
 // =========================================================================================
