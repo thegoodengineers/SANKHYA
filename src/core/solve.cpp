@@ -333,8 +333,9 @@ void polish_with_the_interior_point(Solution* first, const Model& model, const O
 /// PDHG's share of a finite time limit when a polish is to follow; the rest is the polish's.
 constexpr double kPdhgShareOfTheTimeLimit = 0.7;
 
-void reconcile_status_with_measurement(Solution* solution, const Options& options,
-                                       Logger& logger, bool check_dual) {
+void reconcile_status_with_measurement(const Model& model, Solution* solution,
+                                       const Options& options, Logger& logger,
+                                       bool check_dual) {
   ProfileScope timed(logger.profiler(), "verification");  // #285
   if (!claims_a_point(*solution)) return;
 
@@ -419,6 +420,36 @@ void reconcile_status_with_measurement(Solution* solution, const Options& option
     solution->status = SolveStatus::kFeasible;
     solution->message = solution->message.empty() ? detail : solution->message + "; " + detail;
     logger.warning("{}", detail);
+  }
+
+  // Strong duality, with the verifier's per-item accounting of the gap (#664). The checks
+  // above can all pass while the primal and dual objectives still disagree: a reduced cost
+  // may differ from c - A^T y by less than the verifier's consistency threshold, and that
+  // residual times a large column value is a gap no per-item check sees. The interior point
+  // with crossover off let such points out as optimal on Netlib forplan and pilot4, which
+  // the verifier rejected on this test alone. The measurement is kkt_check.cpp's, the
+  // in-process copy of tools/verify_solution.py, so this cannot disagree with the verifier
+  // about what the gap is. Only its strong-duality verdict is acted on here: its other checks
+  // either repeat the measurements above or (the basis) are not this guard's to add. They run
+  // first and return early, so a point that fails one of them is not judged on the gap at all;
+  // every one of them is also a verifier rejection, so no such point reaches a passing result.
+  if (check_dual && solution->status == SolveStatus::kOptimal) {
+    KktTolerances tolerances;
+    tolerances.primal = primal_tolerance;
+    tolerances.dual = dual_tolerance;
+    tolerances.duality_gap = tol::kDualityGap;
+    const KktVerdict verdict = check_lp_optimality(model, *solution, tolerances);
+    if (!verdict.passed && verdict.check == "strong duality") {
+      const std::string detail = fmt::format(
+          "engine reported optimal but strong duality fails ({}), above the {:.1e} relative "
+          "tolerance the independent verifier applies; reporting a feasible point rather "
+          "than a proof",
+          verdict.detail, tol::kDualityGap);
+      solution->status = SolveStatus::kFeasible;
+      solution->message =
+          solution->message.empty() ? detail : solution->message + "; " + detail;
+      logger.warning("{}", detail);
+    }
   }
 }
 
@@ -912,7 +943,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     const auto certify_by_retry = [&](const char* note) {
       Solution retry = run_lp_engine(model);
       retry.solve_seconds = timer.elapsed_seconds();
-      reconcile_status_with_measurement(&retry, options, logger, /*check_dual=*/true);
+      reconcile_status_with_measurement(model, &retry, options, logger, /*check_dual=*/true);
       refuse_a_non_finite_answer(&retry, logger);
       record_why_it_stopped(&retry);
       say_which_engine_ran(&retry);
@@ -948,7 +979,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       return solution;
     }
     solution.solve_seconds = timer.elapsed_seconds();
-    reconcile_status_with_measurement(&solution, options, logger, /*check_dual=*/true);
+    reconcile_status_with_measurement(model, &solution, options, logger, /*check_dual=*/true);
     refuse_a_non_finite_answer(&solution, logger);
     record_why_it_stopped(&solution);
     say_which_engine_ran(&solution);
@@ -1054,7 +1085,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
                   solution.solve_seconds);
       return solution;
     }
-    reconcile_status_with_measurement(&solution, options, logger, /*check_dual=*/false);
+    reconcile_status_with_measurement(model, &solution, options, logger, /*check_dual=*/false);
     // NOT for the branch and bound's "nothing found" convention, which deliberately reports
     // the worst representable objective - an infinity there is a considered statement that
     // no point exists, not a broken number. Only a claimed POINT is checked, and that
@@ -1100,7 +1131,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // check_dual is false: the QP's reduced costs are c + Qx - A'y, which is not the
     // quantity Solution::recompute_quality() tests, and applying the LP dual rule here
     // would reject correct answers. Primal feasibility and the status still have to agree.
-    reconcile_status_with_measurement(&solution, options, logger, /*check_dual=*/false);
+    reconcile_status_with_measurement(model, &solution, options, logger, /*check_dual=*/false);
     // THE SAME IN-PROCESS KKT GATE THE LP PATH HAS (#590, as #157 for LP): a QP `optimal`
     // the check cannot back is withdrawn to `feasible` with the failing check in the
     // message, before it is written. The first Maros-Meszaros run had six answers labelled
@@ -1180,7 +1211,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
                   solution.solve_seconds);
       return solution;
     }
-    reconcile_status_with_measurement(&solution, options, logger, /*check_dual=*/false);
+    reconcile_status_with_measurement(model, &solution, options, logger, /*check_dual=*/false);
     refuse_a_non_finite_answer(&solution, logger);
     record_why_it_stopped(&solution);
     say_which_engine_ran(&solution);

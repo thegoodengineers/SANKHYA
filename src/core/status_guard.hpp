@@ -28,9 +28,13 @@ namespace sankhya {
 ///
 /// `check_dual` is false for a MILP: a branch-and-bound incumbent comes from a node LP whose
 /// bounds were tightened by branching, so its reduced costs are dual feasible for that node
-/// and generally not for the original model.
-void reconcile_status_with_measurement(Solution* solution, const Options& options,
-                                       Logger& logger, bool check_dual);
+/// and generally not for the original model. It is false for a QP too, whose own KKT gate
+/// (check_qp_optimality) runs after this one.
+///
+/// `model` is the ORIGINAL model, the one `solution`'s vectors are indexed by: with
+/// `check_dual` the guard also applies the verifier's strong-duality test to it (#664).
+void reconcile_status_with_measurement(const Model& model, Solution* solution,
+                                       const Options& options, Logger& logger, bool check_dual);
 
 /// Downgrade a claimed point whose objective is not finite to a numerical error, and leave a
 /// limited search that found nothing alone (#289). Defined beside the guard above in

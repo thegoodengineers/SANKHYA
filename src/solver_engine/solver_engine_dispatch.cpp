@@ -72,7 +72,7 @@ Solution solve(const SolverRegistry& registry, const Model& model, const Options
   // engine's own "optimal" is reconciled with the measured point, and a claimed point with a
   // non-finite objective is a numerical error, not an answer. The dual check is the LP one,
   // as in solve(): a branch-and-bound incumbent's reduced costs belong to its node.
-  reconcile_status_with_measurement(&answer, options, logger,
+  reconcile_status_with_measurement(model, &answer, options, logger,
                                     /*check_dual=*/problem_class == ProblemClass::kLp);
   refuse_a_non_finite_answer(&answer, logger);
   record_why_it_stopped(&answer);
