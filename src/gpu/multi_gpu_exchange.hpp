@@ -26,7 +26,7 @@
 // a ring all-reduce moves, over the same NVLink, and NCCL's reduction order is chosen by its
 // algorithm selection (ring or tree, by size and topology), which would tie the answer to
 // NCCL's tuning. A second, optional dependency buys nothing measurable here; the reasoning
-// is recorded in docs/PROVENANCE.md (judgement call 28).
+// is recorded in docs/PROVENANCE.md (judgement call 29).
 #pragma once
 
 #include <cuda_runtime.h>

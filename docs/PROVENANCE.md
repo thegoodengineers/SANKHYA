@@ -54,7 +54,7 @@ needed, and none is linked, vendored or fetched:
 | pybind11 | BSD-3-Clause | Not used. The Python bindings (#59, #129) are `ctypes` over the C API and compile nothing. |
 | AMD / COLAMD ordering | per-module | Not used as a library. The sparse LDL^T (#70) carries its own ordering, written from the AMD paper (Amestoy, Davis & Duff 1996) for #193 - approximate minimum degree on a quotient graph - with no code from SuiteSparse or anywhere else; the LU orders by Markowitz counts. |
 | Eigen | MPL-2.0 | Not used. `DenseLu` (`src/simplex/dense_lu.cpp`) is the reference oracle the sparse LU is tested against. |
-| NCCL | BSD-3-Clause | Not used (#295). NVIDIA's collective-communication library, not a solver, so allowed; for two cards on one node an all-gather of the A^T y partials over `cudaMemcpyPeerAsync` moves the bytes a ring all-reduce moves over the same NVLink, and NCCL picks its reduction order by its own algorithm selection, which would tie the multi-GPU answer to NCCL's tuning instead of a fixed order. Judgement call 28. |
+| NCCL | BSD-3-Clause | Not used (#295). NVIDIA's collective-communication library, not a solver, so allowed; for two cards on one node an all-gather of the A^T y partials over `cudaMemcpyPeerAsync` moves the bytes a ring all-reduce moves over the same NVLink, and NCCL picks its reduction order by its own algorithm selection, which would tie the multi-GPU answer to NCCL's tuning instead of a fixed order. Judgement call 29. |
 
 ---
 
