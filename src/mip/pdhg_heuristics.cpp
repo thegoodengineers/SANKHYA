@@ -513,6 +513,8 @@ class Propagator {
         return true;
       }
     }
+#else
+    (void)device_;  // only the CUDA build has a device to use
 #endif
     if (!rows_built_) {
       rows_ = row_major(model_);
@@ -525,7 +527,7 @@ class Propagator {
 
  private:
   const Model& model_;
-  [[maybe_unused]] bool device_;  // read only by the CUDA build
+  bool device_;
   double integrality_;
   PdhgHeuristicResult* result_;
   RowMajor rows_;

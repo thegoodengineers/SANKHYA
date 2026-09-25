@@ -56,13 +56,15 @@ class OneThread {
   ~OneThread() {
 #ifdef SANKHYA_HAVE_OPENMP
     omp_set_num_threads(saved_);
+#else
+    (void)saved_;
 #endif
   }
   OneThread(const OneThread&) = delete;
   OneThread& operator=(const OneThread&) = delete;
 
  private:
-  [[maybe_unused]] int saved_ = 0;
+  int saved_ = 0;
 };
 
 /// Rows given densely; every column in [lower, upper], integer where `integer` says so.
