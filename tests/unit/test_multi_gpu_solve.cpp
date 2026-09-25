@@ -212,13 +212,23 @@ TEST(MultiGpuTwoCards, ALargerSyntheticLpMatchesOneCardAndItsKnownOptimum) {
   Logger silent(nullptr);
   // 20,000 x 20,000, five nonzeros a column plus eight linking rows of 2,000.
   const SyntheticLp lp = synthetic_kkt_lp(20000, 20000, 5, 8, 2000, 295);
-  const Solution two = gpu::solve_pdhg_multi_gpu(lp.model, solve_options(), {0, 1}, silent);
+  // The iteration BUDGET here is 1,000,000, not the file's 400,000; the tolerance is
+  // unchanged. What binds on this model is the project standard's complementarity bound
+  // (1e-6), which the run meets somewhere between roughly 270,000 and 420,000 iterations
+  // depending on where its restarts fall. On two A100s (#478 item 3): single engine 266,920
+  // (evaluation on the device) and 310,920 (on the host); two cards 415,240 (on the cards)
+  // and 360,240 (on the host); the device and host evaluations agreed to six digits at
+  // every checkpoint of the 415,240 run, complementarity included. A rounding-level
+  // difference in a restart decision moves the count by 100,000, so 400,000 was a coin toss.
+  Options budget = solve_options();
+  budget.set_int("iteration_limit", 1000000);
+  const Solution two = gpu::solve_pdhg_multi_gpu(lp.model, budget, {0, 1}, silent);
   ASSERT_EQ(two.algorithm, "pdhg-cuda-multi");
-  Options partitioned = solve_options();
+  Options partitioned = budget;
   partitioned.set_bool("gpu_partitioned", true);
   const Solution one_partitioned =
       gpu::solve_pdhg_multi_gpu(lp.model, partitioned, {0}, silent);
-  const Solution one_engine = gpu::solve_pdhg_gpu(lp.model, solve_options(), silent);
+  const Solution one_engine = gpu::solve_pdhg_gpu(lp.model, budget, silent);
   agrees(one_partitioned, two, "synthetic 20000x20000 (partitioned engine, one card)");
   agrees(one_engine, two, "synthetic 20000x20000 (single-GPU engine)");
   ASSERT_TRUE(converged(two)) << two.message;
