@@ -102,13 +102,18 @@ EngineSelection select_engine(const Model& model, const Options& options, bool w
   }
   const double work = static_cast<double>(s.rows) * static_cast<double>(s.nonzeros);
   if (work >= kSimplexWorkCeiling) {
-    s.algorithm = "ipm";
-    s.rule = "work:ipm";
+    // qap15 (#417): optimal on the device interior point in 23 s and on CPU PDHG in 126 s;
+    // the CPU factor spends the whole limit in 19 dense factorizations, so without the
+    // device the first-order method is the one that finishes.
+    s.algorithm = device_factor ? "ipm" : "pdhg";
+    s.rule = device_factor ? "work:ipm-device" : "work:pdhg";
     s.reason = fmt::format(
-        "{}: rows x nonzeros is {:.3g}, over {:.0e}, beyond the dual simplex's measured "
-        "reach (dfl001 at 2.2e8 solves on it in 47 s, qap15 at 6.0e8 times out at 300 s and "
-        "is optimal on the interior point; #417)",
-        shape, work, kSimplexWorkCeiling);
+        "{}: rows x nonzeros is {:.3g}, over {:.0e}, beyond the dual simplex's measured reach "
+        "(dfl001 at 2.2e8 solves on it in 47 s; qap15 at 6.0e8 times out at 300 s, and is "
+        "optimal on {}; #417)",
+        shape, work, kSimplexWorkCeiling,
+        device_factor ? "the interior point with the device factor in 23 s"
+                      : "PDHG in 126 s where the CPU factor times out");
     return s;
   }
   s.algorithm = "dual-simplex";
