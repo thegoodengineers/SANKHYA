@@ -43,6 +43,7 @@
 #pragma once
 
 #include <limits>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -176,10 +177,18 @@ enum class CutFamily {
 
 [[nodiscard]] const char* cut_family_name(CutFamily family) noexcept;
 
+struct CutDerivation;  // cut_derivation.hpp
+struct CutProof;       // cut_derivation.hpp
+
 struct Cut {
   std::vector<double> coeff;  ///< per-column coefficient (indexed by model.num_cols())
   double rhs = 0.0;           ///< right-hand side
   CutFamily family = CutFamily::kUnknown;  ///< which separator built it (#496)
+  /// How the cut follows from the rows, when the separator was asked to say (#518,
+  /// certificate mode only); null otherwise.
+  std::shared_ptr<const CutDerivation> derivation;
+  /// The certified form of that derivation, set by certify_cuts() (#518).
+  std::shared_ptr<const CutProof> proof;
 };
 
 /// Try to generate a Gomory mixed-integer cut from a specific basis row.
@@ -216,8 +225,13 @@ struct RootGmiContext {
 
 /// Production multi-row GMI generator.
 /// Iterates over all fractional basic structural integer variables, generating one cut per
-/// eligible row. Returns candidates in deterministic basis-slot order.
-[[nodiscard]] std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution);
+/// eligible row. Returns candidates in deterministic basis-slot order. With `safe` (the
+/// `gmi_safety` option, #496; Cornuejols, Margot and Nannicini 2013) a row whose basic value
+/// is within kGmiMinFractionality of an integer gives no cut, and every cut's rhs is loosened
+/// by kGmiRhsRelaxAbsolute + kGmiRhsRelaxRelative * |rhs|. With `derive` (certificate mode,
+/// #518) each cut carries the split it rests on.
+[[nodiscard]] std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution,
+                                                 bool safe = false, bool derive = false);
 
 // =========================================================================================
 // Cut Filtering and Deduplication (Stage 4C)

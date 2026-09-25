@@ -16,9 +16,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A newer push to a PR branch makes its older run worthless, so that run is cancelled. A
+# push to main is a merge, and every merge must end in a real pass or fail: with the group
+# keyed on the ref, each merge cancelled the previous merge's run (7 of the last 20 runs on
+# main ended "cancelled"), which left main commits with no verdict and a red-looking X.
+# Keying main's runs on the commit puts every merge in its own group, so none is cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   thread-sanitizer:
@@ -133,7 +138,23 @@ jobs:
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev
+          sudo apt-get install -y ninja-build zlib1g-dev ccache
+
+      # The compiler cache and ctest's record of how long each test took, restored from the
+      # newest run of this leg on main. The Debug+ASan+UBSan leg is the one every merge
+      # waits for: 7 minutes of build, most of it recompiling files the change did not
+      # touch, and a test step whose three longest tests (192, 149 and 134 s under ASan)
+      # started last because a fresh build has no timings, so ctest could not schedule
+      # them first. With the timings file restored it starts the longest tests first.
+      # Saved only from main, so pull requests read main's cache and do not evict it.
+      - name: Restore the compiler cache and the test timings
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/ccache
+            build/Testing/Temporary/CTestCostData.txt
+          key: build-${{ matrix.name }}-${{ github.sha }}
+          restore-keys: build-${{ matrix.name }}-
 
       - name: Report compiler version
         run: g++ --version
@@ -144,10 +165,19 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DSANKHYA_SANITIZE=${{ matrix.sanitize }} \
             ${{ matrix.debug_flags && format('-DCMAKE_CXX_FLAGS_DEBUG="{0}"', matrix.debug_flags) || '' }} \
-            -DSANKHYA_BUILD_TESTS=ON
+            -DSANKHYA_BUILD_TESTS=ON             -DCMAKE_C_COMPILER_LAUNCHER=ccache             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build build -j
+        # No CCACHE_BASEDIR: it rewrites absolute source paths to relative ones, so __FILE__
+        # becomes "../tests/unit/...", and the tests that find data/netlib/ from __FILE__
+        # stop finding it (121 failures on the first run of this change). The runner checks
+        # out to the same absolute path every time, so the cache hits without it.
+        env:
+          CCACHE_MAXSIZE: 2G
+        run: |
+          ccache --zero-stats
+          cmake --build build -j
+          ccache --show-stats
 
       - name: Test
         env:
@@ -164,6 +194,17 @@ jobs:
           serial='^(ParallelTree|PdhgParallelSpmv|EngineConcurrency|EngineRace|EngineDeterminism|Deterministic)\.'
           ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$serial"
           ctest --test-dir build --output-on-failure -R "$serial"
+
+      # After the tests, so the timings file holds this run's times. A failed run saves
+      # nothing: `if: success()` is the default for a step.
+      - name: Save the compiler cache and the test timings
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cache/ccache
+            build/Testing/Temporary/CTestCostData.txt
+          key: build-${{ matrix.name }}-${{ github.sha }}
 
       # The bindings are pure ctypes over the shared library, so there is no extension to
       # build and no Python dependency to install - but that also means nothing else in CI
@@ -207,6 +248,12 @@ jobs:
         # not a pass.
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_netlib_infeasible.py
+
+      - name: Netlib fetch falls back to the tracked copies when netlib.org is down
+        # No network: the base URL points at a closed local port. With --offline-fallback the
+        # tracked readme and instances are used unchanged; without it the outage still fails.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_fetch_offline.py
 
       - name: The relative-KKT crossing columns and their doc tables (#486)
         # Pure Python, no solve: blanks for a non-PDHG row, nan kept for a level never
@@ -278,6 +325,12 @@ jobs:
         # selection, and the pass rule shared with the Netlib full-set runner.
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_kennington.py
+
+      - name: Engine-selection tree, gate and held-out split (#477)
+        # Pure Python, no solver: the CART labels, determinism, the emission gate (rows,
+        # distinct shapes, no shape on both sides of the split) and the committed grid.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_engine_selection_cart.py
 
       - name: Every results CSV is stamped with a commit on main (#433)
         # A benchmark run on a PR branch is stamped with a commit that dies at the squash
@@ -505,14 +558,14 @@ jobs:
           key: netlib-v1-${{ hashFiles('bench/runners/fetch_data.py') }}
 
       # Downloads the instances and PARSES the reference optima out of Netlib's own
-      # readme. No expected value is stored in this repository, so the benchmark cannot
-      # be made to pass by editing a constant.
+      # readme, so while netlib.org answers the benchmark cannot be made to pass by editing
+      # the tracked readme or reference.json.
       #
-      # Still runs on a cache hit. It is cheap when the files are already present, it
-      # re-verifies every sha256 in reference.json, and it keeps the fetch path on the
-      # tested route rather than letting it rot behind a cache that always hits.
+      # --offline-fallback: when netlib.org does not answer (it timed out four times on
+      # #670 and failed a PR that only added a CSV), the tracked copies in data/netlib/ -
+      # every instance and the readme - are used with a warning, after a short probe.
       - name: Fetch the Netlib set and its published optima
-        run: python3 bench/runners/fetch_data.py
+        run: python3 bench/runners/fetch_data.py --offline-fallback
 
       # Gates on BOTH the published optimum and independent verification of every
       # solution. Exits non-zero if any instance fails either one.
@@ -573,7 +626,7 @@ jobs:
           key: netlib-medium-v1-${{ hashFiles('bench/runners/fetch_data.py') }}
 
       - name: Fetch the medium tier and its published optima
-        run: python3 bench/runners/fetch_data.py --set medium
+        run: python3 bench/runners/fetch_data.py --set medium --offline-fallback
 
       - name: Solve and verify every answer
         run: |

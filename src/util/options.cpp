@@ -225,6 +225,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"product-form", "forrest-tomlin"}});
+    s.push_back({"lu_hyper_sparse",
+                 OptionType::Bool,
+                 false,
+                 "Hyper-sparse FTRAN and BTRAN in the simplex (#464; Gilbert and Peierls "
+                 "1988, Hall and McKinnon 2005): a search over the LU factors' graphs from "
+                 "the right-hand side's nonzeros finds the steps the result can reach, and "
+                 "the solve runs over those alone, in the same order as the full loops, so "
+                 "the results and the pivots are identical. Falls back to the full loops "
+                 "above 10% of the rows. Off by default until its A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"ratio_test",
                  OptionType::String,
                  std::string("textbook"),
@@ -237,6 +249,32 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"harris", "textbook"}});
+    s.push_back({"dual_ratio_test",
+                 OptionType::String,
+                 std::string("textbook"),
+                 "Dual simplex entering-variable rule inside the bound-flipping ratio test "
+                 "(#465): textbook (default; the tightest breakpoint, ties to the largest "
+                 "pivot) or harris (Harris 1973 two passes per group of breakpoints: the step "
+                 "bound with every reduced cost relaxed by a tenth of the dual tolerance, "
+                 "then the largest pivot under it; an entering reduced cost of the wrong sign "
+                 "is removed by shifting its cost, and a solve that shifted a cost ends with "
+                 "the exact costs and the primal simplex; Koberstein 2005, ch. 6). Not the "
+                 "default until its A/B on main.",
+                 0.0,
+                 0.0,
+                 {"harris", "textbook"}});
+    s.push_back({"dual_perturb_costs_at_start",
+                 OptionType::Bool,
+                 false,
+                 "Dual simplex (#465): perturb the nonbasic structural costs before the first "
+                 "iteration when they take fewer than n/4 distinct values, by 1e-5 + 1e-5 "
+                 "|c_j| times a per-column factor in [0.5, 1], in the direction that keeps "
+                 "the basis dual feasible (Koberstein 2005, ch. 6). The exact costs are "
+                 "restored at the end and the primal simplex finishes. Off by default; without "
+                 "it the costs are perturbed only after a dual-degenerate stall.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mps_format",
                  OptionType::String,
                  std::string("auto"),
@@ -416,15 +454,26 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"gmi_safety",
+                 OptionType::Bool,
+                 false,
+                 "Gomory mixed-integer cuts (#496; Cornuejols, Margot and Nannicini 2013): no "
+                 "cut from a source row whose basic value is within 0.01 of an integer, and "
+                 "every cut's right-hand side loosened by 1e-9 + 1e-9 |rhs|. Only read when "
+                 "enable_root_cuts is set. Off until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"root_cut_loop",
                  OptionType::Bool,
                  false,
                  "Root cuts (#495): after the first round, separate again at the new LP "
                  "point, add, re-solve warm, and repeat until the bound stalls (3 rounds "
                  "moving it by at most 1e-3 of the gap, or of max(1, |bound|) with no "
-                 "incumbent), 20 rounds, 20 percent of time_limit, or a round that takes "
-                 "nothing. Logs one line per round. Only read when enable_root_cuts is set. "
-                 "Off until an A/B on main.",
+                 "incumbent), 20 rounds, 20 percent of time_limit, a round that takes "
+                 "nothing, or max(100, m) cut rows added in all, m the rows before the first "
+                 "cut. Logs one line per round. Only read when enable_root_cuts is set. Off "
+                 "until an A/B on main.",
                  0.0,
                  0.0,
                  {}});
@@ -981,6 +1030,15 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back({"domain_prop_backend",
+                 OptionType::String,
+                 std::string("auto"),
+                 "Where gpu_domain_prop runs (#510): auto uses the CUDA propagator when the "
+                 "build has CUDA and a card answers, cpu forces the CPU reference (the same "
+                 "bounds either way). cpu exists so the two can be timed on one machine.",
+                 0.0,
+                 0.0,
+                 {"auto", "cpu"}});
     s.push_back(
         {"gpu_pump",
          OptionType::Bool,
@@ -1361,6 +1419,23 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"pdhg_detect_infeasibility",
+         OptionType::Bool,
+         false,
+         "At each restart (#484), test the period's iterate difference - already computed "
+         "for the primal-weight update, at no extra cost when this is off - as a candidate "
+         "primal ray (unbounded) or dual Farkas ray (infeasible): Applegate, Diaz, Lu and "
+         "Lubin, 'Infeasibility detection with primal-dual hybrid gradient for large-scale "
+         "linear programming', SIAM J. Optim. 34(1) (2024). Rather than the paper's own "
+         "numerical thresholds, the candidate is handed directly to this project's own "
+         "certificate checker (src/core/certificate.cpp, the same one every other engine's "
+         "proof is held to) and accepted only when it confirms the direction - a candidate "
+         "that does not check out changes nothing, and the normal iteration/time limit "
+         "reporting stands. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"qp_tolerance",
                  OptionType::Double,
                  1e-8,
@@ -1488,7 +1563,9 @@ const std::vector<OptionSpec>& Options::registry() {
                  "more nonzeros than this (1e8 is 800 MB of values and 400 MB of pattern), "
                  "before any of it is allocated; the message carries both numbers. The polish "
                  "of a first-order answer has its own, tighter cap in "
-                 "polish_max_factor_nonzeros. -1 for no cap.",
+                 "polish_max_factor_nonzeros. -1 for no cap. Since #467 the normal equations "
+                 "are counted from the pattern of A before they are assembled, and a count "
+                 "above this cap declines at once: the factor holds at least as many.",
                  -1.0,
                  kNoLimit,
                  {}});
@@ -1502,6 +1579,76 @@ const std::vector<OptionSpec>& Options::registry() {
          "Default OFF; the scalar path is the oracle it is tested against.",
          0.0,
          0.0,
+         {}});
+    s.push_back(
+        {"ipm_proximal_regularization",
+         OptionType::Bool,
+         false,
+         "Proximal primal-dual regularization of the LP interior point (#473; Altman and "
+         "Gondzio 1999, Friedlander and Orban 2012): factor the regularized augmented "
+         "system [-(Theta^-1 + rho I), A'; A, delta I], quasi-definite for any rho, delta > "
+         "0, by the signed LDL^T the QP interior point uses, with rho = delta following mu "
+         "down to 1e-8 and raised when a pivot comes out wrong, and solve the UNREGULARIZED "
+         "Newton system from its factors by iterative refinement. Replaces the normal "
+         "equations and their fixed 1e-10 floor. Default OFF.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back({"ipm_dense_columns",
+                 OptionType::Bool,
+                 false,
+                 "Split dense columns off the interior point's normal equations (#467): a "
+                 "column with more than ipm_dense_column_factor * sqrt(rows) entries (at most "
+                 "100 of them, densest first) is left out of A Theta A^T and corrected for by "
+                 "Sherman-Morrison-Woodbury, used as the preconditioner of conjugate gradients "
+                 "on the whole system (Andersen, Gondzio, Meszaros & Xu 1996). One column of "
+                 "bdry2 would otherwise make the normal equations 7.9e9 nonzeros. Default OFF.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"ipm_dense_column_factor",
+                 OptionType::Double,
+                 tol::kIpmDenseColumnFactor,
+                 "With ipm_dense_columns, a column is dense when it has more than this times "
+                 "sqrt(rows) entries (#467).",
+                 0.0,
+                 kNoLimit,
+                 {}});
+    s.push_back({"ipm_normal_side",
+                 OptionType::String,
+                 std::string("rows"),
+                 "Which normal equations the interior point factors (#469): rows (the m x m "
+                 "A Theta A^T + D every earlier version factored), columns (the n x n "
+                 "Theta^-1 + A^T D^-1 A, with M's solves by conjugate gradients preconditioned "
+                 "by the Woodbury identity on its factors), or auto (when rows outnumber "
+                 "columns, both are counted and ordered and the smaller predicted factor is "
+                 "kept; otherwise the column side only when the row side's count is over "
+                 "ipm_max_factor_nonzeros). The choice counts against ipm_setup_share. "
+                 "Ignored, with a log line, under ipm_proximal_regularization or "
+                 "ipm_dense_columns. Default rows.",
+                 0.0,
+                 0.0,
+                 {"rows", "columns", "auto"}});
+    s.push_back(
+        {"ipm_centrality_correctors",
+         OptionType::Int,
+         std::int64_t{0},
+         "Gondzio's multiple centrality correctors in the LP interior point (#472; Gondzio "
+         "1996, Colombo and Gondzio 2008): after the Mehrotra direction, up to this many "
+         "extra solves with the same factors push the complementarity products back into "
+         "[0.1, 10] sigma mu from the aspiration step min(1.5 alpha + 0.3, 1). A corrector is "
+         "kept only if its solve is finite and accurate (the conjugate gradients of "
+         "ipm_dense_columns or the n x n side converged, the refinement of "
+         "ipm_proximal_regularization met its target), it lengthens alpha_p + alpha_d by 1%, "
+         "and at the point the step reaches neither the worst complementarity product nor "
+         "their spread (largest over mean) grows and their floor (smallest over mean) does "
+         "not fall; the first one refused ends the iteration's "
+         "correctors. The number tried per iteration is also bounded by the factor's "
+         "estimated factorization-to-solve cost ratio (one, plus one per doubling past 2), "
+         "and is at most 1 on the dense-column and n x n paths and at most 2 on the proximal "
+         "path. 0 (the default) is off and leaves the iteration exactly as without it.",
+         0.0,
+         10.0,
          {}});
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
@@ -1677,9 +1824,13 @@ const std::vector<OptionSpec>& Options::registry() {
                  "combining its children over the disjunction. Presolve, node propagation and "
                  "the integer row tightening are switched off and the search runs on one "
                  "thread, so every node LP is solved over exactly the box its derivation uses. "
-                 "Nothing is written, and the log says why, when cut, symmetry or objective "
-                 "rows were added (set enable_root_cuts=false), after a restart, or for an "
-                 "MIQP. Empty (default) disables it.",
+                 "Root cuts are derived in the certificate from the model (knapsack cover and "
+                 "{0,1/2} cuts as Chvatal-Gomory roundings, Gomory and MIR cuts as splits); "
+                 "a cut whose derivation does not check is dropped, and the clique, flow "
+                 "cover, implied-bound and c-MIR separators and tree cut rounds are off in "
+                 "this mode. Nothing is written, and the log says why, when symmetry or "
+                 "objective rows were added, after a restart, or for an MIQP. Empty (default) "
+                 "disables it.",
                  0.0,
                  0.0,
                  {},

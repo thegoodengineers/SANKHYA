@@ -65,11 +65,13 @@ struct CombinatorialCutStats {
 
 /// {0,1/2}-CG cuts violated at `solution.col_value`, from the pure-integer rows with integer
 /// data: single rows, pairs sharing a column, and sets of any size found by Gaussian
-/// elimination over GF(2) on the rows with slack below one.
+/// elimination over GF(2) on the rows with slack below one. With `derive` (certificate
+/// mode, #518) each cut carries its rows and their multipliers 1/2 (cut_derivation.hpp).
 [[nodiscard]] std::vector<Cut> generate_zero_half_cuts(const Model& model,
                                                        const Solution& solution,
                                                        const std::vector<double>& col_lower,
                                                        const std::vector<double>& col_upper,
-                                                       CombinatorialCutStats* stats = nullptr);
+                                                       CombinatorialCutStats* stats = nullptr,
+                                                       bool derive = false);
 
 }  // namespace sankhya::mip

@@ -5,14 +5,18 @@
 // of an optimal LP, the Farkas multipliers of an infeasible one - and every branching node
 // its two children. At the end of the search src/mip/certificate_writer.cpp turns that into
 // a VIPR derivation (Cheung, Gleixner and Steffy, IPCO 2017) that tools/verify_certificate.py
-// checks in exact arithmetic. Anything the certificate cannot express - a row the model does
-// not have, a split that is not one disjunction, a tree thrown away by a restart - makes the
-// search give up on it and say why; the search itself is unaffected.
+// checks in exact arithmetic. Root cut rows are certified as they are added (each with its
+// derivation, cut_derivation.hpp) and written before the tree. Anything the certificate
+// cannot express - a row it cannot derive, a split that is not one disjunction, a tree thrown
+// away by a restart - makes the search give up on it and say why.
 
 #include "branch_and_bound_internal.hpp"
 
 #include "core/safe_bound.hpp"
+#include "cut_derivation.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 #include <utility>
 #include <vector>
@@ -29,6 +33,17 @@ CertificateTree::Node& grow_to(std::vector<CertificateTree::Node>* nodes, Index 
 
 }  // namespace
 
+bool BranchAndBound::certificate_rows_match() {
+  const auto cuts = static_cast<Index>(pool_cuts_.size());
+  const bool derived = std::all_of(pool_cuts_.begin(), pool_cuts_.end(),
+                                   [](const Cut& cut) { return cut.proof != nullptr; });
+  if (working_.num_rows() == original_.num_rows() + cuts && derived) return true;
+  certificate_refuse(
+      "rows the model does not have, and the certificate cannot derive, were added to the "
+      "search (symmetry or objective rows, or an underived cut)");
+  return false;
+}
+
 bool BranchAndBound::farkas_proves(const std::vector<double>& y) const {
   if (y.size() != static_cast<std::size_t>(working_.num_rows())) return false;
   SafeBoundProblem problem;
@@ -43,6 +58,58 @@ bool BranchAndBound::farkas_proves(const std::vector<double>& y) const {
          safe_dual_bound(problem, negated).value > 0.0;
 }
 
+std::vector<CertificateTree::CutRow> BranchAndBound::certificate_cut_rows() const {
+  std::vector<CertificateTree::CutRow> cuts;
+  cuts.reserve(pool_cuts_.size());
+  for (const Cut& cut : pool_cuts_) {
+    CertificateTree::CutRow row;
+    // The entries append_cut_rows() gave the row, and no others.
+    for (std::size_t j = 0; j < cut.coeff.size(); ++j) {
+      if (std::fabs(cut.coeff[j]) > tol::kZeroDrop) {
+        row.coefficients.emplace_back(static_cast<Index>(j), cut.coeff[j]);
+      }
+    }
+    row.rhs = cut.rhs;
+    row.proof = cut.proof;
+    cuts.push_back(std::move(row));
+  }
+  return cuts;
+}
+
+Model BranchAndBound::certificate_rows() const {
+  return detail::with_cut_rows(original_, certificate_cut_rows());
+}
+
+void BranchAndBound::certify_round_cuts(std::vector<Cut>* accepted) {
+  // Once the certificate is refused it will not be written, so there is nothing to derive
+  // against and no reason to drop cuts the search could use.
+  if (!certificate_mode() || !certificate_refusal_.empty() || accepted->empty()) return;
+  if (certificate_cuts_derived_ + certificate_cuts_dropped_ == 0) {
+    std::string off;
+    for (const char* option : {"enable_clique_cuts", "enable_flow_cover_cuts",
+                               "mip_implied_bound_cuts", "mir_cmir"}) {
+      if (options_.get_bool(option))
+        off += fmt::format("{}{}", off.empty() ? "" : ", ", option);
+    }
+    if (!off.empty()) {
+      logger_.info("Certificate (#518): off in this mode, their cuts state no derivation: {}",
+                   off);
+    }
+  }
+  // Derived against the rows the certificate will state and the model's own column box,
+  // which is what the checker has; a cut that needs a bound the search tightened fails.
+  const Model rows = certificate_rows();
+  const CutCertification outcome =
+      certify_cuts(rows, original_.col_lower, original_.col_upper, accepted);
+  certificate_cuts_derived_ += outcome.derived;
+  certificate_cuts_dropped_ += outcome.dropped;
+  logger_.info("Certificate (#518): cuts of this round: {}; {} right-hand side(s) relaxed{}",
+               outcome.summary, outcome.relaxed,
+               outcome.first_failure.empty()
+                   ? std::string()
+                   : fmt::format("; first drop: {}", outcome.first_failure));
+}
+
 void BranchAndBound::certificate_refuse(const std::string& why) {
   if (certificate_path_.empty() || !certificate_refusal_.empty()) return;
   certificate_refusal_ = why;
@@ -51,13 +118,9 @@ void BranchAndBound::certificate_refuse(const std::string& why) {
 void BranchAndBound::certificate_record(Index node, const Solution& relaxation,
                                         CertificateTree::Proof proof) {
   if (certificate_path_.empty() || !certificate_refusal_.empty()) return;
-  const Index rows = original_.num_rows();
-  if (working_.num_rows() != rows) {
-    certificate_refuse(
-        "rows the model does not have were added to the search (cuts, symmetry or objective "
-        "rows); run with enable_root_cuts=false");
-    return;
-  }
+  // The model's rows, then the certified cut rows (#518), and nothing else.
+  const Index rows = working_.num_rows();
+  if (!certificate_rows_match()) return;
   const std::vector<double>* source =
       proof == CertificateTree::Proof::kFarkas ? &relaxation.farkas_dual : &relaxation.row_dual;
   // AN INFEASIBLE NODE'S FARKAS VECTOR MUST PROVE IT EXACTLY. The dual simplex's is the row of
@@ -113,11 +176,7 @@ void BranchAndBound::finish_certificate() {
   if (!options_.get_string("resume").empty()) {
     certificate_refuse("the search resumed from a checkpoint");
   }
-  if (working_.num_rows() != original_.num_rows()) {
-    certificate_refuse(
-        "rows the model does not have were added to the search (cuts, symmetry or objective "
-        "rows); run with enable_root_cuts=false");
-  }
+  (void)certificate_rows_match();
   if (!certificate_refusal_.empty()) {
     logger_.warning("Certificate (#518) not written: {}", certificate_refusal_);
     return;
@@ -135,6 +194,7 @@ void BranchAndBound::finish_certificate() {
     out.value = node.change.value;
   }
   certificate_nodes_.clear();
+  tree.cuts = certificate_cut_rows();
   const std::vector<double> none;
   const CertificateOutcome outcome =
       write_vipr_certificate(certificate_path_, original_, tree,

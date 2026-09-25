@@ -36,6 +36,7 @@
 
 #include "branch_and_bound_internal.hpp"
 #include "combinatorial_cuts.hpp"
+#include "cut_derivation.hpp"
 #include "implied_bound_cuts.hpp"
 #include "mir_cuts.hpp"
 #include "presolve/probing.hpp"
@@ -123,7 +124,10 @@ void BranchAndBound::resize_warm_starts(Index rows) {
 void BranchAndBound::add_combinatorial_cuts(const Solution& relaxation,
                                             std::vector<Cut>* candidates, bool root) {
   CombinatorialCutStats stats;
-  if (options_.get_bool("enable_clique_cuts")) {
+  // Certificate mode (#518): clique and flow cover cuts state no derivation, so they are
+  // not separated (certificate_cut_families() logs it); {0,1/2}-cuts carry theirs.
+  const bool certify = certificate_mode();
+  if (options_.get_bool("enable_clique_cuts") && !certify) {
     // Probing's conflicts (#512), once, in the ROOT round only, on the model and global
     // bounds there: every conflict then holds at every feasible point, so it stays valid as
     // bounds tighten. Never in a tree round, even if no root round ran (a search resumed from
@@ -149,8 +153,8 @@ void BranchAndBound::add_combinatorial_cuts(const Solution& relaxation,
     candidates->insert(candidates->end(), cliques.begin(), cliques.end());
   }
   if (options_.get_bool("enable_zero_half_cuts")) {
-    std::vector<Cut> halves =
-        generate_zero_half_cuts(working_, relaxation, global_lower_, global_upper_, &stats);
+    std::vector<Cut> halves = generate_zero_half_cuts(working_, relaxation, global_lower_,
+                                                      global_upper_, &stats, certify);
     zero_half_cuts_generated_ += static_cast<Count>(halves.size());
     candidates->insert(candidates->end(), halves.begin(), halves.end());
   }
@@ -160,7 +164,7 @@ void BranchAndBound::add_combinatorial_cuts(const Solution& relaxation,
   }
   // Flow cover cuts (#419): the family for rows whose inflows are switched by binaries
   // through variable-upper-bound rows, read under the GLOBAL bounds like the two above.
-  if (options_.get_bool("enable_flow_cover_cuts")) {
+  if (options_.get_bool("enable_flow_cover_cuts") && !certify) {
     FlowCoverStats flow;
     std::vector<Cut> covers =
         generate_flow_cover_cuts(working_, relaxation, global_lower_, global_upper_, &flow);
@@ -193,6 +197,12 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
         cut.coeff[static_cast<std::size_t>(cover->col_index[k])] = cover->coeff[k];
       }
       cut.rhs = cover->rhs;
+      if (certificate_mode()) {  // #518: Chvatal-Gomory rounding of row i, one multiplier
+        auto derivation = std::make_shared<CutDerivation>();
+        derivation->kind = CutDerivation::Kind::kSingleRowRounding;
+        derivation->row = i;
+        cut.derivation = std::move(derivation);
+      }
       candidates.push_back(std::move(cut));
     }
   }
@@ -203,11 +213,12 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
         cover_stats.supported_rows, cover_stats.covers_found, cover_stats.exact_separations,
         cover_stats.cuts_returned, cover_stats.best_base_violation);
   }
-  std::vector<Cut> gmi = generate_gmi_cuts(working_, relaxation);
+  std::vector<Cut> gmi = generate_gmi_cuts(working_, relaxation,
+                                           options_.get_bool("gmi_safety"), certificate_mode());
   candidates.insert(candidates.end(), gmi.begin(), gmi.end());
   // Implied-bound cuts (#499): the line through a two-variable row's two binary cases,
   // tighter than the row when the continuous column's own bound caps one case.
-  if (options_.get_bool("mip_implied_bound_cuts")) {
+  if (options_.get_bool("mip_implied_bound_cuts") && !certificate_mode()) {
     std::vector<Cut> implied = implied_bound_cuts(working_, relaxation.col_value);
     candidates.insert(candidates.end(), implied.begin(), implied.end());
   }
@@ -278,6 +289,13 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
                     accepted.size(), passed, waiting_cuts_.size());
   }
   if (debug_.has_value()) append_planted_cut(&accepted);  // a test's planted cut (#500)
+  // With the loop on, round 1 counts against the same row budget as the rounds after it
+  // (#495): "at most the budget in all, round 1 included".
+  if (options_.get_bool("root_cut_loop")) {
+    take_within_budget(&accepted, &waiting_cuts_,
+                       static_cast<std::size_t>(root_cut_row_budget(original_root_rows)));
+  }
+  certify_round_cuts(&accepted);  // #518: certificate mode only
   if (accepted.empty()) return;
 
   append_cut_rows(accepted);

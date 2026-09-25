@@ -28,8 +28,25 @@ void explain(std::string* why, std::string text) {
 
 }  // namespace
 
-bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y,
+namespace {
+// A certificate proves the same at any positive scale, and the checks below compare against
+// tolerances with an absolute floor (max(1, ...)). Scaled to unit infinity-norm first, a
+// certificate cannot pass by being tiny: a Farkas vector of size 1e-9 once aggregated to a
+// "reachable" of 0 under that floor and passed on a FEASIBLE model, and a ray of size 1e-8
+// moved no row by more than the absolute 1e-7 (found in review of #652).
+std::vector<double> unit_scaled(const std::vector<double>& v) {
+  double largest = 0.0;
+  for (const double x : v) largest = std::max(largest, std::fabs(x));
+  if (largest == 0.0 || !std::isfinite(largest)) return v;
+  std::vector<double> out(v.size());
+  for (std::size_t k = 0; k < v.size(); ++k) out[k] = v[k] / largest;
+  return out;
+}
+}  // namespace
+
+bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y_given,
                               std::string* why) {
+  const std::vector<double> y = unit_scaled(y_given);
   const Index m = model.num_rows();
   const Index n = model.num_cols();
   if (static_cast<Index>(y.size()) != m) {
@@ -86,7 +103,8 @@ bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y,
     // A coefficient at rounding size is not evidence of anything; treating it as zero is the
     // conservative reading, because it can only make `reachable` smaller and so can only make
     // the proof harder to pass.
-    if (d[u] > tol::kZeroDrop * std::max(1.0, scale)) {
+    const double drop = tol::kZeroDrop * std::max(1.0, scale);
+    if (d[u] > drop) {
       if (!finite(model.col_upper[u])) {
         explain(why, fmt::format("column {} is free upward and the aggregate leans on it, so "
                                  "the aggregate has no upper limit",
@@ -94,7 +112,7 @@ bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y,
         return false;
       }
       reachable += d[u] * model.col_upper[u];
-    } else if (d[u] < -tol::kZeroDrop * std::max(1.0, scale)) {
+    } else if (d[u] < -drop) {
       if (!finite(model.col_lower[u])) {
         explain(why, fmt::format("column {} is free downward and the aggregate leans on it, "
                                  "so the aggregate has no upper limit",
@@ -102,6 +120,12 @@ bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y,
         return false;
       }
       reachable += d[u] * model.col_lower[u];
+    } else if (d[u] != 0.0 && finite(model.col_lower[u]) && finite(model.col_upper[u])) {
+      // A rounding-size coefficient is read as zero for its SIGN, but what it could still
+      // add is charged against the proof: dropping it outright makes `reachable` smaller and
+      // the proof EASIER, which is the wrong direction to err in.
+      reachable += std::fabs(d[u]) *
+                   std::max(std::fabs(model.col_lower[u]), std::fabs(model.col_upper[u]));
     }
   }
 
@@ -120,7 +144,9 @@ bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y,
   return true;
 }
 
-bool ray_proves_unbounded(const Model& model, const std::vector<double>& d, std::string* why) {
+bool ray_proves_unbounded(const Model& model, const std::vector<double>& d_given,
+                          std::string* why) {
+  const std::vector<double> d = unit_scaled(d_given);
   const Index m = model.num_rows();
   const Index n = model.num_cols();
   if (static_cast<Index>(d.size()) != n) {
