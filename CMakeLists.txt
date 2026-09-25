@@ -318,6 +318,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/branch_and_bound_conflicts.cpp
   src/mip/heuristics.cpp
   src/mip/feasibility_jump.cpp
+  src/mip/pdhg_heuristics.cpp
   src/mip/branch_and_bound_parallel.cpp
   src/nlp/convex_nlp.cpp
   src/nlp/convexity.cpp
@@ -344,6 +345,7 @@ set(SANKHYA_CORE_SOURCES
   src/pdhg/pdhg_halpern.cpp
   src/pdhg/batch_pdhg.cpp
   src/pdhg/batch_pdhg_cpu.cpp
+  src/pdhg/pdhg_parallel.cpp
   src/gpu/gpu_memory.cpp
   src/gpu/cudss_factor.cpp
   src/gpu/multi_device.cpp

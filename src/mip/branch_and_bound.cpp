@@ -694,6 +694,11 @@ Solution BranchAndBound::run() {
       // all came back empty: its value is an incumbent where there is none, and it costs
       // LP solves.
       if (node_index == 0) run_root_pump(relaxation);
+      // The PDHG heuristics (#509), off by default, under the same rule: the first root only,
+      // and only when everything cheaper came back empty. A smoke run with them before the
+      // cut round (12fcc3c) spent their budget on instances whose root rounding would have
+      // found an incumbent anyway, and delayed it.
+      if (node_index == 0 && restarts_ == 0) run_pdhg_heuristics(relaxation);
     }
 
     // The branching decision, with the node's bounds still entered: strong branching

@@ -72,6 +72,14 @@ TEST(GpuMemory, LargeModelIsInMibRange) {
   EXPECT_GT(est, k40Mib);
 }
 
+TEST(GpuMemory, DeterministicModeAddsASecondCsrForTheTranspose) {
+  // #478: A^T held in CSR is n x m, so (n+1) row offsets, then the same nnz indices and
+  // values as A. n=20, nnz=50: 21*4 + 50*4 + 50*8 = 84 + 200 + 400.
+  EXPECT_EQ(gpu::estimate_pdhg_gpu_transpose_memory(20, 50), 684U);
+  EXPECT_EQ(gpu::estimate_pdhg_gpu_transpose_memory(0, 0), sizeof(int));
+  EXPECT_EQ(gpu::estimate_pdhg_gpu_transpose_memory(-1, -1), sizeof(int));
+}
+
 // ---- vram_reserve -----------------------------------------------------------
 
 TEST(GpuMemory, ReserveIsAtLeast256Mib) {

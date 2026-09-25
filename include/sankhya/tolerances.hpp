@@ -590,6 +590,14 @@ inline constexpr double kRootCutRowShare = 1.0;
 /// and the evaluation stride less often; 32 is under the evaluation interval of 40.
 inline constexpr Count kPdhgDeviceLoopBlock = 32;
 
+/// CPU PDHG parallel vector updates (#487): the fixed chunk the movement and interaction
+/// sums are taken in. A constant, not a function of the thread count, which is what makes
+/// the sums the same bits at any thread count. The chunk is also the unit of work a thread
+/// takes, so it bounds the parallelism from above (a 10,000-column model has ten chunks);
+/// 1024 doubles (8 KiB) keeps a chunk's working set of three or four vectors in L1, and a
+/// vector shorter than one chunk runs on one thread. A choice, not a measurement.
+inline constexpr Count kPdhgParallelChunk = 1024;
+
 /// Feasibility Jump polls the caller's stop (interrupt, time limit) every this many work
 /// units: about a millisecond of work, so a stop is seen promptly and the poll costs nothing.
 inline constexpr Count kFeasibilityJumpPollWork = 65536;
@@ -622,6 +630,26 @@ inline constexpr double kObbtCutoffEpsilon = 1e-6;
 /// most tightening happens in the first few (Savelsbergh 1994), and a cap keeps a slowly
 /// converging chain (bounds creeping by a small amount each round) from running long.
 inline constexpr int kDomainPropagationRounds = 50;
+
+/// The PDHG heuristics (#509): the PDHG iteration cap of one projection (or relaxation) solve,
+/// solved to kPdhgLoose - a projection only has to say which way the rounding should move;
+/// the feasibility pump's perturbation, Fischetti, Glover & Lodi (2005) section 3 - a
+/// rounding repeated from the round before flips a random number of columns in [T/2, 3T/2]
+/// with T = kPumpFlips, and one repeated within the last kPumpCycleWindow rounds is restarted
+/// by adding a random amount in [kPumpRestartLow, kPumpRestartHigh] to each column's distance
+/// from its rounding and flipping those that pass one half; the LPs at most that complete the
+/// continuous columns of one pump; and the Feasibility Jump budget, in nonzero visits, of the
+/// fix-and-propagate repair.
+inline constexpr Count kPdhgHeuristicIterations = 5000;
+/// The share of the search's remaining time one run of either PDHG heuristic may spend, all
+/// its solves included, when the search has a time limit and is not deterministic.
+inline constexpr double kPdhgHeuristicTimeShare = 0.1;
+inline constexpr int kPumpFlips = 20;
+inline constexpr int kPumpCycleWindow = 3;
+inline constexpr double kPumpRestartLow = -0.3;
+inline constexpr double kPumpRestartHigh = 0.7;
+inline constexpr int kPumpCompletionLimit = 10;
+inline constexpr Count kFixPropRepairWork = 1'000'000;
 
 /// PDHG infeasibility detection (#484; Applegate, Lubin & Hinder 2024): a restart difference is
 /// tested only from the kPdhgDetectionMinRestarts-th restart on - the first "difference" is a

@@ -142,6 +142,13 @@ struct HeuristicSchedule {
   bool rins = false;
   bool rens = false;
   bool fj = false;  ///< Feasibility Jump (#506), feasibility_jump.hpp
+  /// The PDHG heuristics (#509), pdhg_heuristics.hpp: their own Bool switches (gpu_pump,
+  /// gpu_fix_and_prop), not mip_heuristics, like gpu_domain_prop; off by default.
+  bool pdhg_pump = false;
+  bool fix_and_propagate = false;
+  bool pdhg_device = true;  ///< gpu_heur_backend=auto (the device when there is one)
+  int pdhg_pump_rounds = 0;
+  int fix_and_propagate_backtracks = 0;
   bool dive[kDiveRules] = {false, false, false, false};  ///< by DiveRule
   bool dive_backtrack = false;
   Count rins_frequency = 0;

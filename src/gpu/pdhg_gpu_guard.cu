@@ -6,14 +6,21 @@
 
 #include "gpu/device.hpp"
 #include "gpu/gpu_memory.hpp"
+#include "gpu/multi_device.hpp"
 
 namespace sankhya::gpu {
 
 bool gpu_pdhg_is_safe(const Model& model, const Options& options, Logger& logger) {
-  if (options.get_bool("deterministic")) {
+  // The single-device engine is bit-for-bit repeatable under deterministic=true (#478:
+  // fixed-order reductions, both products non-transpose CSR_ALG2 on an explicit A^T). The
+  // multi-device engine is not: it still sums with atomicAdd and runs cuSPARSE's transpose
+  // product, so deterministic mode refuses it as #383 refused every GPU path.
+  const bool deterministic = options.get_bool("deterministic");
+  if (deterministic && parse_device_ids(options.get_string("gpu_devices")).size() > 1) {
     logger.warning(
-        "GPU PDHG: deterministic=true is incompatible with atomicAdd reductions (#383); "
-        "falling back to CPU PDHG");
+        "GPU PDHG: deterministic=true is not honoured by the multi-GPU engine (atomicAdd "
+        "reductions, #383); falling back to CPU PDHG. Name one device in gpu_devices for a "
+        "deterministic GPU solve");
     return false;
   }
 
@@ -32,8 +39,12 @@ bool gpu_pdhg_is_safe(const Model& model, const Options& options, Logger& logger
   if (device_free_memory(&free_bytes, &total_bytes)) {
     // Uses the caller's `model` dimensions as given (pre-presolve when called from
     // solve.cpp): conservative (overestimates), safe.
+    // Deterministic mode holds A^T as a second CSR matrix on the device (#478).
     const std::size_t required =
-        estimate_pdhg_gpu_memory(model.num_rows(), model.num_cols(), model.num_nonzeros());
+        estimate_pdhg_gpu_memory(model.num_rows(), model.num_cols(), model.num_nonzeros()) +
+        (deterministic ? estimate_pdhg_gpu_transpose_memory(model.num_cols(),
+                                                            model.num_nonzeros())
+                       : 0);
     const std::size_t reserve = vram_reserve(total_bytes);
     logger.info(
         "GPU PDHG memory: required {:.0f} MiB, available {:.0f} MiB, reserve {:.0f} MiB",

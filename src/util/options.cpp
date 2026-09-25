@@ -1023,10 +1023,34 @@ const std::vector<OptionSpec>& Options::registry() {
                  std::string("auto"),
                  "Comma-separated CUDA device IDs for multi-GPU PDHG (#295). 'auto' uses "
                  "device 0 (single-GPU path). Two or more IDs (e.g. '0,1') enable the "
-                 "row-partitioned multi-GPU path: each device owns one row block of the "
-                 "constraint matrix; the primal iterate is replicated; a host-mediated "
-                 "allreduce synchronises A^T*y each iteration. Devices that fail the "
-                 "architecture check or are absent cause a fallback to the single-GPU path.",
+                 "row-partitioned multi-GPU path: each device owns one contiguous row block "
+                 "of the constraint matrix, balanced by nonzeros; the primal iterate is "
+                 "replicated; A^T*y is summed across the devices each iteration, device to "
+                 "device where peer access allows (see gpu_peer_access), in a fixed order so "
+                 "that a run is bitwise reproducible. Absent devices cause a fallback to the "
+                 "single-GPU path.",
+                 {},
+                 {},
+                 {}});
+    s.push_back({"gpu_peer_access",
+                 OptionType::Bool,
+                 true,
+                 "Multi-GPU PDHG (#295): move the per-device A^T*y partials device to device "
+                 "(cudaDeviceEnablePeerAccess, cudaMemcpyPeerAsync over NVLink or PCIe P2P) "
+                 "when every pair of listed devices supports it. False, or any pair without "
+                 "P2P, stages them through pinned host memory instead. Both transports feed "
+                 "the same fixed-order sum, so the answer is bitwise the same; only the time "
+                 "differs.",
+                 {},
+                 {},
+                 {}});
+    s.push_back({"gpu_partitioned",
+                 OptionType::Bool,
+                 false,
+                 "Run the row-partitioned multi-GPU PDHG engine even when gpu_devices names a "
+                 "single device (#295). Off, one device runs the single-GPU engine. On, one "
+                 "device is the partitioned engine's own one-card baseline, the like-for-like "
+                 "reference its multi-card scaling is measured against.",
                  {},
                  {},
                  {}});
@@ -1102,31 +1126,68 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"gpu_pump",
                  OptionType::Bool,
                  false,
-                 "GPU feasibility pump for MIP (#509). CURRENTLY A STUB: the kernel is not "
-                 "written and feasibility_pump() returns nothing, so the search behaves "
-                 "exactly as with the option off. The design: PDHG on the device solves each "
-                 "L1 projection LP; the outer loop rounds to integer and repeats until "
-                 "feasible or a round limit. Default OFF; it earns a default by a clean A/B "
-                 "on main once the kernel exists. "
-                 "References: Fischetti, Glover & Lodi, Math. Prog. 104 (2005); "
-                 "Mexi et al., arXiv:2307.03466; Corduk et al., arXiv:2510.20499.",
+                 "Feasibility pump on PDHG projections at the MIP root (#509): round the "
+                 "root relaxation, project the rounding back onto the LP polytope in the L1 "
+                 "distance by restarted PDHG (general integers through one auxiliary column "
+                 "each), repeat; a repeated rounding is perturbed, a longer cycle restarted. "
+                 "The continuous columns of a mixed model are completed by an LP with the "
+                 "integer columns fixed, and every point is checked against the model's rows "
+                 "and bounds before it is offered to the search, which checks it again. Runs "
+                 "on the CUDA device when the build has one and a card answers (see "
+                 "gpu_heur_backend), otherwise on the CPU; only while there is no incumbent. "
+                 "Default OFF until an A/B on main. References: Fischetti, Glover & Lodi, "
+                 "Math. Prog. 104 (2005); Bertacco, Fischetti & Lodi, Discrete Optim. 4 "
+                 "(2007); Mexi et al., arXiv:2307.03466; Corduk et al., arXiv:2510.20499.",
                  0.0,
                  0.0,
+                 {}});
+    s.push_back({"gpu_pump_max_iter",
+                 OptionType::Int,
+                 std::int64_t{50},
+                 "Projections at most in one run of gpu_pump (#509); each is one PDHG solve "
+                 "capped at kPdhgHeuristicIterations iterations, and the whole run, like one "
+                 "of gpu_fix_and_prop, at kPdhgHeuristicTimeShare of the time limit left.",
+                 0.0,
+                 1e6,
                  {}});
     s.push_back(
         {"gpu_fix_and_prop",
          OptionType::Bool,
          false,
-         "GPU fix-and-propagate heuristic for MIP (#509). CURRENTLY A STUB: the kernel "
-         "is not written and fix_and_propagate() returns nothing, so the search behaves "
-         "exactly as with the option off. The design: fix near-integer columns from the "
-         "LP relaxation, run GPU domain propagation (#510) to tighten the rest, solve "
-         "the residual LP. Default OFF; it earns a default by a clean A/B on main once "
-         "the kernel exists. "
-         "Reference: Corduk et al., arXiv:2510.20499.",
+         "Fix-and-propagate at the MIP root (#509): fix the integer columns, least "
+         "fractional in the root relaxation first, to the integer nearest the relaxation "
+         "inside each column's current domain, in batches that double on success and halve "
+         "on a proved-empty box, with activity-based bound propagation (#510) after each "
+         "batch; back up at most gpu_fix_backtrack times; complete the continuous columns by "
+         "an LP; repair a failure with Feasibility Jump. Every point is checked against the "
+         "model before it is offered. Propagation on the CUDA device when the build has one "
+         "and a card answers (see gpu_heur_backend), otherwise the CPU reference - the same "
+         "bounds either way. Runs only while there is no incumbent, after gpu_pump when both "
+         "are on. Default OFF until an A/B on main. References: Gamrath, Berthold, Heinz & "
+         "Winkler, Optimization in the Real World, Springer 2016; Corduk et al., "
+         "arXiv:2510.20499.",
          0.0,
          0.0,
          {}});
+    s.push_back({"gpu_fix_backtrack",
+                 OptionType::Int,
+                 std::int64_t{5},
+                 "Back-ups at most in one run of gpu_fix_and_prop (#509): when both integers "
+                 "next to the relaxation's value of a column empty the box, the last committed "
+                 "fix is undone and changed; each costs one.",
+                 0.0,
+                 1e6,
+                 {}});
+    s.push_back({"gpu_heur_backend",
+                 OptionType::String,
+                 std::string("auto"),
+                 "Where gpu_pump and gpu_fix_and_prop run (#509): auto uses the CUDA device "
+                 "for the PDHG solves and the propagation when the build has CUDA and a card "
+                 "answers, cpu forces the CPU PDHG and the CPU propagator. cpu exists so the "
+                 "two can be compared on one machine.",
+                 0.0,
+                 0.0,
+                 {"auto", "cpu"}});
     s.push_back({"gpu_on_device_loop",
                  OptionType::Bool,
                  false,
@@ -1784,6 +1845,21 @@ const std::vector<OptionSpec>& Options::registry() {
          "thread count. The serial product is a column scatter in a different summation "
          "order, so the two paths agree to rounding, not to the bit. Off by default until "
          "the A/B on main; the thread-scaling runner is bench/runners/pdhg_threads.py.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
+        {"pdhg_parallel_updates",
+         OptionType::Bool,
+         false,
+         "Run the rest of a CPU PDHG iteration over the `threads` workers too (#487): the "
+         "projected primal and dual updates, the extrapolation, the step rule's movement and "
+         "interaction sums and the running sums of the average. The sums are taken in fixed "
+         "chunks whose size does not depend on the thread count, so the answer is bitwise "
+         "identical at any thread count; against the serial loops the summation order "
+         "differs, so the two agree to rounding, not to the bit. Pairs with "
+         "pdhg_parallel_spmv for a fully parallel iteration. Off by default until the A/B on "
+         "main; the thread-scaling runner is bench/runners/pdhg_threads.py.",
          0.0,
          0.0,
          {}});
