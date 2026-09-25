@@ -1002,14 +1002,49 @@ const std::vector<OptionSpec>& Options::registry() {
         {"gpu_batch_nodes",
          OptionType::Bool,
          false,
-         "Bound and score a slab of open B&B nodes in one batched GPU PDHG pass (#520). "
-         "CURRENTLY A STUB: the kernel is not written, solve_batch_nodes() returns an "
-         "empty result and the search runs its sequential node LPs exactly as with the "
-         "option off. Default OFF; it earns a default by a clean A/B on main once the "
-         "kernel exists. No-op when gpu=false or no CUDA device is present.",
+         "MILP: bound a slab of open branch-and-bound nodes (up to gpu_batch_size) in one "
+         "batched PDHG run (#520) and prune, without a simplex solve, every node whose "
+         "Neumaier-Shcherbina bound from the batch's duals reaches the incumbent. The bound "
+         "is valid for any duals, so it is used only to prune and order; the simplex stays "
+         "the node solver. Runs between nodes once there is an incumbent. Default OFF until "
+         "a clean A/B on main.",
          0.0,
          0.0,
          {}});
+    s.push_back({"gpu_batch_strong_branching",
+                 OptionType::Bool,
+                 false,
+                 "MILP: score the strong-branching children in one batched PDHG run (#520) "
+                 "instead of one dual simplex probe each: a child's score is its safe bound, "
+                 "and a child whose bound reaches the incumbent is a closed side. Default OFF "
+                 "until a clean A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"gpu_batch_size",
+                 OptionType::Int,
+                 std::int64_t{32},
+                 "gpu_batch_nodes: the most open nodes bounded in one batch (#520).",
+                 1.0,
+                 4096.0,
+                 {}});
+    s.push_back({"gpu_batch_iterations",
+                 OptionType::Int,
+                 std::int64_t{500},
+                 "Batched PDHG (#520): iterations per batch. Any number gives a valid bound; "
+                 "more give a tighter one. 0 bounds from the starting duals alone.",
+                 0.0,
+                 1e7,
+                 {}});
+    s.push_back({"gpu_batch_backend",
+                 OptionType::String,
+                 std::string("auto"),
+                 "Where the batched PDHG runs (#520): auto uses the CUDA kernels when the "
+                 "build has CUDA and a card answers, cpu forces the CPU reference (the same "
+                 "bounds bit for bit either way).",
+                 0.0,
+                 0.0,
+                 {"auto", "cpu"}});
     s.push_back(
         {"gpu_domain_prop",
          OptionType::Bool,

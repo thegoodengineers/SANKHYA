@@ -693,4 +693,31 @@ inline constexpr double kIpmDenseSchurMinPivot = 0.5;
 /// iteration limit; with no floor none converged.
 inline constexpr double kIpmColumnSideDiagonalFloor = 1e-8;
 
+// ---- Batched PDHG node bounds (#520, src/pdhg/batch_pdhg.hpp) -----------------------------
+//
+// The batch is only ever used through the Neumaier-Shcherbina bound of its duals, which is
+// valid for ANY dual vector, so none of these decides whether a bound is correct - only how
+// good it is for the iterations spent.
+
+/// Iterations between the restart checks. Each check costs about three extra products per
+/// LP (A x and A^T y at the average and A x at the current point), so 64 keeps them near 5%.
+inline constexpr Count kBatchPdhgCheckInterval = 64;
+/// Rows or columns per partial sum in the restart statistics: each is summed in index order
+/// and the partials in chunk order, the same on the CPU and on the device, so the two take
+/// the same restart decisions and return the same duals bit for bit.
+inline constexpr Index kBatchPdhgChunk = 256;
+/// Step eta = kBatchPdhgStepFraction / ||A||_2 (power-iteration estimate, rounded up), so
+/// tau * sigma * ||A||^2 < 1 as Chambolle & Pock (2011) Theorem 1 requires.
+inline constexpr double kBatchPdhgStepFraction = 0.9;
+/// Restart criteria of Applegate et al. (2021) sec. 3.2 on the KKT error, as cuPDLP.jl (Lu &
+/// Yang 2023) states them: sufficient decay, necessary decay with no local progress, and an
+/// artificial restart once the epoch is this share of all iterations so far.
+inline constexpr double kBatchPdhgRestartSufficient = 0.2;
+inline constexpr double kBatchPdhgRestartNecessary = 0.8;
+inline constexpr double kBatchPdhgRestartArtificial = 0.36;
+/// Primal-weight smoothing theta of Applegate et al. (2021) sec. 3.3.
+inline constexpr double kBatchPdhgWeightSmoothing = 0.5;
+/// A restart moves the primal weight only when both iterates moved by more than this.
+inline constexpr double kBatchPdhgMinMove = 1e-10;
+
 }  // namespace sankhya::tol

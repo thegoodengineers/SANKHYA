@@ -297,6 +297,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/branch_and_bound_heuristics.cpp
   src/mip/branch_and_bound_restart.cpp
   src/mip/branch_and_bound_safe.cpp
+  src/mip/branch_and_bound_batch.cpp
   src/mip/branch_and_bound_certificate.cpp
   src/mip/certificate_writer.cpp
   src/mip/certificate_cuts.cpp
@@ -339,6 +340,8 @@ set(SANKHYA_CORE_SOURCES
   src/pdhg/pdhg_evaluate.cpp
   src/pdhg/pdhg_certificate.cpp
   src/pdhg/pdhg_halpern.cpp
+  src/pdhg/batch_pdhg.cpp
+  src/pdhg/batch_pdhg_cpu.cpp
   src/gpu/gpu_memory.cpp
   src/gpu/ipm_cudss.cpp
   src/gpu/multi_device.cpp
@@ -381,6 +384,14 @@ set_property(SOURCE src/util/version.cpp PROPERTY COMPILE_DEFINITIONS
   SANKHYA_GIT_COMMIT="${SANKHYA_GIT_COMMIT}"
   SANKHYA_BUILD_TYPE="$<CONFIG>"
   SANKHYA_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+
+# The batched PDHG's CPU reference (#520) must round every product and sum on its own, as
+# the CUDA kernels do with explicit intrinsics, for the two to agree bit for bit: no fused
+# multiply-add contraction in that file, whatever -march a build adds.
+if(NOT MSVC)
+  set_source_files_properties(src/pdhg/batch_pdhg_cpu.cpp PROPERTIES COMPILE_OPTIONS
+    "-ffp-contract=off")
+endif()
 
 if(SANKHYA_ENABLE_CUDA)
   # Must be set before enable_language(CUDA): CMake reads CMAKE_CUDA_ARCHITECTURES

@@ -122,6 +122,9 @@ struct TreeNode {
   /// the parent's relaxation when the node is created. Only kBestEstimate reads it; it equals
   /// `bound` until the pseudocosts have seen anything.
   double estimate = 0.0;
+  /// gpu_batch_nodes (#520): the node has been through one batched bound (whether or not it
+  /// raised `bound`), so it is not put through another.
+  bool batch_bounded = false;
 };
 
 /// Convergence tolerance for a QP node relaxation in an MIQP search.
@@ -578,6 +581,41 @@ class BranchAndBound {
   /// path (an infeasible search returns before the other counters are written).
   void report_branching_fixpoint() const;
   bool safe_bounds_ = false;
+  // ---- Batched PDHG bounds (#520), in branch_and_bound_batch.cpp ------------------------
+  /// Read the gpu_batch_* options.
+  void init_batch();
+  /// gpu_batch_nodes: between nodes, bound up to gpu_batch_size open nodes in one batch,
+  /// raise their stored bounds and drop those that can now be pruned.
+  void batch_bound_open_nodes();
+  /// gpu_batch_strong_branching: the batched safe bound of each strong-branching child,
+  /// down[i] for x_c <= floor(x_c) and up[i] for x_c >= ceil(x_c) of columns[i]. Requires the
+  /// node's bounds entered. False when there is nothing to score with (the caller then
+  /// probes with the simplex as before).
+  bool batch_strong_branch(const std::vector<double>& x, const std::vector<Index>& columns,
+                           std::vector<double>* down, std::vector<double>* up);
+  /// Report a batched prune of `box` to the test seam (batch_audit.hpp), when one is set.
+  void batch_audit(bool strong_branching, const std::vector<double>& lower,
+                   const std::vector<double>& upper, double bound) const;
+  /// The root relaxation's point and duals, the starting point of the node batches.
+  void batch_remember_root(const Solution& relaxation);
+  void report_batch() const;
+  bool batch_nodes_ = false;   ///< gpu_batch_nodes
+  bool batch_strong_ = false;  ///< gpu_batch_strong_branching
+  Index batch_size_ = 0;
+  Count batch_iterations_ = 0;
+  bool batch_device_ = false;  ///< gpu_batch_backend = auto
+  std::vector<double> batch_root_x_;
+  std::vector<double> batch_root_y_;  ///< minimise space
+  /// The duals of the relaxation the branching decision is taken on, minimise space.
+  std::vector<double> batch_branch_duals_;
+  Count batch_calls_ = 0;
+  Count batch_device_calls_ = 0;
+  Count batch_lps_ = 0;
+  Count batch_bounds_raised_ = 0;
+  Count batch_node_prunes_ = 0;
+  Count batch_children_closed_ = 0;
+  double batch_seconds_ = 0.0;
+
   // ---- Certificates (#518), in branch_and_bound_certificate.cpp -------------------------
   /// Keep what a solved node's LP proves: its duals (kDual) or Farkas multipliers (kFarkas).
   void certificate_record(Index node, const Solution& relaxation, CertificateTree::Proof proof);

@@ -145,6 +145,13 @@ Index BranchAndBound::select_branching_column(Solution& relaxation, double& node
   strong_fixes_.clear();
   for (int round = 0;; ++round) {
     const bool may_fix = strong_branch_fix_ && round < tol::kStrongBranchFixRounds;
+    // #520: the batched children start from this relaxation's duals, in minimise space.
+    if (batch_strong_) {
+      batch_branch_duals_.resize(relaxation.row_dual.size());
+      for (std::size_t i = 0; i < batch_branch_duals_.size(); ++i) {
+        batch_branch_duals_[i] = sense_ * relaxation.row_dual[i];
+      }
+    }
     std::vector<DomainChange> fixes;
     const Index column =
         choose_branching_column(relaxation.col_value, node_bound, may_fix ? &fixes : nullptr);
