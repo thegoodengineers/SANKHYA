@@ -1001,8 +1001,12 @@ bool InteriorPoint::factorize() {
     // applies to it.
     // Under ipm_linear_solver = auto a system already at the floor goes to the device
     // before any CPU ordering: on rmine15 (7.8e6 nonzeros) that ordering does not finish
-    // inside the set-up share, and the device orders the matrix itself.
+    // inside the set-up share, and the device orders the matrix itself. Not a system past
+    // tol::kIpmDeviceSystemCeiling: the device's analysis does not consult the deadline, and
+    // every such system measured had a factor no budget admits, so the CPU ordering, which
+    // declines at the set-up share, keeps it.
     if (device_auto_ && system.num_nonzeros() >= tol::kIpmDeviceFactorFloor &&
+        static_cast<double>(system.num_nonzeros()) < tol::kIpmDeviceSystemCeiling &&
         device_start_affordable()) {
       device_auto_ = false;
       (void)start_device(true, fmt::format("ipm_linear_solver = auto, {} nonzeros in the "

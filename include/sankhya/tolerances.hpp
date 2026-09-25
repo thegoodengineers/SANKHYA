@@ -880,5 +880,13 @@ inline constexpr std::int64_t kIpmDeviceFactorFloor = 1'000'000;
 /// ADenseColumnDoesNotCarryTheSolvePastItsTimeLimit, 0.9 s against 0.5 s), and 1.5 s later
 /// under a loaded ctest; two seconds covers both with room.
 inline constexpr double kIpmDeviceStartSeconds = 2.0;
+/// Under `ipm_linear_solver = auto`, normal equations holding this many nonzeros or more
+/// are not handed to the device before the CPU ordering has sized their factor. cuDSS's
+/// analysis does not consult the deadline, and on the three Mittelmann systems this large
+/// it ran past the set-up share to a factor no budget admits: chromaticindex1024-7 (3.0e8
+/// nonzeros, factor 1.0e9, declined at 78 s of a 60 s share), supportcase10 (2.2e8, 7.8e9,
+/// 86 s) and Linf_520c (4.7e8, 1.0e9, 158 s), where the CPU ordering declines at the share
+/// (bench runs in #489). The largest system the device solved was rmine15's, 7.8e6.
+inline constexpr double kIpmDeviceSystemCeiling = 1e8;
 
 }  // namespace sankhya::tol
