@@ -43,6 +43,11 @@ struct EngineSelection {
 ///   maros-r7 (3,136 rows, 144,848 nonzeros) times out on the dual simplex and solves in
 ///   14 s on the interior point with crossover; no Netlib instance under 100,000 nonzeros
 ///   is measured to prefer it (fit2p, 50,284 nonzeros, times out on it).
+/// - kIpmDensityRowFloor: the density rule applies from this many rows. Its evidence is a
+///   basis factorization the dual simplex cannot afford, and a model with a few hundred
+///   rows has no such basis however many nonzeros its columns hold: fit2d (25 rows, 10,500
+///   columns, 129,018 nonzeros after presolve) solves in 0.09 s on the dual simplex against
+///   0.18 s on the interior point with crossover. maros-r7, the rule's reason, has 3,136.
 /// - kPdhgRowFloor: from 100,000 rows the direct factorization is out of reach
 ///   (`scale-e134aeb.csv`: the interior point produces no output on the 100,000-row random
 ///   shape and hits the limit on the staircase; PDHG reaches the optimum to 1e-7 on both),
@@ -50,6 +55,7 @@ struct EngineSelection {
 ///   (`scale-refinery-e134aeb.csv`).
 inline constexpr Index kDualSimplexRowLimit = 20000;
 inline constexpr Count kIpmNonzeroFloor = 100000;
+inline constexpr Index kIpmDensityRowFloor = 1000;
 inline constexpr Index kPdhgRowFloor = 100000;
 
 /// Decide the LP engine for `model` under `options`. An explicit `algorithm` other than

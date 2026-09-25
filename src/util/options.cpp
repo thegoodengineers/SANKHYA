@@ -129,7 +129,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  std::string("auto"),
                  "LP engine: auto (a rule-based selection from the model's shape, #284: "
                  "the dual simplex below 20,000 rows and 100,000 nonzeros, where it passes "
-                 "80 of 89 Netlib instances; the interior point with crossover above either; "
+                 "80 of 89 Netlib instances; the interior point with crossover above either "
+                 "(the nonzero bound only from 1,000 rows); "
                  "PDHG from 100,000 rows; a starting basis always means the dual simplex; "
                  "the answer's engine_rule/engine_reason say which rule fired and why), "
                  "simplex (the primal), dual-simplex, pdhg, or ipm (#56: Mehrotra "

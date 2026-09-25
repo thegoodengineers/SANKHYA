@@ -63,7 +63,7 @@ EngineSelection select_engine(const Model& model, const Options& options, bool w
         shape, kDualSimplexRowLimit);
     return s;
   }
-  if (s.nonzeros >= kIpmNonzeroFloor) {
+  if (s.nonzeros >= kIpmNonzeroFloor && s.rows >= kIpmDensityRowFloor) {
     s.algorithm = "ipm";
     s.rule = "density:ipm";
     s.reason = fmt::format(
@@ -76,10 +76,10 @@ EngineSelection select_engine(const Model& model, const Options& options, bool w
   s.algorithm = "dual-simplex";
   s.rule = "default:dual-simplex";
   s.reason = fmt::format(
-      "{}: below {} rows and {} nonzeros the dual simplex is the measured default, 80 of "
-      "89 on the Netlib full set (netlib-full-b3f1660.csv); it produces the basis the rest "
-      "of the pipeline uses",
-      shape, kDualSimplexRowLimit, kIpmNonzeroFloor);
+      "{}: below {} rows, and below {} nonzeros or {} rows, the dual simplex is the "
+      "measured default, 80 of 89 on the Netlib full set (netlib-full-b3f1660.csv); it "
+      "produces the basis the rest of the pipeline uses",
+      shape, kDualSimplexRowLimit, kIpmNonzeroFloor, kIpmDensityRowFloor);
   return s;
 }
 
