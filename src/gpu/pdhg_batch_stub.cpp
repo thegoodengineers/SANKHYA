@@ -8,13 +8,12 @@
 
 namespace sankhya::gpu {
 
-std::vector<BatchNodeResult> solve_batch_nodes(
-    const Model& /*model*/, int /*K*/,
-    const std::vector<double>& /*col_lb*/,
-    const std::vector<double>& /*col_ub*/,
-    double /*incumbent*/, const Options& /*options*/)
-{
-    return {};
+std::vector<BatchNodeResult> solve_batch_nodes(const Model& /*model*/, int /*K*/,
+                                               const std::vector<double>& /*col_lb*/,
+                                               const std::vector<double>& /*col_ub*/,
+                                               double /*incumbent*/,
+                                               const Options& /*options*/) {
+  return {};
 }
 
 }  // namespace sankhya::gpu
