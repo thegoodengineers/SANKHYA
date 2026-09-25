@@ -27,7 +27,7 @@
 #include "device.hpp"
 #include "pdhg_batch.hpp"
 
-#include "../core/safe_bound.hpp"
+#include "pdhg_batch_bound.hpp"
 #include "sankhya/sparse.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -299,20 +299,7 @@ std::vector<BatchNodeResult> solve_batch_nodes(const Model& model, int K,
   const std::size_t ws_size = std::max(ws1, ws2);
   if (ws_size > 0) cudaMalloc(&ws, ws_size);
 
-  // Build SafeBoundProblem for dual bound extraction (Neumaier-Shcherbina #519).
-  std::vector<double> cost_min(static_cast<std::size_t>(n));
-  for (int j = 0; j < n; ++j) {
-    cost_min[static_cast<std::size_t>(j)] = model.col_cost[static_cast<std::size_t>(j)] *
-                                            (model.sense == ObjSense::kMinimize ? 1.0 : -1.0);
-  }
-  const SafeBoundProblem sbp{
-      &model.matrix,
-      std::span<const double>{cost_min},
-      std::span<const double>{model.row_lower},
-      std::span<const double>{model.row_upper},
-      std::span<const double>{model.col_lower},
-      std::span<const double>{model.col_upper},
-  };
+  // Safe bound extraction happens in pdhg_batch_bound.cpp (C++20, has std::span).
 
   const int max_iters = options.get_int("gpu_batch_max_iter");
   const int n_threads = kBlock;
@@ -360,11 +347,10 @@ std::vector<BatchNodeResult> solve_batch_nodes(const Model& model, int K,
                      cudaMemcpyDeviceToHost) == cudaSuccess) {
         for (int k = 0; k < K; ++k) {
           if (!active[static_cast<std::size_t>(k)]) continue;
-          const std::span<const double> y_k(Y_host.data() + k * m, static_cast<std::size_t>(m));
-          const SafeBound sb = safe_dual_bound(sbp, y_k);
-          results[static_cast<std::size_t>(k)].dual_bound = sb.value;
+          const double bound = batch_safe_bound(model, Y_host.data() + k * m, m);
+          results[static_cast<std::size_t>(k)].dual_bound = bound;
           results[static_cast<std::size_t>(k)].iterations = iter + 1;
-          if (std::isfinite(sb.value) && sb.value > incumbent + tol::kPrimalFeasibility) {
+          if (std::isfinite(bound) && bound > incumbent + tol::kPrimalFeasibility) {
             results[static_cast<std::size_t>(k)].pruned = true;
             active[static_cast<std::size_t>(k)] = false;
             --active_count;
