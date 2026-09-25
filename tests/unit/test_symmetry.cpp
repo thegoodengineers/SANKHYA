@@ -353,9 +353,9 @@ TEST(Symmetry, RandomMilpsWithADuplicatedColumnAgreeWithTheExactOracle) {
   EXPECT_GT(generators, 0) << "a duplicated column should be found on most instances";
 }
 
-TEST(Symmetry, TheOptionIsRegisteredAndOffByDefault) {
+TEST(Symmetry, TheOptionIsRegisteredAndOnByDefault) {
   const Options options;
-  EXPECT_FALSE(options.get_bool("mip_symmetry"));
+  EXPECT_TRUE(options.get_bool("mip_symmetry"));
   EXPECT_EQ(options.get_int("mip_symmetry_search_limit"), 1000);
 }
 

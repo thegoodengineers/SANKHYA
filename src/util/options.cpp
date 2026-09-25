@@ -841,7 +841,7 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"mip_symmetry",
                  OptionType::Bool,
-                 false,
+                 true,
                  "Formulation symmetry (#413; Margot 2010; Liberti 2012): detect the "
                  "permutations of columns and rows that leave the model unchanged, by "
                  "colour refinement and individualisation on the model's coloured bipartite "

@@ -84,10 +84,11 @@ TEST(CertificateWriter, TheSearchWritesTheClaimItProved) {
   EXPECT_NE(text.find("DER "), std::string::npos);
 }
 
-TEST(CertificateWriter, RowsTheModelDoesNotHaveMeanNoCertificate) {
+TEST(CertificateWriter, SymmetryRowsAreLeftOutOfACertifiedSearch) {
   // Two identical columns: formulation symmetry (#413) appends an ordering row, a row the
-  // model does not have, and the certificate is refused rather than written about another
-  // model. The file is left as it was (empty).
+  // model does not have and the certificate cannot derive. With symmetry on by default, a
+  // search asked for a proof runs without those rows and is certified, rather than refused
+  // on every symmetric model.
   Model model = knapsack();
   model.col_cost[1] = model.col_cost[0];
   model.matrix.reset(3, 3);
@@ -103,15 +104,16 @@ TEST(CertificateWriter, RowsTheModelDoesNotHaveMeanNoCertificate) {
   options.set_bool("log_to_console", false);
   options.set_bool("enable_root_cuts", false);
   options.set_bool("mip_symmetry", true);
+  // Without a certificate the model is symmetric and the ordering rows are added.
+  const Solution plain = solve(model, options);
+  ASSERT_EQ(plain.status, SolveStatus::kOptimal);
+  ASSERT_GT(plain.symmetry_generators, 0);
+  // With one, the search runs without them and the answer is certified.
   options.set_string("write_certificate", file.path());
   const Solution solved = solve(model, options);
   ASSERT_EQ(solved.status, SolveStatus::kOptimal);
-  ASSERT_GT(solved.symmetry_generators, 0);
-  EXPECT_TRUE(read_all(file.path()).empty());
-  // Without the symmetry rows the same model is certified.
-  options.set_bool("mip_symmetry", false);
-  const Solution again = solve(model, options);
-  ASSERT_EQ(again.status, SolveStatus::kOptimal);
+  EXPECT_EQ(solved.symmetry_generators, 0);
+  EXPECT_DOUBLE_EQ(solved.objective, plain.objective);
   EXPECT_NE(read_all(file.path()).find("RTP range"), std::string::npos);
 }
 
