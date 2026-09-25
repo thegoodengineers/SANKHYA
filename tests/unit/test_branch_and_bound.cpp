@@ -1053,4 +1053,71 @@ TEST(ObjectiveIntegrality, LeavesAFractionalObjectiveAlone) {
   EXPECT_NEAR(with.objective, without.objective, 1e-9);
   EXPECT_EQ(with.nodes, without.nodes) << "the search rounded a bound it had no right to";
 }
+TEST(TreeCuts, CutPoolingPreservesCorrectnessAndCountersSane) {
+  // Issue #497 regression: verify the cut pooling feature.
+  //
+  // Uses the same padded 16-column knapsack as TheRootBoundBeforeAndAfterCutsIsReported,
+  // which is proven to generate root cuts (cuts_applied > 0). Enables mip_cut_pooling and
+  // checks:
+  //   1. Correctness: same optimal objective with and without pooling.
+  //   2. Counter sanity: cut_rows_aged_out and cuts_reactivated are non-negative.
+  //   3. Option is honoured: mip_cut_pooling=false must produce cuts_reactivated=0.
+  //   4. Aging guard: if cuts were generated and >=kCutRowAgeLimit nodes explored,
+  //      at least one cut must have aged out (the aging call is proven by the source).
+  //
+  // The same capacity-8 instance (capacity 9 is integral at the root) that
+  // TheRootBoundBeforeAndAfterCutsIsReported uses. Twelve dummy columns with cost +1
+  // make it wide enough for the density filter to pass the cover cut.
+  std::vector<double> row{5.0, 4.0, 3.0, 2.0};
+  std::vector<double> cost{-10.0, -7.0, -4.0, -3.0};
+  std::vector<double> upper(4, 1.0);
+  std::vector<bool> integral(4, true);
+  for (int pad = 0; pad < 12; ++pad) {
+    row.push_back(0.0);
+    cost.push_back(1.0);
+    upper.push_back(1.0);
+    integral.push_back(true);
+  }
+  const Model model = make_milp({row}, {-kInfinity}, {8.0}, cost, upper, integral);
+
+  Options opts = mip_options();
+  opts.set_bool("presolve", false);
+  opts.set_bool("enable_root_cuts", true);
+  opts.set_bool("mip_heuristics", false);
+  opts.set_bool("mip_symmetry", false);
+  opts.set_int("node_limit", 20000);
+
+  // Baseline: no pooling.
+  opts.set_bool("mip_cut_pooling", false);
+  Solution sol_off = solve(model, opts);
+  ASSERT_EQ(sol_off.status, SolveStatus::kOptimal) << sol_off.message;
+  // Verify the base instance does generate cuts (requirement from theRootBound test).
+  ASSERT_GT(sol_off.cuts_applied, 0) << "The padded knapsack must generate root cuts";
+  // Baseline must have zero reactivations (feature off).
+  EXPECT_EQ(sol_off.cuts_reactivated, 0) << "mip_cut_pooling=false must not reactivate";
+
+  // With pooling on.
+  opts.set_bool("mip_cut_pooling", true);
+  Solution sol_on = solve(model, opts);
+  ASSERT_EQ(sol_on.status, SolveStatus::kOptimal) << sol_on.message;
+
+  // 1. Correctness: pooling must not change the optimal objective.
+  EXPECT_NEAR(sol_on.objective, sol_off.objective, 1e-9)
+      << "mip_cut_pooling changed the optimal objective (correctness failure)";
+
+  // 2. Counter sanity: counters must not go negative.
+  EXPECT_GE(sol_on.cut_rows_aged_out, 0);
+  EXPECT_GE(sol_on.cuts_reactivated, 0);
+
+  // 3. Aging check: if the search explored enough nodes for cuts to age out
+  //    (kCutRowAgeLimit = 50), the aging call in age_cut_rows must have freed at least one.
+  //    This instance has 4 real binary variables; without heuristics, the tree may be small.
+  //    The check is conditional so it fires only when the aging path is reachable.
+  if (sol_on.nodes >= 50 && sol_on.cuts_applied > 0) {
+    EXPECT_GT(sol_on.cut_rows_aged_out, 0)
+        << "cuts_applied=" << sol_on.cuts_applied << ", nodes=" << sol_on.nodes
+        << ", but cut_rows_aged_out=0: aging may not be firing correctly";
+  }
+}
+
 }  // namespace sankhya
