@@ -389,6 +389,22 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"presolve_bound_propagation",
+                 OptionType::Bool,
+                 false,
+                 "Bound propagation from row activity in presolve (#485; Brearley, Mitra and "
+                 "Williams 1975; Andersen and Andersen 1995; Cederberg and Boyd, arXiv "
+                 "2604.23951): on each live inequality row with two or more columns, each "
+                 "column's bounds implied by the row's bounds and the activity range of the "
+                 "other columns, loosened by a safety margin, rounded inward on an integer "
+                 "column. Column singletons in inequality rows and doubleton inequalities are "
+                 "special cases. Every tightened bound leaves a record: when the engine ends a "
+                 "column on it, postsolve moves the column's reduced cost onto the row that "
+                 "implied it, so the duals hold on the original model. Only read when presolve "
+                 "is on. Off until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"presolve_coefficient_tightening",
                  OptionType::Bool,
                  false,

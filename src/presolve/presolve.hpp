@@ -78,6 +78,14 @@ struct Record {
     /// two flags say which of the kept row's bounds came from the removed row, because that
     /// is where the dual belongs when that bound binds.
     kParallelRow,
+    /// Bound propagation from row activity (#485; Andersen & Andersen 1995): the
+    /// bound `value` on column `column` (its upper bound when `implied_upper`, else its
+    /// lower) implied by row `index`, whose coefficient on the column is `coefficient`, and
+    /// the activity range of the row's other columns. The row stays. The bound is part of
+    /// the reduced model's box but not of the original's, so when the column ends on it the
+    /// reduced cost it carries belongs to the row: postsolve moves it there, which is the
+    /// same transfer a singleton row makes.
+    kImpliedBound,
   };
 
   Kind kind = Kind::kEmptyRow;
@@ -117,6 +125,8 @@ struct Record {
   /// box, so the box never binds and the substitution is the free one. Replayed identically;
   /// counted separately in the report.
   bool implied_free = false;
+  /// kImpliedBound only: the bound written was the column's upper bound.
+  bool implied_upper = false;
 };
 
 /// The reduced problem plus everything needed to get back.

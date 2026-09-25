@@ -331,6 +331,7 @@ set(SANKHYA_CORE_SOURCES
   src/global/relaxation.cpp
   src/global/spatial_bnb.cpp
   src/presolve/coef_tightening.cpp
+  src/presolve/implied_bounds.cpp
   src/presolve/presolve.cpp
   src/presolve/probing.cpp
   src/ipm/dense_columns.cpp
