@@ -26,9 +26,12 @@ Output: bench/results/pdhg-two-matvec-<sha>.csv (the sha from the binary, #433),
 instance, engine and option value, with the columns ENGINEERING_RULES.md requires: instance,
 sha256 of the instance file, objective, reference objective, absolute and relative gap,
 status, solver and wall seconds, iterations, git commit, machine. seconds_per_iteration is
-the median solver seconds over the iterations run, one-off set-up (scaling, the power
-iteration, the device upload) included and identical in both arms; ratio_to_three_products
-is the two-product row's per-iteration time over the three-product row's.
+the MARGINAL solver time per iteration: each arm is also run at a fifth of the count, and
+the median over repeats of (t - t_short) / (k - k_short) is reported, so the one-off set-up
+(on the device the context and the upload are most of a short solve) cancels. An instance
+that converges before twice the short count has no marginal time and says so.
+ratio_to_three_products is the two-product row's per-iteration time over the
+three-product row's.
 """
 from __future__ import annotations
 
@@ -60,10 +63,10 @@ NETLIB_NINE = ["afiro", "sc50a", "sc50b", "adlittle", "blend", "share2b", "sc105
 COLUMNS = ["instance", "instance_sha256", "rows", "cols", "nnz", "engine", "two_matvec",
            "iterations_requested", "iterations", "status", "objective", "reference_objective",
            "absolute_gap", "relative_gap", "solver_seconds", "wall_seconds",
-           "seconds_per_iteration", "ratio_to_three_products", "repeats", "algorithm_ran",
+           "short_iterations", "short_solver_seconds", "seconds_per_iteration", "ratio_to_three_products", "repeats", "algorithm_ran",
            "solver_options", "git_commit", "machine", "gpu", "timestamp_utc"]
 
-DEFAULT_ITERATIONS = 2000
+DEFAULT_ITERATIONS = 10000
 
 # --solver-option values, passed to every solve of both arms (e.g. gpu_on_device_loop=true)
 # and recorded in the solver_options column.
@@ -130,22 +133,34 @@ def netlib_references() -> dict[str, float]:
 def measure(binary: Path, name: str, mps: Path, reference: float | None, engines: list[bool],
             iterations: int, repeats: int, common: dict) -> list[dict]:
     digest = sha256_file(mps)
+    short = max(1, iterations // 5)
     rows = []
     for cuda in engines:
         if cuda:
-            solve(binary, mps, True, False, min(iterations, 200))  # device warm-up
-        runs: dict[bool, list[dict]] = {False: [], True: []}
+            solve(binary, mps, True, False, short)  # device warm-up
+        runs: dict[bool, list[tuple[dict, dict]]] = {False: [], True: []}
         for _ in range(repeats):
             for two in (False, True):  # interleaved: A B A B
-                runs[two].append(solve(binary, mps, cuda, two, iterations))
-        per_iteration = {}
+                runs[two].append((solve(binary, mps, cuda, two, short),
+                                  solve(binary, mps, cuda, two, iterations)))
+        per_iteration: dict[bool, float | None] = {}
         for two in (False, True):
             done = runs[two]
-            last = done[-1]
-            seconds = statistics.median(r["seconds"] for r in done)
-            wall = statistics.median(r["wall"] for r in done)
+            last = done[-1][1]
+            # The MARGINAL time per iteration, (t_long - t_short) / (k_long - k_short), per
+            # repeat: the set-up both runs pay once (reading, scaling, the power iteration,
+            # and on the device the context, the upload and the cuSPARSE buffers) cancels.
+            # On the device the set-up is most of a short solve, so the plain quotient t / k
+            # would measure the set-up, not the iteration.
+            marginal = [(long_run["seconds"] - short_run["seconds"])
+                        / (long_run["iterations"] - short_run["iterations"])
+                        for short_run, long_run in done
+                        if long_run["iterations"] - short_run["iterations"] >= short]
+            per_iteration[two] = statistics.median(marginal) if marginal else None
+            seconds = statistics.median(long_run["seconds"] for _, long_run in done)
+            short_seconds = statistics.median(short_run["seconds"] for short_run, _ in done)
+            wall = statistics.median(long_run["wall"] for _, long_run in done)
             count = last["iterations"]
-            per_iteration[two] = seconds / count if count else None
             objective = last["objective"]
             absolute = relative = ""
             if objective is not None and reference is not None:
@@ -161,20 +176,26 @@ def measure(binary: Path, name: str, mps: Path, reference: float | None, engines
                 "reference_objective": "" if reference is None else repr(reference),
                 "absolute_gap": absolute, "relative_gap": relative,
                 "solver_seconds": round(seconds, 6), "wall_seconds": round(wall, 6),
+                "short_iterations": done[-1][0]["iterations"],
+                "short_solver_seconds": round(short_seconds, 6),
                 "seconds_per_iteration": ("" if per_iteration[two] is None
                                           else f"{per_iteration[two]:.6e}"),
                 "ratio_to_three_products": "", "repeats": repeats,
                 "algorithm_ran": last["algorithm"], **common,
             })
+        engine = "cuda" if cuda else "cpu"
         if per_iteration[False] and per_iteration[True]:
             ratio = per_iteration[True] / per_iteration[False]
             rows[-1]["ratio_to_three_products"] = f"{ratio:.4f}"
             rows[-2]["ratio_to_three_products"] = "1.0000"
-            engine = "cuda" if cuda else "cpu"
             print(f"{name:>22}  {engine:>4}  {rows[-2]['iterations']:>6} / "
                   f"{rows[-1]['iterations']:>6} it  three {per_iteration[False] * 1e6:10.2f} us"
                   f"  two {per_iteration[True] * 1e6:10.2f} us  ratio {ratio:.3f}"
                   f"  ran {rows[-1]['algorithm_ran']}", flush=True)
+        else:
+            print(f"{name:>22}  {engine:>4}  converged before {2 * short} iterations "
+                  f"({rows[-2]['iterations']} / {rows[-1]['iterations']}): no marginal time",
+                  flush=True)
     return rows
 
 
