@@ -30,8 +30,9 @@
 
 namespace sankhya::nlp {
 
-/// Solve a nonlinear model whose columns are all continuous. A model with integer columns is
-/// refused here (kNotSolved, with the reason); a MINLP goes to the branch and bound.
+/// Solve a nonlinear model. Continuous: the interior point. With integer columns: the
+/// NLP-based branch and bound (minlp_bnb.hpp, NLP stage 3), which refuses a model whose
+/// relaxation is not proved convex.
 [[nodiscard]] Solution solve_nlp(const NonlinearModel& model, const Options& options,
                                  SolveControl* control = nullptr);
 
