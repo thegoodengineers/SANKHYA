@@ -17,6 +17,10 @@
 #include "feasibility_jump.hpp"
 #include "parallel_search.hpp"
 
+#ifdef SANKHYA_ENABLE_CUDA
+#include "../gpu/gpu_fj.hpp"
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -407,8 +411,37 @@ void BranchAndBound::run_feasibility_jump(const std::vector<double>* from) {
     if (control_ != nullptr && control_->interruption_requested()) return true;
     return schedule_.seconds_budgets && limits_.time_exhausted(timer_.elapsed_seconds());
   };
-  const FeasibilityJumpResult found = feasibility_jump(
-      original_, from != nullptr ? *from : feasibility_jump_zero_start(original_), settings);
+  const std::vector<double> start =
+      from != nullptr ? *from : feasibility_jump_zero_start(original_);
+  // gpu_feasibility_jump (#508, off by default) runs the same search on the device, many
+  // restarts at once; its points pass the host check in gpu_fj.cu and then offer_incumbent()
+  // like any other. When no device runs it, the CPU search below does.
+  if (options_.get_bool("gpu_feasibility_jump")) {
+#ifdef SANKHYA_ENABLE_CUDA
+    const gpu::FjDeviceResult device = gpu::feasibility_jump(original_, start, settings);
+    if (device.ran) {
+      s.work += device.search.work;
+      s.seconds += clock.elapsed_seconds();
+      logger_.verbose(
+          "Feasibility jump on the GPU ({}): {} restart(s), {} point(s), {} move(s), {} weight "
+          "update(s), {} launch(es){}{}",
+          from != nullptr ? "from the root relaxation" : "before the root LP", device.restarts,
+          device.search.points.size(), device.search.moves, device.search.weight_updates,
+          device.launches,
+          device.rejected > 0
+              ? fmt::format(", {} point(s) refused by the host check", device.rejected)
+              : std::string(),
+          device.reason.empty() ? std::string() : "; " + device.reason);
+      return;
+    }
+    logger_.info("Feasibility jump: the GPU search did not run ({}); the CPU search runs",
+                 device.reason);
+#else
+    logger_.info(
+        "Feasibility jump: gpu_feasibility_jump needs a CUDA build; the CPU search runs");
+#endif
+  }
+  const FeasibilityJumpResult found = feasibility_jump(original_, start, settings);
   s.work += found.work;
   s.seconds += clock.elapsed_seconds();
   logger_.verbose("Feasibility jump ({}): {} point(s), {} move(s), {} weight update(s)",

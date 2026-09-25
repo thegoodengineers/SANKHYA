@@ -589,6 +589,18 @@ inline constexpr Count kPdhgDeviceLoopBlock = 32;
 /// units: about a millisecond of work, so a stop is seen promptly and the poll costs nothing.
 inline constexpr Count kFeasibilityJumpPollWork = 65536;
 
+/// GPU Feasibility Jump (#508; Corduk, Sielski, Boucher & Aatish, arXiv:2510.20499), one
+/// search per CUDA block of 8 warps: each warp scores kGpuFeasibilityJumpSamplesPerWarp
+/// sampled columns per move, 32 in all against the CPU's 25, the extra ones costing no wall
+/// time since the warps run at once; a launch runs kGpuFeasibilityJumpLaunchSteps moves or
+/// weight updates of every search before the host polls for points and for the stop; the
+/// default is kGpuFeasibilityJumpRestartsPerSm searches per multiprocessor, as many as
+/// kGpuFeasibilityJumpMemoryShare of the card's free memory holds.
+inline constexpr int kGpuFeasibilityJumpSamplesPerWarp = 4;
+inline constexpr int kGpuFeasibilityJumpLaunchSteps = 128;
+inline constexpr int kGpuFeasibilityJumpRestartsPerSm = 2;
+inline constexpr double kGpuFeasibilityJumpMemoryShare = 0.5;
+
 /// Implied-integer detection (#513): every coefficient and right-hand side it reasons about
 /// must be an integer of magnitude below 2^53, where a double holds every integer exactly
 /// and fmod is exact, so the divisibility test adds no rounding of its own.

@@ -75,4 +75,14 @@ struct FeasibilityJumpResult {
 /// The start used before any LP: every column at the value of its box closest to zero.
 [[nodiscard]] std::vector<double> feasibility_jump_zero_start(const Model& model);
 
+/// The check a point from the GPU search (#508) passes on the host before it is kept or
+/// handed over, with the tolerances BranchAndBound::offer_incumbent() applies: every integer
+/// column within `integrality_tolerance` of an integer, every column inside its box and every
+/// row activity, recomputed from the original matrix, inside its interval, both to
+/// tol::kPrimalFeasibility absolute. A point of the wrong length, or with a non-finite value,
+/// fails.
+[[nodiscard]] bool feasibility_jump_point_is_feasible(const Model& model,
+                                                      const std::vector<double>& x,
+                                                      double integrality_tolerance);
+
 }  // namespace sankhya::mip

@@ -346,4 +346,37 @@ std::vector<double> feasibility_jump_zero_start(const Model& model) {
   return x;
 }
 
+bool feasibility_jump_point_is_feasible(const Model& model, const std::vector<double>& x,
+                                        double integrality_tolerance) {
+  if (x.size() != static_cast<std::size_t>(model.num_cols())) return false;
+  for (std::size_t j = 0; j < x.size(); ++j) {
+    if (!std::isfinite(x[j])) return false;
+    if (model.col_type[j] == VarType::kInteger &&
+        std::fabs(x[j] - std::round(x[j])) > integrality_tolerance) {
+      return false;
+    }
+    if (is_finite_bound(model.col_lower[j]) &&
+        x[j] < model.col_lower[j] - tol::kPrimalFeasibility) {
+      return false;
+    }
+    if (is_finite_bound(model.col_upper[j]) &&
+        x[j] > model.col_upper[j] + tol::kPrimalFeasibility) {
+      return false;
+    }
+  }
+  std::vector<double> activity(static_cast<std::size_t>(model.num_rows()), 0.0);
+  if (model.num_rows() > 0) model.matrix.multiply(x.data(), activity.data());
+  for (std::size_t i = 0; i < activity.size(); ++i) {
+    if (is_finite_bound(model.row_lower[i]) &&
+        activity[i] < model.row_lower[i] - tol::kPrimalFeasibility) {
+      return false;
+    }
+    if (is_finite_bound(model.row_upper[i]) &&
+        activity[i] > model.row_upper[i] + tol::kPrimalFeasibility) {
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace sankhya::mip

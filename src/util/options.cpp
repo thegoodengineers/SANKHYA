@@ -1076,13 +1076,15 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"gpu_feasibility_jump",
                  OptionType::Bool,
                  false,
-                 "GPU Feasibility Jump heuristic for MIP (#508): activities and column "
-                 "weights kept on the device; jump value and score of many candidate "
-                 "variables evaluated in parallel (one warp per candidate, segmented "
-                 "CUB reduction); several independent restarts as parallel CUDA blocks. "
-                 "CURRENTLY A STUB: feasibility_jump() returns nullopt. Default OFF; "
-                 "enable after A/B on main once kernels are written. "
-                 "Reference: Corduk et al., arXiv:2510.20499.",
+                 "Run Feasibility Jump (#506) on the GPU (#508) wherever mip_heur_fj "
+                 "runs it: one search per CUDA block, two per multiprocessor, each with "
+                 "its own point, activities and row weights on the device and its "
+                 "candidate columns scored one warp per column; each search spends "
+                 "mip_fj_work. Every point is checked against the original model on the "
+                 "host, then offered as an incumbent like any other. Without a CUDA build "
+                 "or a device the CPU search runs instead. Default OFF until an A/B on "
+                 "main. References: Luteberget and Sartor, Math. Programming Computation "
+                 "15 (2023); Corduk et al., arXiv:2510.20499.",
                  0.0,
                  0.0,
                  {}});
