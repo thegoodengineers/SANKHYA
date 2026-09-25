@@ -174,10 +174,15 @@ TEST(PdhgParallelSpmv, TheVectorUpdatesGiveTheSameBitsAtOneTwoFourAndEightThread
 
 TEST(PdhgParallelSpmv, TheVectorUpdatesAgreeWithTheSerialLoopsToRounding) {
   // Against the serial loops the three sums are taken in a different order, so the
-  // standard is rounding: the same status, and the objective to the stopping tolerance the
-  // two runs were asked for (1e-6), since a one-ulp difference in a sum may move a restart
-  // by an evaluation and two points that each stopped at 1e-6 are not closer than that.
-  // The iteration counts are printed so a drift is visible even where it is allowed.
+  // standard is rounding, and rounding in a step-rule sum is enough to move a restart by an
+  // evaluation: from there the two runs take different paths (sc50a on an L4 box: 12,880
+  // iterations serial, 14,440 parallel). What can be asked of two different paths is what
+  // is asked of any two runs of this method: the same status, and where both stopped on the
+  // tolerance, the objective to that tolerance (1e-6 here, the one both were asked for).
+  // Where both ran out of the 20,000-iteration budget the two points are wherever their
+  // paths had got to and no closeness is implied, so only the status is compared. The
+  // counts are printed so a drift is visible even where it is allowed.
+  int compared = 0;
   for (const char* name : kInstances) {
     Model model;
     ASSERT_TRUE(io::read_model(netlib_path(name), &model).ok) << name;
@@ -186,13 +191,19 @@ TEST(PdhgParallelSpmv, TheVectorUpdatesAgreeWithTheSerialLoopsToRounding) {
     parallel_options.set_bool("pdhg_parallel_updates", true);
     const Solution parallel = solve(model, parallel_options);
     EXPECT_EQ(serial.status, parallel.status) << name << ": " << parallel.message;
-    EXPECT_NEAR(serial.objective, parallel.objective,
-                1e-6 * std::max(1.0, std::fabs(serial.objective)))
-        << name;
-    std::printf("%s: serial updates %lld iterations, parallel updates %lld\n", name,
-                static_cast<long long>(serial.iterations),
+    const bool both_optimal =
+        serial.status == SolveStatus::kOptimal && parallel.status == SolveStatus::kOptimal;
+    if (both_optimal) {
+      ++compared;
+      EXPECT_NEAR(serial.objective, parallel.objective,
+                  1e-6 * std::max(1.0, std::fabs(serial.objective)))
+          << name;
+    }
+    std::printf("%s: %s, serial updates %lld iterations, parallel updates %lld\n", name,
+                to_string(parallel.status), static_cast<long long>(serial.iterations),
                 static_cast<long long>(parallel.iterations));
   }
+  EXPECT_GE(compared, 2) << "afiro and sc50a converge inside the budget on both paths";
 }
 
 }  // namespace
