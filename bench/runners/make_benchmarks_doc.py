@@ -2585,7 +2585,9 @@ def main() -> int:
                               for engine in KENNINGTON_ENGINES}
     milp_csv = newest("miplib-*.csv", prefix="miplib")
     milp_long_csv = newest_named("miplib-600s-*.csv")
-    pdhg_csv = newest("pdhg-*.csv")
+    # prefix: pdhg-threads-*, pdhg-two-matvec-* and pdhg-478-* share the glob, and since #592
+    # section 1e had been reading the thread-scaling CSV as its own (0 instances shown).
+    pdhg_csv = newest("pdhg-*.csv", prefix="pdhg")
     mittelmann_csv = newest("mittelmann-*.csv")
     mittelmann_pdhg_csv = newest_option_run("mittelmann-*.csv", "algorithm=pdhg")
     mittelmann_ipm_csv = newest_option_run("mittelmann-*.csv", "algorithm=ipm")
