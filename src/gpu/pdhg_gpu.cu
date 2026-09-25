@@ -255,9 +255,12 @@ struct GpuState {
   // A^T in CSR (the CSC arrays of A), deterministic mode only (#478): n + 1 row offsets.
   int *d_trowptr{}, *d_tcolidx{};
   double* d_tvals{};
-  // cuSPARSE SpMV buffer (single buffer, sized to max of NT and T)
+  // cuSPARSE SpMV workspaces, one per product and never exchanged between them: with
+  // CUSPARSE_SPMV_CSR_ALG2 the first call leaves per-matrix state in its buffer, and a probe
+  // on CUDA 12.4 (#478) measured wrong products from the second call on when A and A^T shared
+  // one buffer. d_spmv serves A x, d_spmv_t serves A^T y.
   void* d_spmv{};
-  std::size_t spmv_bytes{};
+  void* d_spmv_t{};
   // cuSPARSE handles
   cusparseHandle_t cs{};
   cusparseSpMatDescr_t mat{};
@@ -306,6 +309,7 @@ struct GpuState {
     cudaFree(d_tcolidx);
     cudaFree(d_tvals);
     cudaFree(d_spmv);
+    cudaFree(d_spmv_t);
   }
 
   [[nodiscard]] bool alloc_ok() const {
@@ -340,11 +344,11 @@ static bool spmv_t(GpuState& g, double* d_in_m, double* d_out_n) {
   CS_CHECK(cusparseDnVecSetValues(g.vn, d_out_n));
   if (g.mat_t != nullptr) {
     CS_CHECK(cusparseSpMV(g.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOne, g.mat_t, g.vm, &kZero,
-                          g.vn, CUDA_R_64F, g.alg, g.d_spmv));
+                          g.vn, CUDA_R_64F, g.alg, g.d_spmv_t));
     return true;
   }
   CS_CHECK(cusparseSpMV(g.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOne, g.mat, g.vm, &kZero, g.vn,
-                        CUDA_R_64F, g.alg, g.d_spmv));
+                        CUDA_R_64F, g.alg, g.d_spmv_t));
   return true;
 }
 
@@ -574,7 +578,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       return cs_failed();
   }
 
-  // Query SpMV buffer sizes and allocate a single buffer for both operations.
+  // Query SpMV buffer sizes and allocate one buffer per product (see GpuState::d_spmv).
   if (m > 0 && nnz > 0) {
     std::size_t bytes_nt = 0, bytes_t = 0;
     cusparseDnVecSetValues(g.vn, g.d_ext);
@@ -592,10 +596,8 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
             : cusparseSpMV_bufferSize(g.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOne, g.mat, g.vm,
                                       &kZero, g.vn, CUDA_R_64F, g.alg, &bytes_t);
     if (sized_t != CUSPARSE_STATUS_SUCCESS) return cs_failed();
-    g.spmv_bytes = std::max(bytes_nt, bytes_t);
-    if (g.spmv_bytes > 0) {
-      if (cudaMalloc(&g.d_spmv, g.spmv_bytes) != cudaSuccess) return cs_failed();
-    }
+    if (bytes_nt > 0 && cudaMalloc(&g.d_spmv, bytes_nt) != cudaSuccess) return cs_failed();
+    if (bytes_t > 0 && cudaMalloc(&g.d_spmv_t, bytes_t) != cudaSuccess) return cs_failed();
   }
 
   // ---- Main iteration loop -----------------------------------------------
@@ -693,7 +695,8 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       b.accepted = g.d_accepted; b.accept_flag = g.d_accept_flag;
       b.eta_ceil = eta_ceil_device; b.n = ni; b.m = mi; b.nnz = nnz;
       b.two_matvec = two_matvec; b.cusparse = g.cs; b.matrix = g.mat; b.vec_n = g.vn;
-      b.vec_m = g.vm; b.spmv_buffer = g.d_spmv; b.matrix_t = g.mat_t; b.spmv_alg = g.alg;
+      b.vec_m = g.vm; b.spmv_buffer = g.d_spmv; b.spmv_buffer_t = g.d_spmv_t;
+      b.matrix_t = g.mat_t; b.spmv_alg = g.alg;
       loop = std::make_unique<DeviceLoop>();
       ready = loop->init(b, static_cast<int>(tol::kPdhgDeviceLoopBlock));
     }

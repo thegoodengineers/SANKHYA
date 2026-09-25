@@ -160,7 +160,8 @@ bool spmv(const DeviceLoopBuffers& b, cudaStream_t stream, cusparseOperation_t o
          cusparseDnVecSetValues(vout, out) == CUSPARSE_STATUS_SUCCESS &&
          cusparseSpMV(b.cusparse, explicit_t ? CUSPARSE_OPERATION_NON_TRANSPOSE : op, &kOne,
                       explicit_t ? b.matrix_t : b.matrix, vin, &kZero, vout, CUDA_R_64F,
-                      b.spmv_alg, b.spmv_buffer) == CUSPARSE_STATUS_SUCCESS;
+                      b.spmv_alg, transpose ? b.spmv_buffer_t : b.spmv_buffer) ==
+             CUSPARSE_STATUS_SUCCESS;
 }
 
 }  // namespace

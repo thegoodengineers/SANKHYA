@@ -46,7 +46,8 @@ struct DeviceLoopBuffers {
   cusparseSpMatDescr_t matrix_t{};
   cusparseSpMVAlg_t spmv_alg = CUSPARSE_SPMV_ALG_DEFAULT;
   cusparseDnVecDescr_t vec_n{}, vec_m{};
-  void* spmv_buffer{};
+  void* spmv_buffer{};    ///< the A x product's cuSPARSE workspace
+  void* spmv_buffer_t{};  ///< the A^T y product's own; never shared with A x (CSR_ALG2, #478)
 };
 
 /// One captured iteration replayed `block` times per run_block().
