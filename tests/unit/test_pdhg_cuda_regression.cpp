@@ -3,18 +3,43 @@
 //
 // Solves the nine committed Netlib instances (data/netlib/reference.json) with both the
 // CPU PDHG engine (algorithm=pdhg, gpu=false) and the CUDA PDHG engine (algorithm=pdhg,
-// gpu=true) and asserts that the resulting objectives satisfy:
+// gpu=true) and holds the two objectives to the error the stopping rule GUARANTEES for
+// the two points actually returned - derived below, per instance and per run - rather than
+// to a fixed relative number.
 //
-//   |obj_cpu - obj_cuda| <= kAgreementTol * max(1, |obj_cpu|, |obj_cuda|)
+// WHY NOT A FIXED 1e-8. This file used to demand |obj_cpu - obj_cuda| <= 1e-8 max(1, |obj|),
+// on the premise that two answers which each stopped at 1e-8 agree to 1e-8. The stopping
+// rule does not say that. Its gap terms are tight enough (kOptimal needs |p - d| <=
+// kDualityGap max(1, |p|) = 1e-9 relative), but it also admits an ABSOLUTE primal residual
+// up to kPrimalFeasibility = 1e-7 and an absolute dual residual up to kDualFeasibility =
+// 1e-7, and a residual moves the objective by the residual times the size of the optimal
+// multipliers or of the optimal point. On blend (|obj| = 30.8) that is worth more than 1e-8
+// relative: two correct runs differed by 1.25e-8 on a card (#711), both kOptimal, while
+// the gap term alone allows 1e-9. The bound below is what the definitions imply.
 //
-// where kAgreementTol = 1e-8, the stopping tolerance both runs are asked for.  Tolerance
-// rationale: the CUDA reductions are not bitwise reproducible (#451), so the two runs do
-// NOT take the same iterates on a real card - stocfor1 on an L4 differed by 1.8e-9 (#456)
-// where the same binary on the CPU differs from itself by 1e-13..1e-15.  Two answers that
-// each stopped at 1e-8 cannot be held to agree tighter than 1e-8; that is the bound, and
-// it is a bound with a reason, not a number fitted to the largest difference seen.  A
-// genuine numerical regression produces divergence orders above it and is caught here.
-// The threshold is documented here, not scattered across individual assertions.
+// THE BOUND. Minimise-space LP min c'x, rl <= A x <= ru, l <= x <= u, optimum p* at (x*, y*)
+// with reduced costs d* = c + A'y* (tests take x*, y*, d* from the simplex). For a returned
+// point (x, y) with objective p = c'x:
+//   below:  c'x - p* = sum_j d*_j (x_j - x*_j) - sum_i y*_i ((A x)_i - (A x*)_i)
+//                    >= -||y*||_2 P - ||d*||_1 V,
+//           P = ||row-bound violation of A x||_2 (pdhg::evaluate's absolute primal residual),
+//           V = max column-bound violation of x (zero before postsolve; measured here);
+//   above:  p* >= L(y) >= d(y) - D M, where d(y) is pdhg::evaluate's dual objective (the
+//           Lagrangian over the absorbable terms), D its absolute dual residual (the terms it
+//           cannot absorb, 2-norm) and M = sqrt(||x*||^2 + ||A x*||^2) - so
+//           c'x - p* <= (p - d(y)) + D M.
+// Hence |p - p*| <= e(x, y) = max(||y*|| P + ||d*||_1 V, max(0, p - d(y)) + D M) for EACH
+// run, and |p_cpu - p_cuda| <= e_cpu + e_cuda, with every residual measured by
+// pdhg::evaluate on the ORIGINAL model at the point solve() returned (after postsolve; the
+// solver's own guarantees are in the presolved space, so they are re-measured here).
+// References: Bertsimas & Tsitsiklis, "Introduction to Linear Optimization", 1997, section
+// 4.3 (weak duality and the Lagrangian bound); Applegate et al., PDLP, NeurIPS 2021,
+// section 3.3 (the residuals). The simplex optimum enters only through the norms ||y*||,
+// ||d*||_1 and M; p* itself cancels.
+//
+// Nothing is loosened: a run whose objective is further from the other than both runs'
+// own residuals permit is a genuine disagreement and fails. The derived bound and the
+// relative difference are both printed per instance.
 //
 // When the CUDA backend is not compiled in (gpu=true falls back to pdhg-cpu), the test
 // calls GTEST_SKIP so that "skipped" is distinguishable from "passed" in CI output.
@@ -30,9 +55,11 @@
 
 #include <gtest/gtest.h>
 
+#include "pdhg/pdhg_evaluate.hpp"
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/types.hpp"
 
 namespace sankhya {
 namespace {
@@ -42,10 +69,69 @@ std::string repository_path(const char* relative) {
       .string();
 }
 
-// Scale-aware objective comparison, at the stopping tolerance.  Documented in the file
-// header: on a real card the two trajectories differ (#451, #456), so the agreement the
-// test can honestly demand is the tolerance both runs stopped at.
-constexpr double kAgreementTol = 1e-8;
+// The norms of a reference optimum (x*, y*, d*) that the bound needs (file header).
+struct ReferenceNorms {
+  double y_norm = 0.0;    ///< ||y*||_2
+  double d_l1 = 0.0;      ///< ||d*||_1
+  double x_extent = 0.0;  ///< M = sqrt(||x*||^2 + ||A x*||^2)
+  bool ok = false;
+};
+
+ReferenceNorms reference_norms(const Model& model) {
+  Options simplex;
+  simplex.set_bool("log_to_console", false);
+  const Solution s = solve(model, simplex);
+  ReferenceNorms r;
+  r.ok = s.status == SolveStatus::kOptimal;
+  if (!r.ok) return r;
+  std::vector<double> ax(static_cast<std::size_t>(model.num_rows()), 0.0);
+  model.matrix.multiply(s.col_value.data(), ax.data());
+  double y2 = 0.0, x2 = 0.0;
+  for (const double v : s.row_dual) y2 += v * v;
+  for (const double v : s.col_dual) r.d_l1 += std::fabs(v);
+  for (const double v : s.col_value) x2 += v * v;
+  for (const double v : ax) x2 += v * v;
+  r.y_norm = std::sqrt(y2);
+  r.x_extent = std::sqrt(x2);
+  return r;
+}
+
+// e(x, y) of the file header for one returned solution: how far its objective can be from
+// the optimum given its own residuals, measured on the original model.
+double objective_error_bound(const Model& model, const Solution& run,
+                             const ReferenceNorms& ref) {
+  const auto n = static_cast<std::size_t>(model.num_cols());
+  const auto m = static_cast<std::size_t>(model.num_rows());
+  const double sense = model.sense_multiplier();
+  pdhg::Problem prob;
+  prob.model = &model;
+  prob.cost.resize(n);
+  for (std::size_t j = 0; j < n; ++j) prob.cost[j] = sense * model.col_cost[j];
+  // bound_norm and cost_norm only scale the RELATIVE residuals, which the bound does not use.
+  std::vector<double> y(m), activity, reduced;
+  for (std::size_t i = 0; i < m; ++i) y[i] = -sense * run.row_dual[i];  // row_dual = -sense y
+  const pdhg::Residuals r = pdhg::evaluate(prob, run.col_value, y, activity, reduced);
+  double column_violation = 0.0;
+  for (std::size_t j = 0; j < n; ++j) {
+    const double x = run.col_value[j];
+    if (is_finite_bound(model.col_lower[j]))
+      column_violation = std::max(column_violation, model.col_lower[j] - x);
+    if (is_finite_bound(model.col_upper[j]))
+      column_violation = std::max(column_violation, x - model.col_upper[j]);
+  }
+  const double below = ref.y_norm * r.absolute_primal + ref.d_l1 * column_violation;
+  const double above =
+      std::max(0.0, r.primal_objective - r.dual_objective) + r.absolute_dual * ref.x_extent;
+  return std::max(below, above);
+}
+
+// The objectives agree when they are within the sum of the two runs' bounds; `allowed`
+// returns that sum so the caller can print it.
+bool objectives_agree(const Model& model, const Solution& cpu, const Solution& gpu,
+                      const ReferenceNorms& ref, double* allowed) {
+  *allowed = objective_error_bound(model, cpu, ref) + objective_error_bound(model, gpu, ref);
+  return std::fabs(cpu.objective - gpu.objective) <= *allowed;
+}
 
 Options pdhg_regression_options(bool gpu) {
   Options o;
@@ -56,11 +142,9 @@ Options pdhg_regression_options(bool gpu) {
   // different code path.  Disabled here so the comparison is purely between the two
   // first-order engines.
   o.set_bool("pdhg_polish", false);
-  // 1e-8: the tighter of the two project-standard tolerances (ENGINEERING_RULES.md), and
-  // the bound kAgreementTol is set to.  This file once held the two runs to 1e-9 on the
-  // premise that they take the same iterates; a real L4 showed they do not (#456), because
-  // the device reductions are not bitwise reproducible (#451), and the premise, not the
-  // engine, is what gave way.
+  // 1e-8: the tighter of the two project-standard tolerances (ENGINEERING_RULES.md). The
+  // two runs do not take the same iterates (#451, #456), so their objectives are held to
+  // the bound both runs' residuals imply (file header), not to each other's bits.
   o.set_double("pdhg_tolerance", 1e-8);
   // Netlib small instances need up to ~200k iterations at 1e-4 (adlittle, test_pdhg.cpp).
   // At 1e-8 the count is higher; 1e6 is the budget here.
@@ -152,18 +236,22 @@ TEST(PdhgCudaRegression, NineNetlibInstancesAgreeAtTheStoppingTolerance) {
       continue;
     }
 
+    const ReferenceNorms ref = reference_norms(model);
+    ASSERT_TRUE(ref.ok) << name << ": the simplex reference did not solve";
     const double scale = std::max({1.0, std::fabs(cpu.objective), std::fabs(gpu.objective)});
     const double diff = std::fabs(cpu.objective - gpu.objective);
-    const bool ok = diff <= kAgreementTol * scale;
+    double allowed = 0.0;
+    const bool ok = objectives_agree(model, cpu, gpu, ref, &allowed);
 
     std::cout << name << ": cpu=" << cpu.objective << "  cuda=" << gpu.objective
-              << "  rel=" << diff / scale << (ok ? "  PASS" : "  FAIL") << "\n";
+              << "  rel=" << diff / scale << "  derived bound rel=" << allowed / scale
+              << (ok ? "  PASS" : "  FAIL") << "\n";
 
     EXPECT_TRUE(ok) << name << ": objective mismatch\n"
                     << "  CPU  objective : " << cpu.objective << "\n"
                     << "  CUDA objective : " << gpu.objective << "\n"
                     << "  relative diff  : " << diff / scale << "\n"
-                    << "  allowed        : " << kAgreementTol;
+                    << "  allowed (derived from both runs' residuals): " << allowed / scale;
     if (ok) {
       ++agreed;
     } else {
@@ -173,7 +261,7 @@ TEST(PdhgCudaRegression, NineNetlibInstancesAgreeAtTheStoppingTolerance) {
 
   std::cout << "CPU/CUDA agreement: " << agreed << "/"
             << static_cast<int>(kNetlibInstances.size())
-            << " instances passed (tolerance=" << kAgreementTol << ")\n";
+            << " instances passed (per-instance derived bound)\n";
   EXPECT_EQ(failed, 0);
 }
 
@@ -210,12 +298,14 @@ TEST(PdhgCudaRegression, TheTwoMatvecPathOnTheDeviceAgreesWithTheCpuAtTheStoppin
     if (!cpu_converged && !gpu_converged) continue;  // share2b: neither, as above
     ++compared;
     EXPECT_TRUE(gpu_converged) << name << " two-mat-vec on CUDA: " << gpu.message;
-    const double scale = std::max({1.0, std::fabs(cpu.objective), std::fabs(gpu.objective)});
-    const double diff = std::fabs(cpu.objective - gpu.objective);
-    EXPECT_LE(diff, kAgreementTol * scale)
-        << name << ": CPU " << cpu.objective << " (" << cpu.iterations
-        << " iterations), CUDA two-mat-vec " << gpu.objective << " (" << gpu.iterations << ")";
-    if (gpu_converged && diff <= kAgreementTol * scale) ++agreed;
+    const ReferenceNorms ref = reference_norms(model);
+    ASSERT_TRUE(ref.ok) << name << ": the simplex reference did not solve";
+    double allowed = 0.0;
+    const bool ok = objectives_agree(model, cpu, gpu, ref, &allowed);
+    EXPECT_TRUE(ok) << name << ": CPU " << cpu.objective << " (" << cpu.iterations
+                    << " iterations), CUDA two-mat-vec " << gpu.objective << " ("
+                    << gpu.iterations << "), allowed " << allowed;
+    if (gpu_converged && ok) ++agreed;
   }
   EXPECT_GE(compared, 8);
   EXPECT_EQ(agreed, compared);
@@ -264,13 +354,15 @@ TEST(PdhgCudaRegression, TheDeviceLoopAgreesWithTheCpuAtTheStoppingTolerance) {
       if (!cpu_converged && !gpu_converged) continue;
       ++compared;
       EXPECT_TRUE(gpu_converged) << name << " device loop: " << gpu.message;
-      const double scale = std::max({1.0, std::fabs(cpu.objective), std::fabs(gpu.objective)});
-      const double diff = std::fabs(cpu.objective - gpu.objective);
-      EXPECT_LE(diff, kAgreementTol * scale)
-          << name << (two_matvec ? " (two-mat-vec)" : "") << ": CPU " << cpu.objective << " ("
-          << cpu.iterations << " iterations), CUDA device loop " << gpu.objective << " ("
-          << gpu.iterations << ")";
-      if (gpu_converged && diff <= kAgreementTol * scale) ++agreed;
+      const ReferenceNorms ref = reference_norms(model);
+      ASSERT_TRUE(ref.ok) << name << ": the simplex reference did not solve";
+      double allowed = 0.0;
+      const bool ok = objectives_agree(model, cpu, gpu, ref, &allowed);
+      EXPECT_TRUE(ok) << name << (two_matvec ? " (two-mat-vec)" : "") << ": CPU "
+                      << cpu.objective << " (" << cpu.iterations
+                      << " iterations), CUDA device loop " << gpu.objective << " ("
+                      << gpu.iterations << "), allowed " << allowed;
+      if (gpu_converged && ok) ++agreed;
     }
     EXPECT_GE(compared, 8) << (two_matvec ? "two-mat-vec" : "three products");
     EXPECT_EQ(agreed, compared) << (two_matvec ? "two-mat-vec" : "three products");

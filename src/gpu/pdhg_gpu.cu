@@ -14,8 +14,12 @@
 //   GPU  SpMVs (cuSPARSE), primal/dual coordinate updates, running-sum accumulation,
 //        movement and interaction reductions (CUB BlockReduce per block, then one block
 //        summing the block totals in a fixed order, pdhg_reduce.cuh, #478; no atomics).
-//   CPU  Preconditioning (one-off), convergence evaluation (every 40 iterations),
-//        restart logic and scalar step-size arithmetic.
+//   CPU  Preconditioning (one-off), the restart and stopping decisions on the scalars the
+//        convergence evaluation returns, and scalar step-size arithmetic.
+//   The convergence evaluation itself (unscaled KKT residuals, gap, restart distances of the
+//   current and the average iterate, every 40 accepted steps) runs on the device with
+//   gpu_device_evaluation (the default, #478 item 3, pdhg_device_eval.cuh) and on the host
+//   (pdhg::evaluate, the reference) without it.
 //
 // The CSR matrix is built on CPU from CsrView(scaling.matrix) and uploaded once.
 // The GPU VRAM ceiling on the primary test machine (RTX 5050) is 6 GB.
@@ -54,6 +58,7 @@
 #include "../core/stop_controller.hpp"
 #include "../la/scaling.hpp"
 #include "device.hpp"
+#include "pdhg_device_eval.cuh"
 #include "pdhg_graph.hpp"
 #include "pdhg_reduce.cuh"
 #include "sankhya/pdhg.hpp"
@@ -659,11 +664,11 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   std::vector<double> best_x(n, 0.0), best_y(m, 0.0);
 
   bool converged = false, gpu_error = false, logged_table = false;
-  // The host's share of the run (#478 item 3): the evaluation below copies x, y and both
-  // running sums off the device and evaluates them on the CPU on the unscaled model. Timed
-  // so the log says what moving it onto the device could at most save.
-  double host_evaluation_seconds = 0.0;
-  Count host_evaluations = 0;
+  // The evaluation's share of the run (#478 item 3), timed on either path so the log shows
+  // what it costs: on the host it copies x, y and both running sums off the device and
+  // evaluates them on the unscaled model; on the device only the sums come back.
+  double evaluation_seconds = 0.0;
+  Count evaluations = 0;
   StopController stop(control, timer, limits);
   SolveStatus stop_status = SolveStatus::kIterationLimit;
   const pdhg::IterateTraceHook trace = pdhg::iterate_trace_for_testing();
@@ -723,6 +728,49 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     logger.info("GPU PDHG: deterministic, fixed-order reductions and both products on CSR "
                 "with CUSPARSE_SPMV_CSR_ALG2 on an explicit A^T (#478)");
   }
+  // THE EVALUATION ON THE DEVICE (#478 item 3). On the stream the products run on: the
+  // device loop's while it holds the cuSPARSE handle, else the legacy default stream.
+  std::unique_ptr<eval::DeviceEvaluator> evaluator;
+  const cudaStream_t eval_stream = loop ? loop->stream() : cudaStream_t{};
+  if (options.get_bool("gpu_device_evaluation") && !gpu_error) {
+    evaluator = std::make_unique<eval::DeviceEvaluator>();
+    if (!evaluator->init(prob, scaling, 0, mi, true, g.d_x)) {
+      evaluator.reset();
+      cudaGetLastError();
+      logger.warning("GPU PDHG: the device evaluation could not be set up; evaluating on "
+                     "the host");
+    } else {
+      logger.info("GPU PDHG: convergence evaluated on the device, scalars to the host (#478)");
+    }
+  }
+  // Residuals of the current iterate (point 0) and the average (point 1) from the device,
+  // and the current iterate's scaled distances to the restart point.
+  auto evaluate_on_device = [&](bool with_average, Residuals* cur, Residuals* avg,
+                                double* restart_dx, double* restart_dy) -> bool {
+    eval::DeviceEvaluator& ev = *evaluator;
+    const cudaStream_t s = eval_stream;
+    if (!spmv_nt(g, g.d_x, ev.ax()) || !ev.rows(s, 0, g.d_y, ev.ax(), true) ||
+        !spmv_t(g, g.d_y, ev.aty()) || !ev.columns(s, 0, g.d_x, ev.aty(), true))
+      return false;
+    if (with_average &&
+        (!ev.average(s, g.d_xsum, g.d_ysum, static_cast<double>(averaged)) ||
+         !spmv_nt(g, ev.x_average(), ev.ax()) || !ev.rows(s, 1, ev.y_average(), ev.ax(), false) ||
+         !spmv_t(g, ev.y_average(), ev.aty()) ||
+         !ev.columns(s, 1, ev.x_average(), ev.aty(), false)))
+      return false;
+    if (!ev.finish(s, with_average ? 2 : 1) || cudaStreamSynchronize(s) != cudaSuccess)
+      return false;
+    const eval::RowSums r0 = eval::row_sums(ev.host_sums(), 0);
+    const eval::ColumnSums c0 = eval::column_sums(ev.host_sums(), 0);
+    *cur = eval::assemble(prob, r0, c0);
+    *restart_dx = std::sqrt(c0.restart_sq);
+    *restart_dy = std::sqrt(r0.restart_sq);
+    if (with_average) {
+      *avg = eval::assemble(prob, eval::row_sums(ev.host_sums(), 1),
+                            eval::column_sums(ev.host_sums(), 1));
+    }
+    return true;
+  };
   while (!gpu_error) {
     if (iteration >= iteration_limit) break;
     if (stop.should_stop(
@@ -878,47 +926,56 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     }  // per-iteration path
 
     const double evaluation_start = timer.elapsed_seconds();
-    ++host_evaluations;
-    // Download current iterates
-    if (!dh_copy(g.d_x, h_x.data(), n) || !dh_copy(g.d_y, h_y.data(), m)) {
-      gpu_error = true;
-      break;
-    }
-
-    // Evaluate current iterate
-    unscale(h_x, h_y);
-    std::vector<double> cur_x = x_unscaled, cur_y = y_unscaled;
-    const Residuals cur = evaluate(prob, cur_x, cur_y, activity, reduced_costs);
-
-    // Evaluate running average  [PDLP §4.3]
-    const Residuals* chosen = &cur;
-    const std::vector<double>* chosen_x = &cur_x;
-    const std::vector<double>* chosen_y = &cur_y;
-
-    Residuals avg;
-    std::vector<double> avg_x, avg_y;
-    if (averaged > 0) {
-      if (!dh_copy(g.d_xsum, h_xsum.data(), n) || !dh_copy(g.d_ysum, h_ysum.data(), m)) {
+    ++evaluations;
+    // The current iterate and the running average [PDLP §4.3], on the device or, as the
+    // reference, on the host.
+    const bool have_average = averaged > 0;
+    Residuals cur, avg;
+    double restart_dx = 0.0, restart_dy = 0.0;  // device path: formed with point 0
+    std::vector<double> cur_x, cur_y, avg_x, avg_y;  // host path only
+    if (evaluator) {
+      if (!evaluate_on_device(have_average, &cur, &avg, &restart_dx, &restart_dy)) {
         gpu_error = true;
         break;
       }
-      const double cnt = static_cast<double>(averaged);
-      std::vector<double> xav(n), yav(m);
-      for (std::size_t j = 0; j < n; ++j) xav[j] = h_xsum[j] / cnt;
-      for (std::size_t i = 0; i < m; ++i) yav[i] = h_ysum[i] / cnt;
-      unscale(xav, yav);
-      avg_x = x_unscaled;
-      avg_y = y_unscaled;
-      avg = evaluate(prob, avg_x, avg_y, activity, reduced_costs);
-      if (avg.worst() < cur.worst()) {
-        chosen = &avg;
-        chosen_x = &avg_x;
-        chosen_y = &avg_y;
+    } else {
+      if (!dh_copy(g.d_x, h_x.data(), n) || !dh_copy(g.d_y, h_y.data(), m)) {
+        gpu_error = true;
+        break;
+      }
+      unscale(h_x, h_y);
+      cur_x = x_unscaled;
+      cur_y = y_unscaled;
+      cur = evaluate(prob, cur_x, cur_y, activity, reduced_costs);
+      if (have_average) {
+        if (!dh_copy(g.d_xsum, h_xsum.data(), n) || !dh_copy(g.d_ysum, h_ysum.data(), m)) {
+          gpu_error = true;
+          break;
+        }
+        const double cnt = static_cast<double>(averaged);
+        std::vector<double> xav(n), yav(m);
+        for (std::size_t j = 0; j < n; ++j) xav[j] = h_xsum[j] / cnt;
+        for (std::size_t i = 0; i < m; ++i) yav[i] = h_ysum[i] / cnt;
+        unscale(xav, yav);
+        avg_x = x_unscaled;
+        avg_y = y_unscaled;
+        avg = evaluate(prob, avg_x, avg_y, activity, reduced_costs);
       }
     }
+    const bool use_average = have_average && avg.worst() < cur.worst();
+    // The chosen point becomes the best so far: a copy on the device, or of the host vectors.
+    auto keep_chosen = [&]() -> bool {
+      if (evaluator) {
+        return evaluator->set_best(eval_stream, use_average ? evaluator->x_average() : g.d_x,
+                                   use_average ? evaluator->y_average() : g.d_y);
+      }
+      best_x = use_average ? avg_x : cur_x;
+      best_y = use_average ? avg_y : cur_y;
+      return true;
+    };
 
-    host_evaluation_seconds += timer.elapsed_seconds() - evaluation_start;
-    const Residuals& better = *chosen;
+    evaluation_seconds += timer.elapsed_seconds() - evaluation_start;
+    const Residuals& better = use_average ? avg : cur;
     for (int level = 0; level < 3; ++level) {
       if (kkt_iterations[level] < 0 && better.worst() <= pdhg::kKktCrossingLevels[level]) {
         kkt_iterations[level] = iteration;
@@ -927,8 +984,10 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     }
     if (better.worst() < best.worst()) {
       best = better;
-      best_x = *chosen_x;
-      best_y = *chosen_y;
+      if (!keep_chosen()) {
+        gpu_error = true;
+        break;
+      }
     }
 
     if (!logged_table) {
@@ -942,9 +1001,8 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
         better.meets_request(tolerance) && (stop_at_request || better.meets_project_standard());
     if (stop_here) {
       best = better;
-      best_x = *chosen_x;
-      best_y = *chosen_y;
-      converged = true;
+      gpu_error = !keep_chosen();
+      converged = !gpu_error;
       break;
     }
 
@@ -959,10 +1017,14 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
 
       if (sufficient || artificial) {
         // Primal weight update towards observed ratio of dual/primal movement  [PDLP §3.2]
-        std::vector<double> dx_rs(n), dy_rs(m);
-        for (std::size_t j = 0; j < n; ++j) dx_rs[j] = h_x[j] - x_restart[j];
-        for (std::size_t i = 0; i < m; ++i) dy_rs[i] = h_y[i] - y_restart[i];
-        const double dxn = euclidean_norm(dx_rs), dyn = euclidean_norm(dy_rs);
+        double dxn = restart_dx, dyn = restart_dy;
+        if (!evaluator) {
+          std::vector<double> dx_rs(n), dy_rs(m);
+          for (std::size_t j = 0; j < n; ++j) dx_rs[j] = h_x[j] - x_restart[j];
+          for (std::size_t i = 0; i < m; ++i) dy_rs[i] = h_y[i] - y_restart[i];
+          dxn = euclidean_norm(dx_rs);
+          dyn = euclidean_norm(dy_rs);
+        }
         if (dxn > 1e-12 && dyn > 1e-12) {
           constexpr double theta = 0.5;
           omega = std::exp(theta * std::log(dyn / dxn) + (1.0 - theta) * std::log(omega));
@@ -980,8 +1042,15 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
           accepted_at_restart = iteration;
         }
         averaged = 0;
-        x_restart = h_x;
-        y_restart = h_y;
+        if (evaluator) {
+          if (!evaluator->set_restart(eval_stream, g.d_x, g.d_y)) {
+            gpu_error = true;
+            break;
+          }
+        } else {
+          x_restart = h_x;
+          y_restart = h_y;
+        }
         restart_kkt = kkt;
         last_restart = iteration;
         ++restarts;
@@ -996,6 +1065,19 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       }
     }
   }  // end while
+
+  // With the evaluation on the device the best point stayed there, scaled: bring it back and
+  // unscale it as the host path does (x = Dc xhat, y = Dr yhat, the same multiplications).
+  if (evaluator && !gpu_error) {
+    std::vector<double> xs(n), ys(m);
+    if (!evaluator->download_best(eval_stream, xs.data(), ys.data())) {
+      gpu_error = true;
+    } else {
+      unscale(xs, ys);
+      best_x = x_unscaled;
+      best_y = y_unscaled;
+    }
+  }
 
   if (gpu_error) {
     // The CPU engine takes over on what the budget has left (#289): the seconds already
@@ -1077,8 +1159,9 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   logger.info("Status: {}   objective {:.10e}   iterations {}   restarts {}   time {:.3f}s",
               to_string(solution.status), solution.objective, solution.iterations, restarts,
               solution.solve_seconds);
-  logger.info("Host evaluation: {} evaluations, {:.3f}s of {:.3f}s", host_evaluations,
-              host_evaluation_seconds, solution.solve_seconds);
+  logger.info("Evaluation on the {}: {} evaluations, {:.3f}s of {:.3f}s",
+              evaluator ? "device" : "host", evaluations, evaluation_seconds,
+              solution.solve_seconds);
   logger.info("Relative residuals: primal {:.3e}, dual {:.3e}, gap {:.3e}", final_r.primal,
               final_r.dual, final_r.gap);
   if (!solution.message.empty()) logger.info("{}", solution.message);
