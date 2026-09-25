@@ -668,13 +668,18 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   s.dive_frequency = options.get_int("mip_dive_frequency");
   s.dive_lp_resolves = static_cast<int>(options.get_int("mip_dive_lp_resolves"));
   s.pump_rounds = static_cast<int>(options.get_int("mip_pump_rounds"));
+  s.pdhg_pump = options.get_bool("gpu_pump");
+  s.fix_and_propagate = options.get_bool("gpu_fix_and_prop");
+  s.pdhg_device = options.get_string("gpu_heur_backend") != "cpu";
+  s.pdhg_pump_rounds = static_cast<int>(options.get_int("gpu_pump_max_iter"));
+  s.fix_and_propagate_backtracks = static_cast<int>(options.get_int("gpu_fix_backtrack"));
   s.seconds_budgets = !options.get_bool("deterministic");
   return s;
 }
 
 bool HeuristicSchedule::any_optional() const {
-  return lock_rounding || repair || pump || rins || rens || fj ||
-         dive[static_cast<std::size_t>(DiveRule::kCoefficient)] ||
+  return lock_rounding || repair || pump || rins || rens || fj || pdhg_pump ||
+         fix_and_propagate || dive[static_cast<std::size_t>(DiveRule::kCoefficient)] ||
          dive[static_cast<std::size_t>(DiveRule::kVectorLength)] ||
          dive[static_cast<std::size_t>(DiveRule::kGuided)];
 }
@@ -692,6 +697,8 @@ std::string HeuristicSchedule::names() const {
   for (std::size_t r = 0; r < kDiveRules; ++r)
     add(dive[r], to_string(static_cast<DiveRule>(r)));
   add(pump, "feasibility pump");
+  add(pdhg_pump, "PDHG feasibility pump");
+  add(fix_and_propagate, "fix-and-propagate");
   add(rins, "RINS");
   add(rens, "RENS");
   return out;
