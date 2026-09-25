@@ -439,6 +439,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_maros_meszaros.py
 
+      - name: The QPLIB listing parser, .qplib conversion and doc section pass their tests (#492)
+        # Hermetic: no download and no solve. Excerpts of QPLIB's own pages pin the selection
+        # and the reference parsing; QPLIB_0018's real file and published point pin the
+        # conversion's quadratic convention through the verifier's MPS reader.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_qplib.py
+
       - name: The pooling instances match their published data and generator (#516)
         # Hermetic: no download and no solve. The GAMS data parser, the committed models
         # against pooling_models.py, sizes against MINLPLib, Haverly's optima as feasible

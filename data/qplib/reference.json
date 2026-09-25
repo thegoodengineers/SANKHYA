@@ -1,0 +1,818 @@
+{
+  "citation": "F. Furini, E. Traversi, P. Belotti, A. Frangioni, A. Gleixner, N. Gould, L. Liberti, A. Lodi, R. Misener, H. Mittelmann, N. V. Sahinidis, S. Vigerske, A. Wiegele, QPLIB: a library of quadratic programming instances, Mathematical Programming Computation 11 (2019), DOI 10.1007/s12532-018-0147-4",
+  "convex_continuous_classes": {
+    "CCB": 3,
+    "CCL": 5,
+    "DCL": 11,
+    "LCD": 13
+  },
+  "files": {
+    "doc.html": {
+      "bytes": 22649,
+      "sha256": "f439cf01aff34e8129aca0e22f7176be67b37337cb223e97f31b781e954c1cbe",
+      "url": "https://qplib.zib.de/doc.html"
+    },
+    "index.html": {
+      "bytes": 13231,
+      "sha256": "b51ebf8b0eabd79e1ea8f850b17873cf27993ffc66a828681ddadb695777628c",
+      "url": "https://qplib.zib.de/index.html"
+    },
+    "instances.html": {
+      "bytes": 284573,
+      "sha256": "91d3a372b211d3f9dfc9ead011e6fcdb613cc5883025c70bfce9139b83f32258",
+      "url": "https://qplib.zib.de/instances.html"
+    },
+    "qplib.solu": {
+      "bytes": 28624,
+      "sha256": "a2a9c136c9a183608439b1fc1ffb78f21a1f7c5e5be2c8afacc040c516eb77fb",
+      "url": "https://qplib.zib.de/qplib.solu"
+    }
+  },
+  "instances": {
+    "QPLIB_10034": {
+      "coefficients": 240405,
+      "converter_check": {
+        "objective_at_point_via_qps": -0.06601017604854412,
+        "passed": true,
+        "published_point_objective": -0.066010176048544,
+        "violation_at_point_via_qps": 7.09405867382884e-11
+      },
+      "name": "QPLIB_10034",
+      "ncons": 40200,
+      "nobjquadnz": 401,
+      "nvars": 40400,
+      "nz": 240004,
+      "page": {
+        "bytes": 10968,
+        "sha256": "602c3ef61c4d281727820e47f895741ab6b5e61d57bd1657784214c1ce937c53",
+        "url": "https://qplib.zib.de/QPLIB_10034.html"
+      },
+      "page_solobjvalue_text": "-0.06601018",
+      "problem_type": "DCL",
+      "q0_entries": 401,
+      "qplib": {
+        "bytes": 5466315,
+        "sha256": "d5adc2d674eff19adf9f081efd65f154b46c9ac85844ea61fbbdea0177ecbba2",
+        "url": "https://qplib.zib.de/qplib/QPLIB_10034.qplib"
+      },
+      "qps": {
+        "bytes": 9491537,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "a94b8f8b9f57ed0644c1dd6e7d673b766e93d92aec36e16b87fc5ee1e3ce2425"
+      },
+      "reference_objective": -0.06601017605,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_10034.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "-0.0660101760500000",
+      "sol": {
+        "bytes": 2100852,
+        "sha256": "824f15fbf881daaaf3d92b83b11702a83dec53307e58c5e8e484f9d63926cbf6",
+        "url": "https://qplib.zib.de/sol/QPLIB_10034.sol"
+      },
+      "solinfeasibility": 1.2733e-11,
+      "tier": "full"
+    },
+    "QPLIB_10038": {
+      "coefficients": 960805,
+      "converter_check": {
+        "objective_at_point_via_qps": 0.0,
+        "passed": true,
+        "published_point_objective": 0.0,
+        "violation_at_point_via_qps": 0.0
+      },
+      "name": "QPLIB_10038",
+      "ncons": 160400,
+      "nobjquadnz": 801,
+      "nvars": 160800,
+      "nz": 960004,
+      "page": {
+        "bytes": 10970,
+        "sha256": "d08469d6b9a2beb1d97ec6ed2d8501752a742faf35bcc32c6a7f2e7463cf773d",
+        "url": "https://qplib.zib.de/QPLIB_10038.html"
+      },
+      "page_solobjvalue_text": "0.00000000",
+      "problem_type": "DCL",
+      "q0_entries": 801,
+      "qplib": {
+        "bytes": 22029643,
+        "sha256": "266a46cad0f274f9e2bf319d4a5f95d795f9ece45c94788f662fa3d5635ad9b6",
+        "url": "https://qplib.zib.de/qplib/QPLIB_10038.qplib"
+      },
+      "qps": {
+        "bytes": 38540467,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "ef39e16125239c51e6b5547230cc9f1249f9e274322caa4c33eacb123ce954ba"
+      },
+      "reference_objective": 0.0,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_10038.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "0.0000000000000000",
+      "sol": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "url": "https://qplib.zib.de/sol/QPLIB_10038.sol"
+      },
+      "solinfeasibility": 0.0,
+      "tier": "full"
+    },
+    "QPLIB_8495": {
+      "coefficients": 95772,
+      "converter_check": {
+        "objective_at_point_via_qps": 42857.49638866786,
+        "passed": true,
+        "published_point_objective": 42857.4963886684,
+        "violation_at_point_via_qps": 2.220446049250313e-14
+      },
+      "name": "QPLIB_8495",
+      "ncons": 8000,
+      "nobjquadnz": 22743,
+      "nvars": 27543,
+      "nz": 73029,
+      "page": {
+        "bytes": 11478,
+        "sha256": "b6f3d69d3476e90edcdfd523ff9776049775577c9d42032e652fb3e18c666d7b",
+        "url": "https://qplib.zib.de/QPLIB_8495.html"
+      },
+      "page_solobjvalue_text": "42857.49639000",
+      "problem_type": "DCL",
+      "q0_entries": 22743,
+      "qplib": {
+        "bytes": 1181611,
+        "sha256": "654e6e53ac88fd4b225762557e77725b4c4e81e55c503f7ddcb46864dedbcd98",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8495.qplib"
+      },
+      "qps": {
+        "bytes": 2967730,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "e363bc70ffdd407bc890bf95667a9adc62cfdcbab89619dfb2edc37452e01ba5"
+      },
+      "reference_objective": 42857.49639,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8495.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "42857.4963900000002468",
+      "sol": {
+        "bytes": 1274780,
+        "sha256": "ddc562e90e15b37d85b5d948ad15045e5c335b744821a75bc008277b49020f3c",
+        "url": "https://qplib.zib.de/sol/QPLIB_8495.sol"
+      },
+      "solinfeasibility": 3.5527e-15,
+      "tier": "small"
+    },
+    "QPLIB_8500": {
+      "coefficients": 1374001,
+      "converter_check": {
+        "objective_at_point_via_qps": 0.017921737632993318,
+        "passed": true,
+        "published_point_objective": 0.017921737632993,
+        "violation_at_point_via_qps": 3.5499996275945023e-09
+      },
+      "name": "QPLIB_8500",
+      "ncons": 250498,
+      "nobjquadnz": 63001,
+      "nvars": 250997,
+      "nz": 1311000,
+      "page": {
+        "bytes": 10978,
+        "sha256": "4981a00fbd6509bc5f53f83463117b3a69ec8ee53de87ed90ba9084da17654a5",
+        "url": "https://qplib.zib.de/QPLIB_8500.html"
+      },
+      "page_solobjvalue_text": "0.01792174",
+      "problem_type": "DCL",
+      "q0_entries": 63001,
+      "qplib": {
+        "bytes": 24983233,
+        "sha256": "0017889e009d059cbb33a57d07937a099a373cac95fa6b623b6990cef5491e6d",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8500.qplib"
+      },
+      "qps": {
+        "bytes": 49446763,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "bf6b0888a5d466b2ac4f29aece586d84f047e7d5cc53be9b9dbaec1934de2ae7"
+      },
+      "reference_objective": 0.01792173763,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8500.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "0.0179217376300000",
+      "sol": {
+        "bytes": 13051896,
+        "sha256": "44570ed142c6fc99ced479e22671b609568751742b2f814dbad74f1c533bd97f",
+        "url": "https://qplib.zib.de/sol/QPLIB_8500.sol"
+      },
+      "solinfeasibility": 3.55e-09,
+      "tier": "full"
+    },
+    "QPLIB_8515": {
+      "coefficients": 80007,
+      "converter_check": {
+        "objective_at_point_via_qps": 319.99998870786413,
+        "passed": true,
+        "published_point_objective": 319.999988707728,
+        "violation_at_point_via_qps": 3.501554601825774e-11
+      },
+      "name": "QPLIB_8515",
+      "ncons": 8002,
+      "nobjquadnz": 24002,
+      "nvars": 16002,
+      "nz": 56005,
+      "page": {
+        "bytes": 11480,
+        "sha256": "7f103ea9bbfe4596fe40a4f5f517953ed7378827cc441fc9882d614281c652a7",
+        "url": "https://qplib.zib.de/QPLIB_8515.html"
+      },
+      "page_solobjvalue_text": "319.99998870",
+      "problem_type": "CCL",
+      "q0_entries": 24002,
+      "qplib": {
+        "bytes": 1481858,
+        "sha256": "f91b17c5d74bd6a51112e103fb675491ce5f6529482c93c895866850733909af",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8515.qplib"
+      },
+      "qps": {
+        "bytes": 2546165,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "5254e040c27242f4a61ac3a982efac059564565668ec7e5c0d416e4adb7315d0"
+      },
+      "reference_objective": 319.9999887,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8515.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "319.9999887000000172",
+      "sol": {
+        "bytes": 832156,
+        "sha256": "d4a07940d96015f8b9fc2d4d658696b4c756b9296f0ed08a93237055580d308d",
+        "url": "https://qplib.zib.de/sol/QPLIB_8515.sol"
+      },
+      "solinfeasibility": 3.638e-11,
+      "tier": "small"
+    },
+    "QPLIB_8547": {
+      "coefficients": 6005002,
+      "name": "QPLIB_8547",
+      "ncons": 1001000,
+      "nobjquadnz": 2001,
+      "nvars": 1003001,
+      "nz": 6003001,
+      "page": {
+        "bytes": 10972,
+        "sha256": "3c8fe306b5e949cda31ae754c57e48267740ea72490f9dfbaaee672151ac235b",
+        "url": "https://qplib.zib.de/QPLIB_8547.html"
+      },
+      "page_solobjvalue_text": "-0.00739847",
+      "problem_type": "DCL",
+      "reference_objective": -0.007398469784,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8547.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "-0.0073984697840000",
+      "skipped": "6005002 coefficients > --max-coefficients 2000000; not downloaded",
+      "solinfeasibility": 4.3656e-11,
+      "tier": "full"
+    },
+    "QPLIB_8559": {
+      "coefficients": 64982,
+      "converter_check": {
+        "objective_at_point_via_qps": 74223239.82932864,
+        "passed": true,
+        "published_point_objective": 74223239.8293286,
+        "violation_at_point_via_qps": 2.4868995751603507e-14
+      },
+      "name": "QPLIB_8559",
+      "ncons": 5000,
+      "nobjquadnz": 39984,
+      "nvars": 10000,
+      "nz": 24998,
+      "page": {
+        "bytes": 11484,
+        "sha256": "31f6dbcf7f26989c93a67a02d9a10ef57c2a41908078ba44a8052ecac403a6f8",
+        "url": "https://qplib.zib.de/QPLIB_8559.html"
+      },
+      "page_solobjvalue_text": "74223239.83000000",
+      "problem_type": "CCL",
+      "q0_entries": 39984,
+      "qplib": {
+        "bytes": 882723,
+        "sha256": "2e5c25c90517f00c6670739af82d3013a830984eb8e24a51d5d6f3650cb50224",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8559.qplib"
+      },
+      "qps": {
+        "bytes": 1932619,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "220d7629fc61ffc6ebab6236df09c06380402409b1b1e26e8925b9072f6bd4cd"
+      },
+      "reference_objective": 74223239.83,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8559.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "74223239.8299999982118607",
+      "sol": {
+        "bytes": 520052,
+        "sha256": "2dbceca733473693bb9a4075f1c97cce3e443ef2334c36ce3705ccc934470a53",
+        "url": "https://qplib.zib.de/sol/QPLIB_8559.sol"
+      },
+      "solinfeasibility": 6.2172e-15,
+      "tier": "small"
+    },
+    "QPLIB_8567": {
+      "coefficients": 72481,
+      "converter_check": {
+        "objective_at_point_via_qps": 78965987.9491791,
+        "passed": true,
+        "published_point_objective": 78965987.9491793,
+        "violation_at_point_via_qps": 3.9968028886505635e-14
+      },
+      "name": "QPLIB_8567",
+      "ncons": 7500,
+      "nobjquadnz": 39984,
+      "nvars": 10000,
+      "nz": 32497,
+      "page": {
+        "bytes": 11484,
+        "sha256": "b535f5748fd7f7480a4845d0304606b831b359e3dd200ee23e53acef965cf255",
+        "url": "https://qplib.zib.de/QPLIB_8567.html"
+      },
+      "page_solobjvalue_text": "78965987.95000000",
+      "problem_type": "CCL",
+      "q0_entries": 39984,
+      "qplib": {
+        "bytes": 987610,
+        "sha256": "2b0050ddbf5580a1db86fd7ebcf0afbd01c6201683793353ef4a9aca71787da1",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8567.qplib"
+      },
+      "qps": {
+        "bytes": 2142498,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "0fa4b0054bfc2afb2ed9a698839a234c9095c68923e45474957f4dcfb2a4db4f"
+      },
+      "reference_objective": 78965987.95,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8567.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "78965987.9500000029802322",
+      "sol": {
+        "bytes": 520052,
+        "sha256": "a0554591d6ffb49c1b4330ef18b3a6d9b5c6b6d12d85478224438483bef06a2e",
+        "url": "https://qplib.zib.de/sol/QPLIB_8567.sol"
+      },
+      "solinfeasibility": 3.9968e-14,
+      "tier": "small"
+    },
+    "QPLIB_8602": {
+      "coefficients": 277439,
+      "converter_check": {
+        "objective_at_point_via_qps": 27353.387199899873,
+        "passed": true,
+        "published_point_objective": 27353.3871998999,
+        "violation_at_point_via_qps": 5.9117155615240335e-12
+      },
+      "name": "QPLIB_8602",
+      "ncons": 52983,
+      "nobjquadnz": 34552,
+      "nvars": 34552,
+      "nz": 242887,
+      "page": {
+        "bytes": 10978,
+        "sha256": "d8170955f97102b82a1a9d4606600e6efd5be2feb1ff8fc7a2610f3dd7ac0234",
+        "url": "https://qplib.zib.de/QPLIB_8602.html"
+      },
+      "page_solobjvalue_text": "27353.38720000",
+      "problem_type": "DCL",
+      "q0_entries": 34552,
+      "qplib": {
+        "bytes": 5116380,
+        "sha256": "cb452aeece377ea346095498267ed30fb184a432820f980a22441b603db45231",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8602.qplib"
+      },
+      "qps": {
+        "bytes": 8353934,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "b4df879828e8b27c6c7b72d8df5221c1cb1929d6f62e368572a445e1f518139f"
+      },
+      "reference_objective": 27353.3872,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8602.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "27353.3872000000010303",
+      "sol": {
+        "bytes": 1796704,
+        "sha256": "71fe56263db004bf5d7f8f5a131bd6d99034f1a1a19dbd99f8c772a161cd00aa",
+        "url": "https://qplib.zib.de/sol/QPLIB_8602.sol"
+      },
+      "solinfeasibility": 5.9046e-12,
+      "tier": "full"
+    },
+    "QPLIB_8616": {
+      "coefficients": 55480,
+      "converter_check": {
+        "objective_at_point_via_qps": 245.06859777120616,
+        "passed": true,
+        "published_point_objective": 245.068597771206,
+        "violation_at_point_via_qps": 1.021405182655144e-14
+      },
+      "name": "QPLIB_8616",
+      "ncons": 10404,
+      "nobjquadnz": 13870,
+      "nvars": 13870,
+      "nz": 41610,
+      "page": {
+        "bytes": 11476,
+        "sha256": "8cbb4f63c2d144bb3048add8552f43638383a5e7619f4326420d63f22e58713e",
+        "url": "https://qplib.zib.de/QPLIB_8616.html"
+      },
+      "page_solobjvalue_text": "245.06859780",
+      "problem_type": "DCL",
+      "q0_entries": 13870,
+      "qplib": {
+        "bytes": 724187,
+        "sha256": "351094962982fc2420ca297c4806a0f398efae26e96b0bb9dd0394945c0e788b",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8616.qplib"
+      },
+      "qps": {
+        "bytes": 1364921,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "4b3f64e2e05a3d320823c5aaa0f4c68caa393b6b5d6d4b5e4009fdb3beee5211"
+      },
+      "reference_objective": 245.0685978,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8616.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "245.0685977999999920",
+      "sol": {
+        "bytes": 720356,
+        "sha256": "bc9add23489ecaeb3615013eb664f4813aa359e12906cc09e2f0115a2105aca7",
+        "url": "https://qplib.zib.de/sol/QPLIB_8616.sol"
+      },
+      "solinfeasibility": 8.8818e-16,
+      "tier": "small"
+    },
+    "QPLIB_8785": {
+      "coefficients": 73422,
+      "converter_check": {
+        "objective_at_point_via_qps": 7867.49114876992,
+        "passed": true,
+        "published_point_objective": 7867.49114876992,
+        "violation_at_point_via_qps": 3.4006575333478395e-11
+      },
+      "name": "QPLIB_8785",
+      "ncons": 11362,
+      "nobjquadnz": 10399,
+      "nvars": 10399,
+      "nz": 63023,
+      "page": {
+        "bytes": 11479,
+        "sha256": "5b24f2c0045041b6c8dbce3f647219d3dbdfb6424dbbe34de2ef84539202e234",
+        "url": "https://qplib.zib.de/QPLIB_8785.html"
+      },
+      "page_solobjvalue_text": "7867.49114900",
+      "problem_type": "DCL",
+      "q0_entries": 10399,
+      "qplib": {
+        "bytes": 1267200,
+        "sha256": "567d271815993ea9830e58fb94dde046333566d755c4740e26f57fb9719591f9",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8785.qplib"
+      },
+      "qps": {
+        "bytes": 2101807,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "e49400fa38b499fcfc24e25b9dca7a470aba8874a5bde2f023906fee5df551bc"
+      },
+      "reference_objective": 7867.491149,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8785.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "7867.4911490000004051",
+      "sol": {
+        "bytes": 540748,
+        "sha256": "63c92702253b3dfc7a155015be3c98e878dc2829ddc56ea11dcc2ddebb317b2e",
+        "url": "https://qplib.zib.de/sol/QPLIB_8785.sol"
+      },
+      "solinfeasibility": 3.3232e-11,
+      "tier": "small"
+    },
+    "QPLIB_8790": {
+      "coefficients": 156420,
+      "converter_check": {
+        "objective_at_point_via_qps": -0.00015624210914970163,
+        "passed": true,
+        "published_point_objective": -0.00015624210915,
+        "violation_at_point_via_qps": 0.0
+      },
+      "name": "QPLIB_8790",
+      "ncons": 0,
+      "nobjquadnz": 117216,
+      "nvars": 39204,
+      "nz": 39204,
+      "page": {
+        "bytes": 10972,
+        "sha256": "039ecdbecd936e05334886f8750835f8f0db9a9afe9db237e716130cf1c5f739",
+        "url": "https://qplib.zib.de/QPLIB_8790.html"
+      },
+      "page_solobjvalue_text": "-0.00015624",
+      "problem_type": "CCB",
+      "q0_entries": 117216,
+      "qplib": {
+        "bytes": 3704567,
+        "sha256": "e9605d515f9e4eb89634fdb0a8ee0561489b11997ad2402668fa36ddfef6d2ac",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8790.qplib"
+      },
+      "qps": {
+        "bytes": 5573022,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "5f212ed03f49d590f935f05296371e0b8108e5d1dba1eeade4973c7651242cf0"
+      },
+      "reference_objective": -0.0001562421091,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8790.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "-0.0001562421091000",
+      "sol": {
+        "bytes": 2038660,
+        "sha256": "e938c7eb27e6e4a65d355a54a1f0939d00221afdf92b4bd29b4c1d7c482001c4",
+        "url": "https://qplib.zib.de/sol/QPLIB_8790.sol"
+      },
+      "solinfeasibility": 0.0,
+      "tier": "full"
+    },
+    "QPLIB_8792": {
+      "coefficients": 60270,
+      "converter_check": {
+        "objective_at_point_via_qps": 3593.5183550645675,
+        "passed": true,
+        "published_point_objective": 3593.51835506461,
+        "violation_at_point_via_qps": 0.0
+      },
+      "name": "QPLIB_8792",
+      "ncons": 0,
+      "nobjquadnz": 45141,
+      "nvars": 15129,
+      "nz": 15129,
+      "page": {
+        "bytes": 11475,
+        "sha256": "bc62a714bfac0c2c0f46cebd82be5912f2302802f23d34489ec88adc091a10d0",
+        "url": "https://qplib.zib.de/QPLIB_8792.html"
+      },
+      "page_solobjvalue_text": "3593.51835500",
+      "problem_type": "CCB",
+      "q0_entries": 45141,
+      "qplib": {
+        "bytes": 1199118,
+        "sha256": "8b0555d0468fadae11441875b31eeeae774e7974772994f592af23ef28bad962",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8792.qplib"
+      },
+      "qps": {
+        "bytes": 2318334,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "94ec18891a0e325f088608c95f43ae728fe3a59286e3d0cf72cfaa83996aaf87"
+      },
+      "reference_objective": 3593.518355,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8792.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "3593.5183550000001560",
+      "sol": {
+        "bytes": 743028,
+        "sha256": "057c97945cb5c257651566b62526f7f1ed7b621b1c9a17a579837d10b132e706",
+        "url": "https://qplib.zib.de/sol/QPLIB_8792.sol"
+      },
+      "solinfeasibility": 0.0,
+      "tier": "small"
+    },
+    "QPLIB_8845": {
+      "coefficients": 69113,
+      "converter_check": {
+        "objective_at_point_via_qps": 10907992.493998807,
+        "passed": true,
+        "published_point_objective": 10907992.4939988,
+        "violation_at_point_via_qps": 4.781952611665474e-12
+      },
+      "name": "QPLIB_8845",
+      "ncons": 777,
+      "nobjquadnz": 58114,
+      "nvars": 1546,
+      "nz": 10999,
+      "page": {
+        "bytes": 11469,
+        "sha256": "98fcb173bf4d4c7281f5b3a69db3d2aa01d163e327d54ee09aa4034835d96b29",
+        "url": "https://qplib.zib.de/QPLIB_8845.html"
+      },
+      "page_solobjvalue_text": "10907992.49000000",
+      "problem_type": "CCL",
+      "q0_entries": 58114,
+      "qplib": {
+        "bytes": 847986,
+        "sha256": "6e245ab7aec4c7a96b68818a175c398a0d388e936bc73f467d821849b09bb93b",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8845.qplib"
+      },
+      "qps": {
+        "bytes": 1437744,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "9e43aba18e45c0803bbedbdc89aaf7959c8a7a06f762dd447d71605f6ad1e212"
+      },
+      "reference_objective": 10907992.49,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8845.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "10907992.4900000002235174",
+      "sol": {
+        "bytes": 32292,
+        "sha256": "353720a8db56c3450f20c52e967ea378e8104f8e9118d8383e181643c887ac2a",
+        "url": "https://qplib.zib.de/sol/QPLIB_8845.sol"
+      },
+      "solinfeasibility": 3.4106e-13,
+      "tier": "small"
+    },
+    "QPLIB_8906": {
+      "coefficients": 77756,
+      "converter_check": {
+        "objective_at_point_via_qps": 2699111.5134656304,
+        "passed": true,
+        "published_point_objective": 2699111.51346564,
+        "violation_at_point_via_qps": 9.754863583566475e-11
+      },
+      "name": "QPLIB_8906",
+      "ncons": 838,
+      "nobjquadnz": 56975,
+      "nvars": 5223,
+      "nz": 20781,
+      "page": {
+        "bytes": 11477,
+        "sha256": "7f269b5e72f67cdc1d1245e1226e08cf62d626d2ad0a2fd6f39ef7b59020c169",
+        "url": "https://qplib.zib.de/QPLIB_8906.html"
+      },
+      "page_solobjvalue_text": "2699111.51300000",
+      "problem_type": "CCL",
+      "q0_entries": 56975,
+      "qplib": {
+        "bytes": 1017151,
+        "sha256": "29dd7c0295e04610d14b1c1abc6a0c8184400d2cbfc3b584695557cdc768976c",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8906.qplib"
+      },
+      "qps": {
+        "bytes": 1762964,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "ffc1d7f5fe816902b62d7f532fe79666ec16a05bfbe11e34ded0936379e4918b"
+      },
+      "reference_objective": 2699111.513,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8906.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "2699111.5129999998025596",
+      "sol": {
+        "bytes": 32448,
+        "sha256": "e13b22ead8ebdc9812e519d75d58f1ecf9e86e63dd81618216d06b07ab76fce1",
+        "url": "https://qplib.zib.de/sol/QPLIB_8906.sol"
+      },
+      "solinfeasibility": 9.7531e-11,
+      "tier": "small"
+    },
+    "QPLIB_8938": {
+      "coefficients": 35997,
+      "converter_check": {
+        "objective_at_point_via_qps": -35.77945295251059,
+        "passed": true,
+        "published_point_objective": -35.7794529525106,
+        "violation_at_point_via_qps": 2.0372681319713593e-10
+      },
+      "name": "QPLIB_8938",
+      "ncons": 11999,
+      "nobjquadnz": 4000,
+      "nvars": 4001,
+      "nz": 31997,
+      "page": {
+        "bytes": 11464,
+        "sha256": "3dc11fab46ac9226e73ace398b66683ef848a36e254b94c2142c82bc1b29f9d5",
+        "url": "https://qplib.zib.de/QPLIB_8938.html"
+      },
+      "page_solobjvalue_text": "-35.77945295",
+      "problem_type": "DCL",
+      "q0_entries": 4000,
+      "qplib": {
+        "bytes": 807217,
+        "sha256": "243df0111d84b1cfcf58d24d15c7edb10561077ecbad1c2e53da63e847f515e4",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8938.qplib"
+      },
+      "qps": {
+        "bytes": 1266387,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "819d8bcea762dce417e427d4e22e84dcb029221045f4f0fdbe276f207821967e"
+      },
+      "reference_objective": -35.77945295,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8938.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "-35.7794529499999996",
+      "sol": {
+        "bytes": 208104,
+        "sha256": "a6b3f3da72b0119cded8218fb53cb5fc5190399121525ced7232765def20dde5",
+        "url": "https://qplib.zib.de/sol/QPLIB_8938.sol"
+      },
+      "solinfeasibility": 7.276e-12,
+      "tier": "small"
+    },
+    "QPLIB_8991": {
+      "coefficients": 57360,
+      "converter_check": {
+        "objective_at_point_via_qps": -0.0016678673779133406,
+        "passed": true,
+        "published_point_objective": -0.001667867377913,
+        "violation_at_point_via_qps": 0.0
+      },
+      "name": "QPLIB_8991",
+      "ncons": 0,
+      "nobjquadnz": 42960,
+      "nvars": 14400,
+      "nz": 14400,
+      "page": {
+        "bytes": 11473,
+        "sha256": "368f393e2dc7ad99dc44a142a32312da6bf400607de1135e666761dc8dbd231d",
+        "url": "https://qplib.zib.de/QPLIB_8991.html"
+      },
+      "page_solobjvalue_text": "-0.00166787",
+      "problem_type": "CCB",
+      "q0_entries": 42960,
+      "qplib": {
+        "bytes": 1151622,
+        "sha256": "fc5257b9a21edda9f80a7c0ef8ac42151523a68b5be5e7eb26348b6a9dcb3db5",
+        "url": "https://qplib.zib.de/qplib/QPLIB_8991.qplib"
+      },
+      "qps": {
+        "bytes": 2293883,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "d2b24437b670c8b6bc9c271003a7923ce2bd8d914980a93421d9f366887695da"
+      },
+      "reference_objective": -0.001667867378,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_8991.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "-0.0016678673780000",
+      "sol": {
+        "bytes": 748852,
+        "sha256": "46a6a038a8942036e46c08fdbb6ed399deed077dd1f319a932d5ec1f512192e3",
+        "url": "https://qplib.zib.de/sol/QPLIB_8991.sol"
+      },
+      "solinfeasibility": 0.0,
+      "tier": "small"
+    },
+    "QPLIB_9002": {
+      "coefficients": 15470,
+      "converter_check": {
+        "note": "no published point to check at",
+        "passed": null
+      },
+      "name": "QPLIB_9002",
+      "ncons": 1649,
+      "nobjquadnz": 2890,
+      "nvars": 2890,
+      "nz": 12580,
+      "page": {
+        "bytes": 10883,
+        "sha256": "7191e9376c2504f18639ab57d55813606676271d169e62bb549aca3ec088a9b9",
+        "url": "https://qplib.zib.de/QPLIB_9002.html"
+      },
+      "page_solobjvalue_text": null,
+      "problem_type": "DCL",
+      "q0_entries": 2890,
+      "qplib": {
+        "bytes": 203064,
+        "sha256": "e6aea2b85e49862df5d8ad03339f65506ff149eeadaa74bb25ebacad14f7a664",
+        "url": "https://qplib.zib.de/qplib/QPLIB_9002.qplib"
+      },
+      "qps": {
+        "bytes": 403268,
+        "converted_by": "bench/runners/qplib_format.py",
+        "sha256": "556b0e50040f07847a8b200667ec3f6fa415c970a763abc1d509011e253ffbd0"
+      },
+      "reference_objective": null,
+      "reference_source": "none: https://qplib.zib.de/QPLIB_9002.html publishes no solution point",
+      "reference_status": "qplib.solu tag =unkn=",
+      "reference_text": null,
+      "solinfeasibility": null,
+      "tier": "small"
+    },
+    "QPLIB_9008": {
+      "coefficients": 9673294,
+      "name": "QPLIB_9008",
+      "ncons": 989604,
+      "nobjquadnz": 19604,
+      "nvars": 1009306,
+      "nz": 9653690,
+      "page": {
+        "bytes": 10980,
+        "sha256": "941730755aeadffbe3845e01ecac191e6a5fe9d00c70fb96b4505921116a6152",
+        "url": "https://qplib.zib.de/QPLIB_9008.html"
+      },
+      "page_solobjvalue_text": "-0.07472028",
+      "problem_type": "DCL",
+      "reference_objective": -0.07472027822,
+      "reference_source": "https://qplib.zib.de/qplib.solu (=best=, a best known solution point, not a proof of optimality); agrees with solobjvalue on https://qplib.zib.de/QPLIB_9008.html",
+      "reference_status": "qplib.solu tag =best=",
+      "reference_text": "-0.0747202782200000",
+      "skipped": "9673294 coefficients > --max-coefficients 2000000; not downloaded",
+      "solinfeasibility": 1.8363e-07,
+      "tier": "full"
+    }
+  },
+  "licence": {
+    "licence": "CC-BY 4.0",
+    "licence_statement": "QPLIB is licensed under CC-BY 4.0.",
+    "licence_url": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  "listing_counts": {
+    "continuous": 134,
+    "rows": 453,
+    "selected": 19
+  },
+  "objective_convention": "0.5 x'Q0 x + b0'x + q0 with Q0 the lower triangle as the .qplib file lists it (doc.html); see qplib_format.py",
+  "selection_rule": "instances.html: Cvx ticked, O in {C, D}, V = C, C in {N, B, L} (doc.html PROBTYPE and CONVEX)",
+  "source": "https://qplib.zib.de/",
+  "tiers": {
+    "max_coefficients": 2000000,
+    "small_max_coefficients": 100000
+  }
+}

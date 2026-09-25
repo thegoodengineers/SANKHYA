@@ -33,6 +33,7 @@ import kkt_crossings  # the relative-KKT crossing tables (#486)
 import latest_result
 import maros_meszaros_doc  # the QP section (#491), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
+import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
 from gpu_doc import gpu_datacenter_table, gpu_real_section  # 1g.1 and 1g.3 (#488)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -2619,6 +2620,10 @@ def main() -> int:
     # Only a run over all 39 (instance, formulation) pairs is pooling-<sha>.csv; a subset
     # is pooling-partial-<sha>.csv and the prefix filter keeps it out (#516).
     pooling_csv = newest("pooling-*.csv", prefix="pooling")
+    # QPLIB (#492): the full selection is qplib-<sha>.csv; without one, the small tier's
+    # qplib-small-<sha>.csv. Any other subset is qplib-partial-<sha>.csv and never read.
+    qplib_csv = (newest("qplib-*.csv", prefix="qplib")
+                 or newest("qplib-small-*.csv", prefix="qplib-small"))
     gpu_pdlp_csv = newest("gpu-pdlp-*.csv")
     commercial_csv = newest("commercial-agreement-*.csv")
     gpu_domain_prop_csv = newest("gpu-domain-prop-*.csv", prefix="gpu-domain-prop")
@@ -2832,6 +2837,20 @@ the published optimum with a solution the independent verifier accepts; a model 
 refuses is listed as refused, not dropped (`bench/runners/pooling.py`).
 
 {pooling_doc.section(pooling_csv)}
+---
+
+## 2d. QPLIB, the convex continuous QPs
+
+The convex, continuous, linearly constrained (or box- or un-constrained) instances of QPLIB
+(Furini et al., *QPLIB: a library of quadratic programming instances*, Mathematical
+Programming Computation 11, 2019), selected from the site's own listing by
+`bench/runners/fetch_qplib.py`, which also reads each reference value from QPLIB's
+`qplib.solu` and the instance's page and records the sha256 of every file in
+`data/qplib/reference.json`. The `.qplib` files are converted to QPS by
+`bench/runners/qplib_format.py` and solved by `bench/runners/qplib.py` under the default QP
+engine and the interior point.
+
+{qplib_doc.section(qplib_csv)}
 ---
 
 ## 3. Correctness beyond the objective value
