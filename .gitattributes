@@ -13,3 +13,7 @@
 # cloned tree and a freshly fetched one two different hashes for the same instance.
 data/netlib/*.mps -text
 data/**/*.mps -text
+# QPLIB test fixtures (#492): the .qplib and .sol files are the site's bytes (CRLF), and
+# test_qplib.py checks their sha256 against the one recorded when they were fetched.
+bench/runners/testdata/qplib/*.qplib -text
+bench/runners/testdata/qplib/*.sol -text
