@@ -92,6 +92,27 @@ const DualBreakpoint& take_next(std::vector<DualBreakpoint>& breakpoints,
   return breakpoints[*heap_size];
 }
 
+/// x before y in the order both tests take breakpoints: (ratio, column).
+bool comes_before(const DualBreakpoint& x, const DualBreakpoint& y) {
+  return BreakpointComesLater{}(y, x);
+}
+
+/// The column to enter from the breakpoints `in_group` accepts: the largest pivot, and on a
+/// tie the one taken first - what a pass over the group in taking order keeps when it
+/// replaces its choice only on a strictly larger pivot.
+template <typename InGroup>
+Index largest_pivot(const std::vector<DualBreakpoint>& breakpoints, InGroup in_group) {
+  const DualBreakpoint* best = nullptr;
+  for (const DualBreakpoint& b : breakpoints) {
+    if (!in_group(b)) continue;
+    if (best == nullptr || b.alpha_abs > best->alpha_abs ||
+        (b.alpha_abs == best->alpha_abs && comes_before(b, *best))) {
+      best = &b;
+    }
+  }
+  return best->column;
+}
+
 }  // namespace
 
 void Simplex::collect_dual_breakpoints(bool leaving_to_upper) const {
@@ -188,14 +209,31 @@ DualRatioResult Simplex::dual_ratio_test_textbook(Index leaving_slot,
   // iteration pays for the breakpoints it reaches rather than for all of them. The sequence
   // is a stable sort's: equal ratios by column index, where std::sort left them in whatever
   // order its partitioning happened to produce.
+  //
+  // AND MOST ITERATIONS NEED NO ORDER AT ALL. When the first breakpoint cannot be passed -
+  // no flip, the usual case - the answer is the largest pivot among the breakpoints tied
+  // with it, and two linear passes find both. Only a step that flips goes to the heap, which
+  // starts again from the first breakpoint, so the two routes cannot disagree.
   std::vector<DualBreakpoint>& breakpoints = breakpoints_;
-  std::make_heap(breakpoints.begin(), breakpoints.end(), BreakpointComesLater{});
-  std::size_t heap_size = breakpoints.size();
-
   const Index leaving = basis_[static_cast<std::size_t>(leaving_slot)];
   const double x_r = x_basic_[static_cast<std::size_t>(leaving_slot)];
   double slope = leaving_to_upper ? x_r - upper_[static_cast<std::size_t>(leaving)]
                                   : lower_[static_cast<std::size_t>(leaving)] - x_r;
+  {
+    const DualBreakpoint* first = &breakpoints.front();
+    for (const DualBreakpoint& b : breakpoints) {
+      if (comes_before(b, *first)) first = &b;
+    }
+    if (!std::isfinite(first->range) ||
+        slope - first->alpha_abs * first->range <= primal_tolerance_) {
+      const double tie = first->ratio + tol::kRatioTestFeasibility;
+      result.entering =
+          largest_pivot(breakpoints, [tie](const DualBreakpoint& b) { return b.ratio <= tie; });
+      return result;
+    }
+  }
+  std::make_heap(breakpoints.begin(), breakpoints.end(), BreakpointComesLater{});
+  std::size_t heap_size = breakpoints.size();
 
   DualBreakpoint stop{};
   for (;;) {
@@ -247,15 +285,46 @@ DualRatioResult Simplex::dual_ratio_test_harris(Index leaving_slot,
     result.dual_unbounded = true;
     return result;
   }
-  // In order off a heap, for the reason given in the textbook test.
   std::vector<DualBreakpoint>& breakpoints = breakpoints_;
-  std::make_heap(breakpoints.begin(), breakpoints.end(), BreakpointComesLater{});
-  std::size_t heap_size = breakpoints.size();
-
   const Index leaving = basis_[static_cast<std::size_t>(leaving_slot)];
   const double x_r = x_basic_[static_cast<std::size_t>(leaving_slot)];
   double slope = leaving_to_upper ? x_r - upper_[static_cast<std::size_t>(leaving)]
                                   : lower_[static_cast<std::size_t>(leaving)] - x_r;
+
+  // THE FIRST GROUP BY TWO LINEAR PASSES, as in the textbook test: its bound is the smallest
+  // relaxed breakpoint of all, and it is every breakpoint whose exact one is under that
+  // bound (pass one below explains why that is the same group). When it cannot be passed -
+  // the usual case - its largest pivot enters and no order was ever needed. A group that is
+  // flipped sends the test to the heap, which starts again from the first group.
+  {
+    double bound = std::numeric_limits<double>::infinity();
+    for (const DualBreakpoint& b : breakpoints) bound = std::min(bound, b.relaxed);
+    std::vector<DualBreakpoint>& group = breakpoint_group_;
+    group.clear();
+    bool all_boxed = true;
+    for (const DualBreakpoint& b : breakpoints) {
+      if (b.ratio > bound) continue;
+      group.push_back(b);
+      all_boxed = all_boxed && std::isfinite(b.range);
+    }
+    bool passable = false;
+    if (all_boxed) {
+      // Summed in taking order, as the heap below sums it, so the comparison with the slope
+      // is the same comparison to the last bit.
+      std::sort(group.begin(), group.end(), comes_before);
+      double drop = 0.0;
+      for (const DualBreakpoint& b : group) drop += b.alpha_abs * b.range;
+      passable = slope - drop > primal_tolerance_;
+    }
+    if (!passable) {
+      result.entering = largest_pivot(group, [](const DualBreakpoint&) { return true; });
+      return result;
+    }
+  }
+
+  // In order off a heap, for the reason given in the textbook test.
+  std::make_heap(breakpoints.begin(), breakpoints.end(), BreakpointComesLater{});
+  std::size_t heap_size = breakpoints.size();
 
   while (heap_size > 0) {
     // PASS ONE. The Harris bound of the breakpoints still in play is the smallest relaxed

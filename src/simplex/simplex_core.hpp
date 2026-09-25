@@ -657,6 +657,7 @@ class Simplex {
   std::vector<Index> pivot_row_touched_;
   /// The ratio test's candidates, kept across iterations so the loop does not allocate.
   mutable std::vector<DualBreakpoint> breakpoints_;
+  mutable std::vector<DualBreakpoint> breakpoint_group_;  ///< the Harris test's first group
   std::vector<char> pivot_row_marked_;
   bool pivot_row_held_sparse_ = false;  ///< the last pass left zeros everywhere but touched
   /// Where the pivot row's time goes, and how sparse rho is, for the verbose report.
