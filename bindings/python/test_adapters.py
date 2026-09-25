@@ -180,6 +180,93 @@ def test_pulp_iteration_limit() -> None:
               _status_name(pulp, status))
 
 
+def test_pulp_status_map_claims_optimal_only_for_optimal() -> None:
+    # Every status the bindings can report has its own entry, and only "optimal" maps to
+    # PuLP's Optimal - whichever PuLP major is installed. A limit or a numerical failure read
+    # back as Optimal would be a wrong answer that looks right.
+    try:
+        import pulp
+    except ImportError as error:
+        skip("test_pulp_status_map_claims_optimal_only_for_optimal", str(error))
+        return
+    import sankhya.adapters.pulp_solver as sankhya_pulp
+
+    if hasattr(pulp, "LpSolveStatus"):
+        table, optimal = sankhya_pulp._STATUS_TO_LPSOLVESTATUS, pulp.LpSolveStatus.Optimal
+    else:
+        table, optimal = sankhya_pulp._STATUS_TO_PULP, pulp.LpStatusOptimal
+    names = sorted(sankhya._STATUS_NAMES.values())
+    missing = [name for name in names if name not in table]
+    check(not missing, "every SANKHYA status is mapped explicitly", str(missing))
+    wrong = [name for name in names if (table.get(name) == optimal) != (name == "optimal")]
+    check(not wrong, "only 'optimal' maps to Optimal", str(wrong))
+    if hasattr(pulp, "LpSolveStatus"):
+        expected = {
+            "time_limit": pulp.LpSolveStatus.TimeLimit,
+            "node_limit": pulp.LpSolveStatus.NodeLimit,
+            "iteration_limit": pulp.LpSolveStatus.IterationLimit,
+            "numerical_error": pulp.LpSolveStatus.NumericalError,
+            "interrupted": pulp.LpSolveStatus.Interrupted,
+            "infeasible_or_unbounded": pulp.LpSolveStatus.Undefined,
+        }
+        off = {k: table[k].name for k, v in expected.items() if table[k] != v}
+        check(not off, "limits and numerical error keep their own PuLP 4 codes", str(off))
+
+
+def test_pulp_free_variable_and_equality_row() -> None:
+    # A free column (PuLP 2/3: lowBound None; PuLP 4: -inf) and an equality row, the two
+    # translations the other PuLP tests do not reach:
+    #   minimise x  s.t.  x + y == 1,  y <= 3,  x free   ->  x = -2, y = 3
+    try:
+        import pulp
+    except ImportError as error:
+        skip("test_pulp_free_variable_and_equality_row", str(error))
+        return
+    import sankhya.adapters.pulp_solver as sankhya_pulp
+
+    prob = pulp.LpProblem("free", pulp.LpMinimize)
+    x = _add_var(pulp, prob, "x")
+    y = _add_var(pulp, prob, "y", lowBound=0, upBound=3)
+    prob += x
+    prob += x + y == 1
+    status = prob.solve(sankhya_pulp.SANKHYA(msg=False))
+    check(_status_name(pulp, status) == "Optimal", "PuLP free/equality status",
+          _status_name(pulp, status))
+    check(near(pulp.value(prob.objective), -2.0), "PuLP free/equality objective",
+          str(pulp.value(prob.objective)))
+    check(near(x.varValue, -2.0) and near(y.varValue, 3.0), "PuLP free/equality values",
+          f"{x.varValue}, {y.varValue}")
+
+
+def test_pulp_no_solution_after_a_solution() -> None:
+    # Solve, then make the model infeasible and solve again. The second answer must not
+    # present the first answer's point as its own: PuLP 2/3 clear varValue; PuLP 4 cannot
+    # (its setter ignores None) and says so through has_solution and a None objective.
+    try:
+        import pulp
+    except ImportError as error:
+        skip("test_pulp_no_solution_after_a_solution", str(error))
+        return
+    import sankhya.adapters.pulp_solver as sankhya_pulp
+
+    prob = pulp.LpProblem("resolve", pulp.LpMaximize)
+    z = _add_var(pulp, prob, "z", lowBound=0, upBound=1)
+    prob += z
+    first = prob.solve(sankhya_pulp.SANKHYA(msg=False))
+    check(_status_name(pulp, first) == "Optimal" and near(z.varValue, 1.0),
+          "PuLP first solve is optimal at z = 1", f"{_status_name(pulp, first)}, {z.varValue}")
+    prob += z >= 5
+    second = prob.solve(sankhya_pulp.SANKHYA(msg=False))
+    check(_status_name(pulp, second) == "Infeasible", "PuLP second solve is infeasible",
+          _status_name(pulp, second))
+    if hasattr(pulp, "LpSolveStatus"):
+        check(second.has_solution is False, "PuLP 4 has_solution is False",
+              str(second.has_solution))
+        check(second.objective is None, "PuLP 4 stats objective is None", str(second.objective))
+    else:
+        check(z.varValue is None, "PuLP legacy varValue cleared", str(z.varValue))
+
+
 # ---- CVXPY --------------------------------------------------------------------------------
 
 def test_cvxpy_lp_matches_a_direct_solve() -> None:
@@ -357,7 +444,12 @@ def test_pyomo_infeasible_is_reported() -> None:
 
 
 def main() -> int:
-    print(f"SANKHYA adapter bindings, against solver version {sankhya.version()}\n")
+    print(f"SANKHYA adapter bindings, against solver version {sankhya.version()}")
+    try:
+        import pulp
+        print(f"PuLP {pulp.__version__}\n")
+    except ImportError:
+        print("PuLP not installed\n")
     for name, function in sorted(globals().items()):
         if name.startswith("test_") and callable(function):
             print(name)

@@ -10,20 +10,32 @@
 
 PuLP's own ``LpSolver`` base class (``pulp/apis/core.py``) is the interface this
 implements - ``actualSolve(self, lp)`` receives the ``LpProblem`` and is responsible for
-setting each variable's ``varValue`` and returning one of PuLP's own status codes. That
-shape (one method, in-memory model in, values and a status code out) is what every other
-PuLP backend (CBC, GLPK, CPLEX, ...) already implements; matching it is interface
-compatibility; nothing here reads or reuses another solver's source.
+setting each variable's ``varValue`` and returning PuLP's own description of the outcome. That
+shape (one method, in-memory model in, values and a status out) is what every other PuLP
+backend (CBC, GLPK, CPLEX, ...) already implements; matching it is interface compatibility;
+nothing here reads or reuses another solver's source. PuLP 2.x, 3.x and 4.x are supported.
 
-STATUS MAPPING. PuLP's vocabulary is narrower than SANKHYA's: ``LpStatusOptimal`` /
-``Infeasible`` / ``Unbounded`` / ``NotSolved`` / ``Undefined``, with no separate word for "a
-feasible point exists but optimality was not proven" - the exact distinction SANKHYA's own
-``feasible`` exists to make (see ``Result.status`` docstring). Reporting ``feasible`` as
-``LpStatusOptimal`` would silently drop that distinction for a caller who trusts PuLP's
-status the way its own solvers document it; it is reported as ``LpStatusNotSolved`` instead,
-which is what PuLP itself uses elsewhere for "stopped without a proof". The unfathomed
-integer values are still returned, exactly as ``pulp.PULP_CBC_CMD`` does at its own time
-limit.
+STATUS MAPPING, PuLP 2.x / 3.x. PuLP's vocabulary is narrower than SANKHYA's:
+``LpStatusOptimal`` / ``Infeasible`` / ``Unbounded`` / ``NotSolved`` / ``Undefined``, with no
+separate word for "a feasible point exists but optimality was not proven" - the exact
+distinction SANKHYA's own ``feasible`` exists to make (see ``Result.status`` docstring).
+Reporting ``feasible`` as ``LpStatusOptimal`` would silently drop that distinction for a caller
+who trusts PuLP's status the way its own solvers document it; it is reported as
+``LpStatusNotSolved`` instead, which is what PuLP itself uses elsewhere for "stopped without a
+proof". The unfathomed integer values are still returned, exactly as ``pulp.PULP_CBC_CMD`` does
+at its own time limit.
+
+STATUS MAPPING, PuLP 4.x. ``actualSolve`` returns the ``LpSolveStats`` the base class's
+``buildStats`` builds: ``status`` is an ``LpSolveStatus`` saying why the solve stopped, and
+``has_solution`` says separately whether a point came back. The limits and numerical trouble
+have their own codes there, so the NotSolved compromise above is gone. ``feasible`` (a point,
+no optimality proof, and none of the limits named as the reason) is ``Stopped``;
+``infeasible_or_unbounded`` is ``Undefined``, which PuLP 4 documents as exactly that
+inconclusive case. Only SANKHYA's ``optimal`` is ever reported as ``Optimal``.
+``has_solution`` is ``Result.claims_a_point``, so it is True for an unbounded result, whose
+point is where the ray starts. PuLP 4 cannot clear a variable's value, so after a solve with
+no solution ``varValue`` keeps whatever an earlier solve left: read ``has_solution``, and
+``LpSolveStats.objective`` is None in that case.
 """
 
 from __future__ import annotations
@@ -32,7 +44,11 @@ import pulp
 
 import sankhya
 
-# (The PuLP 4.x version restriction was removed in #690; capability detection is used instead)
+# PuLP 4.0 replaced the LpStatus* constants with the LpSolveStatus enum and made actualSolve
+# return LpSolveStats (#690). Detected by capability, not by parsing the version string.
+_PULP4 = hasattr(pulp, "LpSolveStatus")
+if _PULP4:
+    from pulp.apis.core import clocks as _clocks
 
 __all__ = ["SANKHYA"]
 
@@ -63,10 +79,8 @@ class SANKHYA(pulp.LpSolver):
         return True
 
     def actualSolve(self, lp: "pulp.LpProblem", **kwargs: object) -> object:
-        is_pulp_4 = hasattr(pulp, "LpSolveStatus")
-        if is_pulp_4:
-            from pulp.apis.core import clocks
-            start = clocks()
+        # PuLP 4's buildStats times the solve from a clocks() pair taken before it starts.
+        start = _clocks() if _PULP4 else None
 
         # mip=False means "solve the LP relaxation": no column is marked integer, so the
         # model IS the relaxation rather than a MILP solve() would have to be told to relax.
@@ -86,22 +100,8 @@ class SANKHYA(pulp.LpSolver):
 
         _assign_values(lp, var_index, result)
 
-        if is_pulp_4:
-            status_map = {
-                "optimal": pulp.LpSolveStatus.Optimal,
-                "infeasible": pulp.LpSolveStatus.Infeasible,
-                "unbounded": pulp.LpSolveStatus.Unbounded,
-                "infeasible_or_unbounded": pulp.LpSolveStatus.Unbounded,
-                "model_error": pulp.LpSolveStatus.Undefined,
-                "numerical_error": pulp.LpSolveStatus.NumericalError,
-                "not_solved": pulp.LpSolveStatus.NotSolved,
-                "feasible": pulp.LpSolveStatus.Stopped,
-                "iteration_limit": pulp.LpSolveStatus.IterationLimit,
-                "time_limit": pulp.LpSolveStatus.TimeLimit,
-                "node_limit": pulp.LpSolveStatus.NodeLimit,
-                "interrupted": pulp.LpSolveStatus.Interrupted,
-            }
-            status = status_map.get(result.status, pulp.LpSolveStatus.Undefined)
+        if _PULP4:
+            status = _STATUS_TO_LPSOLVESTATUS.get(result.status, pulp.LpSolveStatus.Undefined)
             return self.buildStats(lp, status, has_solution=result.claims_a_point, start=start)
 
         lp.status = _STATUS_TO_PULP.get(result.status, pulp.LpStatusUndefined)
@@ -114,27 +114,45 @@ class SANKHYA(pulp.LpSolver):
         return lp.status
 
 
-_STATUS_TO_PULP = {
-    "optimal": getattr(pulp, "LpStatusOptimal", 1),
-    "infeasible": getattr(pulp, "LpStatusInfeasible", -1),
-    "unbounded": getattr(pulp, "LpStatusUnbounded", -2),
-    "infeasible_or_unbounded": getattr(pulp, "LpStatusUnbounded", -2),
-    "model_error": getattr(pulp, "LpStatusUndefined", -3),
-    "numerical_error": getattr(pulp, "LpStatusUndefined", -3),
-    "not_solved": getattr(pulp, "LpStatusNotSolved", 0),
+# PuLP 4.x: every SANKHYA status by name - see the module docstring's STATUS MAPPING note. A
+# status missing here (one added to SANKHYA later) falls back to Undefined, never to Optimal.
+_STATUS_TO_LPSOLVESTATUS = {
+    "optimal": pulp.LpSolveStatus.Optimal,
+    "feasible": pulp.LpSolveStatus.Stopped,
+    "infeasible": pulp.LpSolveStatus.Infeasible,
+    "unbounded": pulp.LpSolveStatus.Unbounded,
+    "iteration_limit": pulp.LpSolveStatus.IterationLimit,
+    "time_limit": pulp.LpSolveStatus.TimeLimit,
+    "node_limit": pulp.LpSolveStatus.NodeLimit,
+    "numerical_error": pulp.LpSolveStatus.NumericalError,
+    "model_error": pulp.LpSolveStatus.Undefined,
+    "infeasible_or_unbounded": pulp.LpSolveStatus.Undefined,
+    "interrupted": pulp.LpSolveStatus.Interrupted,
+    "not_solved": pulp.LpSolveStatus.NotSolved,
+} if _PULP4 else {}
+
+# PuLP 2.x / 3.x only: PuLP 4 has no LpStatus* constants.
+_STATUS_TO_PULP = {} if _PULP4 else {
+    "optimal": pulp.LpStatusOptimal,
+    "infeasible": pulp.LpStatusInfeasible,
+    "unbounded": pulp.LpStatusUnbounded,
+    "infeasible_or_unbounded": pulp.LpStatusUnbounded,
+    "model_error": pulp.LpStatusUndefined,
+    "numerical_error": pulp.LpStatusUndefined,
+    "not_solved": pulp.LpStatusNotSolved,
     # A point exists but optimality (feasible) or even a point (the limits without one) was
     # not proven: PuLP's closest word is "not solved", not "optimal" - see the module
     # docstring's STATUS MAPPING note.
-    "feasible": getattr(pulp, "LpStatusNotSolved", 0),
-    "iteration_limit": getattr(pulp, "LpStatusNotSolved", 0),
-    "time_limit": getattr(pulp, "LpStatusNotSolved", 0),
-    "node_limit": getattr(pulp, "LpStatusNotSolved", 0),
-    "interrupted": getattr(pulp, "LpStatusNotSolved", 0),
+    "feasible": pulp.LpStatusNotSolved,
+    "iteration_limit": pulp.LpStatusNotSolved,
+    "time_limit": pulp.LpStatusNotSolved,
+    "node_limit": pulp.LpStatusNotSolved,
+    "interrupted": pulp.LpStatusNotSolved,
 }
 
 
 def _sol_status_map() -> dict[str, object]:
-    if not hasattr(pulp, "LpSolutionOptimal"):
+    if _PULP4 or not hasattr(pulp, "LpSolutionOptimal"):
         return {}
     no_solution = getattr(pulp, "LpSolutionNoSolutionFound", pulp.LpSolutionInfeasible)
     return {
@@ -169,6 +187,8 @@ def _build_model(lp: "pulp.LpProblem", relax_integers: bool = False):
 
     var_index: dict[str, int] = {}
     for variable in lp.variables():
+        # PuLP 2.x / 3.x say "no bound" with None; PuLP 4 with -inf / +inf, which is
+        # sankhya.INFINITY itself and passes straight through float().
         lower = variable.lowBound
         upper = variable.upBound
         integer = variable.cat in (pulp.LpInteger, pulp.LpBinary) and not relax_integers
@@ -185,9 +205,12 @@ def _build_model(lp: "pulp.LpProblem", relax_integers: bool = False):
     if lp.objective is not None:
         model.set_objective_offset(float(lp.objective.constant))
 
-    constraints = lp.constraints() if callable(lp.constraints) else lp.constraints.items()
+    # PuLP 4 made LpProblem.constraints a method returning a list in model order; before it,
+    # it was a dict keyed by constraint name.
     if callable(lp.constraints):
         constraints = [(c.name, c) for c in lp.constraints()]
+    else:
+        constraints = list(lp.constraints.items())
 
     for name, constraint in constraints:
         coefficients = {
@@ -210,6 +233,8 @@ def _build_model(lp: "pulp.LpProblem", relax_integers: bool = False):
 def _assign_values(lp: "pulp.LpProblem", var_index: dict[str, int],
                    result: "sankhya.Result") -> None:
     if not result.claims_a_point:
+        # Clears the values under PuLP 2.x / 3.x. PuLP 4's varValue setter ignores None, so
+        # there an earlier solve's values stay and LpSolveStats.has_solution is the answer.
         for variable in lp.variables():
             variable.varValue = None
         return
