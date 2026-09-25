@@ -48,7 +48,8 @@ struct CondatVuSteps {
 /// The steps at primal weight omega, meaning sigma / tau = omega^2 (the [PDLP] convention),
 /// under the same coupling rule as the default steps: tau is the positive root of
 /// 2 a2 omega^2 tau^2 + (L/2) tau - 1 = 0, taken in its cancellation-free form, and sigma is
-/// then (1/tau - L/2) / (2 a2). `a2` is the engine's inflated ||A||^2 estimate.
+/// then (1/tau - L/2) / (2 a2) = omega^2 tau, the cancellation-free form it is computed in.
+/// `a2` is the engine's inflated ||A||^2 estimate.
 [[nodiscard]] CondatVuSteps condat_vu_steps_at_weight(double lipschitz, double a2,
                                                       double omega);
 
