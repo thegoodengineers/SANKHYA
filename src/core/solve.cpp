@@ -422,19 +422,33 @@ void reconcile_status_with_measurement(const Model& model, Solution* solution,
     logger.warning("{}", detail);
   }
 
-  // Strong duality: the verifier's accounted-gap test (issue #664).
+  // Strong duality, with the verifier's per-item accounting of the gap (#664). The checks
+  // above can all pass while the primal and dual objectives still disagree: a reduced cost
+  // may differ from c - A^T y by less than the verifier's consistency threshold, and that
+  // residual times a large column value is a gap no per-item check sees. The interior point
+  // with crossover off let such points out as optimal on Netlib forplan and pilot4, which
+  // the verifier rejected on this test alone. The measurement is kkt_check.cpp's, the
+  // in-process copy of tools/verify_solution.py, so this cannot disagree with the verifier
+  // about what the gap is. Only its strong-duality verdict is acted on here: its other checks
+  // either repeat the measurements above or (the basis) are not this guard's to add. They run
+  // first and return early, so a point that fails one of them is not judged on the gap at all;
+  // every one of them is also a verifier rejection, so no such point reaches a passing result.
   if (check_dual && solution->status == SolveStatus::kOptimal) {
     KktTolerances tolerances;
-    tolerances.primal = options.get_double("primal_feasibility_tolerance");
+    tolerances.primal = primal_tolerance;
     tolerances.dual = dual_tolerance;
     tolerances.duality_gap = tol::kDualityGap;
-
     const KktVerdict verdict = check_lp_optimality(model, *solution, tolerances);
     if (!verdict.passed && verdict.check == "strong duality") {
+      const std::string detail = fmt::format(
+          "engine reported optimal but strong duality fails ({}), above the {:.1e} relative "
+          "tolerance the independent verifier applies; reporting a feasible point rather "
+          "than a proof",
+          verdict.detail, tol::kDualityGap);
       solution->status = SolveStatus::kFeasible;
-      solution->message = solution->message.empty() ? verdict.detail
-                                                    : solution->message + "; " + verdict.detail;
-      logger.warning("engine reported optimal but {}", verdict.detail);
+      solution->message =
+          solution->message.empty() ? detail : solution->message + "; " + detail;
+      logger.warning("{}", detail);
     }
   }
 }
