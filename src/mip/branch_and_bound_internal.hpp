@@ -391,7 +391,7 @@ class BranchAndBound {
   void unwind_to(std::size_t mark);
   /// The feasibility pump at the root, only when nothing else found an incumbent.
   void run_root_pump(const Solution& relaxation);
-  /// The PDHG feasibility pump and fix-and-propagate (#509), from the first root relaxation,
+  /// The PDHG feasibility pump and fix-and-propagate (#509), at the root after the dives,
   /// only while there is no incumbent, each behind its own option.
   void run_pdhg_heuristics(const Solution& relaxation);
   /// Feasibility Jump (#506): before the root LP when `from` is null, else from `from`

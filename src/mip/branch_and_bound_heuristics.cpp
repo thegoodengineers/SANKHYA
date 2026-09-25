@@ -392,10 +392,11 @@ void BranchAndBound::run_root_pump(const Solution& relaxation) {
 }
 
 // The PDHG heuristics (#509; pdhg_heuristics.hpp): the feasibility pump, then
-// fix-and-propagate when the pump found nothing, each from the first root relaxation and each
-// only while there is no incumbent. They read original_ and nothing else of the search, and
-// what they return goes through offer_incumbent() like every other heuristic's point. In a
-// parallel search only the worker holding the root runs them.
+// fix-and-propagate when the pump found nothing, each from the root relaxation after the cut
+// round, after the rounding, the dives and the CPU pump, and only while there is no incumbent.
+// They read original_ and nothing else of the search, and what they return goes through
+// offer_incumbent() like every other heuristic's point. In a parallel search only the worker
+// holding the root runs them.
 void BranchAndBound::run_pdhg_heuristics(const Solution& relaxation) {
   if (!schedule_.pdhg_pump && !schedule_.fix_and_propagate) return;
   if (have_incumbent_ || quadratic_ || integer_columns_.empty()) return;
