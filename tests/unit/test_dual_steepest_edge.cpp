@@ -34,6 +34,10 @@ Options dual_steepest_edge() {
   options.set_bool("presolve", false);
   options.set_string("algorithm", "dual-simplex");
   options.set_string("pricing", "dual-steepest-edge");
+  // The rule these tests were written under. Under Harris (the LP default since #712) a
+  // cost shift ends the dual with the primal simplex, and the weights check below needs the
+  // dual to finish on its own; the weights are what is under test, not the ratio test.
+  options.set_string("dual_ratio_test", "textbook");
   return options;
 }
 
