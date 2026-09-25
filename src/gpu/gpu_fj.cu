@@ -274,7 +274,11 @@ FjDeviceResult feasibility_jump(const Model& model, const std::vector<double>& s
         std::chrono::duration<double>(std::chrono::steady_clock::now() - clock).count();
     return std::move(result);
   };
-  if (!device_available(&result.reason)) return finish();
+  std::string device;
+  if (!device_available(&device)) {
+    result.reason = device;
+    return finish();
+  }
   const Index n = model.num_cols();
   const Index m = model.num_rows();
   const Index nnz = model.num_nonzeros();

@@ -12,7 +12,7 @@
 //
 // ONE BLOCK IS ONE SEARCH. Block b owns its own point, activities, row weights and violated
 // list (the slots at offset b), and runs the CPU reference's loop:
-//   sample   each warp draws kSamplesPerWarp candidate columns, a random entry of a random
+//   sample   each warp draws tol::kGpuFeasibilityJumpSamplesPerWarp candidate columns, a random entry of a random
 //            violated row (a random costed column once no row is violated), as the CPU does;
 //   score    the warp computes the column's jump value and its score, lanes striding over
 //            the column's nonzeros and reducing by shuffles (warp_best_jump below);
@@ -221,10 +221,10 @@ __device__ Jump warp_best_jump(const Problem& p, const double* x, const double* 
     // [left, right]: the minimisers of the function without the column's box.
     double left = -INFINITY;
     double right = -INFINITY;
-    if (slope >= 0.0) {
-      if (slope == 0.0) right = warp_next_break(p, act, weight, xj, j, -INFINITY, lane);
-      if (slope == 0.0) *work += length;
-    } else {
+    if (slope == 0.0) {
+      right = warp_next_break(p, act, weight, xj, j, -INFINITY, lane);
+      *work += length;
+    } else if (slope < 0.0) {
       double below = -INFINITY;
       double above = INFINITY;
       double best = INFINITY;
@@ -277,8 +277,12 @@ __device__ Jump warp_best_jump(const Problem& p, const double* x, const double* 
         left = right = INFINITY;  // still falling after the last breakpoint
       } else {
         left = best;
-        right = best_slope > 0.0 ? left : warp_next_break(p, act, weight, xj, j, left, lane);
-        if (!(best_slope > 0.0)) *work += length;
+        if (best_slope > 0.0) {
+          right = left;
+        } else {
+          right = warp_next_break(p, act, weight, xj, j, left, lane);
+          *work += length;
+        }
       }
     }
     double target;
