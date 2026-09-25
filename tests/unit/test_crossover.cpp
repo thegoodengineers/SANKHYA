@@ -159,7 +159,7 @@ TEST(Crossover, ThePushStopsAtTheTimeLimit) {
   // #417: run_push() armed its deadline before the time limit was read, so the push had no
   // deadline and ran every superbasic to a bound whatever was left: 244 s against 143 s on
   // rmine15. Here the crossover is handed 0.1 ms, which is gone before the first push step on
-  // a model with superbasics; the push must say it stopped, and report no vertex.
+  // a model with superbasics; it must stop with no pivot made, and report no vertex.
   Model model;
   const std::string path =
       (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
@@ -190,12 +190,14 @@ TEST(Crossover, ThePushStopsAtTheTimeLimit) {
   if (log.find("no time left for crossover") != std::string::npos) {
     GTEST_SKIP() << "the 0.1 ms were gone before the push started on this machine";
   }
-  ASSERT_NE(log.find("Crossover push:"), std::string::npos) << log;
-  EXPECT_NE(log.find("(time limit reached inside the push)"), std::string::npos) << log;
+  // Stopped before a single push pivot: in the set-up of the push (its first factorization
+  // asks the deadline too) or at the push's first check. With no deadline the push ran every
+  // superbasic to a bound and only the primal loop after it noticed the limit.
   EXPECT_EQ(after.algorithm.find("crossover"), std::string::npos) << after.message;
-  EXPECT_NE(after.message.find("crossover did not reach a vertex (time_limit"),
+  EXPECT_NE(after.message.find("crossover did not reach a vertex (time_limit after 0 pivots"),
             std::string::npos)
-      << after.message;
+      << after.message << "\n"
+      << log;
 }
 
 TEST(Crossover, OffLeavesTheInteriorPointsAnswerAlone) {
