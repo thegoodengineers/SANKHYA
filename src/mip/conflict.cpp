@@ -18,7 +18,9 @@
 namespace sankhya::mip {
 
 const char* to_string(ConflictSource source) noexcept {
-  return source == ConflictSource::kLp ? "lp" : "propagation";
+  if (source == ConflictSource::kLp) return "lp";
+  if (source == ConflictSource::kCutoff) return "cutoff";
+  return "propagation";
 }
 
 std::vector<ConflictLiteral> canonical(std::vector<ConflictLiteral> literals) {

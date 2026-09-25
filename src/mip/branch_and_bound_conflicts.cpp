@@ -22,6 +22,7 @@ namespace sankhya::mip {
 
 void BranchAndBound::init_conflicts() {
   conflicts_enabled_ = options_.get_bool("conflict_analysis");
+  conflict_cutoff_ = options_.get_bool("conflict_cutoff");
   conflict_minimize_ = options_.get_bool("conflict_minimize");
   const std::string use = options_.get_string("conflict_use");
   conflict_use_ = use == "none"    ? ConflictUse::kNone
@@ -142,7 +143,7 @@ void BranchAndBound::analyze_conflict(Index node_index, ConflictSource source,
   };
 
   bool proved = false;
-  if (source == ConflictSource::kLp) {
+  if (source == ConflictSource::kLp || source == ConflictSource::kCutoff) {
     if (farkas != nullptr && !farkas->empty()) {
       // Engines differ in the sign they report the multipliers with; the proof is checked
       // either way round, and only a proof that holds is used.

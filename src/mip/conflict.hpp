@@ -56,7 +56,7 @@ struct ConflictLiteral {
 };
 
 /// What proved the node infeasible.
-enum class ConflictSource { kPropagation, kLp };
+enum class ConflictSource { kPropagation, kLp, kCutoff };
 
 [[nodiscard]] const char* to_string(ConflictSource source) noexcept;
 
