@@ -1914,19 +1914,23 @@ const std::vector<OptionSpec>& Options::registry() {
          {}});
     s.push_back(
         {"pdhg_two_matvec",
-         OptionType::Bool,
-         false,
+         OptionType::String,
+         std::string("cpu"),
          "Cache A*x_k between iterations and compute A*x_{k+1} once per step, deriving "
          "A*x_bar = 2*A*x_{k+1} - A*x_k and A*dx = A*x_{k+1} - A*x_k by vector ops, "
          "reducing three sparse mat-vecs per iteration to two (#479). A*x is recomputed "
-         "exactly at every restart to prevent rounding drift. Active on the CPU engine "
-         "and on the CUDA engine, per-iteration and device-loop paths alike. The derived "
-         "products differ from computed ones by rounding, so the trajectory is not bitwise "
-         "the three-product one. Incompatible with pdhg_halpern. Default OFF until an A/B "
-         "on main confirms the per-iteration saving on CPU and GPU.",
+         "exactly at every restart to prevent rounding drift. The derived products differ "
+         "from computed ones by rounding, so the trajectory is not bitwise the "
+         "three-product one. cpu (default): two products on the CPU engine, three on the "
+         "CUDA engine, and three on the CPU when pdhg_halpern is on; true: two products on "
+         "both engines (per-iteration and device-loop paths alike), refused with "
+         "pdhg_halpern; false: three products everywhere. The default follows the A/B on "
+         "main 58a8374 (bench/results/pdhg-two-matvec-58a8374.csv): the CPU per-iteration "
+         "time is 0.74 to 0.84 of the three-product time on all 14 instances, the device "
+         "mixed (1.2649 on kkt_1000x1000, 1.0327 on kkt_5000x5000).",
          0.0,
          0.0,
-         {}});
+         {"cpu", "true", "false"}});
     s.push_back(
         {"pdhg_geometric_evaluation",
          OptionType::Bool,

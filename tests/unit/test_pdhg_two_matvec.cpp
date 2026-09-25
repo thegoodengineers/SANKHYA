@@ -39,7 +39,7 @@ Options pdhg_options(bool two_matvec) {
   options.set_string("algorithm", "pdhg");
   options.set_bool("pdhg_polish", false);
   options.set_double("pdhg_tolerance", 1e-8);
-  options.set_bool("pdhg_two_matvec", two_matvec);
+  options.set_string("pdhg_two_matvec", two_matvec ? "true" : "false");
   return options;
 }
 
@@ -78,6 +78,21 @@ TEST(PdhgTwoMatvec, OffIsBitwiseTheOldPath) {
   const Solution b = solve(model, off);
   EXPECT_EQ(a.objective, b.objective);
   EXPECT_EQ(a.iterations, b.iterations);
+}
+
+TEST(PdhgTwoMatvec, TheDefaultIsTwoProductsOnTheCpuEngine) {
+  // The default "cpu" (#479, the A/B in bench/results/pdhg-two-matvec-58a8374.csv) is the
+  // explicit "true" path on the CPU engine, bit for bit.
+  EXPECT_EQ(Options().get_string("pdhg_two_matvec"), "cpu");
+  Model model;
+  ASSERT_TRUE(io::read_model(netlib_path("adlittle"), &model).ok);
+  Options by_default = pdhg_options(true);
+  by_default.set_string("pdhg_two_matvec", "cpu");
+  const Solution a = solve(model, by_default);
+  const Solution b = solve(model, pdhg_options(true));
+  EXPECT_EQ(a.status, b.status);
+  EXPECT_EQ(a.iterations, b.iterations);
+  EXPECT_EQ(a.objective, b.objective);
 }
 
 // ---- Iterate by iterate (#479 acceptance) ---------------------------------------------------
