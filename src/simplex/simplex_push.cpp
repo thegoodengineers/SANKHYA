@@ -39,6 +39,13 @@ namespace sankhya::detail {
 Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& interior_x,
                            const std::vector<double>& interior_activity) {
   Timer timer;
+  // The limits BEFORE the deadline is armed, as run() and run_dual() do: arm_deadline() reads
+  // limits_, and prepare() sets it only after. Armed first, the push saw a default
+  // ResourceLimits with no time limit and ran with no deadline at all - on rmine15 after the
+  // cuDSS interior point (#417) it took 244 s of the 143 s left, 14,353 pivots and 143
+  // refactorizations of a 358,395-row basis, and the solve ended at 400 s of 300.
+  limits_ = ResourceLimits(options_, logger_);
+  time_limit_ = options_.get_double("time_limit");
   arm_deadline(timer);
   if (std::optional<Solution> early = prepare(&warm, timer)) return *early;
   logger_.info("Crossover push: {} rows, {} columns, {} nonzeros{}", m_, n_,

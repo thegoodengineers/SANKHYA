@@ -10,6 +10,7 @@
 // keep, so that is the first model.
 
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -18,6 +19,8 @@
 
 #include "core/status_guard.hpp"
 #include "sankhya/io.hpp"
+#include "sankhya/ipm.hpp"
+#include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 #include "sankhya/tolerances.hpp"
@@ -150,6 +153,49 @@ TEST(Crossover, GetsWhatTheTimeLimitHasLeftAfterTheInteriorPointNotLessTwice) {
       << vertex.message;
   EXPECT_NE(vertex.algorithm.find("crossover"), std::string::npos) << vertex.message;
   expect_a_vertex(model, vertex);
+}
+
+TEST(Crossover, ThePushStopsAtTheTimeLimit) {
+  // #417: run_push() armed its deadline before the time limit was read, so the push had no
+  // deadline and ran every superbasic to a bound whatever was left: 244 s against 143 s on
+  // rmine15. Here the crossover is handed 0.1 ms, which is gone before the first push step on
+  // a model with superbasics; the push must say it stopped, and report no vertex.
+  Model model;
+  const std::string path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+       "data/netlib/scsd8.mps")
+          .string();
+  const io::ReadResult read = io::read_model(path, &model);
+  ASSERT_TRUE(read.ok) << path << ": " << read.error;
+  Logger quiet(nullptr);
+  Solution interior = ipm::solve_ipm(model, ipm_options(false), quiet);
+  ASSERT_EQ(interior.status, SolveStatus::kOptimal) << interior.message;
+
+  std::FILE* stream = std::tmpfile();
+  ASSERT_NE(stream, nullptr);
+  Options options = ipm_options(true);
+  options.set_double("time_limit", 1e-4);
+  Solution after;
+  {
+    Logger logger(stream, LogLevel::kInfo);
+    const Timer timer;
+    after = crossover_to_vertex(model, interior, options, logger, nullptr, timer);
+  }
+  std::fflush(stream);
+  std::rewind(stream);
+  std::string log;
+  char buffer[4096];
+  while (std::fgets(buffer, sizeof(buffer), stream) != nullptr) log += buffer;
+  std::fclose(stream);
+  if (log.find("no time left for crossover") != std::string::npos) {
+    GTEST_SKIP() << "the 0.1 ms were gone before the push started on this machine";
+  }
+  ASSERT_NE(log.find("Crossover push:"), std::string::npos) << log;
+  EXPECT_NE(log.find("(time limit reached inside the push)"), std::string::npos) << log;
+  EXPECT_EQ(after.algorithm.find("crossover"), std::string::npos) << after.message;
+  EXPECT_NE(after.message.find("crossover did not reach a vertex (time_limit"),
+            std::string::npos)
+      << after.message;
 }
 
 TEST(Crossover, OffLeavesTheInteriorPointsAnswerAlone) {
