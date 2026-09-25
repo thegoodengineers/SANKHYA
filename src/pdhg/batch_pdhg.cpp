@@ -8,6 +8,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <random>
 #include <span>
 #include <string>
 #include <vector>
@@ -80,6 +81,51 @@ BatchData build_data(const BatchProblem& problem, const Scaling& scaling) {
     for (std::size_t k = 0; k < k_count; ++k) d.y0[i * k_count + k] = y;
   }
   return d;
+}
+
+/// ||Ahat||_2 by power iteration on Ahat^T Ahat, rounded up by 1% as la/scaling.hpp's
+/// estimate_spectral_norm() rounds: an underestimate would oversize the step. Written here,
+/// single-threaded over the batch's own arrays, because that routine's A^T x is an OpenMP
+/// region, and a caller that runs many small batches pays a thread-team start per product:
+/// on a box with a 7-CPU quota and 64 visible cores, test_batch_pdhg.cpp's CPU sweep took
+/// 689 s with that routine at the default thread count and 0.1 s with OMP_NUM_THREADS=1.
+double spectral_norm(const BatchData& d) {
+  const auto n = static_cast<std::size_t>(d.cols);
+  const auto m = static_cast<std::size_t>(d.rows);
+  if (n == 0 || m == 0 || d.col_value.empty()) return 1.0;
+  std::mt19937 rng(kPowerSeed);
+  std::uniform_real_distribution<double> spread(-1.0, 1.0);
+  std::vector<double> v(n);
+  for (double& value : v) value = spread(rng);
+  std::vector<double> av(m);
+  double norm = 0.0;
+  for (int step = 0; step < kPowerIterations; ++step) {
+    double length = 0.0;
+    for (const double value : v) length += value * value;
+    length = std::sqrt(length);
+    if (!(length > 0.0) || !std::isfinite(length)) return 1.0;
+    for (double& value : v) value /= length;
+    for (std::size_t i = 0; i < m; ++i) {
+      double sum = 0.0;
+      for (auto p = static_cast<std::size_t>(d.row_start[i]);
+           p < static_cast<std::size_t>(d.row_start[i + 1]); ++p) {
+        sum += d.row_value[p] * v[static_cast<std::size_t>(d.row_index[p])];
+      }
+      av[i] = sum;
+    }
+    double next = 0.0;
+    for (std::size_t j = 0; j < n; ++j) {
+      double sum = 0.0;
+      for (auto p = static_cast<std::size_t>(d.col_start[j]);
+           p < static_cast<std::size_t>(d.col_start[j + 1]); ++p) {
+        sum += d.col_value[p] * av[static_cast<std::size_t>(d.col_index[p])];
+      }
+      v[j] = sum;
+      next += sum * sum;
+    }
+    norm = std::sqrt(std::sqrt(next));  // ||A^T A v||^(1/2) approaches ||A||_2
+  }
+  return norm > 0.0 ? norm * 1.01 : 1.0;
 }
 
 /// Initial primal weight, [PDLP] sec. 3.3: ||c|| / ||b|| over the finite row bounds, or 1
@@ -181,8 +227,7 @@ BatchResult solve_batch(const BatchProblem& problem, const BatchSettings& settin
 
   const Scaling scaling = build_scaling(model, problem.cost, kRuizIterations);
   const BatchData data = build_data(problem, scaling);
-  const double eta = tol::kBatchPdhgStepFraction /
-                     estimate_spectral_norm(scaling.matrix, kPowerIterations, kPowerSeed);
+  const double eta = tol::kBatchPdhgStepFraction / spectral_norm(data);
   std::vector<double> weight(k_count, initial_primal_weight(data));
   std::vector<double> tau(k_count);
   std::vector<double> sigma(k_count);
