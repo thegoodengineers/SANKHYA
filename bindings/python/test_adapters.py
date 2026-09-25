@@ -49,6 +49,20 @@ def near(a: float, b: float, tol: float = 1e-6) -> bool:
     return abs(a - b) <= tol * max(1.0, abs(b))
 
 
+def _add_var(pulp_module, prob, name, lowBound=None, upBound=None, cat="Continuous"):
+    if hasattr(prob, "add_variable"):
+        return prob.add_variable(name, lowBound=lowBound, upBound=upBound, cat=cat)
+    return pulp_module.LpVariable(name, lowBound=lowBound, upBound=upBound, cat=cat)
+
+
+def _status_name(pulp_module, status):
+    if hasattr(pulp_module, "LpSolveStatus"):
+        if hasattr(status, "status"):
+            return status.status.name
+        return pulp_module.LpSolveStatus(status).name
+    return pulp_module.LpStatus.get(status, "Undefined")
+
+
 # ---- The reference: the same three models, solved directly ------------------------------
 
 def _direct_lp() -> "sankhya.Result":
@@ -89,14 +103,14 @@ def test_pulp_lp_matches_a_direct_solve() -> None:
 
     reference = _direct_lp()
     prob = pulp.LpProblem("blend", pulp.LpMaximize)
-    x = pulp.LpVariable("x", lowBound=0, upBound=3)
-    y = pulp.LpVariable("y", lowBound=0)
+    x = _add_var(pulp, prob, "x", lowBound=0, upBound=3)
+    y = _add_var(pulp, prob, "y", lowBound=0)
     prob += 3 * x + 2 * y
     prob += x + y <= 4
     prob += x + 3 * y <= 6
     status = prob.solve(sankhya_pulp.SANKHYA(msg=False))
 
-    check(pulp.LpStatus[status] == "Optimal", "PuLP LP status", pulp.LpStatus[status])
+    check(_status_name(pulp, status) == "Optimal", "PuLP LP status", _status_name(pulp, status))
     check(near(pulp.value(prob.objective), reference.objective), "PuLP LP objective matches",
           f"{pulp.value(prob.objective)} vs {reference.objective}")
     check(near(x.varValue, reference.x[0]) and near(y.varValue, reference.x[1]),
@@ -113,13 +127,13 @@ def test_pulp_milp_matches_a_direct_solve() -> None:
 
     reference = _direct_milp()
     prob = pulp.LpProblem("knapsack", pulp.LpMaximize)
-    a = pulp.LpVariable("a", cat=pulp.LpBinary)
-    b = pulp.LpVariable("b", cat=pulp.LpBinary)
+    a = _add_var(pulp, prob, "a", cat=pulp.LpBinary)
+    b = _add_var(pulp, prob, "b", cat=pulp.LpBinary)
     prob += a + b
     prob += 2 * a + 2 * b <= 3
     status = prob.solve(sankhya_pulp.SANKHYA(msg=False))
 
-    check(pulp.LpStatus[status] == "Optimal", "PuLP MILP status", pulp.LpStatus[status])
+    check(_status_name(pulp, status) == "Optimal", "PuLP MILP status", _status_name(pulp, status))
     check(near(pulp.value(prob.objective), reference.objective), "PuLP MILP objective matches",
           f"{pulp.value(prob.objective)} vs {reference.objective}")
     check(all(abs(v - round(v)) < 1e-6 for v in (a.varValue, b.varValue)),
@@ -135,12 +149,35 @@ def test_pulp_infeasible_is_reported() -> None:
     import sankhya.adapters.pulp_solver as sankhya_pulp
 
     prob = pulp.LpProblem("bad", pulp.LpMinimize)
-    z = pulp.LpVariable("z", lowBound=0, upBound=1)
+    z = _add_var(pulp, prob, "z", lowBound=0, upBound=1)
     prob += z
     prob += z >= 5
     status = prob.solve(sankhya_pulp.SANKHYA(msg=False))
-    check(pulp.LpStatus[status] == "Infeasible", "PuLP infeasible status",
-          pulp.LpStatus[status])
+    check(_status_name(pulp, status) == "Infeasible", "PuLP infeasible status",
+          _status_name(pulp, status))
+
+
+def test_pulp_iteration_limit() -> None:
+    try:
+        import pulp
+    except ImportError as error:
+        skip("test_pulp_iteration_limit", str(error))
+        return
+    import sankhya.adapters.pulp_solver as sankhya_pulp
+
+    prob = pulp.LpProblem("iter", pulp.LpMaximize)
+    x = _add_var(pulp, prob, "x", lowBound=0, upBound=3)
+    prob += x
+
+    status = prob.solve(sankhya_pulp.SANKHYA(msg=False, iteration_limit=0))
+
+    if hasattr(pulp, "LpSolveStatus"):
+        check(status.status == pulp.LpSolveStatus.IterationLimit, "PuLP iteration limit status",
+              _status_name(pulp, status))
+        check(status.has_solution is True, "PuLP has_solution is True", str(status.has_solution))
+    else:
+        check(_status_name(pulp, status) == "Not Solved", "PuLP legacy iteration limit status",
+              _status_name(pulp, status))
 
 
 # ---- CVXPY --------------------------------------------------------------------------------
