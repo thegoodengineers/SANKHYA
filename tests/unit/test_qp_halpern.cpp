@@ -2,14 +2,14 @@
 // SANKHYA - restarted Halpern iteration and the PID primal weight in the first-order QP engine
 // (#493, CPU).
 //
-// Three things are pinned. Off, the engine is the one it was: the defaults are off and an
-// explicit off (with the controller's gains moved, which must then be ignored) reproduces the
-// default run bit for bit. On, each switch alone and both together reach the optimum the
-// interior point (#490) reaches, on hand-derived QPs and on seeded random ones, and every
-// answer passes the in-process KKT check (the same conditions tools/verify_solution.py
-// re-derives). And the step-size algebra the controller relies on - that the default steps are
-// the weight formula at the default weight, that Condat's condition holds at every weight, and
-// that kp = 0.5 alone is PDLP's smoothing - is checked directly.
+// Three things are pinned. The defaults: the PID weight on (since the A/B on main 58a8374),
+// Halpern off, and the default run is an explicit PID-only run bit for bit; an explicit off
+// ignores the controller's gains, bit for bit. On, each switch alone and both together reach
+// the optimum the interior point (#490) reaches, on hand-derived QPs and on seeded random ones,
+// and every answer passes the in-process KKT check (the same conditions
+// tools/verify_solution.py re-derives). And the step-size algebra the controller relies on -
+// that the default steps are the weight formula at the default weight, that Condat's condition
+// holds at every weight, and that kp = 0.5 alone is PDLP's smoothing - is checked directly.
 
 #include <algorithm>
 #include <cmath>
