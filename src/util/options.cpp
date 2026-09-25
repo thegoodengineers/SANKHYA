@@ -1814,21 +1814,25 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"ipm_linear_solver",
                  OptionType::String,
-                 std::string("cpu"),
+                 std::string("auto"),
                  "Where the LP interior point factors its normal equations (#489): cpu (the "
-                 "sparse LDL^T every earlier version used) or cudss (NVIDIA cuDSS on the "
+                 "sparse LDL^T every earlier version used), cudss (NVIDIA cuDSS on the "
                  "device: analysed once, refactorized every iteration, the Newton iteration "
                  "and the iterative refinement unchanged on the host; the same pivot rule as "
-                 "the CPU factor). cudss needs a build with SANKHYA_ENABLE_CUDSS and a CUDA "
-                 "device; without either, and under ipm_proximal_regularization, "
-                 "ipm_dense_columns or the column side of ipm_normal_side, it warns and keeps "
-                 "the CPU factor. A device factorization that fails, or that leaves a negative "
+                 "the CPU factor), or auto (the default): in a build with SANKHYA_ENABLE_CUDSS "
+                 "and a CUDA device, cudss for normal equations of at least 1e6 nonzeros or "
+                 "whose CPU factor would hold that many (tol::kIpmDeviceFactorFloor), cpu for "
+                 "everything smaller and in every other build, silently. cudss needs a build "
+                 "with SANKHYA_ENABLE_CUDSS and a CUDA device; without either, and under "
+                 "ipm_proximal_regularization, ipm_dense_columns or the column side of "
+                 "ipm_normal_side, it warns and keeps the CPU factor (auto keeps it without a "
+                 "warning). A device factorization that fails, or that leaves a negative "
                  "pivot the CPU rule would have lifted, is redone on the CPU; a failed device "
-                 "solve moves the rest of the solve to the CPU. Default cpu. Reference: Shin "
-                 "et al., MadIPM GPU interior point, arXiv:2508.16094.",
+                 "solve moves the rest of the solve to the CPU. Reference: Shin et al., "
+                 "MadIPM GPU interior point, arXiv:2508.16094.",
                  0.0,
                  0.0,
-                 {"cpu", "cudss"}});
+                 {"auto", "cpu", "cudss"}});
     s.push_back({"ipm_normal_side",
                  OptionType::String,
                  std::string("rows"),

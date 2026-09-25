@@ -352,8 +352,19 @@ class InteriorPoint {
   /// The device's phase times, kept when a failure drops it mid-solve.
   gpu::CudssTiming device_timing_;
   bool device_used_ = false;
-  /// Turns the device on for ipm_linear_solver = cudss, after the side is chosen.
+  /// Under ipm_linear_solver = auto the device is not started up front: the first analysis
+  /// starts it when the system holds at least tol::kIpmDeviceFactorFloor nonzeros, or its
+  /// CPU factor would. Cleared once that decision is made.
+  bool device_auto_ = false;
+  /// Turns the device on for ipm_linear_solver = cudss, after the side is chosen, or arms
+  /// the size gate for ipm_linear_solver = auto.
   void choose_linear_solver();
+  /// Create the device factor; false, with a log line, when there is none. `why` is the
+  /// reason the log gives for it.
+  bool start_device(bool automatic, const std::string& why);
+  /// ipm_linear_solver = auto after a CPU analysis whose factor is at the floor: start the
+  /// device and analyse there too, keeping ldl_'s analysis for any return to the CPU.
+  void analyze_on_device_too();
   /// A cuDSS failure: say so and finish the solve on the CPU factor.
   void drop_device(const std::string& reason);
   /// Factor normal_lower_ with dual_regularization_: on the device when it is on and
@@ -985,6 +996,15 @@ bool InteriorPoint::factorize() {
     // share of a 1,200 s limit. cuDSS reports its factor as the CPU ordering does (lower
     // triangle with the diagonal: 30,474 against 31,860 on 25fv47), and the same budget
     // applies to it.
+    // Under ipm_linear_solver = auto a system already at the floor goes to the device
+    // before any CPU ordering: on rmine15 (7.8e6 nonzeros) that ordering does not finish
+    // inside the set-up share, and the device orders the matrix itself.
+    if (device_auto_ && system.num_nonzeros() >= tol::kIpmDeviceFactorFloor) {
+      device_auto_ = false;
+      (void)start_device(true, fmt::format("ipm_linear_solver = auto, {} nonzeros in the "
+                                           "normal equations",
+                                           system.num_nonzeros()));
+    }
     if (device_ != nullptr) {
       ProfileScope timed(profiler, "cudss analysis", ProfileMode::kDetailed);
       std::string reason;
@@ -1016,6 +1036,10 @@ bool InteriorPoint::factorize() {
         factor_too_large_ = true;
         return false;
       }
+      if (device_auto_) {
+        device_auto_ = false;
+        if (factor_size_ >= tol::kIpmDeviceFactorFloor) analyze_on_device_too();
+      }
     }
   }
   bool factored = false;
@@ -1045,7 +1069,13 @@ bool InteriorPoint::factorize() {
 }
 
 void InteriorPoint::choose_linear_solver() {
-  if (options_.get_string("ipm_linear_solver") != "cudss") return;
+  const std::string asked = options_.get_string("ipm_linear_solver");
+  if (asked == "cpu") return;
+  // AUTO (#489): the device where the build carries it and the system is large enough to
+  // repay it, decided at the first analysis; the CPU factor, silently, everywhere else. A
+  // CPU build has nothing to choose between and says nothing.
+  const bool automatic = asked == "auto";
+  if (automatic && !gpu::CudssFactor::compiled()) return;
   // The device factors the plain normal equations only. The proximal path factors a signed
   // augmented system, and the dense-column and column-side paths are built on ldl_'s own
   // factors; each keeps the CPU, and the log says so.
@@ -1054,23 +1084,76 @@ void InteriorPoint::choose_linear_solver() {
                          : column_side_active_ ? "the column side of ipm_normal_side"
                                                : nullptr;
   if (excluded != nullptr) {
-    logger_.warning(
-        "interior point: ipm_linear_solver = cudss does not apply with {}; the CPU factor is "
-        "kept",
-        excluded);
+    if (automatic) {
+      logger_.verbose("interior point: ipm_linear_solver = auto keeps the CPU factor with {}",
+                      excluded);
+    } else {
+      logger_.warning(
+          "interior point: ipm_linear_solver = cudss does not apply with {}; the CPU factor "
+          "is kept",
+          excluded);
+    }
     return;
   }
+  if (automatic) {
+    device_auto_ = true;
+    return;
+  }
+  (void)start_device(false, "ipm_linear_solver = cudss");
+}
+
+bool InteriorPoint::start_device(bool automatic, const std::string& why) {
   auto device = std::make_unique<gpu::CudssFactor>();
   std::string reason;
   if (!device->initialize(&reason)) {
-    logger_.warning(
-        "interior point: ipm_linear_solver = cudss is unavailable ({}); the CPU factor is kept",
-        reason);
-    return;
+    if (automatic) {
+      logger_.verbose(
+          "interior point: ipm_linear_solver = auto found no cuDSS device ({}); the CPU "
+          "factor is kept",
+          reason);
+    } else {
+      logger_.warning(
+          "interior point: ipm_linear_solver = cudss is unavailable ({}); the CPU factor is "
+          "kept",
+          reason);
+    }
+    return false;
   }
   device_ = std::move(device);
   device_used_ = true;
-  logger_.info("Interior point: normal equations factored on the device by cuDSS (#489)");
+  logger_.info("Interior point: normal equations factored on the device by cuDSS (#489; {})",
+               why);
+  return true;
+}
+
+void InteriorPoint::analyze_on_device_too() {
+  // Under ipm_linear_solver = auto a CPU factor at the floor goes to the device (qap15: 9.2e6
+  // nonzeros from 1.9e5 in the system). ldl_ keeps its analysis for any factorization that
+  // has to come back to the CPU.
+  if (!start_device(
+          true, fmt::format("ipm_linear_solver = auto, a {}-nonzero factor", factor_size_))) {
+    return;
+  }
+  std::string reason;
+  bool analysed = false;
+  {
+    ProfileScope timed(logger_.profiler(), "cudss analysis", ProfileMode::kDetailed);
+    analysed = device_->analyze(normal_lower_, &reason);
+  }
+  if (!analysed) {
+    drop_device(reason);
+    return;
+  }
+  logger_.verbose(
+      "interior point: cuDSS analysed the normal equations in {:.2f}s, factor {} nonzeros",
+      device_->timing().analysis, device_->factor_nonzeros());
+  if (max_factor_nonzeros_ >= 0 && device_->factor_nonzeros() > max_factor_nonzeros_) {
+    // The device's own ordering came out over the budget the CPU's met: keep the CPU factor
+    // rather than decline a system it can factor.
+    drop_device("its factor is over ipm_max_factor_nonzeros");
+    return;
+  }
+  factor_size_ = device_->factor_nonzeros();
 }
 
 void InteriorPoint::drop_device(const std::string& reason) {

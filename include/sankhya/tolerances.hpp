@@ -857,4 +857,20 @@ inline constexpr Count kNlpMaxRestorationIterations = 500;
 /// feasible node whose minimum sits at the solver's tolerance is never declared empty.
 inline constexpr double kMinlpEmptyViolation = 1e-6;
 
+// ---- The interior point's device factor under ipm_linear_solver = auto (#489) -------------
+
+/// Under `ipm_linear_solver = auto` in a cuDSS build with a device, the normal equations go to
+/// the device when they hold at least this many nonzeros, or when the CPU ordering says their
+/// factor would; below it they stay on the CPU factor. Measured with `algorithm=ipm
+/// crossover=false` on an A100 (#489): the Netlib factors at or above it are dfl001 (1.7e6),
+/// maros-r7 (1.3e6) and fit2p (4.5e6), optimal on both factors in 52 s, 11.5 s and 144 s on
+/// the CPU against 4.0 s, 2.8 s and 6.0 s on the device
+/// (bench/results/ipm-cudss-ab-netlib-{cpu,cudss}-58a8374.csv); every other Netlib factor is
+/// below 5e5, where forcing the device changed five statuses (agg, greenbeb, lotfi, ship08l,
+/// tuff, all factors under 1e5); the one large saving left below it is pilot87 (factor 4.5e5,
+/// 39 s against 6.9 s), feasible on both. Of the Mittelmann eight, qap15 (factor 9.2e6) and
+/// rmine15 (7.8e6 assembled, its CPU ordering unfinished inside the set-up share) are over
+/// it. A system this large skips the CPU ordering: the device orders it.
+inline constexpr std::int64_t kIpmDeviceFactorFloor = 1'000'000;
+
 }  // namespace sankhya::tol
