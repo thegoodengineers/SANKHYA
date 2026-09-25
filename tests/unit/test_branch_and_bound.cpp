@@ -834,6 +834,10 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheCutPool) {
   options.set_bool("mip_cut_pooling", true);
   options.set_int("mip_cut_age_limit", 1);
   options.set_int("cut_support_floor", 100);  // as the debug-solution fuzz: more rows
+  // Trees to age rows in: two cuts a round and no heuristics leave the root open.
+  options.set_int("cut_max_per_round", 2);
+  options.set_int("tree_cut_rows_per_round", 2);
+  options.set_bool("mip_heuristics", false);
   const FuzzTally pool = run_milp_fuzz(options, "cut pool, age 1, wide", true, 600);
   expect_clean_sweep(pool, 200, 100);
   EXPECT_GT(pool.cut_rows_aged_out, 0) << "no cut row was ever freed";

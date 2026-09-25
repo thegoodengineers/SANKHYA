@@ -497,6 +497,13 @@ TEST(DebugSolution, FuzzTheCutPoolAgainstTheUniqueExactOptimum) {
   Options options = every_family_on();
   options.set_bool("mip_cut_pooling", true);
   options.set_int("mip_cut_age_limit", 1);
+  // A tree to age rows in: at the settings above the root closes almost every one of these
+  // instances, and a pool with no second node never re-imposes anything. Two cuts a round,
+  // no loop and no heuristics leave the root open; the tree rounds still add rows.
+  options.set_bool("root_cut_loop", false);
+  options.set_int("cut_max_per_round", 2);
+  options.set_int("tree_cut_rows_per_round", 2);
+  options.set_bool("mip_heuristics", false);
   FuzzTally tally;
   for (int attempt = 0; attempt < 1200 && tally.checked < 150; ++attempt) {
     const oracle::GeneratedLp lp = binary_rows_instance(rng);
