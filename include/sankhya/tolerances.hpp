@@ -297,6 +297,24 @@ inline constexpr double kCutMinEfficacy = 1e-4;
 /// Prevents extreme coefficient scaling from ruining the numerical stability of the LP.
 inline constexpr double kCutMaxCoefficientRatio = 1e6;
 
+/// The root's bounded admission of dense cuts (#496, `cut_dense_max`). Refusing every cut
+/// above kCutMaxDensity refused every Gomory cut on opt1217, rlp1, neos5, pk1 and gen-ip016,
+/// whose root gap then closed by nothing; admitting all of them (cut_support_floor=100000)
+/// measured slower on the whole set. A dense cut is admitted at the root only when it
+/// passed every other test, most efficacious first, while the nonzeros of all admitted
+/// dense cuts stay within this share of the model's own nonzeros at the root: at 1.0 the
+/// node LP at most doubles in nonzeros, whatever n is. The default of
+/// `cut_dense_nonzero_share`.
+inline constexpr double kCutDenseNonzeroShare = 1.0;
+
+/// A dense cut is held to a tighter dynamism than kCutMaxCoefficientRatio. A Gomory row's
+/// rounding error is relative to its LARGEST entry, so an entry 1e6 below it can be mostly
+/// error, and a dense row has many such entries that every node LP then carries. At 1e4
+/// every kept entry is at least 1e-4 of the largest, so an error of 1e-12 of the largest
+/// is at most 1e-8 of the entry. A conservative choice of ours, in the spirit of the
+/// dynamism limit Cornuejols, Margot and Nannicini (2013) study, not tuned from it.
+inline constexpr double kCutDenseMaxCoefficientRatio = 1e4;
+
 /// A cut coefficient this far below the cut's own largest coefficient is the ROUNDING of
 /// the arithmetic that produced it rather than a quantity. The Gomory derivation is a few
 /// dozen multiply-adds over the tableau row, so its relative error is a small multiple of the

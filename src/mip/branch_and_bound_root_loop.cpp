@@ -110,7 +110,8 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
     waiting_cuts_.clear();
     const std::size_t found = candidates.size();
     auto filtered =
-        filter_and_deduplicate_cuts(working_, *relaxation, candidates, cut_filter_policy());
+        filter_and_deduplicate_cuts(working_, *relaxation, candidates, cut_filter_policy(true));
+    admit_dense_root_cuts(&filtered, *relaxation);  // #496: the same budget as round 1
     std::vector<Cut> passing;
     for (auto& fc : filtered) {
       if (fc.reason != CutFilterReason::kAccepted) continue;

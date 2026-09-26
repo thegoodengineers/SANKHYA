@@ -252,6 +252,9 @@ enum class CutFilterReason {
 struct FilteredCut {
   Cut cut;
   CutFilterReason reason;
+  /// kTooDense under CutFilterPolicy::test_dense, and every other test passed: refused for
+  /// its density alone, so a root admission (#496) may take it.
+  bool dense_only = false;
 };
 
 /// Validates, filters, and deduplicates a set of candidate cuts.
@@ -268,6 +271,9 @@ struct CutFilterPolicy {
   /// Test violation / ||coeff||_2 against kCutMinEfficacy instead of the absolute violation
   /// against kCutViolationTolerance (cut_efficacy_test).
   bool efficacy = false;
+  /// Run a too-dense cut through the remaining tests too and mark it dense_only when it
+  /// passes them all (#496): the root's bounded admission of dense cuts reads the mark.
+  bool test_dense = false;
 };
 
 [[nodiscard]] std::vector<FilteredCut> filter_and_deduplicate_cuts(
