@@ -841,7 +841,7 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"mip_symmetry",
                  OptionType::Bool,
-                 false,
+                 true,
                  "Formulation symmetry (#413; Margot 2010; Liberti 2012): detect the "
                  "permutations of columns and rows that leave the model unchanged, by "
                  "colour refinement and individualisation on the model's coloured bipartite "
@@ -850,7 +850,10 @@ const std::vector<OptionSpec>& Options::registry() {
                  "the lexicographically smallest point of every orbit, so an optimum "
                  "survives them; every generator is verified against the model entry by "
                  "entry before it is used. One search only; not for a quadratic objective. "
-                 "OFF until the MIPLIB A/B on main.",
+                 "ON by default: on the 30-instance MIPLIB set at 60 s it proves b-ball (9 "
+                 "nodes, 0.1 s) and changes no other verdict. Off under write_certificate, "
+                 "which cannot derive the rows, and under pool_complete, which promises every "
+                 "assignment.",
                  0.0,
                  0.0,
                  {}});
@@ -2011,7 +2014,9 @@ const std::vector<OptionSpec>& Options::registry() {
          OptionType::String,
          std::string(""),
          "MILP: write the learned conflicts and their statistics as JSON to this file, in "
-         "the indices of the model the search ran on (presolved, if presolve ran).",
+         "the indices of the model the search ran on (presolved, if presolve ran). Each "
+         "conflict is proved over that model's rows, the ordering rows of mip_symmetry "
+         "included when it found any, so it holds for the points those rows keep.",
          0.0,
          0.0,
          {},

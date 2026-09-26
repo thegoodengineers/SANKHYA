@@ -281,9 +281,21 @@ Solution BranchAndBound::run() {
   // Formulation symmetry (#413): only in a search that owns its working model - a parallel
   // worker shares the driver's scaling, whose row count the appended rows would not match -
   // and not for a quadratic objective, whose Hessian the detection does not read.
+  // A certificate (#518) cannot derive the ordering rows, so with a proof asked for the
+  // search runs without them, as it runs without tree cut rounds, rather than refusing the
+  // proof on every symmetric model now that the option is on by default.
   if (options_.get_bool("mip_symmetry") && !quadratic_ && shared_ == nullptr &&
       seed_ == nullptr) {
-    append_symmetry_rows();
+    if (certificate_mode()) {
+      logger_.info(
+          "Certificate (#518): formulation symmetry is off in this mode (mip_symmetry)");
+    } else if (pool_complete_) {
+      // pool_complete (#225) promises every assignment within the pool gap, and the ordering
+      // rows exist to cut all but one of each orbit away.
+      logger_.info("pool_complete: formulation symmetry is off (mip_symmetry)");
+    } else {
+      append_symmetry_rows();
+    }
   }
   debug_start();  // the debug-solution check (#500); nothing unless the option is set
 

@@ -128,7 +128,6 @@ Nothing has demoted these. Each is off by default until its A/B on `main` says w
 |---|---|---|---|
 | Dual steepest-edge pricing (#411, #434) | `pricing=dual-steepest-edge` | exact row norms of B⁻¹ maintained through the Forrest–Goldfarb update, one extra FTRAN per pivot | Netlib medium and the scale models, iterations and seconds under each rule |
 | Objective branching (#418, #438) | `mip_objective_branching` | on an integral objective, branch on a split of the objective row instead of a column | the four plateau instances on MIPLIB |
-| Formulation symmetry (#413, #441) | `mip_symmetry` | colour refinement and individualisation; one ordering row per verified generator | `enlight8`, `enlight_hard`, `markshare1` |
 | Dual fixing (#412, #429) | `presolve_dual_fixing` | a column whose entries only push rows away from a finite bound one way, and whose cost never rewards it, fixed at the other bound | Netlib and MIPLIB re-runs on `main` |
 | Parallel rows (#412, #436) | `presolve_parallel_rows` | a row that is a scalar multiple of an earlier one folds its bounds into that row | same |
 | Dominated columns (#412, #440) | `presolve_dominated_columns` | activity moves from a dominated column onto a dominating one; one of the two is fixed | same |
