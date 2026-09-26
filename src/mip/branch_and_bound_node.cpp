@@ -235,6 +235,8 @@ Index BranchAndBound::take_next_open_node(bool diving) {
                   [this](Index a, Index b) { return open_after(a, b); });
     const Index node_index = open_.back();
     open_.pop_back();
+    open_by_bound_.erase(
+        {open_key(nodes_[static_cast<std::size_t>(node_index)].bound), node_index});
     ++selected_by_policy_;
     ++heap_selections_;
     deepest_node_ = std::max(deepest_node_, nodes_[static_cast<std::size_t>(node_index)].depth);
@@ -256,14 +258,21 @@ Index BranchAndBound::take_next_open_node(bool diving) {
     }
   };
 
+  // The smallest bound, ties to the smallest index, read from the bound index instead of a
+  // scan of every open node's bound: the same node (the index files each under that key),
+  // found in O(1) and located in `open_` by a scan of indices alone.
+  const auto choose_smallest_bound = [&] {
+    const Index best_node = open_by_bound_.begin()->second;
+    pick = static_cast<std::size_t>(std::find(open_.begin(), open_.end(), best_node) -
+                                    open_.begin());
+  };
+
   switch (node_selection_) {
     case NodeSelection::kDepthFirst: break;  // pick is already the newest
     case NodeSelection::kHybrid:
-      if (!diving) choose_smallest([](const TreeNode& node) { return node.bound; });
+      if (!diving) choose_smallest_bound();
       break;
-    case NodeSelection::kBestBound:
-      choose_smallest([](const TreeNode& node) { return node.bound; });
-      break;
+    case NodeSelection::kBestBound: choose_smallest_bound(); break;
     case NodeSelection::kBestEstimate:
       choose_smallest([](const TreeNode& node) { return node.estimate; });
       break;
@@ -277,7 +286,7 @@ Index BranchAndBound::take_next_open_node(bool diving) {
   }
 
   const Index node_index = open_[pick];
-  open_.erase(open_.begin() + static_cast<std::ptrdiff_t>(pick));
+  erase_open_at(pick);
   deepest_node_ = std::max(deepest_node_, nodes_[static_cast<std::size_t>(node_index)].depth);
   return node_index;
 }
