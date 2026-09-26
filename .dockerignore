@@ -1,0 +1,13 @@
+build/
+build-*/
+.git/
+.cache/
+.claude/
+.pytest_cache/
+__pycache__/
+data/miplib/
+data/miplib-tier2/
+data/qplib/
+data/netlib-infeasible/
+bench/results/
+notebooks/

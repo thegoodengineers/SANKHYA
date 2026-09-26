@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SANKHYA Board</title>
+<style>
+  :root{
+    --bg:#f6f4ec; --bg2:#fbfaf5; --ink:#17201d; --ink2:#4a5350; --muted:#7b837f;
+    --line:#e3dfd2; --accent:#0f5c4c; --accent2:#e9f1ee; --ok:#1f7a4d; --bad:#b3261e;
+    --warn:#a05a00; --code:#12201c; --codeink:#d7e3dd; --chip:#fff;
+    --serif:"Georgia","Times New Roman",serif; --sans:system-ui,-apple-system,"Segoe UI",Inter,sans-serif;
+    --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45}
+  a{color:var(--accent)}
+  .wrap{max-width:1360px;margin:0 auto;padding:0 20px}
+  /* nav */
+  .nav{position:sticky;top:0;z-index:5;background:rgba(246,244,236,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .nav .wrap{display:flex;align-items:center;gap:18px;height:56px}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:600;letter-spacing:.02em}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:#e0623b}
+  .brand span.light{color:var(--muted);font-weight:400}
+  .tabs{display:flex;gap:4px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px}
+  .tabs a{padding:5px 14px;border-radius:999px;text-decoration:none;color:var(--ink2);font-size:14px}
+  .tabs a.on{background:var(--accent2);color:var(--accent);font-weight:600}
+  .nav .right{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .live{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block}
+  /* hero */
+  .hero{padding:72px 0 40px;text-align:center}
+  .kicker{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:18px}
+  h1{font-family:var(--serif);font-weight:400;font-size:clamp(34px,5vw,58px);line-height:1.08;margin:0 auto 18px;max-width:14ch}
+  h1 em{font-style:italic}
+  .sub{max-width:62ch;margin:0 auto 26px;color:var(--ink2);font-size:17px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;border:1px solid var(--ink);background:#fff;color:var(--ink);text-decoration:none;font-weight:600;cursor:pointer;font-size:14px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn.small{padding:6px 12px;font-size:13px;font-weight:500}
+  /* board */
+  .board{display:grid;grid-template-columns:300px minmax(0,1fr) 380px;gap:16px;padding:20px 0 40px}
+  @media (max-width:1100px){.board{grid-template-columns:1fr}}
+  .panel{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .panel h3{margin:0 0 10px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .models{display:flex;flex-direction:column;gap:6px}
+  .model{border:1px solid var(--line);background:#fff;border-radius:8px;padding:9px 11px;cursor:pointer;text-align:left;font:inherit;color:inherit}
+  .model.on{border-color:var(--accent);background:var(--accent2)}
+  .model b{display:block;font-size:14px}
+  .model span{font-size:12px;color:var(--ink2)}
+  .upload{margin-top:10px;font-size:13px;color:var(--ink2)}
+  .upload input{display:none}
+  .card{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+  .facts{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px}
+  .facts div b{display:block;font-family:var(--mono);font-size:15px;font-weight:600}
+  .facts div{color:var(--muted)}
+  label.f{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px}
+  select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit}
+  .check{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;color:var(--ink2)}
+  .solve{margin-top:14px;width:100%;justify-content:center}
+  /* middle */
+  .strip{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px}
+  .strip div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .strip div small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+  .strip div b{font-family:var(--mono);font-size:16px;font-weight:600;display:block;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .status-optimal{color:var(--ok)} .status-infeasible,.status-error{color:var(--bad)} .status-running{color:var(--warn)}
+  .chart{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:12px}
+  .chart .ttl{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:2px 6px 6px}
+  .chart svg{width:100%;height:190px;display:block}
+  .log{background:var(--code);color:var(--codeink);border-radius:8px;padding:12px;font-family:var(--mono);font-size:12px;line-height:1.5;height:340px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+  .log .dim{opacity:.55} .log .hi{color:#9fe1c4} .log .bad{color:#ff9a8f} .log .cmd{color:#f2d58f}
+  /* right */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  td.n,th.n{text-align:right;font-family:var(--mono);white-space:nowrap}
+  .badge{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-weight:600;font-size:14px;margin-bottom:10px}
+  .badge.ok{background:#e4f3ea;color:var(--ok)} .badge.bad{background:#fbe7e5;color:var(--bad)} .badge.none{background:#eee;color:var(--muted)}
+  .checks{font-size:12.5px;display:flex;flex-direction:column;gap:3px;max-height:220px;overflow:auto}
+  .checks div{display:grid;grid-template-columns:44px 1fr;gap:8px}
+  .checks .p{color:var(--ok);font-family:var(--mono)} .checks .x{color:var(--bad);font-family:var(--mono)}
+  .checks small{color:var(--muted);display:block}
+  .sec{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+  .tbl{max-height:230px;overflow:auto}
+  .msg{font-size:13px;color:var(--ink2);background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px}
+  .msg.bad{border-color:#f0c9c5;background:#fff7f6}
+  /* how */
+  .how{padding:30px 0 60px;border-top:1px solid var(--line)}
+  .how h2{font-family:var(--serif);font-weight:400;font-size:34px;margin:0 0 6px}
+  .how p.lead{color:var(--ink2);margin:0 0 22px}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media (max-width:900px){.cards{grid-template-columns:1fr}}
+  .cards div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px}
+  .cards b{display:block;margin-bottom:6px}
+  .cards p{margin:0;color:var(--ink2);font-size:14px}
+  .cards code{font-family:var(--mono);font-size:12px;color:var(--accent)}
+  footer{padding:20px 0 40px;color:var(--muted);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="nav"><div class="wrap">
+  <div class="brand"><span class="dot"></span>SANKHYA <span class="light">Board</span></div>
+  <div class="tabs"><a href="#top" class="on">Home</a><a href="#board">Board</a><a href="#how">How it works</a></div>
+  <div class="right"><span class="live"></span> <span id="where">local</span> <span id="ver">…</span></div>
+</div></div>
+
+<section class="hero wrap" id="top">
+  <div class="kicker">SANKHYA · SIH26119 · Mangalore Refinery and Petrochemicals</div>
+  <h1>The refinery's plan, solved <em>in front of you.</em></h1>
+  <p class="sub">A from-scratch LP, MILP and QP solver. Pick a model, pick an algorithm, and watch every iteration as it happens. When it stops, an independent checker recomputes the answer from the model file, and HiGHS solves the same file beside it.</p>
+  <a class="btn primary" href="#board">Open the board</a>
+  <a class="btn" href="https://github.com/thegoodengineers/SANKHYA" target="_blank" rel="noopener">Source on GitHub</a>
+</section>
+
+<section class="board wrap" id="board">
+  <!-- LEFT: the model -->
+  <div class="panel">
+    <h3>Model</h3>
+    <div class="models" id="models"></div>
+    <div class="upload">or <label><a href="#" onclick="return false">upload an .mps or .lp</a><input type="file" id="file" accept=".mps,.lp"></label> <span id="upname"></span></div>
+    <div class="card" id="card" hidden>
+      <div style="font-weight:600;margin-bottom:8px" id="ctitle"></div>
+      <div class="facts">
+        <div>rows<b id="c_rows">–</b></div><div>columns<b id="c_cols">–</b></div>
+        <div>nonzeros<b id="c_nnz">–</b></div><div>integer<b id="c_int">–</b></div>
+        <div style="grid-column:1/3">class<b id="c_class">–</b></div>
+      </div>
+    </div>
+    <label class="f">Algorithm</label>
+    <select id="alg"></select>
+    <label class="check"><input type="checkbox" id="highs" checked> Also run HiGHS as the reference</label>
+    <button class="btn primary solve" id="go">Solve</button>
+    <button class="btn solve" id="stop" hidden>Stop</button>
+  </div>
+
+  <!-- MIDDLE: the solve -->
+  <div class="panel">
+    <h3>Solve</h3>
+    <div class="strip">
+      <div><small>status</small><b id="s_status">idle</b></div>
+      <div><small>elapsed</small><b id="s_time">–</b></div>
+      <div><small>objective</small><b id="s_obj">–</b></div>
+      <div><small>iterations</small><b id="s_iter">–</b></div>
+      <div><small>nodes</small><b id="s_nodes">–</b></div>
+      <div><small>gap</small><b id="s_gap">–</b></div>
+    </div>
+    <div class="chart"><div class="ttl"><span id="ch1t">Objective by iteration</span><span id="ch1r"></span></div><svg id="ch1"></svg></div>
+    <div class="chart"><div class="ttl"><span id="ch2t">Primal and dual infeasibility (log scale)</span><span id="ch2r"></span></div><svg id="ch2"></svg></div>
+    <div class="log" id="log"><span class="dim">Pick a model and press Solve. The solver's own log appears here, line by line, as it is written.</span></div>
+  </div>
+
+  <!-- RIGHT: the proof -->
+  <div class="panel">
+    <h3>Result</h3>
+    <table><thead><tr><th>solver</th><th>status</th><th class="n">objective</th><th class="n">time</th><th class="n">iters</th></tr></thead>
+    <tbody id="cmp"><tr><td colspan="5" style="color:var(--muted)">nothing solved yet</td></tr></tbody></table>
+    <div id="agree" class="msg" hidden></div>
+
+    <div class="sec">
+      <h3>Independent verification</h3>
+      <div class="badge none" id="vbadge">not run</div>
+      <div class="checks" id="checks"></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px">tools/verify_solution.py: pure Python, parses the MPS itself, links none of the solver, recomputes every number.</div>
+    </div>
+
+    <div class="sec" id="proofsec" hidden>
+      <h3>Certificate</h3>
+      <div class="msg" id="proof"></div>
+    </div>
+
+    <div class="sec">
+      <h3>Variables</h3>
+      <div class="tbl"><table><thead><tr><th>name</th><th class="n">value</th><th class="n">reduced cost</th><th>basis</th></tr></thead><tbody id="cols"></tbody></table></div>
+    </div>
+    <div class="sec">
+      <h3>Constraints and shadow prices</h3>
+      <div class="tbl"><table><thead><tr><th>row</th><th class="n">activity</th><th class="n">dual</th><th>basis</th></tr></thead><tbody id="rows"></tbody></table></div>
+      <div style="margin-top:10px"><button class="btn small" id="dl" disabled>Download result as JSON</button></div>
+    </div>
+  </div>
+</section>
+
+<section class="how wrap" id="how">
+  <h2>Where every number on this page comes from.</h2>
+  <p class="lead">The page holds no solver logic. It runs the command-line solver and shows what it wrote.</p>
+  <div class="cards">
+    <div><b>The log is the solver's log</b><p>Each line is streamed from <code>sankhya solve --option log_level=verbose</code> as it is printed. The iteration table you see is the one the engine writes; the chart is drawn from those same lines.</p></div>
+    <div><b>The answer is checked by something that is not us</b><p><code>tools/verify_solution.py</code> reads the model file with its own MPS parser, recomputes activities, the objective, reduced costs and the dual objective from the solution, and passes or fails each check. It links none of the C++.</p></div>
+    <div><b>The comparison is against the real thing</b><p>HiGHS solves the same file through <code>highspy</code>, the same call <code>bench/runners/cross_check_highs.py</code> makes. Where it finishes first, that is shown too. The problem statement asks us to compare, not to win.</p></div>
+  </div>
+</section>
+<footer>SANKHYA · Apache-2.0 · <span id="ver2"></span></footer>
+
+<script>
+const $ = id => document.getElementById(id);
+// Where the solver runs. Same origin by default; a static host passes ?api=https://backend
+// once and it is remembered in this browser.
+let API = (() => { const q = new URLSearchParams(location.search).get('api');
+  try { if(q!=null){ localStorage.setItem('sankhya_api', q.replace(/\/$/,'')); } return localStorage.getItem('sankhya_api') || ''; } catch(e){ return q||''; } })();
+const fmt = (x, d=6) => (x==null||Number.isNaN(x)) ? '–' : (Math.abs(x)>=1e15||(Math.abs(x)<1e-3&&x!==0)) ? x.toExponential(3) : Number(x.toPrecision(d)).toLocaleString('en-US',{maximumFractionDigits:12,useGrouping:false});
+const state = { model:null, meta:null, es:null, iters:[], prog:[], result:null, highs:null, verify:null };
+
+async function boot(){
+  let m;
+  try { m = await (await fetch(API+'/api/meta')).json(); }
+  catch(e){
+    // A remembered backend that no longer answers must not strand a shared link.
+    if(API){ API=''; try{ localStorage.removeItem('sankhya_api'); }catch(_){} return boot(); }
+    $('ver').textContent = 'no backend';
+    $('models').innerHTML = `<div class="msg bad">No solver backend at <code>${API||location.origin}</code>. Run <code>python apps/web/server.py</code> and open this page with <code>?api=http://127.0.0.1:8010</code>, or point it at a deployed backend.</div>`;
+    return;
+  }
+  state.meta = m; $('where').textContent = API ? new URL(API).host : (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'local' : location.host);
+  $('ver').textContent = m.version.split(' (')[0] + (m.version.match(/\(([^,]+)/)||['',''])[1].replace(/^/, ' · ');
+  $('ver2').textContent = m.version;
+  $('models').innerHTML = m.models.map(x => `<button class="model" data-id="${x.id}"><b>${x.title}</b><span>${x.blurb}</span></button>`).join('');
+  $('alg').innerHTML = m.algorithms.map(a => `<option value="${a.id}">${a.title}</option>`).join('');
+  if(!m.highs_available){ $('highs').checked=false; $('highs').disabled=true; $('highs').parentElement.title='highspy is not installed'; }
+  document.querySelectorAll('.model').forEach(b => b.onclick = () => pick(b.dataset.id, b));
+  const want = new URLSearchParams(location.search).get('model');
+  const btn = want && document.querySelector(`.model[data-id="${want}"]`);
+  if(want && !btn && /^upload-/.test(want)){
+    const info = await (await fetch(API+'/api/info/'+want)).json();
+    const b = document.createElement('button'); b.className='model'; b.dataset.id=want;
+    b.innerHTML = `<b>${info.title}</b><span>uploaded</span>`; b.onclick=()=>pick(want,b);
+    $('models').appendChild(b); pick(want,b); return;
+  }
+  pick(btn ? want : m.models[0].id, btn || document.querySelector('.model'));
+}
+
+async function pick(id, btn){
+  document.querySelectorAll('.model').forEach(b => b.classList.toggle('on', b===btn));
+  state.model = id;
+  const info = await (await fetch(API+'/api/info/'+id)).json();
+  $('card').hidden = false;
+  $('ctitle').textContent = info.title + (info.source ? '  ·  ' + info.source : '');
+  $('c_rows').textContent = info.rows ?? '–'; $('c_cols').textContent = info.columns ?? '–';
+  $('c_nnz').textContent = info.nonzeros ?? '–'; $('c_int').textContent = info.integer_columns ?? '–';
+  $('c_class').textContent = info.problem_class ?? (info.ok ? 'LP' : 'unreadable');
+  const isLP = (info.problem_class||'LP')==='LP';
+  // The algorithm picker only means something for a pure LP; MILP, QP and pooling go to their own engines.
+  $('alg').disabled = !isLP; if(!isLP) $('alg').value='auto';
+}
+
+$('file').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fetch(API+'/api/upload', {method:'POST', body:fd});
+  if(!r.ok){ alert(await r.text()); return; }
+  const j = await r.json();
+  $('upname').textContent = j.title;
+  const b = document.createElement('button'); b.className='model'; b.dataset.id=j.id;
+  b.innerHTML = `<b>${j.title}</b><span>uploaded</span>`; b.onclick=()=>pick(j.id,b);
+  $('models').appendChild(b); pick(j.id,b);
+  history.replaceState(null,'','?model='+j.id);
+};
+
+function reset(){
+  state.iters=[]; state.prog=[]; state.result=null; state.highs=null; state.verify=null;
+  $('log').textContent=''; $('cmp').innerHTML=''; $('cols').innerHTML=''; $('rows').innerHTML='';
+  $('checks').innerHTML=''; $('vbadge').className='badge none'; $('vbadge').textContent='running…';
+  $('agree').hidden=true; $('proofsec').hidden=true; $('dl').disabled=true;
+  ['s_time','s_obj','s_iter','s_nodes','s_gap'].forEach(k=>$(k).textContent='–');
+  setStatus('running'); drawChart($('ch1'),[]); drawChart($('ch2'),[],{log:true});
+}
+function setStatus(s){ const e=$('s_status'); e.textContent=s; e.className='status-'+s.replace(/[^a-z]/g,''); }
+function logLine(txt, cls){ const l=$('log'); const s=document.createElement('span'); if(cls) s.className=cls; s.textContent=txt+'\n'; l.appendChild(s); l.scrollTop=l.scrollHeight; }
+
+$('go').onclick = () => {
+  if(!state.model) return;
+  reset(); $('go').disabled=true; $('stop').hidden=false;
+  const alg = $('alg').value;
+  const url = `${API}/api/solve/${state.model}?algorithm=${alg}`;
+  const es = new EventSource(url); state.es = es;
+  const t0 = performance.now();
+  const tick = setInterval(()=>{ if(state.result) return; $('s_time').textContent=((performance.now()-t0)/1000).toFixed(1)+'s'; },100);
+  es.addEventListener('start', e => { const d=JSON.parse(e.data); logLine('$ '+d.command,'cmd'); });
+  es.addEventListener('log', e => {
+    const d=JSON.parse(e.data); const L=d.line;
+    const cls = /^Result:|^Status:|VERIFIED/.test(L) ? 'hi' : /infeasible|error|FAIL/i.test(L) && !/Primal Inf/.test(L) ? 'bad' : /^refactorized|time by phase|pivot row split|^\s*$/.test(L) ? 'dim' : '';
+    logLine(L, cls);
+  });
+  es.addEventListener('iter', e => {
+    const d=JSON.parse(e.data); state.iters.push(d);
+    $('s_iter').textContent=d.iteration; $('s_obj').textContent=fmt(d.objective,8);
+    drawChart($('ch1'), [{name:'objective', pts: state.iters.map(p=>[p.iteration,p.objective])}]);
+    drawChart($('ch2'), [{name:'primal inf', pts: state.iters.filter(p=>p.primal_inf>0).map(p=>[p.iteration,p.primal_inf])},
+                          {name:'dual inf', pts: state.iters.filter(p=>p.dual_inf>0).map(p=>[p.iteration,p.dual_inf])}], {log:true});
+  });
+  es.addEventListener('progress', e => {
+    const d=JSON.parse(e.data); state.prog.push(d);
+    if(d.nodes!=null) $('s_nodes').textContent=d.nodes;
+    if(d.gap_pct!=null) $('s_gap').textContent=d.gap_pct.toFixed(3)+'%';
+    if(d.best_integer!=null) $('s_obj').textContent=fmt(d.best_integer,8);
+    if(state.prog.some(p=>p.nodes!=null)){
+      $('ch1t').textContent='Branch and bound: incumbent and best bound by time';
+      drawChart($('ch1'), [{name:'best bound', pts: state.prog.map(p=>[p.elapsed_s,p.best_bound])},
+                            {name:'incumbent', pts: state.prog.filter(p=>p.best_integer!=null).map(p=>[p.elapsed_s,p.best_integer])}]);
+    }
+  });
+  es.addEventListener('result', e => {
+    const d=JSON.parse(e.data); state.result=d; clearInterval(tick);
+    const st = d.stats||{}; const r = st.result||{}; const hdr = (d.solution||{}).header||{};
+    const status = r.status || hdr.status || (d.exit_code===0?'done':'error');
+    setStatus(status);
+    $('s_time').textContent = (st.effort?.solve_seconds ?? d.wall_seconds).toFixed(4)+'s';
+    const hasPoint = /optimal|feasible|limit|interrupted/.test(status) && !/infeasible/.test(status);
+    const obj = hasPoint ? (r.objective ?? (hdr.objective? +hdr.objective : null)) : null;
+    $('s_obj').textContent = fmt(obj,10);
+    if(st.effort){ $('s_iter').textContent=st.effort.iterations; if(st.effort.nodes) $('s_nodes').textContent=st.effort.nodes; }
+    addCmpRow('SANKHYA · '+(hdr.algorithm||r.algorithm||''), status, r.objective ?? (hdr.objective? +hdr.objective : null), st.effort?.solve_seconds ?? d.wall_seconds, st.effort?.iterations);
+    if(d.solution){ fillTables(d.solution); $('dl').disabled=false; }
+    const sol = d.solution||{};
+    if(status!=='optimal' && ((hdr.certificate && hdr.certificate!=='none') || (st.result&&st.result.message))){
+      $('proofsec').hidden=false;
+      const kind = {row:'row', col_hi:'upper bound on', col_lo:'lower bound on'};
+      let html = '';
+      if(sol.iis && sol.iis.length){
+        html += `<div style="margin-bottom:8px"><b>Smallest set of constraints that cannot hold together</b> (${sol.iis.length}, irreducible: ${hdr.iis_irreducible||'?'}):<br>` + sol.iis.map(e=>`<code>${kind[e.kind]||e.kind} ${e.name}</code>`).join(', ') + '</div>';
+      }
+      if(sol.farkas && sol.farkas.length){
+        html += `<div style="margin-bottom:8px"><b>Farkas certificate</b> (row multipliers; the checker recomputes the aggregate):<br>` + sol.farkas.filter(f=>f.multiplier!==0).map(f=>`<code>${f.row}: ${fmt(f.multiplier,6)}</code>`).join(', ') + '</div>';
+      }
+      const msg = (st.result&&st.result.message) || '';
+      const proofLine = (msg.match(/proof: [^;]+/)||[msg])[0];
+      html += `<div style="color:var(--ink2)">${proofLine}</div>`;
+      $('proof').innerHTML = html;
+    }
+    if($('highs').checked) runHighs(obj, status);
+  });
+  es.addEventListener('verify_log', e => logLine('  '+JSON.parse(e.data).line, 'dim'));
+  es.addEventListener('verify', e => {
+    const d=JSON.parse(e.data); state.verify=d;
+    const b=$('vbadge');
+    if(d.verified===true){ b.className='badge ok'; b.textContent='VERIFIED · '+d.checks.filter(c=>c.status==='PASS').length+' checks passed'; }
+    else if(d.verified===false){ b.className='badge bad'; b.textContent='VERIFICATION FAILED · exit '+d.exit_code; }
+    else { b.className='badge none'; b.textContent=d.note||'not run'; }
+    $('checks').innerHTML = d.checks.map(c=>`<div><span class="${c.status==='PASS'?'p':'x'}">${c.status}</span><span>${c.check}<small>${c.detail}</small></span></div>`).join('');
+  });
+  es.addEventListener('end', () => finish());
+  es.onerror = () => { if(!state.result){ setStatus('error'); logLine('connection to the server was lost','bad'); } finish(); };
+  function finish(){ es.close(); state.es=null; $('go').disabled=false; $('stop').hidden=true; clearInterval(tick); }
+};
+$('stop').onclick = () => { if(state.es){ state.es.close(); state.es=null; setStatus('stopped'); $('go').disabled=false; $('stop').hidden=true; } };
+
+function addCmpRow(name, status, obj, secs, iters){
+  $('cmp').insertAdjacentHTML('beforeend', `<tr><td>${name}</td><td class="status-${(status||'').replace(/[^a-z]/g,'')}">${status}</td><td class="n">${fmt(obj,10)}</td><td class="n">${secs!=null?secs.toFixed(4)+'s':'–'}</td><td class="n">${iters??'–'}</td></tr>`);
+}
+async function runHighs(ourObj, ourStatus){
+  $('cmp').insertAdjacentHTML('beforeend', `<tr id="hrow"><td>HiGHS</td><td colspan="4" style="color:var(--muted)">running…</td></tr>`);
+  const h = await (await fetch(API+'/api/highs/'+state.model)).json(); state.highs=h;
+  $('hrow').remove();
+  if(!h.available){ $('cmp').insertAdjacentHTML('beforeend', `<tr><td>HiGHS</td><td colspan="4" style="color:var(--muted)">${h.reason}</td></tr>`); return; }
+  addCmpRow('HiGHS', h.status, /infeas|unbounded|error/.test(h.status) ? null : h.objective, h.seconds, h.iterations);
+  const a=$('agree'); a.hidden=false;
+  const bothInf = /infeas/.test(ourStatus) && /infeas/.test(h.status);
+  if(bothInf){ a.className='msg'; a.textContent='Both solvers report the model infeasible. SANKHYA additionally attaches a certificate that the checker verified.'; return; }
+  if(ourObj==null||h.objective==null){ a.className='msg'; a.textContent='No objective to compare.'; return; }
+  const rel = Math.abs(ourObj-h.objective)/Math.max(1,Math.abs(h.objective));
+  a.className = rel<1e-6 ? 'msg' : 'msg bad';
+  a.textContent = rel<1e-6 ? `Objectives agree to ${rel.toExponential(1)} relative.` : `Objectives DIFFER by ${rel.toExponential(2)} relative. Read the verification block before trusting either.`;
+}
+function fillTables(sol){
+  const N=400;
+  $('cols').innerHTML = sol.columns.slice(0,N).map(c=>`<tr><td>${c.name}</td><td class="n">${fmt(c.value,8)}</td><td class="n">${fmt(c.reduced_cost,4)}</td><td>${c.basis}</td></tr>`).join('') + (sol.columns.length>N?`<tr><td colspan="4" style="color:var(--muted)">… ${sol.columns.length-N} more in the download</td></tr>`:'');
+  $('rows').innerHTML = sol.rows.slice(0,N).map(r=>`<tr><td>${r.name}</td><td class="n">${fmt(r.activity,8)}</td><td class="n">${fmt(r.dual,6)}</td><td>${r.basis}</td></tr>`).join('') + (sol.rows.length>N?`<tr><td colspan="4" style="color:var(--muted)">… ${sol.rows.length-N} more in the download</td></tr>`:'');
+}
+$('dl').onclick = () => {
+  const blob = new Blob([JSON.stringify({model:state.model, result:state.result, highs:state.highs, verify:state.verify, iterations:state.iters, progress:state.prog}, null, 1)], {type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`sankhya-${state.model}.json`; a.click();
+};
+
+// A small SVG line chart. No library, so the board works in a room with no network.
+function drawChart(svg, series, opt={}){
+  const W=svg.clientWidth||600, H=190, P={l:64,r:10,t:10,b:22};
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.innerHTML='';
+  const colors=['#0f5c4c','#e0623b','#5b6ee1'];
+  const pts = series.flatMap(s=>s.pts).filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1])&&(!opt.log||p[1]>0));
+  if(pts.length<1){ svg.innerHTML=`<text x="${W/2}" y="${H/2}" fill="#aaa" font-size="12" text-anchor="middle">waiting for iterations</text>`; return; }
+  const ty = v => opt.log? Math.log10(v) : v;
+  let x0=Math.min(...pts.map(p=>p[0])), x1=Math.max(...pts.map(p=>p[0]));
+  let y0=Math.min(...pts.map(p=>ty(p[1]))), y1=Math.max(...pts.map(p=>ty(p[1])));
+  if(x1===x0) x1=x0+1; if(y1===y0){ y0-=1; y1+=1; }
+  const pad=(y1-y0)*0.08; y0-=pad; y1+=pad;
+  const X = x => P.l + (x-x0)/(x1-x0)*(W-P.l-P.r), Y = y => H-P.b - (ty(y)-y0)/(y1-y0)*(H-P.t-P.b);
+  let g='';
+  for(let i=0;i<=4;i++){ const yv=y0+(y1-y0)*i/4, yy=H-P.b-(H-P.t-P.b)*i/4;
+    const lab = opt.log? '1e'+Math.round(yv) : fmt(yv,4);
+    g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${yy}" y2="${yy}" stroke="#eee"/><text x="${P.l-6}" y="${yy+4}" font-size="10" fill="#888" text-anchor="end">${lab}</text>`; }
+  for(let i=0;i<=4;i++){ const xv=x0+(x1-x0)*i/4; g+=`<text x="${X(xv)}" y="${H-6}" font-size="10" fill="#888" text-anchor="middle">${fmt(xv,3)}</text>`; }
+  series.forEach((s,i)=>{ const ps=s.pts.filter(p=>Number.isFinite(p[1])&&(!opt.log||p[1]>0)); if(!ps.length) return;
+    g+=`<polyline fill="none" stroke="${colors[i]}" stroke-width="1.8" points="${ps.map(p=>X(p[0])+','+Y(p[1])).join(' ')}"/>`;
+    ps.slice(-1).forEach(p=>g+=`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3" fill="${colors[i]}"/>`);
+    g+=`<text x="${W-P.r-4}" y="${P.t+12+i*13}" font-size="11" fill="${colors[i]}" text-anchor="end">${s.name}</text>`; });
+  svg.innerHTML=g;
+}
+window.addEventListener('resize', ()=>{ if(state.iters.length) { drawChart($('ch1'),[{name:'objective',pts:state.iters.map(p=>[p.iteration,p.objective])}]); } });
+boot();
+</script>
+</body>
+</html>

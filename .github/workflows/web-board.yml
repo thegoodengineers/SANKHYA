@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The web board (apps/web). Two jobs:
+#
+#   build   a fully static Linux solver binary, the file the Vercel function carries at
+#           apps/web/api/bin/sankhya, uploaded as an artifact on every run; plus the
+#           board's own tests.
+#   deploy  the board to Vercel, on pushes to main only, and only when the repository has
+#           the VERCEL_TOKEN secret. Without it the job is skipped, not failed: a fork or a
+#           clone must be able to run CI green without a Vercel account.
+#
+# The binary is static (-static, OpenMP off, zlib's .a) so that one file runs on Vercel's
+# Amazon Linux regardless of which libstdc++ it ships. See apps/web/README.md.
+
+name: web-board
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/web/**", "src/**", "include/**", "apps/sankhya-cli/**", "CMakeLists.txt",
+            "tools/verify_solution*.py", "demo/*.mps", ".github/workflows/web-board.yml"]
+  pull_request:
+    paths: ["apps/web/**", ".github/workflows/web-board.yml"]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build zlib1g-dev
+      - name: Build the static solver
+        run: |
+          cmake -G Ninja -B build-linux -DCMAKE_BUILD_TYPE=Release -DSANKHYA_BUILD_TESTS=OFF \
+                -DSANKHYA_WITH_OPENMP=OFF -DCMAKE_EXE_LINKER_FLAGS=-static \
+                -DZLIB_LIBRARY_RELEASE=/usr/lib/x86_64-linux-gnu/libz.a
+          cmake --build build-linux -j --target sankhya-cli
+          file build-linux/sankhya | grep -q "statically linked"
+          ./build-linux/sankhya version
+          mkdir -p apps/web/api/bin && cp build-linux/sankhya apps/web/api/bin/sankhya
+      - name: Board tests
+        run: |
+          pip install fastapi python-multipart
+          python apps/web/vendor.py
+          python apps/web/test_server.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sankhya-linux-static
+          path: apps/web/api/bin/sankhya
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Is a Vercel token configured?
+        id: token
+        run: echo "present=${{ secrets.VERCEL_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        if: steps.token.outputs.present == 'true'
+        with:
+          name: sankhya-linux-static
+          path: apps/web/api/bin
+      - name: Deploy to Vercel
+        if: steps.token.outputs.present == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          chmod +x apps/web/api/bin/sankhya
+          python apps/web/vendor.py
+          npm i -g vercel
+          cd apps/web && vercel deploy --prod --yes --token "$VERCEL_TOKEN"

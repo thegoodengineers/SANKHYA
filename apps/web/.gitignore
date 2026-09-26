@@ -1,0 +1,5 @@
+.vercel
+.env*
+# The static Linux solver for the Vercel function is built by CI (.github/workflows/web-board.yml)
+# or by the commands in README.md, never committed: 6 MB per revision would bloat every clone.
+api/bin/

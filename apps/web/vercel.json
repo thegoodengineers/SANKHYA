@@ -1,0 +1,12 @@
+{
+  "framework": null,
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "rewrites": [ { "source": "/api/(.*)", "destination": "/api/index" } ],
+  "functions": {
+    "api/index.py": { "maxDuration": 300, "includeFiles": "{vendor,api/bin}/**" }
+  },
+  "headers": [
+    { "source": "/(.*)", "headers": [ { "key": "Cache-Control", "value": "no-store" } ] }
+  ]
+}

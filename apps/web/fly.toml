@@ -1,0 +1,19 @@
+# Fly.io config for the board's backend. From the repository root:
+#     fly launch --config apps/web/fly.toml --dockerfile apps/web/Dockerfile --now
+# then take the app's URL and pass it to the page as ?api=https://<app>.fly.dev
+app = "sankhya-board"
+primary_region = "bom"
+
+[build]
+  dockerfile = "apps/web/Dockerfile"
+
+[http_service]
+  internal_port = 8010
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
