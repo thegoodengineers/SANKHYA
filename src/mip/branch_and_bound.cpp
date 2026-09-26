@@ -637,6 +637,18 @@ Solution BranchAndBound::run() {
     // of its primal point. The believed bound still drives the pseudocosts and branching.
     // With miqp_node_ipm (#494) an MIQP node is pruned on the linearised bound likewise.
     double prune_bound = prune_bound_of(relaxation, node_bound);
+    // A NODE NEVER KNOWS LESS THAN ITS PARENT. Its region is inside the parent's, so the
+    // bound it inherited (the parent's, or a batched bound #520 raised it to) is a lower
+    // bound on it too, and the larger of two lower bounds is one. The node LP alone can
+    // come back below it: a root cut row freed by age (mip_cut_age_limit) no longer
+    // constrains the node LPs, and b-ball's open bound then fell from the root's -1.7333
+    // after cuts to -1.7778 at 60 s - a bound weaker than the root's, reported and pruned
+    // on. Not under a certificate (#518): its leaves are proved by their own LP duals.
+    const double inherited = node.bound;
+    const auto keep_inherited = [&] {
+      if (!certificate_mode() && inherited > prune_bound) prune_bound = inherited;
+    };
+    keep_inherited();
     if (can_prune(prune_bound)) {
       leave();
       ++nodes_pruned_;
@@ -712,6 +724,7 @@ Solution BranchAndBound::run() {
       ++nodes_pruned_;
       continue;
     }
+    keep_inherited();  // a strong-branch fix (#502) may have re-solved the node LP
     if (!strong_fixes_.empty()) children_warm = basis_of(relaxation);
     if (branch_column == kBranchIntegral && !strong_fixes_.empty()) {
       offer_incumbent(relaxation.col_value);
