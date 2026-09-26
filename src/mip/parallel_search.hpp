@@ -147,6 +147,17 @@ class SharedSearch {
   [[nodiscard]] const NodeScaling* scaling() const {
     return has_scaling_ ? &scaling_ : nullptr;
   }
+  /// The symmetry ordering rows (#413), derived once by the driver before any worker starts
+  /// and read-only after: every worker appends exactly these, so every subtree is a subtree
+  /// of the one restricted problem.
+  void set_symmetry(std::vector<std::pair<Index, Index>> pairs, Count generators) {
+    symmetry_pairs_ = std::move(pairs);
+    symmetry_generators_ = generators;
+  }
+  [[nodiscard]] const std::vector<std::pair<Index, Index>>& symmetry_pairs() const {
+    return symmetry_pairs_;
+  }
+  [[nodiscard]] Count symmetry_generators() const { return symmetry_generators_; }
   /// Add what a worker observed on top of the snapshot it started from.
   void merge_pseudocosts(const Pseudocosts& start, const Pseudocosts& end);
 
@@ -184,6 +195,8 @@ class SharedSearch {
 
   NodeScaling scaling_;
   bool has_scaling_ = false;
+  std::vector<std::pair<Index, Index>> symmetry_pairs_;
+  Count symmetry_generators_ = 0;
 };
 
 /// How many tree workers `mip_threads` asks for on this model: 1 when it asks for one, and

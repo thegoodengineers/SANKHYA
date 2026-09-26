@@ -15,6 +15,7 @@
 
 #include "branch_and_bound_internal.hpp"
 #include "parallel_search.hpp"
+#include "symmetry.hpp"
 #include "util/threads.hpp"
 
 namespace sankhya::mip {
@@ -330,8 +331,11 @@ void BranchAndBound::donate_open_nodes() {
     spec.estimate = node.estimate;
     spec.fraction = node.fraction;
     spec.depth = node.depth;
-    // Cut rows are this worker's own; a basis that counts them is no basis elsewhere.
-    if (working_.num_rows() == original_.num_rows()) spec.warm = std::move(node.warm);
+    // Cut rows are this worker's own; a basis that counts them is no basis elsewhere. The
+    // symmetry rows (#413) are every worker's, so a basis over them alone travels.
+    if (working_.num_rows() == original_.num_rows() + symmetry_rows_) {
+      spec.warm = std::move(node.warm);
+    }
     node.warm = WarmStart{};
     shared_->push(std::move(spec));
     shared_->donations.fetch_add(1, std::memory_order_relaxed);
@@ -497,9 +501,27 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
 
   logger.info("Branch and bound: parallel tree search on {} threads (#222)", threads);
   {
+    // Formulation symmetry (#413), detected once here rather than in every subtree: the
+    // workers append these rows as the sequential search appends its own, and the shared
+    // scaling is built on the model with them, so its row count is every worker's.
+    Model rows = model;
+    // Not under a certificate, whose search runs without the rows (branch_and_bound.cpp):
+    // the workers would not append them and the scaling would count rows they lack.
+    if (options.get_bool("mip_symmetry") && options.get_string("write_certificate").empty()) {
+      const SymmetryGroup group = detect_symmetry(
+          model, static_cast<Count>(options.get_int("mip_symmetry_search_limit")));
+      std::vector<std::pair<Index, Index>> pairs = ordering_rows(group);
+      logger.info(
+          "Symmetry (#413): {} generator(s), {} orbit(s) of more than one column; {} "
+          "ordering row(s) x_i <= x_k for every worker{}",
+          group.generators.size(), group.nontrivial_orbits, pairs.size(),
+          group.budget_exhausted ? " (stopped at mip_symmetry_search_limit)" : "");
+      append_ordering_rows(&rows, pairs);
+      shared.set_symmetry(std::move(pairs), static_cast<Count>(group.generators.size()));
+    }
     Options quiet = options;
     quiet.set_bool("log_to_console", false);
-    shared.set_scaling(build_node_scaling(model, quiet));
+    shared.set_scaling(build_node_scaling(rows, quiet));
   }
   SubtreeSpec root;
   root.is_root = true;
@@ -578,6 +600,7 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   solution.root_bound_after_cuts = root_answer.root_bound_after_cuts;
   solution.cuts_applied = root_answer.cuts_applied;
   solution.cut_filter_report = root_answer.cut_filter_report;
+  solution.symmetry_generators = shared.symmetry_generators();
 
   const LimitReason why = shared.reason();
   const bool stopped = why != LimitReason::kNone;

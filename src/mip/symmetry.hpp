@@ -61,4 +61,9 @@ struct SymmetryGroup {
 /// survives it. Each pair (i, k) once; returned as (i, k).
 [[nodiscard]] std::vector<std::pair<Index, Index>> ordering_rows(const SymmetryGroup& group);
 
+/// Append one row x_i - x_k <= 0 per pair (i, k) after `model`'s last row, in order: the
+/// rows the sequential search adds to its working model, and the parallel driver (#222) to
+/// the model its shared node scaling is built from, so both have the same rows.
+void append_ordering_rows(Model* model, const std::vector<std::pair<Index, Index>>& pairs);
+
 }  // namespace sankhya::mip
