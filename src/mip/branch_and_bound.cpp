@@ -29,6 +29,7 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -353,6 +354,7 @@ Solution BranchAndBound::run() {
   SolveStatus stop_status;
 
   while (!open_.empty()) {
+    assert(open_index_consistent());  // the bound index read below (debug builds)
     // PERIODIC CHECKPOINT (#287), between nodes: no node is entered, so every bound in the
     // working model is the root's and the open list is the whole of the search.
     if (checkpoint_nodes_ > 0 && nodes_explored_ > 0 &&
@@ -389,12 +391,7 @@ Solution BranchAndBound::run() {
     // ALGORITHMIC OPEN BOUND: compute unconditionally when there is an incumbent so that
     // the gap-target stopping condition below always sees a fresh value every iteration.
     // The progress callback lambda reuses this when reporting and does NOT re-scan.
-    if (have_incumbent_) {
-      open_bound = std::numeric_limits<double>::infinity();
-      for (const Index open_index : open_) {
-        open_bound = std::min(open_bound, nodes_[static_cast<std::size_t>(open_index)].bound);
-      }
-    }
+    if (have_incumbent_) open_bound = open_min_bound();
 
     if (stop.should_stop(
             [&]() {
@@ -408,13 +405,7 @@ Solution BranchAndBound::run() {
               // When an incumbent exists, open_bound was computed above this call; reuse it.
               // When no incumbent exists yet, scan now for accurate reporting only.
               double reporting_bound = open_bound;
-              if (!have_incumbent_) {
-                reporting_bound = std::numeric_limits<double>::infinity();
-                for (const Index open_index : open_) {
-                  reporting_bound = std::min(
-                      reporting_bound, nodes_[static_cast<std::size_t>(open_index)].bound);
-                }
-              }
+              if (!have_incumbent_) reporting_bound = open_min_bound();
               reporting_bound = integral_bound(reporting_bound);
               p.best_bound =
                   (original_.sense == ObjSense::kMaximize) ? -reporting_bound : reporting_bound;
@@ -823,11 +814,9 @@ Solution BranchAndBound::run() {
     dive = true;
 
     // ---- The node table -------------------------------------------------------------------
-    best_open_bound = std::numeric_limits<double>::infinity();
-    for (const Index open_index : open_) {
-      best_open_bound = std::min(
-          best_open_bound, integral_bound(nodes_[static_cast<std::size_t>(open_index)].bound));
-    }
+    // Rounding up to the objective step is monotone, so the rounded minimum is the minimum
+    // of the rounded bounds the scan this replaces took.
+    best_open_bound = integral_bound(open_min_bound());
     if (!logged_table) {
       logger_.begin_node_table();
       logged_table = true;

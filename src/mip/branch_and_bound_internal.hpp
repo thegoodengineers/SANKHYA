@@ -39,7 +39,9 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
@@ -354,8 +356,28 @@ class BranchAndBound {
   [[nodiscard]] Index take_next_open_node(bool diving);
   /// Add a node to `open_`, keeping the heap order under mip_heap_open_list (#502).
   void push_open(Index node_index);
-  /// Restore the heap order after `open_` was rebuilt wholesale (a checkpoint restore).
+  /// Restore the heap order after `open_` was rebuilt wholesale (a checkpoint restore), and
+  /// rebuild the bound index from it.
   void rebuild_open_heap();
+  /// Take one node out of `open_` at position `k`, and out of the bound index.
+  void erase_open_at(std::size_t k);
+  /// The smallest bound of an open node, raw (not rounded); +inf with nothing open. O(1).
+  [[nodiscard]] double open_min_bound() const {
+    return open_by_bound_.empty() ? std::numeric_limits<double>::infinity()
+                                  : open_by_bound_.begin()->first;
+  }
+  /// The key a node is filed under in the bound index. A NaN bound cannot be ordered, and a
+  /// node whose bound is unknown proves nothing, so it is filed as -inf: never pruned by the
+  /// gap test, and first in best-bound order.
+  [[nodiscard]] static double open_key(double bound) {
+    return std::isnan(bound) ? -std::numeric_limits<double>::infinity() : bound;
+  }
+  /// Every open node's bound must be changed through this, never in place: the bound index
+  /// is keyed by it.
+  void set_open_bound(Index node_index, double bound);
+  /// The bound index holds exactly the nodes of `open_`, each under its current bound.
+  /// O(n log n): asserted once per node in debug builds only.
+  [[nodiscard]] bool open_index_consistent() const;
   /// mip_heap_open_list (#502): `open_` is kept as a binary heap under best-bound or
   /// best-estimate, in one worker only (parallel donation erases from the middle of it).
   [[nodiscard]] bool open_is_heap() const {
@@ -856,6 +878,14 @@ class BranchAndBound {
 
   std::vector<TreeNode> nodes_;
   std::vector<Index> open_;
+  /// THE OPEN NODES BY BOUND: (open_key(bound), index) for exactly the nodes in `open_`, so
+  /// the smallest bound, ties to the smallest index, is the first entry - the same order the
+  /// best-bound scan used. Before it every node scanned the whole open list twice, for the
+  /// gap test and for the node table, and on a tree of 10^5 open nodes that was most of the
+  /// search's time (b-ball: 43.8 of 60 s outside the node LPs, branching and heuristics).
+  /// Kept in step with `open_` by push_open(), erase_open_at(), rebuild_open_heap() and
+  /// set_open_bound(); every other change to `open_` must go through one of them.
+  std::set<std::pair<double, Index>> open_by_bound_;
 
   /// Bounds saved by the current enter(), restored by leave().
   std::vector<DomainChange> saved_;
