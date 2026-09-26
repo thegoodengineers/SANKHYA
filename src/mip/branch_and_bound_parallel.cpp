@@ -316,7 +316,7 @@ void BranchAndBound::donate_open_nodes() {
       }
     }
     const Index index = open_[pick];
-    open_.erase(open_.begin() + static_cast<std::ptrdiff_t>(pick));
+    erase_open_at(pick);
     TreeNode& node = nodes_[static_cast<std::size_t>(index)];
 
     SubtreeSpec spec;

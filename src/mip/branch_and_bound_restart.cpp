@@ -135,6 +135,7 @@ void BranchAndBound::restart_search() {
   // incumbent and the heuristics' statistics are all untouched here.
   nodes_.clear();
   open_.clear();
+  open_by_bound_.clear();
   saved_.clear();
   // Built in place rather than copied in: GCC 13 at -O2 reports a null dereference inside
   // the copy of a node whose warm-start vectors are empty, a false positive -Werror turns

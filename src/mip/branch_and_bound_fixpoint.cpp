@@ -32,9 +32,17 @@ namespace sankhya::mip {
 // on a tree of 10^5 open nodes is most of the node's cost. A binary heap on the same key and
 // the same tie-break yields the same node in O(log n): the order of the search, and with it
 // every result, is unchanged. That equivalence is what the tests pin.
+//
+// The bound index, open_by_bound_, is kept whatever the policy: every open node filed under
+// (bound, index), a red-black tree (std::set), so the smallest bound is read in O(1) and a
+// node is filed or removed in O(log n). The gap test and the node table read it every node,
+// best-bound and the hybrid's backtrack take their node from it, and the search they make
+// is the one the linear scans made: the same key, the same tie-break.
 
 void BranchAndBound::push_open(Index node_index) {
   open_.push_back(node_index);
+  open_by_bound_.emplace(open_key(nodes_[static_cast<std::size_t>(node_index)].bound),
+                         node_index);
   if (open_is_heap()) {
     std::push_heap(open_.begin(), open_.end(),
                    [this](Index a, Index b) { return open_after(a, b); });
@@ -42,10 +50,37 @@ void BranchAndBound::push_open(Index node_index) {
 }
 
 void BranchAndBound::rebuild_open_heap() {
+  open_by_bound_.clear();
+  for (const Index open : open_) {
+    open_by_bound_.emplace(open_key(nodes_[static_cast<std::size_t>(open)].bound), open);
+  }
   if (open_is_heap()) {
     std::make_heap(open_.begin(), open_.end(),
                    [this](Index a, Index b) { return open_after(a, b); });
   }
+}
+
+void BranchAndBound::erase_open_at(std::size_t k) {
+  const Index node_index = open_[k];
+  open_by_bound_.erase(
+      {open_key(nodes_[static_cast<std::size_t>(node_index)].bound), node_index});
+  open_.erase(open_.begin() + static_cast<std::ptrdiff_t>(k));
+}
+
+bool BranchAndBound::open_index_consistent() const {
+  if (open_by_bound_.size() != open_.size()) return false;
+  return std::all_of(open_.begin(), open_.end(), [this](Index open) {
+    return open_by_bound_.count(
+               {open_key(nodes_[static_cast<std::size_t>(open)].bound), open}) == 1;
+  });
+}
+
+void BranchAndBound::set_open_bound(Index node_index, double bound) {
+  TreeNode& node = nodes_[static_cast<std::size_t>(node_index)];
+  if (open_by_bound_.erase({open_key(node.bound), node_index}) > 0) {
+    open_by_bound_.emplace(open_key(bound), node_index);
+  }
+  node.bound = bound;
 }
 
 // ---- Incremental propagation to a fixpoint ---------------------------------------------
