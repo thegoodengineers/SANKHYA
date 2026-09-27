@@ -1870,6 +1870,45 @@ def refinery_scale_section(path: Path | None) -> str:
     return chr(10).join(out)
 
 
+def seeds_paragraph(rows: list[dict]) -> str:
+    """The multi-seed run at the SAME commit as the table (#504), when there is one.
+
+    Seed 0 is the published file and the other seeds are row and column permutations of it
+    (bench/runners/miplib_seeds.py, after Lodi and Tramontani 2013), so a verdict that moves
+    between seeds is performance variability, not a code effect. Read from the summary CSV
+    the runner writes beside a `--seeds N` run, `summary-miplib-seedsN-<sha>.csv`, and only
+    when its commit is the table's commit, so the paragraph is about the binary above it.
+    Everything here is counted from that CSV; nothing is asserted.
+    """
+    commit = (rows[0].get("git_commit") or "").strip() if rows else ""
+    if not commit:
+        return ""
+    candidates = sorted(p for p in RESULTS_DIR.glob("summary-miplib-seeds*-*.csv")
+                        if latest_result.commit_of(p) == commit)
+    if not candidates:
+        return ""
+    path = candidates[-1]
+    summary = read_csv(path)
+    if not summary:
+        return ""
+    seeds = int(summary[0].get("seeds") or 0)
+    all_matched = [r for r in summary if int(r["seeds_matched"]) == seeds]
+    any_matched = [r for r in summary if int(r["seeds_matched"]) > 0]
+    all_proved = [r for r in summary if int(r["seeds_proved"]) == seeds]
+    any_proved = [r for r in summary if int(r["seeds_proved"]) > 0]
+    unstable = sorted(r["instance"] for r in summary
+                      if 0 < int(r["seeds_matched"]) < seeds or 0 < int(r["seeds_proved"]) < seeds)
+    names = ", ".join(f"`{n}`" for n in unstable) if unstable else "none"
+    return (
+        f"**Over {seeds} seeds** (`bench/results/{path.name}`, the published file and "
+        f"{seeds - 1} permutations of it, same commit and limit): **{len(all_matched)} of "
+        f"{len(summary)}** instances reach the published optimum on every seed and "
+        f"{len(any_matched)} on at least one; **{len(all_proved)} of {len(summary)}** prove it "
+        f"on every seed and {len(any_proved)} on at least one. Instances whose verdict moves "
+        f"with the seed, which is the noise floor a single run carries: {names}."
+    )
+
+
 def milp_section(path: Path | None) -> str:
     """MIPLIB, where TWO questions have to be answered separately.
 
@@ -1903,6 +1942,7 @@ def milp_section(path: Path | None) -> str:
     proved = [r for r in rows if r.get("proved_optimal") == "1"]
     commit = rows[0].get("git_commit", "unknown")
     machine = rows[0].get("machine", "unknown")
+    seeds = seeds_paragraph(rows)
 
     out = [
         f"Source CSV: `bench/results/{path.name}`  ",
@@ -1927,6 +1967,7 @@ def milp_section(path: Path | None) -> str:
         "",
         heuristics_ab_paragraph(rows),
         "",
+        *([seeds, ""] if seeds else []),
         "**The time limit decides some of these, not the solver.** A row that stops at the limit "
         "with a small gap says \"needs more time than we gave it\", not \"cannot\"; which side of "
         "the limit such a row lands on moves with the machine's speed rather than with anything "
