@@ -26,6 +26,9 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gpu_arms  # noqa: E402  (#488: driver and CUDA runtime columns)
 import stamp  # noqa: E402  (#433: stamps from the binary)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,7 +40,7 @@ CSV_COLUMNS = [
     "iterations", "seconds", "seconds_min", "seconds_max", "repeats",
     "wall_seconds", "reached_tolerance",
     "primal_residual", "dual_residual",
-    "git_commit", "machine", "gpu", "timestamp_utc",
+    "git_commit", "machine", "gpu", "driver_version", "cuda_runtime", "timestamp_utc",
 ]
 
 # THE TWO ENGINES ARE COMPARED ON THE SAME WORK. `algorithm=pdhg` alone hands a finished
@@ -192,12 +195,16 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--repeats", type=int, default=5,
                         help="solves per (size, algorithm, tolerance) cell; median is reported")
+    parser.add_argument("--card", default="",
+                        help="short card name (l4, a100, ...): the output becomes "
+                             "gpu-<card>-<commit>.csv, which the doc's section 1g.3 reads")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()
 
     commit = git_commit(args.binary)
     machine = f"{platform.system()}-{platform.machine()}"
     gpu = gpu_description(args.binary)
+    platform_cells = gpu_arms.platform_cells(gpu)
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     rows: list[dict] = []
 
@@ -264,7 +271,7 @@ def main() -> int:
                         "primal_residual": result.get("primal_residual", ""),
                         "dual_residual": result.get("dual_residual", ""),
                         "git_commit": commit, "machine": machine, "gpu": gpu,
-                        "timestamp_utc": timestamp,
+                        **platform_cells, "timestamp_utc": timestamp,
                     })
 
                     speedup_str = f"{speedup:.2f}x" if alg != "pdhg-cpu" else "baseline"
@@ -274,7 +281,8 @@ def main() -> int:
                           f"{str(result['iterations']):>8}  {speedup_str:>8}")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = args.out or (RESULTS_DIR / f"gpu-{commit}.csv")
+    card = f"{args.card}-" if args.card else ""
+    out = args.out or (RESULTS_DIR / f"gpu-{card}{commit}.csv")
     with out.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
         writer.writeheader()

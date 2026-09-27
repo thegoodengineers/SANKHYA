@@ -32,9 +32,17 @@ bool device_available(std::string* description) {
     return false;
   }
   if (description) {
-    char buf[512];  // prop.name is char[256]; suffix adds ~40 chars
-    std::snprintf(buf, sizeof(buf), "%s (compute %d.%d, %.0f MiB VRAM)", prop.name, prop.major,
-                  prop.minor, static_cast<double>(prop.totalGlobalMem) / (1024.0 * 1024.0));
+    // The CUDA runtime the binary links and the driver API version the host offers, so a
+    // benchmark CSV can name them (#488); cudaRuntimeGetVersion packs 12.4 as 12040.
+    int runtime = 0, driver = 0;
+    (void)cudaRuntimeGetVersion(&runtime);
+    (void)cudaDriverGetVersion(&driver);
+    char buf[512];  // prop.name is char[256]; suffix adds ~80 chars
+    std::snprintf(buf, sizeof(buf),
+                  "%s (compute %d.%d, %.0f MiB VRAM, CUDA runtime %d.%d, driver API %d.%d)",
+                  prop.name, prop.major, prop.minor,
+                  static_cast<double>(prop.totalGlobalMem) / (1024.0 * 1024.0), runtime / 1000,
+                  (runtime % 1000) / 10, driver / 1000, (driver % 1000) / 10);
     *description = buf;
   }
   return true;

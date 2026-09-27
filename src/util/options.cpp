@@ -1074,8 +1074,13 @@ const std::vector<OptionSpec>& Options::registry() {
                  "of the constraint matrix, balanced by nonzeros; the primal iterate is "
                  "replicated; A^T*y is summed across the devices each iteration, device to "
                  "device where peer access allows (see gpu_peer_access), in a fixed order so "
-                 "that a run is bitwise reproducible. Absent devices cause a fallback to the "
-                 "single-GPU path.",
+                 "that a run is bitwise reproducible, deterministic=true included. An absent "
+                 "device id falls back to the single-GPU path; a listed card below the "
+                 "compiled compute capability, or one that cannot hold its block (the "
+                 "partition is by work, not by memory), falls back to CPU PDHG. Nothing "
+                 "chooses several cards automatically: the measurement (docs/BENCHMARKS.md "
+                 "1g.6) shows a per-step gain only at millions of rows and none on the whole "
+                 "solve, so the set is used only when named here.",
                  {},
                  {},
                  {}});
@@ -1292,6 +1297,22 @@ const std::vector<OptionSpec>& Options::registry() {
                  "alone; off, the iteration is the plain Condat-Vu one. References: Lu & Yang "
                  "arXiv:2407.16144; "
                  "PDQP arXiv:2311.07710; Condat JOTA 158 (2013).",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"qp_gpu",
+                 OptionType::Bool,
+                 false,
+                 "Run the first-order QP engine's arithmetic on the CUDA device (#493, "
+                 "qp_algorithm=condat-vu): Q x, A^T y and A xbar by cuSPARSE on explicitly "
+                 "stored matrices, the primal and dual steps, the Halpern blend and the "
+                 "fixed-order reductions as kernels, the iterate kept on the card and the "
+                 "evaluated point read back every 50 iterations for the residual test, which "
+                 "stays on the host. The iteration logic, the step sizes and the restarts are "
+                 "the host engine's; the answer is the host operator's to rounding "
+                 "(tests/unit/test_qp_device.cpp). Needs a build with SANKHYA_ENABLE_CUDA and "
+                 "a device; otherwise it warns and runs on the host. A device failure "
+                 "mid-solve hands the remaining budget to the host. Default OFF.",
                  0.0,
                  0.0,
                  {}});
