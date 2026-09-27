@@ -1319,6 +1319,140 @@ python bench/runners/qplib.py --tier small   # the instances of at most 100,000 
 
 ---
 
+## 2e. Nonlinear programs - Hock-Schittkowski, and convex MINLPLib
+
+The nonlinear engine behind the `solve()` seam (NLP stages 1-3): a model read from AMPL's
+`.nl` format, exact first and second derivatives by automatic differentiation, a primal-dual
+interior point with a filter line search, and NLP-based branch and bound for integer columns.
+Both sets ship in `data/nlp/` with their published objectives in each set's `REFERENCE.csv`,
+and every answer is checked by `tools/verify_solution.py`, which reads the `.nl` file with
+its own reader and evaluates the constraints with its own derivatives. The statuses are the
+finding: `optimal` is claimed only where the model is proved convex, `locally_optimal` is any
+other KKT point, and `locally_infeasible` is a local minimizer of the violation.
+
+**Hock-Schittkowski** - the 70 problems of Hock and Schittkowski, *Test Examples for Nonlinear Programming Codes* (1981), from Vanderbei's AMPL models converted by `bench/runners/hs_mod_to_nl.py`, matched at a relative 1e-6. The interior point with a filter line search after Wachter and Biegler (2006); where the model is not proved convex, `locally_optimal` is the status the engine can honestly give, and the breakdown says how often that is.
+
+Source CSV: `bench/results/nlp-hs-ad57c03.csv`  
+Commit `ad57c03` · machine `Linux-x86_64` · 60.0 s per problem
+
+**64 of 70** reached the published objective, and **70 of 70** answers were accepted by the independent checker (`tools/verify_solution.py`, its own `.nl` reader and its own derivatives). Statuses: `locally_optimal` 51, `optimal` 19.
+
+| problem | status | our objective | published | rel. gap | iters | time (s) | match | verified |
+|---|---|---:|---:|---:|---:|---:|:--:|:--:|
+| `hs001` | locally_optimal | 1.604114528e-17 | -0 | 1.60e-17 | 26 | 0.00 | yes | yes |
+| `hs002` | locally_optimal | 4.941229328 | 0.0504261879 | 4.89e+00 | 11 | 0.00 | **NO** | yes |
+| `hs003` | optimal | 1e-08 | -0 | 1.00e-08 | 4 | 0.00 | yes | yes |
+| `hs004` | locally_optimal | 2.666666687 | 2.666666667 | 7.50e-09 | 6 | 0.00 | yes | yes |
+| `hs005` | locally_optimal | -1.913222955 | -1.91322207 | 4.62e-07 | 9 | 0.00 | yes | yes |
+| `hs006` | locally_optimal | 3.405159426e-16 | -0 | 3.41e-16 | 9 | 0.00 | yes | yes |
+| `hs007` | locally_optimal | -1.732050808 | -1.732050808 | 6.48e-13 | 27 | 0.00 | yes | yes |
+| `hs008` | locally_optimal | -1 | -1 | 0.00e+00 | 6 | 0.00 | yes | yes |
+| `hs010` | locally_optimal | -0.99999999 | -1 | 1.00e-08 | 12 | 0.00 | yes | yes |
+| `hs011` | optimal | -8.498464213 | -8.498464223 | 1.16e-09 | 8 | 0.00 | yes | yes |
+| `hs012` | locally_optimal | -29.99999999 | -30 | 3.33e-10 | 8 | 0.00 | yes | yes |
+| `hs013` | locally_optimal | 0.9976580967 | 1 | 2.34e-03 | 1123 | 0.01 | **NO** | yes |
+| `hs014` | optimal | 1.393464991 | 1.393464981 | 7.18e-09 | 7 | 0.00 | yes | yes |
+| `hs015` | locally_optimal | 306.5 | 306.5 | 6.53e-11 | 15 | 0.00 | yes | yes |
+| `hs016` | locally_optimal | 23.14466096 | 0.25 | 2.29e+01 | 10 | 0.00 | **NO** | yes |
+| `hs017` | locally_optimal | 1.000000426 | 1 | 4.26e-07 | 20 | 0.00 | yes | yes |
+| `hs018` | locally_optimal | 5.00000001 | 5 | 2.00e-09 | 12 | 0.00 | yes | yes |
+| `hs019` | locally_optimal | -6961.813876 | -6961.81381 | 9.42e-09 | 16 | 0.00 | yes | yes |
+| `hs020` | locally_optimal | 40.19872983 | 38.19872981 | 5.24e-02 | 12 | 0.00 | **NO** | yes |
+| `hs021` | optimal | -99.95999999 | -99.96 | 9.90e-11 | 9 | 0.00 | yes | yes |
+| `hs022` | optimal | 1.00000002 | 1 | 2.00e-08 | 6 | 0.00 | yes | yes |
+| `hs023` | locally_optimal | 2.00000002 | 2 | 9.98e-09 | 10 | 0.00 | yes | yes |
+| `hs024` | locally_optimal | -0.99999998 | -1 | 2.00e-08 | 14 | 0.00 | yes | yes |
+| `hs026` | locally_optimal | 8.482336173e-14 | -0 | 8.48e-14 | 21 | 0.00 | yes | yes |
+| `hs027` | locally_optimal | 0.04 | 0.04 | 0.00e+00 | 17 | 0.00 | yes | yes |
+| `hs028` | optimal | 0 | -0 | 0.00e+00 | 2 | 0.00 | yes | yes |
+| `hs029` | locally_optimal | -22.62741699 | -22.627417 | 4.41e-10 | 8 | 0.00 | yes | yes |
+| `hs030` | optimal | 1 | 1 | 4.00e-12 | 16 | 0.00 | yes | yes |
+| `hs031` | locally_optimal | 6.00000001 | 6 | 1.67e-09 | 7 | 0.00 | yes | yes |
+| `hs032` | optimal | 1.000000361 | 1 | 3.61e-07 | 12 | 0.00 | yes | yes |
+| `hs033` | locally_optimal | -4.585786408 | -4.585786438 | 6.54e-09 | 48 | 0.00 | yes | yes |
+| `hs034` | optimal | -0.8340324152 | -0.8340324452 | 3.01e-08 | 9 | 0.00 | yes | yes |
+| `hs035` | locally_optimal | 0.1111111212 | 0.1111111111 | 1.00e-08 | 7 | 0.00 | yes | yes |
+| `hs036` | locally_optimal | -3300 | -3300 | 9.09e-12 | 13 | 0.00 | yes | yes |
+| `hs037` | locally_optimal | -3456 | -3456 | 2.89e-12 | 11 | 0.00 | yes | yes |
+| `hs038` | locally_optimal | 2.317148421e-21 | -0 | 2.32e-21 | 40 | 0.00 | yes | yes |
+| `hs039` | locally_optimal | -1 | -1 | 0.00e+00 | 9 | 0.00 | yes | yes |
+| `hs040` | locally_optimal | -0.25 | -0.25 | 0.00e+00 | 8 | 0.00 | yes | yes |
+| `hs041` | locally_optimal | 1.925925936 | 1.925925926 | 5.18e-09 | 10 | 0.00 | yes | yes |
+| `hs042` | locally_optimal | 13.85786438 | 13.85786438 | 2.23e-12 | 6 | 0.00 | yes | yes |
+| `hs043` | optimal | -43.99999998 | -44 | 4.55e-10 | 9 | 0.00 | yes | yes |
+| `hs044` | locally_optimal | -12.99999996 | -15 | 1.33e-01 | 18 | 0.00 | **NO** | yes |
+| `hs045` | locally_optimal | 1.00000005 | 1 | 5.00e-08 | 23 | 0.00 | yes | yes |
+| `hs046` | locally_optimal | 4.870714159e-13 | -0 | 4.87e-13 | 16 | 0.00 | yes | yes |
+| `hs047` | locally_optimal | 1.902239821e-12 | -0 | 1.90e-12 | 20 | 0.00 | yes | yes |
+| `hs048` | optimal | 2.888956546e-28 | -0 | 2.89e-28 | 3 | 0.00 | yes | yes |
+| `hs049` | optimal | 5.366698265e-11 | -0 | 5.37e-11 | 18 | 0.00 | yes | yes |
+| `hs050` | optimal | 2.095411779e-31 | -0 | 2.10e-31 | 9 | 0.00 | yes | yes |
+| `hs051` | optimal | 2.465190329e-32 | -0 | 2.47e-32 | 2 | 0.00 | yes | yes |
+| `hs052` | optimal | 5.326647564 | 5.326647564 | 1.62e-14 | 2 | 0.00 | yes | yes |
+| `hs053` | optimal | 4.093023256 | 4.093023256 | 9.66e-13 | 6 | 0.00 | yes | yes |
+| `hs060` | locally_optimal | 0.03256820026 | 0.03256820025 | 5.10e-12 | 7 | 0.00 | yes | yes |
+| `hs061` | locally_optimal | -143.6461422 | -143.6461422 | 1.39e-11 | 16 | 0.00 | yes | yes |
+| `hs062` | locally_optimal | -26272.51449 | -26272.51448 | 2.78e-10 | 8 | 0.00 | yes | yes |
+| `hs063` | locally_optimal | 961.7151721 | 961.7151721 | 3.12e-11 | 14 | 0.00 | yes | yes |
+| `hs064` | optimal | 6299.842428 | 6299.842428 | 1.11e-11 | 18 | 0.00 | yes | yes |
+| `hs065` | optimal | 0.9535288668 | 0.9535288567 | 1.01e-08 | 12 | 0.00 | yes | yes |
+| `hs066` | optimal | 0.5181632941 | 0.5181632741 | 2.00e-08 | 7 | 0.00 | yes | yes |
+| `hs071` | locally_optimal | 17.01401731 | 17.0140173 | 5.35e-10 | 8 | 0.00 | yes | yes |
+| `hs073` | locally_optimal | 29.89437819 | 29.894378 | 6.33e-09 | 8 | 0.00 | yes | yes |
+| `hs076` | locally_optimal | -4.681818162 | -4.681818181 | 4.10e-09 | 7 | 0.00 | yes | yes |
+| `hs077` | locally_optimal | 0.2415051288 | 0.24150513 | 1.21e-09 | 9 | 0.00 | yes | yes |
+| `hs078` | locally_optimal | -2.919700409 | -2.91970041 | 3.56e-10 | 8 | 0.00 | yes | yes |
+| `hs079` | locally_optimal | 0.07877682087 | 0.0787768209 | 2.89e-11 | 5 | 0.00 | yes | yes |
+| `hs093` | locally_optimal | 135.0759628 | 135.075961 | 1.37e-08 | 9 | 0.00 | yes | yes |
+| `hs100` | locally_optimal | 680.6300574 | 680.6300573 | 1.38e-10 | 10 | 0.00 | yes | yes |
+| `hs104` | locally_optimal | 3.95116348 | 3.95116344 | 1.03e-08 | 9 | 0.00 | yes | yes |
+| `hs108` | locally_optimal | -0.6749813833 | -0.8660254038 | 1.91e-01 | 15 | 0.01 | **NO** | yes |
+| `hs110` | locally_optimal | -45.77846971 | -45.77846971 | 5.68e-11 | 6 | 0.00 | yes | yes |
+| `hs113` | locally_optimal | 24.30620913 | 24.3062091 | 1.16e-09 | 19 | 0.01 | yes | yes |
+
+**Not at the published objective**, named rather than dropped: `hs002`, `hs013`, `hs016`, `hs020`, `hs044`, `hs108`.
+
+
+**MINLPLib, convex** - convex mixed-integer instances of MINLPLib with a published primal bound, matched at the MIP gap target 1e-4, solved by NLP-based branch and bound - run only when the relaxation is proved convex, so `optimal` here is a closed bound.
+
+Source CSV: `bench/results/nlp-minlplib-ad57c03.csv`  
+Commit `ad57c03` · machine `Linux-x86_64` · 60.0 s per problem
+
+**14 of 17** reached the published objective, and **16 of 17** answers were accepted by the independent checker (`tools/verify_solution.py`, its own `.nl` reader and its own derivatives). Statuses: `feasible` 2, `numerical_error` 1, `optimal` 14.
+
+| problem | status | our objective | published | rel. gap | iters | time (s) | match | verified |
+|---|---|---:|---:|---:|---:|---:|:--:|:--:|
+| `ball_mk2_10` | optimal | 0 | 0 | 0.00e+00 | 24115 | 0.54 | yes | yes |
+| `batchdes` | optimal | 167427.6571 | 167427.6571 | 8.96e-11 | 175 | 0.01 | yes | yes |
+| `clay0203m` | feasible | 41573.26247 | 41573.26252 | 1.23e-09 | 237083 | 34.69 | **NO** | yes |
+| `cvxnonsep_pcon20` | optimal | -21.51230115 | -21.5123012 | 2.22e-09 | 837 | 0.06 | yes | yes |
+| `ex1223` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 140 | 0.01 | yes | yes |
+| `ex1223a` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 39 | 0.01 | yes | yes |
+| `ex1223b` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 118 | 0.01 | yes | yes |
+| `fac1` | optimal | 160912612.3 | 160912612.4 | 3.11e-10 | 195 | 0.02 | yes | yes |
+| `flay02m` | optimal | 37.94733201 | 37.94733192 | 2.42e-09 | 101 | 0.01 | yes | yes |
+| `gbd` | optimal | 2.20000001 | 2.2 | 4.55e-09 | 34 | 0.00 | yes | yes |
+| `jit1` | numerical_error | - | 173983.33 | - | 3000 | 0.21 | **NO** | no point |
+| `m3` | feasible | 37.80000029 | 37.8 | 7.67e-09 | 13078 | 1.53 | **NO** | yes |
+| `nvs03` | optimal | 16 | 16 | 0.00e+00 | 110 | 0.00 | yes | yes |
+| `st_e14` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 140 | 0.01 | yes | yes |
+| `syn05m` | optimal | 837.7324008 | 837.7324009 | 6.92e-11 | 197 | 0.01 | yes | yes |
+| `synthes2` | optimal | 73.03531256 | 73.03531253 | 3.44e-10 | 189 | 0.01 | yes | yes |
+| `synthes3` | optimal | 68.00974056 | 68.00974052 | 6.50e-10 | 330 | 0.02 | yes | yes |
+
+**Not at the published objective**, named rather than dropped: `clay0203m`, `jit1`, `m3`.
+
+**No point to check** (a limit or an infeasibility verdict): `jit1`.
+
+
+Reproduce:
+
+```
+python bench/runners/nlp_bench.py --data data/nlp/hs                              # 70 Hock-Schittkowski
+python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4  # convex MINLPLib
+```
+---
+
 ## 3. Correctness beyond the objective value
 
 An objective that matches a published number is necessary, not sufficient — it says nothing
