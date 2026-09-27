@@ -214,7 +214,15 @@ verdicts without one (12 from the dual simplex and phase 1, 3 from presolve) and
 certificates). Maros-Meszaros, all 138 convex QPs at 300 s: `optimal` on 45, within 1e-6 of the
 reference on 44, verifier-accepted on 39, and **six labelled `optimal` that the verifier rejects**
 (`bench/results/maros-meszaros-65eecbc.csv`, #590): since #593 the in-process KKT gate writes such
-answers as `feasible`, and the next run measures that. The first-order QP engine alone, at 30 s
+answers as `feasible`, and the next run measures that. QPLIB's convex continuous QPs, small
+tier (12 instances of at most 100,000 coefficients, 11 with a published value), on `main` at
+`ad57c03` at the runner's default 1000 s (`bench/results/qplib-small-ad57c03.csv`,
+`docs/BENCHMARKS.md` section 2d): the default QP engine passes **6 of 11** and the interior
+point (`qp_algorithm=ipm`) **7 of 11**, 9 of 11 by one engine or the other. The first-order
+default stops at its million-iteration ceiling on four; the interior point's iterate stops
+being finite on three (`QPLIB_8559`, `8567`, `8906`); and `QPLIB_8515`, convex by QPLIB's
+tag, is refused as non-convex by both at an LDL^T pivot of 7.8e-09 (column 15999), a value
+within rounding of zero; whether that refusal is right is not yet checked. The first-order QP engine alone, at 30 s
 and `qp_tolerance=1e-6` (#493, `bench/results/maros-meszaros-493-{off,pid,both}-58a8374.csv`):
 the PID primal weight (`qp_primal_weight_pid=true`) passes **19 of 138** against 2 without it;
 adding Halpern restarts passes 16, and both legs lose `hs76`, which the plain engine passes. The
