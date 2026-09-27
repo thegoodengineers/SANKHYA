@@ -965,10 +965,10 @@ Commit `e134aeb` · machine `Windows-AMD64` · 120.0s per solve · refinery stru
 The LP tiers above say nothing about the branch and bound. This is the MILP evidence, and it
 is a harder library: MIPLIB instances are chosen to be difficult for mature solvers.
 
-Source CSV: `bench/results/miplib-5daee10.csv`  
-Commit `5daee10` · machine `Windows-AMD64`
+Source CSV: `bench/results/miplib-ad57c03.csv`  
+Commit `ad57c03` · machine `Linux-x86_64`
 
-**13 of 30** instances reached the published optimum. **10 of 30** also PROVED it - closed the bound to within the requested gap target rather than stopping at a node or time limit.
+**14 of 30** instances reached the published optimum. **11 of 30** also PROVED it - closed the bound to within the requested gap target rather than stopping at a node or time limit.
 
 Every row above was counted under the #188 convention: a search that meets the requested gap target reports `optimal`, because the incumbent is within the tolerance that was asked for. Only a node or time limit leaves a row unproved.
 Those are different claims and are kept apart deliberately. Branch and bound here finds good incumbents far more often than it finishes the proof: reliability branching (#69) and warm-started dual node LPs (#65) do the searching, and the root cutting planes that exist (#159: Gomory mixed-integer and lifted knapsack cover, selected by score since #415) have their default decided by the measurement below, not asserted here. Collapsing the two columns would hide exactly the thing cuts are meant to improve.
@@ -1020,55 +1020,57 @@ Root gap closed is (bound after cuts - bound before) / (final objective - bound 
 
 **Per-heuristic A/B (#414):** not measured on this checkout (no `bench/results/miplib-heur-*.csv`).
 
-**The time limit decides some of these, not the solver.** A row that stops at the limit with a small gap says "needs more time than we gave it", not "cannot"; which side of the limit such a row lands on moves with the machine's speed rather than with anything about the search. The remedy is a longer limit, and the reason this table does not already use one is that the set already adds up to 21 minutes of solve time per run at this one.
+**Over 3 seeds** (`bench/results/summary-miplib-seeds3-ad57c03.csv`, the published file and 2 permutations of it, same commit and limit): **14 of 30** instances reach the published optimum on every seed and 15 on at least one; **9 of 30** prove it on every seed and 11 on at least one. Instances whose verdict moves with the seed, which is the noise floor a single run carries: `b-ball`, `enlight8`, `neos-3611689-kaihu`.
+
+**The time limit decides some of these, not the solver.** A row that stops at the limit with a small gap says "needs more time than we gave it", not "cannot"; which side of the limit such a row lands on moves with the machine's speed rather than with anything about the search. The remedy is a longer limit, and the reason this table does not already use one is that the set already adds up to 20 minutes of solve time per run at this one.
 
 Instances are the smallest MIPLIB 2017 instances tagged easy that carry a **proven** optimum (`=opt=` in MIPLIB's own solution file). A `=best=` value is the best anyone has found, not a proof, and scoring against one would let a wrong answer look like a record.
 
 | instance | rows | cols | int | status | our objective | published | rel. gap | nodes | time (s) | matched | proved | verified |
 |---|---:|---:|---:|---|---:|---:|---:|---:|---:|:--:|:--:|:--:|
-| `b-ball` | 30 | 100 | 88 | feasible | -1.5 | -1.5 | 1.85e-01 | 111312 | 60.1 | yes | **NO** | yes |
-| `ej` | 1 | 3 | 3 | feasible | 51015 | 25508 | 1.00e+00 | 72054 | 60.0 | **NO** | **NO** | yes |
-| `enlight8` | 64 | 128 | 128 | time_limit | inf | 27 | - | 120473 | 60.0 | **NO** | **NO** | **NO** |
-| `enlight_hard` | 100 | 200 | 200 | time_limit | inf | 37 | - | 110779 | 60.0 | **NO** | **NO** | **NO** |
-| `f2gap40400` | 40 | 400 | 400 | optimal | 20772 | 20772 | 9.63e-05 | 336 | 3.4 | yes | yes | yes |
-| `flugpl` | 18 | 18 | 11 | optimal | 1201500 | 1201500 | 0.00e+00 | 701 | 0.1 | yes | yes | yes |
-| `gen-ip016` | 24 | 28 | 28 | feasible | -9438.111136 | -9476.155197 | 6.59e-03 | 113511 | 60.0 | **NO** | **NO** | yes |
-| `gen-ip054` | 27 | 30 | 30 | feasible | 6859.084635 | 6840.965642 | 1.02e-02 | 118506 | 60.0 | **NO** | **NO** | yes |
+| `b-ball` | 30 | 100 | 88 | optimal | -1.5 | -1.5 | 0.00e+00 | 7 | 0.1 | yes | yes | yes |
+| `ej` | 1 | 3 | 3 | feasible | 41013 | 25508 | 1.00e+00 | 246049 | 60.1 | **NO** | **NO** | yes |
+| `enlight8` | 64 | 128 | 128 | time_limit | inf | 27 | - | 310481 | 60.1 | **NO** | **NO** | **NO** |
+| `enlight_hard` | 100 | 200 | 200 | time_limit | inf | 37 | - | 188430 | 60.1 | **NO** | **NO** | **NO** |
+| `f2gap40400` | 40 | 400 | 400 | optimal | 20772 | 20772 | 9.63e-05 | 336 | 2.3 | yes | yes | yes |
+| `flugpl` | 18 | 18 | 11 | optimal | 1201500 | 1201500 | 0.00e+00 | 701 | 0.0 | yes | yes | yes |
+| `gen-ip016` | 24 | 28 | 28 | feasible | -9439.769515 | -9476.155197 | 6.25e-03 | 452771 | 60.2 | **NO** | **NO** | yes |
+| `gen-ip054` | 27 | 30 | 30 | feasible | 6859.084635 | 6840.965642 | 9.29e-03 | 389308 | 60.1 | **NO** | **NO** | yes |
 | `gr4x6` | 34 | 48 | 24 | optimal | 202.35 | 202.35 | 0.00e+00 | 44 | 0.0 | yes | yes | yes |
-| `gt2` | 29 | 188 | 188 | optimal | 21166 | 21166 | 0.00e+00 | 78 | 0.1 | yes | yes | yes |
-| `k16x240b` | 256 | 480 | 240 | feasible | 12506 | 11393 | 4.04e-01 | 85923 | 60.0 | **NO** | **NO** | yes |
-| `markshare1` | 6 | 62 | 50 | feasible | 29 | 1 | 1.00e+00 | 129267 | 60.0 | **NO** | **NO** | yes |
-| `markshare_4_0` | 4 | 34 | 30 | feasible | 7 | 1 | 1.00e+00 | 167528 | 60.0 | **NO** | **NO** | yes |
-| `markshare_5_0` | 5 | 45 | 40 | feasible | 19 | 1 | 1.00e+00 | 138434 | 60.0 | **NO** | **NO** | yes |
+| `gt2` | 29 | 188 | 188 | optimal | 21166 | 21166 | 0.00e+00 | 1327 | 0.3 | yes | yes | yes |
+| `k16x240b` | 256 | 480 | 240 | feasible | 12506 | 11393 | 3.94e-01 | 119921 | 60.1 | **NO** | **NO** | yes |
+| `markshare1` | 6 | 62 | 50 | feasible | 24 | 1 | 1.00e+00 | 742917 | 60.2 | **NO** | **NO** | yes |
+| `markshare_4_0` | 4 | 34 | 30 | feasible | 1 | 1 | 1.00e+00 | 1185510 | 60.1 | yes | **NO** | yes |
+| `markshare_5_0` | 5 | 45 | 40 | feasible | 14 | 1 | 1.00e+00 | 862411 | 60.2 | **NO** | **NO** | yes |
 | `neos-1425699` | 89 | 105 | 85 | optimal | 3179698977 | 3179698977 | 0.00e+00 | 3 | 0.0 | yes | yes | yes |
-| `neos-3072252-nete` | 432 | 576 | 144 | feasible | 12009820 | 11807698 | 1.10e-01 | 41900 | 60.0 | **NO** | **NO** | yes |
-| `neos-3611689-kaihu` | 323 | 421 | 88 | optimal | 119 | 119 | 0.00e+00 | 57576 | 44.0 | yes | yes | yes |
-| `neos-5140963-mincio` | 184 | 196 | 183 | feasible | 14818 | 14393 | 2.16e-01 | 80762 | 60.0 | **NO** | **NO** | yes |
+| `neos-3072252-nete` | 432 | 576 | 144 | feasible | 12046823 | 11807698 | 1.12e-01 | 42685 | 60.0 | **NO** | **NO** | yes |
+| `neos-3611689-kaihu` | 323 | 421 | 88 | optimal | 119 | 119 | 0.00e+00 | 70614 | 51.3 | yes | yes | yes |
+| `neos-5140963-mincio` | 184 | 196 | 183 | feasible | 14535 | 14393 | 1.89e-01 | 135624 | 60.0 | **NO** | **NO** | yes |
 | `neos-5192052-neckar` | 57 | 180 | 24 | optimal | -11670000 | -11670000 | 0.00e+00 | 9 | 0.0 | yes | yes | yes |
-| `neos5` | 63 | 63 | 53 | feasible | 15.5 | 15 | 9.68e-02 | 57540 | 60.0 | **NO** | **NO** | yes |
-| `noswot` | 182 | 128 | 100 | feasible | -40 | -41.00000885 | 7.50e-02 | 88724 | 60.0 | **NO** | **NO** | yes |
-| `opt1217` | 64 | 769 | 768 | feasible | -16 | -16 | 2.50e-01 | 74396 | 60.0 | yes | **NO** | yes |
-| `p0201` | 133 | 201 | 201 | optimal | 7615 | 7615 | 0.00e+00 | 396 | 1.3 | yes | yes | yes |
-| `pk1` | 45 | 86 | 55 | feasible | 14 | 11 | 6.32e-01 | 108237 | 60.0 | **NO** | **NO** | yes |
-| `ran12x21` | 285 | 504 | 252 | feasible | 3681 | 3664 | 5.64e-02 | 56653 | 60.0 | **NO** | **NO** | yes |
-| `ran13x13` | 195 | 338 | 169 | feasible | 3319 | 3252 | 5.47e-02 | 74286 | 60.0 | **NO** | **NO** | yes |
-| `rlp1` | 68 | 461 | 450 | feasible | 15 | 15 | 6.67e-02 | 82611 | 60.0 | yes | **NO** | yes |
-| `supportcase14` | 234 | 304 | 304 | optimal | 288 | 288 | 0.00e+00 | 46 | 0.3 | yes | yes | yes |
-| `supportcase16` | 130 | 319 | 319 | optimal | 288 | 288 | 0.00e+00 | 41 | 0.3 | yes | yes | yes |
-| `timtab1` | 171 | 397 | 171 | feasible | 1106773 | 764772 | 7.33e-01 | 82922 | 60.0 | **NO** | **NO** | yes |
+| `neos5` | 63 | 63 | 53 | feasible | 15.5 | 15 | 9.68e-02 | 65418 | 60.0 | **NO** | **NO** | yes |
+| `noswot` | 182 | 128 | 100 | feasible | -39 | -41.00000885 | 1.03e-01 | 169146 | 60.1 | **NO** | **NO** | yes |
+| `opt1217` | 64 | 769 | 768 | feasible | -16 | -16 | 2.50e-01 | 157511 | 60.1 | yes | **NO** | yes |
+| `p0201` | 133 | 201 | 201 | optimal | 7615 | 7615 | 0.00e+00 | 389 | 1.3 | yes | yes | yes |
+| `pk1` | 45 | 86 | 55 | feasible | 17 | 11 | 5.27e-01 | 272062 | 60.1 | **NO** | **NO** | yes |
+| `ran12x21` | 285 | 504 | 252 | feasible | 3681 | 3664 | 5.24e-02 | 66979 | 60.0 | **NO** | **NO** | yes |
+| `ran13x13` | 195 | 338 | 169 | feasible | 3319 | 3252 | 4.93e-02 | 99981 | 60.0 | **NO** | **NO** | yes |
+| `rlp1` | 68 | 461 | 450 | feasible | 15 | 15 | 6.67e-02 | 197074 | 60.1 | yes | **NO** | yes |
+| `supportcase14` | 234 | 304 | 304 | optimal | 288 | 288 | 0.00e+00 | 47 | 0.3 | yes | yes | yes |
+| `supportcase16` | 130 | 319 | 319 | optimal | 288 | 288 | 0.00e+00 | 82 | 0.5 | yes | yes | yes |
+| `timtab1` | 171 | 397 | 171 | feasible | 1172343 | 764772 | 7.18e-01 | 126693 | 60.1 | **NO** | **NO** | yes |
 
-**Not proved optimal**, named rather than dropped: `b-ball`, `ej`, `enlight8`, `enlight_hard`, `gen-ip016`, `gen-ip054`, `k16x240b`, `markshare1`, `markshare_4_0`, `markshare_5_0`, `neos-3072252-nete`, `neos-5140963-mincio`, `neos5`, `noswot`, `opt1217`, `pk1`, `ran12x21`, `ran13x13`, `rlp1`, `timtab1`.
+**Not proved optimal**, named rather than dropped: `ej`, `enlight8`, `enlight_hard`, `gen-ip016`, `gen-ip054`, `k16x240b`, `markshare1`, `markshare_4_0`, `markshare_5_0`, `neos-3072252-nete`, `neos-5140963-mincio`, `neos5`, `noswot`, `opt1217`, `pk1`, `ran12x21`, `ran13x13`, `rlp1`, `timtab1`.
 
 #### The same set at 600 s
 
-Source CSV: `bench/results/miplib-600s-cca77e0.csv` (600 s per instance), beside `bench/results/miplib-5daee10.csv` (60 s)  
+Source CSV: `bench/results/miplib-600s-cca77e0.csv` (600 s per instance), beside `bench/results/miplib-ad57c03.csv` (60 s)  
 Commit `54e561b`
 
 At 600 s: **15 of 30** reach the published optimum, **9 of 30** prove it.
 
 | instance | 60 s: status · matched · proved | 600 s: status · matched · proved · gap | verdict |
 |---|---|---|---|
-| `b-ball` | feasible · yes · no | feasible · yes · no · 2.1e-01 | needs a bound (#221) |
+| `b-ball` | optimal · yes · yes | feasible · yes · no · 2.1e-01 | needs a bound (#221) |
 | `ej` | feasible · no · no | feasible · no · no · 1.0e+00 | needs an incumbent (#290) |
 | `enlight8` | time_limit · no · no | time_limit · no · no · 1.8e-01 | needs an incumbent (#290) |
 | `enlight_hard` | time_limit · no · no | time_limit · no · no · 0.0e+00 | needs an incumbent (#290) |
@@ -1080,7 +1082,7 @@ At 600 s: **15 of 30** reach the published optimum, **9 of 30** prove it.
 | `gt2` | optimal · yes · yes | optimal · yes · yes · 0.0e+00 | proved |
 | `k16x240b` | feasible · no · no | feasible · no · no · 3.7e-01 | needs an incumbent (#290) |
 | `markshare1` | feasible · no · no | feasible · no · no · 1.0e+00 | needs an incumbent (#290) |
-| `markshare_4_0` | feasible · no · no | feasible · no · no · 1.0e+00 | needs an incumbent (#290) |
+| `markshare_4_0` | feasible · yes · no | feasible · no · no · 1.0e+00 | needs an incumbent (#290) |
 | `markshare_5_0` | feasible · no · no | feasible · no · no · 1.0e+00 | needs an incumbent (#290) |
 | `neos-1425699` | optimal · yes · yes | optimal · yes · yes · 0.0e+00 | proved |
 | `neos-3072252-nete` | feasible · no · no | feasible · no · no · 1.1e-01 | needs an incumbent (#290) |
