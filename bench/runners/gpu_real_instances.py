@@ -31,6 +31,7 @@ import datetime
 import json
 import platform
 import re
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -48,10 +49,12 @@ MITTELMANN_DIR = REPO_ROOT / "data" / "mittelmann"
 CSV_COLUMNS = [
     "instance", "instance_sha256", "rows", "cols", "nnz", "algorithm", "arm", "cpu_threads",
     "parallel_spmv", "tolerance", "status", "objective", "reference_objective",
-    "reference_source", "abs_gap", "rel_gap", "iterations", "seconds", "wall_seconds",
+    "reference_source", "reference_seconds", "abs_gap", "rel_gap", "iterations", "seconds",
+    "seconds_min", "seconds_max", "repeats", "wall_seconds",
     "reached_tolerance", "primal_residual", "dual_residual",
     "kkt_1e4_seconds", "kkt_1e6_seconds", "kkt_1e8_seconds",
-    "git_commit", "machine", "gpu", "timestamp_utc", "solver_options",
+    "git_commit", "machine", "gpu", "driver_version", "cuda_runtime", "timestamp_utc",
+    "solver_options",
 ]
 
 COMMON_OPTIONS = ["log_to_console=false", "algorithm=pdhg", "pdhg_polish=false",
@@ -111,15 +114,20 @@ def run_solve(binary: Path, mps: Path, algorithm: str, tolerance: float,
 
 
 def mps_dimensions(mps: Path) -> tuple[int, int, int]:
-    """Count rows, cols, nonzeros from a free-format MPS file (approx)."""
+    """Count rows, cols, nonzeros from a free-format MPS file (approx). A column is counted
+    when its name changes, not per COLUMNS line: the first version counted every line, so
+    `cols` equalled `nnz` in the gpu-real CSVs stamped 58a8374 (#488)."""
     rows = cols = nnz = 0
     section = ""
+    last_col = None
     open_fn = open
     if str(mps).endswith(".gz"):
         import gzip
         open_fn = gzip.open
     with open_fn(mps, "rt", encoding="utf-8", errors="replace") as fh:
         for line in fh:
+            if line.startswith("*"):
+                continue
             tok = line.split()
             if not tok:
                 continue
@@ -129,7 +137,9 @@ def mps_dimensions(mps: Path) -> tuple[int, int, int]:
             if section == "ROWS" and tok[0] != "N":
                 rows += 1
             elif section == "COLUMNS":
-                cols += 1
+                if tok[0] != last_col:
+                    cols += 1
+                    last_col = tok[0]
                 nnz += len(tok) // 2
     return rows, cols, nnz
 
@@ -143,9 +153,23 @@ def find_mittelmann_mps(name: str) -> Path | None:
     return None
 
 
+def repeated(binary: Path, mps: Path, algorithm: str, tol: float, time_limit: float,
+             options: list[str], repeats: int) -> dict:
+    """`repeats` solves; the one whose solver clock is nearest the median, with the min and
+    max of the repeats on it (#488: the gpu-real CSVs before this were single runs)."""
+    results = [run_solve(binary, mps, algorithm, tol, time_limit, options)
+               for _ in range(max(1, repeats))]
+    seconds = [r["seconds"] for r in results]
+    median = statistics.median(seconds)
+    result = min(results, key=lambda r: abs(r["seconds"] - median))
+    result = dict(result, seconds=median, seconds_min=min(seconds), seconds_max=max(seconds),
+                  repeats=len(results))
+    return result
+
+
 def build_row(name: str, dims: tuple[int, int, int], digest: str, arm: tuple, tol: float,
               result: dict, reference: float | None, reference_source: str,
-              stamp_fields: dict) -> dict:
+              stamp_fields: dict, reference_seconds: float | None = None) -> dict:
     """One CSV row. Pure, so test_gpu_runners.py can pin it with a synthetic result."""
     r, c, nz = dims
     row = {
@@ -157,6 +181,9 @@ def build_row(name: str, dims: tuple[int, int, int], digest: str, arm: tuple, to
         "objective": "" if result["objective"] is None else repr(result["objective"]),
         "iterations": result["iterations"],
         "seconds": round(result["seconds"], 6),
+        "seconds_min": round(result.get("seconds_min", result["seconds"]), 6),
+        "seconds_max": round(result.get("seconds_max", result["seconds"]), 6),
+        "repeats": result.get("repeats", 1),
         "wall_seconds": round(result["wall"], 6),
         "reached_tolerance": int(result["status"] in ("optimal", "feasible")),
         "primal_residual": result.get("primal_residual", ""),
@@ -166,7 +193,7 @@ def build_row(name: str, dims: tuple[int, int, int], digest: str, arm: tuple, to
         "kkt_1e8_seconds": result.get("kkt_1e8_seconds", ""),
     }
     row.update(gpu_arms.fairness_cells(arm, digest, result["objective"], reference,
-                                       reference_source))
+                                       reference_source, reference_seconds))
     row.update(stamp_fields)
     return row
 
@@ -175,20 +202,22 @@ def measure(name: str, mps: Path, args, stamp_fields: dict) -> list[dict]:
     """Every arm at every tolerance on one instance, with one reference for all of them."""
     digest = gpu_arms.sha256_file(mps)
     dims = mps_dimensions(mps)
-    reference, source, note = gpu_arms.reference_objective(
+    reference, source, note, ref_seconds = gpu_arms.reference_objective(
         mps, args.reference_time_limit, use_highs=not args.no_reference)
-    print(f"{name}: sha256 {digest[:16]}..., reference {reference!r} ({source}; {note})")
+    print(f"{name}: sha256 {digest[:16]}..., reference {reference!r} ({source}; {note}; "
+          f"{ref_seconds} s)")
     # warm-up GPU
     run_solve(args.binary, mps, "pdhg-cuda", TOLERANCES[0], args.time_limit, args.solver_option)
     rows: list[dict] = []
+    repeats = getattr(args, "repeats", 1)
     for tol in TOLERANCES:
         cpu_seconds: dict[str, float] = {}
         for arm in gpu_arms.all_arms(args.cpu_threads):
             label, algorithm, arm_options = arm[0], arm[1], arm[2]
-            result = run_solve(args.binary, mps, algorithm, tol, args.time_limit,
-                               arm_options + args.solver_option)
+            result = repeated(args.binary, mps, algorithm, tol, args.time_limit,
+                              arm_options + args.solver_option, repeats)
             row = build_row(name, dims, digest, arm, tol, result, reference, source,
-                            stamp_fields)
+                            stamp_fields, ref_seconds)
             if algorithm == "pdhg-cpu":
                 cpu_seconds[label] = result["seconds"]
                 versus = "baseline"
@@ -223,6 +252,9 @@ def main() -> int:
                              "solver_options column: the A/B of an option (gpu_on_device_loop, "
                              "pdhg_two_matvec, ...). Such a run is written to gpu-ab-<commit>-<tag>.csv, "
                              "which the benchmark doc's gpu-real-* tier never reads.")
+    parser.add_argument("--repeats", type=int, default=1,
+                        help="solves per arm and tolerance; the row is the one nearest the "
+                             "median solver clock, with seconds_min and seconds_max (#488)")
     parser.add_argument("--skip-refinery", action="store_true",
                         help="only the Mittelmann instances (the 779,640-row refinery year is the "
                              "slow part)")
@@ -234,12 +266,14 @@ def main() -> int:
     gpu = gpu_description(args.binary)
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     stamp_fields = {"git_commit": commit, "machine": machine, "gpu": gpu,
+                    **gpu_arms.platform_cells(gpu),
                     "timestamp_utc": timestamp, "solver_options": solver_options}
     result_rows: list[dict] = []
 
     print("GPU vs CPU PDHG on real instances")
     print(f"binary: {args.binary}")
-    print(f"commit: {commit}  machine: {machine}  gpu: {gpu}")
+    print(f"commit: {commit}  machine: {machine}  gpu: {gpu}  driver: "
+          f"{stamp_fields['driver_version']}  repeats: {args.repeats}")
     print(f"CPU arms: {', '.join(a[0] for a in gpu_arms.cpu_arms(args.cpu_threads))}\n")
     print(f"{'instance':>24}  {'arm':>8}  {'tol':>6}  {'status':>15}  {'seconds':>9}  "
           f"{'rel gap':>10}  speedup")

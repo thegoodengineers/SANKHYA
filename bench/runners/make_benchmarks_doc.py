@@ -34,7 +34,9 @@ import latest_result
 import maros_meszaros_doc  # the QP section (#491), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
-from gpu_doc import gpu_datacenter_table, gpu_real_section  # 1g.1 and 1g.3 (#488)
+import gpu_doc  # 1g.1 and 1g.3 (#488)
+import gpu_plot  # the speedup-against-nonzeros figure of 1g.3 (#488)
+from gpu_doc import gpu_datacenter_table, gpu_real_section
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
@@ -2181,10 +2183,12 @@ def gpu_section(path: Path | None) -> str:
         "timed ones. The GPU pays a per-iteration launch and transfer cost that a small model "
         "cannot amortise; the crossover is where the parallel products start to pay for it.",
         "",
-        "> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd`"
-        " reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting"
-        " the whole trajectory. Speedup figures here are the median of repeated solves"
-        + (f" ({repeats} per cell)" if repeats else "") + ". Do not"
+        "> **GPU iteration counts differ from the CPU's (#448).** The device sums its"
+        " reductions in a fixed order since #478, so a GPU run repeats itself, but a"
+        " one-ulp difference from the CPU's summation order can flip a restart decision and"
+        " shift the whole trajectory. Speedup figures here are the median of repeated solves"
+        + (f" ({repeats} per cell)" if repeats else "") + ", and a ratio below 1x is a loss,"
+        " printed in the same type as a win. Do not"
         " compare a GPU iteration count against a CPU count for the same instance: the two"
         " engines take different trajectories and any comparison is meaningless."
         " `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same"
@@ -2210,8 +2214,9 @@ def gpu_section(path: Path | None) -> str:
         if not cpu or not gpu:
             return "—"
         try:
-            s = float(cpu["seconds"]) / float(gpu["seconds"])
-            return f"**{s:.2f}×**" if s > 1 else f"{s:.2f}×"
+            # Wins and losses in the same type (#488): a bold 4.21x beside a plain 0.07x
+            # reads as two different kinds of number.
+            return f"{float(cpu['seconds']) / float(gpu['seconds']):.2f}×"
         except (ZeroDivisionError, ValueError):
             return "—"
 
@@ -2239,17 +2244,8 @@ def gpu_section(path: Path | None) -> str:
 
     lines += [
         "",
-        f"GPU: {gpu}.  ",
+        f"GPU: {gpu}; {gpu_doc.platform_line(rows[0])}.  ",
         "Instances are synthetic KKT LPs with ~5 nonzeros per column (seed 42).",
-        "",
-        "> **GPU iteration counts vary run to run (#448, #451).** The device reductions inside "
-        "the GPU mat-vec are not bitwise reproducible, and a one-ulp difference can flip a "
-        "restart decision and shift the whole trajectory, which is why every GPU cell is the "
-        "median of repeated solves. Do not compare a GPU iteration count against the CPU count "
-        "for the same instance: the two engines take different trajectories to the same "
-        "tolerance. The regression test holds them to agreement at the stopping tolerance, "
-        "not to the same iterate (`tests/unit/test_pdhg_cuda_regression.cpp`); see also "
-        "`docs/ARCHITECTURE.md` section 7.",
         "",
     ]
 
@@ -2297,6 +2293,15 @@ def gpu_cards_section() -> str:
         if crossover is None and real is None and datacenter is None:
             continue
         blocks.append(f"**{card.upper()}**\n")
+        figure = gpu_plot.write_figure(card, crossover, real)
+        if figure is not None:
+            blocks.append(f"![GPU speedup against nonzeros on the {card.upper()}]"
+                          f"({figure.relative_to(OUTPUT.parent).as_posix()})\n")
+            blocks.append("The figure is regenerated from the two CSVs by "
+                          "`bench/runners/gpu_plot.py` each time this document is; each point "
+                          "is one instance and tolerance, the speedup against the faster CPU "
+                          "arm on the solver's clock; the dashed line is 1x, the crossover, "
+                          "and everything below it is a loss.\n")
         if crossover is not None:
             blocks.append("The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, "
                           "medians of repeats with their min-max):\n")
