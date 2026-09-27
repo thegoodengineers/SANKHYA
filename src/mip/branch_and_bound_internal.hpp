@@ -768,12 +768,19 @@ class BranchAndBound {
   }
   /// The filter's policy from the options (#496): both default to the filter's own
   /// behaviour until the A/B on main says otherwise.
-  [[nodiscard]] CutFilterPolicy cut_filter_policy() const {
+  /// `root`: a root round, where cuts refused for density alone are marked for
+  /// admit_dense_root_cuts().
+  [[nodiscard]] CutFilterPolicy cut_filter_policy(bool root = false) const {
     CutFilterPolicy policy;
     policy.support_floor = static_cast<Index>(options_.get_int("cut_support_floor"));
     policy.efficacy = options_.get_bool("cut_efficacy_test");
+    policy.test_dense = root && options_.get_int("cut_dense_max") > 0;
     return policy;
   }
+  /// #496: accept the most efficacious of the cuts in `filtered` refused for density
+  /// alone, within cut_dense_max and the root's nonzero budget; returns how many.
+  std::size_t admit_dense_root_cuts(std::vector<FilteredCut>* filtered,
+                                    const Solution& relaxation);
 
   // ---- The debug-solution check (#500), in branch_and_bound_debug.cpp ------------------
   void debug_start();                ///< load the point; check the rows appended at the root
@@ -949,6 +956,9 @@ class BranchAndBound {
   Count root_cuts_applied_ = 0;
   Count root_cut_rounds_ = 0;      ///< #495: rounds that appended rows at the root
   std::string cut_filter_report_;  ///< the root filter's verdicts per family and reason (#496)
+  Count dense_cuts_admitted_ = 0;  ///< #496: dense cuts admitted at the root
+  Count dense_nonzeros_admitted_ = 0;  ///< their nonzeros, against the budget
+  Count root_model_nonzeros_ = -1;     ///< the model's nonzeros before the first cut row
   /// Cut rows below the root (#221): the option-driven depth cap and per-round row cap,
   /// the column bounds every tree cut is built on (valid everywhere), the pool of rows
   /// appended so far starting at working_ row first_cut_row_, and their ageing state.

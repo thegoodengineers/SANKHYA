@@ -971,6 +971,28 @@ const std::vector<OptionSpec>& Options::registry() {
          1e9,
          {}});
     s.push_back(
+        {"cut_dense_max",
+         OptionType::Int,
+         std::int64_t{10},
+         "Root cuts refused as too dense (#496): at most this many of them are admitted "
+         "after all, most efficacious first, when each passed every other test and a "
+         "coefficient range of 1e4, and while all admitted dense cuts together hold at "
+         "most cut_dense_nonzero_share times the model's own nonzeros. 0 refuses every "
+         "dense cut, the behaviour before. Tree rounds never admit one.",
+         0.0,
+         1e9,
+         {}});
+    s.push_back(
+        {"cut_dense_nonzero_share",
+         OptionType::Double,
+         tol::kCutDenseNonzeroShare,
+         "The nonzero budget of cut_dense_max (#496): the admitted dense cuts together "
+         "hold at most this share of the model's nonzeros at the root, so at 1.0 the node "
+         "LP at most doubles in nonzeros.",
+         0.0,
+         1e3,
+         {}});
+    s.push_back(
         {"cut_efficacy_test",
          OptionType::Bool,
          false,

@@ -131,6 +131,9 @@ bool literals_hold(const nlohmann::json& conflict, const std::vector<double>& x)
 Options searching(bool cutoff, const std::string& out) {
   Options options;
   options.set_bool("log_to_console", false);
+  // The models here are a few columns, so every root cut is "dense" and the admission
+  // (#496) would close them at the root; pinned off, since the tree is what is tested.
+  options.set_int("cut_dense_max", 0);
   options.set_bool("presolve", false);  // conflict indices are then the model's own
   options.set_bool("conflict_analysis", true);
   options.set_bool("conflict_cutoff", cutoff);
