@@ -353,6 +353,71 @@ TEST(Symmetry, RandomMilpsWithADuplicatedColumnAgreeWithTheExactOracle) {
   EXPECT_GT(generators, 0) << "a duplicated column should be found on most instances";
 }
 
+TEST(Symmetry, TheParallelSearchAddsTheRowsAndKeepsTheOptimum) {
+  // #222 with #413: every worker appends the ordering rows the driver derived once, the
+  // rows the sequential search appends. Before this the parallel search added none. The
+  // same generators as the sequential search, and the enumerated optimum, on 2 and 4
+  // threads; and against the exact oracle on the duplicated-column MILPs.
+  std::mt19937 rng(4131);
+  Count generators = 0;
+  for (int trial = 0; trial < 60; ++trial) {
+    const Model m = symmetric_model(rng, trial);
+    const auto [any, best] = enumerate(m);
+    const Solution sequential = solve(m, quiet());
+    for (const int threads : {2, 4}) {
+      Options options = quiet();
+      options.set_int("mip_threads", threads);
+      const Solution solved = solve(m, options);
+      if (!any) {
+        EXPECT_EQ(solved.status, SolveStatus::kInfeasible) << "trial " << trial;
+        continue;
+      }
+      ASSERT_EQ(solved.status, SolveStatus::kOptimal)
+          << "trial " << trial << " threads " << threads << ": " << solved.message;
+      EXPECT_NEAR(solved.objective, best, 1e-6) << "trial " << trial << " threads " << threads;
+      EXPECT_TRUE(feasible(m, solved.col_value)) << "trial " << trial;
+      EXPECT_EQ(solved.symmetry_generators, sequential.symmetry_generators)
+          << "trial " << trial << " threads " << threads;
+      generators += solved.symmetry_generators;
+    }
+  }
+  EXPECT_GT(generators, 0) << "the parallel search found no generator";
+
+  std::mt19937_64 random(41301);
+  oracle::GeneratorConfig config;
+  config.max_rows = 5;
+  config.max_cols = 6;
+  int compared = 0;
+  for (int trial = 0; trial < 120; ++trial) {
+    oracle::GeneratedLp lp = oracle::random_lp(random, config);
+    lp.integral.assign(static_cast<std::size_t>(lp.num_cols), 0);
+    for (Index j = 0; j < lp.num_cols; ++j) {
+      lp.integral[static_cast<std::size_t>(j)] = (j + trial) % 2 == 0 ? 1 : 0;
+    }
+    duplicate_a_column(&lp, random);
+    const oracle::OracleResult exact = oracle::solve_exact_milp(lp, 20000);
+    if (exact.status != oracle::OracleStatus::kOptimal &&
+        exact.status != oracle::OracleStatus::kInfeasible) {
+      continue;
+    }
+    Model model = oracle::to_model(lp);
+    for (Index j = 0; j < lp.num_cols; ++j) {
+      if (lp.integral[static_cast<std::size_t>(j)] != 0) {
+        model.col_type[static_cast<std::size_t>(j)] = VarType::kInteger;
+      }
+    }
+    Options options = quiet();
+    options.set_int("node_limit", 100000);
+    options.set_int("mip_threads", 3);
+    const Solution got = solve(model, options);
+    std::string why;
+    EXPECT_TRUE(agree(exact, got, &why)) << "trial " << trial << ": " << why << "\n"
+                                         << lp.to_text();
+    ++compared;
+  }
+  EXPECT_GT(compared, 60);
+}
+
 TEST(Symmetry, TheOptionIsRegisteredAndOnByDefault) {
   const Options options;
   EXPECT_TRUE(options.get_bool("mip_symmetry"));

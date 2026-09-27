@@ -436,4 +436,27 @@ std::vector<std::pair<Index, Index>> ordering_rows(const SymmetryGroup& group) {
   return rows;
 }
 
+void append_ordering_rows(Model* model, const std::vector<std::pair<Index, Index>>& pairs) {
+  if (pairs.empty()) return;
+  const Index old_rows = model->num_rows();
+  const Index cols = model->num_cols();
+  const auto added = static_cast<Index>(pairs.size());
+  SparseMatrix matrix(old_rows + added, cols);
+  for (Index j = 0; j < cols; ++j) {
+    const ColumnView view = model->matrix.column(j);
+    for (Index k = 0; k < view.size; ++k) matrix.add_entry(view.rows[k], j, view.values[k]);
+  }
+  for (Index k = 0; k < added; ++k) {
+    matrix.add_entry(old_rows + k, pairs[static_cast<std::size_t>(k)].first, 1.0);
+    matrix.add_entry(old_rows + k, pairs[static_cast<std::size_t>(k)].second, -1.0);
+  }
+  matrix.finalize();
+  model->matrix = std::move(matrix);
+  model->resize_rows(old_rows + added);
+  for (Index k = 0; k < added; ++k) {
+    model->row_lower[static_cast<std::size_t>(old_rows + k)] = -kInfinity;
+    model->row_upper[static_cast<std::size_t>(old_rows + k)] = 0.0;
+  }
+}
+
 }  // namespace sankhya::mip

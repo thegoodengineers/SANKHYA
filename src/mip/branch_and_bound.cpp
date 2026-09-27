@@ -213,28 +213,10 @@ void BranchAndBound::append_symmetry_rows() {
       group.budget_exhausted ? " (stopped at mip_symmetry_search_limit)" : "");
   const std::vector<std::pair<Index, Index>> pairs = ordering_rows(group);
   if (pairs.empty()) return;
-  const Index old_rows = working_.num_rows();
-  const Index cols = working_.num_cols();
-  const auto added = static_cast<Index>(pairs.size());
-  SparseMatrix matrix(old_rows + added, cols);
-  for (Index j = 0; j < cols; ++j) {
-    const ColumnView view = working_.matrix.column(j);
-    for (Index k = 0; k < view.size; ++k) matrix.add_entry(view.rows[k], j, view.values[k]);
-  }
-  for (Index k = 0; k < added; ++k) {
-    matrix.add_entry(old_rows + k, pairs[static_cast<std::size_t>(k)].first, 1.0);
-    matrix.add_entry(old_rows + k, pairs[static_cast<std::size_t>(k)].second, -1.0);
-  }
-  matrix.finalize();
-  working_.matrix = std::move(matrix);
-  working_.resize_rows(old_rows + added);
-  for (Index k = 0; k < added; ++k) {
-    working_.row_lower[static_cast<std::size_t>(old_rows + k)] = -kInfinity;
-    working_.row_upper[static_cast<std::size_t>(old_rows + k)] = 0.0;
-  }
-  symmetry_rows_ = added;
+  append_ordering_rows(&working_, pairs);
+  symmetry_rows_ = static_cast<Count>(pairs.size());
   logger_.info("Symmetry (#413): {} ordering row(s) x_i <= x_k appended for the generators",
-               added);
+               pairs.size());
 }
 
 Solution BranchAndBound::run() {
@@ -278,14 +260,14 @@ Solution BranchAndBound::run() {
     solution.message = problem;
     return solution;
   }
-  // Formulation symmetry (#413): only in a search that owns its working model - a parallel
-  // worker shares the driver's scaling, whose row count the appended rows would not match -
-  // and not for a quadratic objective, whose Hessian the detection does not read.
+  // Formulation symmetry (#413), not for a quadratic objective, whose Hessian the detection
+  // does not read. A parallel worker (#222) appends the rows the driver derived once from
+  // the same model, in the same order, so every subtree searches the same restricted
+  // problem the sequential search does and the shared scaling, built on those rows, matches.
   // A certificate (#518) cannot derive the ordering rows, so with a proof asked for the
   // search runs without them, as it runs without tree cut rounds, rather than refusing the
   // proof on every symmetric model now that the option is on by default.
-  if (options_.get_bool("mip_symmetry") && !quadratic_ && shared_ == nullptr &&
-      seed_ == nullptr) {
+  if (options_.get_bool("mip_symmetry") && !quadratic_) {
     if (certificate_mode()) {
       logger_.info(
           "Certificate (#518): formulation symmetry is off in this mode (mip_symmetry)");
@@ -293,8 +275,12 @@ Solution BranchAndBound::run() {
       // pool_complete (#225) promises every assignment within the pool gap, and the ordering
       // rows exist to cut all but one of each orbit away.
       logger_.info("pool_complete: formulation symmetry is off (mip_symmetry)");
-    } else {
+    } else if (shared_ == nullptr) {
       append_symmetry_rows();
+    } else if (!shared_->symmetry_pairs().empty()) {
+      append_ordering_rows(&working_, shared_->symmetry_pairs());
+      symmetry_rows_ = static_cast<Count>(shared_->symmetry_pairs().size());
+      symmetry_generators_ = shared_->symmetry_generators();
     }
   }
   debug_start();  // the debug-solution check (#500); nothing unless the option is set
