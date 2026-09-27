@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kkt_crossings  # the relative-KKT crossing tables (#486)
 import latest_result
 import maros_meszaros_doc  # the QP section (#491), kept in its own file
+import nlp_doc  # the nonlinear section (NLP stages 2-3), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
 import gpu_doc  # 1g.1 and 1g.3 (#488)
@@ -2673,6 +2674,10 @@ def main() -> int:
     qplib_csv = (newest("qplib-*.csv", prefix="qplib")
                  or newest("qplib-small-*.csv", prefix="qplib-small"))
     gpu_pdlp_csv = newest("gpu-pdlp-*.csv")
+    # The nonlinear sets (NLP stages 2-3): nlp_bench.py names its CSV after the data
+    # directory, nlp-<set>-<sha>[-<host>].csv, so each set has its own pattern.
+    nlp_hs_csv = newest("nlp-hs-*.csv")
+    nlp_minlp_csv = newest("nlp-minlplib-*.csv")
     commercial_csv = newest("commercial-agreement-*.csv")
     gpu_domain_prop_csv = newest("gpu-domain-prop-*.csv", prefix="gpu-domain-prop")
     multi_gpu_csv = newest("multi-gpu-*.csv")
@@ -2922,6 +2927,20 @@ Programming Computation 11, 2019), selected from the site's own listing by
 engine and the interior point.
 
 {qplib_doc.section(qplib_csv)}
+---
+
+## 2e. Nonlinear programs - Hock-Schittkowski, and convex MINLPLib
+
+The nonlinear engine behind the `solve()` seam (NLP stages 1-3): a model read from AMPL's
+`.nl` format, exact first and second derivatives by automatic differentiation, a primal-dual
+interior point with a filter line search, and NLP-based branch and bound for integer columns.
+Both sets ship in `data/nlp/` with their published objectives in each set's `REFERENCE.csv`,
+and every answer is checked by `tools/verify_solution.py`, which reads the `.nl` file with
+its own reader and evaluates the constraints with its own derivatives. The statuses are the
+finding: `optimal` is claimed only where the model is proved convex, `locally_optimal` is any
+other KKT point, and `locally_infeasible` is a local minimizer of the violation.
+
+{nlp_doc.section(nlp_hs_csv, nlp_minlp_csv)}
 ---
 
 ## 3. Correctness beyond the objective value
