@@ -784,6 +784,19 @@ Two cards against one, per step (partitioned-2 / partitioned-1, the same arithme
 | `Linf_520c` | steps | 0.85x | 0.60x |
 | `bdry2` | steps | 0.44x | 0.31x |
 
+#### 1g.7 The interior point's normal equations on cuDSS (#489)
+
+`ipm_linear_solver=cudss` factors the normal equations on the device (NVIDIA cuDSS, a
+vendor library and not a solver, judgement call 28 in `docs/PROVENANCE.md`); the Newton
+iteration and the refinement stay on the host. The instances are section 1g.3's: the
+synthetic ladder, the refinery year and the Mittelmann pair.
+
+Not yet run. Needs a build with `-DSANKHYA_ENABLE_CUDSS=ON` and a card:
+
+```
+python bench/runners/ipm_cudss.py --binary build/sankhya --card a100
+```
+
 ---
 
 ### 1f. Scale — how far up this goes

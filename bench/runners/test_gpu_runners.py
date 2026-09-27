@@ -21,6 +21,7 @@ import gpu_arms  # noqa: E402
 import gpu_datacenter  # noqa: E402
 import gpu_doc  # noqa: E402
 import gpu_real_instances  # noqa: E402
+import ipm_cudss  # noqa: E402
 
 FAILURES = 0
 
@@ -297,6 +298,31 @@ def test_doc_datacenter() -> None:
           "old CSV: the note names what its CPU arm was")
 
 
+def test_ipm_cudss_rows_and_doc() -> None:
+    fixed = {"git_commit": "abc1234", "machine": "Linux-x86_64-a100", "gpu": "A100",
+             "driver_version": "550", "cuda_runtime": "12.4", "timestamp_utc": "t"}
+    rows = []
+    for leg, seconds, used in (("cpu", 20.0, 0), ("cudss", 2.5, 1)):
+        result = {"status": "optimal", "objective": BRAZIL3_GPU, "iterations": 40,
+                  "seconds": seconds, "wall": seconds + 1.0, "verified": 1,
+                  "verifier_message": "", "device_used": used}
+        rows.append(ipm_cudss.build_row("brazil3", (14646, 24000, 100000), "ab" * 32, leg,
+                                        1e-8, result, BRAZIL3_REF, "highs", 3.0, fixed,
+                                        ["algorithm=ipm", f"ipm_linear_solver={leg}"]))
+    check(all(set(r) == set(ipm_cudss.COLUMNS) for r in rows), "the rows have the CSV's columns")
+    check(rows[1]["device_used"] == 1 and rows[1]["tolerance"] == "1e-08"
+          and rows[1]["rel_gap"] == "1.530e-07" and rows[1]["machine"].endswith("a100"),
+          "the cudss row says the device ran, at the recorded tolerance, on the named card")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "ipm-cudss-a100-abc1234.csv"
+        write_csv(path, ipm_cudss.COLUMNS, rows)
+        text = gpu_doc.ipm_cudss_section(path)
+    check("| `brazil3` | 20.0 | 2.5 | 8.00x | optimal | optimal |" in text,
+          "the doc divides the CPU factor's time by cuDSS's, in plain type", text)
+    check("| cudss | yes |" in text and "| cpu | no |" in text,
+          "the doc says which rows used the device")
+
+
 def test_committed_old_csvs_render() -> None:
     results = Path(__file__).resolve().parents[2] / "bench" / "results"
     for name, render in (("gpu-real-l4-fdc89c5.csv", gpu_doc.gpu_real_section),
@@ -312,7 +338,8 @@ def test_committed_old_csvs_render() -> None:
 def main() -> int:
     for test in (test_arms, test_gaps, test_fairness_cells, test_residuals, test_reference,
                  test_real_runner_rows, test_datacenter_rows, test_doc_real,
-                 test_doc_datacenter, test_committed_old_csvs_render):
+                 test_doc_datacenter, test_ipm_cudss_rows_and_doc,
+                 test_committed_old_csvs_render):
         print(test.__name__)
         test()
     print(f"\n{FAILURES} failure(s)")

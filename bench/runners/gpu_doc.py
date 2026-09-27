@@ -349,3 +349,64 @@ def multi_gpu_section(path: Path | None) -> str:
                      f"| {_ratio(per_step(one), per_step(host))} |")
     lines.append("")
     return chr(10).join(lines)
+
+
+def ipm_cudss_section(path: Path | None) -> str:
+    """1g.7: the interior point's normal equations on cuDSS against the CPU factor (#489),
+    from bench/runners/ipm_cudss.py: per instance both legs' status, verification, gap and
+    solver time, and the device's speedup in the same type whichever way it goes."""
+    if path is None:
+        return chr(10).join([
+            "Not yet run. Needs a build with `-DSANKHYA_ENABLE_CUDSS=ON` and a card:",
+            "",
+            "```",
+            "python bench/runners/ipm_cudss.py --binary build/sankhya --card a100",
+            "```",
+            "",
+        ])
+    rows = read_csv(path)
+    if not rows:
+        return "The CSV is empty." + chr(10)
+    first = rows[0]
+    commit = first.get("git_commit", "unknown")
+    if "-dirty" in commit:
+        return (f"`{path.name}` is stamped `{commit}`: produced from a modified tree. "
+                "Re-run on a clean checkout of a main commit." + chr(10))
+    lines = [
+        f"Source CSV: `bench/results/{path.name}`  ",
+        f"Commit `{commit}` · machine `{first.get('machine', '')}` · "
+        f"GPU {first.get('gpu', '') or 'not recorded'}; {platform_line(first)}  ",
+        f"`algorithm=ipm` to the project standard (tolerance column: relative gap "
+        f"{first.get('tolerance', '')}, feasibility 1e-07), `ipm_linear_solver=cpu` against "
+        "`=cudss`; `device used` is read from the engine's own log line, so a cudss row that "
+        "ran the CPU factor says so. The gap is |obj - ref| / max(1, |ref|); `verified` is "
+        "tools/verify_solution.py on the written solution. A ratio below 1x is a loss and is "
+        "printed in the same type as a win.",
+        "",
+        "| instance | rows | nnz | factor | device used | status | verified | rel gap "
+        "| iterations | solver (s) | wall (s) | reference |",
+        "|---|---:|---:|---|---|---|---|---:|---:|---:|---:|---|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| `{r.get('instance', '')}` | {_cell(r.get('rows'))} | {_cell(r.get('nnz'))} "
+            f"| {r.get('linear_solver', '')} | {'yes' if r.get('device_used') == '1' else 'no'} "
+            f"| {r.get('status', '')} | {_cell(r.get('independently_verified'))} "
+            f"| {_cell(r.get('rel_gap'))} | {_cell(r.get('iterations'))} "
+            f"| {_cell(r.get('seconds'))} | {_cell(r.get('wall_seconds'))} "
+            f"| {reference_cell(r)} |")
+    lines += ["", "cuDSS against the CPU factor on the solver's own clock:", "",
+              "| instance | CPU factor (s) | cuDSS (s) | speedup | CPU status | cuDSS status |",
+              "|---|---:|---:|---:|---|---|"]
+    for name in dict.fromkeys(r.get("instance", "") for r in rows):
+        cpu = next((r for r in rows if r.get("instance") == name
+                    and r.get("linear_solver") == "cpu"), None)
+        dev = next((r for r in rows if r.get("instance") == name
+                    and r.get("linear_solver") == "cudss"), None)
+        if cpu is None or dev is None:
+            continue
+        lines.append(f"| `{name}` | {_cell(cpu.get('seconds'))} | {_cell(dev.get('seconds'))} "
+                     f"| {_ratio(_float(cpu.get('seconds')), _float(dev.get('seconds')))} "
+                     f"| {cpu.get('status', '')} | {dev.get('status', '')} |")
+    lines.append("")
+    return chr(10).join(lines)
