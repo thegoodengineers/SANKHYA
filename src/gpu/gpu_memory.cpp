@@ -53,6 +53,28 @@ std::size_t estimate_pdhg_gpu_transpose_memory(Index cols, Count nonzeros) {
   return (n + 1) * sizeof(int) + nnz * sizeof(int) + nnz * sizeof(double);
 }
 
+std::size_t estimate_multi_gpu_partition_memory(Index cols, Index local_rows,
+                                                Count local_nonzeros, int devices) {
+  const auto n = static_cast<std::size_t>(cols < 0 ? 0 : cols);
+  const auto m = static_cast<std::size_t>(local_rows < 0 ? 0 : local_rows);
+  const auto nnz = static_cast<std::size_t>(local_nonzeros < 0 ? 0 : local_nonzeros);
+  const auto k = static_cast<std::size_t>(devices < 1 ? 1 : devices);
+  // multi::setup_device: d_x, d_xn, d_ext, d_dx, d_aty, d_xsum, d_partial, d_cost, d_clo,
+  // d_chi (10 n-vectors) and d_recv (k x n); d_y, d_yn, d_dy, d_ax, d_adx, d_ysum, d_rlo,
+  // d_rhi (8 local-m vectors); A_k as CSR ((m + 1) offsets, nnz indices, nnz values) and
+  // A_k^T as CSR ((n + 1) offsets, nnz indices, nnz values).
+  const std::size_t n_vecs = (10 + k) * n * sizeof(double);
+  const std::size_t m_vecs = 8 * m * sizeof(double);
+  const std::size_t csr_a = (m + 1) * sizeof(int) + nnz * (sizeof(int) + sizeof(double));
+  const std::size_t csr_at = (n + 1) * sizeof(int) + nnz * (sizeof(int) + sizeof(double));
+  // eval::DeviceEvaluator (#478): row_scale, row_lo, row_hi, ax, y_avg, y_restart, y_best on
+  // this card's rows; col_scale, cost, col_lo, col_hi, aty, x_avg, x_restart, x_best on every
+  // column (card 0 holds the column side; counted on every card to stay conservative).
+  const std::size_t eval = (7 * m + 8 * n) * sizeof(double);
+  constexpr std::size_t kLibraryOverhead = 16ULL * 1024 * 1024;  // as above
+  return n_vecs + m_vecs + csr_a + csr_at + eval + kLibraryOverhead;
+}
+
 std::size_t vram_reserve(std::size_t total_bytes) {
   // Reserve the larger of 10 % of total VRAM or 256 MiB so that the runtime, other
   // processes, and allocation fragmentation have headroom. On a 6144 MiB card (the RTX 4050

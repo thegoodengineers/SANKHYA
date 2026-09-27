@@ -198,6 +198,20 @@ def end_to_end() -> None:
                            f"{name}: cut{k} with one coefficient changed is rejected",
                            out.strip()[:160])
         base.check(written > 0, "at least one certificate carries derived cut rows")
+        # Dense cuts (#496): on 6 columns every Gomory cut over one nonzero is above the
+        # density cap, so the certificate verified above carries a cut only the root's
+        # dense admission let in; without it there are fewer cut rows.
+        mps = Path(tmp) / "model.mps"
+        mps.write_text(GOMORY)
+        counts = []
+        for dense in ("cut_dense_max=0", "cut_dense_max=10"):
+            cert = Path(tmp) / "dense.vipr"
+            if cert.exists():
+                cert.unlink()
+            base.solve(binary, mps, cert, "enable_root_cuts=true", dense)
+            counts.append(len(cut_indices(cert.read_text())) if cert.exists() else -1)
+        base.check(counts[1] > counts[0] >= 0, "gomory: the dense admission writes more cut "
+                   "rows, and they verified above", f"cut rows without/with: {counts}")
 
 
 def main() -> int:

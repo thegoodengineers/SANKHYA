@@ -38,6 +38,17 @@ inline constexpr int kMinComputeArch = SANKHYA_MIN_COMPUTE_ARCH;
 /// (cols + 1) int32 row offsets, nnz int32 column indices and nnz double values.
 [[nodiscard]] std::size_t estimate_pdhg_gpu_transpose_memory(Index cols, Count nonzeros);
 
+/// Peak device bytes ONE CARD of the row-partitioned multi-GPU PDHG needs (#295) for a block
+/// of `local_rows` rows holding `local_nonzeros` of a model with `cols` columns, in a set of
+/// `devices` cards: the replicated n-vectors (10) plus the exchange's receive buffer
+/// (devices x n), the block's 8 m-vectors, A_k and A_k^T both in CSR, the on-card
+/// evaluation's buffers (#478: 7 per side), and the same library-overhead constant as the
+/// single-card estimate. Mirrors multi::setup_device and eval::DeviceEvaluator::init;
+/// conservative, as above.
+[[nodiscard]] std::size_t estimate_multi_gpu_partition_memory(Index cols, Index local_rows,
+                                                              Count local_nonzeros,
+                                                              int devices);
+
 /// Return true when a device with the given compute capability (major.minor) meets the
 /// minimum architecture compiled into this build (kMinComputeArch).
 /// Pure arithmetic — no CUDA calls — so safe to call from CPU-only translation units.

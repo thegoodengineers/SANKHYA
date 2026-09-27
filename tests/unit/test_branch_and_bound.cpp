@@ -1013,7 +1013,8 @@ Model make_non_integral_objective_model() {
 TEST(ObjectiveIntegrality, RoundsTheBoundAndProvesTheIncumbentAtTheRoot) {
   const Model model = make_integral_objective_model();
   Options on = mip_options();
-  Options off = mip_options();
+  on.set_int("cut_dense_max", 0);  // tiny model: every cut is dense, and the tree is the test
+  Options off = on;
   off.set_bool("mip_objective_integrality", false);
   const Solution with = solve(model, on);
   const Solution without = solve(model, off);
@@ -1028,7 +1029,8 @@ TEST(ObjectiveIntegrality, RoundsTheBoundAndProvesTheIncumbentAtTheRoot) {
 TEST(ObjectiveIntegrality, SeesThroughAColumnDefinedByRowsFromIntegerColumns) {
   const Model model = make_defined_objective_model();
   Options on = mip_options();
-  Options off = mip_options();
+  on.set_int("cut_dense_max", 0);  // tiny model: every cut is dense, and the tree is the test
+  Options off = on;
   off.set_bool("mip_objective_integrality", false);
   const Solution with = solve(model, on);
   const Solution without = solve(model, off);
@@ -1045,7 +1047,8 @@ TEST(ObjectiveIntegrality, LeavesAFractionalObjectiveAlone) {
   // search that rounded bounds to integers would prove 2 and be wrong.
   const Model model = make_non_integral_objective_model();
   Options on = mip_options();
-  Options off = mip_options();
+  on.set_int("cut_dense_max", 0);  // tiny model: every cut is dense, and the tree is the test
+  Options off = on;
   off.set_bool("mip_objective_integrality", false);
   const Solution with = solve(model, on);
   const Solution without = solve(model, off);

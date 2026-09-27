@@ -11,26 +11,29 @@
 namespace sankhya::gpu {
 
 bool gpu_pdhg_is_safe(const Model& model, const Options& options, Logger& logger) {
-  // The single-device engine is bit-for-bit repeatable under deterministic=true (#478:
-  // fixed-order reductions, both products non-transpose CSR_ALG2 on an explicit A^T). The
-  // multi-device engine is not: it still sums with atomicAdd and runs cuSPARSE's transpose
-  // product, so deterministic mode refuses it as #383 refused every GPU path.
+  // Both GPU engines are bit-for-bit repeatable under deterministic=true: the single-device
+  // engine since #478 (fixed-order reductions, both products non-transpose CSR_ALG2 on an
+  // explicit A^T), the multi-device engine since its reductions were written that way
+  // (pdhg_multi_gpu_device.hpp) and its cross-card sum runs in slot order
+  // (multi_gpu_exchange.hpp; tests/unit/test_multi_gpu_solve.cpp,
+  // TwoRunsAndOneOrTwoCardsGiveTheSameBits). #383's refusal of the multi-device path under
+  // the flag is gone (#295).
   const bool deterministic = options.get_bool("deterministic");
-  if (deterministic && parse_device_ids(options.get_string("gpu_devices")).size() > 1) {
-    logger.warning(
-        "GPU PDHG: deterministic=true is not honoured by the multi-GPU engine (atomicAdd "
-        "reductions, #383); falling back to CPU PDHG. Name one device in gpu_devices for a "
-        "deterministic GPU solve");
-    return false;
-  }
 
-  int cap_major = 0, cap_minor = 0;
-  if (device_compute_capability(&cap_major, &cap_minor)) {
-    if (!is_supported_compute_capability(cap_major, cap_minor)) {
+  // Every card named in gpu_devices must meet the compiled minimum, not only device 0
+  // (#295): a set with one older card would launch on it and fail at run time. A card that
+  // does not exist is left to the engine, which says so and runs on one card.
+  const std::vector<int> device_ids = parse_device_ids(options.get_string("gpu_devices"));
+  for (int id : device_ids) {
+    int cap_major = 0, cap_minor = 0;
+    const bool known = device_ids.size() > 1
+                           ? device_compute_capability_of(id, &cap_major, &cap_minor)
+                           : device_compute_capability(&cap_major, &cap_minor);
+    if (known && !is_supported_compute_capability(cap_major, cap_minor)) {
       logger.warning(
-          "GPU PDHG: device compute {}.{} is below the minimum compiled architecture "
+          "GPU PDHG: device {} compute {}.{} is below the minimum compiled architecture "
           "({}.{}); falling back to CPU PDHG",
-          cap_major, cap_minor, kMinComputeArch / 10, kMinComputeArch % 10);
+          id, cap_major, cap_minor, kMinComputeArch / 10, kMinComputeArch % 10);
       return false;
     }
   }
@@ -42,9 +45,9 @@ bool gpu_pdhg_is_safe(const Model& model, const Options& options, Logger& logger
     // Deterministic mode holds A^T as a second CSR matrix on the device (#478).
     const std::size_t required =
         estimate_pdhg_gpu_memory(model.num_rows(), model.num_cols(), model.num_nonzeros()) +
-        (deterministic ? estimate_pdhg_gpu_transpose_memory(model.num_cols(),
-                                                            model.num_nonzeros())
-                       : 0);
+        (deterministic
+             ? estimate_pdhg_gpu_transpose_memory(model.num_cols(), model.num_nonzeros())
+             : 0);
     const std::size_t reserve = vram_reserve(total_bytes);
     logger.info(
         "GPU PDHG memory: required {:.0f} MiB, available {:.0f} MiB, reserve {:.0f} MiB",

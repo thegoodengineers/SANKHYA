@@ -13,7 +13,8 @@ namespace sankhya::gpu {
 /// Return true when at least one CUDA-capable device is present and ready.
 ///
 /// On success *description is a human-readable line:
-///   "GeForce RTX 4050 Laptop GPU (compute 8.9, 6144 MiB VRAM)"
+///   "GeForce RTX 4050 Laptop GPU (compute 8.9, 6144 MiB VRAM, CUDA runtime 12.4, driver
+///   API 12.6)"
 /// On failure *description holds the reason (no device, driver error, …).
 /// description may be null.
 [[nodiscard]] bool device_available(std::string* description);
