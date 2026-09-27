@@ -272,6 +272,7 @@ set(SANKHYA_CORE_SOURCES
   src/diagnose/diagnose.cpp
   src/qp/convexity.cpp
   src/qp/qp_condat_vu.cpp
+  src/qp/qp_operator.cpp
   src/qp/qp_first_order_accel.cpp
   src/qp/qp_ipm.cpp
   src/qp/qp_ipm_system.cpp
@@ -363,6 +364,7 @@ set(SANKHYA_CORE_SOURCES
   src/gpu/gpu_memory.cpp
   src/gpu/cudss_factor.cpp
   src/gpu/multi_device.cpp
+  src/gpu/qp_device_stub.cpp
   src/simplex/dual_ratio.cpp
   src/simplex/dual_simplex.cpp
   src/simplex/primal_simplex.cpp
