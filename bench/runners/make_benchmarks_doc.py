@@ -36,7 +36,7 @@ import pooling_doc  # the non-convex pooling section (#516), kept in its own fil
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
 import gpu_doc  # 1g.1 and 1g.3 (#488)
 import gpu_plot  # the speedup-against-nonzeros figure of 1g.3 (#488)
-from gpu_doc import gpu_datacenter_table, gpu_real_section, multi_gpu_section
+from gpu_doc import gpu_datacenter_table, gpu_real_section, ipm_cudss_section, multi_gpu_section
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
@@ -2635,6 +2635,11 @@ def main() -> int:
     commercial_csv = newest("commercial-agreement-*.csv")
     gpu_domain_prop_csv = newest("gpu-domain-prop-*.csv", prefix="gpu-domain-prop")
     multi_gpu_csv = newest("multi-gpu-*.csv")
+    # The cuDSS runner's own file (#489); the ipm-cudss-ab-* legs of #696 are named A/B runs
+    # of netlib.py and mittelmann.py and are not this tier.
+    ipm_cudss_csv = None
+    for card in GPU_CARDS:
+        ipm_cudss_csv = ipm_cudss_csv or newest(f"ipm-cudss-{card}-*.csv")
 
     # Legacy untagged CSVs predate the tier tag; fall back so an old results directory still
     # generates something rather than failing.
@@ -2800,6 +2805,14 @@ order over P2P (NVLink or PCIe) or, without it, staged through the host
 several cards by itself, for the reason the table gives (`docs/ARCHITECTURE.md` section 7).
 
 {multi_gpu_section(multi_gpu_csv)}
+#### 1g.7 The interior point's normal equations on cuDSS (#489)
+
+`ipm_linear_solver=cudss` factors the normal equations on the device (NVIDIA cuDSS, a
+vendor library and not a solver, judgement call 28 in `docs/PROVENANCE.md`); the Newton
+iteration and the refinement stay on the host. The instances are section 1g.3's: the
+synthetic ladder, the refinery year and the Mittelmann pair.
+
+{ipm_cudss_section(ipm_cudss_csv)}
 ---
 
 ### 1f. Scale — how far up this goes
