@@ -2,36 +2,52 @@
 <rect width="720" height="420" fill="white"/>
 <text x="360" y="18" text-anchor="middle" font-size="14">A100: GPU speedup against the faster CPU arm, by nonzeros</text>
 <line x1="70.0" y1="30" x2="70.0" y2="360" stroke="#ddd"/>
-<text x="70.0" y="376" text-anchor="middle">1e5</text>
-<line x1="280.0" y1="30" x2="280.0" y2="360" stroke="#ddd"/>
-<text x="280.0" y="376" text-anchor="middle">1e6</text>
-<line x1="490.0" y1="30" x2="490.0" y2="360" stroke="#ddd"/>
-<text x="490.0" y="376" text-anchor="middle">1e7</text>
+<text x="70.0" y="376" text-anchor="middle">1e3</text>
+<line x1="196.0" y1="30" x2="196.0" y2="360" stroke="#ddd"/>
+<text x="196.0" y="376" text-anchor="middle">1e4</text>
+<line x1="322.0" y1="30" x2="322.0" y2="360" stroke="#ddd"/>
+<text x="322.0" y="376" text-anchor="middle">1e5</text>
+<line x1="448.0" y1="30" x2="448.0" y2="360" stroke="#ddd"/>
+<text x="448.0" y="376" text-anchor="middle">1e6</text>
+<line x1="574.0" y1="30" x2="574.0" y2="360" stroke="#ddd"/>
+<text x="574.0" y="376" text-anchor="middle">1e7</text>
 <line x1="700.0" y1="30" x2="700.0" y2="360" stroke="#ddd"/>
 <text x="700.0" y="376" text-anchor="middle">1e8</text>
 <line x1="70" y1="360.0" x2="700" y2="360.0" stroke="#ddd"/>
-<text x="64" y="364.0" text-anchor="end">0.1x</text>
+<text x="64" y="364.0" text-anchor="end">0.01x</text>
 <line x1="70" y1="250.0" x2="700" y2="250.0" stroke="#ddd"/>
-<text x="64" y="254.0" text-anchor="end">1x</text>
+<text x="64" y="254.0" text-anchor="end">0.1x</text>
 <line x1="70" y1="140.0" x2="700" y2="140.0" stroke="#ddd"/>
-<text x="64" y="144.0" text-anchor="end">10x</text>
+<text x="64" y="144.0" text-anchor="end">1x</text>
 <line x1="70" y1="30.0" x2="700" y2="30.0" stroke="#ddd"/>
-<text x="64" y="34.0" text-anchor="end">100x</text>
-<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="#333" stroke-dasharray="6 4"/>
-<text x="696" y="245.0" text-anchor="end">crossover, 1x: above is a win, below a loss</text>
+<text x="64" y="34.0" text-anchor="end">10x</text>
+<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="#333" stroke-dasharray="6 4"/>
+<text x="696" y="135.0" text-anchor="end">crossover, 1x: above is a win, below a loss</text>
 <text x="360" y="412" text-anchor="middle">nonzeros of A</text>
-<rect x="91.1" y="140.5" width="10" height="10" fill="#1f77b4"><title>brazil3 at 1e-04: 8.91x (real)</title></rect>
-<text x="104.1" y="139.5">brazil3</text>
-<rect x="91.1" y="132.5" width="10" height="10" fill="#d62728"><title>brazil3 at 1e-08: 10.53x (real)</title></rect>
-<text x="104.1" y="131.5">brazil3</text>
-<rect x="155.7" y="217.6" width="10" height="10" fill="#d62728"><title>chromaticindex1024-7 at 1e-08: 1.77x (real)</title></rect>
-<text x="168.7" y="216.6">chromaticindex1024-7</text>
-<rect x="155.7" y="203.5" width="10" height="10" fill="#1f77b4"><title>chromaticindex1024-7 at 1e-04: 2.38x (real)</title></rect>
-<text x="168.7" y="202.5">chromaticindex1024-7</text>
-<rect x="494.9" y="245.0" width="10" height="10" fill="#d62728"><title>refinery_year at 1e-08: 1.00x (real)</title></rect>
-<text x="507.9" y="244.0">refinery_year</text>
-<rect x="494.9" y="245.0" width="10" height="10" fill="#1f77b4"><title>refinery_year at 1e-04: 1.00x (real)</title></rect>
-<text x="507.9" y="244.0">refinery_year</text>
+<circle cx="70.0" cy="267.5" r="5" fill="#d62728"><title>kkt_200x200 at 1e-08: 0.07x (synthetic)</title></circle>
+<circle cx="70.0" cy="258.6" r="5" fill="#1f77b4"><title>kkt_200x200 at 1e-04: 0.08x (synthetic)</title></circle>
+<circle cx="120.1" cy="219.9" r="5" fill="#1f77b4"><title>kkt_500x500 at 1e-04: 0.19x (synthetic)</title></circle>
+<circle cx="120.1" cy="218.4" r="5" fill="#d62728"><title>kkt_500x500 at 1e-08: 0.19x (synthetic)</title></circle>
+<circle cx="158.1" cy="228.4" r="5" fill="#d62728"><title>kkt_1000x1000 at 1e-08: 0.16x (synthetic)</title></circle>
+<circle cx="158.1" cy="224.4" r="5" fill="#1f77b4"><title>kkt_1000x1000 at 1e-04: 0.17x (synthetic)</title></circle>
+<circle cx="196.0" cy="151.4" r="5" fill="#d62728"><title>kkt_2000x2000 at 1e-08: 0.79x (synthetic)</title></circle>
+<circle cx="196.0" cy="151.3" r="5" fill="#1f77b4"><title>kkt_2000x2000 at 1e-04: 0.79x (synthetic)</title></circle>
+<circle cx="271.9" cy="115.5" r="5" fill="#1f77b4"><title>kkt_5000x5000 at 1e-04: 1.67x (synthetic)</title></circle>
+<circle cx="271.9" cy="111.3" r="5" fill="#d62728"><title>kkt_5000x5000 at 1e-08: 1.82x (synthetic)</title></circle>
+<circle cx="309.8" cy="83.2" r="5" fill="#d62728"><title>kkt_10000x10000 at 1e-08: 3.28x (synthetic)</title></circle>
+<circle cx="309.8" cy="72.8" r="5" fill="#1f77b4"><title>kkt_10000x10000 at 1e-04: 4.08x (synthetic)</title></circle>
+<rect x="332.7" y="38.7" width="10" height="10" fill="#1f77b4"><title>brazil3 at 1e-04: 7.50x (real)</title></rect>
+<text x="345.7" y="37.7">brazil3</text>
+<rect x="332.7" y="31.6" width="10" height="10" fill="#d62728"><title>brazil3 at 1e-08: 8.72x (real)</title></rect>
+<text x="345.7" y="30.6">brazil3</text>
+<rect x="371.4" y="111.0" width="10" height="10" fill="#d62728"><title>chromaticindex1024-7 at 1e-08: 1.65x (real)</title></rect>
+<text x="384.4" y="110.0">chromaticindex1024-7</text>
+<rect x="371.4" y="101.5" width="10" height="10" fill="#1f77b4"><title>chromaticindex1024-7 at 1e-04: 2.02x (real)</title></rect>
+<text x="384.4" y="100.5">chromaticindex1024-7</text>
+<rect x="574.9" y="135.0" width="10" height="10" fill="#1f77b4"><title>refinery_year at 1e-04: 1.00x (real)</title></rect>
+<text x="587.9" y="134.0">refinery_year</text>
+<rect x="574.9" y="135.0" width="10" height="10" fill="#d62728"><title>refinery_year at 1e-08: 1.00x (real)</title></rect>
+<text x="587.9" y="134.0">refinery_year</text>
 <circle cx="82" cy="44" r="5" fill="#1f77b4"/>
 <text x="92" y="48">1e-04, circle: synthetic ladder; square: real instance</text>
 <circle cx="82" cy="62" r="5" fill="#d62728"/>

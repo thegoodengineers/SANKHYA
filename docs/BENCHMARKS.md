@@ -608,66 +608,117 @@ GPU speedup on the solver's own clock (median of the repeats):
 
 The figure is regenerated from the two CSVs by `bench/runners/gpu_plot.py` each time this document is; each point is one instance and tolerance, the speedup against the faster CPU arm on the solver's clock; the dashed line is 1x, the crossover, and everything below it is a loss.
 
+The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, medians of repeats with their min-max):
+
+Source CSV: `bench/results/gpu-a100-fdd1f35.csv`  
+Commit `fdd1f35` · machine `Linux-x86_64`
+
+Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
+
+> **GPU iteration counts differ from the CPU's (#448).** The device sums its reductions in a fixed order since #478, so a GPU run repeats itself, but a one-ulp difference from the CPU's summation order can flip a restart decision and shift the whole trajectory. Speedup figures here are the median of repeated solves (5 per cell), and a ratio below 1x is a loss, printed in the same type as a win. Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
+
+Each cell is the median of 5 solves; `[min–max]` shows the spread from run-to-run variance (thermal state, clock boost on the laptop GPU).
+
+| rows×cols | CPU 1e-4 (s) | GPU 1e-4 (s) | speedup | CPU 1e-8 (s) | GPU 1e-8 (s) | speedup |
+|----------:|-------------:|-------------:|--------:|-------------:|-------------:|--------:|
+| 200×200 | 0.089 [0.088–0.108] | 1.061 [0.915–1.594] | 0.08× | 0.090 [0.089–0.091] | 1.296 [0.875–1.799] | 0.07× |
+| 500×500 | 0.271 [0.271–0.281] | 1.444 [0.377–1.806] | 0.19× | 0.368 [0.367–0.382] | 1.903 [1.779–2.735] | 0.19× |
+| 1000×1000 | 0.075 [0.075–0.076] | 0.439 [0.328–0.512] | 0.17× | 0.075 [0.075–0.081] | 0.479 [0.400–0.612] | 0.16× |
+| 2000×2000 | 1.575 [1.555–1.579] | 1.997 [1.393–2.154] | 0.79× | 1.565 [1.562–1.579] | 1.986 [1.540–2.346] | 0.79× |
+| 5000×5000 | 1.082 [1.077–1.102] | 0.648 [0.444–0.706] | 1.67× | 1.086 [1.078–1.091] | 0.596 [0.463–0.684] | 1.82× |
+| 10000×10000 | 3.156 [3.148–3.183] | 0.773 [0.693–0.895] | 4.08× | 3.151 [3.147–3.152] | 0.960 [0.710–1.615] | 3.28× |
+
+GPU: NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM, CUDA runtime 12.4, driver API 12.4); driver 550.127.08, CUDA runtime 12.4.  
+Instances are synthetic KKT LPs with ~5 nonzeros per column (seed 42).
+
+#### 1e-8 ceiling — sizes PDHG does not drive to project standard
+
+Project standard: absolute primal ≤ 1e-7, dual ≤ 1e-7, gap ≤ 1e-8.  
+`feasible` means the solver met the *requested* 1e-8 tolerance but not all three project-standard thresholds. These are not dropped from the table.
+
+| rows×cols | engine | achieved primal | achieved dual |
+|----------:|--------|----------------:|--------------:|
+| 200×200 | CPU | 7.112e-08 | 0.000e+00 |
+| 200×200 | GPU | 5.606e-08 | 9.947e-16 |
+| 500×500 | CPU | 8.676e-08 | 0.000e+00 |
+| 500×500 | GPU | 7.995e-08 | 1.616e-15 |
+
 On non-synthetic instances (`bench/runners/gpu_real_instances.py`):
 
-Source CSV: `bench/results/gpu-real-a100-58a8374.csv`  
-Commit `58a8374` · machine `Linux-x86_64`  
-GPU: NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM); driver and CUDA runtime not recorded (the CSV predates #488's columns)
+Source CSV: `bench/results/gpu-real-a100-fdd1f35.csv`  
+Commit `fdd1f35` · machine `Linux-x86_64`  
+GPU: NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM, CUDA runtime 12.4, driver API 12.4); driver 550.127.08, CUDA runtime 12.4
 
-Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance, one solve per cell. Report the result whichever way it goes: a speedup below 1x is a loss and is printed in the same type as a win. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and 28 threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column, which also carries HiGHS's own run time on the same file in its own process when HiGHS is the reference; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
+Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance, each cell the median of 3 solves. Report the result whichever way it goes: a speedup below 1x is a loss and is printed in the same type as a win. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and 16 threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column, which also carries HiGHS's own run time on the same file in its own process when HiGHS is the reference; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
 
-| instance | rows | tol | CPU 1 thread (s) | CPU 28 threads (s) | GPU (s) | GPU vs 1 thread | GPU vs 28 threads | GPU status | rel gap CPU 1t / CPU 28t / GPU | reference |
+| instance | rows | tol | CPU 1 thread (s) | CPU 16 threads (s) | GPU (s) | GPU vs 1 thread | GPU vs 16 threads | GPU status | rel gap CPU 1t / CPU 16t / GPU | reference |
 |----------|-----:|----:|-------------:|-------------:|--------:|--------:|--------:|--------|--------|--------|
-| `refinery_year` | 779640 | 1e-04 | 300.518 | 300.706 | 300.557 | 1.00x | 1.00x | time_limit | 1.105e-07 / 1.347e-08 / 1.684e-10 | -38289180.41914 (construction) |
-| `refinery_year` | 779640 | 1e-08 | 300.524 | 300.711 | 300.570 | 1.00x | 1.00x | time_limit | 1.105e-07 / 1.624e-08 / 5.462e-11 | -38289180.41914 (construction) |
-| `chromaticindex1024-7` | 67583 | 1e-04 | 1.526 | 1.410 | 0.592 | 2.58x | 2.38x | feasible | 7.666e-10 / 7.666e-10 / 4.174e-10 | 3.0 (highs) |
-| `chromaticindex1024-7` | 67583 | 1e-08 | 1.497 | 1.229 | 0.693 | 2.16x | 1.77x | feasible | 7.666e-10 / 7.666e-10 / 3.539e-10 | 3.0 (highs) |
-| `brazil3` | 14646 | 1e-04 | 52.071 | 61.195 | 5.842 | 8.91x | 10.48x | feasible | 5.942e-07 / 5.942e-07 / 2.889e-07 | 2.0000000000012172 (highs) |
-| `brazil3` | 14646 | 1e-08 | 127.139 | 137.859 | 12.069 | 10.53x | 11.42x | feasible | 1.228e-09 / 1.228e-09 / 1.266e-08 | 2.0000000000012172 (highs) |
+| `refinery_year` | 779640 | 1e-04 | 300.486 | 300.580 | 300.537 | 1.00x | 1.00x | time_limit | 1.410e-08 / 2.347e-09 / 1.786e-12 | -38289180.41914 (construction) |
+| `refinery_year` | 779640 | 1e-08 | 300.515 | 300.516 | 300.550 | 1.00x | 1.00x | time_limit | 1.410e-08 / 2.653e-08 / 2.148e-11 | -38289180.41914 (construction) |
+| `chromaticindex1024-7` | 67583 | 1e-04 | 1.058 | 0.886 | 0.439 | 2.41x | 2.02x | feasible | 3.655e-10 / 3.655e-10 / 1.881e-10 | 3.0 (highs, 134.339 s) |
+| `chromaticindex1024-7` | 67583 | 1e-08 | 1.150 | 0.868 | 0.526 | 2.19x | 1.65x | feasible | 1.468e-10 / 1.468e-10 / 1.083e-10 | 3.0 (highs, 134.339 s) |
+| `brazil3` | 14646 | 1e-04 | 40.005 | 38.658 | 5.154 | 7.76x | 7.50x | feasible | 2.973e-07 / 2.973e-07 / 9.721e-08 | 2.0000000000012172 (highs, 9.285 s) |
+| `brazil3` | 14646 | 1e-08 | 92.221 | 91.841 | 10.535 | 8.75x | 8.72x | feasible | 4.341e-10 / 4.341e-10 / 3.947e-09 | 2.0000000000012172 (highs, 9.285 s) |
 
 The datacenter runner (`bench/runners/gpu_datacenter.py`, #488):
 
-`gpu-datacenter-a100-58a8374.csv` - NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM), driver and CUDA runtime not recorded (the CSV predates #488's columns), solver at `58a8374`, Linux-x86_64, 3 repeats per cell. HiGHS's own time on the same file, once per instance in its own process: `chromaticindex1024-7` -; `brazil3` -.
+`gpu-datacenter-a100-fdd1f35.csv` - NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM, CUDA runtime 12.4, driver API 12.4), driver 550.127.08, CUDA runtime 12.4, solver at `fdd1f35`, Linux-x86_64, 3 repeats per cell. HiGHS's own time on the same file, once per instance in its own process: `chromaticindex1024-7` 132.257 s; `brazil3` 9.158 s; `refinery_year` -.
 
 | instance | mode | threads | parallel A x | tol | forced iterations | status | objective | rel gap | primal res | dual res | iterations | solver (s) | solver median (s) | median wall (s) | spread (s) |
 |---|---|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `chromaticindex1024-7` | cpu-1t | 1 | false | 0.0001 | - | feasible | 3.0000000022999487 | 7.666e-10 | 7.735e-08 | 0.000e+00 | 480 | 1.490867 | 1.510587 | 2.625248 | 0.073252 |
-| `chromaticindex1024-7` | cpu-28t | 28 | true | 0.0001 | - | feasible | 3.0000000022999487 | 7.666e-10 | 7.735e-08 | 0.000e+00 | 480 | 1.569669 | 1.502556 | 2.684703 | 0.157775 |
-| `chromaticindex1024-7` | gpu | - | - | 0.0001 | - | feasible | 3.0000000007930705 | 2.644e-10 | 4.786e-08 | 5.171e-20 | 440 | 0.552845 | 0.552845 | 1.747900 | 0.501080 |
-| `chromaticindex1024-7` | cpu-1t | 1 | false | 1e-06 | - | feasible | 3.0000000022999487 | 7.666e-10 | 7.735e-08 | 0.000e+00 | 480 | 1.491608 | 1.500582 | 2.576197 | 0.062749 |
-| `chromaticindex1024-7` | cpu-28t | 28 | true | 1e-06 | - | feasible | 3.0000000022999487 | 7.666e-10 | 7.735e-08 | 0.000e+00 | 480 | 1.451053 | 1.451053 | 2.550487 | 0.091694 |
-| `chromaticindex1024-7` | gpu | - | - | 1e-06 | - | feasible | 3.0000000008243117 | 2.748e-10 | 1.176e-08 | 1.862e-20 | 440 | 0.547007 | 0.599097 | 1.787267 | 0.351924 |
-| `chromaticindex1024-7` | cpu-1t | 1 | false | 1e-08 | - | feasible | 3.0000000022999487 | 7.666e-10 | 7.735e-08 | 0.000e+00 | 480 | 1.514827 | 1.510053 | 2.753570 | 0.055688 |
-| `chromaticindex1024-7` | cpu-28t | 28 | true | 1e-08 | - | feasible | 3.0000000022999487 | 7.666e-10 | 7.735e-08 | 0.000e+00 | 480 | 1.510526 | 1.510526 | 2.684466 | 1.622999 |
-| `chromaticindex1024-7` | gpu | - | - | 1e-08 | - | feasible | 3.000000000413749 | 1.379e-10 | 3.359e-09 | 2.257e-20 | 440 | 0.550016 | 0.578665 | 1.717585 | 0.065785 |
-| `chromaticindex1024-7` | cpu-1t | 1 | false | 1e-08 | 2000 | feasible | 3.0000000022999487 | 7.666e-10 | 7.735e-08 | 0.000e+00 | 480 | 1.511980 | 1.511980 | 2.656153 | 0.062388 |
-| `chromaticindex1024-7` | cpu-28t | 28 | true | 1e-08 | 2000 | feasible | 3.0000000022999487 | 7.666e-10 | 7.735e-08 | 0.000e+00 | 480 | 1.477447 | 1.477447 | 2.571599 | 0.198520 |
-| `chromaticindex1024-7` | gpu | - | - | 1e-08 | 2000 | feasible | 3.0000000008146324 | 2.715e-10 | 1.184e-08 | 1.045e-20 | 440 | 0.546591 | 0.562799 | 1.663584 | 0.412077 |
-| `brazil3` | cpu-1t | 1 | false | 0.0001 | - | feasible | 1.999998811677631 | 5.942e-07 | 9.810e-08 | 4.616e-06 | 80800 | 53.379065 | 53.237243 | 54.100824 | 1.152108 |
-| `brazil3` | cpu-28t | 28 | true | 0.0001 | - | feasible | 1.999998811677631 | 5.942e-07 | 9.810e-08 | 4.616e-06 | 80800 | 55.566795 | 55.566795 | 56.635863 | 2.649627 |
-| `brazil3` | gpu | - | - | 0.0001 | - | feasible | 2.000001042596344 | 5.213e-07 | 9.975e-08 | 1.046e-15 | 65160 | 6.563175 | 7.160503 | 8.161334 | 4.274332 |
-| `brazil3` | cpu-1t | 1 | false | 1e-06 | - | feasible | 2.0000000851361506 | 4.257e-08 | 8.140e-09 | 8.089e-08 | 101600 | 66.151960 | 66.561518 | 67.523527 | 1.237008 |
-| `brazil3` | cpu-28t | 28 | true | 1e-06 | - | feasible | 2.0000000851361506 | 4.257e-08 | 8.140e-09 | 8.089e-08 | 101600 | 66.542193 | 72.848465 | 73.805784 | 7.232364 |
-| `brazil3` | gpu | - | - | 1e-06 | - | feasible | 1.9999988875934829 | 5.562e-07 | 9.183e-08 | 1.835e-09 | 114440 | 11.306742 | 11.306742 | 12.345989 | 4.397393 |
-| `brazil3` | cpu-1t | 1 | false | 1e-08 | - | feasible | 1.9999999975461507 | 1.228e-09 | 2.028e-10 | 3.687e-10 | 194240 | 126.098101 | 126.098101 | 127.047154 | 2.762732 |
-| `brazil3` | cpu-28t | 28 | true | 1e-08 | - | feasible | 1.9999999975461507 | 1.228e-09 | 2.028e-10 | 3.687e-10 | 194240 | 131.226687 | 131.226687 | 132.290846 | 11.619005 |
-| `brazil3` | gpu | - | - | 1e-08 | - | feasible | 2.000000001556267 | 7.775e-10 | 1.489e-10 | 1.055e-11 | 169240 | 16.827862 | 13.777328 | 14.923035 | 3.924187 |
-| `brazil3` | cpu-1t | 1 | false | 1e-08 | 2000 | iteration_limit | 0.0 | 1.000e+00 | 2.212e-02 | 0.000e+00 | 2000 | 1.411992 | 1.411992 | 2.535670 | 0.183936 |
-| `brazil3` | cpu-28t | 28 | true | 1e-08 | 2000 | iteration_limit | 0.0 | 1.000e+00 | 2.212e-02 | 0.000e+00 | 2000 | 1.277072 | 1.270676 | 2.293257 | 0.309545 |
-| `brazil3` | gpu | - | - | 1e-08 | 2000 | iteration_limit | 0.0 | 1.000e+00 | 2.212e-02 | 1.180e-17 | 2000 | 0.610117 | 0.502850 | 1.455980 | 0.340637 |
+| `chromaticindex1024-7` | cpu-1t | 1 | false | 0.0001 | - | feasible | 3.0000000010966152 | 3.655e-10 | 4.298e-08 | 0.000e+00 | 440 | 1.044568 | 1.045359 | 1.699264 | 0.094034 |
+| `chromaticindex1024-7` | cpu-16t | 16 | true | 0.0001 | - | feasible | 3.0000000010966152 | 3.655e-10 | 4.298e-08 | 0.000e+00 | 440 | 0.934624 | 0.934624 | 1.630916 | 0.073677 |
+| `chromaticindex1024-7` | gpu | - | - | 0.0001 | - | feasible | 3.000000001790135 | 5.967e-10 | 5.078e-08 | 1.440e-20 | 440 | 0.444030 | 0.527923 | 1.363874 | 0.305273 |
+| `chromaticindex1024-7` | cpu-1t | 1 | false | 1e-06 | - | feasible | 3.0000000010966152 | 3.655e-10 | 4.298e-08 | 0.000e+00 | 440 | 1.048594 | 1.046543 | 1.779338 | 0.180825 |
+| `chromaticindex1024-7` | cpu-16t | 16 | true | 1e-06 | - | feasible | 3.0000000010966152 | 3.655e-10 | 4.298e-08 | 0.000e+00 | 440 | 0.944112 | 0.944112 | 1.695665 | 0.165481 |
+| `chromaticindex1024-7` | gpu | - | - | 1e-06 | - | optimal | 2.999999999933687 | 2.210e-11 | 2.647e-09 | 6.386e-21 | 480 | 0.441226 | 0.474954 | 1.348346 | 0.069336 |
+| `chromaticindex1024-7` | cpu-1t | 1 | false | 1e-08 | - | feasible | 3.0000000004404526 | 1.468e-10 | 1.413e-08 | 0.000e+00 | 480 | 1.140325 | 1.134743 | 1.748526 | 0.156432 |
+| `chromaticindex1024-7` | cpu-16t | 16 | true | 1e-08 | - | feasible | 3.0000000004404526 | 1.468e-10 | 1.413e-08 | 0.000e+00 | 480 | 1.134410 | 1.023737 | 1.770078 | 0.071265 |
+| `chromaticindex1024-7` | gpu | - | - | 1e-08 | - | optimal | 2.9999999999201497 | 2.662e-11 | 4.337e-09 | 8.637e-21 | 480 | 0.514749 | 0.587042 | 1.410876 | 0.130916 |
+| `chromaticindex1024-7` | cpu-1t | 1 | false | 1e-08 | 2000 | feasible | 3.0000000004404526 | 1.468e-10 | 1.413e-08 | 0.000e+00 | 480 | 1.140050 | 1.141037 | 1.806845 | 0.110548 |
+| `chromaticindex1024-7` | cpu-16t | 16 | true | 1e-08 | 2000 | feasible | 3.0000000004404526 | 1.468e-10 | 1.413e-08 | 0.000e+00 | 480 | 1.118039 | 1.089569 | 1.863584 | 0.250995 |
+| `chromaticindex1024-7` | gpu | - | - | 1e-08 | 2000 | feasible | 3.0000000003387575 | 1.129e-10 | 1.126e-08 | 3.651e-20 | 480 | 0.492554 | 0.512776 | 1.477552 | 0.549593 |
+| `brazil3` | cpu-1t | 1 | false | 0.0001 | - | feasible | 2.0000005945624593 | 2.973e-07 | 5.838e-08 | 0.000e+00 | 80400 | 39.673795 | 39.673795 | 40.187951 | 0.860591 |
+| `brazil3` | cpu-16t | 16 | true | 0.0001 | - | feasible | 2.0000005945624593 | 2.973e-07 | 5.838e-08 | 0.000e+00 | 80400 | 45.219215 | 39.959953 | 40.563899 | 7.264595 |
+| `brazil3` | gpu | - | - | 0.0001 | - | feasible | 2.000001059866077 | 5.299e-07 | 9.924e-08 | 8.602e-06 | 76000 | 5.173633 | 5.173633 | 5.774609 | 1.267470 |
+| `brazil3` | cpu-1t | 1 | false | 1e-06 | - | feasible | 2.000000046366026 | 2.318e-08 | 4.445e-09 | 3.274e-09 | 100720 | 49.791687 | 49.757710 | 50.423300 | 0.229131 |
+| `brazil3` | cpu-16t | 16 | true | 1e-06 | - | feasible | 2.000000046366026 | 2.318e-08 | 4.445e-09 | 3.274e-09 | 100720 | 53.048559 | 48.922255 | 49.480363 | 5.037091 |
+| `brazil3` | gpu | - | - | 1e-06 | - | feasible | 2.0000003248963667 | 1.624e-07 | 3.107e-08 | 3.952e-08 | 109520 | 7.508020 | 7.508020 | 8.135186 | 3.005358 |
+| `brazil3` | cpu-1t | 1 | false | 1e-08 | - | feasible | 2.0000000008694463 | 4.341e-10 | 8.318e-11 | 9.559e-10 | 186480 | 91.624233 | 91.624233 | 92.173520 | 0.075755 |
+| `brazil3` | cpu-16t | 16 | true | 1e-08 | - | feasible | 2.0000000008694463 | 4.341e-10 | 8.318e-11 | 9.559e-10 | 186480 | 86.064040 | 86.064040 | 86.742761 | 6.218757 |
+| `brazil3` | gpu | - | - | 1e-08 | - | feasible | 2.000000000359578 | 1.792e-10 | 3.445e-11 | 4.879e-10 | 188320 | 12.552638 | 12.246187 | 12.851702 | 1.638437 |
+| `brazil3` | cpu-1t | 1 | false | 1e-08 | 2000 | iteration_limit | 0.015343213351677185 | 9.923e-01 | 2.029e-02 | 9.577e-04 | 2000 | 1.060653 | 1.063369 | 1.559908 | 0.203006 |
+| `brazil3` | cpu-16t | 16 | true | 1e-08 | 2000 | iteration_limit | 0.015343213351677185 | 9.923e-01 | 2.029e-02 | 9.577e-04 | 2000 | 0.887245 | 0.868460 | 1.711694 | 0.586000 |
+| `brazil3` | gpu | - | - | 1e-08 | 2000 | iteration_limit | 0.0 | 1.000e+00 | 2.153e-02 | 1.909e-17 | 2000 | 0.351621 | 0.466897 | 1.079123 | 0.171720 |
+| `refinery_year` | cpu-1t | 1 | false | 0.0001 | - | time_limit | -38289179.8791777 | 1.410e-08 | 3.513e-02 | 3.548e-04 | 6484 | 300.502737 | 300.483279 | 312.530795 | 0.162886 |
+| `refinery_year` | cpu-16t | 16 | true | 0.0001 | - | time_limit | -38289180.32925697 | 2.347e-09 | 8.827e-03 | 1.834e-04 | 12360 | 300.745930 | 300.690346 | 312.785082 | 0.070754 |
+| `refinery_year` | gpu | - | - | 0.0001 | - | time_limit | -38289180.41991669 | 2.028e-11 | 3.065e-05 | 1.187e-11 | 526610 | 300.580993 | 300.580993 | 312.948826 | 0.112449 |
+| `refinery_year` | cpu-1t | 1 | false | 1e-06 | - | time_limit | -38289179.8791777 | 1.410e-08 | 3.513e-02 | 3.548e-04 | 6404 | 300.500946 | 300.500946 | 312.829517 | 0.162958 |
+| `refinery_year` | cpu-16t | 16 | true | 1e-06 | - | time_limit | -38289180.32925697 | 2.347e-09 | 8.827e-03 | 1.834e-04 | 12626 | 300.696524 | 300.602121 | 312.769317 | 0.179278 |
+| `refinery_year` | gpu | - | - | 1e-06 | - | time_limit | -38289180.420124196 | 2.570e-11 | 8.175e-05 | 1.853e-09 | 527335 | 300.557498 | 300.561976 | 312.729397 | 0.249979 |
+| `refinery_year` | cpu-1t | 1 | false | 1e-08 | - | time_limit | -38289179.8791777 | 1.410e-08 | 3.513e-02 | 3.548e-04 | 6462 | 300.495616 | 300.495616 | 312.697036 | 0.226163 |
+| `refinery_year` | cpu-16t | 16 | true | 1e-08 | - | time_limit | -38289181.43510503 | 2.653e-08 | 1.662e-02 | 3.066e-04 | 12969 | 300.618292 | 300.678841 | 313.097623 | 0.715307 |
+| `refinery_year` | gpu | - | - | 1e-08 | - | time_limit | -38289180.41914109 | 2.841e-14 | 1.274e-05 | 3.233e-08 | 527654 | 300.541985 | 300.554939 | 312.713069 | 0.705166 |
+| `refinery_year` | cpu-1t | 1 | false | 1e-08 | 2000 | iteration_limit | -38289178.233224735 | 5.709e-08 | 1.351e-01 | 5.119e-03 | 2000 | 95.325896 | 95.249205 | 107.188652 | 0.602393 |
+| `refinery_year` | cpu-16t | 16 | true | 1e-08 | 2000 | iteration_limit | -38289178.233224735 | 5.709e-08 | 1.351e-01 | 5.119e-03 | 2000 | 51.905765 | 51.905765 | 64.141963 | 3.874404 |
+| `refinery_year` | gpu | - | - | 1e-08 | 2000 | iteration_limit | -38289179.325400755 | 2.857e-08 | 1.383e-01 | 2.162e-03 | 2000 | 4.522373 | 4.510435 | 16.555003 | 0.209577 |
 
 GPU speedup on the solver's own clock (median of the repeats):
 
-| instance | tol | forced iterations | GPU vs 1 thread | GPU vs 28 threads, parallel A x | GPU rel gap |
+| instance | tol | forced iterations | GPU vs 1 thread | GPU vs 16 threads, parallel A x | GPU rel gap |
 |---|---:|---:|---:|---:|---:|
-| `chromaticindex1024-7` | 0.0001 | - | 2.73x | 2.72x | 2.644e-10 |
-| `chromaticindex1024-7` | 1e-06 | - | 2.50x | 2.42x | 2.748e-10 |
-| `chromaticindex1024-7` | 1e-08 | - | 2.61x | 2.61x | 1.379e-10 |
-| `chromaticindex1024-7` | 1e-08 | 2000 | 2.69x | 2.63x | 2.715e-10 |
-| `brazil3` | 0.0001 | - | 7.43x | 7.76x | 5.213e-07 |
-| `brazil3` | 1e-06 | - | 5.89x | 6.44x | 5.562e-07 |
-| `brazil3` | 1e-08 | - | 9.15x | 9.52x | 7.775e-10 |
-| `brazil3` | 1e-08 | 2000 | 2.81x | 2.53x | 1.000e+00 |
+| `chromaticindex1024-7` | 0.0001 | - | 1.98x | 1.77x | 5.967e-10 |
+| `chromaticindex1024-7` | 1e-06 | - | 2.20x | 1.99x | 2.210e-11 |
+| `chromaticindex1024-7` | 1e-08 | - | 1.93x | 1.74x | 2.662e-11 |
+| `chromaticindex1024-7` | 1e-08 | 2000 | 2.23x | 2.12x | 1.129e-10 |
+| `brazil3` | 0.0001 | - | 7.67x | 7.72x | 5.299e-07 |
+| `brazil3` | 1e-06 | - | 6.63x | 6.52x | 1.624e-07 |
+| `brazil3` | 1e-08 | - | 7.48x | 7.03x | 1.792e-10 |
+| `brazil3` | 1e-08 | 2000 | 2.28x | 1.86x | 1.000e+00 |
+| `refinery_year` | 0.0001 | - | 1.00x | 1.00x | 2.028e-11 |
+| `refinery_year` | 1e-06 | - | 1.00x | 1.00x | 2.570e-11 |
+| `refinery_year` | 1e-08 | - | 1.00x | 1.00x | 2.841e-14 |
+| `refinery_year` | 1e-08 | 2000 | 21.12x | 11.51x | 2.857e-08 |
 
 #### 1g.4 What the CPU side does with its cores
 
