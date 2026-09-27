@@ -2754,6 +2754,20 @@ def main() -> int:
     ipm_cudss_csv = None
     for card in GPU_CARDS:
         ipm_cudss_csv = ipm_cudss_csv or newest(f"ipm-cudss-{card}-*.csv")
+    # #509 and #520 on the full MIPLIB tier 2: miplib-t2-full-<leg>-<sha>.csv, one CSV per
+    # leg; `off` is the baseline, the rest set options and are read by one of them.
+    # Seven hex digits in the glob, so `520-both-<sha>` cannot also match `520-both-cpu-<sha>`.
+    sha7 = "[0-9a-f]" * 7
+    tier2_legs = {"off": newest(f"miplib-t2-full-off-{sha7}*.csv")}
+    for leg, option in (("509-fixprop-gpu", "gpu_fix_and_prop=true"),
+                        ("509-fixprop-cpu", "gpu_fix_and_prop=true"),
+                        ("509-pump-gpu", "gpu_pump=true"), ("509-pump-cpu", "gpu_pump=true"),
+                        ("520-nodes", "gpu_batch_nodes=true"),
+                        ("520-sb-score", "gpu_batch_strong_branching=score"),
+                        ("520-sb-filter", "gpu_batch_strong_branching=filter"),
+                        ("520-both", "gpu_batch_nodes=true"),
+                        ("520-both-cpu", "gpu_batch_nodes=true")):
+        tier2_legs[leg] = newest_option_run(f"miplib-t2-full-{leg}-{sha7}*.csv", option)
     # #508: gpu-fj-ab-<sha>-<machine>.csv, newest by git order (the machine is in the name).
     fj_csv = newest("gpu-fj-ab-*.csv")
     # #478 on the refinery year: one CSV per option leg, pdhg-478-refinery-<leg>-<sha>.csv.
@@ -2958,6 +2972,18 @@ sparse products per iteration, and with the whole iteration loop kept on the dev
 (`gpu_on_device_loop=true`).
 
 {gpu_ab_doc.refinery_478_section(refinery_478_csvs)}
+
+#### 1g.10 GPU MIP heuristics and batched node bounds on the full MIPLIB tier 2 (#509, #520)
+
+All 60 instances of the tier-2 list (`bench/runners/miplib_tier2.json`), 60 s each, one run
+per leg on one binary: the feasibility pump and fix-and-propagate on PDHG relaxations (#509,
+on the device and with `gpu_heur_backend=cpu`), and batched PDHG for node bounds and for
+strong-branching scores (#520, on the device and with `gpu_batch_backend=cpu`). All of
+these are off by default; each row says what turning one on does against `off`. "Closer" and
+"further" compare the incumbent, and the final dual bound, with the published optimum,
+instance by instance.
+
+{gpu_ab_doc.tier2_legs_section(tier2_legs)}
 ---
 
 ### 1f. Scale — how far up this goes

@@ -85,3 +85,73 @@ def refinery_478_section(paths: dict[str, Path | None]) -> str:
            f"between the full and the one-fifth run, as `pdhg_two_matvec_ab.py` defines it. "
            f"Commit `{header.get('git_commit', '?')}`, GPU {header.get('gpu', '?')}.", ""] + out
     return "\n".join(out) + "\n"
+
+
+def _num(row: dict, key: str) -> float | None:
+    try:
+        value = float(row.get(key, ""))
+    except (TypeError, ValueError):
+        return None
+    return value if value == value and abs(value) != float("inf") else None
+
+
+def _closer(a: float | None, b: float | None, target: float) -> int:
+    """+1 when a is closer to target than b, -1 when further, 0 when level (1e-6 relative)."""
+    tol = 1e-6 * max(1.0, abs(target))
+    if a is not None and (b is None or abs(a - target) < abs(b - target) - tol):
+        return 1
+    if b is not None and (a is None or abs(a - target) > abs(b - target) + tol):
+        return -1
+    return 0
+
+
+def tier2_legs_section(legs: dict[str, Path | None]) -> str:
+    """The #509 / #520 legs on the MIPLIB tier-2 set, each against the first (baseline) leg.
+
+    Per leg: feasible points found, published optimum matched and proved, node throughput
+    (total nodes over total solver seconds), and per instance against the baseline whether
+    the incumbent (primal) and the final dual bound are closer to or further from the
+    published optimum. All counted from the rows.
+    """
+    present = {label: p for label, p in legs.items() if p is not None}
+    if len(present) < 2:
+        return "Not yet run at this commit."
+    labels = list(present)
+    base_label = labels[0]
+    tables = {label: {r["instance"]: r for r in _rows(p)} for label, p in present.items()}
+    base = tables[base_label]
+    first = next(iter(base.values()))
+    out = [f"Commit `{first.get('git_commit', '?')}` · machine `{first.get('machine', '?')}` · "
+           f"{len(base)} instances, one seed, one thread; every leg against `{base_label}`, "
+           f"the same binary with every GPU option off.", "",
+           "| leg | solver options | feasible | matched | proved | nodes / s | primal closer / "
+           "further | dual bound closer / further | source |",
+           "|---|---|---:|---:|---:|---:|---:|---:|---|"]
+    for label in labels:
+        rows = tables[label]
+        feasible = sum(_num(r, "our_objective") is not None for r in rows.values())
+        matched = sum(r.get("matched_published") == "1" for r in rows.values())
+        proved = sum(r.get("proved_optimal") == "1" for r in rows.values())
+        nodes = sum(_num(r, "nodes") or 0.0 for r in rows.values())
+        secs = sum(_num(r, "solver_seconds") or 0.0 for r in rows.values())
+        primal = [0, 0]
+        dual = [0, 0]
+        if label != base_label:
+            for name, r in rows.items():
+                b = base.get(name)
+                pub = _num(r, "published_objective")
+                if b is None or pub is None:
+                    continue
+                p = _closer(_num(r, "our_objective"), _num(b, "our_objective"), pub)
+                d = _closer(_num(r, "dual_bound"), _num(b, "dual_bound"), pub)
+                primal[0] += p > 0
+                primal[1] += p < 0
+                dual[0] += d > 0
+                dual[1] += d < 0
+        opts = next(iter(rows.values())).get("solver_options") or "defaults"
+        pc = "-" if label == base_label else f"{primal[0]} / {primal[1]}"
+        dc = "-" if label == base_label else f"{dual[0]} / {dual[1]}"
+        rate = f"{nodes / secs:.0f}" if secs else "-"
+        out.append(f"| {label} | `{opts}` | {feasible} | {matched} | {proved} | {rate} | {pc} "
+                   f"| {dc} | `{present[label].name}` |")
+    return "\n".join(out) + "\n"
