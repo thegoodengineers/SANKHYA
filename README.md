@@ -60,8 +60,9 @@ It separates decisions made on a committed measurement from decisions made on a 
 run that was never repeated on `main`, and keeps every withdrawn claim by name.
 
 Benchmark results against Netlib, headline first, as two measurements of the same run on
-`main` at `5b2bd80` (`bench/results/netlib-full-5b2bd80.csv`, alone on the machine, on
-mains, 120 s per instance, 24 September 2026):
+`main` at `ad57c03` (`bench/results/netlib-full-ad57c03.csv`, alone on a rented 7-vCPU
+EPYC 7542 node, 120 s per instance, 27 September 2026; the previous run at `5b2bd80` on a
+laptop, `netlib-full-5b2bd80.csv`, read the same two counts):
 
 | measurement | count |
 |---|---|
@@ -108,14 +109,15 @@ is off in the same direction. It is counted in the 81 because that column is def
 against the readme, and it is named here so nobody reads the 81 as 81 exact optima. #548
 tracks it.
 
-**At `5b2bd80` no instance is left to the clock, at 120 s.** `dfl001` finishes in 50.6 s on
-the dual simplex, `pilot87` in 33.4 s, and `maros-r7` in 6.9 s under the interior point,
+**At `ad57c03` no instance is left to the clock, at 120 s.** `dfl001` finishes in 50.9 s on
+the dual simplex, `pilot87` in 27.9 s, and `maros-r7` in 10.0 s under the interior point,
 where #284's engine rule has sent it since (144,848 nonzeros, above the 100,000 line), so
 the scaled-attempt factorization stall of #214 and #247 is no longer on its route (#466,
-closed with that attribution). The edge has moved, not vanished: the same binary at the
-runner's default 60 s reads 79 of 89, with `dfl001` and `pilot87` on the limit, and at
+closed with that attribution); at `5b2bd80` on the laptop the same three took 50.6 s,
+33.4 s and 6.9 s. The edge has moved, not vanished: the `5b2bd80` binary at the
+runner's default 60 s read 79 of 89, with `dfl001` and `pilot87` on the limit, and at
 `adb37bb` on a slower day `dfl001` missed at 120.06 s. The figure above is the 120 s one
-the paragraph has always quoted, and both runs are in this repository's history.
+the paragraph has always quoted, and every one of those runs is in this repository's history.
 
 This mattered because our own verifier could not settle it — it re-derives the answer from
 the same file we read, so agreeing with it shows only that our two readers agree, and both
@@ -386,16 +388,19 @@ tracks every PS26119 requirement against what exists on `main`; section 6 of
 | **Parallelism** - a threaded SpMV is #487, its TSan job #535, decomposition #525 | Single-threaded by default. `--option threads=N` runs the column loops of an iteration under OpenMP, deterministically - results are bit-identical at 1 and 8 threads - and at Netlib scale it is measured to buy nothing, because an iteration is too short to amortize the fork (#57). It is a correctness-preserving switch, not a speed claim. |
 
 On speed against HiGHS: on the medium tier the objectives agree on all 50 instances, and
-the speed ratio is, for the first time, a number two runs an hour apart agree on. Three
-runs of the same binary on `main` at `bf3df02` (`bench/results/compare-highs-medium-
-bf3df02.csv`, `-second.csv`, `-third.csv`; 16:17, 16:41 and 17:21 on the same afternoon,
-alone on the machine, on mains) put the median per-instance ratio at **2.01x, 2.04x and
-2.12x** - SANKHYA slower - with total solve time 2.64x, 2.56x and 2.62x. The first and the
-third are an hour apart and agree within 6%, which is the bar #212 set for quoting it;
-the earlier committed pair, three days apart, had read 1.38x and 2.11x, and that spread is
-why the number was not quoted before. Read it as *about twice HiGHS's time on these
-instances, on this laptop*: 9 to 16 of the 50 timing envelopes still overlap outright,
-the instances solve in single-digit milliseconds, and the ratio belongs to this machine
+the ratio depends on the machine more than on the solver. The latest run, on `main` at
+`ad57c03` on a rented 7-vCPU EPYC 7542 node, alone on the box, HiGHS 1.15.1 as a separate
+process, the median of 15 timed solves per instance (`bench/results/compare-highs-medium-ad57c03.csv`,
+`docs/BENCHMARKS.md` section 4): total solve time **0.99x** HiGHS's (0.750 s against
+0.760 s over the 50), shifted geometric mean 1.0x, per-instance median 1.02x, and SANKHYA
+is the slower of the two on **27 of 50** instances (worst `etamacro` at 2.91x, best `wood1p`
+at 0.32x). On 31 of the 50 the two timing envelopes overlap outright, so the honest reading
+is *within noise of HiGHS on these instances, on that node*. The earlier laptop
+measurement, three runs of the same binary at `bf3df02` an hour apart
+(`compare-highs-medium-bf3df02.csv`, `-second.csv`, `-third.csv`), read a median of 2.01x
+to 2.12x and a total of 2.56x to 2.64x, SANKHYA slower, and stays in the tree: the two
+readings are a different machine and some 300 commits apart, and neither is quoted alone.
+These instances solve in single-digit milliseconds, and the ratio belongs to the machine
 state as much as to the solver.
 The reproducible comparison is iteration count, where the gap narrowed by a third when
 devex pricing became the default (#66); HiGHS's devex still takes fewer.
@@ -430,7 +435,7 @@ apply to it.
 |---|---|---|
 | **The dual simplex's cost per iteration at size** | [#210](https://github.com/thegoodengineers/SANKHYA/issues/210), [#243](https://github.com/thegoodengineers/SANKHYA/issues/243) | #242 removed two O(m)-per-step sweeps from the factorization and the per-iteration recomputation of the basic values and duals; the per-phase clock it added (verbose log) now puts the pivot row - a BTRAN of a unit vector plus a gather over every column - at a quarter to a third of an iteration at 20,000 rows. Both standard remedies are in: the gather runs over rho's support through a row-wise copy of A (#265) and the transposed solve applies L^T in push form (#278), and the second measured to no change, because counters put a transposed solve's cost in the eta file (20,000 to 27,000 entries read per solve against a few hundred pushes through the factors) and in the four full-length passes over m; the Forrest-Tomlin update exists (`--option basis_update=forrest-tomlin`, [#279](https://github.com/thegoodengineers/SANKHYA/issues/279): the column is folded into U with a sparse spike and one row eta, and #396 added Tomlin's stability tests after the fold was measured drifting 2.5e-3 where the product form stayed at 1.1e-6 on a six-seed harness; with them 4.3e-8) but stays opt-in: it wins iterations on greenbea and d2q06c and loses them on perold and pilotnov, and the product form is the measured default. Two levers on the same cost remain untouched: the iteration COUNT, where dual steepest edge is what Devex left open ([#411](https://github.com/thegoodengineers/SANKHYA/issues/411)), and the work never done at all, where the presolve suite is eight reductions against the twenty the literature ranks ([#412](https://github.com/thegoodengineers/SANKHYA/issues/412), whose binary probing is also what would fill the conflict graph #379 found empty). None of the four 5,000- and 20,000-row scale models reaches the optimum in 120 s yet, but the iteration count inside those 120 s is up on every one: on `main` at `e134aeb` (`bench/results/scale-e134aeb.csv`, `scale-staircase-e134aeb.csv`) the dual simplex does 33,019 / 42,448 iterations at 5,000 rows (random / staircase) and 34,163 / 40,108 at 20,000, against 24,316 / 13,761 and 28,564 / 10,144 on the last runs before this work (`scale-f545f83.csv`, `scale-staircase-bf3df02.csv`). |
 | **The unscaled retry on badly scaled generated models** | [#244](https://github.com/thegoodengineers/SANKHYA/issues/244) | When the scaled dual simplex times out, the unscaled retry repairs singular bases and hands over to the primal on a fresh-factor pivot disagreement. The dual ratio test accepts any pivot above an absolute 1e-9; a relative floor with a Harris pass is what production codes do. |
-| **Netlib 81 of 89** | [#214](https://github.com/thegoodengineers/SANKHYA/issues/214) | 81 of 89 match Netlib's readme and 89 of 89 return an optimum the verifier accepts (`bench/results/netlib-full-5b2bd80.csv`). The eight verified non-matches agree with Koch's exact optima (2004) to 1e-11 or better, `e226` once its objective constant is added, so the readme is the outlier there; the table under the headline above has the numbers. What is left is ours: the clock edge, which at `5b2bd80` and 120 s no instance is on (at 60 s `dfl001` and `pilot87` are; `maros-r7` left it when #284 routed it to the interior point, #466 closed; #463 is the LU work that would move it further), and `pilot87`, which matches the readme but is 1.14e-6 from the exact optimum ([#548](https://github.com/thegoodengineers/SANKHYA/issues/548)). |
+| **Netlib 81 of 89** | [#214](https://github.com/thegoodengineers/SANKHYA/issues/214) | 81 of 89 match Netlib's readme and 89 of 89 return an optimum the verifier accepts (`bench/results/netlib-full-ad57c03.csv`, the same counts as `netlib-full-5b2bd80.csv` before it). The eight verified non-matches agree with Koch's exact optima (2004) to 1e-11 or better, `e226` once its objective constant is added, so the readme is the outlier there; the table under the headline above has the numbers. What is left is ours: the clock edge, which at `5b2bd80` and 120 s no instance is on (at 60 s `dfl001` and `pilot87` are; `maros-r7` left it when #284 routed it to the interior point, #466 closed; #463 is the LU work that would move it further), and `pilot87`, which matches the readme but is 1.14e-6 from the exact optimum ([#548](https://github.com/thegoodengineers/SANKHYA/issues/548)). |
 | **Mittelmann 2 of 8 (auto), 3 of 8 across engines** | [#216](https://github.com/thegoodengineers/SANKHYA/issues/216) | On a 96 GB node at `5c7efbc` (#575): `auto` 2, PDHG 3 (`qap15` in 93.5 s), IPM 2, 3 across engines; the interior point's limit there is its ordering budget, not memory (#576). Re-measured on `main` at `0018254`, alone on the machine (`bench/results/mittelmann-{,pdhg-,ipm-}0018254.csv`): `auto` finishes `brazil3` and, via the interior-point fallback to PDHG (#437), `chromaticindex1024-7`; the interior point alone also finishes `qap15`, which `auto` mis-routes to the dual simplex - an engine-selection finding for #284. Before this the default row read 0 of 8 at `e134aeb`. The per-engine table in section 1d (`mittelmann-{pdhg,ipm}-d24662f.csv`) shows the first-order engine finishing `chromaticindex1024-7` and `brazil3`, verified, and the interior point finishing none: two `std::bad_alloc` (#246), two non-finite iterates, four time limits, `Linf_520c` overrunning to 367 s inside a factorization. `qap15` stays a time limit under all three; the rest are size. Both files are far behind `main` - before the interior point went from 51 to 73 of 89 and before the out-of-memory guard (#326) that turns those two `std::bad_alloc` rows into a status - so the first step is a re-run, and the second is attributing each of the eight failures to one cause rather than counting them ([#417](https://github.com/thegoodengineers/SANKHYA/issues/417)). |
 | **MIPLIB: 13 of 30 reach the optimum, 10 prove it** | [#215](https://github.com/thegoodengineers/SANKHYA/issues/215) | The weakest number in the project, and the issue says where each of the other instances stands. The plain run on the merged binary at `5daee10` reads 13 and 10 (`bench/results/miplib-5daee10.csv`, 60 s, with the cut-filter report column of #584). Root cuts are on by default since `0018254`: the root leg of the three-way there reaches 13 and proves **10** at 1.015x the nodes (`bench/results/miplib-cuts-on.csv`, `neos-3611689-kaihu` proved), and the tree leg loses that proof again, so the default question on #221 is answered and the tree rounds stay opt-in. What the 16 that never reach the optimum need is the incumbent, not the bound: `markshare1` reports 40 against 1 and `timtab1` is 59% high, and the heuristics that exist measurably hurt ([#414](https://github.com/thegoodengineers/SANKHYA/issues/414)). The rest of the work list, each with its own acceptance A/B: symmetry and orbital fixing for the instances that enumerate permutations ([#413](https://github.com/thegoodengineers/SANKHYA/issues/413)), cut selection and scoring ([#415](https://github.com/thegoodengineers/SANKHYA/issues/415)), root restarts and branching that can break a bound plateau ([#418](https://github.com/thegoodengineers/SANKHYA/issues/418)), and flow cover cuts for the fixed-charge family ([#419](https://github.com/thegoodengineers/SANKHYA/issues/419)). |
 | **Interior point on the largest random model** | [#246](https://github.com/thegoodengineers/SANKHYA/issues/246) | On the 100,000-row random scale model it dies of `std::bad_alloc` 170 s past its 120 s limit with no status and no stats file, on an 8 GB machine: an out-of-memory condition must come back as a status, and the ordering needs a memory budget the way the polish has a factor budget. |
