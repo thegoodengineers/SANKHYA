@@ -36,7 +36,7 @@ import pooling_doc  # the non-convex pooling section (#516), kept in its own fil
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
 import gpu_doc  # 1g.1 and 1g.3 (#488)
 import gpu_plot  # the speedup-against-nonzeros figure of 1g.3 (#488)
-from gpu_doc import gpu_datacenter_table, gpu_real_section
+from gpu_doc import gpu_datacenter_table, gpu_real_section, multi_gpu_section
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
@@ -2634,6 +2634,7 @@ def main() -> int:
     gpu_pdlp_csv = newest("gpu-pdlp-*.csv")
     commercial_csv = newest("commercial-agreement-*.csv")
     gpu_domain_prop_csv = newest("gpu-domain-prop-*.csv", prefix="gpu-domain-prop")
+    multi_gpu_csv = newest("multi-gpu-*.csv")
 
     # Legacy untagged CSVs predate the tier tag; fall back so an old results directory still
     # generates something rather than failing.
@@ -2790,6 +2791,15 @@ sets); this is what each costs, on generated knapsack-row models from 1,000 to 1
 rows (`bench/runners/gpu_domain_prop.py`).
 
 {gpu_domain_prop_section(gpu_domain_prop_csv)}
+#### 1g.6 Two cards against one: the row-partitioned engine (#295)
+
+Rows of A split across the cards, balanced by nonzeros plus rows; the primal iterate
+replicated, the dual partitioned, A^T y summed across the cards every iteration in slot
+order over P2P (NVLink or PCIe) or, without it, staged through the host
+(`src/gpu/pdhg_multi_gpu.cu`). Dispatch is explicit (`gpu_devices=0,1`); nothing chooses
+several cards by itself, for the reason the table gives (`docs/ARCHITECTURE.md` section 7).
+
+{multi_gpu_section(multi_gpu_csv)}
 ---
 
 ### 1f. Scale — how far up this goes
