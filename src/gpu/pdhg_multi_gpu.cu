@@ -50,6 +50,8 @@
 #include "../core/stop_controller.hpp"
 #include "../la/scaling.hpp"
 #include "../pdhg/pdhg_evaluate.hpp"
+#include "../util/profiler.hpp"
+#include "gpu_memory.hpp"
 #include "multi_device.hpp"
 #include "multi_gpu_exchange.hpp"
 #include "pdhg_gpu.hpp"
@@ -73,6 +75,46 @@ using pdhg::evaluate;
 using pdhg::Problem;
 using pdhg::Residuals;
 
+// One pair of events per card around the exchange, so the time a card spends in the
+// cross-card sum - its own copies plus waiting for the slowest partial - is read off its
+// stream after the iteration's host synchronization, off the critical path. This is the
+// communication side of the comm/compute split #295 asks for; the events are recorded on
+// the card's own stream and cost a few microseconds an iteration.
+struct ExchangeClock {
+  std::vector<cudaEvent_t> before, after;
+  bool ok = true;
+  explicit ExchangeClock(const std::vector<DeviceState*>& cards) {
+    for (const DeviceState* c : cards) {
+      cudaEvent_t b{}, a{};
+      if (cudaSetDevice(c->device_id) != cudaSuccess || cudaEventCreate(&b) != cudaSuccess ||
+          cudaEventCreate(&a) != cudaSuccess) {
+        ok = false;
+        break;
+      }
+      before.push_back(b);
+      after.push_back(a);
+    }
+  }
+  ExchangeClock(const ExchangeClock&) = delete;
+  ExchangeClock& operator=(const ExchangeClock&) = delete;
+  ~ExchangeClock() {
+    for (cudaEvent_t e : before) cudaEventDestroy(e);
+    for (cudaEvent_t e : after) cudaEventDestroy(e);
+  }
+  /// The longest of the cards' spans, in seconds; 0 when a query fails. Call after the
+  /// streams were synchronized.
+  [[nodiscard]] double elapsed_seconds() const {
+    float longest = 0.0f;
+    for (std::size_t k = 0; k < before.size(); ++k) {
+      float ms = 0.0f;
+      if (cudaEventElapsedTime(&ms, before[k], after[k]) == cudaSuccess) {
+        longest = std::max(longest, ms);
+      }
+    }
+    return static_cast<double>(longest) / 1000.0;
+  }
+};
+
 // Pinned host memory for the per-card scalars, so their downloads are truly asynchronous.
 struct PinnedDoubles {
   double* p = nullptr;
@@ -92,8 +134,8 @@ struct PinnedDoubles {
 // ---- Public entry point --------------------------------------------------
 
 Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
-                               const std::vector<int>& device_ids, Logger& logger,
-                               SolveControl* control) {
+                              const std::vector<int>& device_ids, Logger& logger,
+                              SolveControl* control) {
   // One device: the single-card engine, unless the partitioned engine is asked for by name
   // (gpu_partitioned), which is how its one-card baseline is measured (#295).
   if (device_ids.empty() || (device_ids.size() == 1 && !options.get_bool("gpu_partitioned"))) {
@@ -180,10 +222,8 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   for (Index j = 0; j < cols; ++j) {
     const auto u = static_cast<std::size_t>(j);
     double v = 0.0;
-    if (!std::isinf(scaling.col_lower[u]) && v < scaling.col_lower[u])
-      v = scaling.col_lower[u];
-    if (!std::isinf(scaling.col_upper[u]) && v > scaling.col_upper[u])
-      v = scaling.col_upper[u];
+    if (!std::isinf(scaling.col_lower[u]) && v < scaling.col_lower[u]) v = scaling.col_lower[u];
+    if (!std::isinf(scaling.col_upper[u]) && v > scaling.col_upper[u]) v = scaling.col_upper[u];
     x0_scaled[u] = v;
   }
 
@@ -202,11 +242,45 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   logger.info("Estimated ||A||_2 = {:.4e}, target tolerance {:.1e}, restarts {}", spectral_norm,
               tolerance, use_restarts ? "on" : "off");
 
+  // ---- Every card must hold its block (#295) -----------------------------
+  // The partition is by work, never by memory: a card that cannot hold the block the
+  // balance gives it refuses the run, and the model goes to CPU PDHG, rather than being
+  // handed a smaller block (which would move the imbalance to the step time on every other
+  // card). That is the defined behaviour for a set of cards with unequal memory. The
+  // estimate is per block (gpu_memory.hpp); the reserve is the single-card policy's. Two
+  // slots on one physical card (a virtual pair) are checked block by block against the same
+  // free figure, which is a looser check than their sum.
+  Profiler* profiler = logger.profiler();
+  for (const RowPartition& part : parts) {
+    std::size_t free_bytes = 0, total_bytes = 0;
+    if (!device_memory_of(part.device_id, &free_bytes, &total_bytes)) continue;
+    const std::size_t required = estimate_multi_gpu_partition_memory(
+        cols, part.local_m(), partition_weight(full_csr.row_starts(), part) - part.local_m(),
+        K);
+    const std::size_t reserve = vram_reserve(total_bytes);
+    logger.info("  device {}: needs {:.0f} MiB of {:.0f} MiB free (reserve {:.0f} MiB)",
+                part.device_id, static_cast<double>(required) / 1048576.0,
+                static_cast<double>(free_bytes) / 1048576.0,
+                static_cast<double>(reserve) / 1048576.0);
+    if (required + reserve > free_bytes) {
+      logger.warning(
+          "Multi-GPU PDHG: device {} cannot hold its block ({:.0f} MiB + {:.0f} MiB reserve "
+          "against {:.0f} MiB free); the partition is by work, not by memory, so the solve "
+          "falls back to CPU PDHG",
+          part.device_id, static_cast<double>(required) / 1048576.0,
+          static_cast<double>(reserve) / 1048576.0,
+          static_cast<double>(free_bytes) / 1048576.0);
+      return pdhg::solve_pdhg(model, options, logger, control);
+    }
+  }
+
   // ---- Per-card state and the exchange -----------------------------------
   // The cards are declared before the exchange so that the exchange, which synchronizes the
   // cards' streams when it goes, is destroyed first.
+  const double setup_start = timer.elapsed_seconds();
   std::vector<std::unique_ptr<DeviceState>> cards;
   std::vector<DeviceState*> card_ptrs;
+  std::vector<double> peak_mib(static_cast<std::size_t>(K), 0.0);  // per slot, from the free
   bool setup_ok = true;
   for (int k = 0; k < K && setup_ok; ++k) {
     const RowPartition& part = parts[static_cast<std::size_t>(k)];
@@ -216,14 +290,22 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     c.slot = k;
     c.num_slots = K;
     card_ptrs.push_back(&c);
+    std::size_t free_before = 0, free_after = 0;
+    const bool measured = device_memory_of(part.device_id, &free_before, nullptr);
     setup_ok =
         multi::setup_device(c, full_csr, scaling, x0_scaled, part.row_start, part.row_end, ni);
+    if (measured && device_memory_of(part.device_id, &free_after, nullptr) &&
+        free_before >= free_after) {
+      peak_mib[static_cast<std::size_t>(k)] =
+          static_cast<double>(free_before - free_after) / 1048576.0;
+    }
   }
   multi::PartialSumExchange exchange;
   std::string transport_reason;
   if (setup_ok) setup_ok = exchange.init(card_ptrs, allow_peer, &transport_reason);
   PinnedDoubles host_scalars(3 * static_cast<std::size_t>(K));
-  if (!setup_ok || host_scalars.p == nullptr) {
+  ExchangeClock exchange_clock(card_ptrs);
+  if (!setup_ok || host_scalars.p == nullptr || !exchange_clock.ok) {
     logger.warning(
         "Multi-GPU PDHG: device setup failed; falling back to single-GPU on device {}",
         device_ids[0]);
@@ -231,6 +313,12 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   }
   const char* transport = multi::to_string(exchange.transport());
   logger.info("A^T y exchange: {} ({})", transport, transport_reason);
+  // Bytes the exchange moves per iteration: over P2P every card pulls the K - 1 other
+  // partials (n doubles each); staged, every card also pushes its own to the host first.
+  const double exchange_bytes_per_iteration =
+      static_cast<double>(K) *
+      static_cast<double>(exchange.transport() == multi::Transport::kPeer ? K - 1 : K) *
+      static_cast<double>(n) * static_cast<double>(sizeof(double));
 
   // THE EVALUATION ON THE CARDS (#478 item 3, pdhg_multi_gpu_eval.cuh): one evaluator per
   // card over its rows, the column side on card 0 (x is replicated on every card).
@@ -240,11 +328,13 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     if (!card_evaluation->init(card_ptrs, &exchange, prob, scaling)) {
       card_evaluation.reset();
       cudaGetLastError();
-      logger.warning("Multi-GPU PDHG: the device evaluation could not be set up; evaluating "
-                     "on the host");
+      logger.warning(
+          "Multi-GPU PDHG: the device evaluation could not be set up; evaluating "
+          "on the host");
     } else {
-      logger.info("Multi-GPU PDHG: convergence evaluated on the cards, scalars to the host "
-                  "(#478)");
+      logger.info(
+          "Multi-GPU PDHG: convergence evaluated on the cards, scalars to the host "
+          "(#478)");
     }
   }
 
@@ -301,7 +391,9 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   };
   DeviceState& c0 = *cards[0];
   const bool on_cards = card_evaluation != nullptr;
+  const double setup_seconds = timer.elapsed_seconds() - setup_start;
   const double loop_start = timer.elapsed_seconds();
+  double exchange_seconds = 0.0;
 
   while (!gpu_error) {
     if (iteration >= iteration_limit) break;
@@ -325,7 +417,14 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     //   interaction -> scalars to the host.
     const bool enqueued =
         on_every_card([](DeviceState& c) { return multi::spmv_aty(c); }) &&
-        exchange.enqueue() &&
+        on_every_card([&](DeviceState& c) {
+          return cudaEventRecord(exchange_clock.before[static_cast<std::size_t>(c.slot)],
+                                 c.stream) == cudaSuccess;
+        }) &&
+        exchange.enqueue() && on_every_card([&](DeviceState& c) {
+          return cudaEventRecord(exchange_clock.after[static_cast<std::size_t>(c.slot)],
+                                 c.stream) == cudaSuccess;
+        }) &&
         on_every_card([&](DeviceState& c) { return multi::launch_primal(c, tau, omega); }) &&
         on_every_card([](DeviceState& c) { return multi::spmv_ax(c, c.d_ext, c.d_ax); }) &&
         on_every_card([&](DeviceState& c) { return multi::launch_dual(c, sigma, omega); }) &&
@@ -344,6 +443,7 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
       break;
     }
     ++attempts;
+    exchange_seconds += exchange_clock.elapsed_seconds();
 
     // mv_x is computed identically on every card (replicated x): card 0's is used. The dual
     // movement and the interaction are summed over the cards in slot order.
@@ -557,19 +657,20 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
     solution.status = SolveStatus::kOptimal;
     char buf[384];
     std::snprintf(buf, sizeof(buf),
-        "CUDA multi-GPU PDHG (%d devices, %s exchange) converged after %lld iterations and %lld restarts; "
-        "absolute primal %.3e, dual %.3e, relative gap %.3e",
-        K, transport, (long long)iteration, (long long)restarts, final_r.absolute_primal,
-        final_r.absolute_dual,
-        final_r.gap_as_verified);
+                  "CUDA multi-GPU PDHG (%d devices, %s exchange) converged after %lld "
+                  "iterations and %lld restarts; "
+                  "absolute primal %.3e, dual %.3e, relative gap %.3e",
+                  K, transport, (long long)iteration, (long long)restarts,
+                  final_r.absolute_primal, final_r.absolute_dual, final_r.gap_as_verified);
     solution.message = buf;
   } else if (converged) {
     solution.status = SolveStatus::kFeasible;
     char buf[384];
     std::snprintf(buf, sizeof(buf),
-        "CUDA multi-GPU PDHG (%d devices, %s exchange) met requested tolerance %.1e after %lld iterations "
-        "but NOT project standard",
-        K, transport, tolerance, (long long)iteration);
+                  "CUDA multi-GPU PDHG (%d devices, %s exchange) met requested tolerance %.1e "
+                  "after %lld iterations "
+                  "but NOT project standard",
+                  K, transport, tolerance, (long long)iteration);
     solution.message = buf;
   } else {
     solution.status =
@@ -578,10 +679,11 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
             : SolveStatus::kIterationLimit;
     char buf[384];
     std::snprintf(buf, sizeof(buf),
-        "CUDA multi-GPU PDHG (%d devices, %s exchange) stopped at relative primal %.3e, dual %.3e, "
-        "gap %.3e after %lld iterations and %lld restarts (target %.1e)",
-        K, transport, final_r.primal, final_r.dual, final_r.gap, (long long)iteration,
-        (long long)restarts, tolerance);
+                  "CUDA multi-GPU PDHG (%d devices, %s exchange) stopped at relative primal "
+                  "%.3e, dual %.3e, "
+                  "gap %.3e after %lld iterations and %lld restarts (target %.1e)",
+                  K, transport, final_r.primal, final_r.dual, final_r.gap, (long long)iteration,
+                  (long long)restarts, tolerance);
     solution.message = buf;
   }
 
@@ -603,12 +705,45 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   // (accepted or rejected), with the evaluation every kEvaluationInterval iterations taken
   // out, and that evaluation on its own, on the cards or on the host.
   const double device_seconds = loop_seconds - evaluation_seconds;
+  // The communication side: the exchange's span on the slowest card, summed over the
+  // attempts (ExchangeClock), against the device time. The exchange is enqueued between the
+  // A_k^T y_k product and the primal step, so its span is what the cards wait for; the rest
+  // of the step is the compute side. The bytes are what the transport moved, in total.
+  const double exchange_mib =
+      exchange_bytes_per_iteration * static_cast<double>(attempts) / 1048576.0;
   logger.info(
       "Timing: loop {:.3f}s, {} step attempts, {:.1f} us per attempt on the cards; "
-      "evaluation {:.3f}s on the {}",
+      "evaluation {:.3f}s on the {}; exchange {:.3f}s ({:.1f}% of the device time, {:.1f} us "
+      "per attempt, {:.1f} MiB moved over {}); setup {:.3f}s",
       loop_seconds, attempts,
       attempts > 0 ? 1e6 * device_seconds / static_cast<double>(attempts) : 0.0,
-      evaluation_seconds, on_cards ? "cards" : "host");
+      evaluation_seconds, on_cards ? "cards" : "host", exchange_seconds,
+      device_seconds > 0.0 ? 100.0 * exchange_seconds / device_seconds : 0.0,
+      attempts > 0 ? 1e6 * exchange_seconds / static_cast<double>(attempts) : 0.0, exchange_mib,
+      transport, setup_seconds);
+  for (int k = 0; k < K; ++k) {
+    logger.info("  device {} (slot {}): peak {:.0f} MiB allocated for its block",
+                cards[static_cast<std::size_t>(k)]->device_id, k,
+                peak_mib[static_cast<std::size_t>(k)]);
+  }
+  // The same figures to the profiler (#285), so `profile=basic profile_out=<file>` carries
+  // them as regions and counters beside every other engine's.
+  if (profiler != nullptr && profiler->records(ProfileMode::kBasic)) {
+    profiler->record("multi-gpu setup", setup_seconds);
+    profiler->record("multi-gpu loop", loop_seconds, attempts);
+    profiler->record("multi-gpu exchange", exchange_seconds, attempts);
+    profiler->record("multi-gpu evaluation", evaluation_seconds);
+    profiler->count("multi-gpu devices", K);
+    profiler->count("multi-gpu host syncs", attempts);
+    profiler->count("multi-gpu exchange bytes",
+                    static_cast<std::int64_t>(exchange_bytes_per_iteration *
+                                              static_cast<double>(attempts)));
+    for (int k = 0; k < K; ++k) {
+      char name[64];
+      std::snprintf(name, sizeof(name), "multi-gpu peak MiB slot %d", k);
+      profiler->count(name, static_cast<std::int64_t>(peak_mib[static_cast<std::size_t>(k)]));
+    }
+  }
   if (!solution.message.empty()) logger.info("{}", solution.message);
   return solution;
 }

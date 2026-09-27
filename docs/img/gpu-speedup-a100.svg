@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420" font-family="sans-serif" font-size="12">
+<rect width="720" height="420" fill="white"/>
+<text x="360" y="18" text-anchor="middle" font-size="14">A100: GPU speedup against the faster CPU arm, by nonzeros</text>
+<line x1="70.0" y1="30" x2="70.0" y2="360" stroke="#ddd"/>
+<text x="70.0" y="376" text-anchor="middle">1e5</text>
+<line x1="280.0" y1="30" x2="280.0" y2="360" stroke="#ddd"/>
+<text x="280.0" y="376" text-anchor="middle">1e6</text>
+<line x1="490.0" y1="30" x2="490.0" y2="360" stroke="#ddd"/>
+<text x="490.0" y="376" text-anchor="middle">1e7</text>
+<line x1="700.0" y1="30" x2="700.0" y2="360" stroke="#ddd"/>
+<text x="700.0" y="376" text-anchor="middle">1e8</text>
+<line x1="70" y1="360.0" x2="700" y2="360.0" stroke="#ddd"/>
+<text x="64" y="364.0" text-anchor="end">0.1x</text>
+<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="#ddd"/>
+<text x="64" y="254.0" text-anchor="end">1x</text>
+<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="#ddd"/>
+<text x="64" y="144.0" text-anchor="end">10x</text>
+<line x1="70" y1="30.0" x2="700" y2="30.0" stroke="#ddd"/>
+<text x="64" y="34.0" text-anchor="end">100x</text>
+<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="#333" stroke-dasharray="6 4"/>
+<text x="696" y="245.0" text-anchor="end">crossover, 1x: above is a win, below a loss</text>
+<text x="360" y="412" text-anchor="middle">nonzeros of A</text>
+<rect x="91.1" y="140.5" width="10" height="10" fill="#1f77b4"><title>brazil3 at 1e-04: 8.91x (real)</title></rect>
+<text x="104.1" y="139.5">brazil3</text>
+<rect x="91.1" y="132.5" width="10" height="10" fill="#d62728"><title>brazil3 at 1e-08: 10.53x (real)</title></rect>
+<text x="104.1" y="131.5">brazil3</text>
+<rect x="155.7" y="217.6" width="10" height="10" fill="#d62728"><title>chromaticindex1024-7 at 1e-08: 1.77x (real)</title></rect>
+<text x="168.7" y="216.6">chromaticindex1024-7</text>
+<rect x="155.7" y="203.5" width="10" height="10" fill="#1f77b4"><title>chromaticindex1024-7 at 1e-04: 2.38x (real)</title></rect>
+<text x="168.7" y="202.5">chromaticindex1024-7</text>
+<rect x="494.9" y="245.0" width="10" height="10" fill="#d62728"><title>refinery_year at 1e-08: 1.00x (real)</title></rect>
+<text x="507.9" y="244.0">refinery_year</text>
+<rect x="494.9" y="245.0" width="10" height="10" fill="#1f77b4"><title>refinery_year at 1e-04: 1.00x (real)</title></rect>
+<text x="507.9" y="244.0">refinery_year</text>
+<circle cx="82" cy="44" r="5" fill="#1f77b4"/>
+<text x="92" y="48">1e-04, circle: synthetic ladder; square: real instance</text>
+<circle cx="82" cy="62" r="5" fill="#d62728"/>
+<text x="92" y="66">1e-08, circle: synthetic ladder; square: real instance</text>
+</svg>

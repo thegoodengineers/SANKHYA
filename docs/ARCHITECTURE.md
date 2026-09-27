@@ -299,10 +299,27 @@ repeatable; under the flag both products run as non-transpose products with
 `CUSPARSE_SPMV_CSR_ALG2`, the one configuration that documentation states is bit-wise
 repeatable, with A^T held explicitly in CSR (the CSC arrays of A, a second copy of the
 matrix on the device, which the VRAM gate counts). `tests/unit/test_pdhg_cuda_determinism.cpp`
-solves twice on the card and compares the answers to the bit. The multi-GPU engine still
-sums with `atomicAdd`, so a deterministic request naming more than one device in
-`gpu_devices` falls back to CPU PDHG with a warning. `docs/PS26119_COVERAGE.md` says what
-exists.
+solves twice on the card and compares the answers to the bit. The multi-GPU engine was
+written fixed-order from the start (`src/gpu/pdhg_multi_gpu_device.hpp`: per-block sums
+finalised in index order, both products `CSR_ALG2` on explicit A_k and A_k^T) and its
+cross-card sum of A^T y runs in slot order whichever transport moved the partials
+(`src/gpu/multi_gpu_exchange.hpp`), so since #295 a deterministic request naming several
+devices in `gpu_devices` is honoured too; `tests/unit/test_multi_gpu.cpp` checks a virtual
+pair of one card to the bit and `tests/unit/test_multi_gpu_solve.cpp` two real cards.
+`docs/PS26119_COVERAGE.md` says what exists.
+
+Multi-GPU dispatch is explicit and stays so: `gpu_devices=auto` means device 0 and the
+single-card engine, and a set of cards is used only when named. Nothing chooses it by size,
+because the measurement (`docs/BENCHMARKS.md` section 1g.6) does not support a rule: two
+A100s over NVLink are 1.64x faster per step than one at 4,000,000 rows and slower on the
+two real instances tried, and the whole solve at 4,000,000 rows takes the same time on one
+card or two because setup and evaluation dominate a 2,000-step budget. The partition is by
+work (nonzeros plus rows), never by memory: every card must hold the block the balance
+gives it, checked per card against that card's free memory before anything is allocated
+(`estimate_multi_gpu_partition_memory`), and a card that cannot sends the whole solve to CPU
+PDHG with a warning rather than being given a smaller block. Every card named must meet the
+compiled compute capability, checked in the shared guard; an id that does not exist runs
+the single-card engine, with a warning.
 
 **GPU iteration counts vary run to run** (#448) without `deterministic=true`: the default
 path keeps cuSPARSE's transpose product and its default algorithm. The working hypothesis

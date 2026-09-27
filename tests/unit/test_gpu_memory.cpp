@@ -80,6 +80,44 @@ TEST(GpuMemory, DeterministicModeAddsASecondCsrForTheTranspose) {
   EXPECT_EQ(gpu::estimate_pdhg_gpu_transpose_memory(-1, -1), sizeof(int));
 }
 
+// ---- estimate_multi_gpu_partition_memory (#295) --------------------------------
+
+TEST(GpuMemory, PartitionEstimateCountsOneCardsBlock) {
+  // n=20 columns, a block of m=10 rows holding nnz=50, K=2 cards:
+  //   (10 + K) n-vectors + 8 m-vectors        = (12*20 + 8*10) * 8 = 2560
+  //   A_k CSR  (m+1)*4 + nnz*4 + nnz*8         = 44 + 200 + 400    = 644
+  //   A_k^T CSR (n+1)*4 + nnz*4 + nnz*8        = 84 + 200 + 400    = 684
+  //   evaluation 7 m + 8 n doubles             = (70 + 160) * 8    = 1840
+  //   library overhead                         = 16 MiB
+  const std::size_t overhead = 16ULL * 1024 * 1024;
+  EXPECT_EQ(gpu::estimate_multi_gpu_partition_memory(20, 10, 50, 2),
+            overhead + 2560U + 644U + 684U + 1840U);
+  // A larger set replicates one more n-vector per card (the receive buffer grows with K).
+  EXPECT_EQ(gpu::estimate_multi_gpu_partition_memory(20, 10, 50, 3) -
+                gpu::estimate_multi_gpu_partition_memory(20, 10, 50, 2),
+            20U * sizeof(double));
+  // Clamped like the single-card estimate; K below 1 counts as 1.
+  EXPECT_EQ(gpu::estimate_multi_gpu_partition_memory(-1, -1, -1, 0),
+            overhead + 2 * sizeof(int));
+}
+
+TEST(GpuMemory, PartitionEstimateGrowsWithTheBlockAndGatesAgainstTheReserve) {
+  // Two balanced blocks of a 1,000,000 x 1,000,000 model with 8 nonzeros a column: about
+  // 340 MB a card. The block's share grows with its rows and nonzeros, the replicated
+  // n-vectors do not shrink with the block, and the gate is the single-card policy's
+  // (estimate + reserve against free): a 2 GiB card with 512 MiB free refuses that block, a
+  // card with 1 GiB free holds it.
+  const std::size_t half =
+      gpu::estimate_multi_gpu_partition_memory(1000000, 500000, 4000000, 2);
+  const std::size_t quarter =
+      gpu::estimate_multi_gpu_partition_memory(1000000, 250000, 2000000, 2);
+  EXPECT_LT(quarter, half);
+  EXPECT_GT(quarter, half / 2);  // the replicated columns are paid on every card
+  const std::size_t total_bytes = 2048ULL * 1024 * 1024;
+  EXPECT_GT(half + gpu::vram_reserve(total_bytes), 512ULL * 1024 * 1024);
+  EXPECT_LT(half + gpu::vram_reserve(total_bytes), 1024ULL * 1024 * 1024);
+}
+
 // ---- vram_reserve -----------------------------------------------------------
 
 TEST(GpuMemory, ReserveIsAtLeast256Mib) {

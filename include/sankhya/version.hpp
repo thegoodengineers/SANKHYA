@@ -24,9 +24,9 @@ namespace sankhya {
 [[nodiscard]] bool cuda_enabled() noexcept;
 
 /// Human-readable description of the first CUDA device visible at run time, e.g.
-/// "GeForce RTX 4050 Laptop GPU (compute 8.9, 6144 MiB VRAM)".
-/// Returns "none (CUDA not compiled in)" when SANKHYA_ENABLE_CUDA is off, or
-/// "no device: <reason>" when a device cannot be found.
+/// "GeForce RTX 4050 Laptop GPU (compute 8.9, 6144 MiB VRAM, CUDA runtime 12.4, driver
+/// API 12.6)". Returns "none (CUDA not compiled in)" when SANKHYA_ENABLE_CUDA is off, or "no
+/// device: <reason>" when a device cannot be found.
 [[nodiscard]] const char* cuda_device_description() noexcept;
 
 /// One-line banner: name, version, commit, build type, CUDA status.

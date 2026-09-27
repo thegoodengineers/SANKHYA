@@ -7,6 +7,7 @@
 // present in SANKHYA_ENABLE_CUDA builds.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -55,6 +56,13 @@ struct RowPartition {
 // Returns true when device `from` can read device `to`'s memory via P2P / NVLink.
 // `from == to` always returns true.
 [[nodiscard]] bool can_peer_access(int from, int to);
+
+// The compute capability of device `id`; false when it does not exist or cannot be queried.
+[[nodiscard]] bool device_compute_capability_of(int id, int* major, int* minor);
+
+// Free and total bytes of device `id`; false when it does not exist or cannot be queried.
+// Leaves the current device as it was.
+[[nodiscard]] bool device_memory_of(int id, std::size_t* free_bytes, std::size_t* total_bytes);
 #endif
 
 }  // namespace sankhya::gpu

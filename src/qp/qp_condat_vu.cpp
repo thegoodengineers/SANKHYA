@@ -47,6 +47,13 @@
 // are decided on the fixed-point residual ||T z - z||. The machinery and its derivation from
 // Condat's relaxation bound are in qp_first_order_accel.hpp. Convergence is checked, and the
 // answer reported, at T z - a point of the box - never at the anchored combination.
+//
+// WHERE THE ARITHMETIC RUNS (#493, the GPU half). The step, the fixed-point residual, the
+// Halpern blend and the restart bookkeeping are a QpOperator (qp_operator.hpp): the host
+// implementation is the arithmetic this file always ran, and qp_gpu=true asks for the device
+// one (src/gpu/qp_device.cu), which keeps the iterate on the card and returns scalars. This
+// loop is the same either way; the residual evaluation every 50 iterations reads the
+// evaluated point back and runs here, so both paths report through one code.
 
 #include "sankhya/qp.hpp"
 #include "sankhya/solve_control.hpp"
@@ -54,6 +61,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <random>
 #include <string>
 #include <vector>
@@ -61,11 +69,13 @@
 #include <fmt/format.h>
 
 #include "../core/stop_controller.hpp"
+#include "../gpu/qp_device.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
 #include "convexity.hpp"
 #include "qp_first_order_accel.hpp"
+#include "qp_operator.hpp"
 
 namespace sankhya::qp {
 namespace {
@@ -133,18 +143,7 @@ namespace {
     if (norm <= 0.0) return 0.0;
     for (double& value : v) value /= norm;
 
-    // qv = Q v, from the lower triangle: the stored off-diagonal entry serves both halves.
-    std::fill(qv.begin(), qv.end(), 0.0);
-    for (Index j = 0; j < model.hessian.num_cols(); ++j) {
-      const ColumnView column = model.hessian.column(j);
-      const auto uj = static_cast<std::size_t>(j);
-      for (Index k = 0; k < column.size; ++k) {
-        const auto ui = static_cast<std::size_t>(column.rows[k]);
-        const double value = column.values[k];
-        qv[ui] += value * v[uj];
-        if (column.rows[k] != j) qv[uj] += value * v[ui];
-      }
-    }
+    hessian_multiply(model, v, &qv);
 
     double next = 0.0;
     for (std::size_t i = 0; i < qv.size(); ++i) next += qv[i] * v[i];
@@ -154,20 +153,23 @@ namespace {
   return estimate;
 }
 
-/// Q x, from the stored lower triangle.
-void hessian_multiply(const Model& model, const std::vector<double>& x,
-                      std::vector<double>* out) {
-  std::fill(out->begin(), out->end(), 0.0);
-  for (Index j = 0; j < model.hessian.num_cols(); ++j) {
-    const ColumnView column = model.hessian.column(j);
-    const auto uj = static_cast<std::size_t>(j);
-    for (Index k = 0; k < column.size; ++k) {
-      const auto ui = static_cast<std::size_t>(column.rows[k]);
-      const double value = column.values[k];
-      (*out)[ui] += value * x[uj];
-      if (column.rows[k] != j) (*out)[uj] += value * x[ui];
+/// The operator qp_gpu asks for, or the host one with a warning when the device cannot be
+/// had. The host operator is never announced: it is what the engine always was.
+std::unique_ptr<QpOperator> choose_operator(const Model& model, const Options& options,
+                                            Logger& logger) {
+  if (options.get_bool("qp_gpu")) {
+    std::string reason;
+    std::unique_ptr<QpOperator> device = gpu::make_qp_device_operator(model, &reason);
+    if (device != nullptr) {
+      logger.info("QP: the first-order operator runs on the device (qp_gpu, #493)");
+      return device;
     }
+    logger.warning(
+        "QP: qp_gpu=true but the device operator is unavailable ({}); running on "
+        "the host",
+        reason);
   }
+  return make_host_operator(model);
 }
 
 }  // namespace
@@ -219,19 +221,11 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
   logger.verbose("QP step sizes: ||A|| ~ {:.4g}, ||Q|| ~ {:.4g}, tau {:.4g}, sigma {:.4g}",
                  norm_a, norm_q, tau, sigma);
 
-  // ---- iterate ----------------------------------------------------------------------------
-  std::vector<double> x(un, 0.0);
-  for (Index j = 0; j < n; ++j) {
-    const auto u = static_cast<std::size_t>(j);
-    x[u] = project(0.0, model.col_lower[u], model.col_upper[u]);
-  }
-  std::vector<double> y(um, 0.0);
-  std::vector<double> x_next(un, 0.0);
-  std::vector<double> y_next(um, 0.0);
-  std::vector<double> extrapolated(un, 0.0);
-  std::vector<double> qx(un, 0.0);
-  std::vector<double> at_y(un, 0.0);
-  std::vector<double> ax(um, 0.0);
+  // ---- the arithmetic, on the host or the device ------------------------------------------
+  std::unique_ptr<QpOperator> op = choose_operator(model, options, logger);
+  if (op->where() != std::string("host")) solution.algorithm = "qp-condat-vu-cuda";
+  std::vector<double> x(un, 0.0), y(um, 0.0);  // the evaluated point, when read back
+  std::vector<double> qx(un, 0.0), at_y(un, 0.0), ax(um, 0.0);
 
   const double tolerance = options.get_double("qp_tolerance");
   // One interpretation of every limit, shared with every other engine (#289). A first-order
@@ -259,18 +253,9 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
   double omega = m > 0 ? condat_vu_weight_of(tau, sigma) : 0.0;
   double reflection =
       use_halpern ? tol::kQpHalpernReflectionShare * condat_vu_reflection_max(l, tau) : 0.0;
-  std::vector<double> x_anchor;
-  std::vector<double> y_anchor;
-  std::vector<double> x_restart;
-  std::vector<double> y_restart;
-  if (use_halpern) {
-    x_anchor = x;
-    y_anchor = y;
-  }
-  if (use_pid) {
-    x_restart = x;
-    y_restart = y;
-  }
+  bool device_error = false;
+  if (use_halpern && !op->set_anchor()) device_error = true;
+  if (use_pid && !op->set_restart()) device_error = true;
   Count period_steps = 0;
   Count restarts = 0;
   double period_residual = 0.0;  // ||T z - z|| at the period's first step
@@ -282,7 +267,7 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
         use_halpern, use_pid, gains.kp, gains.ki, gains.kd, omega, reflection);
   }
 
-  while (true) {
+  while (!device_error) {
     // Time outranks the counters when both are exhausted at one safe point (#289).
     if (limits.time_exhausted(timer.elapsed_seconds())) {
       status = SolveStatus::kTimeLimit;
@@ -302,58 +287,29 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
       break;
     }
     ++iterations;
-    // Primal: x' = proj_box( x - tau (c + Qx + A'y) ). The Qx term is the whole difference
-    // from the LP engine; everything else is Chambolle-Pock unchanged.
-    hessian_multiply(model, x, &qx);
-    std::fill(at_y.begin(), at_y.end(), 0.0);
-    if (m > 0) model.matrix.transpose_multiply_add(y.data(), at_y.data());
-    for (Index j = 0; j < n; ++j) {
-      const auto u = static_cast<std::size_t>(j);
-      const double gradient = sense * model.col_cost[u] + sense * qx[u] + at_y[u];
-      x_next[u] = project(x[u] - tau * gradient, model.col_lower[u], model.col_upper[u]);
-      extrapolated[u] = 2.0 * x_next[u] - x[u];
-    }
-
-    // Dual: y' = prox_{sigma sigma_C}(y + sigma A xbar) = v - sigma proj_C(v / sigma).
-    if (m > 0) {
-      model.matrix.multiply(extrapolated.data(), ax.data());
-      for (Index i = 0; i < m; ++i) {
-        const auto u = static_cast<std::size_t>(i);
-        const double v = y[u] + sigma * ax[u];
-        y_next[u] = v - sigma * project(v / sigma, model.row_lower[u], model.row_upper[u]);
-      }
+    // T z: the primal step with Q x, then the dual prox (qp_operator.hpp).
+    if (!op->step(tau, sigma)) {
+      device_error = true;
+      break;
     }
 
     if (use_restarts) {
       // ||T z - z|| in the diagonal of Condat's metric, diag(I / tau, I / sigma). The period's
       // first value is the reference the restart test compares against, in the same norm.
-      double dx2 = 0.0;
-      for (std::size_t u = 0; u < un; ++u) {
-        const double d = x_next[u] - x[u];
-        dx2 += d * d;
+      fixed_point_residual = op->fixed_point_residual(tau, sigma);
+      if (!std::isfinite(fixed_point_residual)) {
+        device_error = true;
+        break;
       }
-      double dy2 = 0.0;
-      for (std::size_t u = 0; u < um; ++u) {
-        const double d = y_next[u] - y[u];
-        dy2 += d * d;
-      }
-      fixed_point_residual = std::sqrt(dx2 / tau + (m > 0 ? dy2 / sigma : 0.0));
       if (period_steps == 0) period_residual = fixed_point_residual;
       ++period_steps;
     }
-    if (use_halpern) {
-      // z <- w ((1 + rho) T z - rho z) + (1 - w) z_anchor. T z stays in x_next / y_next,
-      // which is where convergence is measured and what is reported.
-      const auto k = static_cast<double>(period_steps - 1);
-      halpern_blend(&x, x_next, x_anchor, k, reflection);
-      halpern_blend(&y, y_next, y_anchor, k, reflection);
-    } else {
-      x.swap(x_next);
-      y.swap(y_next);
+    // z <- T z, or under Halpern z <- w ((1 + rho) T z - rho z) + (1 - w) z_anchor, T z
+    // staying where convergence is measured and what is reported.
+    if (!op->advance(static_cast<double>(period_steps - 1), use_halpern ? reflection : -1.0)) {
+      device_error = true;
+      break;
     }
-    // The point every test below is made at: T z, in the box. Without Halpern it is z itself.
-    const std::vector<double>& x_eval = use_halpern ? x_next : x;
-    const std::vector<double>& y_eval = use_halpern ? y_next : y;
 
     // ---- termination, every 50 iterations -------------------------------------------------
     if (iterations % 50 != 0) continue;
@@ -375,10 +331,16 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
       break;
     }
 
+    // The point every test below is made at: T z, in the box. Without Halpern it is z itself.
+    if (!op->download(use_halpern, &x, &y)) {
+      device_error = true;
+      break;
+    }
+
     // Primal residual: the worst row-bound violation.
     double primal_residual = 0.0;
     if (m > 0) {
-      model.matrix.multiply(x_eval.data(), ax.data());
+      model.matrix.multiply(x.data(), ax.data());
       for (Index i = 0; i < m; ++i) {
         const auto u = static_cast<std::size_t>(i);
         const double projected = project(ax[u], model.row_lower[u], model.row_upper[u]);
@@ -388,16 +350,15 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
 
     // Dual residual: the projected-gradient stationarity measure. At an optimum, taking a
     // unit gradient step and projecting back changes nothing.
-    hessian_multiply(model, x_eval, &qx);
+    hessian_multiply(model, x, &qx);
     std::fill(at_y.begin(), at_y.end(), 0.0);
-    if (m > 0) model.matrix.transpose_multiply_add(y_eval.data(), at_y.data());
+    if (m > 0) model.matrix.transpose_multiply_add(y.data(), at_y.data());
     double dual_residual = 0.0;
     for (Index j = 0; j < n; ++j) {
       const auto u = static_cast<std::size_t>(j);
       const double gradient = sense * model.col_cost[u] + sense * qx[u] + at_y[u];
-      const double stepped =
-          project(x_eval[u] - gradient, model.col_lower[u], model.col_upper[u]);
-      dual_residual = std::max(dual_residual, std::fabs(x_eval[u] - stepped));
+      const double stepped = project(x[u] - gradient, model.col_lower[u], model.col_upper[u]);
+      dual_residual = std::max(dual_residual, std::fabs(x[u] - stepped));
     }
 
     if (primal_residual <= tolerance && dual_residual <= tolerance) {
@@ -405,7 +366,7 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
       break;
     }
     if (iterations % 5000 == 0) {
-      logger.iteration(iterations, model.evaluate_objective(x_eval.data()), primal_residual,
+      logger.iteration(iterations, model.evaluate_objective(x.data()), primal_residual,
                        dual_residual, timer.elapsed_seconds());
     }
 
@@ -419,32 +380,25 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
                                                  static_cast<double>(iterations)));
       if (sufficient || artificial) {
         // Restart at T z, the point the residual was measured at.
-        if (use_halpern) {
-          x = x_next;
-          y = y_next;
+        if (use_halpern && !op->take_tz()) {
+          device_error = true;
+          break;
         }
         if (use_pid) {
-          double dx2 = 0.0;
-          for (std::size_t u = 0; u < un; ++u) {
-            const double d = x[u] - x_restart[u];
-            dx2 += d * d;
+          double dx_norm = 0.0, dy_norm = 0.0;
+          if (!op->restart_distance(&dx_norm, &dy_norm) || !op->set_restart()) {
+            device_error = true;
+            break;
           }
-          double dy2 = 0.0;
-          for (std::size_t u = 0; u < um; ++u) {
-            const double d = y[u] - y_restart[u];
-            dy2 += d * d;
-          }
-          omega = pid_primal_weight(omega, std::sqrt(dx2), std::sqrt(dy2), gains, &pid);
+          omega = pid_primal_weight(omega, dx_norm, dy_norm, gains, &pid);
           const CondatVuSteps steps = condat_vu_steps_at_weight(l, a2, omega);
           tau = steps.tau;
           sigma = steps.sigma;
           if (use_halpern) reflection = tol::kQpHalpernReflectionShare * steps.reflection_max;
-          x_restart = x;
-          y_restart = y;
         }
-        if (use_halpern) {
-          x_anchor = x;
-          y_anchor = y;
+        if (use_halpern && !op->set_anchor()) {
+          device_error = true;
+          break;
         }
         period_steps = 0;
         ++restarts;
@@ -457,14 +411,30 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
     }
   }
 
+  if (device_error) {
+    // The device failed mid-solve: say so and hand the rest of the budget to the host path,
+    // as the LP engines do. The host operator cannot fail, so this never recurses.
+    Options on_host = options;
+    on_host.set_bool("qp_gpu", false);
+    if (limits.has_time_limit())
+      on_host.set_double("time_limit", limits.remaining_seconds(timer.elapsed_seconds()));
+    logger.warning(
+        "QP: the device operator failed after {} iterations; running on the host "
+        "with the remaining budget",
+        iterations);
+    return solve_convex_qp(model, on_host, logger, control);
+  }
+
   if (status == SolveStatus::kIterationLimit && message.empty()) {
     message = limits.describe(LimitReason::kIterations, timer.elapsed_seconds(), iterations, 0);
   }
 
   // Halpern's report is T z from the last step taken; before any step there is only z.
-  if (use_halpern && iterations > 0) {
-    x.swap(x_next);
-    y.swap(y_next);
+  if (!op->download(use_halpern && iterations > 0, &x, &y)) {
+    solution.status = SolveStatus::kNotSolved;
+    solution.message = "the QP operator could not return its iterate";
+    solution.solve_seconds = timer.elapsed_seconds();
+    return solution;
   }
   if (use_restarts) {
     logger.verbose("QP acceleration: {} restarts, final weight {:.4g}", restarts, omega);

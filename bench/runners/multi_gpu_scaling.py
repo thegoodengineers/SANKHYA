@@ -29,6 +29,10 @@ with --reference objectives where known.
 
 Writes a CSV to bench/results/ (or --out) with the instance's sha256, the objective against
 the reference, status, times, iterations, the commit (stamp.py, #433) and the machine tag.
+Since the #295 follow-up every cell is the median of --repeats runs (us_per_step_min and
+_max beside it), and the partitioned engine's log gives, per row, the partition (rows and
+nonzeros per device), the per-card peak device memory, and the exchange's time as a share
+of the device time with the bytes it moved - the comm/compute split of a two-card step.
 
 Usage:
     python bench/runners/multi_gpu_scaling.py --binary build/sankhya --machine a100x2 \\
@@ -51,7 +55,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_large_lp  # noqa: E402
+import gpu_arms  # noqa: E402
 import stamp  # noqa: E402
+from gpu_real_instances import gpu_description, mps_dimensions  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
@@ -68,12 +74,19 @@ COMMON = ["algorithm=pdhg", "gpu=true", "pdhg_polish=false", "presolve=off"]
 CSV_COLUMNS = [
     "instance", "sha256", "rows", "cols", "nnz", "config", "budget", "tolerance",
     "status", "objective", "reference_objective", "absolute_gap", "relative_gap",
-    "iterations", "step_attempts", "us_per_step", "host_evaluation_seconds", "solve_seconds",
-    "wall_seconds", "algorithm", "transport", "git_commit", "machine", "timestamp_utc",
+    "iterations", "step_attempts", "us_per_step", "us_per_step_min", "us_per_step_max",
+    "repeats", "host_evaluation_seconds", "exchange_seconds", "exchange_share",
+    "exchange_us_per_step", "exchange_mib", "setup_seconds", "partition", "peak_mib",
+    "solve_seconds", "wall_seconds", "algorithm", "transport", "git_commit", "machine", "gpu",
+    "driver_version", "cuda_runtime", "timestamp_utc",
 ]
 
 TIMING = re.compile(r"Timing: loop ([\d.]+)s, (\d+) step attempts, ([\d.]+) us per attempt "
                     r"on the cards; (?:host )?evaluation ([\d.]+)s")
+EXCHANGE = re.compile(r"exchange ([\d.]+)s \(([\d.]+)% of the device time, ([\d.]+) us per "
+                      r"attempt, ([\d.]+) MiB moved over [a-z-]+\); setup ([\d.]+)s")
+PARTITION = re.compile(r"device (\d+): rows \[(\d+), (\d+)\), (\d+) nonzeros")
+PEAK = re.compile(r"device (\d+) \(slot (\d+)\): peak (\d+) MiB allocated")
 TRANSPORT = re.compile(r"\((\d+) devices?, ([a-z-]+) exchange\)")
 
 
@@ -113,9 +126,31 @@ def solve(binary: Path, mps: Path, config: str, options: list[str], time_limit: 
                 row["us_per_step"] = f"{1e6 * float(row['solve_seconds']) / float(row['iterations']):.1f}"
             except (TypeError, ValueError, ZeroDivisionError):
                 pass
+        exchange = EXCHANGE.search(run.stdout)
+        if exchange:
+            row.update(exchange_seconds=exchange.group(1), exchange_share=exchange.group(2),
+                       exchange_us_per_step=exchange.group(3), exchange_mib=exchange.group(4),
+                       setup_seconds=exchange.group(5))
+        # "0:250000r/1000000nz;1:250000r/1000000nz" and "0:1234;1:1230" (MiB per slot).
+        row["partition"] = ";".join(f"{d}:{int(b) - int(a)}r/{nz}nz"
+                                    for d, a, b, nz in PARTITION.findall(run.stdout))
+        row["peak_mib"] = ";".join(f"{slot}:{mib}" for _, slot, mib in PEAK.findall(run.stdout))
         transport = TRANSPORT.search(result.get("message", ""))
         row["transport"] = transport.group(2) if transport else ""
         return row
+
+
+def solve_repeated(binary: Path, mps: Path, config: str, options: list[str],
+                   time_limit: float, repeats: int) -> dict:
+    """The row of the run nearest the median us_per_step, with the min and max of all."""
+    rows = [solve(binary, mps, config, options, time_limit) for _ in range(max(1, repeats))]
+    steps = [float(r["us_per_step"]) for r in rows if r.get("us_per_step")]
+    if not steps:
+        return dict(rows[-1], repeats=len(rows))
+    median = sorted(steps)[len(steps) // 2]
+    row = next(r for r in rows if r.get("us_per_step") and float(r["us_per_step"]) == median)
+    return dict(row, us_per_step_min=f"{min(steps):.1f}", us_per_step_max=f"{max(steps):.1f}",
+                repeats=len(rows))
 
 
 def main() -> int:
@@ -135,6 +170,8 @@ def main() -> int:
     parser.add_argument("--tolerance", type=float, default=0.0,
                         help="also solve to this tolerance (0: skip)")
     parser.add_argument("--time-limit", type=float, default=900.0)
+    parser.add_argument("--repeats", type=int, default=1,
+                        help="runs per cell; the row is the median us_per_step with min and max")
     parser.add_argument("--configs", default=",".join(CONFIGS))
     parser.add_argument("--workdir", type=Path, default=Path(tempfile.gettempdir()) / "sankhya-mgpu")
     parser.add_argument("--out", type=Path, default=None)
@@ -158,7 +195,9 @@ def main() -> int:
                           built["nonzeros"]))
     for k, path in enumerate(args.instance):
         ref = args.reference[k] if k < len(args.reference) else None
-        instances.append((path.stem, path, ref, 0, 0, 0))
+        instances.append((path.stem, path, ref, *mps_dimensions(path)))
+    gpu = gpu_description(args.binary)
+    platform_cells = gpu_arms.platform_cells(gpu)
 
     out = args.out or RESULTS_DIR / f"multi-gpu-{args.machine}-{commit}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -173,7 +212,8 @@ def main() -> int:
             digest = sha256(path)
             for budget, options, tol in budgets:
                 for config in [c for c in args.configs.split(",") if c]:
-                    row = solve(args.binary, path, config, options, args.time_limit)
+                    row = solve_repeated(args.binary, path, config, options, args.time_limit,
+                                         args.repeats)
                     obj = row.get("objective", "")
                     gap_abs = gap_rel = ""
                     if ref is not None and obj not in ("", None):
@@ -183,7 +223,7 @@ def main() -> int:
                                nnz=nnz or "", config=config, budget=budget, tolerance=tol,
                                reference_objective="" if ref is None else ref,
                                absolute_gap=gap_abs, relative_gap=gap_rel, git_commit=commit,
-                               machine=args.machine,
+                               machine=args.machine, gpu=gpu, **platform_cells,
                                timestamp_utc=datetime.datetime.now(datetime.timezone.utc)
                                .strftime("%Y-%m-%dT%H:%M:%SZ"))
                     writer.writerow(row)
