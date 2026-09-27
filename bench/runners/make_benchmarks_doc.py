@@ -35,6 +35,7 @@ import maros_meszaros_doc  # the QP section (#491), kept in its own file
 import nlp_doc  # the nonlinear section (NLP stages 2-3), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
+import gpu_ab_doc  # 1g.8 and 1g.9, the device A/Bs of #508 and #478
 import gpu_doc  # 1g.1 and 1g.3 (#488)
 import gpu_plot  # the speedup-against-nonzeros figure of 1g.3 (#488)
 from gpu_doc import gpu_datacenter_table, gpu_real_section, ipm_cudss_section, multi_gpu_section
@@ -2686,6 +2687,18 @@ def main() -> int:
     ipm_cudss_csv = None
     for card in GPU_CARDS:
         ipm_cudss_csv = ipm_cudss_csv or newest(f"ipm-cudss-{card}-*.csv")
+    # #508: gpu-fj-ab-<sha>-<machine>.csv, newest by git order (the machine is in the name).
+    fj_csv = newest("gpu-fj-ab-*.csv")
+    # #478 on the refinery year: one CSV per option leg, pdhg-478-refinery-<leg>-<sha>.csv.
+    # The option legs set solver options, which latest() skips by design, so each is read by
+    # its own name with newest_option_run(); the commit order still picks the newest.
+    refinery_478_csvs = {
+        "default": newest("pdhg-478-refinery-default-[0-9a-f]*.csv"),
+        "deterministic": newest_option_run("pdhg-478-refinery-deterministic-[0-9a-f]*.csv",
+                                           "deterministic=true"),
+        "deterministic-loop": newest_option_run(
+            "pdhg-478-refinery-deterministic-loop-[0-9a-f]*.csv", "gpu_on_device_loop=true"),
+    }
 
     # Legacy untagged CSVs predate the tier tag; fall back so an old results directory still
     # generates something rather than failing.
@@ -2859,6 +2872,25 @@ iteration and the refinement stay on the host. The instances are section 1g.3's:
 synthetic ladder, the refinery year and the Mittelmann pair.
 
 {ipm_cudss_section(ipm_cudss_csv)}
+
+#### 1g.8 Feasibility Jump on the device against the CPU (#508)
+
+The MIP primal heuristic of Luteberget and Sartor (Feasibility Jump, Mathematical Programming
+Computation 15, 2023) run once per instance on each engine from the box point closest to zero,
+every third instance of the MIPLIB tier-2 list, `bench/runners/gpu_fj_ab.py`. The question is
+only whether and when a feasible point appears; neither engine is in the default solve path.
+
+{gpu_ab_doc.fj_section(fj_csv)}
+
+#### 1g.9 Deterministic device reductions on the refinery year, per iteration (#478)
+
+Since #478 the device sums its reductions in a fixed order (`deterministic=true`) so a GPU
+solve repeats itself. This measures what that costs per PDHG iteration on the 779,640-row
+refinery year (`generate_refinery_lp.py --periods 8760 --seed 42`), with three and with two
+sparse products per iteration, and with the whole iteration loop kept on the device
+(`gpu_on_device_loop=true`).
+
+{gpu_ab_doc.refinery_478_section(refinery_478_csvs)}
 ---
 
 ### 1f. Scale — how far up this goes

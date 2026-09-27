@@ -797,6 +797,60 @@ Not yet run. Needs a build with `-DSANKHYA_ENABLE_CUDSS=ON` and a card:
 python bench/runners/ipm_cudss.py --binary build/sankhya --card a100
 ```
 
+
+#### 1g.8 Feasibility Jump on the device against the CPU (#508)
+
+The MIP primal heuristic of Luteberget and Sartor (Feasibility Jump, Mathematical Programming
+Computation 15, 2023) run once per instance on each engine from the box point closest to zero,
+every third instance of the MIPLIB tier-2 list, `bench/runners/gpu_fj_ab.py`. The question is
+only whether and when a feasible point appears; neither engine is in the default solve path.
+
+Source CSV: `bench/results/gpu-fj-ab-ad57c03-e2e-V100.csv`  
+Commit `ad57c03` · machine `e2e-V100` · GPU Tesla V100-PCIE-32GB · 60.0 s per run, one run per instance and engine, every point checked against the model (`verified`)
+
+- `cpu`: a feasible point on **16 of 20** instances by the limit, 14 of 20 by 10 s.
+- `gpu`: a feasible point on **15 of 20** instances by the limit, 14 of 20 by 10 s.
+
+| instance | cpu first (s) | cpu rel. gap | gpu first (s) | gpu rel. gap |
+|---|---:|---:|---:|---:|
+| `csched007` | none | - | none | - |
+| `glass4` | 1.902 | 0.733728 | 2.019 | 0.472213 |
+| `mad` | 0.002 | 0.6322 | 0.172 | 0.31 |
+| `markshare_4_0` | 0.000 | 162 | 0.153 | 46 |
+| `mas76` | 0.000 | 0.0971636 | 0.158 | 0.0411497 |
+| `mc11` | 0.030 | 0.621011 | 0.653 | 1.16109 |
+| `mik-250-20-75-4` | 0.000 | 0.026902 | 0.156 | 0.021491 |
+| `n5-3` | 0.296 | 0.559284 | 2.483 | 0.467366 |
+| `neos-3024952-loue` | 52.911 | 7.86418 | 31.681 | 7.55042 |
+| `neos-3627168-kasai` | 15.132 | 0.0160906 | none | - |
+| `neos-3754480-nidda` | 0.000 | 0.840704 | 0.189 | 0.46102 |
+| `neos-4338804-snowy` | 0.018 | 0.0509857 | 0.281 | 0.0135962 |
+| `pk1` | 0.001 | 8.63636 | 0.156 | 2.81818 |
+| `qap10` | 0.001 | 0.376471 | 0.141 | 0.111765 |
+| `reblock115` | 0.000 | 1 | 0.130 | 0.921877 |
+| `rococoC10-001000` | none | - | none | - |
+| `roll3000` | none | - | none | - |
+| `timtab1` | none | - | none | - |
+| `tr12-30` | 0.008 | 0.145533 | 0.242 | 0.0990153 |
+| `uct-subprob` | 0.010 | 0.207006 | 0.172 | 0.10828 |
+
+
+#### 1g.9 Deterministic device reductions on the refinery year, per iteration (#478)
+
+Since #478 the device sums its reductions in a fixed order (`deterministic=true`) so a GPU
+solve repeats itself. This measures what that costs per PDHG iteration on the 779,640-row
+refinery year (`generate_refinery_lp.py --periods 8760 --seed 42`), with three and with two
+sparse products per iteration, and with the whole iteration loop kept on the device
+(`gpu_on_device_loop=true`).
+
+Instance `refinery_year.mps` (779640 rows, 1208880 columns, 9968834 nonzeros), engine `cuda`, 10000 iterations per solve, median of 3 repeats; the per-iteration figure is the marginal time between the full and the one-fifth run, as `pdhg_two_matvec_ab.py` defines it. Commit `ad57c03`, GPU Tesla V100-PCIE-32GB (compute 7.0, 32494 MiB VRAM).
+
+| leg | solver options | three products (us/iter) | two products (us/iter) | two / three | source |
+|---|---|---:|---:|---:|---|
+| default | `defaults` | 985.7 | 808.7 | 0.820 | `pdhg-478-refinery-default-ad57c03.csv` |
+| deterministic | `deterministic=true` | 1007.4 | 805.8 | 0.800 | `pdhg-478-refinery-deterministic-ad57c03.csv` |
+| deterministic-loop | `deterministic=true gpu_on_device_loop=true` | 1009.4 | 824.4 | 0.817 | `pdhg-478-refinery-deterministic-loop-ad57c03.csv` |
+
 ---
 
 ### 1f. Scale — how far up this goes
