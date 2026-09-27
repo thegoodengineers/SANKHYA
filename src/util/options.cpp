@@ -1278,6 +1278,22 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"qp_gpu",
+                 OptionType::Bool,
+                 false,
+                 "Run the first-order QP engine's arithmetic on the CUDA device (#493, "
+                 "qp_algorithm=condat-vu): Q x, A^T y and A xbar by cuSPARSE on explicitly "
+                 "stored matrices, the primal and dual steps, the Halpern blend and the "
+                 "fixed-order reductions as kernels, the iterate kept on the card and the "
+                 "evaluated point read back every 50 iterations for the residual test, which "
+                 "stays on the host. The iteration logic, the step sizes and the restarts are "
+                 "the host engine's; the answer is the host operator's to rounding "
+                 "(tests/unit/test_qp_device.cpp). Needs a build with SANKHYA_ENABLE_CUDA and "
+                 "a device; otherwise it warns and runs on the host. A device failure "
+                 "mid-solve hands the remaining budget to the host. Default OFF.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"qp_primal_weight_pid",
                  OptionType::Bool,
                  true,
