@@ -1052,8 +1052,13 @@ const std::vector<OptionSpec>& Options::registry() {
                  "of the constraint matrix, balanced by nonzeros; the primal iterate is "
                  "replicated; A^T*y is summed across the devices each iteration, device to "
                  "device where peer access allows (see gpu_peer_access), in a fixed order so "
-                 "that a run is bitwise reproducible. Absent devices cause a fallback to the "
-                 "single-GPU path.",
+                 "that a run is bitwise reproducible, deterministic=true included. An absent "
+                 "device id falls back to the single-GPU path; a listed card below the "
+                 "compiled compute capability, or one that cannot hold its block (the "
+                 "partition is by work, not by memory), falls back to CPU PDHG. Nothing "
+                 "chooses several cards automatically: the measurement (docs/BENCHMARKS.md "
+                 "1g.6) shows a per-step gain only at millions of rows and none on the whole "
+                 "solve, so the set is used only when named here.",
                  {},
                  {},
                  {}});

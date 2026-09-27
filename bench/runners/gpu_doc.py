@@ -263,3 +263,89 @@ def gpu_datacenter_table(path: Path) -> str:
                    f"| {_ratio(solver_time(par), solver_time(card))} "
                    f"| {_cell(card.get('rel_gap'))} |")
     return "\n".join(out) + "\n"
+
+
+def multi_gpu_section(path: Path | None) -> str:
+    """1g.6: one card against two for the row-partitioned engine (#295), from
+    bench/runners/multi_gpu_scaling.py. Per instance and budget: every configuration's
+    per-step time, then partitioned-2 against partitioned-1 (the same arithmetic, split) and
+    against the single-card engine. A CSV written before the comm/compute columns renders
+    with '-' there."""
+    if path is None:
+        return chr(10).join([
+            "Not yet run. Needs two cards:",
+            "",
+            "```",
+            "python bench/runners/multi_gpu_scaling.py --binary build/sankhya --machine <tag> "
+            "--sizes 250000,1000000,4000000 --iterations 2000",
+            "```",
+            "",
+        ])
+    rows = read_csv(path)
+    if not rows:
+        return "The CSV is empty." + chr(10)
+    first = rows[0]
+    commit = first.get("git_commit", "unknown")
+    if "-dirty" in commit:
+        return (f"`{path.name}` is stamped `{commit}`: produced from a modified tree. "
+                "Re-run on a clean checkout of a main commit." + chr(10))
+    repeats = first.get("repeats", "") or "1"
+    lines = [
+        f"Source CSV: `bench/results/{path.name}`  ",
+        f"Commit `{commit}` · machine `{first.get('machine', '')}` · "
+        f"GPU {first.get('gpu', '') or 'not recorded'}; {platform_line(first)}  ",
+        f"{repeats} run(s) per cell; the row is the median per-step time with its min and max "
+        "where recorded.",
+        "",
+        "`partitioned-1` is the multi-card engine on one card, the like-for-like baseline; "
+        "`single-engine` is the production single-card engine. The exchange share is the time "
+        "the cards spend in the cross-card sum of A^T y (waiting for the slowest partial "
+        "included) as a share of the device time per step; `peak MiB` is what each slot "
+        "allocated. A ratio below 1x is a loss and is printed in the same type as a win.",
+        "",
+        "| instance | rows | nnz | budget | config | status | rel gap | us/step [min-max] "
+        "| exchange share | exchange us/step | MiB moved | peak MiB per slot | partition "
+        "| solve (s) |",
+        "|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---|---|---:|",
+    ]
+    for r in rows:
+        spread = ""
+        if r.get("us_per_step_min"):
+            spread = f" [{r['us_per_step_min']}-{r['us_per_step_max']}]"
+        share = f"{r['exchange_share']}%" if r.get("exchange_share") else "-"
+        lines.append(
+            f"| `{r.get('instance', '')}` | {_cell(r.get('rows'))} | {_cell(r.get('nnz'))} "
+            f"| {r.get('budget', '')}{(' ' + r['tolerance']) if r.get('tolerance') else ''} "
+            f"| {r.get('config', '')} | {r.get('status', '')} | {_cell(r.get('relative_gap'))} "
+            f"| {_cell(r.get('us_per_step'))}{spread} | {share} "
+            f"| {_cell(r.get('exchange_us_per_step'))} | {_cell(r.get('exchange_mib'))} "
+            f"| {_cell(r.get('peak_mib'))} | {_cell(r.get('partition'))} "
+            f"| {_cell(r.get('solve_seconds'))} |")
+    lines += ["", "Two cards against one, per step (partitioned-2 / partitioned-1, the same "
+              "arithmetic split; `single-engine`'s per-step figure includes its setup and "
+              "evaluation, so it is not a like-for-like denominator and is not divided here):",
+              "",
+              "| instance | budget | two cards vs partitioned-1 | host-staged vs partitioned-1 |",
+              "|---|---|---:|---:|"]
+    cells = list(dict.fromkeys((r.get("instance", ""), r.get("budget", ""), r.get("tolerance", ""))
+                               for r in rows))
+
+    def pick(cell, config):
+        return next((r for r in rows if (r.get("instance", ""), r.get("budget", ""),
+                                         r.get("tolerance", "")) == cell
+                     and r.get("config") == config), None)
+
+    def per_step(r):
+        return _float(r.get("us_per_step")) if r else None
+
+    for cell in cells:
+        two, one, host = (pick(cell, c) for c in
+                                  ("partitioned-2", "partitioned-1",
+                                   "partitioned-2-host"))
+        if two is None:
+            continue
+        budget = cell[1] + (f" {cell[2]}" if cell[2] else "")
+        lines.append(f"| `{cell[0]}` | {budget} | {_ratio(per_step(one), per_step(two))} "
+                     f"| {_ratio(per_step(one), per_step(host))} |")
+    lines.append("")
+    return chr(10).join(lines)

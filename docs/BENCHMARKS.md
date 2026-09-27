@@ -737,6 +737,53 @@ Commit `58a8374` · machine `Linux-x86_64` · GPU NVIDIA L4 (compute 8.9, 22478 
 **The device loses at every measured size (5 of 5).** The CPU reference is faster from the smallest model to the largest; the GPU backend stays off by default (`gpu_domain_prop=false`, `domain_prop_backend=auto`).
 Without the context (a process that has already touched the card), the device is faster at 3 of 5.
 
+#### 1g.6 Two cards against one: the row-partitioned engine (#295)
+
+Rows of A split across the cards, balanced by nonzeros plus rows; the primal iterate
+replicated, the dual partitioned, A^T y summed across the cards every iteration in slot
+order over P2P (NVLink or PCIe) or, without it, staged through the host
+(`src/gpu/pdhg_multi_gpu.cu`). Dispatch is explicit (`gpu_devices=0,1`); nothing chooses
+several cards by itself, for the reason the table gives (`docs/ARCHITECTURE.md` section 7).
+
+Source CSV: `bench/results/multi-gpu-e2e-2xA100-SXM4-40GB-NV12-58a8374.csv`  
+Commit `58a8374` · machine `e2e-2xA100-SXM4-40GB-NV12` · GPU not recorded; driver and CUDA runtime not recorded (the CSV predates #488's columns)  
+1 run(s) per cell; the row is the median per-step time with its min and max where recorded.
+
+`partitioned-1` is the multi-card engine on one card, the like-for-like baseline; `single-engine` is the production single-card engine. The exchange share is the time the cards spend in the cross-card sum of A^T y (waiting for the slowest partial included) as a share of the device time per step; `peak MiB` is what each slot allocated. A ratio below 1x is a loss and is printed in the same type as a win.
+
+| instance | rows | nnz | budget | config | status | rel gap | us/step [min-max] | exchange share | exchange us/step | MiB moved | peak MiB per slot | partition | solve (s) |
+|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---|---|---:|
+| `kkt_250000_8_295` | - | - | steps | single-engine | iteration_limit | 2.0365770667639497e-06 | 1532.4 | - | - | - | - | - | 3.064838692 |
+| `kkt_250000_8_295` | - | - | steps | partitioned-1 | iteration_limit | 2.0417248172018695e-06 | 301.8 | - | - | - | - | - | 3.89680004 |
+| `kkt_250000_8_295` | - | - | steps | partitioned-2 | iteration_limit | 2.05556322707943e-06 | 281.8 | - | - | - | - | - | 4.033234973 |
+| `kkt_250000_8_295` | - | - | steps | partitioned-2-host | iteration_limit | 2.05556322707943e-06 | 561.7 | - | - | - | - | - | 5.919624766 |
+| `kkt_1000000_8_295` | - | - | steps | single-engine | iteration_limit | 7.828675480288482e-07 | 7589.2 | - | - | - | - | - | 15.178445209 |
+| `kkt_1000000_8_295` | - | - | steps | partitioned-1 | iteration_limit | 7.50299129631909e-07 | 780.2 | - | - | - | - | - | 14.744972242 |
+| `kkt_1000000_8_295` | - | - | steps | partitioned-2 | iteration_limit | 8.851956530360737e-07 | 658.6 | - | - | - | - | - | 14.804839477 |
+| `kkt_1000000_8_295` | - | - | steps | partitioned-2-host | iteration_limit | 8.851956530360737e-07 | 1844.8 | - | - | - | - | - | 18.013142631 |
+| `kkt_4000000_8_295` | - | - | steps | single-engine | iteration_limit | 1.0458861020341966e-06 | 53819.2 | - | - | - | - | - | 107.638338313 |
+| `kkt_4000000_8_295` | - | - | steps | partitioned-1 | iteration_limit | 1.0619466278583482e-06 | 4465.8 | - | - | - | - | - | 108.389042159 |
+| `kkt_4000000_8_295` | - | - | steps | partitioned-2 | iteration_limit | 1.100689788744084e-06 | 2722.3 | - | - | - | - | - | 106.526108326 |
+| `kkt_4000000_8_295` | - | - | steps | partitioned-2-host | iteration_limit | 1.100689788744084e-06 | 7919.3 | - | - | - | - | - | 115.886434061 |
+| `Linf_520c` | - | - | steps | single-engine | iteration_limit | - | 764.5 | - | - | - | - | - | 1.528970668 |
+| `Linf_520c` | - | - | steps | partitioned-1 | iteration_limit | - | 143.2 | - | - | - | - | - | 1.259586643 |
+| `Linf_520c` | - | - | steps | partitioned-2 | iteration_limit | - | 167.7 | - | - | - | - | - | 1.910138542 |
+| `Linf_520c` | - | - | steps | partitioned-2-host | iteration_limit | - | 238.7 | - | - | - | - | - | 1.547371667 |
+| `bdry2` | - | - | steps | single-engine | iteration_limit | - | 1623.4 | - | - | - | - | - | 3.246786156 |
+| `bdry2` | - | - | steps | partitioned-1 | iteration_limit | - | 260.3 | - | - | - | - | - | 2.468190109 |
+| `bdry2` | - | - | steps | partitioned-2 | iteration_limit | - | 592.2 | - | - | - | - | - | 4.256273472 |
+| `bdry2` | - | - | steps | partitioned-2-host | iteration_limit | - | 830.5 | - | - | - | - | - | 3.764644477 |
+
+Two cards against one, per step (partitioned-2 / partitioned-1, the same arithmetic split; `single-engine`'s per-step figure includes its setup and evaluation, so it is not a like-for-like denominator and is not divided here):
+
+| instance | budget | two cards vs partitioned-1 | host-staged vs partitioned-1 |
+|---|---|---:|---:|
+| `kkt_250000_8_295` | steps | 1.07x | 0.54x |
+| `kkt_1000000_8_295` | steps | 1.18x | 0.42x |
+| `kkt_4000000_8_295` | steps | 1.64x | 0.56x |
+| `Linf_520c` | steps | 0.85x | 0.60x |
+| `bdry2` | steps | 0.44x | 0.31x |
+
 ---
 
 ### 1f. Scale — how far up this goes
