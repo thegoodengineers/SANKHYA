@@ -32,9 +32,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kkt_crossings  # the relative-KKT crossing tables (#486)
 import latest_result
 import maros_meszaros_doc  # the QP section (#491), kept in its own file
+import nlp_doc  # the nonlinear section (NLP stages 2-3), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
-from gpu_doc import gpu_datacenter_table, gpu_real_section  # 1g.1 and 1g.3 (#488)
+import gpu_doc  # 1g.1 and 1g.3 (#488)
+import gpu_plot  # the speedup-against-nonzeros figure of 1g.3 (#488)
+from gpu_doc import gpu_datacenter_table, gpu_real_section, ipm_cudss_section, multi_gpu_section
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
@@ -1868,6 +1871,45 @@ def refinery_scale_section(path: Path | None) -> str:
     return chr(10).join(out)
 
 
+def seeds_paragraph(rows: list[dict]) -> str:
+    """The multi-seed run at the SAME commit as the table (#504), when there is one.
+
+    Seed 0 is the published file and the other seeds are row and column permutations of it
+    (bench/runners/miplib_seeds.py, after Lodi and Tramontani 2013), so a verdict that moves
+    between seeds is performance variability, not a code effect. Read from the summary CSV
+    the runner writes beside a `--seeds N` run, `summary-miplib-seedsN-<sha>.csv`, and only
+    when its commit is the table's commit, so the paragraph is about the binary above it.
+    Everything here is counted from that CSV; nothing is asserted.
+    """
+    commit = (rows[0].get("git_commit") or "").strip() if rows else ""
+    if not commit:
+        return ""
+    candidates = sorted(p for p in RESULTS_DIR.glob("summary-miplib-seeds*-*.csv")
+                        if latest_result.commit_of(p) == commit)
+    if not candidates:
+        return ""
+    path = candidates[-1]
+    summary = read_csv(path)
+    if not summary:
+        return ""
+    seeds = int(summary[0].get("seeds") or 0)
+    all_matched = [r for r in summary if int(r["seeds_matched"]) == seeds]
+    any_matched = [r for r in summary if int(r["seeds_matched"]) > 0]
+    all_proved = [r for r in summary if int(r["seeds_proved"]) == seeds]
+    any_proved = [r for r in summary if int(r["seeds_proved"]) > 0]
+    unstable = sorted(r["instance"] for r in summary
+                      if 0 < int(r["seeds_matched"]) < seeds or 0 < int(r["seeds_proved"]) < seeds)
+    names = ", ".join(f"`{n}`" for n in unstable) if unstable else "none"
+    return (
+        f"**Over {seeds} seeds** (`bench/results/{path.name}`, the published file and "
+        f"{seeds - 1} permutations of it, same commit and limit): **{len(all_matched)} of "
+        f"{len(summary)}** instances reach the published optimum on every seed and "
+        f"{len(any_matched)} on at least one; **{len(all_proved)} of {len(summary)}** prove it "
+        f"on every seed and {len(any_proved)} on at least one. Instances whose verdict moves "
+        f"with the seed, which is the noise floor a single run carries: {names}."
+    )
+
+
 def milp_section(path: Path | None) -> str:
     """MIPLIB, where TWO questions have to be answered separately.
 
@@ -1901,6 +1943,7 @@ def milp_section(path: Path | None) -> str:
     proved = [r for r in rows if r.get("proved_optimal") == "1"]
     commit = rows[0].get("git_commit", "unknown")
     machine = rows[0].get("machine", "unknown")
+    seeds = seeds_paragraph(rows)
 
     out = [
         f"Source CSV: `bench/results/{path.name}`  ",
@@ -1925,6 +1968,7 @@ def milp_section(path: Path | None) -> str:
         "",
         heuristics_ab_paragraph(rows),
         "",
+        *([seeds, ""] if seeds else []),
         "**The time limit decides some of these, not the solver.** A row that stops at the limit "
         "with a small gap says \"needs more time than we gave it\", not \"cannot\"; which side of "
         "the limit such a row lands on moves with the machine's speed rather than with anything "
@@ -2181,10 +2225,12 @@ def gpu_section(path: Path | None) -> str:
         "timed ones. The GPU pays a per-iteration launch and transfer cost that a small model "
         "cannot amortise; the crossover is where the parallel products start to pay for it.",
         "",
-        "> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd`"
-        " reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting"
-        " the whole trajectory. Speedup figures here are the median of repeated solves"
-        + (f" ({repeats} per cell)" if repeats else "") + ". Do not"
+        "> **GPU iteration counts differ from the CPU's (#448).** The device sums its"
+        " reductions in a fixed order since #478, so a GPU run repeats itself, but a"
+        " one-ulp difference from the CPU's summation order can flip a restart decision and"
+        " shift the whole trajectory. Speedup figures here are the median of repeated solves"
+        + (f" ({repeats} per cell)" if repeats else "") + ", and a ratio below 1x is a loss,"
+        " printed in the same type as a win. Do not"
         " compare a GPU iteration count against a CPU count for the same instance: the two"
         " engines take different trajectories and any comparison is meaningless."
         " `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same"
@@ -2210,8 +2256,9 @@ def gpu_section(path: Path | None) -> str:
         if not cpu or not gpu:
             return "—"
         try:
-            s = float(cpu["seconds"]) / float(gpu["seconds"])
-            return f"**{s:.2f}×**" if s > 1 else f"{s:.2f}×"
+            # Wins and losses in the same type (#488): a bold 4.21x beside a plain 0.07x
+            # reads as two different kinds of number.
+            return f"{float(cpu['seconds']) / float(gpu['seconds']):.2f}×"
         except (ZeroDivisionError, ValueError):
             return "—"
 
@@ -2239,17 +2286,8 @@ def gpu_section(path: Path | None) -> str:
 
     lines += [
         "",
-        f"GPU: {gpu}.  ",
+        f"GPU: {gpu}; {gpu_doc.platform_line(rows[0])}.  ",
         "Instances are synthetic KKT LPs with ~5 nonzeros per column (seed 42).",
-        "",
-        "> **GPU iteration counts vary run to run (#448, #451).** The device reductions inside "
-        "the GPU mat-vec are not bitwise reproducible, and a one-ulp difference can flip a "
-        "restart decision and shift the whole trajectory, which is why every GPU cell is the "
-        "median of repeated solves. Do not compare a GPU iteration count against the CPU count "
-        "for the same instance: the two engines take different trajectories to the same "
-        "tolerance. The regression test holds them to agreement at the stopping tolerance, "
-        "not to the same iterate (`tests/unit/test_pdhg_cuda_regression.cpp`); see also "
-        "`docs/ARCHITECTURE.md` section 7.",
         "",
     ]
 
@@ -2297,6 +2335,15 @@ def gpu_cards_section() -> str:
         if crossover is None and real is None and datacenter is None:
             continue
         blocks.append(f"**{card.upper()}**\n")
+        figure = gpu_plot.write_figure(card, crossover, real)
+        if figure is not None:
+            blocks.append(f"![GPU speedup against nonzeros on the {card.upper()}]"
+                          f"({figure.relative_to(OUTPUT.parent).as_posix()})\n")
+            blocks.append("The figure is regenerated from the two CSVs by "
+                          "`bench/runners/gpu_plot.py` each time this document is; each point "
+                          "is one instance and tolerance, the speedup against the faster CPU "
+                          "arm on the solver's clock; the dashed line is 1x, the crossover, "
+                          "and everything below it is a loss.\n")
         if crossover is not None:
             blocks.append("The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, "
                           "medians of repeats with their min-max):\n")
@@ -2627,8 +2674,18 @@ def main() -> int:
     qplib_csv = (newest("qplib-*.csv", prefix="qplib")
                  or newest("qplib-small-*.csv", prefix="qplib-small"))
     gpu_pdlp_csv = newest("gpu-pdlp-*.csv")
+    # The nonlinear sets (NLP stages 2-3): nlp_bench.py names its CSV after the data
+    # directory, nlp-<set>-<sha>[-<host>].csv, so each set has its own pattern.
+    nlp_hs_csv = newest("nlp-hs-*.csv")
+    nlp_minlp_csv = newest("nlp-minlplib-*.csv")
     commercial_csv = newest("commercial-agreement-*.csv")
     gpu_domain_prop_csv = newest("gpu-domain-prop-*.csv", prefix="gpu-domain-prop")
+    multi_gpu_csv = newest("multi-gpu-*.csv")
+    # The cuDSS runner's own file (#489); the ipm-cudss-ab-* legs of #696 are named A/B runs
+    # of netlib.py and mittelmann.py and are not this tier.
+    ipm_cudss_csv = None
+    for card in GPU_CARDS:
+        ipm_cudss_csv = ipm_cudss_csv or newest(f"ipm-cudss-{card}-*.csv")
 
     # Legacy untagged CSVs predate the tier tag; fall back so an old results directory still
     # generates something rather than failing.
@@ -2785,6 +2842,23 @@ sets); this is what each costs, on generated knapsack-row models from 1,000 to 1
 rows (`bench/runners/gpu_domain_prop.py`).
 
 {gpu_domain_prop_section(gpu_domain_prop_csv)}
+#### 1g.6 Two cards against one: the row-partitioned engine (#295)
+
+Rows of A split across the cards, balanced by nonzeros plus rows; the primal iterate
+replicated, the dual partitioned, A^T y summed across the cards every iteration in slot
+order over P2P (NVLink or PCIe) or, without it, staged through the host
+(`src/gpu/pdhg_multi_gpu.cu`). Dispatch is explicit (`gpu_devices=0,1`); nothing chooses
+several cards by itself, for the reason the table gives (`docs/ARCHITECTURE.md` section 7).
+
+{multi_gpu_section(multi_gpu_csv)}
+#### 1g.7 The interior point's normal equations on cuDSS (#489)
+
+`ipm_linear_solver=cudss` factors the normal equations on the device (NVIDIA cuDSS, a
+vendor library and not a solver, judgement call 28 in `docs/PROVENANCE.md`); the Newton
+iteration and the refinement stay on the host. The instances are section 1g.3's: the
+synthetic ladder, the refinery year and the Mittelmann pair.
+
+{ipm_cudss_section(ipm_cudss_csv)}
 ---
 
 ### 1f. Scale — how far up this goes
@@ -2853,6 +2927,20 @@ Programming Computation 11, 2019), selected from the site's own listing by
 engine and the interior point.
 
 {qplib_doc.section(qplib_csv)}
+---
+
+## 2e. Nonlinear programs - Hock-Schittkowski, and convex MINLPLib
+
+The nonlinear engine behind the `solve()` seam (NLP stages 1-3): a model read from AMPL's
+`.nl` format, exact first and second derivatives by automatic differentiation, a primal-dual
+interior point with a filter line search, and NLP-based branch and bound for integer columns.
+Both sets ship in `data/nlp/` with their published objectives in each set's `REFERENCE.csv`,
+and every answer is checked by `tools/verify_solution.py`, which reads the `.nl` file with
+its own reader and evaluates the constraints with its own derivatives. The statuses are the
+finding: `optimal` is claimed only where the model is proved convex, `locally_optimal` is any
+other KKT point, and `locally_infeasible` is a local minimizer of the violation.
+
+{nlp_doc.section(nlp_hs_csv, nlp_minlp_csv)}
 ---
 
 ## 3. Correctness beyond the objective value

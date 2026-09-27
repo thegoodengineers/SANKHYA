@@ -40,6 +40,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "branch_and_bound_internal.hpp"
@@ -244,6 +245,69 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
   return candidates;
 }
 
+// DENSE CUTS AT THE ROOT (#496). The density filter refuses every cut above kCutMaxDensity
+// of the columns, and on opt1217, rlp1, neos5, pk1 and gen-ip016 that was every Gomory cut,
+// so their roots closed no gap at all; admitting every dense cut instead measured slower on
+// the whole MIPLIB easy set. A dense cut costs every node LP its nonzeros for the rest of
+// the search, so the admission is bounded the way a cut budget is (Achterberg 2007, ch. 8;
+// Wesselmann and Suhl 2012): only a cut that passed every other test, and a tighter
+// dynamism (kCutDenseMaxCoefficientRatio); the most efficacious first; at most
+// cut_dense_max of them, while their nonzeros together stay within cut_dense_nonzero_share
+// of the model's own. Nothing about a cut changes on admission, so each is exactly as valid
+// as it was when the filter refused it, and in certificate mode (#518) it goes through
+// certify_round_cuts() like every other cut of the round.
+std::size_t BranchAndBound::admit_dense_root_cuts(std::vector<FilteredCut>* filtered,
+                                                  const Solution& relaxation) {
+  const auto most = static_cast<Count>(options_.get_int("cut_dense_max"));
+  if (most <= 0) return 0;
+  if (root_model_nonzeros_ < 0) root_model_nonzeros_ = working_.matrix.num_nonzeros();
+  const double budget = options_.get_double("cut_dense_nonzero_share") *
+                        static_cast<double>(root_model_nonzeros_);
+  struct Dense {
+    std::size_t at;
+    Count support;
+    double efficacy;
+  };
+  std::vector<Dense> dense;
+  for (std::size_t k = 0; k < filtered->size(); ++k) {
+    const FilteredCut& fc = (*filtered)[k];
+    if (!fc.dense_only) continue;
+    Count support = 0;
+    double largest = 0.0;
+    double smallest = std::numeric_limits<double>::infinity();
+    for (const double a : fc.cut.coeff) {
+      if (std::fabs(a) <= tol::kZeroDrop) continue;
+      ++support;
+      largest = std::max(largest, std::fabs(a));
+      smallest = std::min(smallest, std::fabs(a));
+    }
+    if (support == 0 || largest > tol::kCutDenseMaxCoefficientRatio * smallest) continue;
+    const double efficacy = score_cut(working_, relaxation.col_value, fc.cut).efficacy;
+    if (!(efficacy > tol::kCutMinEfficacy)) continue;
+    dense.push_back({k, support, efficacy});
+  }
+  std::stable_sort(dense.begin(), dense.end(),
+                   [](const Dense& a, const Dense& b) { return a.efficacy > b.efficacy; });
+  std::size_t admitted = 0;
+  for (const Dense& d : dense) {
+    if (dense_cuts_admitted_ >= most) break;
+    if (static_cast<double>(dense_nonzeros_admitted_ + d.support) > budget) continue;
+    FilteredCut& fc = (*filtered)[d.at];
+    fc.reason = CutFilterReason::kAccepted;
+    fc.dense_only = false;
+    dense_nonzeros_admitted_ += d.support;
+    ++dense_cuts_admitted_;
+    ++admitted;
+  }
+  if (!dense.empty()) {
+    logger_.verbose(
+        "root dense cuts: {} of {} eligible admitted; {} dense cut(s) with {} nonzeros of a "
+        "budget of {:.0f} so far",
+        admitted, dense.size(), dense_cuts_admitted_, dense_nonzeros_admitted_, budget);
+  }
+  return admitted;
+}
+
 void BranchAndBound::root_cut_round(Solution* relaxation) {
   const Index original_root_rows = working_.num_rows();
   Model pre_cut_model = working_;
@@ -258,7 +322,8 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   }
 
   auto filtered = filter_and_deduplicate_cuts(working_, initial_relaxation, candidates,
-                                              cut_filter_policy());
+                                              cut_filter_policy(/*root=*/true));
+  admit_dense_root_cuts(&filtered, initial_relaxation);
   // WHAT THE FILTER DID, per family and reason (#496): the answer to "why 0 root cuts on
   // opt1217", carried on the Solution into the stats and the MIPLIB CSV.
   cut_filter_report_ = describe_cut_filter(filtered);

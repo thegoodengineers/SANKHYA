@@ -1215,7 +1215,8 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
     // nonzeros and refuses every Gomory cut; a floor lets a small model take cuts that are
     // dense in the fraction and small in the count, where a dense row costs nothing.
     const bool under_floor = nonzero_count <= policy.support_floor;
-    if (density > tol::kCutMaxDensity && !under_floor) {
+    const bool too_dense = density > tol::kCutMaxDensity && !under_floor;
+    if (too_dense && !policy.test_dense) {
       fc.reason = CutFilterReason::kTooDense;
       results.push_back(fc);
       continue;
@@ -1308,6 +1309,12 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
       continue;
     }
 
+    // Refused for its density alone (#496): still kTooDense, and never a dedup reference
+    // for the cuts after it, since only accepted cuts are.
+    if (too_dense) {
+      fc.reason = CutFilterReason::kTooDense;
+      fc.dense_only = true;
+    }
     results.push_back(fc);
   }
 

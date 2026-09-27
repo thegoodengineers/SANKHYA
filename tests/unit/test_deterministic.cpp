@@ -33,6 +33,9 @@ namespace {
 Options deterministic(bool on) {
   Options options;
   options.set_bool("log_to_console", false);
+  // The models here are a few columns, so every root cut is "dense" and the admission
+  // (#496) would close them at the root; pinned off, since the tree is what is tested.
+  options.set_int("cut_dense_max", 0);
   options.set_bool("deterministic", on);
   return options;
 }
@@ -317,10 +320,15 @@ TEST(Deterministic, GpuPdhgUnderDeterministicReproducesBitForBit) {
   expect_identical(result, solve(lp, options), "deterministic PDHG with gpu=true");
 }
 
-TEST(Deterministic, MultiGpuPdhgIsStillRefusedUnderDeterministic) {
-  // The multi-device engine keeps its atomicAdd reductions and cuSPARSE's transpose product
-  // (#383), so a deterministic request naming more than one device runs CPU PDHG. With no
-  // CUDA in the build the answer is CPU PDHG for the plainer reason.
+TEST(Deterministic, MultiGpuPdhgUnderDeterministicReproducesBitForBit) {
+  // Since #295 the flag is honoured on several devices too: the partitioned engine's
+  // reductions are fixed-order and its cross-card sum runs in slot order
+  // (src/gpu/pdhg_multi_gpu_device.hpp, multi_gpu_exchange.hpp), so a deterministic request
+  // naming two devices is no longer refused (#383 had refused every GPU path). What runs
+  // depends on the box: two cards run the partitioned engine, one card falls back to the
+  // single-card engine (the second id is absent), no CUDA runs CPU PDHG. The promise is the
+  // same on each: two runs, the same bits. tests/unit/test_multi_gpu.cpp checks the
+  // partitioned engine itself on a virtual pair of one card.
   const Model lp = dense_lp(20);
   Options options = deterministic(true);
   options.set_bool("gpu", true);
@@ -328,10 +336,10 @@ TEST(Deterministic, MultiGpuPdhgIsStillRefusedUnderDeterministic) {
   options.set_string("gpu_devices", "0,1");
   const Solution result = solve(lp, options);
   ASSERT_NE(result.status, SolveStatus::kNotSolved) << result.message;
-  EXPECT_EQ(result.algorithm, "pdhg-cpu")
-      << "a multi-device GPU solve must be refused when deterministic=true; got: "
-      << result.algorithm;
-  expect_identical(result, solve(lp, options), "multi-GPU refused, CPU PDHG reproduces");
+  const bool known_engine =
+      result.algorithm == "pdhg-cpu" || result.algorithm.find("cuda") != std::string::npos;
+  EXPECT_TRUE(known_engine) << "unexpected engine: " << result.algorithm;
+  expect_identical(result, solve(lp, options), "deterministic PDHG with gpu_devices=0,1");
 }
 
 }  // namespace

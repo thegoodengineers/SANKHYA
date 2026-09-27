@@ -358,6 +358,64 @@ TEST(MultiGpu, SolveTwoVirtualDevicesMatchesSingleGpu) {
       << "multi-GPU objective diverged from single-GPU";
 }
 
+// ---- Failure paths (#295): every refusal is a fallback with a warning, never a crash ----
+
+Model afiro_model() {
+  const std::string path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+       "data/netlib/afiro.mps")
+          .string();
+  Model model;
+  const io::ReadResult r = io::read_model(path, &model);
+  EXPECT_TRUE(r.ok) << path << ": " << r.error;
+  return model;
+}
+
+Options quiet_pdhg_options() {
+  Options opts;
+  opts.set_bool("log_to_console", false);
+  opts.set_double("pdhg_tolerance", 1e-6);
+  opts.set_bool("pdhg_polish", false);
+  opts.set_int("iteration_limit", 500000);
+  return opts;
+}
+
+TEST(MultiGpu, AnAbsentDeviceIdFallsBackToOneCard) {
+  if (gpu::device_count() == 0) GTEST_SKIP() << "no CUDA device present";
+  const Model model = afiro_model();
+  const Options opts = quiet_pdhg_options();
+  Logger silent(nullptr);
+  // Device 99 does not exist on any box this runs on; and `0,<count>` is exactly the
+  // "0,1 on a one-card machine" case when count is 1.
+  for (const std::vector<int> ids :
+       {std::vector<int>{0, 99}, std::vector<int>{0, gpu::device_count()}}) {
+    const Solution s = gpu::solve_pdhg_multi_gpu(model, opts, ids, silent);
+    EXPECT_EQ(s.algorithm, "pdhg-cuda")
+        << "expected the single-card engine for ids " << ids[0] << "," << ids[1];
+    EXPECT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  }
+}
+
+TEST(MultiGpu, TwoSlotsOnOneCardGiveTheSameBitsTwiceUnderDeterministic) {
+  // deterministic=true is honoured by the partitioned engine (#295): fixed-order reductions
+  // and a slot-order exchange, so two runs of a virtual pair on one card are the same bits.
+  if (gpu::device_count() == 0) GTEST_SKIP() << "no CUDA device present";
+  const Model model = afiro_model();
+  Options opts = quiet_pdhg_options();
+  opts.set_bool("deterministic", true);
+  Logger silent(nullptr);
+  const Solution a = gpu::solve_pdhg_multi_gpu(model, opts, {0, 0}, silent);
+  const Solution b = gpu::solve_pdhg_multi_gpu(model, opts, {0, 0}, silent);
+  ASSERT_EQ(a.algorithm, "pdhg-cuda-multi") << a.message;
+  ASSERT_EQ(a.status, SolveStatus::kOptimal) << a.message;
+  EXPECT_EQ(a.iterations, b.iterations);
+  EXPECT_EQ(a.objective, b.objective);
+  ASSERT_EQ(a.col_value.size(), b.col_value.size());
+  for (std::size_t j = 0; j < a.col_value.size(); ++j) {
+    EXPECT_EQ(a.col_value[j], b.col_value[j]) << "column " << j;
+  }
+}
+
 #endif  // SANKHYA_ENABLE_CUDA
 
 }  // namespace

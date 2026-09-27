@@ -41,6 +41,26 @@ def _cell(value) -> str:
     return "-" if value in (None, "") else str(value)
 
 
+def platform_line(first: dict) -> str:
+    """`driver X, CUDA runtime Y` from the row's columns (#488), or a note that the CSV
+    predates them."""
+    driver, runtime = first.get("driver_version", ""), first.get("cuda_runtime", "")
+    if not driver and not runtime:
+        return "driver and CUDA runtime not recorded (the CSV predates #488's columns)"
+    return f"driver {driver or '?'}, CUDA runtime {runtime or '?'}"
+
+
+def reference_cell(row: dict) -> str:
+    """`value (source)` with HiGHS's own time on the same file when it was recorded."""
+    if not row.get("reference_objective"):
+        return "-"
+    seconds = _float(row.get("reference_seconds"))
+    source = row.get("reference_source", "")
+    if seconds is not None:
+        return f"{row['reference_objective']} ({source}, {seconds:.3f} s)"
+    return f"{row['reference_objective']} ({source})"
+
+
 def parallel_arm(rows: list[dict], arm_key: str) -> tuple[str | None, str]:
     """(label, thread count) of the N-thread CPU arm run with pdhg_parallel_spmv=true, or
     (None, "N") when the CSV has none - which every pre-#488 CSV is."""
@@ -128,18 +148,23 @@ def gpu_real_section(path: Path | None) -> str:
     def gap(r: dict | None) -> str:
         return _cell(r.get("rel_gap")) if r else "-"
 
+    repeats = rows[0].get("repeats", "")
     lines = [
         f"Source CSV: `bench/results/{path.name}`  ",
         f"Commit `{commit}` · machine `{machine}`  ",
-        f"GPU: {gpu}",
+        f"GPU: {gpu}; {platform_line(rows[0])}",
         "",
-        "Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance. "
-        "Report the result whichever way it goes. The card is compared with two CPU arms: one "
+        "Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance"
+        + (f", each cell the median of {repeats} solves" if repeats and repeats != "1" else
+           ", one solve per cell")
+        + ". Report the result whichever way it goes: a speedup below 1x is a loss and is "
+        "printed in the same type as a win. The card is compared with two CPU arms: one "
         "thread with the serial A x (the default configuration), and "
         f"{many} threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as "
         "A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in "
-        "the last column; `feasible` means the requested relative tolerance was met but not "
-        "the project's absolute standard.",
+        "the last column, which also carries HiGHS's own run time on the same file in its "
+        "own process when HiGHS is the reference; `feasible` means the requested relative "
+        "tolerance was met but not the project's absolute standard.",
         "",
         f"| instance | rows | tol | CPU 1 thread (s) | CPU {many} threads (s) | GPU (s) "
         f"| GPU vs 1 thread | GPU vs {many} threads | GPU status "
@@ -155,9 +180,7 @@ def gpu_real_section(path: Path | None) -> str:
             if not (one or par or card):
                 continue
             first = one or par or card
-            reference = "-"
-            if first.get("reference_objective"):
-                reference = f"{first['reference_objective']} ({first.get('reference_source', '')})"
+            reference = reference_cell(first)
             lines.append(
                 f"| `{inst}` | {first.get('rows', '')} | {tol:.0e} | {fmt_s(one)} | {fmt_s(par)} "
                 f"| {fmt_s(card)} | {_ratio(secs(one), secs(card))} "
@@ -181,8 +204,15 @@ def gpu_datacenter_table(path: Path) -> str:
     first = rows[0]
     has_arms = "parallel_spmv" in first
     many_label, many = parallel_arm(rows, "mode") if has_arms else (None, "N")
-    out = [f"`{path.name}` - {first.get('gpu', '?')}, solver at `{first.get('git_commit', '?')}`, "
-           f"{first.get('machine', '?')}, {first.get('repeats', '?')} repeats per cell:\n",
+    out = [f"`{path.name}` - {first.get('gpu', '?')}, {platform_line(first)}, solver at "
+           f"`{first.get('git_commit', '?')}`, {first.get('machine', '?')}, "
+           f"{first.get('repeats', '?')} repeats per cell. HiGHS's own time on the same file, "
+           "once per instance in its own process: "
+           + "; ".join(f"`{name}` {secs}" for name, secs in dict.fromkeys(
+               (r.get("instance", ""), (f"{_float(r.get('reference_seconds')):.3f} s"
+                                        if _float(r.get("reference_seconds")) is not None
+                                        else "-")) for r in rows))
+           + ".\n",
            "| instance | mode | threads | parallel A x | tol | forced iterations | status "
            "| objective | rel gap | primal res | dual res | iterations | solver (s) "
            "| solver median (s) | median wall (s) | spread (s) |",
@@ -233,3 +263,150 @@ def gpu_datacenter_table(path: Path) -> str:
                    f"| {_ratio(solver_time(par), solver_time(card))} "
                    f"| {_cell(card.get('rel_gap'))} |")
     return "\n".join(out) + "\n"
+
+
+def multi_gpu_section(path: Path | None) -> str:
+    """1g.6: one card against two for the row-partitioned engine (#295), from
+    bench/runners/multi_gpu_scaling.py. Per instance and budget: every configuration's
+    per-step time, then partitioned-2 against partitioned-1 (the same arithmetic, split) and
+    against the single-card engine. A CSV written before the comm/compute columns renders
+    with '-' there."""
+    if path is None:
+        return chr(10).join([
+            "Not yet run. Needs two cards:",
+            "",
+            "```",
+            "python bench/runners/multi_gpu_scaling.py --binary build/sankhya --machine <tag> "
+            "--sizes 250000,1000000,4000000 --iterations 2000",
+            "```",
+            "",
+        ])
+    rows = read_csv(path)
+    if not rows:
+        return "The CSV is empty." + chr(10)
+    first = rows[0]
+    commit = first.get("git_commit", "unknown")
+    if "-dirty" in commit:
+        return (f"`{path.name}` is stamped `{commit}`: produced from a modified tree. "
+                "Re-run on a clean checkout of a main commit." + chr(10))
+    repeats = first.get("repeats", "") or "1"
+    lines = [
+        f"Source CSV: `bench/results/{path.name}`  ",
+        f"Commit `{commit}` · machine `{first.get('machine', '')}` · "
+        f"GPU {first.get('gpu', '') or 'not recorded'}; {platform_line(first)}  ",
+        f"{repeats} run(s) per cell; the row is the median per-step time with its min and max "
+        "where recorded.",
+        "",
+        "`partitioned-1` is the multi-card engine on one card, the like-for-like baseline; "
+        "`single-engine` is the production single-card engine. The exchange share is the time "
+        "the cards spend in the cross-card sum of A^T y (waiting for the slowest partial "
+        "included) as a share of the device time per step; `peak MiB` is what each slot "
+        "allocated. A ratio below 1x is a loss and is printed in the same type as a win.",
+        "",
+        "| instance | rows | nnz | budget | config | status | rel gap | us/step [min-max] "
+        "| exchange share | exchange us/step | MiB moved | peak MiB per slot | partition "
+        "| solve (s) |",
+        "|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---|---|---:|",
+    ]
+    for r in rows:
+        spread = ""
+        if r.get("us_per_step_min"):
+            spread = f" [{r['us_per_step_min']}-{r['us_per_step_max']}]"
+        share = f"{r['exchange_share']}%" if r.get("exchange_share") else "-"
+        lines.append(
+            f"| `{r.get('instance', '')}` | {_cell(r.get('rows'))} | {_cell(r.get('nnz'))} "
+            f"| {r.get('budget', '')}{(' ' + r['tolerance']) if r.get('tolerance') else ''} "
+            f"| {r.get('config', '')} | {r.get('status', '')} | {_cell(r.get('relative_gap'))} "
+            f"| {_cell(r.get('us_per_step'))}{spread} | {share} "
+            f"| {_cell(r.get('exchange_us_per_step'))} | {_cell(r.get('exchange_mib'))} "
+            f"| {_cell(r.get('peak_mib'))} | {_cell(r.get('partition'))} "
+            f"| {_cell(r.get('solve_seconds'))} |")
+    lines += ["", "Two cards against one, per step (partitioned-2 / partitioned-1, the same "
+              "arithmetic split; `single-engine`'s per-step figure includes its setup and "
+              "evaluation, so it is not a like-for-like denominator and is not divided here):",
+              "",
+              "| instance | budget | two cards vs partitioned-1 | host-staged vs partitioned-1 |",
+              "|---|---|---:|---:|"]
+    cells = list(dict.fromkeys((r.get("instance", ""), r.get("budget", ""), r.get("tolerance", ""))
+                               for r in rows))
+
+    def pick(cell, config):
+        return next((r for r in rows if (r.get("instance", ""), r.get("budget", ""),
+                                         r.get("tolerance", "")) == cell
+                     and r.get("config") == config), None)
+
+    def per_step(r):
+        return _float(r.get("us_per_step")) if r else None
+
+    for cell in cells:
+        two, one, host = (pick(cell, c) for c in
+                                  ("partitioned-2", "partitioned-1",
+                                   "partitioned-2-host"))
+        if two is None:
+            continue
+        budget = cell[1] + (f" {cell[2]}" if cell[2] else "")
+        lines.append(f"| `{cell[0]}` | {budget} | {_ratio(per_step(one), per_step(two))} "
+                     f"| {_ratio(per_step(one), per_step(host))} |")
+    lines.append("")
+    return chr(10).join(lines)
+
+
+def ipm_cudss_section(path: Path | None) -> str:
+    """1g.7: the interior point's normal equations on cuDSS against the CPU factor (#489),
+    from bench/runners/ipm_cudss.py: per instance both legs' status, verification, gap and
+    solver time, and the device's speedup in the same type whichever way it goes."""
+    if path is None:
+        return chr(10).join([
+            "Not yet run. Needs a build with `-DSANKHYA_ENABLE_CUDSS=ON` and a card:",
+            "",
+            "```",
+            "python bench/runners/ipm_cudss.py --binary build/sankhya --card a100",
+            "```",
+            "",
+        ])
+    rows = read_csv(path)
+    if not rows:
+        return "The CSV is empty." + chr(10)
+    first = rows[0]
+    commit = first.get("git_commit", "unknown")
+    if "-dirty" in commit:
+        return (f"`{path.name}` is stamped `{commit}`: produced from a modified tree. "
+                "Re-run on a clean checkout of a main commit." + chr(10))
+    lines = [
+        f"Source CSV: `bench/results/{path.name}`  ",
+        f"Commit `{commit}` · machine `{first.get('machine', '')}` · "
+        f"GPU {first.get('gpu', '') or 'not recorded'}; {platform_line(first)}  ",
+        f"`algorithm=ipm` to the project standard (tolerance column: relative gap "
+        f"{first.get('tolerance', '')}, feasibility 1e-07), `ipm_linear_solver=cpu` against "
+        "`=cudss`; `device used` is read from the engine's own log line, so a cudss row that "
+        "ran the CPU factor says so. The gap is |obj - ref| / max(1, |ref|); `verified` is "
+        "tools/verify_solution.py on the written solution. A ratio below 1x is a loss and is "
+        "printed in the same type as a win.",
+        "",
+        "| instance | rows | nnz | factor | device used | status | verified | rel gap "
+        "| iterations | solver (s) | wall (s) | reference |",
+        "|---|---:|---:|---|---|---|---|---:|---:|---:|---:|---|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| `{r.get('instance', '')}` | {_cell(r.get('rows'))} | {_cell(r.get('nnz'))} "
+            f"| {r.get('linear_solver', '')} | {'yes' if r.get('device_used') == '1' else 'no'} "
+            f"| {r.get('status', '')} | {_cell(r.get('independently_verified'))} "
+            f"| {_cell(r.get('rel_gap'))} | {_cell(r.get('iterations'))} "
+            f"| {_cell(r.get('seconds'))} | {_cell(r.get('wall_seconds'))} "
+            f"| {reference_cell(r)} |")
+    lines += ["", "cuDSS against the CPU factor on the solver's own clock:", "",
+              "| instance | CPU factor (s) | cuDSS (s) | speedup | CPU status | cuDSS status |",
+              "|---|---:|---:|---:|---|---|"]
+    for name in dict.fromkeys(r.get("instance", "") for r in rows):
+        cpu = next((r for r in rows if r.get("instance") == name
+                    and r.get("linear_solver") == "cpu"), None)
+        dev = next((r for r in rows if r.get("instance") == name
+                    and r.get("linear_solver") == "cudss"), None)
+        if cpu is None or dev is None:
+            continue
+        lines.append(f"| `{name}` | {_cell(cpu.get('seconds'))} | {_cell(dev.get('seconds'))} "
+                     f"| {_ratio(_float(cpu.get('seconds')), _float(dev.get('seconds')))} "
+                     f"| {cpu.get('status', '')} | {dev.get('status', '')} |")
+    lines.append("")
+    return chr(10).join(lines)

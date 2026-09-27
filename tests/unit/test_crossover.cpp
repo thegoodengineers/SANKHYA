@@ -18,10 +18,13 @@
 
 #include "core/status_guard.hpp"
 #include "sankhya/io.hpp"
+#include "sankhya/ipm.hpp"
+#include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 #include "sankhya/tolerances.hpp"
 #include "simplex/crossover.hpp"
+#include "simplex/simplex_core.hpp"
 
 namespace sankhya {
 namespace {
@@ -150,6 +153,44 @@ TEST(Crossover, GetsWhatTheTimeLimitHasLeftAfterTheInteriorPointNotLessTwice) {
       << vertex.message;
   EXPECT_NE(vertex.algorithm.find("crossover"), std::string::npos) << vertex.message;
   expect_a_vertex(model, vertex);
+}
+
+TEST(Crossover, ThePushStopsAtTheTimeLimit) {
+  // #417: run_push() armed its deadline before the time limit was read, so the push had no
+  // deadline and ran every superbasic to a bound whatever was left: 244 s against 143 s on
+  // rmine15, and only the primal loop after it noticed the limit. Here the push itself is
+  // given a limit that is gone at once, from the interior point's answer on a degenerate
+  // Netlib model; it must stop with no pivot made. Without the fix it made them all and
+  // reported the limit after them.
+  Model model;
+  const std::string path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+       "data/netlib/scsd8.mps")
+          .string();
+  const io::ReadResult read = io::read_model(path, &model);
+  ASSERT_TRUE(read.ok) << path << ": " << read.error;
+  Logger quiet(nullptr);
+  const Solution interior = ipm::solve_ipm(model, ipm_options(false), quiet);
+  ASSERT_EQ(interior.status, SolveStatus::kOptimal) << interior.message;
+  const CrossoverGuess guess = crossover_guess(model, interior);
+  ASSERT_EQ(guess.basic, model.num_rows());
+  WarmStart warm;
+  warm.col_status = guess.col_status;
+  warm.row_status = guess.row_status;
+
+  // The same push with no limit makes pivots, so a stop at zero is the deadline's doing.
+  Options unlimited = ipm_options(true);
+  unlimited.set_string("algorithm", "dual-simplex");
+  detail::Simplex free_run(model, unlimited, quiet, nullptr);
+  const Solution pushed = free_run.run_push(warm, interior.col_value, interior.row_activity);
+  ASSERT_GT(pushed.iterations, 0) << pushed.message;
+
+  Options limited = unlimited;
+  limited.set_double("time_limit", 1e-9);
+  detail::Simplex timed(model, limited, quiet, nullptr);
+  const Solution stopped = timed.run_push(warm, interior.col_value, interior.row_activity);
+  EXPECT_EQ(stopped.status, SolveStatus::kTimeLimit) << stopped.message;
+  EXPECT_EQ(stopped.iterations, 0) << stopped.message;
 }
 
 TEST(Crossover, OffLeavesTheInteriorPointsAnswerAlone) {

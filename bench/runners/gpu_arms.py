@@ -26,17 +26,40 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+import subprocess
 from pathlib import Path
 
 # (arm label, algorithm, extra solver options, cpu_threads, parallel_spmv). The GPU arm's
 # thread columns are blank: it passes neither option, and neither changes what the card does.
 GPU_ARM = ("gpu", "pdhg-cuda", [], "", "")
 
-# The columns every row of both CSVs now carries, in order.
+# The columns every row of both CSVs now carries, in order. `reference_seconds` is HiGHS's
+# own run time on the same file in its own process (blank for a constructed reference), so
+# a card is read beside a simplex on the same host and not only against our CPU (#488).
 FAIRNESS_COLUMNS = [
     "arm", "cpu_threads", "parallel_spmv", "instance_sha256", "reference_objective",
-    "reference_source", "abs_gap", "rel_gap",
+    "reference_source", "reference_seconds", "abs_gap", "rel_gap",
 ]
+
+# The driver and the CUDA runtime a GPU row was produced under (#488). The runtime and the
+# driver API version are in the binary's device description (src/gpu/device.cu, from
+# cudaRuntimeGetVersion and cudaDriverGetVersion); the driver's own version string, which is
+# what a card's changelog names, only nvidia-smi knows.
+PLATFORM_COLUMNS = ["driver_version", "cuda_runtime"]
+
+
+def platform_cells(gpu_description: str) -> dict:
+    driver = ""
+    try:
+        done = subprocess.run(["nvidia-smi", "--query-gpu=driver_version",
+                               "--format=csv,noheader"], capture_output=True, text=True,
+                              check=False, timeout=30)
+        if done.returncode == 0 and done.stdout.strip():
+            driver = done.stdout.strip().splitlines()[0].strip()
+    except (OSError, subprocess.SubprocessError):
+        driver = ""
+    match = re.search(r"CUDA runtime ([\d.]+)", gpu_description or "")
+    return {"driver_version": driver, "cuda_runtime": match.group(1) if match else ""}
 
 
 def cpu_arms(threads: int) -> list[tuple[str, str, list[str], int, bool]]:
@@ -76,8 +99,9 @@ def analytic_optimum(mps: Path) -> float | None:
 
 
 def reference_objective(mps: Path, time_limit: float,
-                        use_highs: bool = True) -> tuple[float | None, str, str]:
-    """(value, source, note) for one instance, computed ONCE per instance.
+                        use_highs: bool = True) -> tuple[float | None, str, str, float | None]:
+    """(value, source, note, seconds) for one instance, computed ONCE per instance; the
+    seconds are HiGHS's own run time, None when HiGHS was not asked.
 
     A generated model that states its own exact optimum (the refinery year) is its own
     reference, `construction`. Anything else asks HiGHS, run as a separate process over the
@@ -86,14 +110,14 @@ def reference_objective(mps: Path, time_limit: float,
     finishing optimal, leaves the reference blank and the source `none` - never a guess."""
     analytic = analytic_optimum(mps)
     if analytic is not None:
-        return analytic, "construction", "analytic optimum stated by the generator"
+        return analytic, "construction", "analytic optimum stated by the generator", None
     if not use_highs:
-        return None, "none", "reference disabled (--no-reference)"
+        return None, "none", "reference disabled (--no-reference)", None
     import mittelmann  # lazy: the doc generator and the tests never need it
-    value, status = mittelmann.highs_objective(mps, time_limit)
+    value, status, seconds = mittelmann.highs_timed(mps, time_limit)
     if value is None:
-        return None, "none", f"highs: {status}"
-    return value, "highs", f"highs: {status}"
+        return None, "none", f"highs: {status}", seconds
+    return value, "highs", f"highs: {status}", seconds
 
 
 def gaps(objective: float | None, reference: float | None) -> tuple[float | None, float | None]:
@@ -112,7 +136,8 @@ def fmt_gap(value: float | None) -> str:
 
 
 def fairness_cells(arm: tuple, digest: str, objective: float | None,
-                   reference: float | None, reference_source: str) -> dict:
+                   reference: float | None, reference_source: str,
+                   reference_seconds: float | None = None) -> dict:
     """The FAIRNESS_COLUMNS of one row."""
     label, _, _, threads, parallel = arm
     absolute, relative = gaps(objective, reference)
@@ -123,6 +148,7 @@ def fairness_cells(arm: tuple, digest: str, objective: float | None,
         "instance_sha256": digest,
         "reference_objective": "" if reference is None else repr(reference),
         "reference_source": reference_source if reference is not None else "none",
+        "reference_seconds": "" if reference_seconds is None else f"{reference_seconds:.6f}",
         "abs_gap": fmt_gap(absolute),
         "rel_gap": fmt_gap(relative),
     }

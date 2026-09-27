@@ -58,6 +58,9 @@ Rational rational_at_least(double v) {
 Options quiet() {
   Options o;
   o.set_bool("log_to_console", false);
+  // The models here are a few columns, so every root cut is "dense" and the admission
+  // (#496) would close them at the root; pinned off, since the tree is what is tested.
+  o.set_int("cut_dense_max", 0);
   return o;
 }
 

@@ -62,6 +62,7 @@
 
 #include "../core/stop_controller.hpp"
 #include "../util/profiler.hpp"
+#include "sankhya/certificate.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -2149,6 +2150,23 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
                       solution.primal_infeasibility_scaled <= primal_tolerance &&
                       solution.dual_infeasibility_scaled <= dual_tolerance;
   if (usable) return solution;
+
+  // AN INFEASIBLE CLAIM THAT PROVES ITSELF ON THE ORIGINAL MODEL ENDS IT TOO. The retry
+  // exists because a scaled claim is a claim about the scaled numerics; a Farkas vector
+  // that, mapped back above, proves the ORIGINAL model has no feasible point (the check
+  // solve() applies to every infeasible verdict, include/sankhya/certificate.hpp; both signs,
+  // as there) is a claim about the model, and a second solve can only repeat it. Branch
+  // and bound meets this at every infeasible node, where it paid a second, unscaled solve
+  // each time. A claim whose vector does not prove it keeps the retry.
+  if (solution.status == SolveStatus::kInfeasible &&
+      solution.farkas_dual.size() == static_cast<std::size_t>(m)) {
+    std::vector<double> flipped = solution.farkas_dual;
+    for (double& value : flipped) value = -value;
+    if (farkas_proves_infeasible(model, solution.farkas_dual) ||
+        farkas_proves_infeasible(model, flipped)) {
+      return solution;
+    }
+  }
 
   // THE RETRY NEVER GETS A FRESH BUDGET. An iteration limit has no notion of "remaining",
   // so a scaled solve that hit it is reported as it stands. A time limit does: the retry

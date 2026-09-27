@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// SANKHYA - the cut filter's policy: the support floor and the efficacy test (#496).
+// SANKHYA - the cut filter's policy: the support floor, the efficacy test and the root's
+// bounded admission of dense cuts (#496).
 //
 // Both are off by default, and the default policy has to be the filter as it was: a cut
 // over more than 0.2 n columns is too dense whatever the count, and a cut is taken on its
@@ -112,33 +113,26 @@ TEST(CutFilterPolicy, EfficacyIsScaleFreeWhereTheAbsoluteViolationIsNot) {
   EXPECT_EQ(res[0].reason, mip::CutFilterReason::kAccepted);
 }
 
-TEST(CutFilterPolicy, ASearchWithBothOnStillReachesTheExactOptimum) {
-  // The unit tests above say which cuts the policy lets through; this says the search that
-  // takes them still gets the right answer. Binary knapsack and covering rows, 8 to 12
-  // columns: 0.2 n is 1 or 2 nonzeros there, so the default filter refuses nearly every cut
-  // and the floor admits them, which is where the policy changes what reaches the LP. Every
-  // root family, tree rounds to depth 4, the floor at 100 and the efficacy test, each
-  // answer compared with the exact rational branch and bound, and the same with both off.
-  std::mt19937_64 rng(20260926);
+struct ExactComparison {
+  int solved = 0;
+  std::int64_t cuts_on = 0;
+  std::int64_t cuts_off = 0;
+};
+
+/// Binary knapsack and covering rows, 8 to 12 columns, `trials` of them from `seed`: each
+/// solved under `on` and under `off` and compared with the exact rational branch and bound.
+/// On 8 to 12 columns 0.2 n is 1 or 2 nonzeros, so the default filter refuses nearly every
+/// cut, which is where a filter policy changes what reaches the LP.
+ExactComparison compare_with_exact(const Options& on, const Options& off, std::uint64_t seed,
+                                   int trials) {
+  std::mt19937_64 rng(seed);
   std::uniform_int_distribution<Index> width(8, 12);
   std::uniform_int_distribution<Index> height(2, 4);
   std::uniform_int_distribution<std::int64_t> weight(1, 9);
   std::uniform_int_distribution<std::int64_t> profit(1, 40);
   std::uniform_int_distribution<int> percent(0, 99);
-  Options on;
-  on.set_bool("log_to_console", false);
-  for (const char* name :
-       {"enable_root_cuts", "enable_mir_cuts", "enable_clique_cuts", "enable_zero_half_cuts"}) {
-    on.set_bool(name, true);
-  }
-  on.set_int("tree_cut_depth", 4);
-  Options off = on;
-  on.set_int("cut_support_floor", 100);
-  on.set_bool("cut_efficacy_test", true);
-  int solved = 0;
-  std::int64_t cuts_on = 0;
-  std::int64_t cuts_off = 0;
-  for (int trial = 0; trial < 120; ++trial) {
+  ExactComparison out;
+  for (int trial = 0; trial < trials; ++trial) {
     oracle::GeneratedLp lp;
     lp.num_cols = width(rng);
     const Index knapsacks = height(rng);
@@ -177,20 +171,91 @@ TEST(CutFilterPolicy, ASearchWithBothOnStillReachesTheExactOptimum) {
     const Solution without = solve(model, off);
     const double expected = exact.objective.to_double();
     const double tolerance = 1e-6 * std::max(1.0, std::fabs(expected));
-    ASSERT_EQ(with.status, SolveStatus::kOptimal) << lp.to_text();
+    EXPECT_EQ(with.status, SolveStatus::kOptimal) << lp.to_text();
     EXPECT_NEAR(with.objective, expected, tolerance) << lp.to_text();
-    ASSERT_EQ(without.status, SolveStatus::kOptimal) << lp.to_text();
+    EXPECT_EQ(without.status, SolveStatus::kOptimal) << lp.to_text();
     EXPECT_NEAR(without.objective, expected, tolerance) << lp.to_text();
-    cuts_on += with.cuts_applied;
-    cuts_off += without.cuts_applied;
-    ++solved;
+    out.cuts_on += with.cuts_applied;
+    out.cuts_off += without.cuts_applied;
+    ++out.solved;
   }
-  EXPECT_GE(solved, 80);
-  EXPECT_GT(cuts_on, cuts_off) << "the policy changed nothing on these instances";
+  return out;
+}
+
+Options every_root_family() {
+  Options options;
+  options.set_bool("log_to_console", false);
+  for (const char* name :
+       {"enable_root_cuts", "enable_mir_cuts", "enable_clique_cuts", "enable_zero_half_cuts"}) {
+    options.set_bool(name, true);
+  }
+  options.set_int("tree_cut_depth", 4);
+  return options;
+}
+
+TEST(CutFilterPolicy, ASearchWithBothOnStillReachesTheExactOptimum) {
+  // The unit tests above say which cuts the policy lets through; this says the search that
+  // takes them still gets the right answer. Every root family, tree rounds to depth 4, the
+  // floor at 100 and the efficacy test, against the same with both off; the dense admission
+  // (#496) is off in both so the floor is what differs.
+  Options on = every_root_family();
+  on.set_int("cut_dense_max", 0);
+  Options off = on;
+  on.set_int("cut_support_floor", 100);
+  on.set_bool("cut_efficacy_test", true);
+  const ExactComparison run = compare_with_exact(on, off, 20260926, 120);
+  EXPECT_GE(run.solved, 80);
+  EXPECT_GT(run.cuts_on, run.cuts_off) << "the policy changed nothing on these instances";
   std::printf(
       "[  INFO    ] cut filter policy: %d instances at the exact optimum; cut rows applied "
       "%lld with the floor and efficacy, %lld without\n",
-      solved, static_cast<long long>(cuts_on), static_cast<long long>(cuts_off));
+      run.solved, static_cast<long long>(run.cuts_on), static_cast<long long>(run.cuts_off));
+}
+
+TEST(CutFilterPolicy, TestDenseMarksACutRefusedForItsDensityAlone) {
+  // 40 of 100 columns: too dense. Violated by 19 at the point 0.5: dense_only. The same
+  // support not violated fails the violation test, which is what it reports; a dense
+  // duplicate of an accepted cut is a duplicate, not dense_only.
+  const Model m = padded(100);
+  mip::CutFilterPolicy policy;
+  policy.test_dense = true;
+  auto res = mip::filter_and_deduplicate_cuts(
+      m, point(100, 0.5), {dense_cut(100, 40, 1.0, 1.0), dense_cut(100, 40, 1.0, 30.0)},
+      policy);
+  ASSERT_EQ(res.size(), 2u);
+  EXPECT_EQ(res[0].reason, mip::CutFilterReason::kTooDense);
+  EXPECT_TRUE(res[0].dense_only);
+  EXPECT_EQ(res[1].reason, mip::CutFilterReason::kInsufficientViolation);
+  EXPECT_FALSE(res[1].dense_only);
+  // Without test_dense the mark is never set: the filter as it was.
+  res = mip::filter_and_deduplicate_cuts(m, point(100, 0.5), {dense_cut(100, 40, 1.0, 1.0)});
+  ASSERT_EQ(res.size(), 1u);
+  EXPECT_EQ(res[0].reason, mip::CutFilterReason::kTooDense);
+  EXPECT_FALSE(res[0].dense_only);
+}
+
+TEST(CutFilterPolicy, TheDenseAdmissionStillReachesTheExactOptimum) {
+  // #496: the root's bounded admission of dense cuts, on its defaults (cut_dense_max 10,
+  // the nonzero share 1.0) and at a budget that admits every eligible cut, against no dense
+  // cut at all; every answer at the exact rational optimum, and the admission applied more
+  // cut rows than the filter alone.
+  Options off = every_root_family();
+  off.set_int("cut_dense_max", 0);
+  Options on = every_root_family();
+  const ExactComparison defaults = compare_with_exact(on, off, 20260927, 120);
+  EXPECT_GE(defaults.solved, 80);
+  EXPECT_GT(defaults.cuts_on, defaults.cuts_off) << "no dense cut was admitted";
+  on.set_int("cut_dense_max", 1000000);
+  on.set_double("cut_dense_nonzero_share", 1000.0);
+  const ExactComparison unbounded = compare_with_exact(on, off, 20260928, 120);
+  EXPECT_GE(unbounded.solved, 80);
+  EXPECT_GT(unbounded.cuts_on, unbounded.cuts_off) << "no dense cut was admitted";
+  std::printf(
+      "[  INFO    ] dense cut admission: %d + %d instances at the exact optimum; cut rows "
+      "applied %lld (defaults) and %lld (unbounded), against %lld and %lld without\n",
+      defaults.solved, unbounded.solved, static_cast<long long>(defaults.cuts_on),
+      static_cast<long long>(unbounded.cuts_on), static_cast<long long>(defaults.cuts_off),
+      static_cast<long long>(unbounded.cuts_off));
 }
 
 }  // namespace

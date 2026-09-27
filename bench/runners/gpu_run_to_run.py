@@ -60,7 +60,7 @@ def main() -> int:
     gpu = gpu_description(args.binary)
     name = args.mps.name.split(".")[0]
     digest = gpu_arms.sha256_file(args.mps)
-    reference, source, note = gpu_arms.reference_objective(args.mps, args.reference_time_limit)
+    reference, source, note, _ = gpu_arms.reference_objective(args.mps, args.reference_time_limit)
     print(f"{name}: sha256 {digest[:16]}..., reference {reference!r} ({source}; {note})")
     print(f"commit {commit}  gpu {gpu}")
 

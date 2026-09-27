@@ -48,6 +48,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gpu_arms  # noqa: E402  (#488: the CPU arms, the reference and the gap arithmetic)
 import stamp  # noqa: E402  (#433: the CSV names the commit the BINARY was built from)
 from gpu_real_instances import find_mittelmann_mps, gpu_description, run_solve  # noqa: E402
+import subprocess  # noqa: E402
+import tempfile  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
@@ -55,9 +57,9 @@ RESULTS_DIR = REPO_ROOT / "bench" / "results"
 COLUMNS = [
     "instance", "instance_sha256", "mode", "cpu_threads", "parallel_spmv", "tol",
     "iteration_limit", "status", "objective", "reference_objective", "reference_source",
-    "abs_gap", "rel_gap", "primal_residual", "dual_residual", "iterations", "seconds",
-    "solver_median_s", "wall_median_s", "wall_spread_s", "repeats", "git_commit", "machine",
-    "card", "gpu", "timestamp_utc",
+    "reference_seconds", "abs_gap", "rel_gap", "primal_residual", "dual_residual",
+    "iterations", "seconds", "solver_median_s", "wall_median_s", "wall_spread_s", "repeats",
+    "git_commit", "machine", "card", "gpu", "driver_version", "cuda_runtime", "timestamp_utc",
 ]
 
 # Mittelmann instances CPU PDHG already finishes (#446); the rest hit the limit on both sides
@@ -89,9 +91,11 @@ def repeated(binary: Path, mps: Path, arm: tuple, tol: float, time_limit: float,
 
 
 def build_row(name: str, digest: str, arm: tuple, tol: float, iteration_limit: int | None,
-              r: dict, reference: float | None, reference_source: str, fixed: dict) -> dict:
+              r: dict, reference: float | None, reference_source: str, fixed: dict,
+              reference_seconds: float | None = None) -> dict:
     """One CSV row. Pure, so test_gpu_runners.py can pin it with a synthetic result."""
-    cells = gpu_arms.fairness_cells(arm, digest, r["objective"], reference, reference_source)
+    cells = gpu_arms.fairness_cells(arm, digest, r["objective"], reference, reference_source,
+                                    reference_seconds)
     row = {
         "instance": name,
         "instance_sha256": digest,
@@ -104,6 +108,7 @@ def build_row(name: str, digest: str, arm: tuple, tol: float, iteration_limit: i
         "objective": "" if r["objective"] is None else repr(r["objective"]),
         "reference_objective": cells["reference_objective"],
         "reference_source": cells["reference_source"],
+        "reference_seconds": cells["reference_seconds"],
         "abs_gap": cells["abs_gap"],
         "rel_gap": cells["rel_gap"],
         "primal_residual": r.get("primal_residual", ""),
@@ -138,6 +143,10 @@ def main() -> int:
                         help="skip HiGHS; the reference is blank unless the file states one")
     parser.add_argument("--instances", nargs="+", type=Path,
                         help="explicit .mps paths (default: the Mittelmann ones PDHG finishes)")
+    parser.add_argument("--with-refinery", action="store_true",
+                        help="also the 779,640-row refinery planning year, generated on the fly "
+                             "as gpu_real_instances.py does (its reference is the generator's "
+                             "analytic optimum)")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
 
@@ -145,6 +154,17 @@ def main() -> int:
         instances = list(args.instances)
     else:
         instances = [p for p in (find_mittelmann_mps(n) for n in DEFAULT_INSTANCES) if p]
+    scratch = tempfile.TemporaryDirectory()
+    if args.with_refinery:
+        refinery = Path(scratch.name) / "refinery_year.mps"
+        gen = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "bench" / "runners" / "generate_refinery_lp.py"),
+             "--periods", "8760", "--seed", "42", "--out", str(refinery)],
+            capture_output=True, text=True, check=False)
+        if gen.returncode != 0 or not refinery.exists():
+            print(f"refinery year not generated: {gen.stderr[:200]}", file=sys.stderr)
+            return 1
+        instances.append(refinery)
     if not instances:
         print("no instances: run bench/runners/fetch_mittelmann.py or pass --instances",
               file=sys.stderr)
@@ -158,7 +178,8 @@ def main() -> int:
     out = args.out or RESULTS_DIR / f"gpu-datacenter-{args.card}-{commit}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     fixed = {"repeats": args.repeats, "git_commit": commit, "machine": machine,
-             "card": args.card, "gpu": gpu, "timestamp_utc": stamp_utc}
+             "card": args.card, "gpu": gpu, **gpu_arms.platform_cells(gpu),
+             "timestamp_utc": stamp_utc}
     arms = gpu_arms.all_arms(args.cpu_threads)
 
     print(f"card {args.card}: {gpu}; solver {commit}; {len(instances)} instance(s), "
@@ -172,9 +193,10 @@ def main() -> int:
         for mps in instances:
             name = mps.name.split(".")[0]
             digest = gpu_arms.sha256_file(mps)
-            reference, source, note = gpu_arms.reference_objective(
+            reference, source, note, ref_seconds = gpu_arms.reference_objective(
                 mps, args.reference_time_limit, use_highs=not args.no_reference)
-            print(f"{name}: sha256 {digest[:16]}..., reference {reference!r} ({source}; {note})")
+            print(f"{name}: sha256 {digest[:16]}..., reference {reference!r} ({source}; {note}; "
+                  f"{ref_seconds} s)")
             # One untimed warm-up on the card so the first measured run is not paying for
             # context creation and module load (the same as gpu_real_instances.py).
             run_solve(args.binary, mps, "pdhg-cuda", tols[0], args.time_limit)
@@ -187,7 +209,7 @@ def main() -> int:
                     r = repeated(args.binary, mps, arm, tol, args.time_limit, args.repeats,
                                  iteration_limit)
                     row = build_row(name, digest, arm, tol, iteration_limit, r, reference,
-                                    source, fixed)
+                                    source, fixed, ref_seconds)
                     if arm[1] == "pdhg-cpu":
                         cpu_solver[arm[0]] = r["solver_median_s"]
                         versus = "baseline"
@@ -202,6 +224,7 @@ def main() -> int:
                     writer.writerow(row)
                     handle.flush()
 
+    scratch.cleanup()
     print(f"\nwrote {out}")
     return 0
 

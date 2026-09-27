@@ -143,8 +143,8 @@ Every instance in Netlib's summary table. Both tiers above are defined by a row 
 makes them the easier half of the library by construction; this is the number Phase 6's
 ">= 95% of Netlib" exit criterion is measured against, and the one the README quotes.
 
-Source CSV: `bench/results/netlib-full-5b2bd80.csv`  
-Commit `5b2bd80` · machine `Windows-AMD64` · generated 2026-09-23T22:11:43+00:00
+Source CSV: `bench/results/netlib-full-ad57c03.csv`  
+Commit `ad57c03` · machine `Linux-x86_64` · generated 2026-09-27T08:57:35+00:00
 
 **81 of 89 instances in this working set** matched their published optimum to a relative 1e-6 **and** passed independent verification by `tools/verify_solution.py`.
 
@@ -158,100 +158,100 @@ Coverage: this run used **89 of the 89 instances** Netlib publishes an optimal v
 
 | instance | rows | cols | status | our objective | published optimum | rel. error | iters | time (s) | verified |
 |---|---:|---:|---|---:|---:|---:|---:|---:|:--:|
-| `25fv47` | 821 | 1571 | optimal | 5.5018458883e+03 | 5.5018458883e+03 | 2.4e-12 | 4107 | 1.139 | yes |
-| `80bau3b` | 2262 | 9799 | optimal | 9.8722419241e+05 | 9.8723216072e+05 | 8.1e-06 | 3868 | 0.469 | yes |
-| `adlittle` | 56 | 97 | optimal | 2.2549496316e+05 | 2.2549496316e+05 | 1.1e-11 | 100 | 0.017 | yes |
-| `afiro` | 27 | 32 | optimal | -4.6475314286e+02 | -4.6475314286e+02 | 6.1e-12 | 13 | 0.015 | yes |
-| `agg` | 488 | 163 | optimal | -3.5991767287e+07 | -3.5991767287e+07 | 1.2e-11 | 150 | 0.022 | yes |
-| `agg2` | 516 | 302 | optimal | -2.0239252356e+07 | -2.0239252356e+07 | 1.1e-12 | 159 | 0.031 | yes |
-| `agg3` | 516 | 302 | optimal | 1.0312115935e+07 | 1.0312115935e+07 | 8.7e-12 | 164 | 0.026 | yes |
-| `bandm` | 305 | 472 | optimal | -1.5862801845e+02 | -1.5862801845e+02 | 7.6e-13 | 484 | 0.028 | yes |
-| `beaconfd` | 173 | 262 | optimal | 3.3592485807e+04 | 3.3592485807e+04 | 6.0e-12 | 115 | 0.019 | yes |
-| `blend` | 74 | 83 | optimal | -3.0812149846e+01 | -3.0812149846e+01 | 5.6e-12 | 99 | 0.017 | yes |
-| `bnl1` | 643 | 1175 | optimal | 1.9776295615e+03 | 1.9776292856e+03 | 1.4e-07 | 1576 | 0.086 | yes |
-| `bnl2` | 2324 | 3489 | optimal | 1.8112365404e+03 | 1.8112365404e+03 | 2.3e-11 | 2279 | 0.224 | yes |
-| `boeing1` | 351 | 384 | optimal | -3.3521356751e+02 | -3.3521356751e+02 | 8.6e-12 | 357 | 0.025 | yes |
-| `boeing2` | 166 | 143 | optimal | -3.1501872802e+02 | -3.1501872802e+02 | 1.5e-11 | 122 | 0.020 | yes |
-| `bore3d` | 233 | 315 | optimal | 1.3730803942e+03 | 1.3730803942e+03 | 6.2e-12 | 161 | 0.024 | yes |
-| `brandy` | 220 | 249 | optimal | 1.5185098965e+03 | 1.5185098965e+03 | 7.8e-12 | 269 | 0.025 | yes |
-| `capri` | 271 | 353 | optimal | 2.6900129138e+03 | 2.6900129138e+03 | 1.2e-11 | 235 | 0.020 | yes |
-| `cycle` | 1903 | 2857 | optimal | -5.2263930249e+00 | -5.2263930249e+00 | 1.1e-12 | 339 | 0.063 | yes |
-| `czprob` | 929 | 3523 | optimal | 2.1851966989e+06 | 2.1851966989e+06 | 2.0e-11 | 991 | 0.089 | yes |
-| `d2q06c` | 2171 | 5167 | optimal | 1.2278421081e+05 | 1.2278423615e+05 | 2.1e-07 | 14357 | 3.752 | yes |
-| `d6cube` | 415 | 6184 | optimal | 3.1549166667e+02 | 3.1549166667e+02 | 1.1e-11 | 868 | 0.298 | yes |
-| `degen2` | 444 | 534 | optimal | -1.4351780000e+03 | -1.4351780000e+03 | 0.0e+00 | 649 | 0.042 | yes |
-| `degen3` | 1503 | 1818 | optimal | -9.8729400000e+02 | -9.8729400000e+02 | 1.2e-16 | 2930 | 0.385 | yes |
-| `dfl001` | 6071 | 12230 | optimal | 1.1266396047e+07 | 1.1266400000e+07 | 3.5e-07 | 72217 | 50.639 | yes |
-| `e226` | 223 | 282 | optimal | -1.1638929066e+01 | -1.8751929066e+01 | 3.8e-01 | 508 | 0.031 | yes |
-| `etamacro` | 400 | 688 | optimal | -7.5571523337e+02 | -7.5571521774e+02 | 2.1e-08 | 795 | 0.039 | yes |
-| `fffff800` | 524 | 854 | optimal | 5.5567956482e+05 | 5.5567961165e+05 | 8.4e-08 | 797 | 0.047 | yes |
-| `finnis` | 497 | 614 | optimal | 1.7279106560e+05 | 1.7279096547e+05 | 5.8e-07 | 377 | 0.032 | yes |
-| `fit1d` | 24 | 1026 | optimal | -9.1463780924e+03 | -9.1463780924e+03 | 2.3e-12 | 56 | 0.033 | yes |
-| `fit1p` | 627 | 1677 | optimal | 9.1463780924e+03 | 9.1463780924e+03 | 2.3e-12 | 1092 | 0.086 | yes |
-| `fit2d` | 25 | 10500 | optimal | -6.8464293294e+04 | -6.8464293294e+04 | 2.5e-12 | 32 | 0.230 | yes |
-| `fit2p` | 3000 | 13525 | optimal | 6.8464293294e+04 | 6.8464293232e+04 | 9.0e-10 | 10150 | 3.248 | yes |
-| `forplan` | 161 | 421 | optimal | -6.6421896127e+02 | -6.6421873953e+02 | 3.3e-07 | 322 | 0.029 | yes |
-| `ganges` | 1309 | 1681 | optimal | -1.0958573613e+05 | -1.0958636356e+05 | 5.7e-06 | 1092 | 0.056 | yes |
-| `gfrd-pnc` | 616 | 1092 | optimal | 6.9022359995e+06 | 6.9022359995e+06 | 7.1e-12 | 448 | 0.034 | yes |
-| `greenbea` | 2392 | 5405 | optimal | -7.2555248130e+07 | -7.2462405908e+07 | 1.3e-03 | 41768 | 12.107 | yes |
-| `greenbeb` | 2392 | 5405 | optimal | -4.3022602612e+06 | -4.3021476065e+06 | 2.6e-05 | 10256 | 1.667 | yes |
-| `grow15` | 300 | 645 | optimal | -1.0687094129e+08 | -1.0687094129e+08 | 3.3e-11 | 3782 | 0.154 | yes |
-| `grow22` | 440 | 946 | optimal | -1.6083433648e+08 | -1.6083433648e+08 | 1.6e-11 | 7041 | 0.362 | yes |
-| `grow7` | 140 | 301 | optimal | -4.7787811815e+07 | -4.7787811815e+07 | 6.0e-12 | 1144 | 0.046 | yes |
-| `israel` | 174 | 142 | optimal | -8.9664482186e+05 | -8.9664482186e+05 | 3.4e-12 | 169 | 0.023 | yes |
-| `kb2` | 43 | 41 | optimal | -1.7499001299e+03 | -1.7499001299e+03 | 3.5e-12 | 51 | 0.017 | yes |
-| `lotfi` | 153 | 308 | optimal | -2.5264706062e+01 | -2.5264706062e+01 | 4.7e-12 | 248 | 0.020 | yes |
-| `maros` | 846 | 1443 | optimal | -5.8063743701e+04 | -5.8063743701e+04 | 2.2e-12 | 2014 | 0.147 | yes |
-| `maros-r7` | 3136 | 9408 | optimal | 1.4971851665e+06 | 1.4971851665e+06 | 1.2e-11 | 28 | 6.948 | yes |
-| `modszk1` | 687 | 1620 | optimal | 3.2061972906e+02 | 3.2061972906e+02 | 1.3e-11 | 664 | 0.049 | yes |
-| `nesm` | 662 | 2923 | optimal | 1.4076036488e+07 | 1.4076073035e+07 | 2.6e-06 | 2560 | 0.177 | yes |
-| `perold` | 625 | 1376 | optimal | -9.3807552782e+03 | -9.3807580773e+03 | 3.0e-07 | 2823 | 0.215 | yes |
-| `pilot` | 1441 | 3652 | optimal | -5.5748972929e+02 | -5.5740430007e+02 | 1.5e-04 | 5793 | 1.661 | yes |
-| `pilot4` | 410 | 1000 | optimal | -2.5811392589e+03 | -2.5811392641e+03 | 2.0e-09 | 1616 | 0.172 | yes |
-| `pilot87` | 2030 | 4883 | optimal | 3.0171069146e+02 | 3.0171072827e+02 | 1.2e-07 | 33985 | 33.397 | yes |
-| `pilotnov` | 975 | 2172 | optimal | -4.4972761882e+03 | -4.4972761882e+03 | 4.2e-12 | 11429 | 1.199 | yes |
-| `recipe` | 91 | 180 | optimal | -2.6661600000e+02 | -2.6661600000e+02 | 1.1e-15 | 40 | 0.017 | yes |
-| `sc105` | 105 | 103 | optimal | -5.2202061212e+01 | -5.2202061212e+01 | 5.6e-12 | 87 | 0.017 | yes |
-| `sc205` | 205 | 203 | optimal | -5.2202061212e+01 | -5.2202061212e+01 | 5.6e-12 | 188 | 0.019 | yes |
-| `sc50a` | 50 | 48 | optimal | -6.4575077059e+01 | -6.4575077059e+01 | 6.7e-12 | 42 | 0.015 | yes |
-| `sc50b` | 50 | 48 | optimal | -7.0000000000e+01 | -7.0000000000e+01 | 2.0e-16 | 42 | 0.017 | yes |
-| `scagr25` | 471 | 500 | optimal | -1.4753433061e+07 | -1.4753433061e+07 | 1.6e-11 | 457 | 0.025 | yes |
-| `scagr7` | 129 | 140 | optimal | -2.3313898243e+06 | -2.3313892548e+06 | 2.4e-07 | 111 | 0.019 | yes |
-| `scfxm1` | 330 | 457 | optimal | 1.8416759028e+04 | 1.8416759028e+04 | 1.9e-11 | 451 | 0.029 | yes |
-| `scfxm2` | 660 | 914 | optimal | 3.6660261565e+04 | 3.6660261565e+04 | 3.3e-14 | 922 | 0.053 | yes |
-| `scfxm3` | 990 | 1371 | optimal | 5.4901254550e+04 | 5.4901254550e+04 | 4.5e-12 | 1478 | 0.079 | yes |
-| `scorpion` | 388 | 358 | optimal | 1.8781248227e+03 | 1.8781248227e+03 | 2.0e-11 | 242 | 0.023 | yes |
-| `scrs8` | 490 | 1169 | optimal | 9.0429695380e+02 | 9.0429998619e+02 | 3.4e-06 | 610 | 0.038 | yes |
-| `scsd1` | 77 | 760 | optimal | 8.6666666743e+00 | 8.6666666743e+00 | 3.8e-12 | 144 | 0.024 | yes |
-| `scsd6` | 147 | 1350 | optimal | 5.0500000077e+01 | 5.0500000078e+01 | 1.7e-11 | 363 | 0.036 | yes |
-| `scsd8` | 397 | 2750 | optimal | 9.0499999993e+02 | 9.0499999993e+02 | 5.0e-12 | 1302 | 0.102 | yes |
-| `sctap1` | 300 | 480 | optimal | 1.4122500000e+03 | 1.4122500000e+03 | 0.0e+00 | 253 | 0.024 | yes |
-| `sctap2` | 1090 | 1880 | optimal | 1.7248071429e+03 | 1.7248071429e+03 | 2.5e-11 | 738 | 0.045 | yes |
-| `sctap3` | 1480 | 2480 | optimal | 1.4240000000e+03 | 1.4240000000e+03 | 0.0e+00 | 1111 | 0.066 | yes |
-| `seba` | 515 | 1028 | optimal | 1.5711600000e+04 | 1.5711600000e+04 | 1.2e-16 | 439 | 0.027 | yes |
-| `share1b` | 117 | 225 | optimal | -7.6589318579e+04 | -7.6589318579e+04 | 2.4e-12 | 136 | 0.019 | yes |
-| `share2b` | 96 | 79 | optimal | -4.1573224074e+02 | -4.1573224074e+02 | 3.4e-12 | 133 | 0.020 | yes |
-| `shell` | 536 | 1775 | optimal | 1.2088253460e+09 | 1.2088253460e+09 | 0.0e+00 | 463 | 0.033 | yes |
-| `ship04l` | 402 | 2118 | optimal | 1.7933245380e+06 | 1.7933245380e+06 | 1.7e-11 | 449 | 0.032 | yes |
-| `ship04s` | 402 | 1458 | optimal | 1.7987147004e+06 | 1.7987147004e+06 | 2.5e-11 | 297 | 0.028 | yes |
-| `ship08l` | 778 | 4283 | optimal | 1.9090552114e+06 | 1.9090552114e+06 | 5.7e-12 | 743 | 0.060 | yes |
-| `ship08s` | 778 | 2387 | optimal | 1.9200982105e+06 | 1.9200982105e+06 | 1.8e-11 | 422 | 0.034 | yes |
-| `ship12l` | 1151 | 5427 | optimal | 1.4701879193e+06 | 1.4701879193e+06 | 2.0e-11 | 1064 | 0.074 | yes |
-| `ship12s` | 1151 | 2763 | optimal | 1.4892361344e+06 | 1.4892361344e+06 | 4.1e-12 | 589 | 0.043 | yes |
-| `sierra` | 1227 | 2036 | optimal | 1.5394362184e+07 | 1.5394362184e+07 | 2.4e-11 | 552 | 0.046 | yes |
-| `stair` | 356 | 467 | optimal | -2.5126695119e+02 | -2.5126695119e+02 | 1.2e-11 | 446 | 0.038 | yes |
-| `standata` | 359 | 1075 | optimal | 1.2576995000e+03 | 1.2576995000e+03 | 1.8e-16 | 58 | 0.024 | yes |
-| `standmps` | 467 | 1075 | optimal | 1.4060175000e+03 | 1.4060175000e+03 | 1.6e-16 | 203 | 0.026 | yes |
-| `stocfor1` | 117 | 111 | optimal | -4.1131976219e+04 | -4.1131976219e+04 | 1.1e-11 | 101 | 0.017 | yes |
-| `stocfor2` | 2157 | 2031 | optimal | -3.9024408538e+04 | -3.9024408538e+04 | 3.0e-12 | 1836 | 0.129 | yes |
-| `tuff` | 333 | 587 | optimal | 2.9214776509e-01 | 2.9214776509e-01 | 3.6e-12 | 241 | 0.031 | yes |
-| `wood1p` | 244 | 2594 | optimal | 1.4429024116e+00 | 1.4429024116e+00 | 1.8e-11 | 494 | 0.160 | yes |
-| `woodw` | 1098 | 8405 | optimal | 1.3044763331e+00 | 1.3044763331e+00 | 1.2e-11 | 3012 | 0.632 | yes |
+| `25fv47` | 821 | 1571 | optimal | 5.5018458883e+03 | 5.5018458883e+03 | 2.4e-12 | 4586 | 0.330 | yes |
+| `80bau3b` | 2262 | 9799 | optimal | 9.8722419241e+05 | 9.8723216072e+05 | 8.1e-06 | 3887 | 0.319 | yes |
+| `adlittle` | 56 | 97 | optimal | 2.2549496316e+05 | 2.2549496316e+05 | 1.1e-11 | 86 | 0.005 | yes |
+| `afiro` | 27 | 32 | optimal | -4.6475314286e+02 | -4.6475314286e+02 | 6.1e-12 | 13 | 0.003 | yes |
+| `agg` | 488 | 163 | optimal | -3.5991767287e+07 | -3.5991767287e+07 | 1.2e-11 | 140 | 0.008 | yes |
+| `agg2` | 516 | 302 | optimal | -2.0239252356e+07 | -2.0239252356e+07 | 1.1e-12 | 165 | 0.009 | yes |
+| `agg3` | 516 | 302 | optimal | 1.0312115935e+07 | 1.0312115935e+07 | 8.7e-12 | 168 | 0.015 | yes |
+| `bandm` | 305 | 472 | optimal | -1.5862801845e+02 | -1.5862801845e+02 | 7.6e-13 | 520 | 0.023 | yes |
+| `beaconfd` | 173 | 262 | optimal | 3.3592485807e+04 | 3.3592485807e+04 | 6.0e-12 | 115 | 0.009 | yes |
+| `blend` | 74 | 83 | optimal | -3.0812149846e+01 | -3.0812149846e+01 | 5.6e-12 | 99 | 0.005 | yes |
+| `bnl1` | 643 | 1175 | optimal | 1.9776295615e+03 | 1.9776292856e+03 | 1.4e-07 | 1674 | 0.066 | yes |
+| `bnl2` | 2324 | 3489 | optimal | 1.8112365404e+03 | 1.8112365404e+03 | 2.3e-11 | 2377 | 0.177 | yes |
+| `boeing1` | 351 | 384 | optimal | -3.3521356751e+02 | -3.3521356751e+02 | 8.6e-12 | 465 | 0.020 | yes |
+| `boeing2` | 166 | 143 | optimal | -3.1501872802e+02 | -3.1501872802e+02 | 1.5e-11 | 223 | 0.008 | yes |
+| `bore3d` | 233 | 315 | optimal | 1.3730803942e+03 | 1.3730803942e+03 | 6.2e-12 | 162 | 0.008 | yes |
+| `brandy` | 220 | 249 | optimal | 1.5185098965e+03 | 1.5185098965e+03 | 7.8e-12 | 299 | 0.013 | yes |
+| `capri` | 271 | 353 | optimal | 2.6900129138e+03 | 2.6900129138e+03 | 1.2e-11 | 259 | 0.011 | yes |
+| `cycle` | 1903 | 2857 | optimal | -5.2263930249e+00 | -5.2263930249e+00 | 1.1e-12 | 335 | 0.046 | yes |
+| `czprob` | 929 | 3523 | optimal | 2.1851966989e+06 | 2.1851966989e+06 | 2.0e-11 | 981 | 0.049 | yes |
+| `d2q06c` | 2171 | 5167 | optimal | 1.2278421081e+05 | 1.2278423615e+05 | 2.1e-07 | 14998 | 3.281 | yes |
+| `d6cube` | 415 | 6184 | optimal | 3.1549166667e+02 | 3.1549166667e+02 | 1.1e-11 | 868 | 0.152 | yes |
+| `degen2` | 444 | 534 | optimal | -1.4351780000e+03 | -1.4351780000e+03 | 0.0e+00 | 611 | 0.035 | yes |
+| `degen3` | 1503 | 1818 | optimal | -9.8729400000e+02 | -9.8729400000e+02 | 1.2e-16 | 3164 | 0.380 | yes |
+| `dfl001` | 6071 | 12230 | optimal | 1.1266396047e+07 | 1.1266400000e+07 | 3.5e-07 | 85012 | 50.945 | yes |
+| `e226` | 223 | 282 | optimal | -1.1638929066e+01 | -1.8751929066e+01 | 3.8e-01 | 435 | 0.018 | yes |
+| `etamacro` | 400 | 688 | optimal | -7.5571523335e+02 | -7.5571521774e+02 | 2.1e-08 | 779 | 0.034 | yes |
+| `fffff800` | 524 | 854 | optimal | 5.5567956482e+05 | 5.5567961165e+05 | 8.4e-08 | 706 | 0.034 | yes |
+| `finnis` | 497 | 614 | optimal | 1.7279106560e+05 | 1.7279096547e+05 | 5.8e-07 | 398 | 0.022 | yes |
+| `fit1d` | 24 | 1026 | optimal | -9.1463780924e+03 | -9.1463780924e+03 | 2.3e-12 | 56 | 0.021 | yes |
+| `fit1p` | 627 | 1677 | optimal | 9.1463780924e+03 | 9.1463780924e+03 | 2.3e-12 | 1088 | 0.072 | yes |
+| `fit2d` | 25 | 10500 | optimal | -6.8464293294e+04 | -6.8464293294e+04 | 2.5e-12 | 226 | 0.171 | yes |
+| `fit2p` | 3000 | 13525 | optimal | 6.8464293294e+04 | 6.8464293232e+04 | 9.0e-10 | 10207 | 2.818 | yes |
+| `forplan` | 161 | 421 | optimal | -6.6421896127e+02 | -6.6421873953e+02 | 3.3e-07 | 298 | 0.012 | yes |
+| `ganges` | 1309 | 1681 | optimal | -1.0958573613e+05 | -1.0958636356e+05 | 5.7e-06 | 1183 | 0.047 | yes |
+| `gfrd-pnc` | 616 | 1092 | optimal | 6.9022359995e+06 | 6.9022359995e+06 | 7.1e-12 | 448 | 0.017 | yes |
+| `greenbea` | 2392 | 5405 | optimal | -7.2555248130e+07 | -7.2462405908e+07 | 1.3e-03 | 8526 | 1.182 | yes |
+| `greenbeb` | 2392 | 5405 | optimal | -4.3022602612e+06 | -4.3021476065e+06 | 2.6e-05 | 10966 | 1.490 | yes |
+| `grow15` | 300 | 645 | optimal | -1.0687094129e+08 | -1.0687094129e+08 | 3.3e-11 | 1238 | 0.056 | yes |
+| `grow22` | 440 | 946 | optimal | -1.6083433648e+08 | -1.6083433648e+08 | 1.6e-11 | 2264 | 0.113 | yes |
+| `grow7` | 140 | 301 | optimal | -4.7787811815e+07 | -4.7787811815e+07 | 6.0e-12 | 337 | 0.018 | yes |
+| `israel` | 174 | 142 | optimal | -8.9664482186e+05 | -8.9664482186e+05 | 3.4e-12 | 170 | 0.011 | yes |
+| `kb2` | 43 | 41 | optimal | -1.7499001299e+03 | -1.7499001299e+03 | 3.5e-12 | 51 | 0.005 | yes |
+| `lotfi` | 153 | 308 | optimal | -2.5264706062e+01 | -2.5264706062e+01 | 4.7e-12 | 200 | 0.009 | yes |
+| `maros` | 846 | 1443 | optimal | -5.8063743701e+04 | -5.8063743701e+04 | 2.2e-12 | 1802 | 0.104 | yes |
+| `maros-r7` | 3136 | 9408 | optimal | 1.4971851665e+06 | 1.4971851665e+06 | 1.2e-11 | 28 | 10.025 | yes |
+| `modszk1` | 687 | 1620 | optimal | 3.2061972906e+02 | 3.2061972906e+02 | 1.3e-11 | 662 | 0.034 | yes |
+| `nesm` | 662 | 2923 | optimal | 1.4076036488e+07 | 1.4076073035e+07 | 2.6e-06 | 3321 | 0.154 | yes |
+| `perold` | 625 | 1376 | optimal | -9.3807552782e+03 | -9.3807580773e+03 | 3.0e-07 | 2492 | 0.170 | yes |
+| `pilot` | 1441 | 3652 | optimal | -5.5748972927e+02 | -5.5740430007e+02 | 1.5e-04 | 9900 | 4.604 | yes |
+| `pilot4` | 410 | 1000 | optimal | -2.5811392589e+03 | -2.5811392641e+03 | 2.0e-09 | 4 | 0.062 | yes |
+| `pilot87` | 2030 | 4883 | optimal | 3.0171069277e+02 | 3.0171072827e+02 | 1.2e-07 | 21106 | 27.890 | yes |
+| `pilotnov` | 975 | 2172 | optimal | -4.4972761882e+03 | -4.4972761882e+03 | 4.2e-12 | 2311 | 0.196 | yes |
+| `recipe` | 91 | 180 | optimal | -2.6661600000e+02 | -2.6661600000e+02 | 1.1e-15 | 40 | 0.004 | yes |
+| `sc105` | 105 | 103 | optimal | -5.2202061212e+01 | -5.2202061212e+01 | 5.6e-12 | 98 | 0.005 | yes |
+| `sc205` | 205 | 203 | optimal | -5.2202061212e+01 | -5.2202061212e+01 | 5.6e-12 | 232 | 0.008 | yes |
+| `sc50a` | 50 | 48 | optimal | -6.4575077059e+01 | -6.4575077059e+01 | 6.7e-12 | 42 | 0.004 | yes |
+| `sc50b` | 50 | 48 | optimal | -7.0000000000e+01 | -7.0000000000e+01 | 2.0e-16 | 42 | 0.004 | yes |
+| `scagr25` | 471 | 500 | optimal | -1.4753433061e+07 | -1.4753433061e+07 | 1.6e-11 | 457 | 0.017 | yes |
+| `scagr7` | 129 | 140 | optimal | -2.3313898243e+06 | -2.3313892548e+06 | 2.4e-07 | 111 | 0.005 | yes |
+| `scfxm1` | 330 | 457 | optimal | 1.8416759028e+04 | 1.8416759028e+04 | 1.9e-11 | 433 | 0.013 | yes |
+| `scfxm2` | 660 | 914 | optimal | 3.6660261565e+04 | 3.6660261565e+04 | 3.3e-14 | 937 | 0.042 | yes |
+| `scfxm3` | 990 | 1371 | optimal | 5.4901254550e+04 | 5.4901254550e+04 | 4.5e-12 | 1641 | 0.077 | yes |
+| `scorpion` | 388 | 358 | optimal | 1.8781248227e+03 | 1.8781248227e+03 | 2.0e-11 | 242 | 0.011 | yes |
+| `scrs8` | 490 | 1169 | optimal | 9.0429695380e+02 | 9.0429998619e+02 | 3.4e-06 | 610 | 0.020 | yes |
+| `scsd1` | 77 | 760 | optimal | 8.6666666743e+00 | 8.6666666743e+00 | 3.8e-12 | 98 | 0.007 | yes |
+| `scsd6` | 147 | 1350 | optimal | 5.0500000078e+01 | 5.0500000078e+01 | 7.1e-12 | 399 | 0.024 | yes |
+| `scsd8` | 397 | 2750 | optimal | 9.0499999993e+02 | 9.0499999993e+02 | 5.0e-12 | 1563 | 0.087 | yes |
+| `sctap1` | 300 | 480 | optimal | 1.4122500000e+03 | 1.4122500000e+03 | 1.6e-16 | 278 | 0.009 | yes |
+| `sctap2` | 1090 | 1880 | optimal | 1.7248071429e+03 | 1.7248071429e+03 | 2.5e-11 | 775 | 0.030 | yes |
+| `sctap3` | 1480 | 2480 | optimal | 1.4240000000e+03 | 1.4240000000e+03 | 0.0e+00 | 1111 | 0.049 | yes |
+| `seba` | 515 | 1028 | optimal | 1.5711600000e+04 | 1.5711600000e+04 | 1.2e-16 | 439 | 0.020 | yes |
+| `share1b` | 117 | 225 | optimal | -7.6589318579e+04 | -7.6589318579e+04 | 2.4e-12 | 136 | 0.008 | yes |
+| `share2b` | 96 | 79 | optimal | -4.1573224074e+02 | -4.1573224074e+02 | 3.4e-12 | 124 | 0.004 | yes |
+| `shell` | 536 | 1775 | optimal | 1.2088253460e+09 | 1.2088253460e+09 | 0.0e+00 | 461 | 0.017 | yes |
+| `ship04l` | 402 | 2118 | optimal | 1.7933245380e+06 | 1.7933245380e+06 | 1.7e-11 | 447 | 0.024 | yes |
+| `ship04s` | 402 | 1458 | optimal | 1.7987147004e+06 | 1.7987147004e+06 | 2.5e-11 | 296 | 0.015 | yes |
+| `ship08l` | 778 | 4283 | optimal | 1.9090552114e+06 | 1.9090552114e+06 | 5.7e-12 | 743 | 0.043 | yes |
+| `ship08s` | 778 | 2387 | optimal | 1.9200982105e+06 | 1.9200982105e+06 | 1.8e-11 | 422 | 0.020 | yes |
+| `ship12l` | 1151 | 5427 | optimal | 1.4701879193e+06 | 1.4701879193e+06 | 2.0e-11 | 1063 | 0.059 | yes |
+| `ship12s` | 1151 | 2763 | optimal | 1.4892361344e+06 | 1.4892361344e+06 | 4.1e-12 | 590 | 0.031 | yes |
+| `sierra` | 1227 | 2036 | optimal | 1.5394362184e+07 | 1.5394362184e+07 | 2.4e-11 | 550 | 0.028 | yes |
+| `stair` | 356 | 467 | optimal | -2.5126695119e+02 | -2.5126695119e+02 | 1.2e-11 | 445 | 0.028 | yes |
+| `standata` | 359 | 1075 | optimal | 1.2576995000e+03 | 1.2576995000e+03 | 1.8e-16 | 51 | 0.010 | yes |
+| `standmps` | 467 | 1075 | optimal | 1.4060175000e+03 | 1.4060175000e+03 | 1.6e-16 | 197 | 0.016 | yes |
+| `stocfor1` | 117 | 111 | optimal | -4.1131976219e+04 | -4.1131976219e+04 | 1.1e-11 | 104 | 0.007 | yes |
+| `stocfor2` | 2157 | 2031 | optimal | -3.9024408538e+04 | -3.9024408538e+04 | 3.0e-12 | 1877 | 0.130 | yes |
+| `tuff` | 333 | 587 | optimal | 2.9214776509e-01 | 2.9214776509e-01 | 3.6e-12 | 242 | 0.011 | yes |
+| `wood1p` | 244 | 2594 | optimal | 1.4429024116e+00 | 1.4429024116e+00 | 1.8e-11 | 219 | 0.072 | yes |
+| `woodw` | 1098 | 8405 | optimal | 1.3044763331e+00 | 1.3044763331e+00 | 1.2e-11 | 2495 | 0.331 | yes |
 
 **Summary**
 
-- shifted geometric mean solve time (shift 1s): **0.263s**
-- slowest solved instance: 50.639s
+- shifted geometric mean solve time (shift 1s): **0.219s**
+- slowest solved instance: 50.945s
 - worst relative error against a published optimum: **5.79e-07**
 - **failed: `80bau3b`, `e226`, `ganges`, `greenbea`, `greenbeb`, `nesm`, `pilot`, `scrs8`** — kept in the table on purpose
 
@@ -441,7 +441,7 @@ Commit `fb72ab4` · machine `Windows-AMD64`
 
 Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
 
-> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd` reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting the whole trajectory. Speedup figures here are the median of repeated solves. Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
+> **GPU iteration counts differ from the CPU's (#448).** The device sums its reductions in a fixed order since #478, so a GPU run repeats itself, but a one-ulp difference from the CPU's summation order can flip a restart decision and shift the whole trajectory. Speedup figures here are the median of repeated solves, and a ratio below 1x is a loss, printed in the same type as a win. Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
 
 | rows×cols | CPU 1e-4 (s) | GPU 1e-4 (s) | speedup | CPU 1e-8 (s) | GPU 1e-8 (s) | speedup |
 |----------:|-------------:|-------------:|--------:|-------------:|-------------:|--------:|
@@ -450,12 +450,10 @@ Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to
 | 1000×1000 | 0.040 | 0.738 | 0.05× | 0.041 | 0.602 | 0.07× |
 | 2000×2000 | 0.698 | 5.081 | 0.14× | 0.715 | 7.467 | 0.10× |
 | 5000×5000 | 0.784 | 1.436 | 0.55× | 0.770 | 1.635 | 0.47× |
-| 10000×10000 | 2.855 | 2.082 | **1.37×** | 2.929 | 1.903 | **1.54×** |
+| 10000×10000 | 2.855 | 2.082 | 1.37× | 2.929 | 1.903 | 1.54× |
 
-GPU: NVIDIA GeForce RTX 5050 Laptop GPU (compute 12.0, 8151 MiB VRAM).  
+GPU: NVIDIA GeForce RTX 5050 Laptop GPU (compute 12.0, 8151 MiB VRAM); driver and CUDA runtime not recorded (the CSV predates #488's columns).  
 Instances are synthetic KKT LPs with ~5 nonzeros per column (seed 42).
-
-> **GPU iteration counts vary run to run (#448, #451).** The device reductions inside the GPU mat-vec are not bitwise reproducible, and a one-ulp difference can flip a restart decision and shift the whole trajectory, which is why every GPU cell is the median of repeated solves. Do not compare a GPU iteration count against the CPU count for the same instance: the two engines take different trajectories to the same tolerance. The regression test holds them to agreement at the stopping tolerance, not to the same iterate (`tests/unit/test_pdhg_cuda_regression.cpp`); see also `docs/ARCHITECTURE.md` section 7.
 
 #### 1e-8 ceiling — sizes PDHG does not drive to project standard
 
@@ -502,6 +500,10 @@ machine's own CPU, so a ratio here is card against host, not card against the la
 
 **L4**
 
+![GPU speedup against nonzeros on the L4](img/gpu-speedup-l4.svg)
+
+The figure is regenerated from the two CSVs by `bench/runners/gpu_plot.py` each time this document is; each point is one instance and tolerance, the speedup against the faster CPU arm on the solver's clock; the dashed line is 1x, the crossover, and everything below it is a loss.
+
 The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, medians of repeats with their min-max):
 
 Source CSV: `bench/results/gpu-l4-fdc89c5.csv`  
@@ -509,7 +511,7 @@ Commit `fdc89c5` · machine `Linux-x86_64`
 
 Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
 
-> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd` reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting the whole trajectory. Speedup figures here are the median of repeated solves (5 per cell). Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
+> **GPU iteration counts differ from the CPU's (#448).** The device sums its reductions in a fixed order since #478, so a GPU run repeats itself, but a one-ulp difference from the CPU's summation order can flip a restart decision and shift the whole trajectory. Speedup figures here are the median of repeated solves (5 per cell), and a ratio below 1x is a loss, printed in the same type as a win. Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
 
 Each cell is the median of 5 solves; `[min–max]` shows the spread from run-to-run variance (thermal state, clock boost on the laptop GPU).
 
@@ -519,13 +521,11 @@ Each cell is the median of 5 solves; `[min–max]` shows the spread from run-to-
 | 500×500 | 0.178 [0.171–0.182] | 0.832 [0.542–3.330] | 0.21× | 0.228 [0.226–0.229] | 1.327 [1.287–2.707] | 0.17× |
 | 1000×1000 | 0.064 [0.063–0.064] | 0.267 [0.240–0.373] | 0.24× | 0.064 [0.063–0.066] | 0.270 [0.244–0.364] | 0.24× |
 | 2000×2000 | 1.025 [1.014–1.034] | 1.449 [1.264–1.795] | 0.71× | 1.028 [1.019–1.063] | 1.302 [1.260–2.244] | 0.79× |
-| 5000×5000 | 0.890 [0.879–0.905] | 0.434 [0.429–0.562] | **2.05×** | 0.884 [0.870–0.904] | 0.501 [0.457–0.540] | **1.77×** |
-| 10000×10000 | 2.854 [2.829–3.001] | 0.678 [0.610–0.799] | **4.21×** | 2.906 [2.856–2.928] | 0.745 [0.644–0.779] | **3.90×** |
+| 5000×5000 | 0.890 [0.879–0.905] | 0.434 [0.429–0.562] | 2.05× | 0.884 [0.870–0.904] | 0.501 [0.457–0.540] | 1.77× |
+| 10000×10000 | 2.854 [2.829–3.001] | 0.678 [0.610–0.799] | 4.21× | 2.906 [2.856–2.928] | 0.745 [0.644–0.779] | 3.90× |
 
-GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM).  
+GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM); driver and CUDA runtime not recorded (the CSV predates #488's columns).  
 Instances are synthetic KKT LPs with ~5 nonzeros per column (seed 42).
-
-> **GPU iteration counts vary run to run (#448, #451).** The device reductions inside the GPU mat-vec are not bitwise reproducible, and a one-ulp difference can flip a restart decision and shift the whole trajectory, which is why every GPU cell is the median of repeated solves. Do not compare a GPU iteration count against the CPU count for the same instance: the two engines take different trajectories to the same tolerance. The regression test holds them to agreement at the stopping tolerance, not to the same iterate (`tests/unit/test_pdhg_cuda_regression.cpp`); see also `docs/ARCHITECTURE.md` section 7.
 
 #### 1e-8 ceiling — sizes PDHG does not drive to project standard
 
@@ -545,9 +545,9 @@ On non-synthetic instances (`bench/runners/gpu_real_instances.py`):
 
 Source CSV: `bench/results/gpu-real-l4-58a8374.csv`  
 Commit `58a8374` · machine `Linux-x86_64`  
-GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM)
+GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM); driver and CUDA runtime not recorded (the CSV predates #488's columns)
 
-Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance. Report the result whichever way it goes. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and 16 threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
+Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance, one solve per cell. Report the result whichever way it goes: a speedup below 1x is a loss and is printed in the same type as a win. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and 16 threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column, which also carries HiGHS's own run time on the same file in its own process when HiGHS is the reference; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
 
 | instance | rows | tol | CPU 1 thread (s) | CPU 16 threads (s) | GPU (s) | GPU vs 1 thread | GPU vs 16 threads | GPU status | rel gap CPU 1t / CPU 16t / GPU | reference |
 |----------|-----:|----:|-------------:|-------------:|--------:|--------:|--------:|--------|--------|--------|
@@ -560,7 +560,7 @@ Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance.
 
 The datacenter runner (`bench/runners/gpu_datacenter.py`, #488):
 
-`gpu-datacenter-l4-58a8374.csv` - NVIDIA L4 (compute 8.9, 22478 MiB VRAM), solver at `58a8374`, Linux-x86_64, 3 repeats per cell:
+`gpu-datacenter-l4-58a8374.csv` - NVIDIA L4 (compute 8.9, 22478 MiB VRAM), driver and CUDA runtime not recorded (the CSV predates #488's columns), solver at `58a8374`, Linux-x86_64, 3 repeats per cell. HiGHS's own time on the same file, once per instance in its own process: `chromaticindex1024-7` -; `brazil3` -.
 
 | instance | mode | threads | parallel A x | tol | forced iterations | status | objective | rel gap | primal res | dual res | iterations | solver (s) | solver median (s) | median wall (s) | spread (s) |
 |---|---|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -604,13 +604,17 @@ GPU speedup on the solver's own clock (median of the repeats):
 
 **A100**
 
+![GPU speedup against nonzeros on the A100](img/gpu-speedup-a100.svg)
+
+The figure is regenerated from the two CSVs by `bench/runners/gpu_plot.py` each time this document is; each point is one instance and tolerance, the speedup against the faster CPU arm on the solver's clock; the dashed line is 1x, the crossover, and everything below it is a loss.
+
 On non-synthetic instances (`bench/runners/gpu_real_instances.py`):
 
 Source CSV: `bench/results/gpu-real-a100-58a8374.csv`  
 Commit `58a8374` · machine `Linux-x86_64`  
-GPU: NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM)
+GPU: NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM); driver and CUDA runtime not recorded (the CSV predates #488's columns)
 
-Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance. Report the result whichever way it goes. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and 28 threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
+Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance, one solve per cell. Report the result whichever way it goes: a speedup below 1x is a loss and is printed in the same type as a win. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and 28 threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column, which also carries HiGHS's own run time on the same file in its own process when HiGHS is the reference; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
 
 | instance | rows | tol | CPU 1 thread (s) | CPU 28 threads (s) | GPU (s) | GPU vs 1 thread | GPU vs 28 threads | GPU status | rel gap CPU 1t / CPU 28t / GPU | reference |
 |----------|-----:|----:|-------------:|-------------:|--------:|--------:|--------:|--------|--------|--------|
@@ -623,7 +627,7 @@ Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance.
 
 The datacenter runner (`bench/runners/gpu_datacenter.py`, #488):
 
-`gpu-datacenter-a100-58a8374.csv` - NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM), solver at `58a8374`, Linux-x86_64, 3 repeats per cell:
+`gpu-datacenter-a100-58a8374.csv` - NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM), driver and CUDA runtime not recorded (the CSV predates #488's columns), solver at `58a8374`, Linux-x86_64, 3 repeats per cell. HiGHS's own time on the same file, once per instance in its own process: `chromaticindex1024-7` -; `brazil3` -.
 
 | instance | mode | threads | parallel A x | tol | forced iterations | status | objective | rel gap | primal res | dual res | iterations | solver (s) | solver median (s) | median wall (s) | spread (s) |
 |---|---|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -732,6 +736,66 @@ Commit `58a8374` · machine `Linux-x86_64` · GPU NVIDIA L4 (compute 8.9, 22478 
 
 **The device loses at every measured size (5 of 5).** The CPU reference is faster from the smallest model to the largest; the GPU backend stays off by default (`gpu_domain_prop=false`, `domain_prop_backend=auto`).
 Without the context (a process that has already touched the card), the device is faster at 3 of 5.
+
+#### 1g.6 Two cards against one: the row-partitioned engine (#295)
+
+Rows of A split across the cards, balanced by nonzeros plus rows; the primal iterate
+replicated, the dual partitioned, A^T y summed across the cards every iteration in slot
+order over P2P (NVLink or PCIe) or, without it, staged through the host
+(`src/gpu/pdhg_multi_gpu.cu`). Dispatch is explicit (`gpu_devices=0,1`); nothing chooses
+several cards by itself, for the reason the table gives (`docs/ARCHITECTURE.md` section 7).
+
+Source CSV: `bench/results/multi-gpu-e2e-2xA100-SXM4-40GB-NV12-58a8374.csv`  
+Commit `58a8374` · machine `e2e-2xA100-SXM4-40GB-NV12` · GPU not recorded; driver and CUDA runtime not recorded (the CSV predates #488's columns)  
+1 run(s) per cell; the row is the median per-step time with its min and max where recorded.
+
+`partitioned-1` is the multi-card engine on one card, the like-for-like baseline; `single-engine` is the production single-card engine. The exchange share is the time the cards spend in the cross-card sum of A^T y (waiting for the slowest partial included) as a share of the device time per step; `peak MiB` is what each slot allocated. A ratio below 1x is a loss and is printed in the same type as a win.
+
+| instance | rows | nnz | budget | config | status | rel gap | us/step [min-max] | exchange share | exchange us/step | MiB moved | peak MiB per slot | partition | solve (s) |
+|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---|---|---:|
+| `kkt_250000_8_295` | - | - | steps | single-engine | iteration_limit | 2.0365770667639497e-06 | 1532.4 | - | - | - | - | - | 3.064838692 |
+| `kkt_250000_8_295` | - | - | steps | partitioned-1 | iteration_limit | 2.0417248172018695e-06 | 301.8 | - | - | - | - | - | 3.89680004 |
+| `kkt_250000_8_295` | - | - | steps | partitioned-2 | iteration_limit | 2.05556322707943e-06 | 281.8 | - | - | - | - | - | 4.033234973 |
+| `kkt_250000_8_295` | - | - | steps | partitioned-2-host | iteration_limit | 2.05556322707943e-06 | 561.7 | - | - | - | - | - | 5.919624766 |
+| `kkt_1000000_8_295` | - | - | steps | single-engine | iteration_limit | 7.828675480288482e-07 | 7589.2 | - | - | - | - | - | 15.178445209 |
+| `kkt_1000000_8_295` | - | - | steps | partitioned-1 | iteration_limit | 7.50299129631909e-07 | 780.2 | - | - | - | - | - | 14.744972242 |
+| `kkt_1000000_8_295` | - | - | steps | partitioned-2 | iteration_limit | 8.851956530360737e-07 | 658.6 | - | - | - | - | - | 14.804839477 |
+| `kkt_1000000_8_295` | - | - | steps | partitioned-2-host | iteration_limit | 8.851956530360737e-07 | 1844.8 | - | - | - | - | - | 18.013142631 |
+| `kkt_4000000_8_295` | - | - | steps | single-engine | iteration_limit | 1.0458861020341966e-06 | 53819.2 | - | - | - | - | - | 107.638338313 |
+| `kkt_4000000_8_295` | - | - | steps | partitioned-1 | iteration_limit | 1.0619466278583482e-06 | 4465.8 | - | - | - | - | - | 108.389042159 |
+| `kkt_4000000_8_295` | - | - | steps | partitioned-2 | iteration_limit | 1.100689788744084e-06 | 2722.3 | - | - | - | - | - | 106.526108326 |
+| `kkt_4000000_8_295` | - | - | steps | partitioned-2-host | iteration_limit | 1.100689788744084e-06 | 7919.3 | - | - | - | - | - | 115.886434061 |
+| `Linf_520c` | - | - | steps | single-engine | iteration_limit | - | 764.5 | - | - | - | - | - | 1.528970668 |
+| `Linf_520c` | - | - | steps | partitioned-1 | iteration_limit | - | 143.2 | - | - | - | - | - | 1.259586643 |
+| `Linf_520c` | - | - | steps | partitioned-2 | iteration_limit | - | 167.7 | - | - | - | - | - | 1.910138542 |
+| `Linf_520c` | - | - | steps | partitioned-2-host | iteration_limit | - | 238.7 | - | - | - | - | - | 1.547371667 |
+| `bdry2` | - | - | steps | single-engine | iteration_limit | - | 1623.4 | - | - | - | - | - | 3.246786156 |
+| `bdry2` | - | - | steps | partitioned-1 | iteration_limit | - | 260.3 | - | - | - | - | - | 2.468190109 |
+| `bdry2` | - | - | steps | partitioned-2 | iteration_limit | - | 592.2 | - | - | - | - | - | 4.256273472 |
+| `bdry2` | - | - | steps | partitioned-2-host | iteration_limit | - | 830.5 | - | - | - | - | - | 3.764644477 |
+
+Two cards against one, per step (partitioned-2 / partitioned-1, the same arithmetic split; `single-engine`'s per-step figure includes its setup and evaluation, so it is not a like-for-like denominator and is not divided here):
+
+| instance | budget | two cards vs partitioned-1 | host-staged vs partitioned-1 |
+|---|---|---:|---:|
+| `kkt_250000_8_295` | steps | 1.07x | 0.54x |
+| `kkt_1000000_8_295` | steps | 1.18x | 0.42x |
+| `kkt_4000000_8_295` | steps | 1.64x | 0.56x |
+| `Linf_520c` | steps | 0.85x | 0.60x |
+| `bdry2` | steps | 0.44x | 0.31x |
+
+#### 1g.7 The interior point's normal equations on cuDSS (#489)
+
+`ipm_linear_solver=cudss` factors the normal equations on the device (NVIDIA cuDSS, a
+vendor library and not a solver, judgement call 28 in `docs/PROVENANCE.md`); the Newton
+iteration and the refinement stay on the host. The instances are section 1g.3's: the
+synthetic ladder, the refinery year and the Mittelmann pair.
+
+Not yet run. Needs a build with `-DSANKHYA_ENABLE_CUDSS=ON` and a card:
+
+```
+python bench/runners/ipm_cudss.py --binary build/sankhya --card a100
+```
 
 ---
 
@@ -901,10 +965,10 @@ Commit `e134aeb` · machine `Windows-AMD64` · 120.0s per solve · refinery stru
 The LP tiers above say nothing about the branch and bound. This is the MILP evidence, and it
 is a harder library: MIPLIB instances are chosen to be difficult for mature solvers.
 
-Source CSV: `bench/results/miplib-5daee10.csv`  
-Commit `5daee10` · machine `Windows-AMD64`
+Source CSV: `bench/results/miplib-ad57c03.csv`  
+Commit `ad57c03` · machine `Linux-x86_64`
 
-**13 of 30** instances reached the published optimum. **10 of 30** also PROVED it - closed the bound to within the requested gap target rather than stopping at a node or time limit.
+**14 of 30** instances reached the published optimum. **11 of 30** also PROVED it - closed the bound to within the requested gap target rather than stopping at a node or time limit.
 
 Every row above was counted under the #188 convention: a search that meets the requested gap target reports `optimal`, because the incumbent is within the tolerance that was asked for. Only a node or time limit leaves a row unproved.
 Those are different claims and are kept apart deliberately. Branch and bound here finds good incumbents far more often than it finishes the proof: reliability branching (#69) and warm-started dual node LPs (#65) do the searching, and the root cutting planes that exist (#159: Gomory mixed-integer and lifted knapsack cover, selected by score since #415) have their default decided by the measurement below, not asserted here. Collapsing the two columns would hide exactly the thing cuts are meant to improve.
@@ -956,55 +1020,57 @@ Root gap closed is (bound after cuts - bound before) / (final objective - bound 
 
 **Per-heuristic A/B (#414):** not measured on this checkout (no `bench/results/miplib-heur-*.csv`).
 
-**The time limit decides some of these, not the solver.** A row that stops at the limit with a small gap says "needs more time than we gave it", not "cannot"; which side of the limit such a row lands on moves with the machine's speed rather than with anything about the search. The remedy is a longer limit, and the reason this table does not already use one is that the set already adds up to 21 minutes of solve time per run at this one.
+**Over 3 seeds** (`bench/results/summary-miplib-seeds3-ad57c03.csv`, the published file and 2 permutations of it, same commit and limit): **14 of 30** instances reach the published optimum on every seed and 15 on at least one; **9 of 30** prove it on every seed and 11 on at least one. Instances whose verdict moves with the seed, which is the noise floor a single run carries: `b-ball`, `enlight8`, `neos-3611689-kaihu`.
+
+**The time limit decides some of these, not the solver.** A row that stops at the limit with a small gap says "needs more time than we gave it", not "cannot"; which side of the limit such a row lands on moves with the machine's speed rather than with anything about the search. The remedy is a longer limit, and the reason this table does not already use one is that the set already adds up to 20 minutes of solve time per run at this one.
 
 Instances are the smallest MIPLIB 2017 instances tagged easy that carry a **proven** optimum (`=opt=` in MIPLIB's own solution file). A `=best=` value is the best anyone has found, not a proof, and scoring against one would let a wrong answer look like a record.
 
 | instance | rows | cols | int | status | our objective | published | rel. gap | nodes | time (s) | matched | proved | verified |
 |---|---:|---:|---:|---|---:|---:|---:|---:|---:|:--:|:--:|:--:|
-| `b-ball` | 30 | 100 | 88 | feasible | -1.5 | -1.5 | 1.85e-01 | 111312 | 60.1 | yes | **NO** | yes |
-| `ej` | 1 | 3 | 3 | feasible | 51015 | 25508 | 1.00e+00 | 72054 | 60.0 | **NO** | **NO** | yes |
-| `enlight8` | 64 | 128 | 128 | time_limit | inf | 27 | - | 120473 | 60.0 | **NO** | **NO** | **NO** |
-| `enlight_hard` | 100 | 200 | 200 | time_limit | inf | 37 | - | 110779 | 60.0 | **NO** | **NO** | **NO** |
-| `f2gap40400` | 40 | 400 | 400 | optimal | 20772 | 20772 | 9.63e-05 | 336 | 3.4 | yes | yes | yes |
-| `flugpl` | 18 | 18 | 11 | optimal | 1201500 | 1201500 | 0.00e+00 | 701 | 0.1 | yes | yes | yes |
-| `gen-ip016` | 24 | 28 | 28 | feasible | -9438.111136 | -9476.155197 | 6.59e-03 | 113511 | 60.0 | **NO** | **NO** | yes |
-| `gen-ip054` | 27 | 30 | 30 | feasible | 6859.084635 | 6840.965642 | 1.02e-02 | 118506 | 60.0 | **NO** | **NO** | yes |
+| `b-ball` | 30 | 100 | 88 | optimal | -1.5 | -1.5 | 0.00e+00 | 7 | 0.1 | yes | yes | yes |
+| `ej` | 1 | 3 | 3 | feasible | 41013 | 25508 | 1.00e+00 | 246049 | 60.1 | **NO** | **NO** | yes |
+| `enlight8` | 64 | 128 | 128 | time_limit | inf | 27 | - | 310481 | 60.1 | **NO** | **NO** | **NO** |
+| `enlight_hard` | 100 | 200 | 200 | time_limit | inf | 37 | - | 188430 | 60.1 | **NO** | **NO** | **NO** |
+| `f2gap40400` | 40 | 400 | 400 | optimal | 20772 | 20772 | 9.63e-05 | 336 | 2.3 | yes | yes | yes |
+| `flugpl` | 18 | 18 | 11 | optimal | 1201500 | 1201500 | 0.00e+00 | 701 | 0.0 | yes | yes | yes |
+| `gen-ip016` | 24 | 28 | 28 | feasible | -9439.769515 | -9476.155197 | 6.25e-03 | 452771 | 60.2 | **NO** | **NO** | yes |
+| `gen-ip054` | 27 | 30 | 30 | feasible | 6859.084635 | 6840.965642 | 9.29e-03 | 389308 | 60.1 | **NO** | **NO** | yes |
 | `gr4x6` | 34 | 48 | 24 | optimal | 202.35 | 202.35 | 0.00e+00 | 44 | 0.0 | yes | yes | yes |
-| `gt2` | 29 | 188 | 188 | optimal | 21166 | 21166 | 0.00e+00 | 78 | 0.1 | yes | yes | yes |
-| `k16x240b` | 256 | 480 | 240 | feasible | 12506 | 11393 | 4.04e-01 | 85923 | 60.0 | **NO** | **NO** | yes |
-| `markshare1` | 6 | 62 | 50 | feasible | 29 | 1 | 1.00e+00 | 129267 | 60.0 | **NO** | **NO** | yes |
-| `markshare_4_0` | 4 | 34 | 30 | feasible | 7 | 1 | 1.00e+00 | 167528 | 60.0 | **NO** | **NO** | yes |
-| `markshare_5_0` | 5 | 45 | 40 | feasible | 19 | 1 | 1.00e+00 | 138434 | 60.0 | **NO** | **NO** | yes |
+| `gt2` | 29 | 188 | 188 | optimal | 21166 | 21166 | 0.00e+00 | 1327 | 0.3 | yes | yes | yes |
+| `k16x240b` | 256 | 480 | 240 | feasible | 12506 | 11393 | 3.94e-01 | 119921 | 60.1 | **NO** | **NO** | yes |
+| `markshare1` | 6 | 62 | 50 | feasible | 24 | 1 | 1.00e+00 | 742917 | 60.2 | **NO** | **NO** | yes |
+| `markshare_4_0` | 4 | 34 | 30 | feasible | 1 | 1 | 1.00e+00 | 1185510 | 60.1 | yes | **NO** | yes |
+| `markshare_5_0` | 5 | 45 | 40 | feasible | 14 | 1 | 1.00e+00 | 862411 | 60.2 | **NO** | **NO** | yes |
 | `neos-1425699` | 89 | 105 | 85 | optimal | 3179698977 | 3179698977 | 0.00e+00 | 3 | 0.0 | yes | yes | yes |
-| `neos-3072252-nete` | 432 | 576 | 144 | feasible | 12009820 | 11807698 | 1.10e-01 | 41900 | 60.0 | **NO** | **NO** | yes |
-| `neos-3611689-kaihu` | 323 | 421 | 88 | optimal | 119 | 119 | 0.00e+00 | 57576 | 44.0 | yes | yes | yes |
-| `neos-5140963-mincio` | 184 | 196 | 183 | feasible | 14818 | 14393 | 2.16e-01 | 80762 | 60.0 | **NO** | **NO** | yes |
+| `neos-3072252-nete` | 432 | 576 | 144 | feasible | 12046823 | 11807698 | 1.12e-01 | 42685 | 60.0 | **NO** | **NO** | yes |
+| `neos-3611689-kaihu` | 323 | 421 | 88 | optimal | 119 | 119 | 0.00e+00 | 70614 | 51.3 | yes | yes | yes |
+| `neos-5140963-mincio` | 184 | 196 | 183 | feasible | 14535 | 14393 | 1.89e-01 | 135624 | 60.0 | **NO** | **NO** | yes |
 | `neos-5192052-neckar` | 57 | 180 | 24 | optimal | -11670000 | -11670000 | 0.00e+00 | 9 | 0.0 | yes | yes | yes |
-| `neos5` | 63 | 63 | 53 | feasible | 15.5 | 15 | 9.68e-02 | 57540 | 60.0 | **NO** | **NO** | yes |
-| `noswot` | 182 | 128 | 100 | feasible | -40 | -41.00000885 | 7.50e-02 | 88724 | 60.0 | **NO** | **NO** | yes |
-| `opt1217` | 64 | 769 | 768 | feasible | -16 | -16 | 2.50e-01 | 74396 | 60.0 | yes | **NO** | yes |
-| `p0201` | 133 | 201 | 201 | optimal | 7615 | 7615 | 0.00e+00 | 396 | 1.3 | yes | yes | yes |
-| `pk1` | 45 | 86 | 55 | feasible | 14 | 11 | 6.32e-01 | 108237 | 60.0 | **NO** | **NO** | yes |
-| `ran12x21` | 285 | 504 | 252 | feasible | 3681 | 3664 | 5.64e-02 | 56653 | 60.0 | **NO** | **NO** | yes |
-| `ran13x13` | 195 | 338 | 169 | feasible | 3319 | 3252 | 5.47e-02 | 74286 | 60.0 | **NO** | **NO** | yes |
-| `rlp1` | 68 | 461 | 450 | feasible | 15 | 15 | 6.67e-02 | 82611 | 60.0 | yes | **NO** | yes |
-| `supportcase14` | 234 | 304 | 304 | optimal | 288 | 288 | 0.00e+00 | 46 | 0.3 | yes | yes | yes |
-| `supportcase16` | 130 | 319 | 319 | optimal | 288 | 288 | 0.00e+00 | 41 | 0.3 | yes | yes | yes |
-| `timtab1` | 171 | 397 | 171 | feasible | 1106773 | 764772 | 7.33e-01 | 82922 | 60.0 | **NO** | **NO** | yes |
+| `neos5` | 63 | 63 | 53 | feasible | 15.5 | 15 | 9.68e-02 | 65418 | 60.0 | **NO** | **NO** | yes |
+| `noswot` | 182 | 128 | 100 | feasible | -39 | -41.00000885 | 1.03e-01 | 169146 | 60.1 | **NO** | **NO** | yes |
+| `opt1217` | 64 | 769 | 768 | feasible | -16 | -16 | 2.50e-01 | 157511 | 60.1 | yes | **NO** | yes |
+| `p0201` | 133 | 201 | 201 | optimal | 7615 | 7615 | 0.00e+00 | 389 | 1.3 | yes | yes | yes |
+| `pk1` | 45 | 86 | 55 | feasible | 17 | 11 | 5.27e-01 | 272062 | 60.1 | **NO** | **NO** | yes |
+| `ran12x21` | 285 | 504 | 252 | feasible | 3681 | 3664 | 5.24e-02 | 66979 | 60.0 | **NO** | **NO** | yes |
+| `ran13x13` | 195 | 338 | 169 | feasible | 3319 | 3252 | 4.93e-02 | 99981 | 60.0 | **NO** | **NO** | yes |
+| `rlp1` | 68 | 461 | 450 | feasible | 15 | 15 | 6.67e-02 | 197074 | 60.1 | yes | **NO** | yes |
+| `supportcase14` | 234 | 304 | 304 | optimal | 288 | 288 | 0.00e+00 | 47 | 0.3 | yes | yes | yes |
+| `supportcase16` | 130 | 319 | 319 | optimal | 288 | 288 | 0.00e+00 | 82 | 0.5 | yes | yes | yes |
+| `timtab1` | 171 | 397 | 171 | feasible | 1172343 | 764772 | 7.18e-01 | 126693 | 60.1 | **NO** | **NO** | yes |
 
-**Not proved optimal**, named rather than dropped: `b-ball`, `ej`, `enlight8`, `enlight_hard`, `gen-ip016`, `gen-ip054`, `k16x240b`, `markshare1`, `markshare_4_0`, `markshare_5_0`, `neos-3072252-nete`, `neos-5140963-mincio`, `neos5`, `noswot`, `opt1217`, `pk1`, `ran12x21`, `ran13x13`, `rlp1`, `timtab1`.
+**Not proved optimal**, named rather than dropped: `ej`, `enlight8`, `enlight_hard`, `gen-ip016`, `gen-ip054`, `k16x240b`, `markshare1`, `markshare_4_0`, `markshare_5_0`, `neos-3072252-nete`, `neos-5140963-mincio`, `neos5`, `noswot`, `opt1217`, `pk1`, `ran12x21`, `ran13x13`, `rlp1`, `timtab1`.
 
 #### The same set at 600 s
 
-Source CSV: `bench/results/miplib-600s-cca77e0.csv` (600 s per instance), beside `bench/results/miplib-5daee10.csv` (60 s)  
+Source CSV: `bench/results/miplib-600s-cca77e0.csv` (600 s per instance), beside `bench/results/miplib-ad57c03.csv` (60 s)  
 Commit `54e561b`
 
 At 600 s: **15 of 30** reach the published optimum, **9 of 30** prove it.
 
 | instance | 60 s: status · matched · proved | 600 s: status · matched · proved · gap | verdict |
 |---|---|---|---|
-| `b-ball` | feasible · yes · no | feasible · yes · no · 2.1e-01 | needs a bound (#221) |
+| `b-ball` | optimal · yes · yes | feasible · yes · no · 2.1e-01 | needs a bound (#221) |
 | `ej` | feasible · no · no | feasible · no · no · 1.0e+00 | needs an incumbent (#290) |
 | `enlight8` | time_limit · no · no | time_limit · no · no · 1.8e-01 | needs an incumbent (#290) |
 | `enlight_hard` | time_limit · no · no | time_limit · no · no · 0.0e+00 | needs an incumbent (#290) |
@@ -1016,7 +1082,7 @@ At 600 s: **15 of 30** reach the published optimum, **9 of 30** prove it.
 | `gt2` | optimal · yes · yes | optimal · yes · yes · 0.0e+00 | proved |
 | `k16x240b` | feasible · no · no | feasible · no · no · 3.7e-01 | needs an incumbent (#290) |
 | `markshare1` | feasible · no · no | feasible · no · no · 1.0e+00 | needs an incumbent (#290) |
-| `markshare_4_0` | feasible · no · no | feasible · no · no · 1.0e+00 | needs an incumbent (#290) |
+| `markshare_4_0` | feasible · yes · no | feasible · no · no · 1.0e+00 | needs an incumbent (#290) |
 | `markshare_5_0` | feasible · no · no | feasible · no · no · 1.0e+00 | needs an incumbent (#290) |
 | `neos-1425699` | optimal · yes · yes | optimal · yes · yes · 0.0e+00 | proved |
 | `neos-3072252-nete` | feasible · no · no | feasible · no · no · 1.1e-01 | needs an incumbent (#290) |
@@ -1243,14 +1309,182 @@ engine and the interior point.
 
 Selection, read from QPLIB's listing: instances.html: Cvx ticked, O in {C, D}, V = C, C in {N, B, L} (doc.html PROBTYPE and CONVEX). **19 instances** of the 453 listed; 17 fetched (12 in the small tier, at most 100,000 stored coefficients), 2 over the size cap and not run: `QPLIB_8547`, `QPLIB_9008`. QPLIB publishes no solution point for `QPLIB_9002`: run, named, and outside the pass count. Convex continuous instances outside the selection, by type: LCD 13 (quadratic constraints: #514's set). Licence, as the site states it: QPLIB is licensed under CC-BY 4.0. (https://creativecommons.org/licenses/by/4.0/)
 
-Not yet run on `main`. Reproduce with:
+Source CSV: `bench/results/qplib-small-ad57c03.csv`  
+Commit `ad57c03` · machine `Linux-x86_64` · time limit 1000 s per instance · solver defaults
+
+- `auto`: **passed 6 of 11** with a published reference; `optimal` on 6 of 12, within 1e-6 of QPLIB's value on 6, accepted by the verifier on 6.
+- `ipm` (`qp_algorithm=ipm`): **passed 7 of 11** with a published reference; `optimal` on 7 of 12, within 1e-6 of QPLIB's value on 7, accepted by the verifier on 7.
+
+A pass is `optimal`, within 1e-6 relative of QPLIB's value (qplib.solu, a best known point, not a proven optimum), all three QP residuals of `qp_residuals.py` within 1e-6 relative, and accepted by the independent verifier, all on the QPS file `qplib_format.py` converted the `.qplib` file to - a conversion checked at QPLIB's own published point for every instance when it was fetched.
+
+| instance | engine | rows | cols | status | our objective | QPLIB value | rel. gap | worst residual | iters | solver time (s) | verified | passed |
+|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|:--:|:--:|
+| `QPLIB_8495` | auto | 8000 | 27543 | optimal | 42857.49638 | 42857.49639 | 1.8e-10 | 5.9e-10 | 1200 | 0.65 | yes | yes |
+| `QPLIB_8495` | ipm | 8000 | 27543 | optimal | 42857.4964 | 42857.49639 | 3.3e-10 | 7.7e-10 | 14 | 4.34 | yes | yes |
+| `QPLIB_8515` | auto | 8002 | 16002 | model_error | 0 | 319.9999887 | 1.0e+00 | - | 0 | 0.00 | - | **no** |
+| `QPLIB_8515` | ipm | 8002 | 16002 | model_error | 0 | 319.9999887 | 1.0e+00 | - | 0 | 0.00 | - | **no** |
+| `QPLIB_8559` | auto | 5000 | 10000 | iteration_limit | 74222438.31 | 74223239.83 | 1.1e-05 | 5.0e-06 | 1000000 | 357.39 | - | **no** |
+| `QPLIB_8559` | ipm | 5000 | 10000 | numerical_error | - | 74223239.83 | - | - | 34 | 113.76 | - | **no** |
+| `QPLIB_8567` | auto | 7500 | 10000 | iteration_limit | 78962705.39 | 78965987.95 | 4.2e-05 | 9.7e-06 | 1000000 | 424.47 | - | **no** |
+| `QPLIB_8567` | ipm | 7500 | 10000 | numerical_error | - | 78965987.95 | - | - | 71 | 287.27 | - | **no** |
+| `QPLIB_8616` | auto | 10404 | 13870 | optimal | 245.0686414 | 245.0685978 | 1.8e-07 | 1.9e-07 | 19450 | 5.55 | yes | yes |
+| `QPLIB_8616` | ipm | 10404 | 13870 | optimal | 245.0685978 | 245.0685978 | 1.6e-10 | 3.4e-10 | 11 | 0.13 | yes | yes |
+| `QPLIB_8785` | auto | 11362 | 10399 | optimal | 7867.491149 | 7867.491149 | 3.1e-11 | 1.9e-09 | 175750 | 64.90 | yes | yes |
+| `QPLIB_8785` | ipm | 11362 | 10399 | optimal | 7867.491149 | 7867.491149 | 1.8e-11 | 2.9e-08 | 14 | 16.02 | yes | yes |
+| `QPLIB_8792` | auto | 0 | 15129 | optimal | 3593.516294 | 3593.518355 | 5.7e-07 | 1.5e-08 | 50 | 0.05 | yes | yes |
+| `QPLIB_8792` | ipm | 0 | 15129 | optimal | 3593.516294 | 3593.518355 | 5.7e-07 | 1.2e-10 | 10 | 0.40 | yes | yes |
+| `QPLIB_8845` | auto | 777 | 1546 | iteration_limit | 10911434.52 | 10907992.49 | 3.2e-04 | 7.6e-04 | 1000000 | 224.02 | - | **no** |
+| `QPLIB_8845` | ipm | 777 | 1546 | optimal | 10907992.49 | 10907992.49 | 3.7e-10 | 9.0e-13 | 31 | 0.54 | yes | yes |
+| `QPLIB_8906` | auto | 838 | 5223 | optimal | 2699111.513 | 2699111.513 | 1.7e-10 | 5.9e-12 | 211100 | 47.05 | yes | yes |
+| `QPLIB_8906` | ipm | 838 | 5223 | numerical_error | - | 2699111.513 | - | - | 25 | 0.76 | - | **no** |
+| `QPLIB_8938` | auto | 11999 | 4001 | iteration_limit | -36.31075388 | -35.77945295 | 1.5e-02 | 1.5e-02 | 1000000 | 167.04 | - | **no** |
+| `QPLIB_8938` | ipm | 11999 | 4001 | optimal | -35.77945295 | -35.77945295 | 6.5e-11 | 8.3e-12 | 20 | 0.12 | yes | yes |
+| `QPLIB_8991` | auto | 0 | 14400 | optimal | -0.001667867378 | -0.001667867378 | 8.6e-14 | 2.2e-08 | 50 | 0.05 | yes | yes |
+| `QPLIB_8991` | ipm | 0 | 14400 | optimal | -0.001667867378 | -0.001667867378 | 8.6e-14 | 9.5e-12 | 6 | 0.20 | yes | yes |
+| `QPLIB_9002` | auto | 1649 | 2890 | iteration_limit | 1.958722727e+10 | - | - | 1.0e+00 | 1000000 | 55.59 | - | - |
+| `QPLIB_9002` | ipm | 1649 | 2890 | iteration_limit | 1.732126844e+11 | - | - | 1.2e+00 | 200 | 6.55 | - | - |
+
+Every failure, named:
+
+- `auto`, **did not reach `optimal`** (6): `QPLIB_8515` (model_error), `QPLIB_8559` (iteration_limit), `QPLIB_8567` (iteration_limit), `QPLIB_8845` (iteration_limit), `QPLIB_8938` (iteration_limit), `QPLIB_9002` (iteration_limit).
+- `auto`, **no published reference** (1): `QPLIB_9002`.
+- `ipm`, **did not reach `optimal`** (5): `QPLIB_8515` (model_error), `QPLIB_8559` (numerical_error), `QPLIB_8567` (numerical_error), `QPLIB_8906` (numerical_error), `QPLIB_9002` (iteration_limit).
+- `ipm`, **no published reference** (1): `QPLIB_9002`.
+
+---
+
+## 2e. Nonlinear programs - Hock-Schittkowski, and convex MINLPLib
+
+The nonlinear engine behind the `solve()` seam (NLP stages 1-3): a model read from AMPL's
+`.nl` format, exact first and second derivatives by automatic differentiation, a primal-dual
+interior point with a filter line search, and NLP-based branch and bound for integer columns.
+Both sets ship in `data/nlp/` with their published objectives in each set's `REFERENCE.csv`,
+and every answer is checked by `tools/verify_solution.py`, which reads the `.nl` file with
+its own reader and evaluates the constraints with its own derivatives. The statuses are the
+finding: `optimal` is claimed only where the model is proved convex, `locally_optimal` is any
+other KKT point, and `locally_infeasible` is a local minimizer of the violation.
+
+**Hock-Schittkowski** - the 70 problems of Hock and Schittkowski, *Test Examples for Nonlinear Programming Codes* (1981), from Vanderbei's AMPL models converted by `bench/runners/hs_mod_to_nl.py`, matched at a relative 1e-6. The interior point with a filter line search after Wachter and Biegler (2006); where the model is not proved convex, `locally_optimal` is the status the engine can honestly give, and the breakdown says how often that is.
+
+Source CSV: `bench/results/nlp-hs-ad57c03.csv`  
+Commit `ad57c03` · machine `Linux-x86_64` · 60.0 s per problem
+
+**64 of 70** reached the published objective, and **70 of 70** answers were accepted by the independent checker (`tools/verify_solution.py`, its own `.nl` reader and its own derivatives). Statuses: `locally_optimal` 51, `optimal` 19.
+
+| problem | status | our objective | published | rel. gap | iters | time (s) | match | verified |
+|---|---|---:|---:|---:|---:|---:|:--:|:--:|
+| `hs001` | locally_optimal | 1.604114528e-17 | -0 | 1.60e-17 | 26 | 0.00 | yes | yes |
+| `hs002` | locally_optimal | 4.941229328 | 0.0504261879 | 4.89e+00 | 11 | 0.00 | **NO** | yes |
+| `hs003` | optimal | 1e-08 | -0 | 1.00e-08 | 4 | 0.00 | yes | yes |
+| `hs004` | locally_optimal | 2.666666687 | 2.666666667 | 7.50e-09 | 6 | 0.00 | yes | yes |
+| `hs005` | locally_optimal | -1.913222955 | -1.91322207 | 4.62e-07 | 9 | 0.00 | yes | yes |
+| `hs006` | locally_optimal | 3.405159426e-16 | -0 | 3.41e-16 | 9 | 0.00 | yes | yes |
+| `hs007` | locally_optimal | -1.732050808 | -1.732050808 | 6.48e-13 | 27 | 0.00 | yes | yes |
+| `hs008` | locally_optimal | -1 | -1 | 0.00e+00 | 6 | 0.00 | yes | yes |
+| `hs010` | locally_optimal | -0.99999999 | -1 | 1.00e-08 | 12 | 0.00 | yes | yes |
+| `hs011` | optimal | -8.498464213 | -8.498464223 | 1.16e-09 | 8 | 0.00 | yes | yes |
+| `hs012` | locally_optimal | -29.99999999 | -30 | 3.33e-10 | 8 | 0.00 | yes | yes |
+| `hs013` | locally_optimal | 0.9976580967 | 1 | 2.34e-03 | 1123 | 0.01 | **NO** | yes |
+| `hs014` | optimal | 1.393464991 | 1.393464981 | 7.18e-09 | 7 | 0.00 | yes | yes |
+| `hs015` | locally_optimal | 306.5 | 306.5 | 6.53e-11 | 15 | 0.00 | yes | yes |
+| `hs016` | locally_optimal | 23.14466096 | 0.25 | 2.29e+01 | 10 | 0.00 | **NO** | yes |
+| `hs017` | locally_optimal | 1.000000426 | 1 | 4.26e-07 | 20 | 0.00 | yes | yes |
+| `hs018` | locally_optimal | 5.00000001 | 5 | 2.00e-09 | 12 | 0.00 | yes | yes |
+| `hs019` | locally_optimal | -6961.813876 | -6961.81381 | 9.42e-09 | 16 | 0.00 | yes | yes |
+| `hs020` | locally_optimal | 40.19872983 | 38.19872981 | 5.24e-02 | 12 | 0.00 | **NO** | yes |
+| `hs021` | optimal | -99.95999999 | -99.96 | 9.90e-11 | 9 | 0.00 | yes | yes |
+| `hs022` | optimal | 1.00000002 | 1 | 2.00e-08 | 6 | 0.00 | yes | yes |
+| `hs023` | locally_optimal | 2.00000002 | 2 | 9.98e-09 | 10 | 0.00 | yes | yes |
+| `hs024` | locally_optimal | -0.99999998 | -1 | 2.00e-08 | 14 | 0.00 | yes | yes |
+| `hs026` | locally_optimal | 8.482336173e-14 | -0 | 8.48e-14 | 21 | 0.00 | yes | yes |
+| `hs027` | locally_optimal | 0.04 | 0.04 | 0.00e+00 | 17 | 0.00 | yes | yes |
+| `hs028` | optimal | 0 | -0 | 0.00e+00 | 2 | 0.00 | yes | yes |
+| `hs029` | locally_optimal | -22.62741699 | -22.627417 | 4.41e-10 | 8 | 0.00 | yes | yes |
+| `hs030` | optimal | 1 | 1 | 4.00e-12 | 16 | 0.00 | yes | yes |
+| `hs031` | locally_optimal | 6.00000001 | 6 | 1.67e-09 | 7 | 0.00 | yes | yes |
+| `hs032` | optimal | 1.000000361 | 1 | 3.61e-07 | 12 | 0.00 | yes | yes |
+| `hs033` | locally_optimal | -4.585786408 | -4.585786438 | 6.54e-09 | 48 | 0.00 | yes | yes |
+| `hs034` | optimal | -0.8340324152 | -0.8340324452 | 3.01e-08 | 9 | 0.00 | yes | yes |
+| `hs035` | locally_optimal | 0.1111111212 | 0.1111111111 | 1.00e-08 | 7 | 0.00 | yes | yes |
+| `hs036` | locally_optimal | -3300 | -3300 | 9.09e-12 | 13 | 0.00 | yes | yes |
+| `hs037` | locally_optimal | -3456 | -3456 | 2.89e-12 | 11 | 0.00 | yes | yes |
+| `hs038` | locally_optimal | 2.317148421e-21 | -0 | 2.32e-21 | 40 | 0.00 | yes | yes |
+| `hs039` | locally_optimal | -1 | -1 | 0.00e+00 | 9 | 0.00 | yes | yes |
+| `hs040` | locally_optimal | -0.25 | -0.25 | 0.00e+00 | 8 | 0.00 | yes | yes |
+| `hs041` | locally_optimal | 1.925925936 | 1.925925926 | 5.18e-09 | 10 | 0.00 | yes | yes |
+| `hs042` | locally_optimal | 13.85786438 | 13.85786438 | 2.23e-12 | 6 | 0.00 | yes | yes |
+| `hs043` | optimal | -43.99999998 | -44 | 4.55e-10 | 9 | 0.00 | yes | yes |
+| `hs044` | locally_optimal | -12.99999996 | -15 | 1.33e-01 | 18 | 0.00 | **NO** | yes |
+| `hs045` | locally_optimal | 1.00000005 | 1 | 5.00e-08 | 23 | 0.00 | yes | yes |
+| `hs046` | locally_optimal | 4.870714159e-13 | -0 | 4.87e-13 | 16 | 0.00 | yes | yes |
+| `hs047` | locally_optimal | 1.902239821e-12 | -0 | 1.90e-12 | 20 | 0.00 | yes | yes |
+| `hs048` | optimal | 2.888956546e-28 | -0 | 2.89e-28 | 3 | 0.00 | yes | yes |
+| `hs049` | optimal | 5.366698265e-11 | -0 | 5.37e-11 | 18 | 0.00 | yes | yes |
+| `hs050` | optimal | 2.095411779e-31 | -0 | 2.10e-31 | 9 | 0.00 | yes | yes |
+| `hs051` | optimal | 2.465190329e-32 | -0 | 2.47e-32 | 2 | 0.00 | yes | yes |
+| `hs052` | optimal | 5.326647564 | 5.326647564 | 1.62e-14 | 2 | 0.00 | yes | yes |
+| `hs053` | optimal | 4.093023256 | 4.093023256 | 9.66e-13 | 6 | 0.00 | yes | yes |
+| `hs060` | locally_optimal | 0.03256820026 | 0.03256820025 | 5.10e-12 | 7 | 0.00 | yes | yes |
+| `hs061` | locally_optimal | -143.6461422 | -143.6461422 | 1.39e-11 | 16 | 0.00 | yes | yes |
+| `hs062` | locally_optimal | -26272.51449 | -26272.51448 | 2.78e-10 | 8 | 0.00 | yes | yes |
+| `hs063` | locally_optimal | 961.7151721 | 961.7151721 | 3.12e-11 | 14 | 0.00 | yes | yes |
+| `hs064` | optimal | 6299.842428 | 6299.842428 | 1.11e-11 | 18 | 0.00 | yes | yes |
+| `hs065` | optimal | 0.9535288668 | 0.9535288567 | 1.01e-08 | 12 | 0.00 | yes | yes |
+| `hs066` | optimal | 0.5181632941 | 0.5181632741 | 2.00e-08 | 7 | 0.00 | yes | yes |
+| `hs071` | locally_optimal | 17.01401731 | 17.0140173 | 5.35e-10 | 8 | 0.00 | yes | yes |
+| `hs073` | locally_optimal | 29.89437819 | 29.894378 | 6.33e-09 | 8 | 0.00 | yes | yes |
+| `hs076` | locally_optimal | -4.681818162 | -4.681818181 | 4.10e-09 | 7 | 0.00 | yes | yes |
+| `hs077` | locally_optimal | 0.2415051288 | 0.24150513 | 1.21e-09 | 9 | 0.00 | yes | yes |
+| `hs078` | locally_optimal | -2.919700409 | -2.91970041 | 3.56e-10 | 8 | 0.00 | yes | yes |
+| `hs079` | locally_optimal | 0.07877682087 | 0.0787768209 | 2.89e-11 | 5 | 0.00 | yes | yes |
+| `hs093` | locally_optimal | 135.0759628 | 135.075961 | 1.37e-08 | 9 | 0.00 | yes | yes |
+| `hs100` | locally_optimal | 680.6300574 | 680.6300573 | 1.38e-10 | 10 | 0.00 | yes | yes |
+| `hs104` | locally_optimal | 3.95116348 | 3.95116344 | 1.03e-08 | 9 | 0.00 | yes | yes |
+| `hs108` | locally_optimal | -0.6749813833 | -0.8660254038 | 1.91e-01 | 15 | 0.01 | **NO** | yes |
+| `hs110` | locally_optimal | -45.77846971 | -45.77846971 | 5.68e-11 | 6 | 0.00 | yes | yes |
+| `hs113` | locally_optimal | 24.30620913 | 24.3062091 | 1.16e-09 | 19 | 0.01 | yes | yes |
+
+**Not at the published objective**, named rather than dropped: `hs002`, `hs013`, `hs016`, `hs020`, `hs044`, `hs108`.
+
+
+**MINLPLib, convex** - convex mixed-integer instances of MINLPLib with a published primal bound, matched at the MIP gap target 1e-4, solved by NLP-based branch and bound - run only when the relaxation is proved convex, so `optimal` here is a closed bound.
+
+Source CSV: `bench/results/nlp-minlplib-ad57c03.csv`  
+Commit `ad57c03` · machine `Linux-x86_64` · 60.0 s per problem
+
+**14 of 17** reached the published objective, and **16 of 17** answers were accepted by the independent checker (`tools/verify_solution.py`, its own `.nl` reader and its own derivatives). Statuses: `feasible` 2, `numerical_error` 1, `optimal` 14.
+
+| problem | status | our objective | published | rel. gap | iters | time (s) | match | verified |
+|---|---|---:|---:|---:|---:|---:|:--:|:--:|
+| `ball_mk2_10` | optimal | 0 | 0 | 0.00e+00 | 24115 | 0.54 | yes | yes |
+| `batchdes` | optimal | 167427.6571 | 167427.6571 | 8.96e-11 | 175 | 0.01 | yes | yes |
+| `clay0203m` | feasible | 41573.26247 | 41573.26252 | 1.23e-09 | 237083 | 34.69 | **NO** | yes |
+| `cvxnonsep_pcon20` | optimal | -21.51230115 | -21.5123012 | 2.22e-09 | 837 | 0.06 | yes | yes |
+| `ex1223` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 140 | 0.01 | yes | yes |
+| `ex1223a` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 39 | 0.01 | yes | yes |
+| `ex1223b` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 118 | 0.01 | yes | yes |
+| `fac1` | optimal | 160912612.3 | 160912612.4 | 3.11e-10 | 195 | 0.02 | yes | yes |
+| `flay02m` | optimal | 37.94733201 | 37.94733192 | 2.42e-09 | 101 | 0.01 | yes | yes |
+| `gbd` | optimal | 2.20000001 | 2.2 | 4.55e-09 | 34 | 0.00 | yes | yes |
+| `jit1` | numerical_error | - | 173983.33 | - | 3000 | 0.21 | **NO** | no point |
+| `m3` | feasible | 37.80000029 | 37.8 | 7.67e-09 | 13078 | 1.53 | **NO** | yes |
+| `nvs03` | optimal | 16 | 16 | 0.00e+00 | 110 | 0.00 | yes | yes |
+| `st_e14` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 140 | 0.01 | yes | yes |
+| `syn05m` | optimal | 837.7324008 | 837.7324009 | 6.92e-11 | 197 | 0.01 | yes | yes |
+| `synthes2` | optimal | 73.03531256 | 73.03531253 | 3.44e-10 | 189 | 0.01 | yes | yes |
+| `synthes3` | optimal | 68.00974056 | 68.00974052 | 6.50e-10 | 330 | 0.02 | yes | yes |
+
+**Not at the published objective**, named rather than dropped: `clay0203m`, `jit1`, `m3`.
+
+**No point to check** (a limit or an infeasibility verdict): `jit1`.
+
+
+Reproduce:
 
 ```
-python bench/runners/fetch_qplib.py
-python bench/runners/qplib.py                # the full selection, engines auto and ipm
-python bench/runners/qplib.py --tier small   # the instances of at most 100,000 coefficients
+python bench/runners/nlp_bench.py --data data/nlp/hs                              # 70 Hock-Schittkowski
+python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4  # convex MINLPLib
 ```
-
 ---
 
 ## 3. Correctness beyond the objective value
@@ -1364,8 +1598,8 @@ demo set. Comparing only where we pass would be the easy version of this table a
 nothing: the instances we fail are exactly the ones a reader should want to see against a
 mature solver.
 
-Source CSV: `bench/results/compare-highs-medium-bf3df02-third.csv`  
-Commit `bf3df02` · machine `Windows-AMD64`
+Source CSV: `bench/results/compare-highs-medium-ad57c03.csv`  
+Commit `ad57c03` · machine `Linux-x86_64`
 
 **50 of 50** instances where the two solvers agree on the objective.
 
@@ -1373,66 +1607,66 @@ Times are **solver-internal on both sides** - HiGHS's own `getRunTime()` against
 
 | instance | SANKHYA obj | HiGHS obj | agree | SANKHYA (s) | HiGHS (s) | ratio |
 |---|---:|---:|:--:|---:|---:|---:|
-| `adlittle` | 2.25494963e+05 | 2.25494963e+05 | yes | 0.002 | 0.002 | 1.15x |
-| `afiro` | -4.64753143e+02 | -4.64753143e+02 | yes | 0.001 | 0.001 | 1.02x |
-| `agg` | -3.59917673e+07 | -3.59917673e+07 | yes | 0.014 | 0.006 | 2.52x |
-| `bandm` | -1.58628018e+02 | -1.58628018e+02 | yes | 0.030 | 0.014 | 2.16x |
-| `beaconfd` | 3.35924858e+04 | 3.35924858e+04 | yes | 0.006 | 0.004 | 1.66x |
-| `blend` | -3.08121498e+01 | -3.08121498e+01 | yes | 0.003 | 0.002 | 1.39x |
-| `boeing1` | -3.35213568e+02 | -3.35213568e+02 | yes | 0.023 | 0.015 | 1.51x |
-| `boeing2` | -3.15018728e+02 | -3.15018728e+02 | yes | 0.005 | 0.004 | 1.40x |
-| `bore3d` | 1.37308039e+03 | 1.37308039e+03 | yes | 0.007 | 0.004 | 1.75x |
-| `brandy` | 1.51850990e+03 | 1.51850990e+03 | yes | 0.014 | 0.007 | 1.95x |
-| `capri` | 2.69001291e+03 | 2.69001291e+03 | yes | 0.014 | 0.005 | 2.64x |
-| `d6cube` | 3.15491667e+02 | 3.15491667e+02 | yes | 0.548 | 0.195 | 2.81x |
-| `degen2` | -1.43517800e+03 | -1.43517800e+03 | yes | 0.065 | 0.020 | 3.19x |
-| `e226` | -1.16389291e+01 | -1.16389291e+01 | yes | 0.031 | 0.011 | 2.84x |
-| `etamacro` | -7.55715233e+02 | -7.55715233e+02 | yes | 0.045 | 0.015 | 2.94x |
-| `finnis` | 1.72791066e+05 | 1.72791066e+05 | yes | 0.023 | 0.008 | 2.89x |
-| `fit1d` | -9.14637809e+03 | -9.14637809e+03 | yes | 0.015 | 0.016 | 0.96x |
-| `fit2d` | -6.84642933e+04 | -6.84642933e+04 | yes | 0.343 | 0.230 | 1.50x |
-| `forplan` | -6.64218961e+02 | -6.64218961e+02 | yes | 0.020 | 0.009 | 2.25x |
-| `grow15` | -1.06870941e+08 | -1.06870941e+08 | yes | 0.357 | 0.059 | 6.08x |
-| `grow22` | -1.60834336e+08 | -1.60834336e+08 | yes | 0.514 | 0.119 | 4.32x |
-| `grow7` | -4.77878118e+07 | -4.77878118e+07 | yes | 0.123 | 0.016 | 7.55x |
-| `israel` | -8.96644822e+05 | -8.96644822e+05 | yes | 0.013 | 0.006 | 2.26x |
-| `kb2` | -1.74990013e+03 | -1.74990013e+03 | yes | 0.002 | 0.001 | 1.64x |
-| `lotfi` | -2.52647061e+01 | -2.52647061e+01 | yes | 0.010 | 0.004 | 2.95x |
-| `pilot4` | -2.58113926e+03 | -2.58113926e+03 | yes | 0.146 | 0.044 | 3.36x |
-| `recipe` | -2.66616000e+02 | -2.66616000e+02 | yes | 0.002 | 0.002 | 0.92x |
-| `sc105` | -5.22020612e+01 | -5.22020612e+01 | yes | 0.003 | 0.001 | 1.84x |
-| `sc205` | -5.22020612e+01 | -5.22020612e+01 | yes | 0.007 | 0.003 | 2.62x |
-| `sc50a` | -6.45750771e+01 | -6.45750771e+01 | yes | 0.001 | 0.001 | 1.55x |
-| `sc50b` | -7.00000000e+01 | -7.00000000e+01 | yes | 0.001 | 0.001 | 1.53x |
-| `scagr25` | -1.47534331e+07 | -1.47534331e+07 | yes | 0.024 | 0.010 | 2.44x |
-| `scagr7` | -2.33138982e+06 | -2.33138982e+06 | yes | 0.003 | 0.003 | 0.93x |
-| `scfxm1` | 1.84167590e+04 | 1.84167590e+04 | yes | 0.028 | 0.013 | 2.08x |
-| `scorpion` | 1.87812482e+03 | 1.87812482e+03 | yes | 0.012 | 0.004 | 2.92x |
-| `scrs8` | 9.04296954e+02 | 9.04296954e+02 | yes | 0.050 | 0.015 | 3.43x |
-| `scsd1` | 8.66666667e+00 | 8.66666667e+00 | yes | 0.011 | 0.003 | 3.29x |
-| `scsd6` | 5.05000001e+01 | 5.05000001e+01 | yes | 0.031 | 0.011 | 2.85x |
-| `scsd8` | 9.05000000e+02 | 9.05000000e+02 | yes | 0.253 | 0.059 | 4.28x |
-| `sctap1` | 1.41225000e+03 | 1.41225000e+03 | yes | 0.013 | 0.010 | 1.36x |
-| `share1b` | -7.65893186e+04 | -7.65893186e+04 | yes | 0.006 | 0.004 | 1.40x |
-| `share2b` | -4.15732241e+02 | -4.15732241e+02 | yes | 0.005 | 0.003 | 1.71x |
-| `ship04l` | 1.79332454e+06 | 1.79332454e+06 | yes | 0.040 | 0.013 | 3.09x |
-| `ship04s` | 1.79871470e+06 | 1.79871470e+06 | yes | 0.022 | 0.009 | 2.45x |
-| `stair` | -2.51266951e+02 | -2.51266951e+02 | yes | 0.047 | 0.021 | 2.24x |
-| `standata` | 1.25769950e+03 | 1.25769950e+03 | yes | 0.006 | 0.006 | 0.96x |
-| `standmps` | 1.40601750e+03 | 1.40601750e+03 | yes | 0.016 | 0.009 | 1.75x |
-| `stocfor1` | -4.11319762e+04 | -4.11319762e+04 | yes | 0.003 | 0.002 | 1.72x |
-| `tuff` | 2.92147765e-01 | 2.92147765e-01 | yes | 0.016 | 0.010 | 1.58x |
-| `wood1p` | 1.44290241e+00 | 1.44290241e+00 | yes | 0.160 | 0.100 | 1.61x |
+| `adlittle` | 2.25494963e+05 | 2.25494963e+05 | yes | 0.001 | 0.002 | 0.74x |
+| `afiro` | -4.64753143e+02 | -4.64753143e+02 | yes | 0.000 | 0.000 | 0.58x |
+| `agg` | -3.59917673e+07 | -3.59917673e+07 | yes | 0.004 | 0.004 | 1.15x |
+| `bandm` | -1.58628018e+02 | -1.58628018e+02 | yes | 0.016 | 0.009 | 1.79x |
+| `beaconfd` | 3.35924858e+04 | 3.35924858e+04 | yes | 0.003 | 0.003 | 0.98x |
+| `blend` | -3.08121498e+01 | -3.08121498e+01 | yes | 0.001 | 0.001 | 0.72x |
+| `boeing1` | -3.35213568e+02 | -3.35213568e+02 | yes | 0.014 | 0.011 | 1.23x |
+| `boeing2` | -3.15018728e+02 | -3.15018728e+02 | yes | 0.002 | 0.003 | 0.90x |
+| `bore3d` | 1.37308039e+03 | 1.37308039e+03 | yes | 0.003 | 0.003 | 0.88x |
+| `brandy` | 1.51850990e+03 | 1.51850990e+03 | yes | 0.008 | 0.005 | 1.47x |
+| `capri` | 2.69001291e+03 | 2.69001291e+03 | yes | 0.005 | 0.004 | 1.51x |
+| `d6cube` | 3.15491667e+02 | 3.15491667e+02 | yes | 0.104 | 0.132 | 0.79x |
+| `degen2` | -1.43517800e+03 | -1.43517800e+03 | yes | 0.021 | 0.014 | 1.53x |
+| `e226` | -1.16389291e+01 | -1.16389291e+01 | yes | 0.012 | 0.007 | 1.60x |
+| `etamacro` | -7.55715233e+02 | -7.55715233e+02 | yes | 0.027 | 0.009 | 2.91x |
+| `finnis` | 1.72791066e+05 | 1.72791066e+05 | yes | 0.014 | 0.005 | 2.85x |
+| `fit1d` | -9.14637809e+03 | -9.14637809e+03 | yes | 0.005 | 0.011 | 0.43x |
+| `fit2d` | -6.84642933e+04 | -6.84642933e+04 | yes | 0.070 | 0.144 | 0.49x |
+| `forplan` | -6.64218961e+02 | -6.64218961e+02 | yes | 0.007 | 0.006 | 1.24x |
+| `grow15` | -1.06870941e+08 | -1.06870941e+08 | yes | 0.042 | 0.042 | 1.01x |
+| `grow22` | -1.60834336e+08 | -1.60834336e+08 | yes | 0.111 | 0.088 | 1.26x |
+| `grow7` | -4.77878118e+07 | -4.77878118e+07 | yes | 0.010 | 0.012 | 0.88x |
+| `israel` | -8.96644822e+05 | -8.96644822e+05 | yes | 0.005 | 0.003 | 1.39x |
+| `kb2` | -1.74990013e+03 | -1.74990013e+03 | yes | 0.001 | 0.001 | 0.97x |
+| `lotfi` | -2.52647061e+01 | -2.52647061e+01 | yes | 0.003 | 0.004 | 0.77x |
+| `pilot4` | -2.58113926e+03 | -2.58113926e+03 | yes | 0.052 | 0.030 | 1.77x |
+| `recipe` | -2.66616000e+02 | -2.66616000e+02 | yes | 0.001 | 0.001 | 0.66x |
+| `sc105` | -5.22020612e+01 | -5.22020612e+01 | yes | 0.001 | 0.001 | 1.11x |
+| `sc205` | -5.22020612e+01 | -5.22020612e+01 | yes | 0.003 | 0.003 | 1.04x |
+| `sc50a` | -6.45750771e+01 | -6.45750771e+01 | yes | 0.000 | 0.001 | 0.86x |
+| `sc50b` | -7.00000000e+01 | -7.00000000e+01 | yes | 0.001 | 0.001 | 0.78x |
+| `scagr25` | -1.47534331e+07 | -1.47534331e+07 | yes | 0.009 | 0.007 | 1.44x |
+| `scagr7` | -2.33138982e+06 | -2.33138982e+06 | yes | 0.001 | 0.003 | 0.56x |
+| `scfxm1` | 1.84167590e+04 | 1.84167590e+04 | yes | 0.012 | 0.008 | 1.53x |
+| `scorpion` | 1.87812482e+03 | 1.87812482e+03 | yes | 0.005 | 0.004 | 1.30x |
+| `scrs8` | 9.04296954e+02 | 9.04296954e+02 | yes | 0.014 | 0.009 | 1.49x |
+| `scsd1` | 8.66666667e+00 | 8.66666667e+00 | yes | 0.002 | 0.002 | 0.79x |
+| `scsd6` | 5.05000001e+01 | 5.05000001e+01 | yes | 0.014 | 0.007 | 1.85x |
+| `scsd8` | 9.05000000e+02 | 9.05000000e+02 | yes | 0.070 | 0.040 | 1.74x |
+| `sctap1` | 1.41225000e+03 | 1.41225000e+03 | yes | 0.006 | 0.005 | 1.11x |
+| `share1b` | -7.65893186e+04 | -7.65893186e+04 | yes | 0.002 | 0.003 | 0.90x |
+| `share2b` | -4.15732241e+02 | -4.15732241e+02 | yes | 0.001 | 0.002 | 0.55x |
+| `ship04l` | 1.79332454e+06 | 1.79332454e+06 | yes | 0.010 | 0.008 | 1.32x |
+| `ship04s` | 1.79871470e+06 | 1.79871470e+06 | yes | 0.006 | 0.006 | 0.99x |
+| `stair` | -2.51266951e+02 | -2.51266951e+02 | yes | 0.016 | 0.014 | 1.12x |
+| `standata` | 1.25769950e+03 | 1.25769950e+03 | yes | 0.002 | 0.004 | 0.39x |
+| `standmps` | 1.40601750e+03 | 1.40601750e+03 | yes | 0.006 | 0.005 | 1.19x |
+| `stocfor1` | -4.11319762e+04 | -4.11319762e+04 | yes | 0.001 | 0.001 | 1.00x |
+| `tuff` | 2.92147765e-01 | 2.92147765e-01 | yes | 0.005 | 0.008 | 0.64x |
+| `wood1p` | 1.44290241e+00 | 1.44290241e+00 | yes | 0.021 | 0.067 | 0.32x |
 
 **Summary**
 
-- SANKHYA shifted geometric mean: **0.057s**
-- HiGHS shifted geometric mean: **0.022s**
-- SANKHYA is **2.6x** the HiGHS time by that measure
+- SANKHYA shifted geometric mean: **0.015s**
+- HiGHS shifted geometric mean: **0.015s**
+- SANKHYA is **1.0x** the HiGHS time by that measure
 
-- per-instance ratio: median **2.12x**, worst **7.55x**, faster than HiGHS on **4 of 50** instances
+- per-instance ratio: median **1.02x**, worst **2.91x**, faster than HiGHS on **23 of 50** instances
 
-We are **2.62x slower** than HiGHS by this measure, and publish that rather than bury it. HiGHS is a decade of specialist work with presolve, a dual simplex and a mature pricing scheme. This solver now has a presolve (#43, #92) and a dual simplex (#65) of its own, both defaults, so what remains between the two is the pricing and the years. The part that has to be right first is that **the answers agree** - the problem statement asks us to compare, not to win.
+The two are **within noise of each other** here, at 1.00x. A narrow claim: eight small instances settle nothing about large models. HiGHS is a decade of specialist work with presolve, a dual simplex and a mature pricing scheme. This solver now has a presolve (#43, #92) and a dual simplex (#65) of its own, both defaults, so what remains between the two is the pricing and the years. The part that has to be right first is that **the answers agree** - the problem statement asks us to compare, not to win.
 
 ---
 

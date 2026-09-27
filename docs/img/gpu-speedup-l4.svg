@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420" font-family="sans-serif" font-size="12">
+<rect width="720" height="420" fill="white"/>
+<text x="360" y="18" text-anchor="middle" font-size="14">L4: GPU speedup against the faster CPU arm, by nonzeros</text>
+<line x1="70.0" y1="30" x2="70.0" y2="360" stroke="#ddd"/>
+<text x="70.0" y="376" text-anchor="middle">1e3</text>
+<line x1="196.0" y1="30" x2="196.0" y2="360" stroke="#ddd"/>
+<text x="196.0" y="376" text-anchor="middle">1e4</text>
+<line x1="322.0" y1="30" x2="322.0" y2="360" stroke="#ddd"/>
+<text x="322.0" y="376" text-anchor="middle">1e5</text>
+<line x1="448.0" y1="30" x2="448.0" y2="360" stroke="#ddd"/>
+<text x="448.0" y="376" text-anchor="middle">1e6</text>
+<line x1="574.0" y1="30" x2="574.0" y2="360" stroke="#ddd"/>
+<text x="574.0" y="376" text-anchor="middle">1e7</text>
+<line x1="700.0" y1="30" x2="700.0" y2="360" stroke="#ddd"/>
+<text x="700.0" y="376" text-anchor="middle">1e8</text>
+<line x1="70" y1="360.0" x2="700" y2="360.0" stroke="#ddd"/>
+<text x="64" y="364.0" text-anchor="end">0.01x</text>
+<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="#ddd"/>
+<text x="64" y="254.0" text-anchor="end">0.1x</text>
+<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="#ddd"/>
+<text x="64" y="144.0" text-anchor="end">1x</text>
+<line x1="70" y1="30.0" x2="700" y2="30.0" stroke="#ddd"/>
+<text x="64" y="34.0" text-anchor="end">10x</text>
+<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="#333" stroke-dasharray="6 4"/>
+<text x="696" y="135.0" text-anchor="end">crossover, 1x: above is a win, below a loss</text>
+<text x="360" y="412" text-anchor="middle">nonzeros of A</text>
+<circle cx="70.0" cy="270.2" r="5" fill="#1f77b4"><title>kkt_200x200 at 1e-04: 0.07x (synthetic)</title></circle>
+<circle cx="70.0" cy="239.2" r="5" fill="#d62728"><title>kkt_200x200 at 1e-08: 0.13x (synthetic)</title></circle>
+<circle cx="120.1" cy="224.2" r="5" fill="#d62728"><title>kkt_500x500 at 1e-08: 0.17x (synthetic)</title></circle>
+<circle cx="120.1" cy="213.5" r="5" fill="#1f77b4"><title>kkt_500x500 at 1e-04: 0.21x (synthetic)</title></circle>
+<circle cx="158.1" cy="208.9" r="5" fill="#d62728"><title>kkt_1000x1000 at 1e-08: 0.24x (synthetic)</title></circle>
+<circle cx="158.1" cy="208.6" r="5" fill="#1f77b4"><title>kkt_1000x1000 at 1e-04: 0.24x (synthetic)</title></circle>
+<circle cx="196.0" cy="156.6" r="5" fill="#1f77b4"><title>kkt_2000x2000 at 1e-04: 0.71x (synthetic)</title></circle>
+<circle cx="196.0" cy="151.3" r="5" fill="#d62728"><title>kkt_2000x2000 at 1e-08: 0.79x (synthetic)</title></circle>
+<circle cx="271.9" cy="112.9" r="5" fill="#d62728"><title>kkt_5000x5000 at 1e-08: 1.77x (synthetic)</title></circle>
+<circle cx="271.9" cy="105.7" r="5" fill="#1f77b4"><title>kkt_5000x5000 at 1e-04: 2.05x (synthetic)</title></circle>
+<circle cx="309.8" cy="75.0" r="5" fill="#d62728"><title>kkt_10000x10000 at 1e-08: 3.90x (synthetic)</title></circle>
+<circle cx="309.8" cy="71.3" r="5" fill="#1f77b4"><title>kkt_10000x10000 at 1e-04: 4.21x (synthetic)</title></circle>
+<rect x="332.7" y="51.4" width="10" height="10" fill="#1f77b4"><title>brazil3 at 1e-04: 5.75x (real)</title></rect>
+<text x="345.7" y="50.4">brazil3</text>
+<rect x="332.7" y="35.0" width="10" height="10" fill="#d62728"><title>brazil3 at 1e-08: 8.10x (real)</title></rect>
+<text x="345.7" y="34.0">brazil3</text>
+<rect x="371.4" y="84.5" width="10" height="10" fill="#d62728"><title>chromaticindex1024-7 at 1e-08: 2.88x (real)</title></rect>
+<text x="384.4" y="83.5">chromaticindex1024-7</text>
+<rect x="371.4" y="83.7" width="10" height="10" fill="#1f77b4"><title>chromaticindex1024-7 at 1e-04: 2.92x (real)</title></rect>
+<text x="384.4" y="82.7">chromaticindex1024-7</text>
+<rect x="574.9" y="135.0" width="10" height="10" fill="#d62728"><title>refinery_year at 1e-08: 1.00x (real)</title></rect>
+<text x="587.9" y="134.0">refinery_year</text>
+<rect x="574.9" y="135.0" width="10" height="10" fill="#1f77b4"><title>refinery_year at 1e-04: 1.00x (real)</title></rect>
+<text x="587.9" y="134.0">refinery_year</text>
+<circle cx="82" cy="44" r="5" fill="#1f77b4"/>
+<text x="92" y="48">1e-04, circle: synthetic ladder; square: real instance</text>
+<circle cx="82" cy="62" r="5" fill="#d62728"/>
+<text x="92" y="66">1e-08, circle: synthetic ladder; square: real instance</text>
+</svg>
