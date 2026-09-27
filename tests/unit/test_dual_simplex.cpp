@@ -8,6 +8,7 @@
 // takes fewer iterations - it usually does with a warm start, and that is measured on
 // MIPLIB rather than promised on random models.
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <random>
 #include <string>
@@ -15,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "sankhya/certificate.hpp"
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
@@ -420,6 +422,93 @@ TEST(DualSimplex, AGapWorthMoneyAtTheOptimalExitGoesToThePrimalLoop) {
     if (std::isfinite(priced)) gap += std::fabs(d) * std::fabs(x - priced);
   }
   EXPECT_LE(gap, 1e-6 * 2581.0) << "wrong-signed reduced costs price " << gap;
+}
+
+bool farkas_either_sign(const Model& model, const std::vector<double>& y) {
+  std::vector<double> flipped = y;
+  for (double& v : flipped) v = -v;
+  return farkas_proves_infeasible(model, y) || farkas_proves_infeasible(model, flipped);
+}
+
+TEST(DualSimplex, AnInfeasibleVerdictItsFarkasVectorProvesIsNotSolvedAgainUnscaled) {
+  // The scaled attempt's infeasible verdict used to go to the unscaled retry every time,
+  // which branch and bound paid at every infeasible node. A verdict whose Farkas vector,
+  // mapped back, proves the ORIGINAL model infeasible is now returned as it stands: no route
+  // note (the retry writes one), and the vector it carries is that proof. Badly scaled rows
+  // so the equilibration is not the identity: 1000 x + 0.001 y >= 4000 and <= 2000.
+  const Model model = make_model(ObjSense::kMinimize, {1.0, 1.0}, {0.0, 0.0}, {kInf, kInf},
+                                 {{1000.0, 0.001}, {1000.0, 0.001}, {0.5, 2000.0}},
+                                 {4000.0, -kInf, -kInf}, {kInf, 2000.0, 7000.0});
+  for (const char* algorithm : {"dual-simplex", "simplex"}) {
+    const Solution s = solve(model, engine_options(algorithm));
+    ASSERT_EQ(s.status, SolveStatus::kInfeasible) << algorithm << ": " << s.message;
+    EXPECT_EQ(s.message.find("route:"), std::string::npos) << algorithm << ": " << s.message;
+    ASSERT_EQ(s.farkas_dual.size(), 3u) << algorithm;
+    EXPECT_TRUE(farkas_either_sign(model, s.farkas_dual)) << algorithm;
+  }
+}
+
+TEST(DualSimplex, EveryInfeasibleVerdictWithoutARetryCarriesAProofOfTheOriginalModel) {
+  // Random boxed LPs, rows and columns scaled over six orders of magnitude, each made
+  // infeasible by a copy of its last row that demands more than the box can give. Every
+  // verdict is checked against scaling off; an infeasible one returned without the retry
+  // must carry a Farkas vector that proves the original model infeasible.
+  std::mt19937_64 rng(20260926);
+  std::uniform_real_distribution<double> coefficient(0.1, 1.0);
+  std::uniform_real_distribution<double> exponent(-3.0, 3.0);
+  std::uniform_int_distribution<int> size(3, 8);
+  int infeasible = 0;
+  int without_retry = 0;
+  for (int trial = 0; trial < 60; ++trial) {
+    const int n = size(rng);
+    const int m = size(rng);
+    std::vector<double> col_scale(static_cast<std::size_t>(n));
+    for (double& c : col_scale) c = std::pow(10.0, exponent(rng));
+    std::vector<std::vector<double>> rows;
+    std::vector<double> lower;
+    std::vector<double> upper;
+    for (int i = 0; i < m; ++i) {
+      const double r = std::pow(10.0, exponent(rng));
+      std::vector<double> row(static_cast<std::size_t>(n));
+      double most = 0.0;
+      for (int j = 0; j < n; ++j) {
+        const auto u = static_cast<std::size_t>(j);
+        row[u] = r * coefficient(rng) * col_scale[u];
+        most += row[u] / col_scale[u];  // each column boxed in [0, 1 / col_scale]
+      }
+      rows.push_back(row);
+      lower.push_back(-kInf);
+      upper.push_back(0.5 * most);
+      if (i == m - 1) {  // the same row asked for more than the box can give
+        rows.push_back(row);
+        lower.push_back(1.5 * most);
+        upper.push_back(kInf);
+      }
+    }
+    std::vector<double> col_upper(static_cast<std::size_t>(n));
+    for (int j = 0; j < n; ++j) {
+      col_upper[static_cast<std::size_t>(j)] = 1.0 / col_scale[static_cast<std::size_t>(j)];
+    }
+    const Model model = make_model(
+        ObjSense::kMinimize, std::vector<double>(static_cast<std::size_t>(n), 1.0),
+        std::vector<double>(static_cast<std::size_t>(n), 0.0), col_upper, rows, lower, upper);
+    Options unscaled = engine_options("dual-simplex");
+    unscaled.set_bool("scaling", false);
+    const Solution reference = solve(model, unscaled);
+    const Solution s = solve(model, engine_options("dual-simplex"));
+    ASSERT_EQ(reference.status, SolveStatus::kInfeasible) << reference.message;
+    ASSERT_EQ(s.status, SolveStatus::kInfeasible) << s.message;
+    ++infeasible;
+    if (s.message.find("route:") == std::string::npos) {
+      ++without_retry;
+      ASSERT_EQ(s.farkas_dual.size(), static_cast<std::size_t>(model.num_rows()));
+      EXPECT_TRUE(farkas_either_sign(model, s.farkas_dual)) << "trial " << trial;
+    }
+  }
+  EXPECT_EQ(infeasible, 60);
+  EXPECT_GT(without_retry, 0) << "every infeasible verdict still went to the retry";
+  std::printf("[  INFO    ] %d infeasible verdicts, %d without the unscaled retry\n",
+              infeasible, without_retry);
 }
 
 }  // namespace
