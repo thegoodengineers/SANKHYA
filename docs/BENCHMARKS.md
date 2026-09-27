@@ -441,7 +441,7 @@ Commit `fb72ab4` · machine `Windows-AMD64`
 
 Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
 
-> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd` reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting the whole trajectory. Speedup figures here are the median of repeated solves. Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
+> **GPU iteration counts differ from the CPU's (#448).** The device sums its reductions in a fixed order since #478, so a GPU run repeats itself, but a one-ulp difference from the CPU's summation order can flip a restart decision and shift the whole trajectory. Speedup figures here are the median of repeated solves, and a ratio below 1x is a loss, printed in the same type as a win. Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
 
 | rows×cols | CPU 1e-4 (s) | GPU 1e-4 (s) | speedup | CPU 1e-8 (s) | GPU 1e-8 (s) | speedup |
 |----------:|-------------:|-------------:|--------:|-------------:|-------------:|--------:|
@@ -450,12 +450,10 @@ Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to
 | 1000×1000 | 0.040 | 0.738 | 0.05× | 0.041 | 0.602 | 0.07× |
 | 2000×2000 | 0.698 | 5.081 | 0.14× | 0.715 | 7.467 | 0.10× |
 | 5000×5000 | 0.784 | 1.436 | 0.55× | 0.770 | 1.635 | 0.47× |
-| 10000×10000 | 2.855 | 2.082 | **1.37×** | 2.929 | 1.903 | **1.54×** |
+| 10000×10000 | 2.855 | 2.082 | 1.37× | 2.929 | 1.903 | 1.54× |
 
-GPU: NVIDIA GeForce RTX 5050 Laptop GPU (compute 12.0, 8151 MiB VRAM).  
+GPU: NVIDIA GeForce RTX 5050 Laptop GPU (compute 12.0, 8151 MiB VRAM); driver and CUDA runtime not recorded (the CSV predates #488's columns).  
 Instances are synthetic KKT LPs with ~5 nonzeros per column (seed 42).
-
-> **GPU iteration counts vary run to run (#448, #451).** The device reductions inside the GPU mat-vec are not bitwise reproducible, and a one-ulp difference can flip a restart decision and shift the whole trajectory, which is why every GPU cell is the median of repeated solves. Do not compare a GPU iteration count against the CPU count for the same instance: the two engines take different trajectories to the same tolerance. The regression test holds them to agreement at the stopping tolerance, not to the same iterate (`tests/unit/test_pdhg_cuda_regression.cpp`); see also `docs/ARCHITECTURE.md` section 7.
 
 #### 1e-8 ceiling — sizes PDHG does not drive to project standard
 
@@ -502,6 +500,10 @@ machine's own CPU, so a ratio here is card against host, not card against the la
 
 **L4**
 
+![GPU speedup against nonzeros on the L4](img/gpu-speedup-l4.svg)
+
+The figure is regenerated from the two CSVs by `bench/runners/gpu_plot.py` each time this document is; each point is one instance and tolerance, the speedup against the faster CPU arm on the solver's clock; the dashed line is 1x, the crossover, and everything below it is a loss.
+
 The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, medians of repeats with their min-max):
 
 Source CSV: `bench/results/gpu-l4-fdc89c5.csv`  
@@ -509,7 +511,7 @@ Commit `fdc89c5` · machine `Linux-x86_64`
 
 Both columns time PDHG alone (`pdhg_polish=false`) on the solver's own clock, to the tolerance named, the CPU side on one thread (#487); a warm-up GPU solve absorbed CUDA's context creation before the timed ones. The GPU pays a per-iteration launch and transfer cost that a small model cannot amortise; the crossover is where the parallel products start to pay for it.
 
-> **GPU iteration counts vary run to run (#448).** The nondeterministic `atomicAdd` reductions inside the GPU mat-vec can flip a restart condition by one ULP, shifting the whole trajectory. Speedup figures here are the median of repeated solves (5 per cell). Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
+> **GPU iteration counts differ from the CPU's (#448).** The device sums its reductions in a fixed order since #478, so a GPU run repeats itself, but a one-ulp difference from the CPU's summation order can flip a restart decision and shift the whole trajectory. Speedup figures here are the median of repeated solves (5 per cell), and a ratio below 1x is a loss, printed in the same type as a win. Do not compare a GPU iteration count against a CPU count for the same instance: the two engines take different trajectories and any comparison is meaningless. `tests/unit/test_pdhg_cuda_regression.cpp` (#451) holds both engines to the same stopping tolerance rather than to identical iterates. See also `docs/ARCHITECTURE.md` § 7.
 
 Each cell is the median of 5 solves; `[min–max]` shows the spread from run-to-run variance (thermal state, clock boost on the laptop GPU).
 
@@ -519,13 +521,11 @@ Each cell is the median of 5 solves; `[min–max]` shows the spread from run-to-
 | 500×500 | 0.178 [0.171–0.182] | 0.832 [0.542–3.330] | 0.21× | 0.228 [0.226–0.229] | 1.327 [1.287–2.707] | 0.17× |
 | 1000×1000 | 0.064 [0.063–0.064] | 0.267 [0.240–0.373] | 0.24× | 0.064 [0.063–0.066] | 0.270 [0.244–0.364] | 0.24× |
 | 2000×2000 | 1.025 [1.014–1.034] | 1.449 [1.264–1.795] | 0.71× | 1.028 [1.019–1.063] | 1.302 [1.260–2.244] | 0.79× |
-| 5000×5000 | 0.890 [0.879–0.905] | 0.434 [0.429–0.562] | **2.05×** | 0.884 [0.870–0.904] | 0.501 [0.457–0.540] | **1.77×** |
-| 10000×10000 | 2.854 [2.829–3.001] | 0.678 [0.610–0.799] | **4.21×** | 2.906 [2.856–2.928] | 0.745 [0.644–0.779] | **3.90×** |
+| 5000×5000 | 0.890 [0.879–0.905] | 0.434 [0.429–0.562] | 2.05× | 0.884 [0.870–0.904] | 0.501 [0.457–0.540] | 1.77× |
+| 10000×10000 | 2.854 [2.829–3.001] | 0.678 [0.610–0.799] | 4.21× | 2.906 [2.856–2.928] | 0.745 [0.644–0.779] | 3.90× |
 
-GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM).  
+GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM); driver and CUDA runtime not recorded (the CSV predates #488's columns).  
 Instances are synthetic KKT LPs with ~5 nonzeros per column (seed 42).
-
-> **GPU iteration counts vary run to run (#448, #451).** The device reductions inside the GPU mat-vec are not bitwise reproducible, and a one-ulp difference can flip a restart decision and shift the whole trajectory, which is why every GPU cell is the median of repeated solves. Do not compare a GPU iteration count against the CPU count for the same instance: the two engines take different trajectories to the same tolerance. The regression test holds them to agreement at the stopping tolerance, not to the same iterate (`tests/unit/test_pdhg_cuda_regression.cpp`); see also `docs/ARCHITECTURE.md` section 7.
 
 #### 1e-8 ceiling — sizes PDHG does not drive to project standard
 
@@ -545,9 +545,9 @@ On non-synthetic instances (`bench/runners/gpu_real_instances.py`):
 
 Source CSV: `bench/results/gpu-real-l4-58a8374.csv`  
 Commit `58a8374` · machine `Linux-x86_64`  
-GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM)
+GPU: NVIDIA L4 (compute 8.9, 22478 MiB VRAM); driver and CUDA runtime not recorded (the CSV predates #488's columns)
 
-Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance. Report the result whichever way it goes. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and 16 threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
+Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance, one solve per cell. Report the result whichever way it goes: a speedup below 1x is a loss and is printed in the same type as a win. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and 16 threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column, which also carries HiGHS's own run time on the same file in its own process when HiGHS is the reference; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
 
 | instance | rows | tol | CPU 1 thread (s) | CPU 16 threads (s) | GPU (s) | GPU vs 1 thread | GPU vs 16 threads | GPU status | rel gap CPU 1t / CPU 16t / GPU | reference |
 |----------|-----:|----:|-------------:|-------------:|--------:|--------:|--------:|--------|--------|--------|
@@ -560,7 +560,7 @@ Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance.
 
 The datacenter runner (`bench/runners/gpu_datacenter.py`, #488):
 
-`gpu-datacenter-l4-58a8374.csv` - NVIDIA L4 (compute 8.9, 22478 MiB VRAM), solver at `58a8374`, Linux-x86_64, 3 repeats per cell:
+`gpu-datacenter-l4-58a8374.csv` - NVIDIA L4 (compute 8.9, 22478 MiB VRAM), driver and CUDA runtime not recorded (the CSV predates #488's columns), solver at `58a8374`, Linux-x86_64, 3 repeats per cell. HiGHS's own time on the same file, once per instance in its own process: `chromaticindex1024-7` -; `brazil3` -.
 
 | instance | mode | threads | parallel A x | tol | forced iterations | status | objective | rel gap | primal res | dual res | iterations | solver (s) | solver median (s) | median wall (s) | spread (s) |
 |---|---|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -604,13 +604,17 @@ GPU speedup on the solver's own clock (median of the repeats):
 
 **A100**
 
+![GPU speedup against nonzeros on the A100](img/gpu-speedup-a100.svg)
+
+The figure is regenerated from the two CSVs by `bench/runners/gpu_plot.py` each time this document is; each point is one instance and tolerance, the speedup against the faster CPU arm on the solver's clock; the dashed line is 1x, the crossover, and everything below it is a loss.
+
 On non-synthetic instances (`bench/runners/gpu_real_instances.py`):
 
 Source CSV: `bench/results/gpu-real-a100-58a8374.csv`  
 Commit `58a8374` · machine `Linux-x86_64`  
-GPU: NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM)
+GPU: NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM); driver and CUDA runtime not recorded (the CSV predates #488's columns)
 
-Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance. Report the result whichever way it goes. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and 28 threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
+Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance, one solve per cell. Report the result whichever way it goes: a speedup below 1x is a loss and is printed in the same type as a win. The card is compared with two CPU arms: one thread with the serial A x (the default configuration), and 28 threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in the last column, which also carries HiGHS's own run time on the same file in its own process when HiGHS is the reference; `feasible` means the requested relative tolerance was met but not the project's absolute standard.
 
 | instance | rows | tol | CPU 1 thread (s) | CPU 28 threads (s) | GPU (s) | GPU vs 1 thread | GPU vs 28 threads | GPU status | rel gap CPU 1t / CPU 28t / GPU | reference |
 |----------|-----:|----:|-------------:|-------------:|--------:|--------:|--------:|--------|--------|--------|
@@ -623,7 +627,7 @@ Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance.
 
 The datacenter runner (`bench/runners/gpu_datacenter.py`, #488):
 
-`gpu-datacenter-a100-58a8374.csv` - NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM), solver at `58a8374`, Linux-x86_64, 3 repeats per cell:
+`gpu-datacenter-a100-58a8374.csv` - NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM), driver and CUDA runtime not recorded (the CSV predates #488's columns), solver at `58a8374`, Linux-x86_64, 3 repeats per cell. HiGHS's own time on the same file, once per instance in its own process: `chromaticindex1024-7` -; `brazil3` -.
 
 | instance | mode | threads | parallel A x | tol | forced iterations | status | objective | rel gap | primal res | dual res | iterations | solver (s) | solver median (s) | median wall (s) | spread (s) |
 |---|---|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|

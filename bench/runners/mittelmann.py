@@ -74,28 +74,41 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def highs_objective(mps: Path, time_limit: float) -> tuple[float | None, str]:
-    """HiGHS as a SEPARATE PROCESS over the same file; nothing of it is linked or read."""
+def highs_timed(mps: Path, time_limit: float) -> tuple[float | None, str, float | None]:
+    """HiGHS as a SEPARATE PROCESS over the same file; nothing of it is linked or read.
+    (objective or None, status, HiGHS's own run time in seconds or None): the time is
+    `Highs.getRunTime()`, the solver's clock after the read, so it is the same quantity as our
+    `solve_seconds` and the GPU runners can put it beside the card (#488)."""
     script = (
         "import sys, highspy\n"
         "h = highspy.Highs(); h.setOptionValue('output_flag', False)\n"
         f"h.setOptionValue('time_limit', {float(time_limit)!r})\n"
         f"h.readModel({str(mps)!r}); h.run()\n"
-        "print(h.modelStatusToString(h.getModelStatus())); print(repr(h.getInfo().objective_function_value))\n")
+        "print(h.modelStatusToString(h.getModelStatus())); print(repr(h.getInfo().objective_function_value))\n"
+        "print(repr(h.getRunTime()))\n")
     try:
         done = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
                               timeout=time_limit + 60)
     except (OSError, subprocess.TimeoutExpired):
-        return None, "highs did not finish"
+        return None, "highs did not finish", None
     lines = done.stdout.strip().splitlines()
     if done.returncode != 0 or len(lines) < 2:
-        return None, "highs unavailable"
+        return None, "highs unavailable", None
     status = lines[0].strip()
+    try:
+        seconds = float(lines[2]) if len(lines) > 2 else None
+    except ValueError:
+        seconds = None
     try:
         value = float(lines[1])
     except ValueError:
-        return None, status
-    return (value if status == "Optimal" else None), status
+        return None, status, seconds
+    return (value if status == "Optimal" else None), status, seconds
+
+
+def highs_objective(mps: Path, time_limit: float) -> tuple[float | None, str]:
+    value, status, _ = highs_timed(mps, time_limit)
+    return value, status
 
 
 def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,

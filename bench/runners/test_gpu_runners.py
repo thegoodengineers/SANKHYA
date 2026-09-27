@@ -113,11 +113,24 @@ def test_reference() -> None:
         check(gpu_arms.analytic_optimum(generated) == -38289180.25,
               "the refinery generator's analytic optimum is read from the file")
         check(gpu_arms.reference_objective(generated, 1.0) ==
-              (-38289180.25, "construction", "analytic optimum stated by the generator"),
+              (-38289180.25, "construction", "analytic optimum stated by the generator", None),
               "a file that states its optimum never calls HiGHS")
-        value, source, _ = gpu_arms.reference_objective(plain, 1.0, use_highs=False)
-        check(value is None and source == "none", "--no-reference leaves it blank")
+        value, source, _, seconds = gpu_arms.reference_objective(plain, 1.0, use_highs=False)
+        check(value is None and source == "none" and seconds is None,
+              "--no-reference leaves it blank")
         check(len(gpu_arms.sha256_file(plain)) == 64, "sha256 of the instance file")
+        two_cols = Path(tmp) / "two.mps"
+        two_cols.write_text("NAME T\n* comment\nROWS\n N COST\n L R1\n G R2\nCOLUMNS\n"
+                            " X COST 1 R1 1\n X R2 2\n Y R1 3\nRHS\n RHS R1 4\nENDATA\n")
+        check(gpu_real_instances.mps_dimensions(two_cols) == (2, 2, 4),
+              "cols counts distinct column names, not COLUMNS lines (#488: cols == nnz)",
+              str(gpu_real_instances.mps_dimensions(two_cols)))
+    cells = gpu_arms.platform_cells("NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM, "
+                                    "CUDA runtime 12.4, driver API 12.4)")
+    check(cells["cuda_runtime"] == "12.4" and set(cells) == set(gpu_arms.PLATFORM_COLUMNS),
+          "the CUDA runtime is read from the binary's device description", str(cells))
+    check(gpu_arms.platform_cells("no device: none")["cuda_runtime"] == "",
+          "no runtime in the description leaves the cell blank")
 
 
 class Recorder:
@@ -145,17 +158,21 @@ def test_real_runner_rows() -> None:
         try:
             args = SimpleNamespace(binary=Path("sankhya"), time_limit=10.0, cpu_threads=16,
                                    reference_time_limit=1.0, no_reference=True,
-                                   solver_option=["pdhg_two_matvec=true"])
+                                   solver_option=["pdhg_two_matvec=true"], repeats=3)
             rows = gpu_real_instances.measure("brazil3", mps, args,
                                               {"git_commit": "abc1234", "machine": "m",
-                                               "gpu": "g", "timestamp_utc": "t",
+                                               "gpu": "g", "driver_version": "550",
+                                               "cuda_runtime": "12.4", "timestamp_utc": "t",
                                                "solver_options": "pdhg_two_matvec=true"})
         finally:
             gpu_real_instances.run_solve = saved
     measured = recorder.calls[1:]  # the first call is the untimed GPU warm-up
-    check(len(rows) == 6 and len(measured) == 6, "3 arms x 2 tolerances", str(len(rows)))
+    check(len(rows) == 6 and len(measured) == 18, "3 arms x 2 tolerances x 3 repeats",
+          str(len(measured)))
+    check(all(r["repeats"] == 3 and r["seconds_min"] == r["seconds"] == r["seconds_max"]
+              for r in rows), "the row is the median of the repeats with its min and max")
     cpu_many = [opts for alg, opts in measured if "threads=16" in opts]
-    check(len(cpu_many) == 2 and all("pdhg_parallel_spmv=true" in o for o in cpu_many),
+    check(len(cpu_many) == 6 and all("pdhg_parallel_spmv=true" in o for o in cpu_many),
           "the N-thread CPU solves really pass pdhg_parallel_spmv=true", str(cpu_many))
     check(all(o[-1] == "pdhg_two_matvec=true" for _, o in measured),
           "--solver-option still reaches every arm")
@@ -166,10 +183,11 @@ def test_real_runner_rows() -> None:
           "arms in order; --no-reference blanks the gap")
     row = gpu_real_instances.build_row("brazil3", (1, 1, 1), "ef" * 32, gpu_arms.GPU_ARM, 1e-8,
                                        recorder(None, None, "pdhg-cuda", 1e-8, 1.0),
-                                       BRAZIL3_REF, "highs", {})
+                                       BRAZIL3_REF, "highs", {}, 2.5)
     check(row["rel_gap"] == "1.530e-07" and row["tolerance"] == "1e-08"
-          and row["instance_sha256"] == "ef" * 32 and row["primal_residual"] == "1.6e-09",
-          "a GPU row carries sha, gap and residuals")
+          and row["instance_sha256"] == "ef" * 32 and row["primal_residual"] == "1.6e-09"
+          and row["reference_seconds"] == "2.500000" and row["repeats"] == 1,
+          "a GPU row carries sha, gap, residuals and HiGHS's own time")
 
 
 def test_datacenter_rows() -> None:
@@ -190,10 +208,12 @@ def test_datacenter_rows() -> None:
     row = gpu_datacenter.build_row("brazil3", "ab" * 32, arm, 1e-8, 2000, r, BRAZIL3_REF,
                                    "highs", {"repeats": 3, "git_commit": "abc1234",
                                              "machine": "m", "card": "l4", "gpu": "g",
-                                             "timestamp_utc": "t"})
+                                             "driver_version": "550", "cuda_runtime": "12.4",
+                                             "timestamp_utc": "t"}, 1.25)
     check(list(row) == gpu_datacenter.COLUMNS, "the row has the CSV's columns in order")
     check(row["mode"] == "cpu-16t" and row["parallel_spmv"] == "true" and row["cpu_threads"] == 16
-          and row["rel_gap"] == "1.530e-07", "mode, threads, A x and gap in the row")
+          and row["rel_gap"] == "1.530e-07" and row["reference_seconds"] == "1.250000",
+          "mode, threads, A x, gap and HiGHS's time in the row")
 
 
 def write_csv(path: Path, columns: list[str], rows: list[dict]) -> None:
@@ -212,7 +232,8 @@ def test_doc_real() -> None:
             new_rows.append(gpu_real_instances.build_row(
                 "brazil3", (14646, 1, 1), "ab" * 32, arm, float(tol), result, BRAZIL3_REF,
                 "highs", {"git_commit": "abc1234", "machine": "m", "gpu": "L4",
-                          "timestamp_utc": "t", "solver_options": ""}))
+                          "driver_version": "550.1", "cuda_runtime": "12.4",
+                          "timestamp_utc": "t", "solver_options": ""}, 0.75))
     old_columns = ["instance", "rows", "cols", "nnz", "algorithm", "tolerance", "status",
                    "objective", "iterations", "seconds", "wall_seconds", "reached_tolerance",
                    "primal_residual", "dual_residual", "git_commit", "machine", "gpu",
@@ -230,8 +251,10 @@ def test_doc_real() -> None:
     line = next((ln for ln in text.splitlines() if ln.startswith("| `brazil3`") and "1e-08" in ln), "")
     check("| 91.000 | 20.000 | 11.000 | 8.27x | 1.82x | feasible |" in line,
           "new CSV: GPU against the 1-thread AND the 16-thread CPU", line)
-    check("1.530e-07 / 1.530e-07 / 1.530e-07" in line and "(highs)" in line,
-          "new CSV: the gap of every arm and the reference's source", line)
+    check("1.530e-07 / 1.530e-07 / 1.530e-07" in line and "(highs, 0.750 s)" in line,
+          "new CSV: the gap of every arm, the reference's source and HiGHS's time", line)
+    check("driver 550.1, CUDA runtime 12.4" in text, "new CSV: the driver and runtime named")
+    check("**" not in line, "a win is not bolded: wins and losses in the same type", line)
     check("CPU 16 threads (s)" in text and "predates #488" not in text,
           "new CSV: the header names the thread count, no old-file note")
     old_line = next((ln for ln in old_text.splitlines() if ln.startswith("| `brazil3`")), "")
@@ -243,7 +266,7 @@ def test_doc_real() -> None:
 
 def test_doc_datacenter() -> None:
     fixed = {"repeats": 3, "git_commit": "abc1234", "machine": "m", "card": "l4", "gpu": "L4",
-             "timestamp_utc": "t"}
+             "driver_version": "550.1", "cuda_runtime": "12.4", "timestamp_utc": "t"}
     new_rows = []
     for arm, seconds in zip(gpu_arms.all_arms(16), (80.0, 16.0, 10.0)):
         r = {"status": "feasible", "objective": BRAZIL3_GPU, "iterations": 1, "seconds": seconds,
@@ -266,6 +289,7 @@ def test_doc_datacenter() -> None:
     check("| `brazil3` | 1e-08 | - | 8.00x | 1.60x | 1.530e-07 |" in text,
           "new CSV: speedup vs both arms and the GPU's gap")
     check("| cpu-16t | 16 | true |" in text, "new CSV: the N-thread row shows parallel A x")
+    check("driver 550.1, CUDA runtime 12.4" in text, "new CSV: the driver and runtime named")
     check("GPU speedup" not in old_text and "| `brazil3` | cpu-16t | - | - | 1e-08 |" in old_text,
           "old CSV: rows render with '-' for the new columns, and no speedup is claimed from "
           "its serial-A-x cpu-16t")

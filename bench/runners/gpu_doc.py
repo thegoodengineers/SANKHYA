@@ -41,6 +41,26 @@ def _cell(value) -> str:
     return "-" if value in (None, "") else str(value)
 
 
+def platform_line(first: dict) -> str:
+    """`driver X, CUDA runtime Y` from the row's columns (#488), or a note that the CSV
+    predates them."""
+    driver, runtime = first.get("driver_version", ""), first.get("cuda_runtime", "")
+    if not driver and not runtime:
+        return "driver and CUDA runtime not recorded (the CSV predates #488's columns)"
+    return f"driver {driver or '?'}, CUDA runtime {runtime or '?'}"
+
+
+def reference_cell(row: dict) -> str:
+    """`value (source)` with HiGHS's own time on the same file when it was recorded."""
+    if not row.get("reference_objective"):
+        return "-"
+    seconds = _float(row.get("reference_seconds"))
+    source = row.get("reference_source", "")
+    if seconds is not None:
+        return f"{row['reference_objective']} ({source}, {seconds:.3f} s)"
+    return f"{row['reference_objective']} ({source})"
+
+
 def parallel_arm(rows: list[dict], arm_key: str) -> tuple[str | None, str]:
     """(label, thread count) of the N-thread CPU arm run with pdhg_parallel_spmv=true, or
     (None, "N") when the CSV has none - which every pre-#488 CSV is."""
@@ -128,18 +148,23 @@ def gpu_real_section(path: Path | None) -> str:
     def gap(r: dict | None) -> str:
         return _cell(r.get("rel_gap")) if r else "-"
 
+    repeats = rows[0].get("repeats", "")
     lines = [
         f"Source CSV: `bench/results/{path.name}`  ",
         f"Commit `{commit}` · machine `{machine}`  ",
-        f"GPU: {gpu}",
+        f"GPU: {gpu}; {platform_line(rows[0])}",
         "",
-        "Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance. "
-        "Report the result whichever way it goes. The card is compared with two CPU arms: one "
+        "Same protocol as §1g: PDHG alone, solver clock, warm-up GPU solve per instance"
+        + (f", each cell the median of {repeats} solves" if repeats and repeats != "1" else
+           ", one solve per cell")
+        + ". Report the result whichever way it goes: a speedup below 1x is a loss and is "
+        "printed in the same type as a win. The card is compared with two CPU arms: one "
         "thread with the serial A x (the default configuration), and "
         f"{many} threads with `pdhg_parallel_spmv=true`, so A x is row-parallel as well as "
         "A^T y (#487, #488). The gap is |obj - ref| / max(1, |ref|) against the reference in "
-        "the last column; `feasible` means the requested relative tolerance was met but not "
-        "the project's absolute standard.",
+        "the last column, which also carries HiGHS's own run time on the same file in its "
+        "own process when HiGHS is the reference; `feasible` means the requested relative "
+        "tolerance was met but not the project's absolute standard.",
         "",
         f"| instance | rows | tol | CPU 1 thread (s) | CPU {many} threads (s) | GPU (s) "
         f"| GPU vs 1 thread | GPU vs {many} threads | GPU status "
@@ -155,9 +180,7 @@ def gpu_real_section(path: Path | None) -> str:
             if not (one or par or card):
                 continue
             first = one or par or card
-            reference = "-"
-            if first.get("reference_objective"):
-                reference = f"{first['reference_objective']} ({first.get('reference_source', '')})"
+            reference = reference_cell(first)
             lines.append(
                 f"| `{inst}` | {first.get('rows', '')} | {tol:.0e} | {fmt_s(one)} | {fmt_s(par)} "
                 f"| {fmt_s(card)} | {_ratio(secs(one), secs(card))} "
@@ -181,8 +204,15 @@ def gpu_datacenter_table(path: Path) -> str:
     first = rows[0]
     has_arms = "parallel_spmv" in first
     many_label, many = parallel_arm(rows, "mode") if has_arms else (None, "N")
-    out = [f"`{path.name}` - {first.get('gpu', '?')}, solver at `{first.get('git_commit', '?')}`, "
-           f"{first.get('machine', '?')}, {first.get('repeats', '?')} repeats per cell:\n",
+    out = [f"`{path.name}` - {first.get('gpu', '?')}, {platform_line(first)}, solver at "
+           f"`{first.get('git_commit', '?')}`, {first.get('machine', '?')}, "
+           f"{first.get('repeats', '?')} repeats per cell. HiGHS's own time on the same file, "
+           "once per instance in its own process: "
+           + "; ".join(f"`{name}` {secs}" for name, secs in dict.fromkeys(
+               (r.get("instance", ""), (f"{_float(r.get('reference_seconds')):.3f} s"
+                                        if _float(r.get("reference_seconds")) is not None
+                                        else "-")) for r in rows))
+           + ".\n",
            "| instance | mode | threads | parallel A x | tol | forced iterations | status "
            "| objective | rel gap | primal res | dual res | iterations | solver (s) "
            "| solver median (s) | median wall (s) | spread (s) |",
