@@ -339,11 +339,28 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
 
     const auto u = static_cast<std::size_t>(choice.column);
     const std::size_t before_fix = saved_.size();
-    tighten_lower(u, choice.value);
-    tighten_upper(u, choice.value);
+    // Fix, propagate the rows (mip_dive_propagate; Achterberg 2007, sec. 9.2) and re-solve.
+    // Propagation only tightens bounds, so the stored basis stays dual feasible for the
+    // re-solve; a box it empties is a dead end that costs no LP. It pushes onto the same
+    // saved_ stack the fix did, so the unwinds below take its tightenings back with the fix.
+    const auto fix_and_probe = [&](double value) {
+      tighten_lower(u, value);
+      tighten_upper(u, value);
+      if (schedule_.dive_propagate) {
+        const bool pruned_before = conflict_pruned_;  // propagate() reports into it
+        const bool alive = propagate();
+        conflict_pruned_ = pruned_before;
+        if (!alive) {
+          Solution dead;
+          dead.status = SolveStatus::kInfeasible;
+          return dead;
+        }
+      }
+      ++lp_resolves;
+      return solve_node();
+    };
     ++depth;
-    Solution probe = solve_node();
-    ++lp_resolves;
+    Solution probe = fix_and_probe(choice.value);
     if (probe.status != SolveStatus::kOptimal && schedule_.dive_backtrack && !backtracked) {
       // ONE backtrack (Achterberg 2007, sec. 9.2): undo the fix and try the other side of
       // the column once; a second dead end ends the dive.
@@ -353,12 +370,7 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
       const bool inside =
           (!is_finite_bound(working_.col_lower[u]) || other >= working_.col_lower[u] - 1e-9) &&
           (!is_finite_bound(working_.col_upper[u]) || other <= working_.col_upper[u] + 1e-9);
-      if (inside) {
-        tighten_lower(u, other);
-        tighten_upper(u, other);
-        probe = solve_node();
-        ++lp_resolves;
-      }
+      if (inside) probe = fix_and_probe(other);
     }
     if (probe.status != SolveStatus::kOptimal) break;  // dead end: infeasible or worse
     x = probe.col_value;

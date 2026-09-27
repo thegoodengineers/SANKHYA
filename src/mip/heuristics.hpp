@@ -151,6 +151,7 @@ struct HeuristicSchedule {
   int fix_and_propagate_backtracks = 0;
   bool dive[kDiveRules] = {false, false, false, false};  ///< by DiveRule
   bool dive_backtrack = false;
+  bool dive_propagate = true;  ///< mip_dive_propagate: the rows after each fix
   Count rins_frequency = 0;
   Count rins_nodes = 0;
   Count rens_nodes = 0;

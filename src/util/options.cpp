@@ -672,6 +672,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"auto", "on", "off"}});
+    s.push_back({"mip_dive_propagate",
+                 OptionType::Bool,
+                 true,
+                 "Propagate the node's rows after each fix a dive makes, before the LP "
+                 "re-solve (Achterberg 2007, sec. 9.2: diving fixes AND propagates). A fix "
+                 "that empties the domain is a dead end without an LP, and a fix the rows "
+                 "complete - a parity row with one column left, as on the lights-out "
+                 "models enlight8 and enlight_hard - fixes the rest of the row, which the "
+                 "LP alone never does. false is the dive as it was.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_dive_backtrack",
                  OptionType::Bool,
                  false,

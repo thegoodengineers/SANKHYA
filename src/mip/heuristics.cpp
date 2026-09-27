@@ -662,6 +662,7 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   s.dive[static_cast<std::size_t>(DiveRule::kGuided)] =
       resolve_switch(options, "mip_heur_dive_guided", master);
   s.dive_backtrack = options.get_bool("mip_dive_backtrack");
+  s.dive_propagate = options.get_bool("mip_dive_propagate");
   s.rins_frequency = options.get_int("mip_rins_frequency");
   s.rins_nodes = options.get_int("mip_rins_nodes");
   s.rens_nodes = options.get_int("mip_rens_nodes");
