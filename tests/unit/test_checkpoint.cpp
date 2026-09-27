@@ -55,6 +55,9 @@ Model knapsack(int columns, int seed) {
 Options base_options() {
   Options o;
   o.set_bool("log_to_console", false);
+  // The models here are a few columns, so every root cut is "dense" and the admission
+  // (#496) would close them at the root; pinned off, since the tree is what is tested.
+  o.set_int("cut_dense_max", 0);
   // These fixtures need a tree that is still open when the node limit hits; with the
   // objective known to be integral (#221) the knapsacks close at the root and nothing is
   // written to resume from.
