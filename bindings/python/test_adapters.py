@@ -267,6 +267,59 @@ def test_pulp_no_solution_after_a_solution() -> None:
         check(z.varValue is None, "PuLP legacy varValue cleared", str(z.varValue))
 
 
+def test_pulp_warm_start_reuses_the_prior_basis() -> None:
+    # warmStart=True (module docstring, "PuLP's own actualSolve") reads
+    # lp._sankhya_last_result, the previous solve's Result, and passes it to model.solve as
+    # start=, which "bypasses presolve on a warm solve" per Result.solve's own docstring. A
+    # warm second solve of a slightly perturbed model should reach the same optimum in fewer
+    # simplex iterations than an unrelated cold solve of that same perturbed model - the
+    # observable difference a reused basis makes, not merely that no exception was raised.
+    try:
+        import pulp
+    except ImportError as error:
+        skip("test_pulp_warm_start_reuses_the_prior_basis", str(error))
+        return
+    import sankhya.adapters.pulp_solver as sankhya_pulp
+
+    def _build(row_bound: float):
+        prob = pulp.LpProblem("warm", pulp.LpMaximize)
+        x = _add_var(pulp, prob, "x", lowBound=0, upBound=3)
+        y = _add_var(pulp, prob, "y", lowBound=0)
+        prob += 3 * x + 2 * y
+        prob += x + y <= row_bound
+        prob += x + 3 * y <= 6
+        return prob, x, y
+
+    prob, x, y = _build(4.0)
+    first = prob.solve(sankhya_pulp.SANKHYA(msg=False))
+    check(_status_name(pulp, first) == "Optimal", "PuLP warm start: first solve is optimal",
+          _status_name(pulp, first))
+    check(getattr(prob, "_sankhya_last_result", None) is not None,
+          "PuLP warm start: the first solve's result is stashed on the problem")
+
+    # A small perturbation of the same row: near enough that the old basis is still a good
+    # starting point, unlike a fresh model that shares nothing with it.
+    prob.constraints[next(iter(prob.constraints))].constant = -4.5
+    warm = prob.solve(sankhya_pulp.SANKHYA(msg=False, warmStart=True))
+    check(_status_name(pulp, warm) == "Optimal", "PuLP warm start: warm solve is optimal",
+          _status_name(pulp, warm))
+
+    cold_prob, cold_x, cold_y = _build(4.5)
+    cold = cold_prob.solve(sankhya_pulp.SANKHYA(msg=False))
+    check(_status_name(pulp, cold) == "Optimal", "PuLP warm start: cold reference is optimal",
+          _status_name(pulp, cold))
+
+    check(near(x.varValue, cold_x.varValue) and near(y.varValue, cold_y.varValue),
+          "PuLP warm start: warm and cold solves agree",
+          f"warm ({x.varValue}, {y.varValue}) vs cold ({cold_x.varValue}, {cold_y.varValue})")
+
+    warm_result = prob._sankhya_last_result
+    cold_result = cold_prob._sankhya_last_result
+    check(warm_result.iterations <= cold_result.iterations,
+          "PuLP warm start: reusing the prior basis takes no more simplex iterations",
+          f"warm {warm_result.iterations} vs cold {cold_result.iterations}")
+
+
 # ---- CVXPY --------------------------------------------------------------------------------
 
 def test_cvxpy_lp_matches_a_direct_solve() -> None:
