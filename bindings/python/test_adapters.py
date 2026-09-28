@@ -281,34 +281,35 @@ def test_pulp_warm_start_reuses_the_prior_basis() -> None:
         return
     import sankhya.adapters.pulp_solver as sankhya_pulp
 
-    def _build(row_bound: float):
+    def _build(extra_bound: float | None = None):
         prob = pulp.LpProblem("warm", pulp.LpMaximize)
         x = _add_var(pulp, prob, "x", lowBound=0, upBound=3)
         y = _add_var(pulp, prob, "y", lowBound=0)
         prob += 3 * x + 2 * y
-        prob += x + y <= row_bound
+        prob += x + y <= 4
         prob += x + 3 * y <= 6
+        if extra_bound is not None:
+            prob += x + y <= extra_bound
         return prob, x, y
 
-    prob, x, y = _build(4.0)
+    prob, x, y = _build()
     first = prob.solve(sankhya_pulp.SANKHYA(msg=False))
     check(_status_name(pulp, first) == "Optimal", "PuLP warm start: first solve is optimal",
           _status_name(pulp, first))
     check(getattr(prob, "_sankhya_last_result", None) is not None,
           "PuLP warm start: the first solve's result is stashed on the problem")
 
-    # A small perturbation of the same row: near enough that the old basis is still a good
-    # starting point, unlike a fresh model that shares nothing with it. PuLP 4 made
-    # LpProblem.constraints a method returning a list; before it, it was a dict keyed by
-    # constraint name (the same distinction _build_model above already accounts for).
-    first_constraint = (prob.constraints()[0] if callable(prob.constraints)
-                        else next(iter(prob.constraints.values())))
-    first_constraint.constant = -4.5
+    # A small tightening of the same feasible region, added as a NEW row rather than by
+    # mutating an existing one: PuLP 4 made LpConstraint.constant a read-only property (and
+    # LpProblem.constraints a method rather than a dict - the distinction _build_model above
+    # already accounts for), so neither PuLP version lets an existing row be edited in place.
+    # `+=` is the one way to change a problem that both versions support identically.
+    prob += x + y <= 3.5
     warm = prob.solve(sankhya_pulp.SANKHYA(msg=False, warmStart=True))
     check(_status_name(pulp, warm) == "Optimal", "PuLP warm start: warm solve is optimal",
           _status_name(pulp, warm))
 
-    cold_prob, cold_x, cold_y = _build(4.5)
+    cold_prob, cold_x, cold_y = _build(extra_bound=3.5)
     cold = cold_prob.solve(sankhya_pulp.SANKHYA(msg=False))
     check(_status_name(pulp, cold) == "Optimal", "PuLP warm start: cold reference is optimal",
           _status_name(pulp, cold))
