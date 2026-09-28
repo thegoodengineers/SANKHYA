@@ -298,8 +298,12 @@ def test_pulp_warm_start_reuses_the_prior_basis() -> None:
           "PuLP warm start: the first solve's result is stashed on the problem")
 
     # A small perturbation of the same row: near enough that the old basis is still a good
-    # starting point, unlike a fresh model that shares nothing with it.
-    prob.constraints[next(iter(prob.constraints))].constant = -4.5
+    # starting point, unlike a fresh model that shares nothing with it. PuLP 4 made
+    # LpProblem.constraints a method returning a list; before it, it was a dict keyed by
+    # constraint name (the same distinction _build_model above already accounts for).
+    first_constraint = (prob.constraints()[0] if callable(prob.constraints)
+                        else next(iter(prob.constraints.values())))
+    first_constraint.constant = -4.5
     warm = prob.solve(sankhya_pulp.SANKHYA(msg=False, warmStart=True))
     check(_status_name(pulp, warm) == "Optimal", "PuLP warm start: warm solve is optimal",
           _status_name(pulp, warm))
