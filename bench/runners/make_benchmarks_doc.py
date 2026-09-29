@@ -204,6 +204,56 @@ def tier_of(path: Path) -> str | None:
     return parts[1] if len(parts) > 2 else None
 
 
+KOCH_EXACT = REPO_ROOT / "data" / "netlib" / "koch_exact.json"
+
+
+def exact_grade(rows: list[dict]) -> tuple[int, int, list[str]] | None:
+    """The same run graded against Koch's exact optima (#747): (matched, graded, misses).
+
+    Read from the CSV's own `matches_exact` column when the run wrote one, and otherwise
+    recomputed from columns every Netlib CSV already has (status, our objective, the
+    objective-row constant, the verifier's verdict), so a CSV written before #747 gets the
+    same grade the runner would give it now. None when the exact values are not fetched."""
+    if not KOCH_EXACT.exists():
+        return None
+    exact = json.loads(KOCH_EXACT.read_text())["instances"]
+    matched, graded, misses = 0, 0, []
+    for row in rows:
+        name = row["instance"]
+        if row.get("matches_exact", "") != "":
+            graded += 1
+            ok = row["matches_exact"] == "1"
+        elif name in exact:
+            graded += 1
+            ours = as_float(row, "our_objective")
+            offset = as_float(row, "objective_offset") or 0.0
+            value = float(exact[name]["exact_objective"])
+            ok = (row.get("status") == "optimal" and ours is not None
+                  and row.get("independently_verified") != "0"
+                  and abs((ours - offset) - value) / max(1.0, abs(value)) <= 1e-6)
+        else:
+            continue
+        matched += ok
+        if not ok:
+            misses.append(name)
+    return matched, graded, misses
+
+
+def exact_grade_lines(rows: list[dict]) -> list[str]:
+    grade = exact_grade(rows)
+    if grade is None or grade[1] == 0:
+        return []
+    matched, graded, misses = grade
+    missed = ", ".join(f"`{name}`" for name in misses) or "none"
+    return [
+        f"The same run graded against the **exact** optimum, Koch's rational values "
+        f"(*The final NETLIB-LP results*, Oper. Res. Lett. 32, 2004; "
+        f"`data/netlib/koch_exact.json`): **{matched} of {graded}** within a relative 1e-6 "
+        f"**and** verified. Not within it: {missed}.",
+        "",
+    ]
+
+
 def netlib_section(path: Path) -> str:
     set_name = tier_of(path)
     rows = read_csv(path)
@@ -227,6 +277,7 @@ def netlib_section(path: Path) -> str:
         f"published optimum to a relative 1e-6 **and** passed independent verification by "
         f"`tools/verify_solution.py`.",
         "",
+        *exact_grade_lines(rows),
         coverage_note(len(rows), set_name),
         "",
         *failure_breakdown(failed),

@@ -61,7 +61,7 @@ with the CSV it lives in - is collected in [`docs/NEGATIVE-RESULTS.md`](docs/NEG
 It separates decisions made on a committed measurement from decisions made on a branch
 run that was never repeated on `main`, and keeps every withdrawn claim by name.
 
-Benchmark results against Netlib, headline first, as two measurements of the same run on
+Benchmark results against Netlib, headline first, as three measurements of the same run on
 `main` at `9094e1c` (`bench/results/netlib-full-9094e1c.csv`, alone on a laptop, 120 s per
 instance, 29 September 2026). The full set is the **92** LPs netlib.org ships as EMPS files:
 the readme lists 97 with an optimum, and five of those are not shipped (qap8, qap12 and qap15
@@ -70,11 +70,19 @@ instances, read 81 and 89 (`netlib-full-ad57c03.csv`); no instance that matched 
 
 | measurement | count |
 |---|---|
-| matched Netlib's published optimum to a relative 1e-6 **and** passed independent verification by `tools/verify_solution.py` | **82 of 92** |
+| within a relative 1e-6 of the **exact** optimum (Koch's rational values, `data/netlib/koch_exact.json`, #747) **and** passed independent verification by `tools/verify_solution.py` | **90 of 92** |
+| matched Netlib's published optimum to a relative 1e-6 **and** passed independent verification | **82 of 92** |
 | returned an answer the independent verifier accepts | **92 of 92** |
 
-The first is the number Phase 6's ">= 95% of Netlib" criterion is measured against, and it
-grades us against Netlib's own readme table. The second says how often the solver finishes
+The first grades us against the true optimum: T. Koch, *The final NETLIB-LP results*,
+Oper. Res. Lett. 32 (2004), computed every Netlib optimum in rational arithmetic, and
+`bench/runners/fetch_koch_exact.py` reads his values from perPlex's own published log (sha256
+pinned). The two it misses are `pilot87`, 1.14e-6 from the exact value (#548), and `pilot.ja`,
+reported `feasible` (below). The count is the same CSV regraded, by
+`bench/runners/make_benchmarks_doc.py`, not a new run.
+
+The second is the number Phase 6's ">= 95% of Netlib" criterion is measured against, and it
+grades us against Netlib's own readme table. The third says how often the solver finishes
 with an answer that checks out. The gap between them is ten instances: the eight where the
 readme is the one that is off (below), and `pilot.ja` and `pilot.we`, whose table values the
 same readme contradicts with CPLEX's (ours agree with CPLEX's to 3.1e-12 and 1.7e-11);

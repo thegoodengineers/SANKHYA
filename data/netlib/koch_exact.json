@@ -1,0 +1,291 @@
+{
+ "citation": "T. Koch, \"The final NETLIB-LP results\", Operations Research Letters 32(2), 138-142, 2004 (ZIB-Report 03-05, 2003)",
+ "original_url": "http://www.zib.de/koch/perplex/data/netlib/txt/perplex.log",
+ "archived_url": "https://web.archive.org/web/20051220030941id_/http://www.zib.de/koch/perplex/data/netlib/txt/perplex.log",
+ "log_sha256": "06af2176cd5faedd399b7e220c67dd5a593084825a65757a7bd4d29fd93682a2",
+ "note": "exact optimal objective per instance, as perPlex printed it after its rational feasibility and optimality check; the objective-row constant is excluded, as in Netlib's readme table",
+ "instances": {
+  "25fv47": {
+   "exact_objective": "0.55018458882867447945812325883916e4"
+  },
+  "80bau3b": {
+   "exact_objective": "0.98722419240909025757911711738799e6"
+  },
+  "adlittle": {
+   "exact_objective": "0.22549496316238038228101176621492e6"
+  },
+  "afiro": {
+   "exact_objective": "-0.46475314285714285714285714285714e3"
+  },
+  "agg": {
+   "exact_objective": "-0.35991767286576506712640824319636e8"
+  },
+  "agg2": {
+   "exact_objective": "-0.20239252355977109024317661926133e8"
+  },
+  "agg3": {
+   "exact_objective": "0.10312115935089225579061058796215e8"
+  },
+  "bandm": {
+   "exact_objective": "-0.15862801845012064052174123768736e3"
+  },
+  "beaconfd": {
+   "exact_objective": "0.335924858072e5"
+  },
+  "blend": {
+   "exact_objective": "-0.30812149845828220173774356124984e2"
+  },
+  "bnl1": {
+   "exact_objective": "0.19776295615228892439564398331821e4"
+  },
+  "bnl2": {
+   "exact_objective": "0.1811236540358545170448413697691e4"
+  },
+  "boeing1": {
+   "exact_objective": "-0.3352135675071266218429697314682e3"
+  },
+  "boeing2": {
+   "exact_objective": "-0.31501872801520287870462195913263e3"
+  },
+  "bore3d": {
+   "exact_objective": "0.13730803942084927215581987251301e4"
+  },
+  "brandy": {
+   "exact_objective": "0.15185098964881283835426751550618e4"
+  },
+  "capri": {
+   "exact_objective": "0.26900129137681610087717280693754e4"
+  },
+  "cycle": {
+   "exact_objective": "-0.52263930248941017172447233836217e1"
+  },
+  "czprob": {
+   "exact_objective": "0.21851966988565774858951155947191e7"
+  },
+  "d2q06c": {
+   "exact_objective": "0.12278421081418945895739128812392e6"
+  },
+  "d6cube": {
+   "exact_objective": "0.31549166666666666666666666666667e3"
+  },
+  "degen2": {
+   "exact_objective": "-0.1435178e4"
+  },
+  "degen3": {
+   "exact_objective": "-0.987294e3"
+  },
+  "dfl001": {
+   "exact_objective": "0.11266396046671392202377652175477e8"
+  },
+  "e226": {
+   "exact_objective": "-0.18751929066370549102605687681285e2"
+  },
+  "etamacro": {
+   "exact_objective": "-0.7557152333749133350792583667773e3"
+  },
+  "fffff800": {
+   "exact_objective": "0.555679564817496376532864378969e6"
+  },
+  "finnis": {
+   "exact_objective": "0.17279106559561159432297900375543e6"
+  },
+  "fit1d": {
+   "exact_objective": "-0.91463780924209269467749025024617e4"
+  },
+  "fit1p": {
+   "exact_objective": "0.91463780924209269467749025024617e4"
+  },
+  "fit2d": {
+   "exact_objective": "-0.68464293293832069575943518435837e5"
+  },
+  "fit2p": {
+   "exact_objective": "0.68464293293832069575943518435837e5"
+  },
+  "forplan": {
+   "exact_objective": "-0.66421896127220457481235119701692e3"
+  },
+  "ganges": {
+   "exact_objective": "-0.10958573612927811623444890424357e6"
+  },
+  "gfrd-pnc": {
+   "exact_objective": "0.69022359995488088295415596232193e7"
+  },
+  "greenbea": {
+   "exact_objective": "-0.72555248129845987457557870574845e8"
+  },
+  "greenbeb": {
+   "exact_objective": "-0.43022602612065867539213672544432e7"
+  },
+  "grow15": {
+   "exact_objective": "-0.10687094129357533671604040930313e9"
+  },
+  "grow22": {
+   "exact_objective": "-0.16083433648256296718456039982613e9"
+  },
+  "grow7": {
+   "exact_objective": "-0.47787811814711502616766956242865e8"
+  },
+  "israel": {
+   "exact_objective": "-0.89664482186304572966200464196045e6"
+  },
+  "kb2": {
+   "exact_objective": "-0.17499001299062057129526866493726e4"
+  },
+  "lotfi": {
+   "exact_objective": "-0.2526470606188e2"
+  },
+  "maros": {
+   "exact_objective": "-0.58063743701125895401208534974734e5"
+  },
+  "maros-r7": {
+   "exact_objective": "0.14971851664796437907337543903552e7"
+  },
+  "modszk1": {
+   "exact_objective": "0.32061972906431580494333823530763e3"
+  },
+  "nesm": {
+   "exact_objective": "0.14076036487562728337980641375835e8"
+  },
+  "perold": {
+   "exact_objective": "-0.93807552782351606734833270386511e4"
+  },
+  "pilot": {
+   "exact_objective": "-0.55748972928406818073034256636894e3"
+  },
+  "pilot.ja": {
+   "exact_objective": "-0.61131364655813432748848620538024e4"
+  },
+  "pilot.we": {
+   "exact_objective": "-0.27201075328449639629439185412556e7"
+  },
+  "pilot4": {
+   "exact_objective": "-0.25811392588838886745830997266797e4"
+  },
+  "pilot87": {
+   "exact_objective": "0.3017103473331105277216600201995e3"
+  },
+  "pilotnov": {
+   "exact_objective": "-0.44972761882188711430996211783943e4"
+  },
+  "recipe": {
+   "exact_objective": "-0.266616e3"
+  },
+  "sc105": {
+   "exact_objective": "-0.52202061211707248062628010857689e2"
+  },
+  "sc205": {
+   "exact_objective": "-0.52202061211707248062628010857689e2"
+  },
+  "sc50a": {
+   "exact_objective": "-0.64575077058564509026860413914575e2"
+  },
+  "sc50b": {
+   "exact_objective": "-0.7e2"
+  },
+  "scagr25": {
+   "exact_objective": "-0.14753433060768523167790925075974e8"
+  },
+  "scagr7": {
+   "exact_objective": "-0.2331389824330984e7"
+  },
+  "scfxm1": {
+   "exact_objective": "0.18416759028348943683579089143655e5"
+  },
+  "scfxm2": {
+   "exact_objective": "0.36660261564998812956939504848248e5"
+  },
+  "scfxm3": {
+   "exact_objective": "0.54901254549751454623888724925519e5"
+  },
+  "scorpion": {
+   "exact_objective": "0.18781248227381066296479411763586e4"
+  },
+  "scrs8": {
+   "exact_objective": "0.90429695380079143579923107948844e3"
+  },
+  "scsd1": {
+   "exact_objective": "0.86666666743333647292533502995263e1"
+  },
+  "scsd6": {
+   "exact_objective": "0.50500000077144345289985489081569e2"
+  },
+  "scsd8": {
+   "exact_objective": "0.90499999992546440094445846417654e3"
+  },
+  "sctap1": {
+   "exact_objective": "0.141225e4"
+  },
+  "sctap2": {
+   "exact_objective": "0.17248071428571428571428571428571e4"
+  },
+  "sctap3": {
+   "exact_objective": "0.1424e4"
+  },
+  "seba": {
+   "exact_objective": "0.157116e5"
+  },
+  "share1b": {
+   "exact_objective": "-0.7658931857918568112797274346007e5"
+  },
+  "share2b": {
+   "exact_objective": "-0.41573224074141948654519910873841e3"
+  },
+  "shell": {
+   "exact_objective": "0.1208825346e10"
+  },
+  "ship04l": {
+   "exact_objective": "0.17933245379703557625562556255626e7"
+  },
+  "ship04s": {
+   "exact_objective": "0.17987147004453921719954082726049e7"
+  },
+  "ship08l": {
+   "exact_objective": "0.19090552113891315179803819998425e7"
+  },
+  "ship08s": {
+   "exact_objective": "0.1920098210534619710172695474693e7"
+  },
+  "ship12l": {
+   "exact_objective": "0.1470187919329264822702175543886e7"
+  },
+  "ship12s": {
+   "exact_objective": "0.14892361344061291565686421605401e7"
+  },
+  "sierra": {
+   "exact_objective": "0.1539436218363193e8"
+  },
+  "stair": {
+   "exact_objective": "-0.25126695119296330352803637106304e3"
+  },
+  "standata": {
+   "exact_objective": "0.12576995e4"
+  },
+  "standmps": {
+   "exact_objective": "0.14060175e4"
+  },
+  "stocfor1": {
+   "exact_objective": "-0.41131976219436406065682760731514e5"
+  },
+  "stocfor2": {
+   "exact_objective": "-0.39024408537882029604587908772433e5"
+  },
+  "stocfor3": {
+   "exact_objective": "-0.39976783943649587403509204700686e5"
+  },
+  "truss": {
+   "exact_objective": "0.45881584718561673163624258476816e6"
+  },
+  "tuff": {
+   "exact_objective": "0.29214776509361284488226309994302e0"
+  },
+  "vtp.base": {
+   "exact_objective": "0.1298314624613613657395984384889e6"
+  },
+  "wood1p": {
+   "exact_objective": "0.14429024115734092400010936668043e1"
+  },
+  "woodw": {
+   "exact_objective": "0.1304476333084229269005552085566e1"
+  }
+ }
+}

@@ -39,6 +39,8 @@ Commit `2b4eb6b` · machine `Windows-AMD64` · generated 2026-09-09T03:41:33+00:
 
 **9 of 9 instances in this working set** matched their published optimum to a relative 1e-6 **and** passed independent verification by `tools/verify_solution.py`.
 
+The same run graded against the **exact** optimum, Koch's rational values (*The final NETLIB-LP results*, Oper. Res. Lett. 32, 2004; `data/netlib/koch_exact.json`): **9 of 9** within a relative 1e-6 **and** verified. Not within it: none.
+
 Coverage: this run used **9 of the 97 instances** Netlib publishes an optimal value for (set `small`, selected by `fetch_data.py --set small`). Phase 6's "full Netlib >= 95%" exit criterion is measured against the full set, not against this one.
 
 Every instance in this set passed.
@@ -68,6 +70,8 @@ Source CSV: `bench/results/netlib-medium-2b4eb6b.csv`
 Commit `2b4eb6b` · machine `Windows-AMD64` · generated 2026-09-09T03:36:04+00:00
 
 **48 of 50 instances in this working set** matched their published optimum to a relative 1e-6 **and** passed independent verification by `tools/verify_solution.py`.
+
+The same run graded against the **exact** optimum, Koch's rational values (*The final NETLIB-LP results*, Oper. Res. Lett. 32, 2004; `data/netlib/koch_exact.json`): **50 of 50** within a relative 1e-6 **and** verified. Not within it: none.
 
 Coverage: this run used **50 of the 97 instances** Netlib publishes an optimal value for (set `medium`, selected by `fetch_data.py --set medium`). Phase 6's "full Netlib >= 95%" exit criterion is measured against the full set, not against this one.
 
@@ -147,6 +151,8 @@ Source CSV: `bench/results/netlib-full-9094e1c.csv`
 Commit `9094e1c` · machine `Windows-AMD64` · generated 2026-09-29T12:26:26+00:00
 
 **82 of 92 instances in this working set** matched their published optimum to a relative 1e-6 **and** passed independent verification by `tools/verify_solution.py`.
+
+The same run graded against the **exact** optimum, Koch's rational values (*The final NETLIB-LP results*, Oper. Res. Lett. 32, 2004; `data/netlib/koch_exact.json`): **90 of 92** within a relative 1e-6 **and** verified. Not within it: `pilot.ja`, `pilot87`.
 
 Coverage: this run used **92 of the 97 instances** Netlib publishes an optimal value for (set `full`, selected by `fetch_data.py --set full`). Phase 6's "full Netlib >= 95%" exit criterion is measured against this set.
 

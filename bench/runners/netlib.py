@@ -88,6 +88,13 @@ CSV_COLUMNS = [
     # 1 when the only disagreement with the published value IS the objective-row constant,
     # which Netlib's table excludes and we include. See the comment at the comparison.
     "differs_by_objective_constant",
+    # Graded against the EXACT optimum as well as the readme (#747): Koch's rational values,
+    # data/netlib/koch_exact.json, fetched by fetch_koch_exact.py. The readme is wrong on
+    # eight instances, so the two grades differ exactly there. Blank when the file lacks
+    # the instance.
+    "exact_objective",
+    "exact_relative_gap",
+    "matches_exact",
     "wall_seconds",
     "solver_seconds",
     "iterations",
@@ -242,6 +249,9 @@ def main() -> int:
     reference_blob = json.loads(reference_path.read_text())
     reference = reference_blob["instances"]
     tier = reference_blob.get("instance_set", "")
+    # Koch's exact optima (#747), when fetched; the readme grade runs without them.
+    exact_path = DATA_DIR / "koch_exact.json"
+    exact = (json.loads(exact_path.read_text())["instances"] if exact_path.exists() else {})
 
     names = sorted(args.instances or reference)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -304,6 +314,17 @@ def main() -> int:
         # re-derivation. Either one alone can be satisfied by a solver that is wrong.
         passed = matches and (verified is not False)
 
+        # The exact grade (#747). Koch's values, like the readme's, exclude the objective-row
+        # constant, so the comparison is against our objective without it - the same units
+        # as the value, for every instance, rather than a special case for e226.
+        exact_text = exact.get(name, {}).get("exact_objective")
+        exact_value = None if exact_text is None else float(exact_text)
+        exact_gap = (None if ours is None or exact_value is None else
+                     abs((ours - offset) - exact_value) / max(1.0, abs(exact_value)))
+        matches_exact = bool(status == "optimal" and exact_gap is not None
+                             and exact_gap <= PASS_RELATIVE_TOLERANCE
+                             and verified is not False)
+
         rows.append({
             "instance": name,
             "instance_sha256": sha256_file(mps),
@@ -322,6 +343,9 @@ def main() -> int:
             "passed": int(passed),
             "objective_offset": repr(offset),
             "differs_by_objective_constant": int(explained_by_offset),
+            "exact_objective": "" if exact_text is None else exact_text,
+            "exact_relative_gap": "" if exact_gap is None else repr(exact_gap),
+            "matches_exact": "" if exact_value is None else int(matches_exact),
             "wall_seconds": round(blob.get("wall_seconds", 0.0), 6),
             "solver_seconds": blob.get("solver_seconds", ""),
             "iterations": blob.get("iterations", ""),
@@ -354,6 +378,13 @@ def main() -> int:
     print("-" * 104)
     print(f"{passes}/{total} matched the published optimum to a relative "
           f"{PASS_RELATIVE_TOLERANCE:g} AND passed independent verification")
+    graded = [row for row in rows if row["matches_exact"] != ""]
+    if graded:
+        # The second grade of the same run, against Koch's exact rational optima (#747).
+        exact_passes = sum(row["matches_exact"] for row in graded)
+        print(f"{exact_passes}/{len(graded)} within a relative {PASS_RELATIVE_TOLERANCE:g} of "
+              f"the EXACT optimum (Koch 2004, data/netlib/koch_exact.json) AND passed "
+              f"independent verification")
     offset_rows = [row["instance"] for row in rows
                    if row.get("differs_by_objective_constant")]
     if offset_rows:
