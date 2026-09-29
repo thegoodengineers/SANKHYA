@@ -66,6 +66,9 @@ def main() -> int:
           " ".join(n for n in odd if n not in table))
     check(table.get("qap15", {}).get("published_optimal") == 1040.994041,
           "and keep the published optimum")
+    shipped = [n for n in table if n not in fetch_data.NOT_SHIPPED]
+    check(len(shipped) == 92, "92 of them shipped as EMPS, the five named in NOT_SHIPPED out",
+          f"{len(shipped)}")
 
     print("netlib.org unreachable, --offline-fallback")
     code, text = run("--offline-fallback")

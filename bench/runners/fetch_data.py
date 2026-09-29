@@ -62,6 +62,12 @@ MEDIUM_MAX_ROWS = 500
 # Counts as of the current Netlib readme: small 9, medium 50, full 89.
 SET_NAMES = ("small", "medium", "full")
 
+# Listed in the summary table with a published optimum, but not shipped in lp/data as an
+# EMPS file, so no set can include them. Measured on 2026-09-29: qap8, qap12 and qap15 are
+# 404 at NETLIB_BASE; stocfor3 and truss are there as input to the generators the readme's
+# NOTES describe, and emps rejects both ("Check sum"). qap15 is run with the Mittelmann set.
+NOT_SHIPPED = {"qap8", "qap12", "qap15", "stocfor3", "truss"}
+
 DEFAULT_SET = [
     "afiro",
     "sc50a",
@@ -430,10 +436,11 @@ def main() -> int:
     else:
         chosen_set = args.instance_set or ("full" if args.all else "small")
         if chosen_set == "full":
-            wanted = sorted(published)
+            wanted = sorted(name for name in published if name not in NOT_SHIPPED)
         elif chosen_set == "medium":
             wanted = sorted(name for name, entry in published.items()
-                            if entry["published_rows"] <= MEDIUM_MAX_ROWS)
+                            if entry["published_rows"] <= MEDIUM_MAX_ROWS
+                            and name not in NOT_SHIPPED)
         else:
             wanted = list(DEFAULT_SET)
 
