@@ -96,8 +96,12 @@ DEFAULT_SET = [
 # The trailing footnote group is not decoration: DFL001 is published as "1.12664E+07 **",
 # an APPROXIMATE optimum. A harness that silently drops the marker would later report a
 # relative gap against a number Netlib itself does not claim to be exact.
+# Two more shapes the table carries, each of which this pattern once dropped without a word,
+# leaving "full" at 89 of the 98 feasible LPs: a dot in the name (PILOT.JA, PILOT.WE,
+# VTP.BASE) and "(see NOTES)" in place of the byte count (QAP8, QAP12, QAP15, STOCFOR3,
+# TRUSS). STANDGUB still does not match, and should not: it publishes no optimum.
 SUMMARY_ROW = re.compile(
-    r"^([A-Z0-9_\-]+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([BR ]*?)\s*"
+    r"^([A-Z0-9_.\-]+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+|\(see NOTES\))\s+([BR ]*?)\s*"
     r"(-?\d+\.\d+E[+-]\d+)\s*(\**)\s*$"
 )
 
@@ -162,7 +166,7 @@ def parse_summary_table(readme: str) -> dict[str, dict]:
             "published_rows": int(rows),
             "published_cols": int(cols),
             "published_nonzeros": int(nonzeros),
-            "published_bytes": int(size),
+            "published_bytes": int(size) if size.isdigit() else None,
             "has_bounds": "B" in flags,
             "has_ranges": "R" in flags,
             "published_optimal": float(optimal),
