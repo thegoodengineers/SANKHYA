@@ -67,8 +67,12 @@ def main() -> int:
     check(table.get("qap15", {}).get("published_optimal") == 1040.994041,
           "and keep the published optimum")
     shipped = [n for n in table if n not in fetch_data.NOT_SHIPPED]
-    check(len(shipped) == 92, "92 of them shipped as EMPS, the five named in NOT_SHIPPED out",
+    check(len(shipped) == 94, "94 of them runnable, the three qap models in NOT_SHIPPED out",
           f"{len(shipped)}")
+    for name, digest in fetch_data.GENERATED.items():
+        path = fetch_data.DATA_DIR / f"{name}.mps"
+        check(path.exists() and fetch_data.sha256(path.read_bytes()) == digest,
+              f"the generated {name}.mps is tracked with its pinned sha256")
 
     print("netlib.org unreachable, --offline-fallback")
     code, text = run("--offline-fallback")
