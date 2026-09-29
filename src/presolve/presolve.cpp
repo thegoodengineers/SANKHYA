@@ -1112,6 +1112,16 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
                 infeasible(fmt::format(
                     "row {} implies {} {:.6g} for column {}, past its other bound {:.6g}", i,
                     upper ? "x <=" : "x >=", v, j, other));
+                // #559: `v` came from row i's own bound (row_lower when it fed rest_max, row_
+                // upper when it fed rest_min - the two cases the a>0/a<0 branches above pick
+                // between) combined with every OTHER live column at the extreme activity
+                // pushed it to. That is exactly the whole-row aggregate activity_certificate
+                // already builds for the "infeasible by activity" checks below: sign +1 is
+                // the bounds.upper-vs-row_lower aggregate, sign -1 is bounds.lower-vs-row_
+                // upper. `implied_lower` (upper == false) took the sign-+1 aggregate when
+                // a > 0 and the sign-1 one when a < 0; `implied_upper` is the opposite of
+                // each. One certificate, reused rather than re-derived.
+                activity_certificate(i, (!upper) == (a > 0.0) ? 1.0 : -1.0);
                 return;
               }
               v = other;

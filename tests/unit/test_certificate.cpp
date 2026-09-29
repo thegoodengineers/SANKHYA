@@ -279,6 +279,24 @@ TEST(Certificate, AnInfeasibilityPresolveProvesWithoutAProofIsRetriedForOne) {
       << solution.message;
 }
 
+TEST(Certificate, ABoundImpliedPastItsOppositeBoundCertifiesTheContradiction) {
+  // #559: bound propagation (src/presolve/presolve.cpp, the `write` lambda in the row loop)
+  // can derive a tighter bound for a column from a row's activity range and find that it
+  // crosses the column's OTHER, already-known bound - a proof of infeasibility all by
+  // itself. Before this fix that path called infeasible() and returned with no certificate
+  // kept at all: x + y <= 10 with y already known to be at least 20 implies x <= -10, past
+  // x's own lower bound of 0. This is the "past its other bound" branch specifically, not
+  // the whole-row activity check a few lines later (both would eventually see this
+  // contradiction, but the propagation loop runs first and used to give up silently).
+  const Model model =
+      make_lp({{1.0, 1.0}}, {-kInfinity}, {10.0}, {0.0, 0.0}, {0.0, 20.0}, {100.0, 100.0});
+  const Solution solution = solve(model, quiet(/*presolve=*/true));
+  ASSERT_EQ(solution.status, SolveStatus::kInfeasible) << solution.message;
+  ASSERT_FALSE(solution.farkas_dual.empty()) << solution.message;
+  std::string why;
+  EXPECT_TRUE(farkas_proves_infeasible(model, solution.farkas_dual, &why)) << why;
+}
+
 TEST(Certificate, ATinyFarkasVectorOnAFeasibleModelIsNotAProof) {
   // Review of #652. x >= 1e6 with x in [0, 2e6] is feasible. The multiplier 1e-12 aggregates
   // to d = 1e-12, under the absolute zero floor, so the aggregate read as 0 >= 1e-6 and was
