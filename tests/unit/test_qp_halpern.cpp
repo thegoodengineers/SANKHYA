@@ -37,6 +37,8 @@ Options quiet(double tolerance = 1e-9) {
   options.set_bool("log_to_console", false);
   options.set_double("qp_tolerance", tolerance);
   options.set_int("iteration_limit", 400000);
+  // Everything here tunes Condat-Vu, which is no longer the default QP engine through solve().
+  options.set_string("qp_algorithm", "condat-vu");
   return options;
 }
 
