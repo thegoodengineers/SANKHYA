@@ -73,6 +73,7 @@ add_executable(sankhya_tests
   unit/test_iis.cpp
   unit/test_pdhg.cpp
   unit/test_status_guard_duality.cpp
+  unit/test_status_guard_complementarity.cpp
   unit/test_banner.cpp
   unit/test_memory.cpp
   unit/test_pdhg_cuda_regression.cpp

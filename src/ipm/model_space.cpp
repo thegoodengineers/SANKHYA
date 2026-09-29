@@ -15,11 +15,13 @@
 namespace sankhya::ipm {
 namespace {
 
-double nearest_bound_distance(double value, double lo, double hi) {
-  double distance = kInfinity;
-  if (is_finite_bound(lo)) distance = std::min(distance, std::fabs(value - lo));
-  if (is_finite_bound(hi)) distance = std::min(distance, std::fabs(value - hi));
-  return distance;
+/// Signed, as the guard's and the verifier's: negative past a bound, where the excess is
+/// primal infeasibility and there is no complementarity product.
+double nearer_slack(double value, double lo, double hi) {
+  double slack = kInfinity;
+  if (is_finite_bound(lo)) slack = std::min(slack, value - lo);
+  if (is_finite_bound(hi)) slack = std::min(slack, hi - value);
+  return slack;
 }
 
 }  // namespace
@@ -102,9 +104,9 @@ ModelSpaceMeasure measure_in_model_space(const ScaledIterate& it) {
     if (d > 0.0 && !is_finite_bound(lower[u])) worst = std::max(worst, d / scale);
     if (d < 0.0 && !is_finite_bound(upper[u])) worst = std::max(worst, -d / scale);
     out.dual_residual = std::max(out.dual_residual, worst);
-    const double distance = nearest_bound_distance(x[u], lower[u], upper[u]);
-    if (d_hat != 0.0 && is_finite_bound(distance)) {
-      const double product = std::fabs(d_hat) * distance;
+    const double slack = nearer_slack(x[u], lower[u], upper[u]);
+    if (d_hat != 0.0 && is_finite_bound(slack) && slack > 0.0) {
+      const double product = std::fabs(d_hat) * slack;
       out.complementarity = std::max(out.complementarity, product);
       worst = std::max(
           worst, product / std::max(1.0, scale * std::max(1.0, std::fabs(x[u] * factor))));
@@ -130,9 +132,9 @@ ModelSpaceMeasure measure_in_model_space(const ScaledIterate& it) {
     if (price > 0.0 && !is_finite_bound(lower[k])) worst = price / price_scale;
     if (price < 0.0 && !is_finite_bound(upper[k])) worst = -price / price_scale;
     out.dual_residual = std::max(out.dual_residual, worst);
-    const double distance = nearest_bound_distance(activity[u], lower[k], upper[k]);
-    if (y[u] != 0.0 && is_finite_bound(distance)) {
-      const double product = std::fabs(y[u]) * distance;
+    const double slack = nearer_slack(activity[u], lower[k], upper[k]);
+    if (y[u] != 0.0 && is_finite_bound(slack) && slack > 0.0) {
+      const double product = std::fabs(y[u]) * slack;
       out.complementarity = std::max(out.complementarity, product);
       worst = std::max(worst, product / std::max(1.0, price_scale * row_scale[u]));
     }

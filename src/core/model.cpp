@@ -356,15 +356,22 @@ void Solution::recompute_quality(const Model& model) {
     // from terms of order 1e+02..1e+04, times an interior value of a few hundred: greenbea
     // 1.2e-7, pilot 3.4e-7, both downgraded to `feasible` on points the verifier accepts.
     // A residue that is zero at the precision of its terms must count as zero here too.
-    const auto nearest_bound_distance = [](double value, double lo, double hi) {
-      double distance = kInfinity;
-      if (is_finite_bound(lo)) distance = std::min(distance, std::fabs(value - lo));
-      if (is_finite_bound(hi)) distance = std::min(distance, std::fabs(value - hi));
-      return distance;
+    //
+    // THE SLACK IS SIGNED, as the verifier's is: min(value - lower, upper - value). A value
+    // past its bound has a negative slack and no complementarity product; how far past is
+    // primal infeasibility, measured above against the primal tolerance. The distance
+    // |value - bound| charged it twice: on adlittle a row 2.7e-9 over its bound of 0, priced
+    // at 765, read as a product of 2.1e-6 and downgraded an optimal PDHG point that
+    // tools/verify_solution.py and kkt_check.cpp both accept.
+    const auto nearer_slack = [](double value, double lo, double hi) {
+      double slack = kInfinity;
+      if (is_finite_bound(lo)) slack = std::min(slack, value - lo);
+      if (is_finite_bound(hi)) slack = std::min(slack, hi - value);
+      return slack;
     };
     const auto record_complementarity = [&](double multiplier, double slack,
                                             double multiplier_scale, double primal_scale) {
-      if (multiplier == 0.0 || !is_finite_bound(slack)) return;
+      if (multiplier == 0.0 || !is_finite_bound(slack) || slack <= 0.0) return;
       const double product = multiplier * slack;
       complementarity_violation = std::max(complementarity_violation, product);
       dual_infeasibility_scaled = std::max(
@@ -412,7 +419,7 @@ void Solution::recompute_quality(const Model& model) {
       // Sign: a positive reduced cost prices the lower bound, a negative one the upper.
       if (d > 0.0 && !is_finite_bound(lo)) record_dual(d, scale);
       if (d < 0.0 && !is_finite_bound(hi)) record_dual(-d, scale);
-      record_complementarity(std::fabs(d), nearest_bound_distance(x, lo, hi), scale,
+      record_complementarity(std::fabs(d), nearer_slack(x, lo, hi), scale,
                              std::max(1.0, std::fabs(x)));
     }
 
@@ -432,7 +439,7 @@ void Solution::recompute_quality(const Model& model) {
       const double price_scale = std::max(1.0, dual_norm);
       if (y > 0.0 && !is_finite_bound(lo)) record_dual(y, price_scale);
       if (y < 0.0 && !is_finite_bound(hi)) record_dual(-y, price_scale);
-      record_complementarity(std::fabs(y), nearest_bound_distance(a, lo, hi), price_scale,
+      record_complementarity(std::fabs(y), nearer_slack(a, lo, hi), price_scale,
                              row_scale[u]);
     }
   }

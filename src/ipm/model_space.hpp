@@ -52,8 +52,9 @@ struct ModelSpaceMeasure {
   /// model units - only their denominators move - and the loop drives them down itself; the
   /// residual is what the scaling and the loop's global norms can hide (#582).
   double dual_residual = 0.0;
-  /// complementarity_violation: the largest absolute |multiplier| * distance to the nearest
-  /// bound, which the guard compares with tol::kComplementarity on its own.
+  /// complementarity_violation: the largest absolute |multiplier| * slack to the nearer
+  /// bound, the slack signed as the verifier's is (none past a bound), which the guard
+  /// compares with tol::kComplementarity on its own.
   double complementarity = 0.0;
   /// Per row, the relative primal violation behind `primal` (for the worst-rows table).
   std::vector<double> row_violation;

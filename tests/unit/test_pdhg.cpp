@@ -344,7 +344,8 @@ TEST(Pdhg, StopAtRequestGivesTheCheapAnswerAndNeverCallsItOptimal) {
   // say so. No hand-built model in this file separates the two measures - on every one the
   // relative request and the absolute standard flip on the same 40-iteration check - so this
   // uses a committed Netlib instance, the way test_ipm.cpp does: adlittle at a 1e-4 request
-  // meets it at 132,520 iterations and the standard at 192,080.
+  // meets it at 183,920 iterations and the standard at 194,440 with two sparse products per
+  // iteration, the CPU default since #479 (132,520 and 192,080 with three).
   //
   // Three things are pinned. The switch stops the loop earlier than the default on the same
   // model. The point it stops on is reported `feasible`, never `optimal`, unless it happens
@@ -356,7 +357,7 @@ TEST(Pdhg, StopAtRequestGivesTheCheapAnswerAndNeverCallsItOptimal) {
   ASSERT_TRUE(read.ok) << path << ": " << read.error
                        << " (the instance is committed; a test that skipped here would pass "
                           "without running)";
-  // adlittle's honest run takes 192,080 iterations; the helper's 200,000 limit is 4% away,
+  // adlittle's honest run takes 194,440 iterations; the helper's 200,000 limit is 3% away,
   // which is a margin a future change could cross without any error of its own.
   Options honest_options = pdhg_options(1e-4);
   honest_options.set_int("iteration_limit", 1000000);

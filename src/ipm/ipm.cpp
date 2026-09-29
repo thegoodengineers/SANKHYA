@@ -289,7 +289,7 @@ class InteriorPoint {
   /// divides it by 1 + ||c||, not by each column's own terms: on finnis a scaled 7.8e-9 is
   /// 7.0e-6 in the model, on a column whose Ruiz factor is 1.
   double model_dual_infeasibility_ = 0.0;
-  /// The guard's complementarity_violation, the largest absolute |multiplier| * distance.
+  /// The guard's complementarity_violation, the largest absolute |multiplier| * slack.
   /// Logged, not required: a product is the same number in both spaces, and the guard
   /// already downgrades an optimal claim that fails it (the claim is then not a proof, but
   /// it is also not a disagreement between two measurements, which is what #582 is).
