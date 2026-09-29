@@ -1111,16 +1111,29 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       solution.solve_seconds = timer.elapsed_seconds();
       return solution;
     }
-    // qp_algorithm=ipm (#490) runs the proximal interior point in place of the Condat-Vu
-    // engine, through the same presolve, status guard and KKT gate; it is off by default.
-    const bool want_qp_ipm = options.get_string("qp_algorithm") == "ipm";
+    // qp_algorithm=ipm (#490), the default since the A/B on Maros-Meszaros at 493fa1d, 60 s
+    // per instance (bench/results/maros-meszaros-{ipm,cv}-60s-493fa1d.csv): the proximal
+    // interior point matched 105 of 138 references against Condat-Vu's 57, with no optimal
+    // the verifier rejects in either. It runs through the same presolve, status guard and
+    // KKT gate. The one instance Condat-Vu won, cvxqp3m, was an interior-point iterate that
+    // stopped being finite, so a numerical_error falls back to Condat-Vu on the time left.
+    // qp_gpu asks for the device QP engine, and only Condat-Vu has one, so it keeps that.
+    const bool want_qp_ipm =
+        options.get_string("qp_algorithm") == "ipm" && !options.get_bool("qp_gpu");
     *engine_ran = want_qp_ipm ? "qp-ipm" : "convex-qp";
     solution = with_presolve(
         [&](const Model& target) {
-          return want_qp_ipm ? qp::solve_convex_qp_ipm(
-                                   target, with_the_time_that_is_left(options), logger, control)
-                             : qp::solve_convex_qp(target, with_the_time_that_is_left(options),
-                                                   logger, control);
+          if (!want_qp_ipm) {
+            return qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger,
+                                       control);
+          }
+          Solution ipm = qp::solve_convex_qp_ipm(target, with_the_time_that_is_left(options),
+                                                 logger, control);
+          if (ipm.status != SolveStatus::kNumericalError) return ipm;
+          logger.warning("QP interior point: {}; falling back to Condat-Vu", ipm.message);
+          *engine_ran = "qp-ipm+convex-qp";
+          return qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger,
+                                     control);
         },
         &presolve_proved_it);
     if (presolve_proved_it) {
