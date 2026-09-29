@@ -144,14 +144,17 @@ TEST(QpIpm, TheNonConvexRefusalIsUnchanged) {
   EXPECT_NE(ipm.message.find("not convex"), std::string::npos) << ipm.message;
 }
 
-TEST(QpIpm, SolveRunsItOnlyWhenAskedAndThroughTheSameGate) {
+TEST(QpIpm, SolveRunsItByDefaultAndThroughTheSameGate) {
   const Model model = inequality_qp();
   Options options = quiet();
-  EXPECT_EQ(options.get_string("qp_algorithm"), "condat-vu");  // default off
-  const Solution by_default = solve(model, options);
-  EXPECT_EQ(by_default.algorithm, "qp-condat-vu");
-
+  EXPECT_EQ(options.get_string("qp_algorithm"), "ipm");  // the default since 493fa1d's A/B
+  options.set_string("qp_algorithm", "condat-vu");
+  EXPECT_EQ(solve(model, options).algorithm, "qp-condat-vu");  // still selectable
+  options.set_bool("qp_gpu", true);
   options.set_string("qp_algorithm", "ipm");
+  EXPECT_NE(solve(model, options).algorithm, "qp-ipm") << "qp_gpu keeps the device engine";
+  options.set_bool("qp_gpu", false);
+
   const Solution s = solve(model, options);
   ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
   EXPECT_EQ(s.algorithm, "qp-ipm");

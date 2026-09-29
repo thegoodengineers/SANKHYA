@@ -793,9 +793,11 @@ cat <<'GAPS' | fill_gaps
                         stays the dual simplex (exact, gives a basis); restarted PDHG is the
                         first-order one.
                         QP: a proximal interior point on the quasi-definite augmented system
-                        (#614, --option qp_algorithm=ipm) is on main and OFF by default. It
-                        has no committed CSV. The Maros-Meszaros CSV that exists measures the
-                        default first-order QP engine, and it is weak:
+                        (#614) is the default QP engine since its A/B on Maros-Meszaros at
+                        493fa1d (105 of 138 matched against the first-order engine's 57,
+                        60 s each; maros-meszaros-{ipm,cv}-60s-493fa1d.csv). The first-order
+                        engine stays selectable, --option qp_algorithm=condat-vu. The newest
+                        default-named Maros-Meszaros CSV reads:
                             @MM@
                             (@MM_CSV@)
     Engine race         --option engine_race=true (#563) runs the dual simplex, the interior

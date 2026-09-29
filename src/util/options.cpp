@@ -1687,16 +1687,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  1e-14,
                  0.1,
                  {}});
-    s.push_back({"qp_algorithm",
-                 OptionType::String,
-                 std::string("condat-vu"),
-                 "Convex QP engine: condat-vu (default; the first-order primal-dual splitting "
-                 "of src/qp/qp_condat_vu.cpp) or ipm (#490: a proximal interior point, "
-                 "Mehrotra predictor-corrector on the regularized quasi-definite augmented "
-                 "system with the sparse LDL^T; off by default until an A/B on main).",
-                 0.0,
-                 0.0,
-                 {"condat-vu", "ipm"}});
+    s.push_back(
+        {"qp_algorithm",
+         OptionType::String,
+         std::string("ipm"),
+         "Convex QP engine: ipm (default; #490, a proximal interior point, Mehrotra "
+         "predictor-corrector on the regularized quasi-definite augmented system with "
+         "the sparse LDL^T, falling back to condat-vu on a numerical error; 105 of 138 "
+         "Maros-Meszaros references matched against condat-vu's 57 at 493fa1d) or "
+         "condat-vu (the first-order primal-dual splitting of src/qp/qp_condat_vu.cpp).",
+         0.0,
+         0.0,
+         {"condat-vu", "ipm"}});
     s.push_back({"qp_ipm_tolerance",
                  OptionType::Double,
                  1e-9,

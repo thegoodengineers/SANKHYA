@@ -1022,7 +1022,7 @@ TEST(MpsReader, AQpsFileSolvesThroughTheDispatcher) {
   const Solution solution = solve(model, options);
 
   ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
-  EXPECT_EQ(solution.algorithm, "qp-condat-vu");
+  EXPECT_EQ(solution.algorithm, "qp-ipm");
   EXPECT_NEAR(solution.col_value[0], 1.0, 1e-5);
   EXPECT_NEAR(solution.col_value[1], 2.0, 1e-5);
   EXPECT_NEAR(solution.objective, -9.0, 1e-5);

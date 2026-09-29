@@ -112,7 +112,7 @@ TEST(Miqp, TheRelaxationIsGenuinelyDifferentFromTheIntegerAnswer) {
 
   const Solution solution = solve(relaxed, options);
   ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
-  EXPECT_EQ(solution.algorithm, "qp-condat-vu") << "this one is a pure QP, not a search";
+  EXPECT_EQ(solution.algorithm, "qp-ipm") << "this one is a pure QP, not a search";
   EXPECT_NEAR(solution.objective, -9.3125, 1e-4);
 }
 
