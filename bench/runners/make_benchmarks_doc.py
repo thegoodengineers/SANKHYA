@@ -2928,8 +2928,10 @@ is a harder library: MIPLIB instances are chosen to be difficult for mature solv
 
 The 138 convex QPs of Maros and Meszaros, *A repository of convex quadratic programming
 problems*, Optimization Methods and Software 11-12 (1999): the set every convex QP paper
-reports. Solved by the default QP engine (Condat-Vu, `src/qp/`) and judged the way the
-published QP benchmark judges it, on primal residual, dual residual and duality gap at 1e-6
+reports. Solved by whichever QP engine was the default at the run's commit (the CSV's
+`algorithm` column names it per instance: the proximal interior point `qp-ipm` since #740,
+Condat-Vu `qp-condat-vu` before it and as the interior point's fallback on a numerical
+error) and judged the way the published QP benchmark judges it, on primal residual, dual residual and duality gap at 1e-6
 and at 1e-9, as well as against the published objective and by the independent verifier.
 
 {maros_meszaros_doc.section(maros_meszaros_csv)}
