@@ -290,7 +290,12 @@ TEST(Certificate, ABoundImpliedPastItsOppositeBoundCertifiesTheContradiction) {
   // contradiction, but the propagation loop runs first and used to give up silently).
   const Model model =
       make_lp({{1.0, 1.0}}, {-kInfinity}, {10.0}, {0.0, 0.0}, {0.0, 20.0}, {100.0, 100.0});
-  const Solution solution = solve(model, quiet(/*presolve=*/true));
+  // The branch runs only under bound propagation, which is off by default; without this
+  // option the whole-row check below it proves the same thing and the test would pass on
+  // the unfixed code.
+  Options options = quiet(/*presolve=*/true);
+  options.set_bool("presolve_bound_propagation", true);
+  const Solution solution = solve(model, options);
   ASSERT_EQ(solution.status, SolveStatus::kInfeasible) << solution.message;
   ASSERT_FALSE(solution.farkas_dual.empty()) << solution.message;
   std::string why;
