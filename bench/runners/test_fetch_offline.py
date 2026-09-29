@@ -57,6 +57,16 @@ def main() -> int:
     manifest = json.loads((fetch_data.DATA_DIR / "reference.json").read_text())
     before = snapshot()
 
+    print("the published summary table, read from the tracked readme")
+    table = fetch_data.parse_summary_table(
+        (fetch_data.DATA_DIR / "readme").read_text(encoding="latin-1"))
+    check(len(table) == 97, "97 of the 98 feasible LPs, all but STANDGUB", f"read {len(table)}")
+    odd = ["pilot.ja", "pilot.we", "vtp.base", "qap8", "qap12", "qap15", "stocfor3", "truss"]
+    check(all(n in table for n in odd), "a dotted name and a '(see NOTES)' size both parse",
+          " ".join(n for n in odd if n not in table))
+    check(table.get("qap15", {}).get("published_optimal") == 1040.994041,
+          "and keep the published optimum")
+
     print("netlib.org unreachable, --offline-fallback")
     code, text = run("--offline-fallback")
     check(code == 0, "the tracked copies are used and the fetch succeeds", text.strip()[-160:])
