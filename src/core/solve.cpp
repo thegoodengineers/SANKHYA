@@ -58,6 +58,7 @@
 #include <fmt/format.h>
 
 #include "core/deterministic_mode.hpp"
+#include "core/elastic_certificate.hpp"
 #include "core/engine_race.hpp"
 #include "core/engine_selection.hpp"
 #include "core/iis.hpp"
@@ -958,6 +959,42 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       retry.message = retry.message.empty() ? std::string(note) : retry.message + "; " + note;
       solution = std::move(retry);
     };
+    // #559, the last resort after the retry: the row duals of the elastic LP (every finite
+    // row side given a slack, the total slack minimised) are a Farkas certificate whenever
+    // that LP's optimum is positive, and that LP is feasible by construction, so it does not
+    // fail where the original's phase 1 did (pang, ceria3d). The vector is adopted only when
+    // farkas_proves_infeasible accepts it, and the verdict itself is never touched.
+    const auto certify_by_elastic = [&] {
+      if (solution.status != SolveStatus::kInfeasible || !solution.farkas_dual.empty() ||
+          !options.get_bool("certificate_elastic") || model.has_integrality()) {
+        return;
+      }
+      double seconds = 60.0;
+      if (limits.has_time_limit()) {
+        seconds = std::min(seconds, limits.remaining_seconds(timer.elapsed_seconds()));
+      }
+      std::vector<double> y = detail::farkas_from_elastic(model, options, seconds);
+      if (y.empty()) {
+        logger.info("Elastic certificate (#559): the elastic LP gave no certificate");
+        return;
+      }
+      std::string why;
+      if (!farkas_proves_infeasible(model, y, &why)) {
+        for (double& value : y) value = -value;
+        if (!farkas_proves_infeasible(model, y, &why)) {
+          logger.info("Elastic certificate (#559): rejected by the check: {}", why);
+          return;
+        }
+      }
+      solution.farkas_dual = std::move(y);
+      constexpr std::string_view kNone =
+          "; no machine-checkable certificate accompanies this verdict";
+      const auto at = solution.message.find(kNone);
+      if (at != std::string::npos) solution.message.erase(at, kNone.size());
+      solution.message +=
+          fmt::format("; certificate from the elastic LP's row duals; proof: {}", why);
+      logger.info("Elastic certificate (#559): {}", why);
+    };
     if (presolve_proved_it) {
       // #559: presolve's own infeasibility detection (a reduction that concludes a row or
       // column bound has crossed) does not yet build a certificate for every reduction that
@@ -974,6 +1011,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
             "presolve proved infeasibility but found no certifiable proof; retried directly "
             "against the original model and this is that retry's result");
       }
+      certify_by_elastic();
       logger.info("Result: {} (proved during presolve)  {:.3f}s", to_string(solution.status),
                   solution.solve_seconds);
       return solution;
@@ -1004,6 +1042,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           "presolve found no certifiable proof; retried directly against the original model "
           "and this is that retry's result");
     }
+    if (!race && !warm_requested) certify_by_elastic();
     // Sensitivity ranging runs on the ORIGINAL model after postsolve so the vectors are
     // full-size and the basis is expressed in terms of original column and row indices.
     detail::compute_ranging(model, options, logger, solution);

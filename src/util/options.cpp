@@ -2100,6 +2100,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"certificate_elastic",
+                 OptionType::Bool,
+                 true,
+                 "When an LP is reported infeasible and no engine produced a certificate that "
+                 "checks out, solve its elastic LP (every finite row side given a slack, the "
+                 "total slack minimised) and offer that LP's row duals as the Farkas "
+                 "certificate (#559). Adopted only when the solver's own check accepts it; the "
+                 "verdict never changes. Disable to skip the extra solve.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"write_certificate",
                  OptionType::String,
                  std::string(""),
