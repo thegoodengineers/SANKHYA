@@ -281,10 +281,72 @@ def end_to_end() -> None:
         # test_verify_certificate_cuts.py.
 
 
+def tamper_nth_leaf_bound(text: str, n: int) -> str | None:
+    """Raise the n-th leaf objective bound by 1000; None when there are fewer leaves."""
+    lines = text.splitlines()
+    seen = 0
+    for k, line in enumerate(lines):
+        fields = line.split()
+        if fields and fields[0].startswith("n") and len(fields) > 3 and fields[3] == "OBJ":
+            if seen == n:
+                shift = 1000 if fields[1] == "G" else -1000
+                fields[2] = str(vc.Fraction(fields[2]) + shift)
+                lines[k] = " ".join(fields)
+                return "\n".join(lines) + "\n"
+            seen += 1
+    return None
+
+
+def batched_end_to_end() -> None:
+    """The certified GPU tree (#756): nodes bounded by the batched PDHG run stay in the proof.
+
+    The CPU backend of the batch is used, which gives the same bounds as the device bit for
+    bit (gpu_batch_backend), so this runs on any machine. The solve must say it recorded
+    batch multipliers, the certificate must verify against the model, and a leaf bound raised
+    anywhere in it, a stand-in for a wrong prune the search could have made, must be rejected:
+    the checker re-derives every leaf and trusts none."""
+    binary = find_binary()
+    mps = HERE.parent / "data" / "miplib" / "p0201.mps.gz"
+    if binary is None or not mps.exists():
+        print("batched end to end: SKIPPED, no built solver or no p0201")
+        return
+    print("batched end to end (#756)")
+    with tempfile.TemporaryDirectory() as tmp:
+        cert = Path(tmp) / "p0201.vipr"
+        log = solve(binary, mps, cert, "gpu_batch_nodes=true", "gpu_batch_backend=cpu",
+                    "time_limit=120")
+        recorded = re.search(r"(\d+) node\(s\) bounded by the batched PDHG run", log)
+        check(recorded is not None and int(recorded.group(1)) > 0,
+              "p0201 with batched node bounds: batch multipliers are in the proof",
+              recorded.group(0) if recorded else log[-300:])
+        check(cert.exists(), "p0201 with batched node bounds: a certificate is written",
+              "" if cert.exists() else log[-300:])
+        if not cert.exists():
+            return
+        code, out = run_checker_on(cert, "--mps", str(mps), "--feas-tol", "1e-9")
+        check(code == 0 and "VERIFIED" in out and "NOT SHOWN" not in out,
+              "p0201 with batched node bounds: optimality verified",
+              out.strip().splitlines()[-2] if out.strip() else "")
+        text = cert.read_text()
+        leaves = sum(1 for line in text.splitlines()
+                     if line.split()[:1] and line.split()[0].startswith("n")
+                     and len(line.split()) > 3 and line.split()[3] == "OBJ")
+        bad = Path(tmp) / "bad.vipr"
+        for n in sorted({0, leaves // 4, leaves // 2, 3 * leaves // 4, max(0, leaves - 1)}):
+            tampered = tamper_nth_leaf_bound(text, n)
+            if tampered is None:
+                continue
+            bad.write_text(tampered)
+            code, out = run_checker_on(bad, "--mps", str(mps))
+            check(code == 1, f"p0201 with batched node bounds: leaf {n} of {leaves} raised is "
+                  "rejected", out.strip()[:160])
+
+
 def main() -> int:
     global FAILURES
     hand_written()
     end_to_end()
+    batched_end_to_end()
     # Cut rows (#518): their own file, which imports this one as a module, so its count of
     # failures lives there.
     import test_verify_certificate_cuts as cuts

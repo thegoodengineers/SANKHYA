@@ -680,6 +680,9 @@ class BranchAndBound {
   // ---- Certificates (#518), in branch_and_bound_certificate.cpp -------------------------
   /// Keep what a solved node's LP proves: its duals (kDual) or Farkas multipliers (kFarkas).
   void certificate_record(Index node, const Solution& relaxation, CertificateTree::Proof proof);
+  /// A node the batched PDHG bound raised (#756): until its own LP runs, its proof is the
+  /// batch's multipliers, `m` of them in minimise space, as a solved node's is its LP duals.
+  void certificate_record_duals(Index node, const double* y, Index m);
   void certificate_children(Index node, Index down, Index up);
   /// Give up on the certificate, keeping the first reason.
   void certificate_refuse(const std::string& why);
@@ -705,9 +708,10 @@ class BranchAndBound {
   std::string certificate_path_;  ///< write_certificate; empty when off
   std::string certificate_refusal_;
   std::vector<CertificateTree::Node> certificate_nodes_;  ///< parallel to nodes_, grown lazily
-  Count safe_bound_nodes_ = 0;                            ///< node bounds computed
-  Count safe_bound_infinite_ = 0;  ///< of which -inf (no finite bound from those duals)
-  Count safe_bound_refusals_ = 0;  ///< the believed bound prunes and the safe one does not
+  Count certificate_batch_leaves_ = 0;  ///< nodes given batched PDHG multipliers (#756)
+  Count safe_bound_nodes_ = 0;          ///< node bounds computed
+  Count safe_bound_infinite_ = 0;       ///< of which -inf (no finite bound from those duals)
+  Count safe_bound_refusals_ = 0;       ///< the believed bound prunes and the safe one does not
   /// max over nodes of believed - safe (finite ones; negative when safe was always higher)
   double safe_bound_max_gap_ = -std::numeric_limits<double>::infinity();
   double safe_bound_max_rel_gap_ = -std::numeric_limits<double>::infinity();

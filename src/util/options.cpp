@@ -1114,8 +1114,10 @@ const std::vector<OptionSpec>& Options::registry() {
          "batched PDHG run (#520) and prune, without a simplex solve, every node whose "
          "Neumaier-Shcherbina bound from the batch's duals reaches the incumbent. The bound "
          "is valid for any duals, so it is used only to prune and order; the simplex stays "
-         "the node solver. Runs between nodes once there is an incumbent. Default OFF until "
-         "a clean A/B on main.",
+         "the node solver. Runs between nodes once there is an incumbent. With "
+         "write_certificate, every node it bounds keeps the batch's multipliers as its proof "
+         "until its own LP runs, so a node it prunes is a leaf of the VIPR certificate like "
+         "any other (#756). Default OFF until a clean A/B on main.",
          0.0,
          0.0,
          {}});

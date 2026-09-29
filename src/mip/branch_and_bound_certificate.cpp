@@ -155,6 +155,31 @@ void BranchAndBound::certificate_record(Index node, const Solution& relaxation,
   record.proof = proof;
 }
 
+void BranchAndBound::certificate_record_duals(Index node, const double* y, Index m) {
+  if (certificate_path_.empty() || !certificate_refusal_.empty()) return;
+  if (!certificate_rows_match()) return;
+  // THE GPU-BOUNDED NODE (#756). The batch raised this node's bound to the Neumaier-Shcherbina
+  // bound of these multipliers over the node's box. If the node is pruned without an LP of its
+  // own - now, or later on that raised bound - the writer re-derives exactly that bound, over
+  // the box the checker knows, in exact decimals, and tools/verify_certificate.py checks it in
+  // rational arithmetic; without this record such a leaf fell back on an ancestor's weaker
+  // duals and the proof missed the incumbent (p0201: by 30). Nothing about the device is
+  // trusted: multipliers that do not bound the leaf as the search believed leave a weaker
+  // proved bound, never a wrong one. A node whose LP does run is recorded again from it.
+  CertificateTree::Node& record = grow_to(&certificate_nodes_, node);
+  record.y.clear();
+  if (m != working_.num_rows()) {
+    record.proof = CertificateTree::Proof::kNone;
+    return;
+  }
+  for (Index i = 0; i < m; ++i) {
+    const double v = y[static_cast<std::size_t>(i)];
+    if (v != 0.0 && std::isfinite(v)) record.y.emplace_back(i, v);
+  }
+  record.proof = CertificateTree::Proof::kDual;
+  ++certificate_batch_leaves_;
+}
+
 void BranchAndBound::certificate_children(Index node, Index down, Index up) {
   if (certificate_path_.empty() || !certificate_refusal_.empty()) return;
   for (const Index child : {down, up}) {
@@ -212,8 +237,9 @@ void BranchAndBound::finish_certificate() {
   }
   logger_.info(
       "Certificate (#518) {}; {} infeasible node(s) re-solved by the primal simplex "
-      "for a Farkas vector that proves them",
-      outcome.leaves, certificate_farkas_resolves_);
+      "for a Farkas vector that proves them; {} node(s) bounded by the batched PDHG run, "
+      "their multipliers kept as the proof unless the node was solved (#756)",
+      outcome.leaves, certificate_farkas_resolves_, certificate_batch_leaves_);
 }
 
 }  // namespace sankhya::mip

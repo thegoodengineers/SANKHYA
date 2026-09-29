@@ -71,15 +71,22 @@ void BranchAndBound::init_batch() {
   batch_iterations_ = options_.get_int("gpu_batch_iterations");
   batch_device_ = options_.get_string("gpu_batch_backend") == "auto";
   if (!batch_nodes_ && !batch_strong_) return;
-  // A QP node's bound is not an LP's; a certificate proves each leaf from its own node LP,
-  // and a node closed by a batch has none; a parallel worker shares its open list.
+  // A QP node's bound is not an LP's; a parallel worker shares its open list.
   const char* declined = quadratic_           ? "the relaxation is a QP"
-                         : certificate_mode() ? "a certificate is being written"
                          : shared_ != nullptr ? "the search is parallel"
                                               : nullptr;
   if (declined != nullptr) {
     logger_.info("Batched PDHG bounds (#520) off: {}", declined);
     batch_nodes_ = false;
+    batch_strong_ = false;
+    batch_score_ = false;
+    return;
+  }
+  // Under a certificate a node closed by the batch is a leaf proved from the batch's own
+  // multipliers (#756, certificate_record_duals). A strong-branching child closed by the batch
+  // is not a node of the tree and has no place in the proof, so that use stays off.
+  if (certificate_mode() && batch_strong_) {
+    logger_.info("Batched PDHG strong branching (#520) off: a certificate is being written");
     batch_strong_ = false;
     batch_score_ = false;
   }
@@ -181,6 +188,7 @@ void BranchAndBound::batch_bound_open_nodes() {
 
   bool changed = false;
   std::vector<char> drop(nodes_.size(), 0);
+  const auto rows = static_cast<std::size_t>(working_.num_rows());
   for (std::size_t k = 0; k < bounded.size(); ++k) {
     TreeNode& node = nodes_[static_cast<std::size_t>(bounded[k])];
     const double bound = result.bound[k];
@@ -189,6 +197,14 @@ void BranchAndBound::batch_bound_open_nodes() {
     set_open_bound(bounded[k], bound);  // refiled in the bound index
     ++batch_bounds_raised_;
     changed = true;
+    // Under a certificate the node's proof is the multipliers that raised its bound (#756): if
+    // it is pruned now, or later on this bound before its own LP runs, its leaf is derived from
+    // them rather than from an ancestor's weaker duals; if its LP runs, those duals replace
+    // these.
+    if (certificate_mode() && result.dual.size() >= (k + 1) * rows) {
+      certificate_record_duals(bounded[k], result.dual.data() + k * rows,
+                               static_cast<Index>(rows));
+    }
     if (!can_prune(bound)) continue;
     drop[static_cast<std::size_t>(bounded[k])] = 1;
     ++nodes_pruned_;
