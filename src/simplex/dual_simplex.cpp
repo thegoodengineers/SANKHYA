@@ -282,8 +282,10 @@ Index Simplex::choose_leaving_row() const {
   // analogue of why the primal prices on d^2 / w rather than on |d|.
   Index best = -1;
   double best_score = 0.0;
+  const bool any_rejected = dual_rows_rejected_now_ > 0;
   for (Index slot = 0; slot < m_; ++slot) {
     const auto s = static_cast<std::size_t>(slot);
+    if (any_rejected && dual_row_rejected_[s] != 0) continue;
     const Index k = basis_[s];
     const double x = x_basic_[s];
     const double lo = lower_[static_cast<std::size_t>(k)];
@@ -503,6 +505,8 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   pivot_row_marked_.assign(static_cast<std::size_t>(total_), 0);
   pivot_row_touched_.clear();
   pivot_row_held_sparse_ = false;
+  dual_row_rejected_.assign(static_cast<std::size_t>(m_), 0);
+  dual_rows_rejected_now_ = 0;
   by_row_.build(model_.matrix);  // once per solve; the pattern never changes (#243)
   pivot_row_single_thread_ = options_.get_int("threads") == 1;
 #ifndef SANKHYA_HAVE_OPENMP
@@ -607,6 +611,14 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
             "fresh factors",
             iterations);
         continue;
+      }
+      // Nothing left but rows passed over on these very factors: the basis is not known to
+      // be primal feasible, and the primal loop settles it, as before rows were passed over.
+      if (dual_rows_rejected_now_ > 0) {
+        return hand_over(fmt::format(
+            "{} infeasible row(s) whose pivot disagrees along the row and the column on "
+            "fresh factors, and no other",
+            dual_rows_rejected_now_));
       }
       if (any_artificial_bound_active()) {
         return hand_over("optimal for the boxed problem with an artificial bound active");
@@ -840,10 +852,40 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
             iterations, pivot_by_row, pivot);
         continue;
       }
-      return hand_over(
-          fmt::format("pivot {:.3e} along the column against {:.3e} along the "
-                      "row on fresh factors",
-                      pivot, pivot_by_row));
+      // FRESH FACTORS STILL DISAGREE: PASS OVER THE ROW, NOT THE WHOLE LOOP. This used to
+      // hand the basis to the primal loop, which then starts a phase 1 from a point that is
+      // far from primal feasible: pilot did 3,385 dual iterations and then 6,515 primal
+      // ones, and under dual steepest edge 1,832 dual and 13,116 primal. The disagreement
+      // is about this row's pivot on this basis; another infeasible row has another pivot.
+      // So this row is set aside until the next refactorization, the flips this iteration
+      // made for its step are undone - the step is not taken, and a flip without its step
+      // leaves the flipped column's reduced cost on the wrong side - and the loop prices again.
+      // When every infeasible row has been set aside, the hand-over above still happens.
+      if (!ratio.flips.empty()) {
+        for (const Index k : ratio.flips) {
+          const auto u = static_cast<std::size_t>(k);
+          if (status_[u] == BasisStatus::kAtLower) {
+            status_[u] = BasisStatus::kAtUpper;
+            nonbasic_value_[u] = upper_[u];
+          } else {
+            status_[u] = BasisStatus::kAtLower;
+            nonbasic_value_[u] = lower_[u];
+          }
+          --bound_flips_;
+        }
+        // flip_rhs_ still holds B^-1 times the flips' change to -N x_N.
+        for (Index i = 0; i < m_; ++i) {
+          x_basic_[static_cast<std::size_t>(i)] -= flip_rhs_[static_cast<std::size_t>(i)];
+        }
+      }
+      dual_row_rejected_[static_cast<std::size_t>(leaving_slot)] = 1;
+      ++dual_rows_rejected_now_;
+      ++dual_row_rejections_;
+      logger_.verbose(
+          "iteration {}: pivot {:.3e} along the column against {:.3e} along the row on "
+          "fresh factors; row {} passed over until the next refactorization",
+          iterations, pivot, pivot_by_row, leaving_slot);
+      continue;
     }
 
     // HARRIS'S WRONG-SIGNED ENTERING COLUMN (#465). The Harris test may pick a column whose
@@ -971,8 +1013,9 @@ Solution Simplex::run_dual(const WarmStart* warm) {
   if (bound_flips_ > 0 || dual_iterations_ > 0) {
     logger_.verbose(
         "dual simplex: {} iterations, {} bound flips, {} weight resets, {} cost "
-        "perturbation(s), {} Harris cost shift(s)",
-        dual_iterations_, bound_flips_, dual_weight_resets_, cost_perturbations_, cost_shifts_);
+        "perturbation(s), {} Harris cost shift(s), {} leaving row(s) passed over",
+        dual_iterations_, bound_flips_, dual_weight_resets_, cost_perturbations_, cost_shifts_,
+        dual_row_rejections_);
   }
   if (done) return *done;
   algorithm_name_ = "simplex-dual+primal";

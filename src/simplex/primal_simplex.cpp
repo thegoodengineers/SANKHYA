@@ -339,6 +339,9 @@ bool Simplex::refactorize() {
   last_factorization_plain_ = false;
   // A column judged dependent on the previous factors is eligible again on these.
   std::fill(numerically_dependent_.begin(), numerically_dependent_.end(), 0);
+  // A leaving row the dual passed over on the previous factors is judged afresh on these.
+  std::fill(dual_row_rejected_.begin(), dual_row_rejected_.end(), 0);
+  dual_rows_rejected_now_ = 0;
   // Phase 2 materialised a dense m x m array here and threw it away again on every pivot:
   // O(m^2) of memory traffic and O(m^3) of arithmetic to factorize a matrix that is better
   // than 99% structural zeros at any realistic size. Nothing is materialised now. A
