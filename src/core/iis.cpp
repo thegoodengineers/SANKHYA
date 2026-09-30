@@ -44,17 +44,25 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
   // A candidate column lower bound j requires d[j] < 0 and col_lower[j] > -inf.
   // A candidate column upper bound j requires d[j] > 0 and col_upper[j] < +inf.
 
+  // Zero is judged column by column against the terms each sum was built from, the rule
+  // farkas_proves_infeasible() applies (#762), so every bound the verified certificate leans
+  // on is a candidate here.
+  double largest_y = 0.0;
+  for (const double v : y) largest_y = std::max(largest_y, std::fabs(v));
   std::vector<double> d(static_cast<std::size_t>(n), 0.0);
-  double scale = 0.0;
+  std::vector<double> threshold(static_cast<std::size_t>(n), 0.0);
   for (Index j = 0; j < n; ++j) {
     const ColumnView col = model.matrix.column(j);
+    const auto u = static_cast<std::size_t>(j);
     for (Index k = 0; k < col.size; ++k) {
-      const double term = col.values[k] * y[static_cast<std::size_t>(col.rows[k])];
-      d[static_cast<std::size_t>(j)] += term;
-      scale = std::max(scale, std::fabs(term));
+      const double multiplier = y[static_cast<std::size_t>(col.rows[k])];
+      d[u] += col.values[k] * multiplier;
+      if (multiplier != 0.0) {
+        threshold[u] =
+            std::max(threshold[u], tol::kZeroDrop * largest_y * std::fabs(col.values[k]));
+      }
     }
   }
-  const double threshold = tol::kZeroDrop * std::max(1.0, scale);
 
   std::vector<bool> row_in(static_cast<std::size_t>(m), false);
   std::vector<bool> col_lo_in(static_cast<std::size_t>(n), false);
@@ -70,11 +78,11 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
   }
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
-    if (d[u] < -threshold && is_finite_bound(model.col_lower[u])) {
+    if (d[u] < -threshold[u] && is_finite_bound(model.col_lower[u])) {
       col_lo_in[u] = true;
       ++k_cols;
     }
-    if (d[u] > threshold && is_finite_bound(model.col_upper[u])) {
+    if (d[u] > threshold[u] && is_finite_bound(model.col_upper[u])) {
       col_hi_in[u] = true;
       ++k_cols;
     }

@@ -85,25 +85,37 @@ bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y_g
 
   // d = A'y, then the most the column box can give the aggregate.
   std::vector<double> d(static_cast<std::size_t>(n), 0.0);
+  std::vector<double> column_scale(static_cast<std::size_t>(n), 0.0);
   double scale = 0.0;
   for (Index j = 0; j < n; ++j) {
     const ColumnView column = model.matrix.column(j);
     double sum = 0.0;
+    double coefficient = 0.0;
     for (Index k = 0; k < column.size; ++k) {
-      const double term = column.values[k] * y[static_cast<std::size_t>(column.rows[k])];
+      const double multiplier = y[static_cast<std::size_t>(column.rows[k])];
+      const double term = column.values[k] * multiplier;
       sum += term;
       scale = std::max(scale, std::fabs(term));
+      if (multiplier != 0.0) coefficient = std::max(coefficient, std::fabs(column.values[k]));
     }
     d[static_cast<std::size_t>(j)] = sum;
+    column_scale[static_cast<std::size_t>(j)] = coefficient;
   }
 
   double reachable = 0.0;
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
-    // A coefficient at rounding size is not evidence of anything; treating it as zero is the
-    // conservative reading, because it can only make `reachable` smaller and so can only make
-    // the proof harder to pass.
-    const double drop = tol::kZeroDrop * std::max(1.0, scale);
+    // A coefficient at rounding size is not evidence of anything. Rounding size is judged
+    // against THIS column: the largest of its matrix entries in a row the certificate uses,
+    // times the unit-size multiplier - what the aggregate would hold if its multipliers were
+    // full-size - not against the largest term anywhere with an absolute floor (#762).
+    // Netlib ganges with its rows and columns scaled by powers of two up to 2^20 is feasible,
+    // yet its engine offered one row, 7.3e-12 x >= 0.043, on a column with no upper bound;
+    // under max(1, largest term) that 7.3e-12 read as zero, the missing bound was never
+    // consulted, and a feasible model was "proved" infeasible - tools/verify_solution.py,
+    // which had the same floor, agreed. A multiplier that is itself rounding (1e-16 of the
+    // largest, as on Netlib ceria3d) still leaves only a rounding-size coefficient.
+    const double drop = tol::kZeroDrop * column_scale[u];
     if (d[u] > drop) {
       if (!finite(model.col_upper[u])) {
         explain(why, fmt::format("column {} is free upward and the aggregate leans on it, so "

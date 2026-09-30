@@ -516,7 +516,12 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
                     worst_off_bound, where_off = off, name
         for i, name in enumerate(model.row_names):
             status = solution.row_status.get(name, "unknown")
-            scale = max(1.0, abs(activity[i]))
+            # In the units the row-activity check uses, the largest term the activity was
+            # summed from (#762): Netlib sc105 scaled by powers of two sums terms of 1e+09 to
+            # an activity at its bound, and the 1.2e-07 left over is rounding of those terms,
+            # not a point off its bound - judged against max(1, |activity|) it rejected an
+            # answer whose objective was right to 1e-16.
+            scale = max(row_scale[i], abs(activity[i]))
             if status == "basic":
                 basic += 1
             elif status == "at_lower" and math.isfinite(model.row_lower[i]):

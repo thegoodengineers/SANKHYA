@@ -115,6 +115,21 @@ TEST(Certificate, AnAggregateOverAFreeColumnProvesNothing) {
   EXPECT_NE(why.find("free upward"), std::string::npos) << why;
 }
 
+TEST(Certificate, ATinyCoefficientOnAnUnboundedColumnIsNotZero) {
+  // #762, from Netlib ganges with rows and columns scaled by powers of two: 7.3e-12 x >= 0.043
+  // with x >= 0 and no upper bound is feasible (x = 6e9). The zero used to be
+  // kZeroDrop * max(1, largest term), which read 7.3e-12 as zero, never consulted the missing
+  // upper bound, and passed 0 >= 0.043 as a proof. Built with finalize(0.0) because the
+  // coefficient is below finalize()'s default drop, as it is below make_lp's.
+  Model model = make_lp({{1.0}}, {0.043}, {kInfinity}, {0.0}, {0.0}, {kInfinity});
+  model.matrix.reset(1, 1);
+  model.matrix.add_entry(0, 0, 7.3e-12);
+  model.matrix.finalize(0.0);
+  std::string why;
+  EXPECT_FALSE(farkas_proves_infeasible(model, {1.0}, &why)) << why;
+  EXPECT_NE(why.find("free upward"), std::string::npos) << why;
+}
+
 TEST(Certificate, AllZeroMultipliersAreNotAProof) {
   const Model model = contradictory_pair();
   std::string why;

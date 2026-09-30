@@ -511,6 +511,35 @@ def test_a_tiny_farkas_vector_on_a_feasible_model_is_rejected() -> None:
           "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
 
 
+def test_a_tiny_coefficient_on_an_unbounded_column_is_not_zero() -> None:
+    """#762, from Netlib ganges scaled by powers of two. 7.3e-12 x >= 0.043 with x >= 0 and
+    no upper bound is feasible (x = 6e9). The old zero, 1e-11 * max(1, largest term), read
+    the 7.3e-12 as zero, the missing upper bound was never consulted, and the aggregate
+    0 >= 0.043 "proved" the model infeasible."""
+    feasible = _two_row_lp(cost=[0.0], lower=[0.0], upper=[vs.INF],
+                           rows=[(0.043, vs.INF, [7.3e-12])])
+    report = _run(feasible, _verdict("infeasible", farkas={"r0": 1.0}))
+    check(report.failures >= 1, "a tiny coefficient on an unbounded column is not zero",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
+
+
+def test_a_nonbasic_row_is_on_its_bound_in_the_units_of_its_terms() -> None:
+    """#762, from Netlib sc105 scaled by powers of two: terms of 1e9 that cancel leave an
+    activity 2e-7 from the bound its status names, which is rounding of those terms (2e-16
+    relative), exactly as the row-activity check already judges it."""
+    x1 = 1.0 - 2.0 ** -52
+    model = _two_row_lp(cost=[0.0, 0.0], lower=[1.0, 0.0], upper=[2.0, vs.INF],
+                        rows=[(0.0, vs.INF, [1e9, -1e9])])
+    activity = 1e9 * 1.0 - 1e9 * x1
+    solution = _verdict("optimal", columns={"x0": 1.0, "x1": x1}, rows={"r0": activity})
+    solution.col_status.update({"x0": "at_lower", "x1": "basic"})
+    solution.row_status.update({"r0": "at_lower"})
+    report = _run(model, solution)
+    check(activity > 1e-7 and report.failures == 0,
+          "a nonbasic row is on its bound in the units of its terms",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
+
+
 def test_a_valid_farkas_certificate_verifies_at_any_scale() -> None:
     report = _run(_contradictory_pair(),
                   _verdict("infeasible", farkas={"r0": 1e-9, "r1": -1e-9}))
@@ -876,6 +905,8 @@ def main() -> int:
     print("the two verdicts with no point (#191)")
     test_a_valid_farkas_certificate_verifies()
     test_a_tiny_farkas_vector_on_a_feasible_model_is_rejected()
+    test_a_tiny_coefficient_on_an_unbounded_column_is_not_zero()
+    test_a_nonbasic_row_is_on_its_bound_in_the_units_of_its_terms()
     test_a_valid_farkas_certificate_verifies_at_any_scale()
     test_a_weakened_farkas_certificate_is_rejected()
     test_an_infeasible_verdict_without_a_certificate_is_not_a_failure()

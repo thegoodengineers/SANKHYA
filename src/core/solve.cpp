@@ -209,6 +209,33 @@ void refuse_a_non_finite_answer(Solution* solution, Logger& logger) {
   solution->dual_bound = 0.0;
 }
 
+/// An LP ENGINE'S INFEASIBLE IS A CLAIM, AND WITHOUT A PROOF IT IS NOT MADE (#762). By the
+/// time this runs, every certificate route has been tried: the engine's own Farkas vector,
+/// the retry on the original model, the elastic LP's row duals (#559), each adopted only when
+/// farkas_proves_infeasible() accepts it. What is left is the engine's reading of a phase 1
+/// that stopped with rows still violated, and on a badly scaled model that reading is wrong:
+/// Netlib bnl1 with its rows and columns scaled by powers of two up to 2^20 (an exact change
+/// of variables, so the model is still feasible) came back `infeasible` after 64 basis
+/// repairs, from a phase 1 that ended at a violation of 2.3e+02. Farkas's lemma makes a
+/// correct verdict checkable, so a verdict that cannot be checked is reported as what it is,
+/// a numerical failure. Presolve's own bound-arithmetic proofs return before this point, and
+/// a MIP's infeasibility is the branch and bound's to judge, not this LP guard's.
+/// Reference: Farkas (1902); Chvatal, Linear Programming (1983), ch. 9.
+void refuse_an_unproved_infeasibility(const Model& model, Solution* solution, Logger& logger) {
+  if (solution->status != SolveStatus::kInfeasible || !solution->farkas_dual.empty() ||
+      model.has_integrality()) {
+    return;
+  }
+  logger.warning(
+      "the engine reported infeasible but no Farkas certificate verifies against the model; "
+      "reporting a numerical failure rather than an unproved verdict");
+  solution->status = SolveStatus::kNumericalError;
+  solution->message +=
+      "; reported numerical_error: the engine's infeasible verdict carries no Farkas "
+      "certificate that verifies, and an infeasibility that cannot be proved is not claimed "
+      "(#762)";
+}
+
 /// Name the resource that ended the solve, for an engine that reported the status but not
 /// the reason (#289). The branch and bound sets it directly, because a limit it hits while
 /// holding an incumbent is reported as kFeasible and the status can no longer say which
@@ -1044,6 +1071,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           "and this is that retry's result");
     }
     if (!race && !warm_requested) certify_by_elastic();
+    refuse_an_unproved_infeasibility(model, &solution, logger);
     // Sensitivity ranging runs on the ORIGINAL model after postsolve so the vectors are
     // full-size and the basis is expressed in terms of original column and row indices.
     detail::compute_ranging(model, options, logger, solution);
