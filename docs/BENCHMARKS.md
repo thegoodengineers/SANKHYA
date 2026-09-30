@@ -1949,7 +1949,226 @@ verdict with a file the verifier accepts (and, when optimal, the objective withi
 relative); **wrong** is a contradicted verdict, an objective off the known optimum, or a file
 the verifier rejects; **failed** is no verdict (a limit, a numerical error, `feasible`).
 
-_No `stress-*.csv` in `bench/results/`. Run `python bench/runners/stress_instances.py` then `python bench/runners/stress.py`._
+Reading it: SANKHYA's scaled-Netlib failures are the status guard refusing a claim it cannot
+support, not answers; why the engine gets there (presolve's absolute 1e-11 coefficient drop,
+an equilibration that does not undo a 2^40 spread, no objective scaling) is #792 and #783.
+HiGHS runs with its defaults, under which a matrix entry below `small_matrix_value` = 1e-9 is
+dropped and a bound at or above `infinite_bound` = 1e20 is infinite. The scaled files carry
+entries far below 1e-9, which is consistent with most of its scaled-Netlib points violating a
+row of the file as written and most of its certificates failing to prove the file infeasible
+(each failing check is named below); Klee-Minty from n = 30, whose last right-hand sides
+reach 5^29 > 1e20, comes back unbounded.
+
+Measured on SANKHYA commit `90f5d356` against HiGHS 1.15.1 (highspy, separate process), machine `laptop-i5-1135G7-7.7GB-Windows-AMD64-shared`, 126 instances. Source: `stress-90f5d356.csv`.
+
+| family | instances | sankhya correct / wrong / failed | highs correct / wrong / failed |
+|---|---|---|---|
+| `degenerate` | 5 | 5 / 0 / 0 | 5 / 0 / 0 |
+| `klee_minty` | 7 | 4 / 0 / 3 | 4 / 3 / 0 |
+| `near_singular` | 8 | 8 / 0 / 0 | 8 / 0 / 0 |
+| `scaled_netlib` | 94 | 7 / 0 / 87 | 0 / 86 / 8 |
+| `thin_infeasible` | 8 | 7 / 0 / 1 | 8 / 0 / 0 |
+| `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 |
+| **all** | 126 | 35 / 0 / 91 | 29 / 89 / 8 |
+
+**sankhya, failed** (91):
+
+- `klee_minty_20`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 1.562e-02, above the 1.0e-06 the independent verifier ac)
+- `klee_minty_25`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 6.400e+01, above the 1.0e-06 the independent verifier ac)
+- `klee_minty_30`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 1.311e+05, above the 1.0e-06 the independent verifier ac)
+- `scaled_25fv47`: no verdict: numerical_error (route: the scaled attempt returned optimal after 3.5 s of its 30 s share; neither attempt produced a usable point; the s)
+- `scaled_80bau3b`: no verdict: numerical_error (phase 1 stalled at max bound violation 5.226e-05, only just above the 1.0e-07 feasibility tolerance; no column prices as)
+- `scaled_adlittle`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 5.417e-06 (5.417e-06 relative to the scale)
+- `scaled_agg`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.484e-02 (3.484e-02 relative to the scale)
+- `scaled_agg2`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 4.268e-02 (3.703e-02 relative to the scale)
+- `scaled_agg3`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.101e-01 (1.101e-01 relative to the scale)
+- `scaled_bandm`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 4.486e-05 (4.486e-05 relative to the scale)
+- `scaled_beaconfd`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 2.810e-04 (2.810e-04 relative to the scale)
+- `scaled_blend`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 4.485e-05 (4.485e-05 relative to the terms the)
+- `scaled_bnl1`: no verdict: numerical_error (phase 1 terminated with max bound violation 2.328e+02, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
+- `scaled_bnl2`: no verdict: numerical_error (phase 1 terminated with max bound violation 1.893e+02, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
+- `scaled_boeing1`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 8.332e-04 (8.332e-04 relative to the scale)
+- `scaled_bore3d`: no verdict: numerical_error (route: the scaled attempt returned optimal after 0.0 s of its 30 s share; nothing was left for an unscaled retry; engine)
+- `scaled_brandy`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.305e-05 (1.305e-05 relative to the scale)
+- `scaled_capri`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 4.835e-04 (4.835e-04 relative to the scale)
+- `scaled_cycle`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 2.975e+08 from a least of 0.000e+00, which cannot happen on faithf)
+- `scaled_czprob`: no verdict: numerical_error (phase 1 terminated with max bound violation 2.308e-04, far above the 1.0e-07 feasibility tolerance; no machine-checkable)
+- `scaled_d2q06c`: no verdict: time_limit (time limit 29.9865s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_d6cube`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 7.629e-06 (7.629e-06 relative to the scale)
+- `scaled_degen2`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 4.091e-05 (4.091e-05 relative to the terms the)
+- `scaled_degen3`: no verdict: numerical_error (phase 1 terminated with max bound violation 2.054e+00, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
+- `scaled_dfl001`: no verdict: numerical_error (dual simplex: basic variable 57 is outside its bounds by 1.016e+00, far above the 1.0e-07 feasibility tolerance, and no )
+- `scaled_e226`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.224e-06 (1.224e-06 relative to the scale)
+- `scaled_etamacro`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 6.408e-05 (6.408e-05 relative to the scale)
+- `scaled_fffff800`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.567e-04 (1.567e-04 relative to the scale)
+- `scaled_finnis`: no verdict: numerical_error (phase 1 terminated with max bound violation 4.299e+01, far above the 1.0e-07 feasibility tolerance; no machine-checkable)
+- `scaled_fit1d`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.831e-05 (1.831e-05 relative to the scale)
+- `scaled_fit1p`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 6.936e-05 (6.936e-05 relative to the scale)
+- `scaled_fit2d`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 6.847e-06 (6.847e-06 relative to the scale)
+- `scaled_fit2p`: no verdict: time_limit (time limit 29.9484s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_forplan`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 2.252e-04 (2.252e-04 relative to the scale)
+- `scaled_ganges`: no verdict: numerical_error (dual simplex: basic variable 1494 is outside its bounds by 5.634e+03, far above the 1.0e-07 feasibility tolerance, and n)
+- `scaled_gfrd-pnc`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.335e-01 (1.335e-01 relative to the scale)
+- `scaled_greenbea`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 6.987e-03 (6.987e-03 relative to the scale)
+- `scaled_greenbeb`: no verdict: time_limit (time limit 37.4059s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned nume)
+- `scaled_grow15`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 4.257e+00 (1.000e+00 relative to the scale)
+- `scaled_grow22`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.815e+00 (1.000e+00 relative to the scale)
+- `scaled_grow7`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 9.577e-01 (9.577e-01 relative to the scale)
+- `scaled_lotfi`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 9.695e-03 (9.695e-03 relative to the scale)
+- `scaled_maros`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 2.184e+09 from a least of 0.000e+00, which cannot happen on faithf)
+- `scaled_maros-r7`: no verdict: time_limit (time limit 59.9759s reached inside the assembly of the normal equations, which was abandoned)
+- `scaled_modszk1`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 7.700e-02 (7.700e-02 relative to the scale)
+- `scaled_nesm`: no verdict: numerical_error (dual simplex: basic variable 2864 is outside its bounds by 8.766e+00, far above the 1.0e-07 feasibility tolerance, and n)
+- `scaled_perold`: no verdict: time_limit (time limit 29.9961s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 1.281e+21 from a least of 1.570e+08, which cannot happen on faithf)
+- `scaled_pilot.ja`: no verdict: time_limit (time limit 29.9585s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot.we`: no verdict: numerical_error (phase 1 terminated with max bound violation 3.956e-01, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
+- `scaled_pilot4`: no verdict: time_limit (time limit 29.999s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
+- `scaled_pilot87`: no verdict: time_limit (stopped at the time limit of 29.9879s after 30.23s, 5754 iterations, 0 nodes; route: the scaled attempt returned time_li)
+- `scaled_pilotnov`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 3.304e+08 from a least of 2.700e+01, which cannot happen on faithf)
+- `scaled_recipe`: no verdict: numerical_error (dual simplex: basic variable 203 is outside its bounds by 8.975e+01, far above the 1.0e-07 feasibility tolerance, and no)
+- `scaled_sc205`: no verdict: feasible (route: the scaled attempt returned optimal after 0.1 s of its 30 s share; the unscaled retry produced this answer; engin)
+- `scaled_sc50b`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.150e-04 (1.150e-04 relative to the scale)
+- `scaled_scagr25`: no verdict: numerical_error (phase 1 terminated with max bound violation 3.639e+05, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
+- `scaled_scagr7`: no verdict: numerical_error (phase 1 terminated with max bound violation 3.526e+03, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
+- `scaled_scfxm1`: no verdict: numerical_error (phase 1 terminated with max bound violation 1.172e-01, far above the 1.0e-07 feasibility tolerance; the scaled attempt c)
+- `scaled_scfxm2`: no verdict: time_limit (time limit 59.5956s reached inside the basis factorization, which was abandoned; the scaled attempt claimed unbounded bu)
+- `scaled_scfxm3`: no verdict: numerical_error (phase 1 terminated with max bound violation 5.460e+03, far above the 1.0e-07 feasibility tolerance; no machine-checkable)
+- `scaled_scorpion`: no verdict: numerical_error (phase 1 stalled at max bound violation 3.662e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as)
+- `scaled_scrs8`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.406e-06 (1.406e-06 relative to the scale)
+- `scaled_scsd1`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.815e-06 (3.815e-06 relative to the scale)
+- `scaled_scsd6`: no verdict: numerical_error (route: the scaled attempt returned optimal after 1.2 s of its 30 s share; neither attempt produced a usable point; the s)
+- `scaled_scsd8`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 4.937e-05 (4.937e-05 relative to the scale)
+- `scaled_sctap1`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 2.384e-06 (2.384e-06 relative to the terms the)
+- `scaled_sctap2`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 2.861e-05 (2.861e-05 relative to the scale)
+- `scaled_sctap3`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.431e-05 (1.431e-05 relative to the scale)
+- `scaled_seba`: no verdict: numerical_error (dual simplex: basic variable 994 is outside its bounds by 1.404e-02, far above the 1.0e-07 feasibility tolerance, and no)
+- `scaled_share1b`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.751e-04 (1.751e-04 relative to the scale)
+- `scaled_share2b`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 5.958e-06 (5.958e-06 relative to the terms the)
+- `scaled_shell`: no verdict: numerical_error (dual simplex: basic variable 1480 is outside its bounds by 1.470e+03, far above the 1.0e-07 feasibility tolerance, and n)
+- `scaled_ship04l`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 5.186e-04 (5.186e-04 relative to the scale)
+- `scaled_ship04s`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.796e-05 (3.796e-05 relative to the scale)
+- `scaled_ship08l`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 2.342e-04 (2.342e-04 relative to the scale)
+- `scaled_ship08s`: no verdict: numerical_error (phase 1 stalled at max bound violation 5.993e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as)
+- `scaled_ship12l`: no verdict: numerical_error (phase 1 stalled at max bound violation 3.499e-07, only just above the 1.0e-07 feasibility tolerance; no column prices as)
+- `scaled_ship12s`: no verdict: numerical_error (phase 1 stalled at max bound violation 1.797e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as)
+- `scaled_sierra`: no verdict: numerical_error (route: the scaled attempt returned optimal after 0.5 s of its 30 s share; neither attempt produced a usable point; the s)
+- `scaled_stair`: no verdict: numerical_error (phase 1 terminated with max bound violation 4.518e+03, far above the 1.0e-07 feasibility tolerance; no machine-checkable)
+- `scaled_standata`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 2.237e-06 (2.237e-06 relative to the terms the)
+- `scaled_standmps`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 9.346e-07 (9.346e-07 relative to the scale)
+- `scaled_stocfor1`: no verdict: numerical_error (phase 1 terminated with max bound violation 8.000e+00, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
+- `scaled_stocfor2`: no verdict: numerical_error (phase 1 terminated with max bound violation 1.710e+04, far above the 1.0e-07 feasibility tolerance; no machine-checkable)
+- `scaled_stocfor3`: no verdict: time_limit (time limit 29.7081s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_truss`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.693e-04 (3.693e-04 relative to the scale)
+- `scaled_tuff`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 9.506e-05 (9.506e-05 relative to the scale)
+- `scaled_vtp.base`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 1.095e-05 (1.095e-05 relative to the terms the)
+- `scaled_woodw`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.486e-07 (3.486e-07 relative to the scale)
+- `thin_infeasible_1e-6_1`: no verdict: numerical_error (phase 1 stalled at max bound violation 1.746e-07, only just above the 1.0e-07 feasibility tolerance; no column prices as)
+
+**highs, wrong** (89):
+
+- `klee_minty_30`: unbounded, verifier rejects: [FAIL] ray respects the row bounds     17 would be crossed: R13, R14, R15, R16, R17
+- `klee_minty_35`: unbounded, verifier rejects: [FAIL] ray respects the row bounds     22 would be crossed: R13, R14, R15, R16, R17
+- `klee_minty_40`: unbounded, verifier rejects: [FAIL] ray respects the row bounds     27 would be crossed: R13, R14, R15, R16, R17
+- `scaled_25fv47`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C474
+- `scaled_80bau3b`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C1807
+- `scaled_adlittle`: optimal, verifier rejects: [FAIL] row activity                      worst violation 4.385e-02 (4.385e-02 relative to the row's terms) on R27; [FAIL] activity agreement                max /ours - solver's/ = 4.385e-02; [F
+- `scaled_afiro`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.043e-02 (2.043e-02 relative to the row's terms) on R4; [FAIL] activity agreement                max /ours - solver's/ = 2.043e-02; [FA
+- `scaled_agg`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C119
+- `scaled_agg2`: optimal, verifier rejects: [FAIL] row activity                      worst violation 7.601e+01 (1.977e+00 relative to the row's terms) on R438; [FAIL] activity agreement                max /ours - solver's/ = 1.850e+02; [
+- `scaled_agg3`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.556e+00 (1.094e+00 relative to the row's terms) on R503; [FAIL] activity agreement                max /ours - solver's/ = 2.279e+02; [
+- `scaled_bandm`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         11 unbounded in the direction used, so the aggregate proves nothing: C8, C88, C240, C278, C280
+- `scaled_beaconfd`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C51
+- `scaled_blend`: unbounded on an instance that is optimal
+- `scaled_bnl1`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C4
+- `scaled_bnl2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C935
+- `scaled_boeing1`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C33
+- `scaled_boeing2`: optimal, verifier rejects: [FAIL] row activity                      worst violation 8.099e-03 (8.099e-03 relative to the row's terms) on R88; [FAIL] activity agreement                max /ours - solver's/ = 9.445e-03; [F
+- `scaled_bore3d`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.766e-02 (1.766e-02 relative to the row's terms) on R190; [FAIL] activity agreement                max /ours - solver's/ = 1.766e-02; [
+- `scaled_brandy`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C5
+- `scaled_capri`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C260
+- `scaled_cycle`: infeasible on an instance that is optimal
+- `scaled_czprob`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C3267
+- `scaled_d2q06c`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C3752
+- `scaled_d6cube`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.441e-04 (2.441e-04 relative to the row's terms) on R406; [FAIL] activity agreement                max /ours - solver's/ = 2.441e-04; [
+- `scaled_degen2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C58, C59
+- `scaled_degen3`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         3 unbounded in the direction used, so the aggregate proves nothing: C389, C390, C391
+- `scaled_dfl001`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C4912
+- `scaled_e226`: infeasible on an instance that is optimal
+- `scaled_etamacro`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C226
+- `scaled_fffff800`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C820
+- `scaled_finnis`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C413, C414
+- `scaled_fit1d`: optimal, verifier rejects: [FAIL] row activity                      worst violation 4.925e-04 (4.925e-04 relative to the row's terms) on R17; [FAIL] activity agreement                max /ours - solver's/ = 4.925e-04; [F
+- `scaled_forplan`: optimal, verifier rejects: [FAIL] row activity                      worst violation 6.199e-03 (6.199e-03 relative to the row's terms) on R10; [FAIL] activity agreement                max /ours - solver's/ = 6.199e-03; [F
+- `scaled_ganges`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C211
+- `scaled_gfrd-pnc`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.670e-01 (2.670e-01 relative to the row's terms) on R7; [FAIL] activity agreement                max /ours - solver's/ = 2.670e-01; [FA
+- `scaled_greenbea`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C2678
+- `scaled_greenbeb`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C1952
+- `scaled_grow15`: optimal, verifier rejects: [FAIL] row activity                      worst violation 4.212e+00 (1.847e+00 relative to the row's terms) on R265; [FAIL] activity agreement                max /ours - solver's/ = 1.961e+02; [
+- `scaled_grow22`: optimal, verifier rejects: [FAIL] row activity                      worst violation 6.851e+00 (1.626e+00 relative to the row's terms) on R139; [FAIL] activity agreement                max /ours - solver's/ = 1.451e+03; [
+- `scaled_grow7`: optimal, verifier rejects: [FAIL] row activity                      worst violation 3.708e+00 (1.277e+00 relative to the row's terms) on R16; [FAIL] activity agreement                max /ours - solver's/ = 1.771e+02; [F
+- `scaled_israel`: optimal, verifier rejects: [FAIL] row activity                      worst violation 9.693e+00 (1.000e+00 relative to the row's terms) on R0; [FAIL] activity agreement                max /ours - solver's/ = 9.693e+00; [FA
+- `scaled_kb2`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.274e-03 (1.274e-03 relative to the row's terms) on R11; [FAIL] activity agreement                max /ours - solver's/ = 1.274e-03; [F
+- `scaled_lotfi`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.753e-01 (1.901e-01 relative to the row's terms) on R138; [FAIL] activity agreement                max /ours - solver's/ = 2.753e-01; [
+- `scaled_maros`: unbounded, verifier rejects: [FAIL] row activity                    worst violation 3.015e+00 (1.015e+00 relative to the row's terms) on R570; [FAIL] activity agreement              max /ours - solver's/ = 3.956e+01
+- `scaled_maros-r7`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C5945
+- `scaled_modszk1`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.454e+00 (1.000e+00 relative to the row's terms) on R685; [FAIL] activity agreement                max /ours - solver's/ = 1.454e+00; [
+- `scaled_nesm`: infeasible, verifier rejects: [FAIL] infeasibility proof                the rows aggregate to at least 7.379150390625e-02, the column bounds allow at most 1.020935039062e-01, a contradiction of -2.830e-02
+- `scaled_pilot`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C82, C2742
+- `scaled_pilot.we`: infeasible, verifier rejects: [FAIL] certificate uses only real bounds  2 lean on an infinite bound: R60, R79
+- `scaled_pilot4`: infeasible on an instance that is optimal
+- `scaled_pilot87`: infeasible on an instance that is optimal
+- `scaled_recipe`: infeasible, verifier rejects: [FAIL] infeasibility proof                the rows aggregate to at least 0.000000000000e+00, the column bounds allow at most 6.675720214844e-05, a contradiction of -6.676e-05
+- `scaled_sc105`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.876e-02 (1.876e-02 relative to the row's terms) on R25; [FAIL] activity agreement                max /ours - solver's/ = 1.876e-02; [F
+- `scaled_sc205`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.882e-02 (2.882e-02 relative to the row's terms) on R116; [FAIL] activity agreement                max /ours - solver's/ = 2.882e-02; [
+- `scaled_sc50a`: optimal, verifier rejects: [FAIL] reduced costs                     max /c - A^T y - d/ = 1.112e-04 (1.112e-04 relative to its terms) on C44
+- `scaled_sc50b`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.150e-04 (1.150e-04 relative to the row's terms) on R35; [FAIL] activity agreement                max /ours - solver's/ = 1.150e-04
+- `scaled_scagr25`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C117, C126
+- `scaled_scagr7`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C96
+- `scaled_scfxm1`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C116
+- `scaled_scfxm2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C690
+- `scaled_scfxm3`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C795
+- `scaled_scorpion`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C249, C263
+- `scaled_scrs8`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C1132
+- `scaled_scsd1`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.271e-05 (2.271e-05 relative to the row's terms) on R7; [FAIL] activity agreement                max /ours - solver's/ = 2.271e-05; [FA
+- `scaled_scsd6`: optimal, verifier rejects: [FAIL] row activity                      worst violation 3.052e-05 (3.052e-05 relative to the row's terms) on R101; [FAIL] activity agreement                max /ours - solver's/ = 3.052e-05; [
+- `scaled_scsd8`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.659e-04 (1.659e-04 relative to the row's terms) on R173; [FAIL] activity agreement                max /ours - solver's/ = 1.659e-04; [
+- `scaled_sctap1`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.831e-03 (1.831e-03 relative to the row's terms) on R150; [FAIL] activity agreement                max /ours - solver's/ = 1.831e-03; [
+- `scaled_sctap2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         3 unbounded in the direction used, so the aggregate proves nothing: C280, C281, C282
+- `scaled_sctap3`: optimal, verifier rejects: [FAIL] row activity                      worst violation 9.766e-04 (9.766e-04 relative to the row's terms) on R171; [FAIL] activity agreement                max /ours - solver's/ = 9.766e-04; [
+- `scaled_seba`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C76
+- `scaled_share1b`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C34, C133
+- `scaled_share2b`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.908e-04 (1.908e-04 relative to the row's terms) on R74; [FAIL] activity agreement                max /ours - solver's/ = 4.232e-03; [F
+- `scaled_shell`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C516
+- `scaled_ship04l`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.314e-02 (1.314e-02 relative to the row's terms) on R59; [FAIL] activity agreement                max /ours - solver's/ = 1.314e-02; [F
+- `scaled_ship04s`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C333
+- `scaled_ship08l`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C177
+- `scaled_ship08s`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C198
+- `scaled_ship12l`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C5332
+- `scaled_ship12s`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C2737
+- `scaled_stair`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C406
+- `scaled_standata`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C235
+- `scaled_standmps`: infeasible, verifier rejects: [FAIL] infeasibility proof                the rows aggregate to at least 0.000000000000e+00, the column bounds allow at most 9.918212890625e-05, a contradiction of -9.918e-05
+- `scaled_stocfor1`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C86
+- `scaled_stocfor2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         3 unbounded in the direction used, so the aggregate proves nothing: C28, C742, C1253
+- `scaled_stocfor3`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         4 unbounded in the direction used, so the aggregate proves nothing: C102, C566, C1782, C1836
+- `scaled_truss`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.562e-02 (1.562e-02 relative to the row's terms) on R458; [FAIL] activity agreement                max /ours - solver's/ = 1.562e-02; [
+- `scaled_tuff`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C399
+- `scaled_vtp.base`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C114
+- `scaled_wood1p`: optimal, verifier rejects: [FAIL] reduced costs                     max /c - A^T y - d/ = 9.080e-06 (9.080e-06 relative to its terms) on C305
+
+**highs, failed** (8):
+
+- `scaled_fit1p`: no verdict: kSolveError
+- `scaled_fit2d`: no verdict: killed (no exit within 3x the time limit)
+- `scaled_fit2p`: no verdict: time_limit
+- `scaled_perold`: no verdict: kNotset
+- `scaled_pilot.ja`: no verdict: kNotset
+- `scaled_pilotnov`: no verdict: kNotset
+- `scaled_sierra`: no verdict: kNotset
+- `scaled_woodw`: no verdict: kNotset
+
+13 thin-infeasible answers are `optimal` at a point the verifier accepts with every row inside 1e-7: at the stated tolerance that point is feasible, so the answer is graded correct, and named here so the grade is not mistaken for a proof of infeasibility.
 
 ---
 

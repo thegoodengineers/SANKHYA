@@ -3182,6 +3182,16 @@ verdict with a file the verifier accepts (and, when optimal, the objective withi
 relative); **wrong** is a contradicted verdict, an objective off the known optimum, or a file
 the verifier rejects; **failed** is no verdict (a limit, a numerical error, `feasible`).
 
+Reading it: SANKHYA's scaled-Netlib failures are the status guard refusing a claim it cannot
+support, not answers; why the engine gets there (presolve's absolute 1e-11 coefficient drop,
+an equilibration that does not undo a 2^40 spread, no objective scaling) is #792 and #783.
+HiGHS runs with its defaults, under which a matrix entry below `small_matrix_value` = 1e-9 is
+dropped and a bound at or above `infinite_bound` = 1e20 is infinite. The scaled files carry
+entries far below 1e-9, which is consistent with most of its scaled-Netlib points violating a
+row of the file as written and most of its certificates failing to prove the file infeasible
+(each failing check is named below); Klee-Minty from n = 30, whose last right-hand sides
+reach 5^29 > 1e20, comes back unbounded.
+
 {stress_doc.section(stress_csv)}
 ---
 
