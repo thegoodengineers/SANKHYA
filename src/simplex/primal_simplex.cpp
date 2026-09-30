@@ -1612,20 +1612,32 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       // none does, eta_count() is zero and this branch declares optimality with the duals
       // it is about to report. It cannot loop: a refactorization empties the eta file, and
       // only a pivot refills it.
+      //
+      // ONCE THE CLEANUP BELOW HAS STARTED, ITS NEXT PIVOT IS LOOKED FOR FIRST. A cleanup
+      // pivot is an ordinary pivot, and nothing about it needs fresh factors; only the claim
+      // that none is left does. Refactorizing before each one cost a factorization per
+      // cleanup pivot: on pilot87 under pricing=dual-steepest-edge, 3,770 refactorizations
+      // in 9,500 iterations of cleanup, where the pivots themselves were the cheap part.
+      // When the cleanup finds nothing here, the factors are refreshed as before and the
+      // claim is re-examined on them.
       if (m_ > 0 && lu_.eta_count() > 0) {
-        if (!refactorize()) return factorization_failed(iterations, timer);
-        ++refactorizations_;
-        compute_basic_values();
-        logger_.verbose(
-            "iteration {}: no improving column through the eta file; re-pricing "
-            "on fresh factors before declaring optimality",
-            iterations);
-        continue;
+        if (polish_pivots_ > 0) entering = polish_candidate(&direction);
+        if (entering < 0) {
+          if (!refactorize()) return factorization_failed(iterations, timer);
+          ++refactorizations_;
+          compute_basic_values();
+          logger_.verbose(
+              "iteration {}: no improving column through the eta file; re-pricing "
+              "on fresh factors before declaring optimality",
+              iterations);
+          continue;
+        }
+      } else {
+        // THE CLEANUP (#548): a reduced cost inside the tolerance whose pivot still buys
+        // more than the claim's accuracy is entered here, on these fresh factors, and the
+        // loop goes on; only when no such column remains is optimality declared.
+        entering = polish_candidate(&direction);
       }
-      // THE CLEANUP (#548): a reduced cost inside the tolerance whose pivot still buys more
-      // than the claim's accuracy is entered here, on these fresh factors, and the loop goes
-      // on; only when no such column remains is optimality declared.
-      entering = polish_candidate(&direction);
       if (entering < 0) {
         if (polish_pivots_ > 0) {
           logger_.verbose(
