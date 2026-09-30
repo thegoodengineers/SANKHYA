@@ -17,6 +17,7 @@ add_executable(sankhya_tests
   unit/test_certificate.cpp
   unit/test_elastic_certificate.cpp
   unit/test_exact_lu.cpp
+  unit/test_exact_repair.cpp
   unit/test_exact_verify.cpp
   unit/test_certificate_writer.cpp
   unit/test_cut_derivation.cpp

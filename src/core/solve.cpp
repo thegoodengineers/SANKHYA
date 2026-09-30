@@ -67,6 +67,7 @@
 #include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
 #include "core/status_guard.hpp"
+#include "exact/exact_repair.hpp"
 #include "exact/exact_sensitivity.hpp"
 #include "exact/exact_verify.hpp"
 #include "mip/components.hpp"
@@ -1095,6 +1096,13 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     detail::compute_ranging(model, options, logger, solution);
     compute_iis(model, &solution, options, logger);
     if (options.get_bool("exact")) {
+      // #757: a basis optimal only to tolerance is first taken to an exactly optimal one by
+      // exact simplex pivots; the ranges are then those of the basis that is reported.
+      if (options.get_bool("exact_repair") &&
+          exact::apply_exact_repair(model, &solution, logger,
+                                    options.get_double("exact_seconds"))) {
+        detail::compute_ranging(model, options, logger, solution);
+      }
       const exact::ExactResult exact_result =
           exact::verify_basis_exact(model, solution, options.get_double("exact_seconds"));
       switch (exact_result.verdict) {

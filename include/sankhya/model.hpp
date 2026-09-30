@@ -325,6 +325,20 @@ class Solution {
   std::string exact_objective;
   std::vector<std::string> exact_col_value;
 
+  // ---- Exact repair of the reported basis (#757, option "exact") ----
+  //
+  // An ADDITION to this frozen interface, called out here as farkas_dual was in #191; it
+  // defaults to kNotAttempted and zero and every existing consumer ignores it. A basis that
+  // is optimal only to tolerance is taken to an exactly optimal one by simplex pivots in
+  // exact rational arithmetic (src/exact/exact_repair.hpp). kVerified: the reported basis
+  // is exactly optimal, either as the engine left it (no pivots, no flips) or after the
+  // pivots and flips counted here, in which case the basis, col_value, col_dual and
+  // row_dual are the repaired basis's exact values rounded once to double.
+  ExactVerification exact_repair_status = ExactVerification::kNotAttempted;
+  std::string exact_repair_message;  ///< why declined or failed
+  int exact_repair_pivots = 0;
+  int exact_repair_flips = 0;
+
   // ---- Sensitivity ranging (populated only when options.get_bool("ranging") is true) ----
   //
   // An ADDITION to this frozen interface, called out here as farkas_dual was in #191; every

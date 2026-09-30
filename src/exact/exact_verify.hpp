@@ -51,7 +51,7 @@ struct ExactResult {
 /// The status a nonbasic variable really has (review of #622): kFixed with unequal bounds is
 /// whichever bound `value` equals exactly, kAtLower or kAtUpper with equal bounds is kFixed,
 /// kNonbasicFree only with 0 inside the bounds, and kUnknown when it cannot be resolved.
-/// Shared with exact_sensitivity.cpp.
+/// Shared with exact_basis.cpp.
 [[nodiscard]] BasisStatus resolved_status(BasisStatus status, double lower, double upper,
                                           double value);
 

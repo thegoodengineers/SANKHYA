@@ -1491,9 +1491,9 @@ const std::vector<OptionSpec>& Options::registry() {
          "Wolter, INFORMS J. Computing 28(3), 2016) - every model coefficient converted "
          "bit-exactly from the double the reader already produced - and check it is exactly "
          "primal and dual feasible, which for a nondegenerate basis is exact optimality. "
-         "Checks the ONE basis double precision already found rather than searching for a "
-         "better one, so a basis double precision got structurally wrong is reported FAILED, "
-         "not repaired. The basis is factorised by a sparse exact LU in the float LU's pivot "
+         "A basis optimal only to tolerance is first repaired by exact simplex pivots "
+         "(option exact_repair, #757), and the check runs on the basis then reported. The "
+         "basis is factorised by a sparse exact LU in the float LU's pivot "
          "order (src/exact/exact_lu.hpp); one that does not finish within exact_seconds is "
          "reported DECLINED, never guessed at. The arithmetic is arbitrary precision "
          "(src/exact/bigint.hpp, #757), so no value is too large. With ranging=true as well, "
@@ -1507,12 +1507,28 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          {}});
     s.push_back(
+        {"exact_repair",
+         OptionType::Bool,
+         true,
+         "With exact=true, when the reported basis is optimal only to tolerance (a basic "
+         "value just outside its bounds, a reduced cost just of the wrong sign, in exact "
+         "arithmetic), take dual and primal simplex pivots in exact rational arithmetic from "
+         "it until it is exactly optimal (Koch, Oper. Res. Letters 32, 2004; Applegate, Cook, "
+         "Dash and Espinoza, Oper. Res. Letters 35, 2007; #757). The repaired basis, its exact "
+         "point and its exact duals, rounded once to double, then replace the reported ones, "
+         "and the ranges, the exact check and the certified sensitivity are those of it. The "
+         ".sol records exact_repair and how many pivots and bound flips it took. Bounded by "
+         "exact_seconds; past it the engine's basis is kept.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
         {"exact_seconds",
          OptionType::Double,
          30.0,
          "Wall-clock budget, in seconds, for each of the exact modules option exact "
-         "runs after the solve (the basis check and, with ranging, the certified "
-         "sensitivity; #757). Exact factors grow with fill and with numbers that "
+         "runs after the solve (the exact repair, the basis check and, with ranging, the "
+         "certified sensitivity; #757). Exact factors grow with fill and with numbers that "
          "lengthen as elimination goes, so past the budget the verdict is DECLINED "
          "rather than a solve that never returns. The solve's own time_limit does not cover "
          "them.",
