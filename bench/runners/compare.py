@@ -21,6 +21,15 @@ Installing HiGHS (any of these; none of them touches the build):
 Usage:
     python bench/runners/compare.py
     python bench/runners/compare.py --highs-binary /path/to/highs --time-limit 60
+
+THE HEAD-TO-HEAD MODE (#766). With --suite, every solver - SANKHYA, HiGHS, SCIP, CBC/Clp and
+GLPK - runs over a whole test set, each as a separate process with one thread and the
+suite's time limit (120 s for Netlib and Kennington, 60 s for Maros-Meszaros), and every
+answer is checked by tools/verify_solution.py. The rivals live in rivals.py and the loop in
+compare_suite.py; both docstrings say exactly how a run is graded.
+
+    python bench/runners/compare.py --suite netlib
+    python bench/runners/compare.py --suite maros-meszaros --solvers sankhya,highs --resume
 """
 
 from __future__ import annotations
@@ -320,7 +329,20 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--highs-binary", type=Path, default=None)
     parser.add_argument("--sankhya-binary", type=Path, default=None)
-    parser.add_argument("--time-limit", type=float, default=60.0)
+    parser.add_argument("--time-limit", type=float, default=None,
+                        help="seconds per solve; 60 by default, or the suite's own limit "
+                             "with --suite")
+    parser.add_argument("--suite", choices=("netlib", "kennington", "maros-meszaros"),
+                        help="the head-to-head mode: every solver over this suite (#766)")
+    parser.add_argument("--solvers", default=None,
+                        help="with --suite: comma-separated subset of sankhya,highs,scip,"
+                             "cbc-clp,glpk (default all; a subset writes a -partial- CSV)")
+    parser.add_argument("--resume", action="store_true",
+                        help="with --suite: keep the runs already in the output CSV that were "
+                             "made at the same commit, and do only the rest")
+    parser.add_argument("--machine-kind", default=None,
+                        help="with --suite: what kind of machine this is, for the machine "
+                             "tag (default: systemd-detect-virt's answer)")
     parser.add_argument("--repeats", type=int, default=15,
                         help="timed runs per solver per instance; the MEDIAN is reported. "
                              "1 reproduces the old single-shot behaviour and its noise.")
@@ -333,6 +355,12 @@ def main() -> int:
                         help="destination CSV; relative paths are resolved "
                              "against the repository root")
     args = parser.parse_args()
+    args.time_limit_given = args.time_limit is not None
+    if args.suite:
+        import compare_suite  # noqa: PLC0415 - the head-to-head mode (#766)
+        return compare_suite.run_suite(args)
+    if args.time_limit is None:
+        args.time_limit = 60.0
 
     # Prefer a real command-line binary; fall back to the highspy package. Either way HiGHS
     # runs as a separate solver and is never linked into SANKHYA.
