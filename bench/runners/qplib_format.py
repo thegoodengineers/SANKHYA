@@ -43,9 +43,14 @@ conversion is: a diagonal entry keeps its value, an off-diagonal entry is halved
 entry is read as a term 0.5 v x_h x_k whichever triangle it sits in, and an entry the file
 lists twice is refused rather than summed.
 
-Scope: continuous variables (type *C*) and linear, box or no constraints (types **L, **B,
-**N) are written. A model with integer variables or quadratic constraints is parsed but
-refused by to_qps() by name - those belong to #514's runner, not this one.
+Every problem class is written (#835). Integer and binary columns go between MARKER INTORG /
+INTEND records with both bounds written explicitly, so no reader's default for an unbounded
+integer column applies. A quadratic constraint cl <= 0.5 x'Q^i x + b^i'x <= cu goes to a
+QCMATRIX section for its row. The Q^i use the same lower-left triangle convention as Q^0, so a
+listed (h, k, v) is the term 0.5 v x_h x_k; QCMATRIX (CPLEX and Gurobi, and
+src/io/mps_quadratic.cpp) lists the FULL symmetric matrix with no 1/2, so a diagonal entry
+becomes 0.5 v and an off-diagonal one becomes the two entries (h, k) and (k, h) of 0.25 v
+each. fetch_qplib.py checks this at QPLIB's published point too, quadratic rows included.
 
     python bench/runners/qplib_format.py QPLIB_8845.qplib QPLIB_8845.qps
 """
@@ -70,7 +75,7 @@ class QplibModel:
     q0: dict[tuple[int, int], float] = field(default_factory=dict)  # listed (h, k) -> v
     b0: list[float] = field(default_factory=list)
     constant: float = 0.0
-    qi_count: int = 0  # entries of the constraint Q^i, parsed and never written
+    qi: dict[tuple[int, int, int], float] = field(default_factory=dict)  # (i, h, k) -> v
     bi: list[list[tuple[int, float]]] = field(default_factory=list)  # per constraint (j, v)
     infinity: float = math.inf
     cl: list[float] = field(default_factory=list)
@@ -86,6 +91,13 @@ class QplibModel:
         """0.5 x'Q^0 x + b^0'x + q^0 with Q^0 as the file lists it (the triangle reading)."""
         quadratic = sum(v * x[h] * x[k] for (h, k), v in self.q0.items())
         return 0.5 * quadratic + sum(b * xj for b, xj in zip(self.b0, x)) + self.constant
+
+    def activity(self, x: list[float]) -> list[float]:
+        """b^i'x + 0.5 x'Q^i x per constraint, Q^i as the file lists it (the triangle reading)."""
+        out = [sum(v * x[j] for j, v in row) for row in self.bi]
+        for (i, h, k), v in self.qi.items():
+            out[i] += 0.5 * v * x[h] * x[k]
+        return out
 
 
 def _number(token: str) -> float:
@@ -176,9 +188,13 @@ def parse(text: str) -> QplibModel:
     model.constant = lines.real("objective constant")
     model.bi = [[] for _ in range(m)]
     if c_type not in "NBL":
-        model.qi_count = lines.integer("number of Q^i entries")
-        for _ in range(model.qi_count):
-            lines.take(4, "Q^i entry")
+        for _ in range(lines.integer("number of Q^i entries")):
+            i, h, k, value = lines.take(4, "Q^i entry")
+            key = (lines.index(i, m, "Q^i constraint"), lines.index(h, n, "Q^i row"),
+                   lines.index(k, n, "Q^i column"))
+            if key in model.qi:
+                raise ValueError(f"Q^i lists entry ({i}, {h}, {k}) twice")
+            model.qi[key] = _number(value)
     if has_constraints:
         for _ in range(lines.integer("number of b^i entries")):
             i, j, value = lines.take(3, "b^i entry")
@@ -244,14 +260,27 @@ def hessian(model: QplibModel) -> dict[tuple[int, int], float]:
     return {key: value for key, value in out.items() if value != 0.0}
 
 
+def row_quadratics(model: QplibModel) -> dict[int, dict[tuple[int, int], float]]:
+    """Per constraint, the FULL symmetric QCMATRIX with the file's 0.5 x'Q^i x folded in:
+    diagonal 0.5 v, each off-diagonal (h, k) and (k, h) 0.25 v."""
+    folded: dict[tuple[int, int, int], float] = {}
+    for (i, h, k), value in model.qi.items():
+        key = (i, max(h, k), min(h, k))
+        folded[key] = folded.get(key, 0.0) + value
+    out: dict[int, dict[tuple[int, int], float]] = {}
+    for (i, h, k), value in sorted(folded.items()):
+        if value == 0.0:
+            continue
+        row = out.setdefault(i, {})
+        if h == k:
+            row[(h, h)] = 0.5 * value
+        else:
+            row[(h, k)] = row[(k, h)] = 0.25 * value
+    return out
+
+
 def to_qps(model: QplibModel) -> str:
-    """The model as free-format QPS. Refuses what this runner does not cover."""
-    if any(model.integer):
-        raise ValueError(f"{model.name} ({model.problem_type}) has integer variables; the "
-                         "convex continuous QP runner does not write them")
-    if model.qi_count or model.problem_type[2] not in "NBL":
-        raise ValueError(f"{model.name} ({model.problem_type}) has quadratic constraints; "
-                         "they are #514's, not this runner's")
+    """The model as free-format QPS, integer markers and QCMATRIX sections included."""
     num = repr
     out = [f"NAME {model.name}"]
     if model.maximize:
@@ -282,7 +311,12 @@ def to_qps(model: QplibModel) -> str:
         for j, value in entries:
             by_column[j].append((i, value))
     out.append("COLUMNS")
+    in_integer = False
     for j in range(model.n):
+        if model.integer[j] != in_integer:
+            marker = "INTORG" if model.integer[j] else "INTEND"
+            out.append(f"    MARKER  'MARKER'  '{marker}'")
+            in_integer = model.integer[j]
         entries = [(OBJECTIVE_ROW, model.b0[j])] if model.b0[j] != 0.0 else []
         seen = set()
         for i, value in sorted(by_column[j]):
@@ -294,6 +328,8 @@ def to_qps(model: QplibModel) -> str:
         if not entries:
             entries = [(OBJECTIVE_ROW, 0.0)]  # a column needs one appearance
         out += [f"    {column_name(j)}  {row}  {num(value)}" for row, value in entries]
+    if in_integer:
+        out.append("    MARKER  'MARKER'  'INTEND'")
     out.append("RHS")
     if model.constant != 0.0:
         out.append(f"    RHS  {OBJECTIVE_ROW}  {num(-model.constant)}")  # RHS on obj = -c0
@@ -317,11 +353,17 @@ def to_qps(model: QplibModel) -> str:
         out.append(f" MI BND  {name}" if math.isinf(lo) else f" LO BND  {name}  {num(lo)}")
         if not math.isinf(hi):
             out.append(f" UP BND  {name}  {num(hi)}")
+        elif model.integer[j]:
+            out.append(f" PL BND  {name}")  # never a reader's [0, 1] integer default
     entries = hessian(model)
     if entries:
         out.append("QUADOBJ")
         out += [f"    {column_name(h)}  {column_name(k)}  {num(value)}"
                 for (h, k), value in sorted(entries.items(), key=lambda kv: (kv[0][1], kv[0][0]))]
+    for i, matrix in row_quadratics(model).items():
+        out.append(f"QCMATRIX  {row_name(i)}")
+        out += [f"    {column_name(h)}  {column_name(k)}  {num(value)}"
+                for (h, k), value in sorted(matrix.items())]
     out.append("ENDATA")
     return "\n".join(out) + "\n"
 
