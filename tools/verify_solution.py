@@ -471,24 +471,40 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
             return abs(multiplier)
         return abs(multiplier) * slack
 
+    def relative(multiplier: float, value: float, lower: float, upper: float,
+                 terms: float) -> float:
+        """The product over max(1, 1e-6 * |multiplier| * magnitude), so that comparing it
+        with 1e-6 passes a product up to max(1e-6, 1e-12 * |multiplier| * magnitude):
+        magnitude is the size of the numbers the slack is a difference of, the row's largest
+        term or its bound, the column's value or its bound (#806, and tolerances.hpp's
+        kComplementarityRounding). A slack is bound - activity, and rounding leaves about
+        eps * magnitude in it; Klee-Minty n = 20 carries a product of 1.6e-02 that is 1.6e-16
+        of its right-hand side 5^20. Under 1e6 of |multiplier| * magnitude this is the
+        absolute product, unchanged. A slack that cannot close stays absolute."""
+        below = (value - lower) if math.isfinite(lower) else INF
+        above = (upper - value) if math.isfinite(upper) else INF
+        slack = min(below, above)
+        product = complementarity(multiplier, slack)
+        if not math.isfinite(slack):
+            return product
+        bound = lower if (math.isfinite(lower) and below == slack) else upper
+        return product / max(1.0, 1e-6 * abs(multiplier) * max(terms, abs(bound)))
+
     for i, name in enumerate(model.row_names):
         if model.row_lower[i] == model.row_upper[i]:
             continue
-        slack_lower = (activity[i] - model.row_lower[i]) if math.isfinite(model.row_lower[i]) else INF
-        slack_upper = (model.row_upper[i] - activity[i]) if math.isfinite(model.row_upper[i]) else INF
-        product = complementarity(y[i], min(slack_lower, slack_upper))
+        product = relative(y[i], activity[i], model.row_lower[i], model.row_upper[i],
+                           row_scale[i])
         if product > worst:
             worst, where = product, name
     for j, name in enumerate(model.col_names):
         if model.col_lower[j] == model.col_upper[j]:
             continue
-        slack_lower = (x[j] - model.col_lower[j]) if math.isfinite(model.col_lower[j]) else INF
-        slack_upper = (model.col_upper[j] - x[j]) if math.isfinite(model.col_upper[j]) else INF
-        product = complementarity(d[j], min(slack_lower, slack_upper))
+        product = relative(d[j], x[j], model.col_lower[j], model.col_upper[j], abs(x[j]))
         if product > worst:
             worst, where = product, name
     report.check(worst <= 1e-6, "complementary slackness",
-                 f"worst |multiplier| * slack = {worst:.3e}"
+                 f"worst |multiplier| * slack = {worst:.3e} relative to its magnitudes"
                  + (f" on {where}" if where else ""))
 
     # ---- The basis (#218) -----------------------------------------------------------------

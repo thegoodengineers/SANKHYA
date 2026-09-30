@@ -436,17 +436,27 @@ void reconcile_status_with_measurement(const Model& model, Solution* solution,
     logger.warning("{}", detail);
   }
 
-  // Complementary slackness, judged the way the verifier judges it: absolutely (#209). The
-  // relative measure below lets a row priced in the thousands sit a few 1e-10 inside its
-  // bound; the verifier's absolute product does not, and a claim the verifier rejects must
-  // not leave here as one. The point is usable, so it is reported feasible, not wrong.
+  // Complementary slackness, judged the way the verifier judges it (#209, #806): each
+  // |multiplier| * slack against the larger of the absolute kComplementarity and the
+  // rounding a slack of its magnitude can carry (tolerances.hpp says why). A row priced in
+  // the thousands still may not sit 1e-9 inside its bound; rounding of huge terms is not
+  // read as a violation (Klee-Minty n = 20, right-hand side 5^20: a product of 1.6e-02 that
+  // is 1.6e-16 of its terms). An LP is
+  // judged by the relative measure, which kkt_check.cpp and the verifier share; any other
+  // model keeps the absolute product, which is never the looser of the two. The point is
+  // usable, so a failure is reported feasible, not wrong.
+  const bool pure_lp = !model.has_quadratic_objective() && !model.has_integrality();
+  const double complementarity =
+      pure_lp && solution->complementarity_violation > tol::kComplementarity
+          ? worst_relative_complementarity(model, *solution)
+          : solution->complementarity_violation;
   if (check_dual && solution->status == SolveStatus::kOptimal &&
-      solution->complementarity_violation > tol::kComplementarity) {
+      complementarity > tol::kComplementarity) {
     const std::string detail = fmt::format(
-        "engine reported optimal but the largest |multiplier| * slack is {:.3e}, above the "
-        "{:.1e} the independent verifier accepts; reporting a feasible point rather than a "
-        "proof",
-        solution->complementarity_violation, tol::kComplementarity);
+        "engine reported optimal but the largest |multiplier| * slack is {:.3e} ({:.3e} "
+        "relative to its magnitudes), above the {:.1e} the independent verifier accepts; "
+        "reporting a feasible point rather than a proof",
+        solution->complementarity_violation, complementarity, tol::kComplementarity);
     solution->status = SolveStatus::kFeasible;
     solution->message = solution->message.empty() ? detail : solution->message + "; " + detail;
     logger.warning("{}", detail);

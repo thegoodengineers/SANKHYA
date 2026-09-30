@@ -541,6 +541,29 @@ def test_a_nonbasic_row_is_on_its_bound_in_the_units_of_its_terms() -> None:
           "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
 
 
+def _huge_bound(gap: float):
+    """#806: minimize -x s.t. x <= 1e14, priced at y = -1, reported 1e14 - gap."""
+    model = _two_row_lp(cost=[-1.0], lower=[0.0], upper=[vs.INF],
+                        rows=[(-vs.INF, 1e14, [1.0])])
+    solution = _verdict("optimal", header={"objective": repr(-(1e14 - gap))},
+                        columns={"x0": 1e14 - gap}, rows={"r0": 1e14 - gap})
+    solution.row_dual["r0"] = -1.0
+    return _run(model, solution)
+
+
+def test_complementarity_allows_rounding_of_a_huge_bound() -> None:
+    report = _huge_bound(0.015625)  # 1.6e-16 of the bound, Klee-Minty n = 20's shape
+    check(report.failures == 0, "complementarity allows rounding of a huge bound",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
+
+
+def test_complementarity_still_rejects_a_real_slack_at_a_huge_bound() -> None:
+    report = _huge_bound(1e3)  # 1e-11 of the bound: ten times the rounding allowance
+    failed = [n for ok, n, d in report.lines if not ok]
+    check("complementary slackness" in failed,
+          "complementarity still rejects a real slack at a huge bound", ", ".join(failed))
+
+
 def test_a_valid_farkas_certificate_verifies_at_any_scale() -> None:
     report = _run(_contradictory_pair(),
                   _verdict("infeasible", farkas={"r0": 1e-9, "r1": -1e-9}))
@@ -908,6 +931,8 @@ def main() -> int:
     test_a_tiny_farkas_vector_on_a_feasible_model_is_rejected()
     test_a_tiny_coefficient_on_an_unbounded_column_is_not_zero()
     test_a_nonbasic_row_is_on_its_bound_in_the_units_of_its_terms()
+    test_complementarity_allows_rounding_of_a_huge_bound()
+    test_complementarity_still_rejects_a_real_slack_at_a_huge_bound()
     test_a_valid_farkas_certificate_verifies_at_any_scale()
     test_a_weakened_farkas_certificate_is_rejected()
     test_an_infeasible_verdict_without_a_certificate_is_not_a_failure()

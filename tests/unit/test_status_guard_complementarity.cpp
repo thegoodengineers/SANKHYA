@@ -92,5 +92,51 @@ TEST(SolveStatusGuardComplementarity, ARowInsideItsBoundIsStillNotAProof) {
       << c.solution.message;
 }
 
+/// #806: minimize -x subject to x <= 1e14, the row priced at y = -1, reported at 1e14 - gap.
+Case huge_bound(double gap) {
+  Case c;
+  Model& model = c.model;
+  model.col_lower = {0.0};
+  model.col_upper = {kInfinity};
+  model.col_cost = {-1.0};
+  model.col_type = {VarType::kContinuous};
+  model.row_lower = {-kInfinity};
+  model.row_upper = {1e14};
+  model.matrix.reset(1, 1);
+  model.matrix.add_entry(0, 0, 1.0);
+  model.matrix.finalize();
+  Solution& s = c.solution;
+  s.status = SolveStatus::kOptimal;
+  s.algorithm = "fabricated";
+  s.col_value = {1e14 - gap};
+  s.row_activity = {1e14 - gap};
+  s.row_dual = {-1.0};
+  s.col_dual = {0.0};
+  s.recompute_quality(model);
+  return c;
+}
+
+TEST(SolveStatusGuardComplementarity, RoundingOfAHugeRightHandSideIsNotAViolation) {
+  // Klee-Minty n = 20's shape: a product of 1.6e-02 against terms of 1e14 is 1.6e-16 of
+  // them, under the kComplementarityRounding allowance of 1e-12 * 1 * 1e14 = 100.
+  Case c = huge_bound(0.015625);
+  ASSERT_GT(c.solution.complementarity_violation, tol::kComplementarity);
+  Logger silent(nullptr);
+  reconcile_status_with_measurement(c.model, &c.solution, quiet(), silent, /*check_dual=*/true);
+  EXPECT_EQ(c.solution.status, SolveStatus::kOptimal) << c.solution.message;
+}
+
+TEST(SolveStatusGuardComplementarity,
+     ASlackAboveRoundingOfAHugeRightHandSideIsStillAViolation) {
+  // 1e3 inside a bound of 1e14 is 1e-11 of it: ten times the rounding allowance, and the
+  // absolute product (1e3) is far above kComplementarity. Not a proof.
+  Case c = huge_bound(1e3);
+  Logger silent(nullptr);
+  reconcile_status_with_measurement(c.model, &c.solution, quiet(), silent, /*check_dual=*/true);
+  EXPECT_EQ(c.solution.status, SolveStatus::kFeasible);
+  EXPECT_NE(c.solution.message.find("|multiplier| * slack"), std::string::npos)
+      << c.solution.message;
+}
+
 }  // namespace
 }  // namespace sankhya

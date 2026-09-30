@@ -146,15 +146,34 @@ inline constexpr int kPropagationWorkPerRow = 20;
 /// should be revisited only if those land and instances still miss it.
 inline constexpr double kDualityGap = 1e-9;
 
-/// Complementary slackness, ABSOLUTE: the largest |multiplier| * slack over every row and
-/// column, in the model's own units, that an optimality claim may carry. This is the test
-/// tools/verify_solution.py applies (its "complementary slackness" check), copied here so the
-/// status guard in solve() cannot let out a claim the verifier will reject. The guard's other
-/// dual measure is relative to each term's scale; this one is deliberately not, because the
-/// verifier's is not (#52: the verifier is not loosened). Found by #209: the interior point's
-/// duals can be purified to 1e-11 while a row priced at 3.3e+03 still sits 3e-10 inside its
-/// bound, a product of 1.1e-06 that only crossover (#219) removes.
+/// Complementary slackness: the largest |multiplier| * slack over every row and column that
+/// an optimality claim may carry. This is the test tools/verify_solution.py applies (its
+/// "complementary slackness" check), mirrored in kkt_check.cpp and the status guard in
+/// solve() so neither can let out a claim the verifier will reject. A product passes when it
+/// is at most
+///
+///     max(kComplementarity, kComplementarityRounding * |multiplier| * magnitude)
+///
+/// where magnitude is the size of the numbers the slack is a difference of: for a row the
+/// larger of its largest term |a_ij x_j| and its bound, for a column the larger of |x_j| and
+/// its bound. The first term is the absolute test of #209, and it is what decides on every
+/// model whose |multiplier| * magnitude is under 1e6: a row priced at 1e3 still may not sit
+/// 3e-9 inside a bound of 1, and the interior point's row priced at 3.3e+03 sitting 3e-10
+/// inside its bound (a product of 1.1e-06) still fails.
 inline constexpr double kComplementarity = 1e-6;
+
+/// The second term (#806): a slack is computed as bound - activity, and rounding leaves an
+/// error of order eps * magnitude in it (times the number of terms summed), so a correct
+/// multiplier times that error is a product no solver can avoid. 1e-12 is about 4500 eps: room
+/// for the summation of a long row, and four orders of magnitude below the primal
+/// feasibility tolerance, so a slack that is a real fraction of its magnitude is still read
+/// as one. Judged by kComplementarity alone, Klee-Minty n = 20 (right-hand sides up to
+/// 5^20 = 9.5e13) carries 1.6e-02, which is 1.6e-16 of its terms, and n = 30 carries 1.3e+05
+/// (1.4e-16); both were downgraded from a correct optimum. A genuine violation stays one:
+/// the scaled Netlib ship models of the stress set carry products equal to |d_j| * |x_j|, a
+/// column interior by its own size. A slack that cannot close keeps the absolute test, since
+/// there the condition is "the multiplier is zero" and has no magnitude.
+inline constexpr double kComplementarityRounding = 1e-12;
 
 /// The in-process KKT check of the engine race (#476, src/core/kkt_check.cpp) makes the
 /// independent verifier's checks, and these are the two of its thresholds that are not
