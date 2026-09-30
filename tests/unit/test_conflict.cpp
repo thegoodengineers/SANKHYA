@@ -337,7 +337,8 @@ Options searching(bool conflicts, const std::string& out) {
   // The models here are a few columns, so every root cut is "dense" and the admission
   // (#496) would close them at the root; pinned off, since the tree is what is tested.
   options.set_int("cut_dense_max", 0);
-  options.set_bool("presolve", false);  // conflict indices are then the model's own
+  options.set_int("cut_support_floor", 0);  // the density cap as the tree was measured (#496)
+  options.set_bool("presolve", false);      // conflict indices are then the model's own
   // And its rows: with symmetry on the search's model carries ordering rows (#413), which
   // cut away all but one point of each orbit, so a conflict re-proved from them holds only
   // on that smaller set, and the test below asks for validity over every feasible point.
