@@ -214,6 +214,40 @@ TEST(NlpIpm, MaximisationFixedColumnsAndAStartOutsideTheDomain) {
   expect_kkt(m, s);
 }
 
+TEST(NlpIpm, ADeadlineOrABadStartBeforeTheFirstIterationIsAnAnswerNotACrash) {
+  // The method can end before it has multipliers: a deadline inside the symbolic analysis of
+  // the KKT system, or a start outside the functions' domain. The answer used to be read as
+  // if it had them - lambda and z of size 0 indexed up to m and n - which crashed the MINLP
+  // tree on CI when a node's share of the time limit ran out in the analysis (a
+  // segmentation fault in test_minlp_minlplib.cpp, once in several runs, #826).
+  NonlinearModel disc(columns(2, -kInf, kInf));
+  {
+    ExpressionGraph& g = disc.graph;
+    const ExprId x0 = g.variable(0), x1 = g.variable(1);
+    disc.objective = g.sum({g.power(g.subtract(x0, g.constant(2.0)), 2.0), g.exp(x1)});
+    disc.constraints.push_back({g.add(g.power(x0, 2.0), g.power(x1, 2.0)), -kInf, 1.0, ""});
+  }
+  Options no_time = quiet();
+  no_time.set_double("time_limit", 0.0);
+  const Solution stopped = solve_nlp(disc, no_time);
+  EXPECT_EQ(stopped.status, SolveStatus::kTimeLimit) << stopped.message;
+  EXPECT_FALSE(claims_a_point(stopped));
+
+  // log(x0) from x = (0, 0) with x0 unbounded below: no push into the domain, so the first
+  // evaluation fails, again before any multiplier exists.
+  NonlinearModel outside(columns(2, -kInf, kInf));
+  {
+    ExpressionGraph& g = outside.graph;
+    outside.objective = g.negate(g.log(g.variable(0)));
+    outside.constraints.push_back({g.add(g.variable(0), g.variable(1)), -kInf, 1.0, ""});
+  }
+  outside.start = {0.0, 0.0};
+  const Solution bad_start = solve_nlp(outside, quiet());
+  EXPECT_FALSE(bad_start.status == SolveStatus::kOptimal ||
+               bad_start.status == SolveStatus::kLocallyOptimal)
+      << bad_start.message;
+}
+
 TEST(NlpIpm, IntegerColumnsGoToTheBranchAndBound) {
   // min exp(x), x integer in [0, 3]: convex, so the NLP-based branch and bound (stage 3)
   // takes it and reaches exp(0) = 1 at x = 0.
