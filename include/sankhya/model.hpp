@@ -580,6 +580,39 @@ class Solution {
   double absolute_gap = 0.0;
   double relative_gap = 0.0;
 
+  // ---- A rigorous bound behind every optimal LP (#763) ----------------------------------
+  //
+  // An ADDITION to this frozen interface, called out here as farkas_dual was in #191. NaN
+  // (not computed) unless the model is an LP - no integer columns, no quadratic objective -
+  // and the status is kOptimal with row duals; every existing consumer ignores them.
+  //
+  // safe_lower_bound is the Neumaier-Shcherbina bound (src/core/safe_bound.hpp) from
+  // row_dual, computed with outward rounding: in the model's own sense with the offset, a
+  // guaranteed lower bound on the exact optimum when minimising and a guaranteed UPPER bound
+  // when maximising (the name follows the minimise convention). -inf (+inf when maximising)
+  // when no finite bound could be proved from these duals. certified_gap is how far the
+  // objective is from it on the side it bounds, sense * (objective - safe_lower_bound), and
+  // certified_relative_gap that over max(1, |objective|). A negative gap means the objective
+  // is past a proved bound, i.e. the point is infeasible by that much in objective terms.
+  // safe_multipliers are the row multipliers the bound was proved from, one per row in the
+  // sign convention of row_dual: row_dual itself, or a vector near it (src/core/
+  // lp_safe_bound.cpp says why), empty when no finite bound was proved. The .sol file
+  // carries them so tools/verify_solution.py can re-derive the bound exactly.
+  // safe_column_bounds are the column bounds the model lacks that the bound relied on, each
+  // implied by one row and the bounds before it in this list (bound propagation), in the
+  // order found; empty when the model's own bounds sufficed.
+  double safe_lower_bound = std::numeric_limits<double>::quiet_NaN();
+  double certified_gap = std::numeric_limits<double>::quiet_NaN();
+  double certified_relative_gap = std::numeric_limits<double>::quiet_NaN();
+  std::vector<double> safe_multipliers;
+  struct SafeColumnBound {
+    Index column = -1;
+    Index row = -1;
+    bool is_upper = false;
+    double value = 0.0;
+  };
+  std::vector<SafeColumnBound> safe_column_bounds;
+
   // ---- Effort -------------------------------------------------------------------------
 
   Count iterations = 0;  ///< simplex/IPM/PDHG iterations

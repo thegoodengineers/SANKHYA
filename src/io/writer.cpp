@@ -182,6 +182,13 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
              solution.algorithm.empty() ? "unknown" : solution.algorithm);
   fmt::print(out, "objective {}\n", exact(solution.objective));
   fmt::print(out, "dual_bound {}\n", exact(solution.dual_bound));
+  // #763: the Neumaier-Shcherbina bound behind an optimal LP, which tools/verify_solution.py
+  // re-derives exactly from the model and the safe_multipliers section below.
+  if (!std::isnan(solution.safe_lower_bound)) {
+    fmt::print(out, "safe_lower_bound {}\n", exact(solution.safe_lower_bound));
+    fmt::print(out, "certified_gap {}\n", exact(solution.certified_gap));
+    fmt::print(out, "certified_relative_gap {}\n", exact(solution.certified_relative_gap));
+  }
   // The targets an `optimal` MILP was held to (#188). Written for every model so the header
   // has one shape; the verifier only reads them when there are integer columns.
   fmt::print(out, "mip_relative_gap {}\n", exact(options.get_double("mip_relative_gap")));
@@ -351,6 +358,30 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
   }
   fmt::print(out, "end rows\n");
 
+  if (solution.safe_multipliers.size() == static_cast<std::size_t>(m)) {
+    fmt::print(out,
+               "\n# The row multipliers safe_lower_bound was proved from (#763), in the sign\n"
+               "# convention of the duals above.\n");
+    fmt::print(out, "begin safe_multipliers {}\n", m);
+    for (Index i = 0; i < m; ++i) {
+      fmt::print(out, "{} {}\n", quoted_name(row_name(model, i)),
+                 exact(solution.safe_multipliers[static_cast<std::size_t>(i)]));
+    }
+    fmt::print(out, "end safe_multipliers\n");
+  }
+  if (!solution.safe_column_bounds.empty()) {
+    fmt::print(out,
+               "\n# Column bounds the model lacks that the safe bound used, each implied by\n"
+               "# the named row and the bounds above it: column side value row.\n");
+    fmt::print(out, "begin safe_column_bounds {}\n", solution.safe_column_bounds.size());
+    for (const Solution::SafeColumnBound& b : solution.safe_column_bounds) {
+      fmt::print(out, "{} {} {} {}\n", quoted_name(column_name(model, b.column)),
+                 b.is_upper ? "upper" : "lower", exact(b.value),
+                 quoted_name(row_name(model, b.row)));
+    }
+    fmt::print(out, "end safe_column_bounds\n");
+  }
+
   // Exact rational verification (#521, option "exact"). Only when verified: the objective
   // and every column's value as an exact "numerator/denominator" decimal-integer fraction,
   // never rounded. tools/verify_solution.py does not yet cross-check this section - the
@@ -480,6 +511,9 @@ bool write_stats_json(const std::string& path, const Model& model, const Solutio
                     {"dual_bound", json_number(solution.dual_bound)},
                     {"absolute_gap", json_number(solution.absolute_gap)},
                     {"relative_gap", json_number(solution.relative_gap)},
+                    {"safe_lower_bound", json_number(solution.safe_lower_bound)},
+                    {"certified_gap", json_number(solution.certified_gap)},
+                    {"certified_relative_gap", json_number(solution.certified_relative_gap)},
                     {"message", solution.message}};
   blob["quality"] = {
       {"primal_infeasibility", json_number(solution.primal_infeasibility)},

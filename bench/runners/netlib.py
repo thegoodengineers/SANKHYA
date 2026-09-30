@@ -96,6 +96,12 @@ CSV_COLUMNS = [
     "exact_objective",
     "exact_relative_gap",
     "matches_exact",
+    # The Neumaier-Shcherbina bound of an optimal answer's own duals, outward-rounded, and
+    # the certified gap to its objective (#763); tools/verify_solution.py re-derives the
+    # bound exactly, so a wrong one fails independently_verified.
+    "safe_lower_bound",
+    "certified_gap",
+    "certified_relative_gap",
     "wall_seconds",
     "solver_seconds",
     "iterations",
@@ -204,6 +210,9 @@ def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
             "objective": as_number(result.get("objective")),
             "absolute_gap": as_number(result.get("absolute_gap")),
             "relative_gap": as_number(result.get("relative_gap")),
+            "safe_lower_bound": as_number(result.get("safe_lower_bound")),
+            "certified_gap": as_number(result.get("certified_gap")),
+            "certified_relative_gap": as_number(result.get("certified_relative_gap")),
             "algorithm": result.get("algorithm", ""),
             "rows": model.get("rows", ""),
             "columns": model.get("columns", ""),
@@ -248,6 +257,9 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=None,
                         help="destination CSV; relative paths are resolved "
                              "against the repository root")
+    parser.add_argument("--machine", default=None,
+                        help="machine tag for the CSV (default: OS-architecture), e.g. to say "
+                             "which box and under what load the timings were taken")
     args = parser.parse_args()
 
     binary = args.binary or default_binary()
@@ -270,7 +282,7 @@ def main() -> int:
 
     names = sorted(args.instances or reference)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    commit, machine = git_commit(args.binary), machine_tag()
+    commit, machine = git_commit(args.binary), args.machine or machine_tag()
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
     rows: list[dict] = []
@@ -361,6 +373,8 @@ def main() -> int:
             "exact_objective": "" if exact_text is None else exact_text,
             "exact_relative_gap": "" if exact_gap is None else repr(exact_gap),
             "matches_exact": "" if exact_value is None else int(matches_exact),
+            **{k: "" if blob.get(k) is None or blob[k] != blob[k] else repr(blob[k])
+               for k in ("safe_lower_bound", "certified_gap", "certified_relative_gap")},
             "wall_seconds": round(blob.get("wall_seconds", 0.0), 6),
             "solver_seconds": blob.get("solver_seconds", ""),
             "iterations": blob.get("iterations", ""),
@@ -400,6 +414,17 @@ def main() -> int:
         print(f"{exact_passes}/{len(graded)} within a relative {PASS_RELATIVE_TOLERANCE:g} of "
               f"the EXACT optimum (Koch 2004, data/netlib/koch_exact.json) AND passed "
               f"independent verification")
+    # #763: how many optimal answers are within 1e-6 relative of a bound valid by
+    # construction. |gap|, because a negative gap is an objective past a proved bound.
+    optimal = [row for row in rows if row["status"] == "optimal"]
+    certified = [row for row in optimal if row["certified_relative_gap"] != ""
+                 and abs(float(row["certified_relative_gap"])) <= PASS_RELATIVE_TOLERANCE]
+    if optimal:
+        print(f"{len(certified)}/{len(optimal)} optimal answers carry a certified relative gap "
+              f"<= {PASS_RELATIVE_TOLERANCE:g} (Neumaier-Shcherbina safe bound of their duals)")
+        uncertified = [row["instance"] for row in optimal if row not in certified]
+        if uncertified:
+            print(f"not certified to that: {', '.join(uncertified)}")
     offset_rows = [row["instance"] for row in rows
                    if row.get("differs_by_objective_constant")]
     if offset_rows:

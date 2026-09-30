@@ -63,6 +63,7 @@
 #include "core/engine_selection.hpp"
 #include "core/iis.hpp"
 #include "core/kkt_check.hpp"
+#include "core/lp_safe_bound.hpp"
 #include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
 #include "core/status_guard.hpp"
@@ -577,6 +578,13 @@ Solution solve(const Model& model, const Options& requested_options, SolveContro
     solved = run_engine_guarded(
         [&] { return solve_unguarded(model, options, control, logger, timer, &engine_ran); },
         [&] { return engine_ran; }, timer, logger);
+  }
+  // #763: every optimal LP carries a bound valid by construction, from its own duals.
+  attach_safe_lower_bound(model, &solved);
+  if (!std::isnan(solved.safe_lower_bound)) {
+    logger.info(
+        "Safe bound (Neumaier-Shcherbina): {:.17g}, certified gap {:.3e} ({:.3e} relative)",
+        solved.safe_lower_bound, solved.certified_gap, solved.certified_relative_gap);
   }
   if (profile_mode != ProfileMode::kOff) {
     report_profile(profiler, options, solved, logger);
