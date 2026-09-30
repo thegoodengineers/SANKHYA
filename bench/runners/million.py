@@ -23,7 +23,7 @@ did, the primal and dual infeasibility it stopped at, the peak resident memory o
 process (from wait4, so the kernel's number, not an estimate), the solver's own message -
 which names the factor's nonzeros when the interior point or the polish declines - and the
 termination reason. `attribution` is one word read off those numbers (iterations, fill,
-memory, polish); docs/BENCHMARKS.md renders the table from this CSV.
+memory, polish, stall, crossover); docs/BENCHMARKS.md renders the table from this CSV.
 
 The machine tag is measured, not typed: CPU model, logical cores and RAM from /proc, and
 whether this is a container. `--host-label` adds what /proc cannot know (the provider).
@@ -223,9 +223,44 @@ def attribute(row: dict, ram_mb: float) -> str:
         return "polish"
     if "factor" in message or "nonzeros" in message or "ordering" in message:
         return "fill"
+    # The two ways the interior point stops short without running out of anything: its
+    # step collapsed (a `feasible` point, however close), or the crossover asked to finish
+    # from that point ran out of time among its pivots. The crossover is named first
+    # because on that arm it is what stopped last.
+    if "crossover did not reach" in message:
+        return "crossover"
+    if "stalled" in message:
+        return "stall"
     if row["status"] == "optimal":
         return "verifier"
     return "iterations"
+
+
+def reattribute(path: Path) -> int:
+    """Re-derive the attribution column of a CSV this runner wrote, from each row's own
+    status, message and memory - nothing is re-solved and no other column changes. The RAM
+    the memory rule compares against is read from the row's machine tag, the machine that
+    measured it, not this one."""
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    changed = 0
+    for row in rows:
+        ram_mb = 0.0
+        for part in row.get("machine", "").split(";"):
+            if part.strip().endswith("GiB RAM"):
+                ram_mb = float(part.split()[0]) * 1024
+        word = attribute(row, ram_mb)
+        if word != row.get("attribution", ""):
+            print(f"  {row['family']} {row['arm']}: {row.get('attribution') or '-'} -> "
+                  f"{word or '-'}")
+            row["attribution"] = word
+            changed += 1
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"{changed} of {len(rows)} attributions changed in {path}")
+    return 0
 
 
 def solve(binary: Path, instance: dict, arm: str, time_limit: float, work: Path,
@@ -283,19 +318,26 @@ def solve(binary: Path, instance: dict, arm: str, time_limit: float, work: Path,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--binary", type=Path, default=None)
+    parser.add_argument("--reattribute", type=Path, default=None, metavar="CSV",
+                        help="re-derive only the attribution column of a CSV this runner "
+                             "wrote, from its own rows, and exit; nothing is solved")
     parser.add_argument("--families", nargs="+", choices=sorted(FAMILIES),
                         default=["transport", "staircase", "refinery"])
     parser.add_argument("--arms", nargs="+", choices=sorted(ARMS), default=["ipm", "ipm-xover", "pdhg"])
     parser.add_argument("--time-limit", type=float, default=3600.0)
     parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE",
                         help="added to every arm and recorded in solver_options")
-    parser.add_argument("--keep", type=Path, required=True,
+    parser.add_argument("--keep", type=Path, default=None,
                         help="where the instances, solutions and logs go (several GB)")
     parser.add_argument("--host-label", default="",
                         help="what /proc cannot tell, e.g. 'cloud container'")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()
+    if args.reattribute:
+        return reattribute(args.reattribute)
+    if args.binary is None or args.keep is None:
+        parser.error("--binary and --keep are required to run")
 
     commit = stamp.stamp(args.binary)
     machine = machine_tag(args.host_label)

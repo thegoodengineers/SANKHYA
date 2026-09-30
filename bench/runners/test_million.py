@@ -58,6 +58,34 @@ def test_attribution_rule() -> None:
     fill = "the factor would hold 3e9 nonzeros, over ipm_max_factor_nonzeros"
     assert million.attribute({**base, "status": "not_solved", "message": fill}, 16000) == "fill"
     assert million.attribute({**base, "status": "optimal"}, 16000) == "verifier"
+    stalled = ("the interior-point iteration stalled after 21 iterations (steps 3.4e-11 / "
+               "1.4e-11); the best iterate is reported as a feasible point")
+    assert million.attribute({**base, "status": "feasible", "message": stalled}, 16000) == (
+        "stall")
+    crossed = stalled + ("; crossover did not reach a vertex (time_limit after 198900 "
+                         "pivots, 3576.36s), the interior point's answer stands")
+    assert million.attribute({**base, "status": "feasible", "message": crossed}, 16000) == (
+        "crossover")
+
+
+def test_reattribute_rewrites_only_the_attribution() -> None:
+    row = {key: "x" for key in million.CSV_COLUMNS}
+    row.update({"family": "transport", "arm": "ipm", "status": "feasible", "verified": "1",
+                "peak_rss_mb": "1865", "attribution": "iterations",
+                "machine": "cloud container; Linux-x86_64; cpu; 4 cores; 15.7 GiB RAM",
+                "message": "the interior-point iteration stalled after 21 iterations"})
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "million-cpu-abc1234.csv"
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=million.CSV_COLUMNS)
+            writer.writeheader()
+            writer.writerow(row)
+        million.reattribute(path)
+        with path.open(newline="", encoding="utf-8") as handle:
+            (after,) = list(csv.DictReader(handle))
+        assert after["attribution"] == "stall", after
+        assert {k: v for k, v in after.items() if k != "attribution"} == {
+            k: v for k, v in row.items() if k != "attribution"}
 
 
 def test_section_renders_both_tables() -> None:
