@@ -223,8 +223,10 @@ const std::vector<OptionSpec>& Options::registry() {
                  "(default; an eta per pivot, read in full by every later solve) or "
                  "forrest-tomlin (#279; the new column is folded into U and only a row eta "
                  "is kept, Forrest & Tomlin 1972). Both refactorize under the same "
-                 "break-even rule. forrest-tomlin is selectable so the A/B on #279 can be "
-                 "measured; it becomes the default only when that measurement says so.",
+                 "break-even rule. Measured against the product form on the full Netlib "
+                 "set, 3 runs a side (bench/results/lu-ft-ab-netlib-*): pilot ends feasible "
+                 "but not optimal in all 3 runs and pilot87 fails in 2, at a shifted geomean "
+                 "1.025x the product form's, so the product form stays the default.",
                  0.0,
                  0.0,
                  {"product-form", "forrest-tomlin"}});
