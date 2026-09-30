@@ -578,8 +578,8 @@ Solution BranchAndBound::run() {
                     "cannot go on: a node whose bound is unknown cannot be fathomed without "
                     "risking the optimum ({})",
                     nodes_explored_, relaxation.message)
-              : fmt::format("node LP returned {} at node {}", to_string(relaxation.status),
-                            nodes_explored_);
+              : fmt::format("node LP returned {} at node {} ({})", to_string(relaxation.status),
+                            nodes_explored_, relaxation.message);
       if (!out_of_iterations) return solution;
       push_open(node_index);  // still open, as above
       break;
@@ -996,10 +996,11 @@ Solution BranchAndBound::run() {
     // How the node LPs were solved (#65). The ratio of warm to cold is the whole point of
     // the dual node engine, and the iterations per solve are the evidence it pays.
     logger_.info(
-        "Node LPs: {} warm-started dual ({} iterations), {} cold primal ({} iterations), {} "
-        "cold fallback(s) after a dual failure; strong branching {} probe(s), {} iterations",
+        "Node LPs: {} warm-started dual ({} iterations), {} cold ({} iterations, {} by the "
+        "primal simplex), {} primal fallback(s) after a dual failure; strong branching {} "
+        "probe(s), {} iterations",
         warm_node_solves_, warm_node_iterations_, cold_node_solves_, cold_node_iterations_,
-        cold_fallbacks_, strong_branch_solves_, strong_branch_iterations_);
+        cold_primal_solves_, cold_fallbacks_, strong_branch_solves_, strong_branch_iterations_);
   }
   if (!solution.message.empty()) logger_.info("{}", solution.message);
   return solution;

@@ -190,11 +190,13 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"mip_node_engine",
                  OptionType::String,
                  std::string("dual"),
-                 "LP engine for branch-and-bound nodes below the root: dual (default) "
+                 "LP engine for branch-and-bound node LPs: dual (default) "
                  "warm-starts each child from its parent's optimal basis with the dual "
                  "simplex, which is dual feasible there and typically a few pivots from "
-                 "the child's optimum; primal re-solves every node from the slack basis, "
-                 "kept so the two can be compared (#65).",
+                 "the child's optimum, and solves a node LP with no basis - the root - with "
+                 "the dual simplex from the slack basis (#803), the primal simplex taking "
+                 "over from a dual that returns no verdict; primal re-solves every node "
+                 "from the slack basis, kept so the two can be compared (#65).",
                  0.0,
                  0.0,
                  {"dual", "primal"}});
