@@ -40,6 +40,7 @@ struct HalpernResult {
   double fp_x2 = 0.0;           ///< ||T(x) - x||^2, so the P-norm can be re-weighted
   double fp_y2 = 0.0;           ///< ||T(y) - y||^2
   bool should_restart = false;  ///< true when the restart criterion is met
+  double alpha = 0.0;           ///< the blend weight used, so A x can be blended alike (#479)
 };
 
 /// Apply one Halpern combination step for the LP primal-dual iterate.

@@ -6,12 +6,15 @@
 // fixed-point residual. Both paths must converge to the same optimum on committed
 // Netlib instances; the averaged path (off) is tested separately for bitwise identity.
 
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 
 #include <gtest/gtest.h>
 
+#include "pdhg/pdhg_trace.hpp"
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
@@ -69,15 +72,60 @@ TEST(PdhgHalpern, OffIsBitwiseTheOldPath) {
   EXPECT_EQ(a.iterations, b.iterations);
 }
 
-TEST(PdhgHalpern, TwoMatvecIsRefusedNotSilentlyWrong) {
-  // The blend moves the iterate after the cached A x was computed (review of #613).
-  Model model;
-  ASSERT_TRUE(io::read_model(netlib_path("afiro"), &model).ok);
-  Options options = pdhg_options(true);
-  options.set_string("pdhg_two_matvec", "true");
-  const Solution s = solve(model, options);
-  EXPECT_EQ(s.status, SolveStatus::kModelError) << s.message;
-  EXPECT_NE(s.message.find("pdhg_two_matvec"), std::string::npos) << s.message;
+// Two products under Halpern (#479): A x_{k+1} is the blend of the fresh A T(x_k) and the
+// anchor's product, alpha A T(x_k) + (1 - alpha) A x_0. That is A of the blended iterate by
+// linearity but not bit for bit, so the cache is held to rounding, not to the bit as on the
+// averaged path: at every accepted iterate it is within kCacheRounding of A x_k taken
+// afresh, relative in the max norm. The bound is one blend's rounding (a few ulps of the
+// largest entry) with room, since each blend starts from a fresh product and each restart
+// recomputes the anchor's; an error that carried over would grow past it.
+constexpr double kCacheRounding = 1e-12;
+
+struct CacheCheck {
+  Count checked = 0;
+  double worst = 0.0;
+};
+
+void check_cache(void* context, Count, const double*, std::size_t, const double*, std::size_t m,
+                 const double* cached, const double* fresh) {
+  auto* check = static_cast<CacheCheck*>(context);
+  if (cached == nullptr || fresh == nullptr) return;
+  ++check->checked;
+  double difference = 0.0;
+  double scale = 0.0;
+  for (std::size_t i = 0; i < m; ++i) {
+    difference = std::max(difference, std::fabs(cached[i] - fresh[i]));
+    scale = std::max(scale, std::fabs(fresh[i]));
+  }
+  check->worst = std::max(check->worst, scale > 0.0 ? difference / scale : difference);
+}
+
+TEST(PdhgHalpern, TwoMatvecAgreesWithThreeProductsAndItsCacheIsAxToRounding) {
+  const char* const names[] = {"afiro", "sc50a", "sc105", "blend", "stocfor1"};
+  for (const char* name : names) {
+    Model model;
+    ASSERT_TRUE(io::read_model(netlib_path(name), &model).ok) << name;
+    Options three = pdhg_options(true);
+    three.set_string("pdhg_two_matvec", "false");
+    Options two = pdhg_options(true);
+    two.set_string("pdhg_two_matvec", "true");
+    const Solution a = solve(model, three);
+    CacheCheck check;
+    pdhg::IterateTraceHook& hook = pdhg::iterate_trace_for_testing();
+    hook.callback = &check_cache;
+    hook.context = &check;
+    const Solution b = solve(model, two);
+    hook = pdhg::IterateTraceHook{};
+    ASSERT_EQ(a.status, SolveStatus::kOptimal) << name << " three: " << a.message;
+    ASSERT_EQ(b.status, SolveStatus::kOptimal) << name << " two: " << b.message;
+    EXPECT_NEAR(a.objective, b.objective, 1e-8 * std::max(1.0, std::fabs(a.objective)))
+        << name << " three " << a.iterations << " iterations, two " << b.iterations;
+    EXPECT_EQ(check.checked, b.iterations) << name;
+    EXPECT_LE(check.worst, kCacheRounding) << name;
+    std::printf("%-9s three %lld iterations, two %lld, cache worst %.1e\n", name,
+                static_cast<long long>(a.iterations), static_cast<long long>(b.iterations),
+                check.worst);
+  }
 }
 
 TEST(PdhgHalpern, TheDefaultTwoMatvecFallsBackToThreeProducts) {

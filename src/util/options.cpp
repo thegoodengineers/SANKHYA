@@ -2001,8 +2001,9 @@ const std::vector<OptionSpec>& Options::registry() {
          "from computed ones by rounding, so the trajectory is not bitwise the "
          "three-product one. cpu (default): two products on the CPU engine, three on the "
          "CUDA engine, and three on the CPU when pdhg_halpern is on; true: two products on "
-         "both engines (per-iteration and device-loop paths alike), refused with "
-         "pdhg_halpern; false: three products everywhere. The default follows the A/B on "
+         "both engines (per-iteration and device-loop paths alike), and under pdhg_halpern "
+         "the cached product is blended with the anchor's as the iterate is; false: three "
+         "products everywhere. The default follows the A/B on "
          "main 58a8374 (bench/results/pdhg-two-matvec-58a8374.csv): the CPU per-iteration "
          "time is 0.74 to 0.84 of the three-product time on all 14 instances, the device "
          "mixed (1.2649 on kkt_1000x1000, 1.0327 on kkt_5000x5000).",
