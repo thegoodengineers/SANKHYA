@@ -510,7 +510,12 @@ TEST(InteriorPointProximal, OffByDefaultAndTheDefaultPathIsTheExplicitlyOffPath)
   EXPECT_EQ(by_default.iterations, plain.iterations);
   EXPECT_EQ(by_default.objective, plain.objective);
   EXPECT_EQ(by_default.col_value, plain.col_value);
-  EXPECT_EQ(by_default.message, plain.message);
+  // The message carries the crossover's wall time ("in 0.01s"), which is not the path: two
+  // identical solves straddle a hundredth of a second on a loaded runner (#826: on CI, 0.01s
+  // against 0.00s under ASan). Compared with every "<number>s" duration blanked.
+  const std::regex seconds(R"(\d+(\.\d+)?s\b)");
+  EXPECT_EQ(std::regex_replace(by_default.message, seconds, "Ts"),
+            std::regex_replace(plain.message, seconds, "Ts"));
   EXPECT_NEAR(plain.objective, proximal.objective, 1e-6 * std::fabs(plain.objective));
 }
 
