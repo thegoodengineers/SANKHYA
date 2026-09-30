@@ -56,7 +56,7 @@ RESULTS_DIR = REPO_ROOT / "bench" / "results"
 
 CSV_COLUMNS = [
     "instance", "sha256", "rows", "cols", "nnz", "backend", "status", "rounds", "tightened",
-    "seconds", "repeats", "agrees_with_cpu", "git_commit", "machine", "gpu", "timestamp_utc",
+    "seconds", "repeats", "cpu_threads", "agrees_with_cpu", "git_commit", "machine", "gpu", "timestamp_utc",
     "context_seconds", "seconds_without_context",
 ]
 
@@ -186,7 +186,9 @@ def main() -> int:
                     "instance": f"prop-knapsack-{size}", "sha256": digest, "rows": rows,
                     "cols": cols, "nnz": nnz, "backend": label, "status": "propagated",
                     "rounds": first["rounds"], "tightened": first["tightened"],
-                    "seconds": f"{median:.6f}", "repeats": len(runs), "agrees_with_cpu": agrees,
+                    "seconds": f"{median:.6f}", "repeats": len(runs),
+                    # The CPU propagator is serial code (#487: name the CPU side's threads).
+                    "cpu_threads": 1 if label == "cpu" else "", "agrees_with_cpu": agrees,
                     "git_commit": commit, "machine": machine, "gpu": gpu,
                     "timestamp_utc": timestamp,
                     "context_seconds": "" if context is None else f"{context:.6f}",
