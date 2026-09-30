@@ -57,7 +57,7 @@ def _candidate_paths() -> list[Path]:
         for name in _LIBRARY_NAMES:
             found.append(base / name)
         # CMake gives the shared library a VERSION and SOVERSION, so on Linux the real file
-        # is libsankhya.so.0.1.0 and the bare name is a symlink beside it. That symlink is
+        # is libsankhya.so.<version> and the bare name is a symlink beside it. That symlink is
         # normally there - but it is created by the install rules as much as by the build,
         # and a tree where it is missing would otherwise fail with "not present" while the
         # library sits right there. Globbing the versioned names costs nothing and removes

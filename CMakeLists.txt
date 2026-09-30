@@ -14,7 +14,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(sankhya
-        VERSION 0.1.0
+        VERSION 1.0.0
         DESCRIPTION "Indigenous GPU-accelerated LP/MILP/QP optimization solver"
         LANGUAGES CXX)
 
