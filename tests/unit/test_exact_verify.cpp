@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -125,6 +126,84 @@ TEST(ExactBigInt, DivisionSatisfiesItsDefinitionOnRandomLargeNumbers) {
             "21267647932558653966460912964485513216");
   EXPECT_EQ(BigInt(-1000000000000LL).to_string(), "-1000000000000");
   EXPECT_EQ(BigInt::gcd(BigInt(-84), BigInt(36)), BigInt(12));
+}
+
+// Lehmer's gcd (#757) against the definition: Euclid by remainders, which the division test
+// above already holds to q b + r = a. Operands up to a dozen limbs, with shared factors so
+// the gcd is itself large, and powers of two, which take their own path.
+TEST(ExactBigInt, LehmerGcdAgreesWithEuclidOnRandomLargeNumbers) {
+  std::uint64_t state = 757;
+  const auto next = [&]() {
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    return static_cast<long long>(state >> 33);
+  };
+  const auto random_big = [&](int limbs) {
+    BigInt v(next() % 1000 - 500);
+    for (int k = 0; k < limbs; ++k) v = v * BigInt(1LL << 31) + BigInt(next());
+    return v;
+  };
+  const auto euclid = [](BigInt a, BigInt b) {
+    a = a.abs();
+    b = b.abs();
+    while (!b.is_zero()) {
+      BigInt t = a % b;
+      a = std::move(b);
+      b = std::move(t);
+    }
+    return a;
+  };
+  for (int trial = 0; trial < 300; ++trial) {
+    const BigInt common = random_big(trial % 4);
+    const BigInt a = random_big(trial % 9) * common;
+    const BigInt b = random_big((trial * 5) % 7) * common;
+    ASSERT_EQ(BigInt::gcd(a, b), euclid(a, b)) << "trial " << trial;
+    const BigInt two = BigInt::power_of_two(trial % 200);
+    ASSERT_EQ(BigInt::gcd(a, two), euclid(a, two)) << "trial " << trial;
+    ASSERT_EQ(BigInt::gcd(two, b), euclid(two, b)) << "trial " << trial;
+  }
+  EXPECT_EQ(BigInt::gcd(BigInt(0), BigInt(0)), BigInt(0));
+  EXPECT_EQ(BigInt::gcd(BigInt(0), BigInt(-12)), BigInt(12));
+  EXPECT_TRUE(BigInt(1).is_one());
+  EXPECT_FALSE(BigInt(-1).is_one());
+}
+
+// Sums, products and quotients in lowest terms without a gcd of the full-size result (Knuth
+// 4.5.1, #757): each result must be reduced, have a positive denominator, and equal the
+// unreduced definition, on fractions whose parts grow far past 64 bits.
+TEST(ExactRational, ReducedOperandArithmeticAgreesWithTheDefinition) {
+  std::uint64_t state = 2007;
+  const auto next = [&]() {
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    return static_cast<double>(static_cast<long long>(state >> 33) % 2000001 - 1000000);
+  };
+  std::vector<Rational> pool;
+  for (int i = 0; i < 12; ++i) pool.push_back(Rational::from_double(next() * 1e-7 + 0.1));
+  for (int round = 0; round < 80; ++round) {
+    const Rational a = pool[static_cast<std::size_t>(round * 7 + 3) % pool.size()];
+    const Rational b = pool[static_cast<std::size_t>(round * 11 + 5) % pool.size()];
+    const Rational sum = a + b;
+    const Rational product = a * b;
+    for (const Rational* r : {&sum, &product}) {
+      EXPECT_GT(r->denominator().sign(), 0) << "round " << round;
+      EXPECT_TRUE(r->is_zero() || BigInt::gcd(r->numerator(), r->denominator()).is_one())
+          << "round " << round;
+    }
+    EXPECT_EQ(
+        sum.numerator() * a.denominator() * b.denominator(),
+        (a.numerator() * b.denominator() + b.numerator() * a.denominator()) * sum.denominator())
+        << "round " << round;
+    EXPECT_EQ(product.numerator() * a.denominator() * b.denominator(),
+              a.numerator() * b.numerator() * product.denominator())
+        << "round " << round;
+    if (!b.is_zero()) {
+      const Rational quotient = a / b;
+      EXPECT_GT(quotient.denominator().sign(), 0);
+      EXPECT_EQ(quotient * b, a) << "round " << round;
+    }
+    EXPECT_EQ(a - a, Rational(0));
+    EXPECT_EQ((a < b), (a - b).sign() < 0) << "round " << round;
+    pool.push_back(round % 2 == 0 ? sum : product);
+  }
 }
 
 // A tiny LP with an exact, hand-checkable optimum: minimize x + y subject to x + 2y >= 4,
