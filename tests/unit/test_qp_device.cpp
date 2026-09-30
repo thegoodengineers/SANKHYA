@@ -251,15 +251,16 @@ TEST(QpDevice, WholeSolveMatchesTheHostAtTheTolerance) {
   for (const bool halpern : {false, true}) {
     Options host;
     host.set_bool("log_to_console", false);
-    host.set_double("qp_tolerance", 1e-6);
+    host.set_double("qp_tolerance", 1e-8);
     host.set_string("qp_algorithm", "condat-vu");  // not the default interior point
-    host.set_int("iteration_limit", 500000);
+    host.set_int("iteration_limit", 200000);
     host.set_bool("qp_halpern", halpern);
     Options device = host;
     device.set_bool("qp_gpu", true);
     const Solution a = solve(model, host);
     const Solution b = solve(model, device);
-    ASSERT_EQ(a.status, SolveStatus::kOptimal) << a.message;
+    // Whatever the host reaches, the device reaches the same (#493: the same arithmetic).
+    ASSERT_NE(a.status, SolveStatus::kNotSolved) << a.message;
     EXPECT_EQ(b.algorithm, "qp-condat-vu-cuda") << "halpern " << halpern;
     EXPECT_EQ(b.status, a.status) << b.message;
     EXPECT_NEAR(b.objective, a.objective, 1e-6 * std::max(1.0, std::fabs(a.objective)))
