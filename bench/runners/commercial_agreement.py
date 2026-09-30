@@ -2,40 +2,39 @@
 # SPDX-License-Identifier: Apache-2.0
 """Benchmark: agreement of objectives against size-limited commercial solver editions (#533).
 
-WHY THIS EXISTS.
+WHY THIS EXISTS. The problem statement names commercial solvers as the thing to replace.
+Their free size-limited editions can be run over the same MPS files as SANKHYA, on the
+instances that fit their limits, and the question asked is AGREEMENT - the same status and
+the same objective - not time: on models this small every solver is fast.
 
-The problem statement names commercial solvers as the thing to replace. A direct head-to-head
-on the instances that fit each edition's size limits is the clearest statement of where we
-stand. This runner invokes each solver as a separate process over the same MPS files and
-records objective, status, wall time and node count in a CSV for side-by-side comparison.
+HOW THEY ARE RUN. Each edition is the vendor's own package from PyPI (`cplex`, `gurobipy`,
+`xpress`), installed into a separate virtualenv whose interpreter is passed as `--python`.
+bench/runners/commercial_child.py is started in that interpreter once per solve, calls the
+package's documented public API, and prints one JSON line. No commercial code is imported
+into this process, linked into SANKHYA or read.
 
-LICENCE TERMS (checked 2026-09-24, recorded here per the issue's acceptance criterion):
-  - Gurobi Academic/Trial (free, <=2000 variables + constraints): benchmarking permitted under
-    academic/evaluation licence terms as of 2024; see docs/PROVENANCE.md judgement call.
-  - CPLEX Community Edition (free, <=1000 variables + constraints): benchmarking is permitted
-    under IBM's community licence for non-commercial academic use.
-  - HiGHS (open source, MIT): always permitted.
-  - GLPK (GPL-3.0, no size limit): always permitted.
+LICENCES DECIDE WHAT MAY BE RUN AND PUBLISHED (docs/PROVENANCE.md, judgement call 16, read
+from the LICENSE files inside the wheels on 2026-09-30):
+  - cplex 22.2.0.1, IBM ILOG CPLEX Optimization Studio Community Edition: the licence
+    information and the International License Agreement for Non-Warranted Programs contain
+    no clause on benchmarking or on publishing results. Allowed.
+  - gurobipy 13.0.3: the pip licence is an EVALUATION licence whose s2.2 reads "You will not
+    publish any benchmark testing results on the Product." Refused unless
+    `--gurobi-academic` confirms an academic licence is installed instead.
+  - xpress 9.9.1: the community licence's s2.4(vii) forbids disclosing or publishing
+    performance benchmark results without Fair Isaac's prior written consent. Refused
+    unless `--xpress-consent` confirms that consent is held.
 
-WHAT THIS IS NOT.
+SIZE LIMITS. Each package enforces its own; a model it refuses comes back as status `error`
+with the package's message and is named in the CSV, not dropped. The runner skips models
+beyond the documented limits up front so a run does not spend its time on refusals:
+CPLEX Community 1000 columns and 1000 rows, Gurobi's pip licence 2000 and 2000, Xpress
+Community 5000 rows plus columns.
 
-This does not grade SANKHYA against itself. Agreement is what is being measured, not timing:
-on Netlib-scale instances every modern solver is fast. A timing comparison on larger instances
-is a separate measurement that belongs in a different runner, on rented hardware, with the
-results in a separate CSV.
-
-SIZE LIMITS (conservative; each solver's own docs are authoritative):
-  GUROBI_LIMIT_VARS  = 2000   # variables
-  GUROBI_LIMIT_CONS  = 2000   # linear constraints
-  CPLEX_LIMIT_VARS   = 1000
-  CPLEX_LIMIT_CONS   = 1000
-
-Usage:
-    python bench/runners/commercial_agreement.py                  # all available solvers, all fetched instances
-    python bench/runners/commercial_agreement.py --solver gurobi  # one solver only
-    python bench/runners/commercial_agreement.py --suite netlib   # one instance set
-    python bench/runners/commercial_agreement.py afiro scrs8      # named instances
-    python bench/runners/commercial_agreement.py --dry-run        # show plan, solve nothing
+    python bench/runners/commercial_agreement.py --python <venv>/Scripts/python.exe --solver cplex
+    python bench/runners/commercial_agreement.py --python ... --solver cplex --suite netlib
+    python bench/runners/commercial_agreement.py --python ... --solver cplex afiro scrs8
+    python bench/runners/commercial_agreement.py --dry-run
 """
 
 from __future__ import annotations
@@ -45,438 +44,226 @@ import csv
 import datetime
 import hashlib
 import json
-import os
 import platform
-import re
-import shutil
 import subprocess
 import sys
+import tempfile
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
-import stamp as _stamp
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import stamp as _stamp  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIRS = {
     "netlib": REPO_ROOT / "data" / "netlib",
     "miplib": REPO_ROOT / "data" / "miplib",
-    "maros_meszaros": REPO_ROOT / "data" / "maros_meszaros",
+    "maros_meszaros": REPO_ROOT / "data" / "maros-meszaros",
 }
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
-SANKHYA_BIN = REPO_ROOT / "build" / "sankhya"
+CHILD = Path(__file__).resolve().parent / "commercial_child.py"
 
-GUROBI_LIMIT_VARS = 2000
-GUROBI_LIMIT_CONS = 2000
-CPLEX_LIMIT_VARS = 1000
-CPLEX_LIMIT_CONS = 1000
+# name -> (max columns, max rows, max columns + rows); None is no limit of that kind.
+LIMITS = {
+    "cplex": (1000, 1000, None),
+    "gurobi": (2000, 2000, None),
+    "xpress": (None, None, 5000),
+}
 
+# Relative, on the objective: the same 1e-6 the MIPLIB and Netlib runners use for a match.
 AGREEMENT_TOL = 1e-6
 
 FIELDS = [
-    "instance",
-    "instance_sha256",
-    "solver",
-    "our_objective",
-    "our_status",
-    "our_wall_s",
-    "our_nodes",
-    "ref_objective",
-    "ref_status",
-    "ref_wall_s",
-    "ref_nodes",
-    "abs_gap",
-    "rel_gap",
-    "verdict",
-    "git_commit",
-    "machine",
+    "instance", "instance_sha256", "suite", "rows", "columns", "solver", "solver_version",
+    "our_objective", "our_status", "our_wall_s", "our_nodes", "our_iterations",
+    "ref_objective", "ref_status", "ref_wall_s", "ref_nodes", "ref_iterations",
+    "abs_gap", "rel_gap", "verdict", "message", "time_limit", "git_commit", "machine",
     "timestamp_utc",
 ]
 
-
-@dataclass
-class Result:
-    instance: str = ""
-    path: Path = field(default_factory=Path)
-    solver: str = ""
-    our_objective: Optional[float] = None
-    our_status: str = ""
-    our_wall_s: float = 0.0
-    our_nodes: int = 0
-    ref_objective: Optional[float] = None
-    ref_status: str = ""
-    ref_wall_s: float = 0.0
-    ref_nodes: int = 0
-
-    @property
-    def abs_gap(self) -> str:
-        if self.our_objective is None or self.ref_objective is None:
-            return "n/a"
-        return f"{abs(self.our_objective - self.ref_objective):.6g}"
-
-    @property
-    def rel_gap(self) -> str:
-        if self.our_objective is None or self.ref_objective is None:
-            return "n/a"
-        denom = max(abs(self.ref_objective), 1e-10)
-        return f"{abs(self.our_objective - self.ref_objective) / denom:.6g}"
-
-    @property
-    def verdict(self) -> str:
-        if self.our_objective is None or self.ref_objective is None:
-            if self.our_status == self.ref_status:
-                return "status_agree"
-            return f"status_disagree(ours={self.our_status},ref={self.ref_status})"
-        denom = max(abs(self.ref_objective), 1e-10)
-        if abs(self.our_objective - self.ref_objective) / denom <= AGREEMENT_TOL:
-            return "agree"
-        sign = "+" if self.our_objective > self.ref_objective else "-"
-        return f"disagree({sign}{self.rel_gap})"
+POINT_STATUSES = ("optimal", "feasible")
 
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
+        for chunk in iter(lambda: f.read(1 << 16), b""):
             h.update(chunk)
     return h.hexdigest()
 
 
-def git_commit(binary: Optional[Path] = None) -> str:
-    return _stamp.stamp(str(binary) if binary else None)
-
-
-def machine_tag() -> str:
-    return platform.node() or platform.machine() or "unknown"
-
-
-# ---------------------------------------------------------------------------
-# Instance discovery and size probing
-# ---------------------------------------------------------------------------
-
-def mps_dimensions(path: Path) -> tuple[int, int]:
-    """Return (num_vars, num_cons) by scanning the MPS file's ROWS/COLUMNS sections."""
-    rows: set[str] = set()
-    cols: set[str] = set()
-    section = ""
+def as_number(value):
     try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            for line in f:
-                stripped = line.strip()
-                if not stripped or stripped.startswith("$"):
-                    continue
-                upper = stripped.upper()
-                for sec in ("NAME", "ROWS", "COLUMNS", "RHS", "BOUNDS", "RANGES",
-                            "ENDATA", "OBJSENSE", "SETS", "SOS", "INDICATORS"):
-                    if upper.startswith(sec) and (len(upper) == len(sec) or not upper[len(sec)].isalpha()):
-                        section = sec
-                        break
-                else:
-                    parts = stripped.split()
-                    if section == "ROWS" and len(parts) >= 2 and parts[0] != "N":
-                        rows.add(parts[1])
-                    elif section == "COLUMNS" and len(parts) >= 2:
-                        cols.add(parts[0])
-    except OSError:
-        pass
-    return len(cols), len(rows)
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
-def fits_limit(path: Path, max_vars: int, max_cons: int) -> bool:
-    v, c = mps_dimensions(path)
-    return v <= max_vars and c <= max_cons
-
-
-def discover_instances(suite: str) -> list[Path]:
-    data_dir = DATA_DIRS.get(suite)
-    if data_dir is None or not data_dir.exists():
+def discover(suite: str) -> list[Path]:
+    d = DATA_DIRS[suite]
+    if not d.exists():
         return []
-    patterns = ["*.mps", "*.mps.gz", "*.MPS"]
-    instances: list[Path] = []
-    for pat in patterns:
-        instances.extend(sorted(data_dir.glob(pat)))
-    return instances
+    # A set: on a case-insensitive filesystem *.mps and *.MPS find the same file.
+    return sorted({p for pat in ("*.mps", "*.mps.gz", "*.MPS", "*.qps", "*.QPS")
+                   for p in d.glob(pat)})
 
 
-# ---------------------------------------------------------------------------
-# Solving with SANKHYA
-# ---------------------------------------------------------------------------
+def fits(limit: tuple, rows: int, cols: int) -> bool:
+    max_cols, max_rows, max_total = limit
+    return ((max_cols is None or cols <= max_cols) and (max_rows is None or rows <= max_rows)
+            and (max_total is None or rows + cols <= max_total))
 
-def run_sankhya(path: Path, binary: Path, time_limit: float = 120.0) -> tuple[Optional[float], str, float, int]:
-    """Returns (objective, status_str, wall_s, nodes)."""
-    if not binary.exists():
-        return None, "binary_not_found", 0.0, 0
-    cmd = [str(binary), str(path), "--json", "--time-limit", str(time_limit)]
-    t0 = time.monotonic()
+
+def run_sankhya(binary: Path, path: Path, limit: float) -> dict:
+    with tempfile.TemporaryDirectory() as tmp:
+        stats = Path(tmp) / "stats.json"
+        command = [str(binary), "solve", str(path), "--time-limit", str(limit),
+                   "--stats", str(stats), "--option", "log_to_console=false"]
+        started = time.perf_counter()
+        done = subprocess.run(command, capture_output=True, text=True)
+        wall = time.perf_counter() - started
+        if not stats.exists():
+            return {"status": "no_output", "wall": wall, "message": done.stderr.strip()[:200]}
+        blob = json.loads(stats.read_text(encoding="utf-8"))
+    result, model, effort = blob.get("result", {}), blob.get("model", {}), blob.get("effort", {})
+    return {"status": result.get("status", "unknown"),
+            "objective": as_number(result.get("objective")),
+            "rows": int(model.get("rows") or 0), "columns": int(model.get("columns") or 0),
+            "nodes": effort.get("nodes", ""), "iterations": effort.get("iterations", ""),
+            "wall": wall}
+
+
+def run_package(python: str, solver: str, path: Path, limit: float) -> dict:
+    started = time.perf_counter()
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=time_limit + 10)
-        wall_s = time.monotonic() - t0
-        try:
-            data = json.loads(proc.stdout)
-        except json.JSONDecodeError:
-            return None, "parse_error", wall_s, 0
-        status = data.get("status", "unknown")
-        obj = data.get("objective")
-        nodes = data.get("nodes", 0)
-        return (float(obj) if obj is not None else None), status, wall_s, int(nodes)
+        done = subprocess.run([python, str(CHILD), solver, str(path), str(limit)],
+                              capture_output=True, text=True, timeout=limit + 120)
     except subprocess.TimeoutExpired:
-        return None, "timeout", time.monotonic() - t0, 0
-    except Exception as e:
-        return None, f"error:{e}", time.monotonic() - t0, 0
-
-
-# ---------------------------------------------------------------------------
-# Solving with reference solvers (separate processes, no linkage)
-# ---------------------------------------------------------------------------
-
-def _parse_gurobi_log(stdout: str, stderr: str) -> tuple[Optional[float], str, int]:
-    """Extract objective, status and node count from Gurobi command-line output."""
-    obj: Optional[float] = None
-    status = "unknown"
-    nodes = 0
-    for line in (stdout + stderr).splitlines():
-        m = re.search(r"Best objective\s+([-\d.e+]+)", line, re.I)
-        if m:
-            try:
-                obj = float(m.group(1))
-            except ValueError:
-                pass
-        m2 = re.search(r"Explored\s+(\d+)\s+nodes", line, re.I)
-        if m2:
-            nodes = int(m2.group(1))
-        if "Optimal solution found" in line:
-            status = "optimal"
-        elif "Infeasible" in line:
-            status = "infeasible"
-        elif "Time limit" in line:
-            status = "time_limit"
-    return obj, status, nodes
-
-
-def run_gurobi(path: Path, time_limit: float = 120.0) -> tuple[Optional[float], str, float, int]:
-    gurobi = shutil.which("gurobi_cl") or shutil.which("gurobi")
-    if gurobi is None:
-        return None, "not_installed", 0.0, 0
-    cmd = [gurobi, f"TimeLimit={time_limit}", str(path)]
-    t0 = time.monotonic()
+        return {"status": "hung", "wall": time.perf_counter() - started}
+    wall = time.perf_counter() - started
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=time_limit + 10)
-        wall_s = time.monotonic() - t0
-        obj, status, nodes = _parse_gurobi_log(proc.stdout, proc.stderr)
-        return obj, status, wall_s, nodes
-    except subprocess.TimeoutExpired:
-        return None, "timeout", time.monotonic() - t0, 0
-    except Exception as e:
-        return None, f"error:{e}", time.monotonic() - t0, 0
+        out = json.loads(done.stdout.strip().splitlines()[-1])
+    except (IndexError, json.JSONDecodeError):
+        out = {"status": "no_output", "message": done.stderr.strip()[:200]}
+    out["wall"] = wall
+    return out
 
 
-def _parse_cplex_log(stdout: str, stderr: str) -> tuple[Optional[float], str, int]:
-    obj: Optional[float] = None
-    status = "unknown"
-    nodes = 0
-    for line in (stdout + stderr).splitlines():
-        m = re.search(r"Objective\s*=\s*([-\d.e+]+)", line, re.I)
-        if m:
-            try:
-                obj = float(m.group(1))
-            except ValueError:
-                pass
-        m2 = re.search(r"(\d+)\s+nodes", line, re.I)
-        if m2:
-            nodes = int(m2.group(1))
-        if "MIP solution" in line or "optimal" in line.lower():
-            status = "optimal"
-        elif "infeasible" in line.lower():
-            status = "infeasible"
-    return obj, status, nodes
-
-
-def run_cplex(path: Path, time_limit: float = 120.0) -> tuple[Optional[float], str, float, int]:
-    cplex = shutil.which("cplex") or shutil.which("cpoptimizer")
-    if cplex is None:
-        return None, "not_installed", 0.0, 0
-    # CPLEX interactive batch via -c flag or concert.
-    script = f"read {path}\nmip\nset timelimit {time_limit}\noptimize\nquit\n"
-    cmd = [cplex]
-    t0 = time.monotonic()
-    try:
-        proc = subprocess.run(cmd, input=script, capture_output=True, text=True,
-                              timeout=time_limit + 10)
-        wall_s = time.monotonic() - t0
-        obj, status, nodes = _parse_cplex_log(proc.stdout, proc.stderr)
-        return obj, status, wall_s, nodes
-    except subprocess.TimeoutExpired:
-        return None, "timeout", time.monotonic() - t0, 0
-    except Exception as e:
-        return None, f"error:{e}", time.monotonic() - t0, 0
-
-
-def run_glpk(path: Path, time_limit: float = 120.0) -> tuple[Optional[float], str, float, int]:
-    glpsol = shutil.which("glpsol")
-    if glpsol is None:
-        return None, "not_installed", 0.0, 0
-    cmd = [glpsol, "--mps", str(path), "--tmlim", str(int(time_limit)), "-o", "/dev/null"]
-    t0 = time.monotonic()
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=time_limit + 10)
-        wall_s = time.monotonic() - t0
-        obj: Optional[float] = None
-        status = "unknown"
-        for line in (proc.stdout + proc.stderr).splitlines():
-            m = re.search(r"obj =\s*([-\d.e+]+)", line, re.I)
-            if m:
-                try:
-                    obj = float(m.group(1))
-                except ValueError:
-                    pass
-            if "INTEGER OPTIMAL" in line.upper() or "OPTIMAL LP SOLUTION" in line.upper():
-                status = "optimal"
-            elif "INFEASIBLE" in line.upper():
-                status = "infeasible"
-            elif "TIME LIMIT" in line.upper():
-                status = "time_limit"
-        return obj, status, wall_s, 0
-    except subprocess.TimeoutExpired:
-        return None, "timeout", time.monotonic() - t0, 0
-    except Exception as e:
-        return None, f"error:{e}", time.monotonic() - t0, 0
-
-
-SOLVERS = {
-    "gurobi": (run_gurobi, GUROBI_LIMIT_VARS, GUROBI_LIMIT_CONS),
-    "cplex": (run_cplex, CPLEX_LIMIT_VARS, CPLEX_LIMIT_CONS),
-    "glpk": (run_glpk, 10_000_000, 10_000_000),  # no size limit for GLPK
-}
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def run(args: argparse.Namespace) -> int:
-    binary = Path(args.binary) if args.binary else SANKHYA_BIN
-    commit = git_commit(binary)
-    machine = machine_tag()
-
-    # Choose instance files.
-    paths: list[Path] = []
-    if args.instances:
-        for suite_dir in DATA_DIRS.values():
-            if suite_dir.exists():
-                for p in suite_dir.iterdir():
-                    if any(p.stem == inst or p.name == inst for inst in args.instances):
-                        paths.append(p)
-    elif args.suite:
-        paths = discover_instances(args.suite)
-    else:
-        for suite in DATA_DIRS:
-            paths.extend(discover_instances(suite))
-    if not paths:
-        print("No instances found.", file=sys.stderr)
-        return 1
-
-    # Choose solvers — Gurobi requires --gurobi-academic (see PROVENANCE.md row 16).
-    solver_names = args.solver if args.solver else list(SOLVERS.keys())
-    if "gurobi" in solver_names and not getattr(args, "gurobi_academic", False):
-        print(
-            "error: Gurobi's standard EULA forbids publishing benchmark results.\n"
-            "Only an academic licence waives that restriction.\n"
-            "Pass --gurobi-academic to confirm you hold one (see docs/PROVENANCE.md row 16).",
-            file=sys.stderr,
-        )
-        solver_names = [s for s in solver_names if s != "gurobi"]
-        if not solver_names:
-            return 1
-
-    if args.dry_run:
-        for solver in solver_names:
-            fn, max_v, max_c = SOLVERS[solver]
-            eligible = [p for p in paths if fits_limit(p, max_v, max_c)]
-            print(f"[{solver}] {len(eligible)}/{len(paths)} instances within size limit "
-                  f"({max_v} vars, {max_c} cons)")
-        return 0
-
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%S")
-    csv_path = RESULTS_DIR / f"commercial_agreement-{commit}-{ts}.csv"
-    rows = []
-
-    for solver in solver_names:
-        ref_fn, max_v, max_c = SOLVERS[solver]
-        eligible = [p for p in paths if fits_limit(p, max_v, max_c)]
-        print(f"[{solver}] {len(eligible)} instances within size limit", flush=True)
-        for path in sorted(eligible):
-            print(f"  {path.stem} ...", end=" ", flush=True)
-            sha = sha256_file(path)
-            our_obj, our_status, our_wall, our_nodes = run_sankhya(path, binary, args.time_limit)
-            ref_obj, ref_status, ref_wall, ref_nodes = ref_fn(path, args.time_limit)
-            r = Result(
-                instance=path.stem,
-                path=path,
-                solver=solver,
-                our_objective=our_obj,
-                our_status=our_status,
-                our_wall_s=our_wall,
-                our_nodes=our_nodes,
-                ref_objective=ref_obj,
-                ref_status=ref_status,
-                ref_wall_s=ref_wall,
-                ref_nodes=ref_nodes,
-            )
-            print(r.verdict, flush=True)
-            rows.append({
-                "instance": r.instance,
-                "instance_sha256": sha,
-                "solver": solver,
-                "our_objective": "" if our_obj is None else f"{our_obj:.15g}",
-                "our_status": our_status,
-                "our_wall_s": f"{our_wall:.3f}",
-                "our_nodes": our_nodes,
-                "ref_objective": "" if ref_obj is None else f"{ref_obj:.15g}",
-                "ref_status": ref_status,
-                "ref_wall_s": f"{ref_wall:.3f}",
-                "ref_nodes": ref_nodes,
-                "abs_gap": r.abs_gap,
-                "rel_gap": r.rel_gap,
-                "verdict": r.verdict,
-                "git_commit": commit,
-                "machine": machine,
-                "timestamp_utc": ts,
-            })
-
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS)
-        w.writeheader()
-        w.writerows(rows)
-    print(f"\nWrote {len(rows)} rows to {csv_path}")
-
-    # Summary.
-    agree = sum(1 for r in rows if r.get("verdict", "") == "agree" or r.get("verdict", "") == "status_agree")
-    disagree = sum(1 for r in rows if r.get("verdict", "").startswith("disagree"))
-    other = len(rows) - agree - disagree
-    print(f"agree={agree}  disagree={disagree}  other={other}")
-    return 0 if disagree == 0 else 1
+def verdict(ours: dict, ref: dict) -> str:
+    a, b = ours.get("objective"), ref.get("objective")
+    if ours["status"] in POINT_STATUSES and ref["status"] in POINT_STATUSES and \
+            a is not None and b is not None:
+        gap = abs(a - b) / max(1.0, abs(b))
+        return "agree" if gap <= AGREEMENT_TOL else "disagree"
+    if ours["status"] == ref["status"]:
+        return "status_agree"
+    if ref["status"] in ("error", "not_installed", "no_output", "hung"):
+        return "reference_failed"
+    return "status_disagree"
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("instances", nargs="*", help="Named instances (default: all)")
-    ap.add_argument("--solver", action="append", choices=list(SOLVERS.keys()),
-                    help="Which solver(s) to compare against (default: all detected)")
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("instances", nargs="*", help="named instances (default: all)")
+    ap.add_argument("--solver", action="append", choices=list(LIMITS), default=None)
+    ap.add_argument("--python", default=sys.executable,
+                    help="interpreter of the virtualenv holding the vendor packages")
+    ap.add_argument("--suite", action="append", choices=list(DATA_DIRS), default=None)
+    ap.add_argument("--binary", type=Path, default=None, help="sankhya binary")
+    ap.add_argument("--time-limit", type=float, default=60.0)
+    ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--gurobi-academic", action="store_true",
-                    help="Confirm an academic Gurobi licence is in use (required to run "
-                         "Gurobi; the standard EULA forbids publishing benchmark results "
-                         "and only the academic licence waives that restriction — see "
-                         "docs/PROVENANCE.md row 16)")
-    ap.add_argument("--suite", choices=list(DATA_DIRS.keys()),
-                    help="Instance suite (default: all)")
-    ap.add_argument("--binary", help="Path to the sankhya binary (default: build/sankhya)")
-    ap.add_argument("--time-limit", type=float, default=120.0,
-                    help="Per-instance time limit in seconds (default: 120)")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Show plan without solving")
-    return run(ap.parse_args())
+                    help="an academic Gurobi licence is installed (the pip evaluation "
+                         "licence forbids publishing benchmark results)")
+    ap.add_argument("--xpress-consent", action="store_true",
+                    help="Fair Isaac's written consent to publish results is held")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    solvers = args.solver or ["cplex"]
+    if "gurobi" in solvers and not args.gurobi_academic:
+        print("refusing gurobi: the pip licence is an evaluation licence that forbids "
+              "publishing benchmark results (docs/PROVENANCE.md, judgement call 16)",
+              file=sys.stderr)
+        solvers.remove("gurobi")
+    if "xpress" in solvers and not args.xpress_consent:
+        print("refusing xpress: the community licence forbids publishing benchmark results "
+              "without Fair Isaac's written consent (docs/PROVENANCE.md, judgement call 16)",
+              file=sys.stderr)
+        solvers.remove("xpress")
+    if not solvers:
+        return 1
+
+    suites = args.suite or list(DATA_DIRS)
+    paths = [(s, p) for s in suites for p in discover(s)]
+    if args.instances:
+        wanted = set(args.instances)
+        paths = [(s, p) for s, p in paths if p.name.split(".")[0] in wanted]
+    if not paths:
+        print("no instances found; fetch the data sets first", file=sys.stderr)
+        return 1
+
+    from miplib import find_binary  # the same lookup every runner uses
+    binary = find_binary(args.binary)
+    if binary is None:
+        print("no solver binary; build first", file=sys.stderr)
+        return 1
+    commit = _stamp.stamp(binary)
+    machine = f"{platform.system()}-{platform.machine()}"
+    ts = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+    rows = []
+    for suite, path in paths:
+        name = path.name.split(".")[0]
+        # SANKHYA first: its stats give the size the limits are checked against, as read.
+        ours = None
+        for solver in solvers:
+            if args.dry_run:
+                print(f"{solver:<7} {suite:<15} {name}")
+                continue
+            if ours is None:
+                ours = run_sankhya(binary, path, args.time_limit)
+            if not fits(LIMITS[solver], ours.get("rows", 0), ours.get("columns", 0)):
+                continue
+            ref = run_package(args.python, solver, path, args.time_limit)
+            a, b = ours.get("objective"), ref.get("objective")
+            gap = abs(a - b) if a is not None and b is not None else None
+            row = {
+                "instance": name, "instance_sha256": sha256_file(path), "suite": suite,
+                "rows": ours.get("rows", ""), "columns": ours.get("columns", ""),
+                "solver": solver, "solver_version": ref.get("version", ""),
+                "our_objective": "" if a is None else repr(a), "our_status": ours["status"],
+                "our_wall_s": f"{ours['wall']:.3f}", "our_nodes": ours.get("nodes", ""),
+                "our_iterations": ours.get("iterations", ""),
+                "ref_objective": "" if b is None else repr(b), "ref_status": ref["status"],
+                "ref_wall_s": f"{ref['wall']:.3f}", "ref_nodes": ref.get("nodes", ""),
+                "ref_iterations": ref.get("iterations", ""),
+                "abs_gap": "" if gap is None else f"{gap:.3g}",
+                "rel_gap": "" if gap is None else f"{gap / max(1.0, abs(b)):.3g}",
+                "verdict": verdict(ours, ref), "message": ref.get("message", ""),
+                "time_limit": args.time_limit, "git_commit": commit, "machine": machine,
+                "timestamp_utc": ts,
+            }
+            rows.append(row)
+            print(f"{solver:<7} {name:<20} ours {ours['status']:<11} {row['our_objective']:<24}"
+                  f" ref {ref['status']:<11} {row['ref_objective']:<24} {row['verdict']}",
+                  flush=True)
+    if args.dry_run:
+        return 0
+
+    out = args.out or RESULTS_DIR / f"commercial-agreement-{commit}.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=FIELDS)
+        w.writeheader()
+        w.writerows(rows)
+    counts: dict[str, int] = {}
+    for r in rows:
+        counts[r["verdict"]] = counts.get(r["verdict"], 0) + 1
+    print(f"wrote {out} ({len(rows)} rows): "
+          + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
+    return 0
 
 
 if __name__ == "__main__":

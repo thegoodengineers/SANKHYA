@@ -2603,11 +2603,13 @@ def commercial_agreement_section(path: Path | None) -> str:
             "No commercial-agreement run has been committed yet. Reproduce with:",
             "",
             "```bash",
-            "# install one or more of: gurobi_cl (Gurobi), cplex (CPLEX Community), glpsol (GLPK)",
-            "python bench/runners/commercial_agreement.py --suite netlib --time-limit 60",
+            "python -m venv editions && editions/bin/pip install cplex   # CPLEX Community",
+            "python bench/runners/commercial_agreement.py --python editions/bin/python",
             "```",
             "",
-            "Licence terms for each edition are checked in `docs/PROVENANCE.md` before any run.",
+            "Licence terms for each edition are in `docs/PROVENANCE.md`, judgement call 16: "
+            "the pip editions of Gurobi and Xpress forbid publishing benchmark results, so "
+            "only CPLEX Community is run by default.",
             "",
         ])
     rows = read_csv(path)
