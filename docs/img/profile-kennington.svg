@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="440" viewBox="0 0 720 440" font-family="sans-serif" font-size="12">
+<rect width="720" height="440" fill="white"/>
+<text x="315" y="20" text-anchor="middle" font-size="14">Kennington LP: Dolan-More performance profile</text>
+<line x1="60.0" y1="36" x2="60.0" y2="384" stroke="#ddd"/>
+<text x="60.0" y="400" text-anchor="middle">1</text>
+<line x1="123.8" y1="36" x2="123.8" y2="384" stroke="#ddd"/>
+<text x="123.8" y="400" text-anchor="middle">2</text>
+<line x1="187.5" y1="36" x2="187.5" y2="384" stroke="#ddd"/>
+<text x="187.5" y="400" text-anchor="middle">4</text>
+<line x1="251.2" y1="36" x2="251.2" y2="384" stroke="#ddd"/>
+<text x="251.2" y="400" text-anchor="middle">8</text>
+<line x1="315.0" y1="36" x2="315.0" y2="384" stroke="#ddd"/>
+<text x="315.0" y="400" text-anchor="middle">16</text>
+<line x1="378.8" y1="36" x2="378.8" y2="384" stroke="#ddd"/>
+<text x="378.8" y="400" text-anchor="middle">32</text>
+<line x1="442.5" y1="36" x2="442.5" y2="384" stroke="#ddd"/>
+<text x="442.5" y="400" text-anchor="middle">64</text>
+<line x1="506.2" y1="36" x2="506.2" y2="384" stroke="#ddd"/>
+<text x="506.2" y="400" text-anchor="middle">128</text>
+<line x1="570.0" y1="36" x2="570.0" y2="384" stroke="#ddd"/>
+<text x="570.0" y="400" text-anchor="middle">256</text>
+<line x1="60" y1="384.0" x2="570" y2="384.0" stroke="#ddd"/>
+<text x="54" y="388.0" text-anchor="end">0.0</text>
+<line x1="60" y1="314.4" x2="570" y2="314.4" stroke="#ddd"/>
+<text x="54" y="318.4" text-anchor="end">0.2</text>
+<line x1="60" y1="244.8" x2="570" y2="244.8" stroke="#ddd"/>
+<text x="54" y="248.8" text-anchor="end">0.4</text>
+<line x1="60" y1="175.2" x2="570" y2="175.2" stroke="#ddd"/>
+<text x="54" y="179.2" text-anchor="end">0.6</text>
+<line x1="60" y1="105.6" x2="570" y2="105.6" stroke="#ddd"/>
+<text x="54" y="109.6" text-anchor="end">0.8</text>
+<line x1="60" y1="36.0" x2="570" y2="36.0" stroke="#ddd"/>
+<text x="54" y="40.0" text-anchor="end">1.0</text>
+<text x="315" y="426" text-anchor="middle">tau: within this factor of the fastest (log2 scale)</text>
+<text x="16" y="210" text-anchor="middle" transform="rotate(-90 16 210)">fraction of instances</text>
+<polyline points="60.0,340.5 60.0,340.5 60.0,340.5 60.0,340.5 60.0,340.5 128.2,340.5 128.2,318.8 136.3,318.8 136.3,297.0 140.2,297.0 140.2,275.2 145.2,275.2 145.2,253.5 145.8,253.5 145.8,231.8 156.6,231.8 156.6,210.0 262.3,210.0 262.3,188.2 273.3,188.2 273.3,166.5 281.1,166.5 281.1,144.8 336.1,144.8 336.1,123.0 372.3,123.0 372.3,101.2 380.3,101.2 380.3,79.5 463.6,79.5 463.6,57.8 570.0,57.8" fill="none" stroke="#D55E00" stroke-width="3"><title>SANKHYA: fastest on 12%, solved 100%</title></polyline>
+<line x1="584" y1="48" x2="610" y2="48" stroke="#D55E00" stroke-width="3"/>
+<text x="616" y="52">SANKHYA</text>
+<polyline points="60.0,318.8 60.0,318.8 60.0,318.8 60.0,318.8 60.0,318.8 60.0,318.8 60.0,318.8 60.9,318.8 60.9,297.0 66.4,297.0 66.4,275.2 72.0,275.2 72.0,253.5 72.5,253.5 72.5,231.8 80.7,231.8 80.7,210.0 84.8,210.0 84.8,188.2 94.2,188.2 94.2,166.5 97.2,166.5 97.2,144.8 125.3,144.8 125.3,123.0 130.6,123.0 130.6,101.2 164.6,101.2 164.6,79.5 246.0,79.5 246.0,57.8 274.1,57.8 274.1,36.0 570.0,36.0" fill="none" stroke="#0072B2" stroke-width="1.8"><title>HiGHS: fastest on 19%, solved 100%</title></polyline>
+<line x1="584" y1="68" x2="610" y2="68" stroke="#0072B2" stroke-width="1.8"/>
+<text x="616" y="72">HiGHS</text>
+<polyline points="60.0,362.2 60.0,362.2 60.0,362.2 86.6,362.2 86.6,340.5 130.2,340.5 130.2,318.8 146.2,318.8 146.2,297.0 164.2,297.0 164.2,275.2 166.1,275.2 166.1,253.5 187.6,253.5 187.6,231.8 243.8,231.8 243.8,210.0 259.2,210.0 259.2,188.2 262.0,188.2 262.0,166.5 302.5,166.5 302.5,144.8 334.4,144.8 334.4,123.0 381.6,123.0 381.6,101.2 512.4,101.2 512.4,79.5 513.2,79.5 513.2,57.8 570.0,57.8" fill="none" stroke="#009E73" stroke-width="1.8"><title>SCIP: fastest on 6%, solved 100%</title></polyline>
+<line x1="584" y1="88" x2="610" y2="88" stroke="#009E73" stroke-width="1.8"/>
+<text x="616" y="92">SCIP</text>
+<polyline points="60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 60.0,57.8 290.8,57.8 290.8,36.0 570.0,36.0" fill="none" stroke="#CC79A7" stroke-width="1.8"><title>CBC/Clp: fastest on 94%, solved 100%</title></polyline>
+<line x1="584" y1="108" x2="610" y2="108" stroke="#CC79A7" stroke-width="1.8"/>
+<text x="616" y="112">CBC/Clp</text>
+<polyline points="60.0,340.5 60.0,340.5 60.0,340.5 60.0,340.5 60.0,340.5 133.8,340.5 133.8,318.8 155.7,318.8 155.7,297.0 161.0,297.0 161.0,275.2 187.5,275.2 187.5,253.5 212.0,253.5 212.0,231.8 212.6,231.8 212.6,210.0 229.3,210.0 229.3,188.2 248.1,188.2 248.1,166.5 255.4,166.5 255.4,144.8 258.5,144.8 258.5,123.0 302.2,123.0 302.2,101.2 326.3,101.2 326.3,79.5 415.1,79.5 415.1,57.8 570.0,57.8" fill="none" stroke="#E69F00" stroke-width="1.8"><title>GLPK: fastest on 12%, solved 100%</title></polyline>
+<line x1="584" y1="128" x2="610" y2="128" stroke="#E69F00" stroke-width="1.8"/>
+<text x="616" y="132">GLPK</text>
+</svg>

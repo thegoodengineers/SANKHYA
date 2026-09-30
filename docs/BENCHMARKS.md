@@ -2008,6 +2008,29 @@ full limit, and the shifted geometric mean uses a
 Times are each solver's own clock. Produced by `python bench/runners/compare.py --suite
 <suite>` (`bench/runners/compare_suite.py`, `bench/runners/rivals.py`).
 
+**Where the Kennington and Maros-Meszaros files came from.** netlib.org and www.doc.ic.ac.uk
+refuse connections from the cloud container these suites ran on, so the files were taken from
+public mirrors and accepted only because every one has the sha256 pinned in
+`data/kennington/reference.json` (`mps_lf_sha256`, all 16) and
+`data/maros-meszaros/reference.json` (the readme, the three archives and all 138 QPS files).
+The mirrors are named in judgement call 37 of `docs/PROVENANCE.md`.
+
+**Reading the Maros-Meszaros table.** GLPK has no quadratic objective, so it is listed as
+unsupported rather than left out. `values` has a non-convex objective; SANKHYA refuses it as a
+model error (its LDL^T of Q meets a negative pivot), and HiGHS and Clp return a local optimum at
+the published value. SANKHYA also refuses `cvxqp1l`, `cvxqp2l` and `cvxqp3l` as non-convex (its LDL^T meets a pivot of -3.5e-3), which HiGHS and Clp solve as convex; that is a miss of SANKHYA's, present in every Maros-Meszaros CSV since `9094e1c`, not a wrong answer. On `hues-mod` SANKHYA and Clp agree with each other to 1e-13 relative and
+SANKHYA's answer passes the verifier on primal and dual conditions, yet both sit 6.5e-6 from the
+readme's eight-figure OPT: the readme is the likely outlier there, as it is for nine Netlib
+instances, but with no exact value published the row is graded against it and not counted. On
+`dpklo1` HiGHS's MPS reader takes the RHS section, whose set is named `1` beside numeric row
+names, differently from our reader and the other three solvers (50 right-hand sides differ;
+matrix, costs and bounds are identical), so it solves another model and the verifier rejects
+its point. Most rival rejections below are not wrong answers but conditions missed by more
+than the verifier allows: complementary slackness and dual feasibility at 1e-7 (HiGHS), or a
+stated objective that differs from the one recomputed at the solver's own point by more than
+1e-9 relative (Clp, SCIP). The verifier and its tolerances are the same for every solver,
+SANKHYA included.
+
 ### 4a.1 Netlib LP
 
 Source CSV: `bench/results/head-to-head-netlib-5e490ef.csv`  
@@ -2055,11 +2078,218 @@ What the verifier rejected:
 
 ### 4a.2 Kennington LP
 
-No `head-to-head-kennington-*.csv` in `bench/results/`, so **no numbers are stated for this suite**. Run `python bench/runners/compare.py --suite kennington`.
+Source CSV: `bench/results/head-to-head-kennington-1860864.csv`  
+Commit `1860864` · machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores; 16 GiB RAM; Linux-x86_64`  
+16 instances · time limit 120 s · 1 thread per solver · every solver a separate process
+
+| solver | version | runs | solved | matched | verified | checked on | SGM time, shift 10 s |
+|---|---|---:|---:|---:|---:|---|---:|
+| SANKHYA | 1860864 | 16 | 15 | 15 | 15 | primal+dual | 9.430 s |
+| HiGHS | 1.15.1 | 16 | 16 | 16 | 16 | primal+dual | 1.855 s |
+| SCIP | 10.0.2 | 16 | 15 | 15 | 15 | primal-only | 10.899 s |
+| CBC/Clp | 1.17.9 | 16 | 16 | 16 | 16 | primal+dual | 0.795 s |
+| GLPK | 5.0 | 16 | 15 | 15 | 15 | primal+dual | 7.345 s |
+
+![Dolan-More performance profile, Kennington LP](img/profile-kennington.svg)
+
+*`docs/img/profile-kennington.svg`, drawn from the CSV by `bench/runners/perf_profile.py` each time this document is generated. A curve's height at tau is the fraction of the instances above on which that solver's run counted and took at most tau times the fastest counted run; times under 0.1 s are floored there (GLPK's clock resolution), so the fast end is a tie.*
+
+Every run that did not count, by solver:
+
+- **SANKHYA**, 1: `pds-20` (time_limit)
+- **SCIP**, 1: `osa-60` (time_limit)
+- **GLPK**, 1: `ken-18` (time_limit)
 
 ### 4a.3 Maros-Meszaros QP
 
-No `head-to-head-maros-meszaros-*.csv` in `bench/results/`, so **no numbers are stated for this suite**. Run `python bench/runners/compare.py --suite maros-meszaros`.
+Source CSV: `bench/results/head-to-head-maros-meszaros-1860864.csv`  
+Commit `1860864` · machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores; 16 GiB RAM; Linux-x86_64`  
+138 instances · time limit 60 s · 1 thread per solver · every solver a separate process
+
+| solver | version | runs | solved | matched | verified | checked on | SGM time, shift 10 s |
+|---|---|---:|---:|---:|---:|---|---:|
+| SANKHYA | 1860864 | 138 | 107 | 106 | 107 | primal+dual | 6.437 s |
+| HiGHS | 1.15.1 | 138 | 105 | 99 | 32 | primal+dual | 35.781 s |
+| SCIP | 10.0.2 | 138 | 78 | 76 | 53 | primal-only | 27.436 s |
+| CBC/Clp | 1.17.9 | 138 | 127 | 113 | 62 | primal+dual | 20.974 s |
+| GLPK | - | 138 | unsupported | - | - | - | - |
+
+![Dolan-More performance profile, Maros-Meszaros QP](img/profile-maros-meszaros.svg)
+
+*`docs/img/profile-maros-meszaros.svg`, drawn from the CSV by `bench/runners/perf_profile.py` each time this document is generated. A curve's height at tau is the fraction of the instances above on which that solver's run counted and took at most tau times the fastest counted run; times under 0.1 s are floored there (GLPK's clock resolution), so the fast end is a tie.*
+
+Every run that did not count, by solver:
+
+- **SANKHYA**, 32: `boyd1` (feasible), `cvxqp1l` (model_error), `cvxqp2l` (model_error), `cvxqp3l` (model_error), `hues-mod` (optimal at relative gap 6.5e-06), `huestis` (feasible), `liswet1` (iteration_limit), `liswet10` (iteration_limit), `liswet11` (iteration_limit), `liswet12` (iteration_limit), `liswet2` (iteration_limit), `liswet7` (time_limit), `liswet8` (iteration_limit), `liswet9` (iteration_limit), `powell20` (feasible), `primalc1` (feasible), `qcapri` (feasible), `qfffff80` (feasible), `qforplan` (feasible), `qgfrdxpn` (feasible), `qgrow15` (feasible), `qpilotno` (iteration_limit), `qseba` (feasible), `qshare1b` (feasible), `qshell` (feasible), `qship12l` (time_limit), `qship12s` (feasible), `qsierra` (iteration_limit), `stadat1` (iteration_limit), `ubh1` (iteration_limit), `values` (model_error), `yao` (iteration_limit)
+- **HiGHS**, 106: `aug2d` (solve error), `aug2dc` (solve error), `aug2dcqp` (time_limit), `aug2dqp` (time_limit), `aug3d` (optimal, rejected by the verifier), `aug3dc` (optimal, rejected by the verifier), `aug3dcqp` (optimal, rejected by the verifier), `aug3dqp` (optimal, rejected by the verifier), `boyd1` (time_limit), `boyd2` (time_limit), `cont-050` (optimal, rejected by the verifier), `cont-100` (optimal, rejected by the verifier), `cont-101` (time_limit), `cont-200` (time_limit), `cont-201` (time_limit), `cont-300` (time_limit), `cvxqp1l` (optimal, rejected by the verifier), `cvxqp2l` (optimal, rejected by the verifier), `cvxqp2m` (optimal, rejected by the verifier), `cvxqp2s` (optimal, rejected by the verifier), `dpklo1` (optimal, rejected by the verifier), `dtoc3` (solve error), `exdata` (optimal, rejected by the verifier), `gouldqp2` (optimal, rejected by the verifier), `gouldqp3` (optimal, rejected by the verifier), `hs118` (optimal, rejected by the verifier), `hs268` (optimal, rejected by the verifier), `hs35` (optimal, rejected by the verifier), `hs35mod` (optimal, rejected by the verifier), `hs51` (optimal, rejected by the verifier), `hs76` (optimal, rejected by the verifier), `hues-mod` (time_limit), `huestis` (time_limit), `ksip` (not set), `laser` (not set), `liswet1` (optimal, rejected by the verifier), `liswet10` (optimal, rejected by the verifier), `liswet11` (optimal, rejected by the verifier), `liswet12` (optimal, rejected by the verifier), `liswet2` (optimal, rejected by the verifier), `liswet3` (optimal, rejected by the verifier), `liswet4` (optimal, rejected by the verifier), `liswet5` (optimal, rejected by the verifier), `liswet6` (optimal, rejected by the verifier), `liswet7` (optimal, rejected by the verifier), `liswet8` (optimal, rejected by the verifier), `liswet9` (optimal, rejected by the verifier), `lotschd` (optimal, rejected by the verifier), `mosarqp1` (solve error), `mosarqp2` (time_limit), `powell20` (optimal, rejected by the verifier), `primalc1` (optimal, rejected by the verifier), `primalc2` (optimal, rejected by the verifier), `primalc5` (optimal, rejected by the verifier), `primalc8` (optimal, rejected by the verifier), `q25fv47` (time_limit), `qadlittl` (optimal, rejected by the verifier), `qafiro` (optimal, rejected by the verifier), `qbandm` (optimal, rejected by the verifier), `qbeaconf` (optimal, rejected by the verifier), `qbore3d` (optimal, rejected by the verifier), `qbrandy` (optimal, rejected by the verifier), `qcapri` (solve error), `qe226` (not set), `qetamacr` (optimal, rejected by the verifier), `qfffff80` (optimal, rejected by the verifier), `qforplan` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `qgrow15` (solve error), `qgrow22` (time_limit), `qgrow7` (time_limit), `qisrael` (optimal, rejected by the verifier), `qpcboei1` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qpcstair` (not set), `qpilotno` (not set), `qrecipe` (optimal, rejected by the verifier), `qscagr25` (optimal, rejected by the verifier), `qscagr7` (optimal, rejected by the verifier), `qscfxm1` (optimal, rejected by the verifier), `qscfxm2` (optimal, rejected by the verifier), `qscfxm3` (optimal, rejected by the verifier), `qscorpio` (optimal, rejected by the verifier), `qscrs8` (optimal, rejected by the verifier), `qscsd8` (time_limit), `qsctap1` (optimal, rejected by the verifier), `qsctap2` (not set), `qsctap3` (not set), `qseba` (optimal, rejected by the verifier), `qshare1b` (solve error), `qshare2b` (optimal, rejected by the verifier), `qshell` (optimal, rejected by the verifier), `qship04l` (optimal, rejected by the verifier), `qship04s` (optimal, rejected by the verifier), `qship08l` (optimal, rejected by the verifier), `qship08s` (optimal, rejected by the verifier), `qship12l` (optimal, rejected by the verifier), `qship12s` (optimal, rejected by the verifier), `qsierra` (solve error), `qstair` (time_limit), `qstandat` (optimal, rejected by the verifier), `s268` (optimal, rejected by the verifier), `stadat1` (optimal, rejected by the verifier), `stadat2` (optimal, rejected by the verifier), `stadat3` (solve error), `ubh1` (time_limit)
+- **SCIP**, 87: `aug2d` (hung), `aug2dc` (hung), `aug2dcqp` (hung), `aug2dqp` (hung), `aug3d` (time_limit), `aug3dc` (time_limit), `boyd1` (time_limit), `boyd2` (time_limit), `cont-050` (optimal, rejected by the verifier), `cont-100` (hung), `cont-101` (time_limit), `cont-200` (time_limit), `cont-201` (hung), `cont-300` (time_limit), `cvxqp1l` (hung), `cvxqp1m` (time_limit), `cvxqp2l` (time_limit), `cvxqp2m` (time_limit), `cvxqp3l` (hung), `cvxqp3m` (time_limit), `dpklo1` (optimal, rejected by the verifier), `dtoc3` (hung), `dual1` (optimal, rejected by the verifier), `dual2` (time_limit), `dual3` (time_limit), `dual4` (optimal, rejected by the verifier), `dualc1` (optimal at relative gap 6.8e-06), `exdata` (crashed), `genhs28` (optimal, rejected by the verifier), `gouldqp2` (time_limit), `gouldqp3` (time_limit), `hs268` (time_limit), `hs35` (optimal, rejected by the verifier), `hs35mod` (optimal, rejected by the verifier), `hs51` (optimal, rejected by the verifier), `hs52` (time_limit), `hs53` (optimal, rejected by the verifier), `hs76` (optimal, rejected by the verifier), `hues-mod` (hung), `huestis` (hung), `ksip` (optimal, rejected by the verifier), `laser` (crashed), `liswet1` (hung), `liswet10` (hung), `liswet11` (hung), `liswet12` (hung), `liswet2` (hung), `liswet3` (hung), `liswet4` (hung), `liswet5` (hung), `liswet6` (hung), `liswet7` (hung), `liswet8` (hung), `liswet9` (hung), `powell20` (hung), `primal1` (optimal, rejected by the verifier), `primal2` (optimal, rejected by the verifier), `primal3` (time_limit), `primal4` (time_limit), `q25fv47` (time_limit), `qafiro` (optimal, rejected by the verifier), `qe226` (optimal, rejected by the verifier), `qetamacr` (time_limit), `qforplan` (time_limit), `qgfrdxpn` (crashed), `qisrael` (optimal, rejected by the verifier), `qpcblend` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qptest` (optimal, rejected by the verifier), `qsc205` (optimal, rejected by the verifier), `qsctap1` (optimal, rejected by the verifier), `qsctap2` (optimal, rejected by the verifier), `qsctap3` (optimal, rejected by the verifier), `qseba` (crashed), `qshell` (crashed), `qship12l` (time_limit), `s268` (time_limit), `stadat1` (crashed), `stadat2` (crashed), `stadat3` (crashed), `stcqp1` (time_limit), `stcqp2` (time_limit), `tame` (optimal, rejected by the verifier), `ubh1` (time_limit), `values` (time_limit), `yao` (optimal at relative gap 7.7e-03), `zecevic2` (optimal, rejected by the verifier)
+- **CBC/Clp**, 78: `aug2dcqp` (optimal, rejected by the verifier), `aug2dqp` (optimal, rejected by the verifier), `boyd1` (unparsed), `boyd2` (hung), `cont-050` (optimal, rejected by the verifier), `cont-100` (optimal, rejected by the verifier), `cont-101` (optimal, rejected by the verifier), `cont-200` (hung), `cont-201` (unparsed), `cont-300` (hung), `cvxqp1l` (unparsed), `cvxqp2l` (unparsed), `cvxqp3l` (unparsed), `dpklo1` (optimal, rejected by the verifier), `dual1` (optimal, rejected by the verifier), `dual2` (optimal, rejected by the verifier), `dual3` (optimal, rejected by the verifier), `dual4` (optimal, rejected by the verifier), `gouldqp2` (optimal, rejected by the verifier), `hs268` (optimal, rejected by the verifier), `hs35` (optimal, rejected by the verifier), `hs35mod` (optimal, rejected by the verifier), `hs53` (optimal, rejected by the verifier), `hs76` (optimal, rejected by the verifier), `hues-mod` (optimal at relative gap 6.5e-06), `huestis` (optimal, rejected by the verifier), `ksip` (optimal, rejected by the verifier), `liswet8` (optimal at relative gap 9.0e-01), `mosarqp2` (optimal, rejected by the verifier), `powell20` (optimal, rejected by the verifier), `primal1` (optimal, rejected by the verifier), `primal2` (optimal, rejected by the verifier), `primal3` (optimal, rejected by the verifier), `primalc2` (optimal, rejected by the verifier), `q25fv47` (optimal, rejected by the verifier), `qadlittl` (optimal, rejected by the verifier), `qafiro` (optimal, rejected by the verifier), `qbeaconf` (optimal, rejected by the verifier), `qbore3d` (optimal, rejected by the verifier), `qbrandy` (optimal, rejected by the verifier), `qcapri` (unparsed), `qe226` (optimal, rejected by the verifier), `qfffff80` (unparsed), `qforplan` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `qgrow15` (optimal, rejected by the verifier), `qgrow22` (optimal, rejected by the verifier), `qgrow7` (optimal, rejected by the verifier), `qisrael` (optimal, rejected by the verifier), `qpcblend` (optimal, rejected by the verifier), `qpcboei1` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qpcstair` (optimal, rejected by the verifier), `qpilotno` (hung), `qptest` (optimal, rejected by the verifier), `qsc205` (optimal, rejected by the verifier), `qscagr25` (optimal, rejected by the verifier), `qscagr7` (optimal, rejected by the verifier), `qscfxm1` (optimal, rejected by the verifier), `qscfxm2` (optimal, rejected by the verifier), `qscfxm3` (optimal, rejected by the verifier), `qscsd8` (optimal, rejected by the verifier), `qsctap1` (optimal, rejected by the verifier), `qsctap3` (optimal, rejected by the verifier), `qseba` (optimal, rejected by the verifier), `qshare1b` (optimal, rejected by the verifier), `qshell` (optimal, rejected by the verifier), `qship08l` (optimal, rejected by the verifier), `qship08s` (optimal, rejected by the verifier), `qsierra` (optimal, rejected by the verifier), `qstair` (optimal, rejected by the verifier), `qstandat` (optimal, rejected by the verifier), `s268` (optimal, rejected by the verifier), `stadat1` (optimal, rejected by the verifier), `stadat3` (optimal, rejected by the verifier), `tame` (optimal, rejected by the verifier), `ubh1` (optimal, rejected by the verifier), `zecevic2` (optimal, rejected by the verifier)
+
+What the verifier rejected:
+
+- HiGHS on `aug3d`: [FAIL] dual feasibility (columns)  worst 2.006e-07 (2.006e-07 relative) on C---3696; [FAIL] strong duality              primal 5.540677257925e+02  dual 5.540682388161e+02  gap 5.130e-04 (relative 9.259e-07), 2.789e-04 of
+- HiGHS on `aug3dc`: [FAIL] dual feasibility (columns)  worst 1.828e-07 (1.828e-07 relative) on C---3697; [FAIL] strong duality              primal 7.712624386889e+02  dual 7.712628998921e+02  gap 4.612e-04 (relative 5.980e-07), 2.248e-04 of
+- HiGHS on `aug3dcqp`: [FAIL] dual feasibility (columns)  worst 1.991e-07 (1.991e-07 relative) on C---3576; [FAIL] complementary slackness     worst |multiplier| * slack = 1.096e-06 on C---1105; [FAIL] strong duality              primal 9.9336
+- HiGHS on `aug3dqp`: [FAIL] dual feasibility (columns)  worst 7.805e-07 (7.550e-07 relative) on C---2179; [FAIL] complementary slackness     worst |multiplier| * slack = 3.160e-06 on C---1691
+- HiGHS on `cont-050`: [FAIL] strong duality              primal -4.563850868314e+00  dual -4.564606144916e+00  gap 7.553e-04 (relative 1.655e-04), 5.197e-04 of it from per-item violations accepted above
+- HiGHS on `cont-100`: [FAIL] strong duality              primal -4.644397375958e+00  dual -4.646823585593e+00  gap 2.426e-03 (relative 5.224e-04), 1.950e-03 of it from per-item violations accepted above
+- HiGHS on `cvxqp1l`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.689e-05 on C---6304
+- HiGHS on `cvxqp2l`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.500e-06 on C---1023
+- HiGHS on `cvxqp2m`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.263e-06 on C----111
+- HiGHS on `cvxqp2s`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.168e-06 on C------9
+- HiGHS on `dpklo1`: [FAIL] row activity                worst violation 3.653e+01 (3.653e+01 relative to the row's terms) on 53
+- HiGHS on `exdata`: [FAIL] dual feasibility (columns)  worst 1.000e-06 (1.000e-06 relative) on bs47; [FAIL] complementary slackness     worst |multiplier| * slack = 1.000e-05 on bs249
+- HiGHS on `gouldqp2`: [FAIL] strong duality              primal 1.882025172792e-04  dual 1.596021559707e-04  gap 2.860e-05 (relative 2.860e-05), 8.530e-06 of it from per-item violations accepted above
+- HiGHS on `gouldqp3`: [FAIL] strong duality              primal 2.062783971713e+00  dual 2.062776572639e+00  gap 7.399e-06 (relative 3.587e-06), 6.220e-06 of it from per-item violations accepted above
+- HiGHS on `hs118`: [FAIL] complementary slackness     worst |multiplier| * slack = 3.591e-04 on C------8; [FAIL] strong duality              primal 6.648204500000e+02  dual 6.648187602000e+02  gap 1.690e-03 (relative 2.542e-06), 1.455e-03 
+- HiGHS on `hs268`: [FAIL] dual feasibility (columns)  worst 4.000e-07 (4.000e-07 relative) on C------5; [FAIL] strong duality              primal 1.818989403546e-12  dual 3.099996320088e-06  gap 3.100e-06 (relative 3.100e-06), 1.999e-07 of
+- HiGHS on `hs35`: [FAIL] dual feasibility (columns)  worst 1.333e-07 (1.333e-07 relative) on C------1
+- HiGHS on `hs35mod`: [FAIL] dual feasibility (columns)  worst 1.500e-07 (1.500e-07 relative) on C------1
+- HiGHS on `hs51`: [FAIL] dual feasibility (columns)  worst 1.000e-07 (1.000e-07 relative) on C------2; [FAIL] strong duality              primal 0.000000000000e+00  dual 4.999999934086e-07  gap 5.000e-07 (relative 5.000e-07), 4.000e-07 of
+- HiGHS on `hs76`: [FAIL] dual feasibility (columns)  worst 2.091e-07 (2.091e-07 relative) on C------2
+- HiGHS on `liswet1`: [FAIL] dual feasibility (columns)  worst 7.482e-06 (7.482e-06 relative) on C--10002; [FAIL] complementary slackness     worst |multiplier| * slack = 7.482e-06 on C--10002; [FAIL] strong duality              primal 3.6122
+- HiGHS on `liswet10`: [FAIL] dual feasibility (columns)  worst 4.814e-05 (4.814e-05 relative) on C---9530; [FAIL] complementary slackness     worst |multiplier| * slack = 4.814e-05 on C---9530; [FAIL] strong duality              primal 4.9485
+- HiGHS on `liswet11`: [FAIL] dual feasibility (columns)  worst 8.005e-04 (8.005e-04 relative) on C--10001; [FAIL] complementary slackness     worst |multiplier| * slack = 8.005e-04 on C--10001; [FAIL] strong duality              primal 4.9523
+- HiGHS on `liswet12`: [FAIL] dual feasibility (columns)  worst 3.274e-05 (3.274e-05 relative) on C---8482; [FAIL] complementary slackness     worst |multiplier| * slack = 3.274e-05 on C---8482
+- HiGHS on `liswet2`: [FAIL] dual feasibility (columns)  worst 1.452e-07 (1.452e-07 relative) on C--10001; [FAIL] strong duality              primal 2.499807610289e+01  dual 2.499840954945e+01  gap 3.334e-04 (relative 1.334e-05), 3.332e-04 of
+- HiGHS on `liswet3`: [FAIL] dual feasibility (columns)  worst 6.224e-04 (6.224e-04 relative) on C---9530; [FAIL] complementary slackness     worst |multiplier| * slack = 6.224e-04 on C---9530; [FAIL] strong duality              primal 2.5001
+- HiGHS on `liswet4`: [FAIL] dual feasibility (columns)  worst 8.156e-04 (8.156e-04 relative) on C---9662; [FAIL] complementary slackness     worst |multiplier| * slack = 8.156e-04 on C---9662; [FAIL] strong duality              primal 2.5000
+- HiGHS on `liswet5`: [FAIL] dual feasibility (columns)  worst 5.453e-03 (5.453e-03 relative) on C---9555; [FAIL] complementary slackness     worst |multiplier| * slack = 5.453e-03 on C---9555; [FAIL] strong duality              primal 2.5034
+- HiGHS on `liswet6`: [FAIL] dual feasibility (columns)  worst 4.394e-03 (4.394e-03 relative) on C---9153; [FAIL] complementary slackness     worst |multiplier| * slack = 4.394e-03 on C---9153; [FAIL] strong duality              primal 2.4995
+- HiGHS on `liswet7`: [FAIL] dual feasibility (columns)  worst 7.272e-07 (7.272e-07 relative) on C--10002
+- HiGHS on `liswet8`: [FAIL] dual feasibility (columns)  worst 3.877e-05 (3.877e-05 relative) on C---9549; [FAIL] complementary slackness     worst |multiplier| * slack = 3.877e-05 on C---9549; [FAIL] strong duality              primal 7.1447
+- HiGHS on `liswet9`: [FAIL] dual feasibility (columns)  worst 1.141e-05 (1.141e-05 relative) on C---9794; [FAIL] complementary slackness     worst |multiplier| * slack = 1.141e-05 on C---9794
+- HiGHS on `lotschd`: [FAIL] complementary slackness     worst |multiplier| * slack = 7.516e-05 on C------5
+- HiGHS on `powell20`: [FAIL] dual feasibility (columns)  worst 2.501e-04 (1.000e-07 relative) on C---5002; [FAIL] complementary slackness     worst |multiplier| * slack = 7.499e-04 on C--10000
+- HiGHS on `primalc1`: [FAIL] dual feasibility (columns)  worst 1.032e-03 (1.032e-03 relative) on C------1; [FAIL] complementary slackness     worst |multiplier| * slack = 1.066e+01 on C------1; [FAIL] strong duality              primal -6.155
+- HiGHS on `primalc2`: [FAIL] dual feasibility (columns)  worst 4.725e-04 (4.725e-04 relative) on C------1; [FAIL] complementary slackness     worst |multiplier| * slack = 2.233e+00 on C------1
+- HiGHS on `primalc5`: [FAIL] dual feasibility (columns)  worst 4.601e-05 (4.601e-05 relative) on C------1; [FAIL] complementary slackness     worst |multiplier| * slack = 2.117e-02 on C------1
+- HiGHS on `primalc8`: [FAIL] dual feasibility (columns)  worst 3.311e-03 (3.311e-03 relative) on C------1; [FAIL] complementary slackness     worst |multiplier| * slack = 1.096e+02 on C------1
+- HiGHS on `qadlittl`: [FAIL] dual feasibility (columns)  worst 5.276e-06 (5.276e-06 relative) on ...142; [FAIL] complementary slackness     worst |multiplier| * slack = 1.484e-02 on ...175
+- HiGHS on `qafiro`: [FAIL] dual feasibility (columns)  worst 2.552e-06 (2.552e-06 relative) on X37; [FAIL] complementary slackness     worst |multiplier| * slack = 6.515e-05 on X37
+- HiGHS on `qbandm`: [FAIL] dual feasibility (columns)  worst 8.433e-05 (8.433e-05 relative) on MC90PT; [FAIL] complementary slackness     worst |multiplier| * slack = 7.111e-02 on MC90PT
+- HiGHS on `qbeaconf`: [FAIL] dual feasibility (columns)  worst 2.792e-04 (2.792e-04 relative) on 10144; [FAIL] complementary slackness     worst |multiplier| * slack = 7.795e-01 on 10144
+- HiGHS on `qbore3d`: [FAIL] dual feasibility (columns)  worst 8.437e-04 (8.437e-04 relative) on IUT.KWXI; [FAIL] complementary slackness     worst |multiplier| * slack = 7.118e+00 on IUT.KWXI
+- HiGHS on `qbrandy`: [FAIL] dual feasibility (columns)  worst 3.532e-04 (3.531e-04 relative) on 100002; [FAIL] complementary slackness     worst |multiplier| * slack = 1.248e+00 on 100002
+- HiGHS on `qetamacr`: [FAIL] dual feasibility (columns)  worst 1.393e-06 (1.393e-06 relative) on KAPSTK65; [FAIL] complementary slackness     worst |multiplier| * slack = 2.144e-04 on PCPETG05
+- HiGHS on `qfffff80`: [FAIL] dual feasibility (columns)  worst 2.469e-02 (2.469e-02 relative) on YP.DWLGS; [FAIL] complementary slackness     worst |multiplier| * slack = 6.098e+03 on YP.DWLGS
+- HiGHS on `qforplan`: [FAIL] dual feasibility (columns)  worst 1.604e-03 (1.604e-03 relative) on DEDO3 82; [FAIL] complementary slackness     worst |multiplier| * slack = 2.573e+01 on DEDO3 82; [FAIL] strong duality              primal 7.4566
+- HiGHS on `qgfrdxpn`: [FAIL] dual feasibility (columns)  worst 4.381e-04 (3.678e-04 relative) on KB1LA1; [FAIL] complementary slackness     worst |multiplier| * slack = 3.510e+02 on XJ2DZ2
+- HiGHS on `qisrael`: [FAIL] dual feasibility (columns)  worst 6.064e-04 (6.064e-04 relative) on A373; [FAIL] complementary slackness     worst |multiplier| * slack = 3.677e+00 on A373
+- HiGHS on `qpcboei1`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.254e-02 on C-----69
+- HiGHS on `qpcboei2`: [FAIL] complementary slackness     worst |multiplier| * slack = 7.700e-02 on C------9
+- HiGHS on `qrecipe`: [FAIL] complementary slackness     worst |multiplier| * slack = 4.000e-05 on JAL1IOBE; [FAIL] strong duality              primal -2.666160000000e+02  dual -2.666175010000e+02  gap 1.501e-03 (relative 5.630e-06), 4.612e-0
+- HiGHS on `qscagr25`: [FAIL] dual feasibility (columns)  worst 2.298e-03 (1.531e-04 relative) on COL00491; [FAIL] complementary slackness     worst |multiplier| * slack = 5.279e+01 on COL00491
+- HiGHS on `qscagr7`: [FAIL] dual feasibility (columns)  worst 1.600e-04 (1.600e-04 relative) on COL00073; [FAIL] complementary slackness     worst |multiplier| * slack = 1.529e+00 on COL00131
+- HiGHS on `qscfxm1`: [FAIL] dual feasibility (columns)  worst 1.547e-03 (1.545e-03 relative) on 1RMCST; [FAIL] complementary slackness     worst |multiplier| * slack = 2.395e+01 on 1RMCST
+- HiGHS on `qscfxm2`: [FAIL] dual feasibility (columns)  worst 1.564e-03 (1.561e-03 relative) on 1RMCST; [FAIL] complementary slackness     worst |multiplier| * slack = 2.445e+01 on 1RMCST
+- HiGHS on `qscfxm3`: [FAIL] dual feasibility (columns)  worst 1.564e-03 (1.561e-03 relative) on 1RMCST; [FAIL] complementary slackness     worst |multiplier| * slack = 2.445e+01 on 1RMCST
+- HiGHS on `qscorpio`: [FAIL] dual feasibility (columns)  worst 2.677e-07 (1.834e-07 relative) on X0337
+- HiGHS on `qscrs8`: [FAIL] dual feasibility (columns)  worst 2.103e-05 (2.103e-05 relative) on NELEDM75; [FAIL] complementary slackness     worst |multiplier| * slack = 4.424e-03 on NELEDM75
+- HiGHS on `qsctap1`: [FAIL] dual feasibility (columns)  worst 1.000e-06 (1.818e-07 relative) on Z4ZZ7ZZ5; [FAIL] complementary slackness     worst |multiplier| * slack = 1.000e-05 on Z4ZZ7ZZ4
+- HiGHS on `qseba`: [FAIL] dual feasibility (columns)  worst 7.896e-04 (7.896e-04 relative) on C0172000; [FAIL] complementary slackness     worst |multiplier| * slack = 6.235e+00 on C0172000
+- HiGHS on `qshare2b`: [FAIL] dual feasibility (columns)  worst 6.000e-06 (6.000e-06 relative) on 010520; [FAIL] complementary slackness     worst |multiplier| * slack = 3.600e-04 on 010520
+- HiGHS on `qshell`: [FAIL] complementary slackness     worst |multiplier| * slack = 6.132e+03 on C10010
+- HiGHS on `qship04l`: [FAIL] complementary slackness     worst |multiplier| * slack = 6.357e-04 on PREG0101
+- HiGHS on `qship04s`: [FAIL] complementary slackness     worst |multiplier| * slack = 6.438e-04 on PREG0101
+- HiGHS on `qship08l`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.585e-04 on PREG0203
+- HiGHS on `qship08s`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.589e-04 on PREG0203
+- HiGHS on `qship12l`: [FAIL] complementary slackness     worst |multiplier| * slack = 8.495e-04 on PREG0407
+- HiGHS on `qship12s`: [FAIL] complementary slackness     worst |multiplier| * slack = 8.517e-04 on PREG0407
+- HiGHS on `qstandat`: [FAIL] dual feasibility (columns)  worst 9.830e-05 (9.829e-05 relative) on FTR.....; [FAIL] complementary slackness     worst |multiplier| * slack = 9.663e-02 on FTR.....
+- HiGHS on `s268`: [FAIL] dual feasibility (columns)  worst 4.000e-07 (4.000e-07 relative) on C------5; [FAIL] strong duality              primal 1.818989403546e-12  dual 3.099996320088e-06  gap 3.100e-06 (relative 3.100e-06), 1.999e-07 of
+- HiGHS on `stadat1`: [FAIL] dual feasibility (columns)  worst 1.930e+06 (1.901e+00 relative) on C----340; [FAIL] complementary slackness     worst |multiplier| * slack = 1.930e+06 on C----340
+- HiGHS on `stadat2`: [FAIL] dual feasibility (columns)  worst 1.026e-06 (1.026e-06 relative) on C------1; [FAIL] complementary slackness     worst |multiplier| * slack = 1.414e-06 on C---2001; [FAIL] strong duality              primal -3.262
+- SCIP on `cont-050`: [FAIL] objective           recomputed -4.563850884524e+00, solver said -4.563850981085e+00, difference 9.656e-08
+- SCIP on `dpklo1`: [FAIL] objective           recomputed 3.700962516886e-01, solver said 3.700961596973e-01, difference 9.199e-08
+- SCIP on `dual1`: [FAIL] objective           recomputed 3.501300191822e-02, solver said 3.501290376899e-02, difference 9.815e-08
+- SCIP on `dual4`: [FAIL] objective           recomputed 7.460908862231e-01, solver said 7.460907878984e-01, difference 9.832e-08
+- SCIP on `genhs28`: [FAIL] objective           recomputed 9.271737444168e-01, solver said 9.271736500756e-01, difference 9.434e-08
+- SCIP on `hs35`: [FAIL] objective           recomputed 1.111111478922e-01, solver said 1.111110651898e-01, difference 8.270e-08
+- SCIP on `hs35mod`: [FAIL] objective           recomputed 2.500000312530e-01, solver said 2.499999782114e-01, difference 5.304e-08
+- SCIP on `hs51`: [FAIL] objective           recomputed 0.000000000000e+00, solver said -9.075448303975e-08, difference 9.075e-08
+- SCIP on `hs53`: [FAIL] objective           recomputed 4.093023275720e+00, solver said 4.093023219721e+00, difference 5.600e-08
+- SCIP on `hs76`: [FAIL] objective           recomputed -4.681818221798e+00, solver said -4.681818231789e+00, difference 9.990e-09
+- SCIP on `ksip`: [FAIL] objective           recomputed 5.757979899730e-01, solver said 5.757978923372e-01, difference 9.764e-08
+- SCIP on `primal1`: [FAIL] objective           recomputed -3.501293585563e-02, solver said -3.501301643532e-02, difference 8.058e-08
+- SCIP on `primal2`: [FAIL] objective           recomputed -3.373363901253e-02, solver said -3.373373819399e-02, difference 9.918e-08
+- SCIP on `qafiro`: [FAIL] objective           recomputed -1.590782842719e+00, solver said -1.590782851654e+00, difference 8.936e-09
+- SCIP on `qe226`: [FAIL] row activity        worst violation 1.105e-07 (1.105e-07 relative to the row's terms) on ...054
+- SCIP on `qisrael`: [FAIL] row activity        worst violation 9.990e-07 (9.990e-07 relative to the row's terms) on B173
+- SCIP on `qpcblend`: [FAIL] objective           recomputed -7.842855006777e-03, solver said -7.842864304416e-03, difference 9.298e-09
+- SCIP on `qpcboei2`: [FAIL] row activity        worst violation 4.114e-07 (4.114e-07 relative to the row's terms) on R-----49
+- SCIP on `qptest`: [FAIL] objective           recomputed 4.371874914510e+00, solver said 4.371874904520e+00, difference 9.990e-09
+- SCIP on `qsc205`: [FAIL] objective           recomputed -5.813959148495e-03, solver said -5.813968995113e-03, difference 9.847e-09
+- SCIP on `qsctap1`: [FAIL] row activity        worst violation 7.073e-07 (7.073e-07 relative to the row's terms) on ACZZ9ZZ2
+- SCIP on `qsctap2`: [FAIL] row activity        worst violation 7.097e-07 (7.097e-07 relative to the row's terms) on ACZ39ZZ2
+- SCIP on `qsctap3`: [FAIL] row activity        worst violation 7.088e-07 (7.088e-07 relative to the row's terms) on ACZ32ZZ2
+- SCIP on `tame`: [FAIL] objective           recomputed 5.187246390146e-23, solver said -9.985476434923e-09, difference 9.985e-09
+- SCIP on `zecevic2`: [FAIL] objective           recomputed -4.124999992549e+00, solver said -4.125000059605e+00, difference 6.706e-08
+- CBC/Clp on `aug2dcqp`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.583e-06 on C--19611
+- CBC/Clp on `aug2dqp`: [FAIL] dual feasibility (columns)  worst 9.312e-07 (9.312e-07 relative) on C--19804; [FAIL] complementary slackness     worst |multiplier| * slack = 5.991e-05 on C--19804
+- CBC/Clp on `cont-050`: [FAIL] objective                   recomputed -4.563850904326e+00, solver said -4.563850885233e+00, difference 1.909e-08
+- CBC/Clp on `cont-100`: [FAIL] objective                   recomputed -4.644397868764e+00, solver said -4.644397861851e+00, difference 6.912e-09
+- CBC/Clp on `cont-101`: [FAIL] objective                   recomputed 1.955273194356e-01, solver said 1.955273050684e-01, difference 1.437e-08
+- CBC/Clp on `dpklo1`: [FAIL] objective                   recomputed 3.700962196558e-01, solver said 3.700962172567e-01, difference 2.399e-09
+- CBC/Clp on `dual1`: [FAIL] objective                   recomputed 3.501297324012e-02, solver said 3.501296699663e-02, difference 6.243e-09
+- CBC/Clp on `dual2`: [FAIL] objective                   recomputed 3.373368025771e-02, solver said 3.373363953785e-02, difference 4.072e-08
+- CBC/Clp on `dual3`: [FAIL] objective                   recomputed 1.357558445771e-01, solver said 1.357558322585e-01, difference 1.232e-08
+- CBC/Clp on `dual4`: [FAIL] objective                   recomputed 7.460908491974e-01, solver said 7.460908249191e-01, difference 2.428e-08
+- CBC/Clp on `gouldqp2`: [FAIL] objective                   recomputed 1.842745033925e-04, solver said 1.837133764805e-04, difference 5.611e-07
+- CBC/Clp on `hs268`: [FAIL] objective                   recomputed 3.510467649903e-08, solver said -5.036781658418e-09, difference 4.014e-08
+- CBC/Clp on `hs35`: [FAIL] objective                   recomputed 1.111111202701e-01, solver said 1.111111019518e-01, difference 1.832e-08
+- CBC/Clp on `hs35mod`: [FAIL] objective                   recomputed 2.500000118478e-01, solver said 2.499999719249e-01, difference 3.992e-08
+- CBC/Clp on `hs53`: [FAIL] objective                   recomputed 4.093023250375e+00, solver said 4.093023255325e+00, difference 4.951e-09
+- CBC/Clp on `hs76`: [FAIL] objective                   recomputed -4.681818176881e+00, solver said -4.681818185640e+00, difference 8.758e-09
+- CBC/Clp on `huestis`: [FAIL] complementary slackness     worst |multiplier| * slack = 7.720e-03 on C------2
+- CBC/Clp on `ksip`: [FAIL] objective                   recomputed 5.757979412412e-01, solver said 5.757978958171e-01, difference 4.542e-08
+- CBC/Clp on `mosarqp2`: [FAIL] objective                   recomputed -1.576416353373e+03, solver said -1.530244759330e+03, difference 4.617e+01; [FAIL] dual feasibility (columns)  worst 9.750e-01 (9.750e-01 relative) on C----772; [FAIL] dual f
+- CBC/Clp on `powell20`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.366e-05 on R---9976
+- CBC/Clp on `primal1`: [FAIL] objective                   recomputed -3.501290856655e-02, solver said -3.501295335878e-02, difference 4.479e-08
+- CBC/Clp on `primal2`: [FAIL] objective                   recomputed -3.373365616287e-02, solver said -3.373366498038e-02, difference 8.818e-09
+- CBC/Clp on `primal3`: [FAIL] objective                   recomputed -1.357558254128e-01, solver said -1.357558342512e-01, difference 8.838e-09
+- CBC/Clp on `primalc2`: [FAIL] objective                   recomputed -3.548649440958e+03, solver said -3.551305919049e+03, difference 2.656e+00; [FAIL] complementary slackness     worst |multiplier| * slack = 3.049e+00 on C------1
+- CBC/Clp on `q25fv47`: [FAIL] dual feasibility (columns)  worst 3.520e+01 (1.833e+00 relative) on 1C1013; [FAIL] complementary slackness     worst |multiplier| * slack = 9.139e+01 on 1C1015
+- CBC/Clp on `qadlittl`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.275e-05 on ...149
+- CBC/Clp on `qafiro`: [FAIL] objective                   recomputed -1.590776580120e+00, solver said -1.590781146719e+00, difference 4.567e-06
+- CBC/Clp on `qbeaconf`: [FAIL] objective                   recomputed 1.647120634900e+05, solver said 1.647120952022e+05, difference 3.171e-02; [FAIL] complementary slackness     worst |multiplier| * slack = 2.031e-03 on 10059S
+- CBC/Clp on `qbore3d`: [FAIL] complementary slackness     worst |multiplier| * slack = 8.292e-05 on ION.DHXI
+- CBC/Clp on `qbrandy`: [FAIL] row activity                worst violation 1.159e-06 (1.159e-06 relative to the row's terms) on 10131A; [FAIL] complementary slackness     worst |multiplier| * slack = 2.128e-04 on 102500
+- CBC/Clp on `qe226`: [FAIL] objective                   recomputed 2.126738145550e+02, solver said 2.126748103066e+02, difference 9.958e-04; [FAIL] dual feasibility (columns)  worst 2.320e+00 (1.262e+00 relative) on .P0LYG; [FAIL] dual feasi
+- CBC/Clp on `qforplan`: [FAIL] dual feasibility (columns)  worst 1.539e-03 (1.539e-03 relative) on DEDO3 82; [FAIL] complementary slackness     worst |multiplier| * slack = 4.271e+02 on DEDO5 12; [FAIL] strong duality              primal 7.4566
+- CBC/Clp on `qgfrdxpn`: [FAIL] column bounds               worst violation 1.552e-06 (1.552e-06 relative) on FI1FJ1; [FAIL] complementary slackness     worst |multiplier| * slack = 2.946e-04 on P2UA
+- CBC/Clp on `qgrow15`: [FAIL] complementary slackness     worst |multiplier| * slack = 3.573e-04 on XI0201
+- CBC/Clp on `qgrow22`: [FAIL] complementary slackness     worst |multiplier| * slack = 8.964e-05 on SI1701
+- CBC/Clp on `qgrow7`: [FAIL] objective                   recomputed -4.279830180767e+07, solver said -4.279879214731e+07, difference 4.903e+02; [FAIL] complementary slackness     worst |multiplier| * slack = 1.918e+01 on XI1505
+- CBC/Clp on `qisrael`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.376e-03 on A340
+- CBC/Clp on `qpcblend`: [FAIL] objective                   recomputed -7.842513105032e-03, solver said -7.842541175848e-03, difference 2.807e-08
+- CBC/Clp on `qpcboei1`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.228e-03 on C----219
+- CBC/Clp on `qpcboei2`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.783e-02 on C-----95
+- CBC/Clp on `qpcstair`: [FAIL] complementary slackness     worst |multiplier| * slack = 6.706e-06 on R----281
+- CBC/Clp on `qptest`: [FAIL] objective                   recomputed 4.371875013913e+00, solver said 4.371874993540e+00, difference 2.037e-08
+- CBC/Clp on `qsc205`: [FAIL] objective                   recomputed -5.771121400589e-03, solver said 1.419142235815e+01, difference 1.420e+01; [FAIL] dual feasibility (columns)  worst 4.930e-04 (4.930e-04 relative) on COL00177; [FAIL] complem
+- CBC/Clp on `qscagr25`: [FAIL] complementary slackness     worst |multiplier| * slack = 3.764e-05 on COL00003
+- CBC/Clp on `qscagr7`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.167e-04 on ROW00041
+- CBC/Clp on `qscfxm1`: [FAIL] row activity                worst violation 9.026e-07 (9.026e-07 relative to the row's terms) on 1DT071; [FAIL] objective                   recomputed 1.688284130238e+07, solver said 1.688268772313e+07, difference
+- CBC/Clp on `qscfxm2`: [FAIL] row activity                worst violation 1.179e-06 (1.179e-06 relative to the row's terms) on 1DT071; [FAIL] objective                   recomputed 2.777663484293e+07, solver said 1.688531309338e+08, difference
+- CBC/Clp on `qscfxm3`: [FAIL] row activity                worst violation 5.371e-07 (5.371e-07 relative to the row's terms) on 2DT071; [FAIL] objective                   recomputed 3.081671307074e+07, solver said 3.081623528605e+07, difference
+- CBC/Clp on `qscsd8`: [FAIL] dual feasibility (columns)  worst 3.710e-06 (9.739e-07 relative) on 30006008
+- CBC/Clp on `qsctap1`: [FAIL] objective                   recomputed 1.415861134552e+03, solver said 1.415860215188e+03, difference 9.194e-04; [FAIL] complementary slackness     worst |multiplier| * slack = 2.924e-06 on Z2ZZ5ZZ1
+- CBC/Clp on `qsctap3`: [FAIL] objective                   recomputed 1.438754681177e+03, solver said 1.438754688970e+03, difference 7.793e-06
+- CBC/Clp on `qseba`: [FAIL] complementary slackness     worst |multiplier| * slack = 4.065e-03 on M5245008
+- CBC/Clp on `qshare1b`: [FAIL] complementary slackness     worst |multiplier| * slack = 7.847e-06 on CCC017
+- CBC/Clp on `qshell`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.648e-03 on C10550
+- CBC/Clp on `qship08l`: [FAIL] objective                   recomputed 2.376040616519e+06, solver said 2.376040571576e+06, difference 4.494e-02; [FAIL] complementary slackness     worst |multiplier| * slack = 7.040e-06 on SH020244
+- CBC/Clp on `qship08s`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.845e-06 on OVRMIN02
+- CBC/Clp on `qsierra`: [FAIL] objective                   recomputed 2.375118103720e+07, solver said 2.375046884817e+07, difference 7.122e+02; [FAIL] complementary slackness     worst |multiplier| * slack = 1.524e+00 on RBNBO3; [FAIL] strong d
+- CBC/Clp on `qstair`: [FAIL] dual feasibility (columns)  worst 7.261e-06 (7.261e-06 relative) on ZM5; [FAIL] complementary slackness     worst |multiplier| * slack = 1.714e-06 on ZM5
+- CBC/Clp on `qstandat`: [FAIL] row activity                worst violation 1.189e-07 (1.189e-07 relative to the row's terms) on TM.3S2T4; [FAIL] complementary slackness     worst |multiplier| * slack = 3.079e-06 on ZP12T408
+- CBC/Clp on `s268`: [FAIL] objective                   recomputed 3.510467649903e-08, solver said -5.036781658418e-09, difference 4.014e-08
+- CBC/Clp on `stadat1`: [FAIL] row activity                worst violation 2.263e+04 (4.230e-03 relative to the row's terms) on R---1339; [FAIL] objective                   recomputed -2.814939018558e+07, solver said -2.833845629765e+07, differ
+- CBC/Clp on `stadat3`: [FAIL] objective                   recomputed -3.577945267267e+01, solver said -3.577945091082e+01, difference 1.762e-06
+- CBC/Clp on `tame`: [FAIL] objective                   recomputed 0.000000000000e+00, solver said -3.712602037948e-08, difference 3.713e-08
+- CBC/Clp on `ubh1`: [FAIL] objective                   recomputed 1.116000815695e+00, solver said 1.116000830621e+00, difference 1.493e-08
+- CBC/Clp on `zecevic2`: [FAIL] objective                   recomputed -4.124999936391e+00, solver said -4.124999954272e+00, difference 1.788e-08
 
 ---
 
