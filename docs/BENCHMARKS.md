@@ -1161,6 +1161,15 @@ Every arm that did not finish, and the numbers that say why. `attribution` is re
 | refinery | `ipm` | **fill** | numerical error | 0 | 5.9e+02 | 3.6e+01 | 3,221 MB | declined: the factor of the normal equations would hold more than 175797034 nonzeros, above ipm_max_factor_nonzeros = 175797034; raise the option or use another engine |
 | refinery | `ipm-xover` | **fill** | numerical error | 0 | 5.9e+02 | 3.6e+01 | 3,221 MB | declined: the factor of the normal equations would hold more than 175797034 nonzeros, above ipm_max_factor_nonzeros = 175797034; raise the option or use another engine; the best iterate (merit 1.5e+05) is attached for crossover_from_nonoptimal, and is not claimed as a point; crossover not attempted from this numerical_error answer: its scaled infeasibility 5.4e+01 / 4.2e+00 is above 1e-04, or it holds no finite point |
 
+**Past the defaults.** The same models and verifier with an option changed on purpose, one CSV per experiment; `options` is what the solver was given.
+
+| CSV | model | arm | options | status | relative error | verified | iterations | seconds | peak memory | solver message |
+|---|---|---|---|---|---:|---:|---:|---:|---:|---|
+| `million-factor-cap-b561fba.csv` | refinery | `ipm` | `algorithm=ipm crossover=true ipm_max_factor_nonzeros=600000000` | time limit | 7.0e-03 | no | 12 | 3,628 | 8,068 MB | time limit 3598.06s reached inside the factorization, which was abandoned |
+| `million-factor-cap-b561fba.csv` | staircase | `ipm` | `algorithm=ipm crossover=true ipm_max_factor_nonzeros=600000000` | time limit | 1.5e-04 | no | 65 | 3,614 | 4,347 MB | time limit 3598.86s reached |
+| `million-supernodal-b561fba.csv` | staircase | `ipm` | `algorithm=ipm crossover=true ipm_max_factor_nonzeros=600000000 ipm_supernodal=true` | numerical error | - | no | 86 | 2,106 | 6,550 MB | the interior-point iteration stalled after 86 iterations (steps 4.1e-19 / 4.8e-17); the best iterate is reported as a feasible point; engine reported feasible but the returned point violates primal feasibility by 9.318e-06 (2.588e-07 relative to the scale it was measured on), above the 1.0e-07 tolerance; it is not a feasible point |
+| `million-supernodal-b561fba.csv` | refinery | `ipm` | `algorithm=ipm crossover=true ipm_max_factor_nonzeros=600000000 ipm_supernodal=true` | killed | - | no | - | 6,000 | 11,806 MB | exit -9;  |
+
 ---
 
 ## 2. MIPLIB — the mixed-integer side
