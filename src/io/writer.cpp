@@ -219,6 +219,20 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
       fmt::print(out, "sensitivity_message {}\n", solution.sensitivity_message);
     }
   }
+  if (solution.exact_repair_status != Solution::ExactVerification::kNotAttempted) {
+    // #757: whether the basis below is exactly optimal after the exact repair, and how many
+    // exact pivots and bound flips it took from the one the engine reported (0 and 0: none).
+    fmt::print(
+        out, "exact_repair {}\n",
+        solution.exact_repair_status == Solution::ExactVerification::kVerified   ? "optimal"
+        : solution.exact_repair_status == Solution::ExactVerification::kDeclined ? "declined"
+                                                                                 : "failed");
+    fmt::print(out, "exact_repair_pivots {}\n", solution.exact_repair_pivots);
+    fmt::print(out, "exact_repair_flips {}\n", solution.exact_repair_flips);
+    if (!solution.exact_repair_message.empty()) {
+      fmt::print(out, "exact_repair_message {}\n", solution.exact_repair_message);
+    }
+  }
   if (solution.exact_status != Solution::ExactVerification::kNotAttempted) {
     fmt::print(out, "exact_verification {}\n",
                solution.exact_status == Solution::ExactVerification::kVerified   ? "verified"
