@@ -173,11 +173,16 @@ def _worker_highs(model: Path, time_limit: float, sol: Path) -> dict:
            "duals": bool(solution.dual_valid), "version": h.version()}
     if mapped == "optimal" and solution.value_valid:
         duals = bool(solution.dual_valid)
+        # One copy of each vector: highspy converts the whole vector on every attribute
+        # access, so indexing `solution.col_value[j]` in the loop is quadratic - 88 s of
+        # wall time around a 1.25 s solve on osa-14, and past the hang margin on osa-30.
+        col_value, col_dual = list(solution.col_value), list(solution.col_dual)
+        row_value, row_dual = list(solution.row_value), list(solution.row_dual)
         write_sol(sol, solver="highs", status="optimal" if duals else "feasible",
                   objective=out["objective"],
-                  columns={n: (solution.col_value[j], solution.col_dual[j] if duals else 0.0)
+                  columns={n: (col_value[j], col_dual[j] if duals else 0.0)
                            for j, n in enumerate(lp.col_names_)},
-                  rows={n: (solution.row_value[i], solution.row_dual[i] if duals else 0.0)
+                  rows={n: (row_value[i], row_dual[i] if duals else 0.0)
                         for i, n in enumerate(lp.row_names_)})
     return out
 
