@@ -53,6 +53,9 @@ struct CertificateTree {
     Index down = -1;
     Index up = -1;
     Proof proof = Proof::kNone;
+    /// `y` came from the batched PDHG run (#756), not the node's own LP: for the report only,
+    /// the checker treats every leaf the same.
+    bool batch = false;
     std::vector<std::pair<Index, double>> y;  ///< sparse: the model's rows, then the cuts'
   };
   std::vector<Node> nodes;

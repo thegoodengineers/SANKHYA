@@ -84,6 +84,7 @@ class Writer {
   struct LeafCounts {
     Count own_duals = 0;        ///< a bound from the leaf's own LP duals
     Count inherited_duals = 0;  ///< from the nearest ancestor's (pruned before its LP)
+    Count batch_duals = 0;      ///< of those two, from the batched PDHG run's multipliers
     Count farkas = 0;           ///< a contradiction from its infeasible LP
     Count farkas_failed = 0;    ///< an infeasible LP whose Farkas vector proved nothing here
     Count empty_box = 0;        ///< a contradiction between two bounds on one column
@@ -306,6 +307,7 @@ Derived Writer::emit_leaf(Index node) {
     return {};
   }
   ++(source == &leaf ? leaves_.own_duals : leaves_.inherited_duals);
+  if (source->batch) ++leaves_.batch_duals;
   const std::vector<Index> implied = emit_implied(node, used.implied);
   Derived d;
   d.bound = bound.value;
@@ -465,9 +467,10 @@ CertificateOutcome write_vipr_certificate(const std::string& path, const Model& 
     const Writer::LeafCounts& c = w.leaves();
     outcome.leaves = fmt::format(
         "leaves: {} from their own LP duals, {} from an ancestor's, {} infeasible by Farkas, "
-        "{} infeasible LPs bounded by an ancestor's duals instead, {} empty boxes; {} "
-        "row-implied column bounds derived; {} cut row(s) derived from the model",
-        c.own_duals, c.inherited_duals, c.farkas, c.farkas_failed, c.empty_box,
+        "{} infeasible LPs bounded by an ancestor's duals instead, {} empty boxes; {} of the "
+        "dual-bounded leaves from the batched PDHG run's multipliers; {} row-implied column "
+        "bounds derived; {} cut row(s) derived from the model",
+        c.own_duals, c.inherited_duals, c.farkas, c.farkas_failed, c.empty_box, c.batch_duals,
         c.implied_bounds, tree.cuts.size());
     if (!body) {
       outcome.message = "writing " + body_path + " failed";

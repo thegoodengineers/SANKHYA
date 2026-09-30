@@ -321,6 +321,15 @@ def batched_end_to_end() -> None:
               recorded.group(0) if recorded else log[-300:])
         check(cert.exists(), "p0201 with batched node bounds: a certificate is written",
               "" if cert.exists() else log[-300:])
+        # The leaves the batch bounded are counted for the report (#756), and the runner's
+        # parse of that line (bench/runners/miplib.py) reads the same numbers.
+        sys.path.insert(0, str(HERE.parent / "bench" / "runners"))
+        import miplib  # noqa: E402
+        counts = miplib.leaf_counts(log)
+        batch = counts["certificate_batch_leaves"]
+        check(batch is not None and 0 < batch <= counts["certificate_dual_leaves"],
+              "p0201 with batched node bounds: some proof leaves come from the batch",
+              f"{batch} of {counts['certificate_dual_leaves']} dual-bounded leaves")
         if not cert.exists():
             return
         code, out = run_checker_on(cert, "--mps", str(mps), "--feas-tol", "1e-9")
