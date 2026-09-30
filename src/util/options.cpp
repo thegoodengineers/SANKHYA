@@ -1320,7 +1320,13 @@ const std::vector<OptionSpec>& Options::registry() {
                  "the host engine's; the answer is the host operator's to rounding "
                  "(tests/unit/test_qp_device.cpp). Needs a build with SANKHYA_ENABLE_CUDA and "
                  "a device; otherwise it warns and runs on the host. A device failure "
-                 "mid-solve hands the remaining budget to the host. Default OFF.",
+                 "mid-solve hands the remaining budget to the host. Default OFF: on the 138 "
+                 "Maros-Meszaros QPs at 30 s on an A100 "
+                 "(maros-meszaros-493-gpu-{host,device}-3f70a78.csv) the device passes 18 "
+                 "against the host's 19. These models are small enough that the launches cost "
+                 "more than the arithmetic: 38 that reach the host's million-iteration ceiling "
+                 "hit the time limit on the device, and dualc1, optimal on the host, times "
+                 "out; the device alone reaches feasible on powell20 and qship12l.",
                  0.0,
                  0.0,
                  {}});
