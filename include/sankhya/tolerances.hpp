@@ -597,6 +597,19 @@ inline constexpr std::int64_t kGlobalHeuristicInterval = 10;
 inline constexpr double kSafeBoundMaxShrink = 1e-6;
 inline constexpr double kSafeBoundShrinkMargin = 4.0;
 
+/// The certified gap of an optimal LP (#763): the relative gap below which the bound from
+/// the reported duals is kept as it is, and the shifts along the basis direction tried
+/// otherwise, relative to the largest term of c and A'y (src/core/lp_safe_bound.cpp): the
+/// first is some 10^4 ulps of that term, past the rounding width of a reduced cost; each
+/// next is kSafeBoundShiftGrowth times the last, up to kSafeBoundShiftLast.
+inline constexpr double kCertifiedGapTarget = 1e-6;
+inline constexpr double kSafeBoundShiftFirst = 1e-12;
+inline constexpr double kSafeBoundShiftLast = 1e-6;
+inline constexpr double kSafeBoundShiftGrowth = 100.0;
+/// Rounds of bound propagation before the certified-gap bound gives up on a missing column
+/// bound; on Netlib most instances stop finding new bounds well before ten (#763).
+inline constexpr int kSafeBoundPropagationPasses = 10;
+
 /// MILP certificates (#518): how many ancestors' duals a leaf tries before it gives up on a
 /// bound, and the largest magnitude an objective step or its rounded bound may have for the
 /// Chvatal-Gomory rounding step to be written: below 2^53 every integer is a double, so the

@@ -128,6 +128,25 @@ struct SafeBoundProblem {
 [[nodiscard]] SafeBound safe_dual_bound(const Model& model, const std::vector<double>& row_dual,
                                         bool imply_bounds = true);
 
+/// A column bound found by propagate_missing_bounds(): `value` bounds x_column from above
+/// (is_upper) or below, implied by `row` and the column box as it stood when it was found.
+struct PropagatedBound {
+  Index column = -1;
+  Index row = -1;
+  bool is_upper = false;
+  double value = 0.0;
+};
+
+/// Bound propagation for the safe bound (#763): up to `passes` rounds in which every column
+/// side that is infinite in [*lower, *upper] gets the tightest bound one row implies from the
+/// other columns' current bounds (the same outward-rounded rule safe_dual_bound() uses for
+/// one column), the round's findings applied together at its end. Finite sides are never
+/// changed, so each side is found at most once. The problem's own column spans are ignored.
+/// Returns what was found, in the order applied. Savelsbergh, ORSA J. Computing 6(4) (1994).
+[[nodiscard]] std::vector<PropagatedBound> propagate_missing_bounds(
+    const SafeBoundProblem& problem, std::vector<double>* lower, std::vector<double>* upper,
+    int passes);
+
 /// An interval containing the exact value of sum_j a_j b_j, by the same outward rounding.
 [[nodiscard]] std::pair<double, double> dot_enclosure(std::span<const double> a,
                                                       std::span<const double> b);

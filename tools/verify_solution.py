@@ -33,6 +33,7 @@ from verify_solution_checks import (STATUSES_ASSERTING_FEASIBILITY, STATUSES_WIT
                                     verify_iis, verify_pool, verify_ray)
 from verify_solution_io import INF
 from verify_solution_mps import Model, parse_mps
+from verify_solution_safe_bound import verify_safe_bound
 from verify_solution_sol import Solution, parse_sol
 from verify_solution_sensitivity import check_certified as check_certified_sensitivity
 
@@ -349,6 +350,10 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
                          f"incumbent {objective:.12e}, bound {bound:.12e}, "
                          f"remaining gap {abs(objective - bound):.3e}")
         return report
+
+    # The Neumaier-Shcherbina bound behind an optimal LP, re-derived exactly (#763).
+    if not model.hessian:
+        verify_safe_bound(model, solution, objective, report)
 
     # ---- Dual feasibility ----------------------------------------------------------------
     # Work in minimize space so one set of sign conventions covers both senses.

@@ -348,6 +348,39 @@ SafeBound safe_dual_bound(const SafeBoundProblem& problem, std::span<const doubl
   return retry;
 }
 
+std::vector<PropagatedBound> propagate_missing_bounds(const SafeBoundProblem& problem,
+                                                      std::vector<double>* lower,
+                                                      std::vector<double>* upper, int passes) {
+  std::vector<PropagatedBound> found;
+  if (problem.matrix == nullptr) return found;
+  const Index n = problem.matrix->num_cols();
+  for (int pass = 0; pass < passes; ++pass) {
+    SafeBoundProblem box = problem;
+    box.col_lower = *lower;
+    box.col_upper = *upper;
+    ImpliedBounds implied(box);
+    const std::size_t before = found.size();
+    for (Index j = 0; j < n; ++j) {
+      const auto uj = static_cast<std::size_t>(j);
+      ImpliedBound how;
+      if (!finite((*lower)[uj])) {
+        const double v = implied.lower(j, &how);
+        if (finite(v)) found.push_back({j, how.row, false, v});
+      }
+      if (!finite((*upper)[uj])) {
+        const double v = implied.upper(j, &how);
+        if (finite(v)) found.push_back({j, how.row, true, v});
+      }
+    }
+    if (found.size() == before) break;
+    for (std::size_t k = before; k < found.size(); ++k) {
+      const PropagatedBound& b = found[k];
+      (b.is_upper ? *upper : *lower)[static_cast<std::size_t>(b.column)] = b.value;
+    }
+  }
+  return found;
+}
+
 std::pair<double, double> dot_enclosure(std::span<const double> a, std::span<const double> b) {
   double lo = 0.0;
   double hi = 0.0;

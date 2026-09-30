@@ -23,6 +23,7 @@ import test_verify_solution_limits  # noqa: E402
 import test_verify_solution_names  # noqa: E402
 import test_verify_solution_nlp  # noqa: E402
 import test_verify_solution_qcqp  # noqa: E402
+import test_verify_solution_safe_bound  # noqa: E402
 import test_verify_solution_sensitivity  # noqa: E402
 
 FAILURES = 0
@@ -932,6 +933,8 @@ def main() -> int:
     print("nonlinear models, .nl (NLP stage 2)")
     test_verify_solution_nlp.run(check)
     test_verify_solution_nlp.run_minlp(check)
+    print("the safe bound of an optimal LP, re-derived exactly (#763)")
+    test_verify_solution_safe_bound.run(check)
     print("certified sensitivity, re-derived in exact arithmetic (#757)")
     test_verify_solution_sensitivity.run(check)
     print("the solution pool (#225)")

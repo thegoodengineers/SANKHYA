@@ -9,17 +9,21 @@
 
 #include <cmath>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <random>
+#include <sstream>
 #include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
 
+#include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 
+#include "core/lp_safe_bound.hpp"
 #include "core/safe_bound.hpp"
 #include "mip/checkpoint.hpp"
 #include "oracles/lp_generator.hpp"
@@ -203,6 +207,7 @@ struct Tally {
   int infeasible = 0;
   int skipped = 0;
   double worst_gap = 0.0;  ///< optimum - safe, over finite bounds from the simplex duals
+  int reported = 0;        ///< optimal solves whose Solution carried a finite safe bound (#763)
 };
 
 /// Every y we can think of, against the exact optimum. Returns false on a violation.
@@ -220,6 +225,21 @@ bool check_instance(const GeneratedLp& lp, std::mt19937_64& rng, Tally* tally,
   try {
     if (exact.status == OracleStatus::kOptimal) {
       ++tally->optimal;
+      // #763: what solve() itself reports on an optimal LP is one of these bounds.
+      if (solved.status == SolveStatus::kOptimal) {
+        if (std::isnan(solved.safe_lower_bound)) {
+          *failure = "an optimal LP was reported without a safe bound\n" + lp.to_text();
+          return false;
+        }
+        if (std::isfinite(solved.safe_lower_bound)) {
+          ++tally->reported;
+          if (rational_at_least(solved.safe_lower_bound) > exact.objective) {
+            *failure = "reported safe_lower_bound " + std::to_string(solved.safe_lower_bound) +
+                       " > exact optimum\n" + lp.to_text();
+            return false;
+          }
+        }
+      }
       std::vector<std::vector<double>> candidates;
       if (solved.row_dual.size() == static_cast<std::size_t>(lp.num_rows)) {
         candidates.push_back(solved.row_dual);
@@ -309,13 +329,111 @@ TEST(SafeBound, NeverExceedsTheExactOptimumOnRandomLps) {
   std::cout << "[safe bound] optimal " << tally.optimal << ", finite from the simplex duals "
             << tally.finite_from_simplex << " (worst optimum - safe " << tally.worst_gap
             << "), infeasible " << tally.infeasible << " of which proved by the Farkas test "
-            << tally.infeasible_proved << ", skipped " << tally.skipped << "\n";
+            << tally.infeasible_proved << ", skipped " << tally.skipped
+            << ", finite safe_lower_bound reported by solve() " << tally.reported << "\n";
   for (const std::string& f : failures) ADD_FAILURE() << f;
   EXPECT_TRUE(failures.empty());
   // The bound is not vacuous: the simplex duals give a finite one on most optimal instances,
   // and it is tight to rounding.
   EXPECT_GT(tally.finite_from_simplex, tally.optimal / 2);
   EXPECT_LT(tally.worst_gap, 1e-6);
+  EXPECT_GT(tally.reported, tally.optimal / 2);
+}
+
+TEST(SafeBound, ABasicColumnWithOnlyALowerBoundIsCertifiedThroughPropagatedBounds) {
+  // min -x1  s.t.  x1 - x0 <= 0,  x0 <= 5,  x >= 0: optimum x = (5, 5), objective -5, both
+  // columns basic, duals (-1, -1). The first dual one ulp short of -1 leaves x1's reduced
+  // cost at -2^-53: it then needs an upper bound x1 has not got, no single row implies one
+  // over the model's box (x0 is unbounded there), and its cost is negative so scaling y
+  // cannot fix the sign. The duals as given prove nothing; two rounds of propagation
+  // (x0 <= 5 from the second row, then x1 <= x0 <= 5 from the first) do (#763).
+  Model model;
+  model.resize_columns(2);
+  model.col_cost = {0.0, -1.0};
+  model.resize_rows(2);
+  model.row_upper = {0.0, 5.0};
+  model.matrix.reset(2, 2);
+  model.matrix.add_entry(0, 0, -1.0);
+  model.matrix.add_entry(0, 1, 1.0);
+  model.matrix.add_entry(1, 0, 1.0);
+  model.matrix.finalize();
+  Solution solution;
+  solution.status = SolveStatus::kOptimal;
+  solution.objective = -5.0;
+  solution.row_dual = {-(1.0 - std::ldexp(1.0, -53)), -1.0};
+  solution.col_status = {BasisStatus::kBasic, BasisStatus::kBasic};
+  solution.row_status = {BasisStatus::kAtUpper, BasisStatus::kAtUpper};
+  ASSERT_FALSE(std::isfinite(safe_dual_bound(model, solution.row_dual).value));
+
+  attach_safe_lower_bound(model, &solution);
+  ASSERT_TRUE(std::isfinite(solution.safe_lower_bound));
+  EXPECT_LE(solution.safe_lower_bound, -5.0);  // the exact optimum is -5
+  EXPECT_GT(solution.safe_lower_bound, -5.0 - 1e-9);
+  EXPECT_LE(solution.certified_relative_gap, 1e-9);
+  ASSERT_EQ(solution.safe_multipliers.size(), 2U);
+  ASSERT_EQ(solution.safe_column_bounds.size(), 2U);
+  EXPECT_EQ(solution.safe_column_bounds[0].column, 0);
+  EXPECT_TRUE(solution.safe_column_bounds[0].is_upper);
+  EXPECT_EQ(solution.safe_column_bounds[0].row, 1);
+  EXPECT_EQ(solution.safe_column_bounds[1].column, 1);
+  EXPECT_EQ(solution.safe_column_bounds[1].row, 0);
+  // The multipliers and bounds reported are the ones that prove it.
+  Model boxed = model;
+  for (const Solution::SafeColumnBound& b : solution.safe_column_bounds) {
+    (b.is_upper ? boxed.col_upper : boxed.col_lower)[static_cast<std::size_t>(b.column)] =
+        b.value;
+  }
+  EXPECT_EQ(safe_dual_bound(boxed, solution.safe_multipliers).value, solution.safe_lower_bound);
+}
+
+TEST(SafeBound, AnOptimalMaximisationReportsAnUpperBoundWithItsOffsetInEveryOutput) {
+  // max 3 x0 + 2 x1 + 5  s.t.  x0 + x1 <= 4,  x0 + 3 x1 <= 6,  0 <= x0 <= 3,  x1 >= 0.
+  // Optimum x = (3, 1), objective 16 exactly: the safe bound must be at least 16.
+  Model model;
+  model.sense = ObjSense::kMaximize;
+  model.objective_offset = 5.0;
+  model.resize_columns(2);
+  model.col_cost = {3.0, 2.0};
+  model.col_upper = {3.0, kInfinity};
+  model.resize_rows(2);
+  model.row_upper = {4.0, 6.0};
+  model.matrix.reset(2, 2);
+  model.matrix.add_entry(0, 0, 1.0);
+  model.matrix.add_entry(0, 1, 1.0);
+  model.matrix.add_entry(1, 0, 1.0);
+  model.matrix.add_entry(1, 1, 3.0);
+  model.matrix.finalize();
+  const Solution solved = solve_float(model);
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal);
+  ASSERT_TRUE(std::isfinite(solved.safe_lower_bound));
+  EXPECT_GE(solved.safe_lower_bound, 16.0);
+  EXPECT_LE(solved.safe_lower_bound, 16.0 + 1e-9);
+  EXPECT_GE(solved.certified_gap, -1e-9);
+  EXPECT_LE(solved.certified_relative_gap, 1e-9);
+
+  const testing::TempFile sol("", ".sol");
+  const testing::TempFile json("", ".json");
+  ASSERT_TRUE(io::write_solution(sol.path(), model, solved, nullptr));
+  ASSERT_TRUE(io::write_stats_json(json.path(), model, solved, nullptr));
+  const auto slurp = [](const std::string& path) {
+    std::ifstream in(path);
+    std::stringstream text;
+    text << in.rdbuf();
+    return text.str();
+  };
+  const std::string sol_text = slurp(sol.path());
+  EXPECT_NE(sol_text.find("\nsafe_lower_bound "), std::string::npos);
+  EXPECT_NE(sol_text.find("\nbegin safe_multipliers 2\n"), std::string::npos);
+  EXPECT_NE(sol_text.find("\ncertified_gap "), std::string::npos);
+  EXPECT_NE(sol_text.find("\ncertified_relative_gap "), std::string::npos);
+  const std::string json_text = slurp(json.path());
+  EXPECT_NE(json_text.find("\"safe_lower_bound\""), std::string::npos);
+  EXPECT_NE(json_text.find("\"certified_relative_gap\""), std::string::npos);
+
+  // A MILP is not given one: its duals belong to a node, not to the model.
+  Model integer = model;
+  integer.col_type[0] = VarType::kInteger;
+  EXPECT_TRUE(std::isnan(solve_float(integer).safe_lower_bound));
 }
 
 TEST(SafeBound, BranchAndBoundWithSafeBoundsMatchesTheExactMilp) {
