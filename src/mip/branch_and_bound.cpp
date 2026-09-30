@@ -566,6 +566,19 @@ Solution BranchAndBound::run() {
       // numerical_error, which says the solver broke when what happened is that it was told
       // to stop. Anything else - a singular basis, an unbounded node, a status no node
       // should return - stays the numerical failure it is.
+      //
+      // A ROOT relaxation the node engine REFUSED is a verdict on the model, not a failure
+      // (#835). The root is the model with integrality dropped and nothing else changed, so
+      // a refusal there - a non-convex objective, found by the QP engine's LDL^T test - holds
+      // for every node, and the MIQP is the model error the same objective is as a QP. It
+      // used to come back numerical_error, which says the solver broke on a model it had
+      // in fact correctly declined.
+      if (node_index == 0 && relaxation.status == SolveStatus::kModelError) {
+        solution.status = SolveStatus::kModelError;
+        solution.message =
+            fmt::format("the continuous relaxation was refused: {}", relaxation.message);
+        return solution;
+      }
       const bool out_of_iterations = relaxation.status == SolveStatus::kIterationLimit;
       limit_hit = out_of_iterations;
       solution.status =

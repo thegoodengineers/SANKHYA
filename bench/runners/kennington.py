@@ -79,6 +79,9 @@ def main() -> int:
                              "per-engine runs")
     parser.add_argument("--out", type=Path, default=None,
                         help="destination CSV; relative paths resolve against the repo root")
+    parser.add_argument("--machine", default=None,
+                        help="machine tag for the CSV (default: OS-architecture), e.g. to say "
+                             "which box and under what load the timings were taken")
     args = parser.parse_args()
 
     manifest_path = DATA_DIR / "reference.json"
@@ -95,7 +98,7 @@ def main() -> int:
     if args.instances:
         tier = "explicit"
     binary = args.binary or netlib.default_binary()
-    commit, machine = netlib.git_commit(args.binary), netlib.machine_tag()
+    commit, machine = netlib.git_commit(args.binary), args.machine or netlib.machine_tag()
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     solver_options = " ".join(args.solver_option)
 

@@ -4,6 +4,7 @@
 #include <fmt/format.h>
 
 #include "core/engine_selection.hpp"
+#include "gpu/cudss_factor.hpp"
 
 #ifdef SANKHYA_ENABLE_CUDA
 #include "gpu/device.hpp"
@@ -80,8 +81,13 @@ EngineChoice select(const SolverRegistry& registry, const Model& model, const Op
 #ifdef SANKHYA_ENABLE_CUDA
     gpu_avail = gpu::device_available(&gpu_desc);
 #endif
+    // The interior point factors large normal equations on the device when the build has
+    // cuDSS, a device answered the probe above, and ipm_linear_solver leaves it the choice
+    // (#489); the rule table routes large models to it on that basis (#417).
+    const bool device_factor = gpu_avail && gpu::CudssFactor::compiled() &&
+                               options.get_string("ipm_linear_solver") != "cpu";
     const EngineSelection chosen =
-        select_engine(model, options, warm_start, gpu_avail, gpu_desc);
+        select_engine(model, options, warm_start, gpu_avail, gpu_desc, device_factor);
     std::string engine_name = chosen.algorithm;
     if (chosen.algorithm == "pdhg" &&
         should_use_gpu_pdhg(registry, model, options, chosen.use_gpu || options.get_bool("gpu"),

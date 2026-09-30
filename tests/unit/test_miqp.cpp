@@ -9,6 +9,7 @@
 // dropped integrality would fail rather than coincide.
 
 #include <cmath>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -149,6 +150,10 @@ TEST(Miqp, ANonConvexMiqpIsStillRefused) {
   EXPECT_NE(solution.status, SolveStatus::kOptimal)
       << "a non-convex MIQP was reported as solved: " << solution.objective;
   EXPECT_FALSE(solution.message.empty()) << "refused without saying why";
+  // A refusal of the model, as the same objective is as a QP - not a numerical failure of
+  // the search (#835).
+  EXPECT_EQ(solution.status, SolveStatus::kModelError) << solution.message;
+  EXPECT_NE(solution.message.find("not convex"), std::string::npos) << solution.message;
 }
 
 TEST(Miqp, IsClassifiedAsMiqpRatherThanFallingBackToAnLp) {
