@@ -345,10 +345,20 @@ void SparseLu::apply_etas(double* b) const {
   }
 }
 
-void SparseLu::solve(double* b) const {
+void SparseLu::solve(double* b, DensityHistory* history) const {
+  solve_base(b, attempt_hyper(history));
+  remember(history);
+}
+
+void SparseLu::solve_transpose(double* b, DensityHistory* history) const {
+  solve_transpose_base(b, attempt_hyper(history));
+  remember(history);
+}
+
+void SparseLu::solve_base(double* b, bool try_hyper) const {
   if (m_ == 0) return;
   // #464: the same passes over the reached steps alone, when the reach is small enough.
-  if (hyper_sparse_ && !ft_active_ && solve_hyper(b)) {
+  if (try_hyper && !ft_active_ && solve_hyper(b)) {
     apply_etas(b);
     return;
   }
@@ -505,7 +515,7 @@ void SparseLu::apply_transposed_l() const {
   }
 }
 
-void SparseLu::solve_transpose(double* b) const {
+void SparseLu::solve_transpose_base(double* b, bool try_hyper) const {
   if (m_ == 0) return;
 
   if (ft_active_) {
@@ -521,7 +531,7 @@ void SparseLu::solve_transpose(double* b) const {
   } else {
     apply_etas_transposed(b);
     // #464: the same passes over the reached steps alone, when the reach is small enough.
-    if (hyper_sparse_ && solve_transpose_hyper(b)) return;
+    if (try_hyper && solve_transpose_hyper(b)) return;
 
     // work_ is indexed by step from here to the end: the right-hand side enters through the
     // pivot columns and the answer leaves through the pivot rows, and both triangular

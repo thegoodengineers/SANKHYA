@@ -497,6 +497,12 @@ class Simplex {
   double refactor_work_ratio_ = 128.0;
 
   SparseLu lu_;
+  /// One density history per kind of solve (#464): the hyper-sparse switch predicts a
+  /// solve's result density from the recent results of the same kind (SparseLu::solve).
+  SparseLu::DensityHistory column_history_;  ///< FTRAN of the entering column
+  SparseLu::DensityHistory row_history_;     ///< BTRAN of the leaving row, e_r^T B^-1
+  SparseLu::DensityHistory tau_history_;     ///< the dual steepest-edge FTRAN of rho
+  SparseLu::DensityHistory flip_history_;    ///< the FTRAN of a set of bound flips
 
   /// Reused across refactorizations so the hot path allocates nothing. Structural columns
   /// point straight into the model's CSC arrays - no copy at all - while logical columns are
