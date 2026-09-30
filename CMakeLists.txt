@@ -34,6 +34,7 @@ endif()
 # -----------------------------------------------------------------------------------------
 
 option(SANKHYA_ENABLE_CUDA  "Build the CUDA backend (Phase 4)"          OFF)
+option(SANKHYA_CUDA_STATIC  "Link the CUDA runtime and cuSPARSE statically, so a release binary needs only the driver (#748)" OFF)
 option(SANKHYA_ENABLE_CUDSS "Interior point normal equations factored by NVIDIA cuDSS (#489); needs SANKHYA_ENABLE_CUDA" OFF)
 option(SANKHYA_BUILD_PYTHON "Build the pybind11 bindings (Phase 10)"    OFF)
 option(SANKHYA_BUILD_TESTS  "Build the GoogleTest suite"                ON)
@@ -404,7 +405,8 @@ set_property(SOURCE src/util/version.cpp PROPERTY COMPILE_DEFINITIONS
   SANKHYA_VERSION="${PROJECT_VERSION}"
   SANKHYA_GIT_COMMIT="${SANKHYA_GIT_COMMIT}"
   SANKHYA_BUILD_TYPE="$<CONFIG>"
-  SANKHYA_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+  SANKHYA_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
+  SANKHYA_CUDA_TOOLKIT="${CMAKE_CUDA_COMPILER_VERSION}")
 
 # The batched PDHG's CPU reference (#520) must round every product and sum on its own, as
 # the CUDA kernels do with explicit intrinsics, for the two to agree bit for bit: no fused
@@ -455,7 +457,11 @@ if(SANKHYA_ENABLE_CUDA)
   endif()
   # cuSPARSE supplies SpMV on device — matrix arithmetic, not an optimisation algorithm.
   # See docs/PROVENANCE.md section 2.
-  target_link_libraries(sankhya_objects PRIVATE CUDA::cusparse CUDA::cudart)
+  if(SANKHYA_CUDA_STATIC)
+    target_link_libraries(sankhya_objects PRIVATE CUDA::cusparse_static CUDA::cudart_static)
+  else()
+    target_link_libraries(sankhya_objects PRIVATE CUDA::cusparse CUDA::cudart)
+  endif()
   target_compile_definitions(sankhya_objects PUBLIC SANKHYA_ENABLE_CUDA)
 endif()
 

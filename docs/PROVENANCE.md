@@ -367,6 +367,19 @@ and `libcublas.so.12` and `libcublasLt.so.12`, which cuDSS loads for its dense k
 cuBLAS row of section 2 still holds for our own code: nothing in `src/` calls cuBLAS). None
 matches the solver-name grep of 4.1.
 
+### 4.2c Release archives (#748)
+
+The release workflow (`.github/workflows/release.yml`) packages each archive with
+`scripts/package_release.sh`, which writes `MANIFEST.txt` into the archive: the banner
+`sankhya version` prints (version, commit, build type, compiler, CUDA toolkit), the link
+dependencies of the binary and library as shipped, and a sha256 of every file. The solver-name
+grep of 4.1 runs on those shipped dependencies and fails the packaging if it matches. The CUDA
+archive links the CUDA runtime and cuSPARSE statically (`SANKHYA_CUDA_STATIC`), so neither
+appears among its runtime dependencies; they are NVIDIA's vendor libraries of section 2 either
+way. The Linux archives ship `libgomp.so.1` (GCC's OpenMP runtime, GPL-3.0 with the runtime
+library exception) beside the binary; the Windows archive ships the MinGW-w64 runtime DLLs the
+library imports.
+
 ### 4.3 SBOM
 
 An SPDX SBOM is generated in CI by the `provenance` job and attached as a build artifact
