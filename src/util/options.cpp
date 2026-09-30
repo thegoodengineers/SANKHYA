@@ -964,11 +964,13 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back(
         {"cut_support_floor",
          OptionType::Int,
-         std::int64_t{0},
+         std::int64_t{100},
          "A cut is refused as too dense only above max(this many nonzeros, 0.2 n) "
-         "(#496). 0 (the default) keeps the fraction alone, which on a 768-column model "
-         "refuses every Gomory cut at 154 nonzeros; 100 lets small models take cuts that "
-         "are dense in the fraction and small in the count. Off until the A/B on main.",
+         "(#496). 0 keeps the fraction alone, which on a 768-column model refuses every "
+         "Gomory cut at 154 nonzeros; 100 (the default) lets small models take cuts that "
+         "are dense in the fraction and small in the count. Default since the A/B on main "
+         "4797f7e (MIPLIB easy, node_limit 10000, 3 seeds: 28 of 90 proved and 37 matched "
+         "either way; bench/results/miplib-4797f7e-n10000-floor100-s3.csv).",
          0.0,
          1e9,
          {}});

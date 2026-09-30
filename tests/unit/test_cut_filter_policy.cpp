@@ -201,6 +201,7 @@ TEST(CutFilterPolicy, ASearchWithBothOnStillReachesTheExactOptimum) {
   Options on = every_root_family();
   on.set_int("cut_dense_max", 0);
   Options off = on;
+  off.set_int("cut_support_floor", 0);  // the fraction alone, the default before #496
   on.set_int("cut_support_floor", 100);
   on.set_bool("cut_efficacy_test", true);
   const ExactComparison run = compare_with_exact(on, off, 20260926, 120);
