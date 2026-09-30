@@ -47,6 +47,7 @@ import datetime
 import json
 import math
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -131,7 +132,8 @@ def judge(status: str, ours: float | None, reference: float,
 
 
 def run_one(binary: Path, qps: Path, time_limit: float, verify: bool,
-            solver_options: list[str]) -> dict:
+            solver_options: list[str], keep_sol: Path | None = None) -> dict:
+    """keep_sol: where to copy the .sol file, for compare.py --suite (#766)."""
     with tempfile.TemporaryDirectory() as tmp:
         stats_path = Path(tmp) / "stats.json"
         sol_path = Path(tmp) / "solution.sol"
@@ -149,6 +151,8 @@ def run_one(binary: Path, qps: Path, time_limit: float, verify: bool,
             return {"status": "hung", "wall_seconds": time.perf_counter() - started,
                     "message": f"no exit within {time_limit + 120:g} s"}
         wall = time.perf_counter() - started
+        if keep_sol is not None and sol_path.exists():
+            shutil.copyfile(sol_path, keep_sol)
         if not stats_path.exists():
             stderr = completed.stderr.strip()
             status = ("read_error" if "error:" in stderr

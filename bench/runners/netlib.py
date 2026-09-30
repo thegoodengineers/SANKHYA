@@ -30,6 +30,7 @@ import datetime
 import hashlib
 import json
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -152,8 +153,13 @@ def default_binary() -> Path:
 
 
 def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
-            solver_options: list[str] | None = None) -> dict:
-    """Solve one instance, then verify the solution independently."""
+            solver_options: list[str] | None = None, keep_sol: Path | None = None,
+            hang_margin: float | None = None) -> dict:
+    """Solve one instance, then verify the solution independently.
+
+    keep_sol: where to copy the .sol file, for a caller that grades it further (compare.py
+    --suite, #766). hang_margin: kill the process this long after its own limit, reported
+    as status `hung`; None waits for it however long it takes, as this runner always has."""
     with tempfile.TemporaryDirectory() as tmp:
         stats_path = Path(tmp) / "stats.json"
         sol_path = Path(tmp) / "solution.sol"
@@ -167,8 +173,17 @@ def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
         for option in solver_options or []:
             command += ["--option", option]
         started = time.perf_counter()
-        completed = subprocess.run(command, capture_output=True, text=True)
+        try:
+            completed = subprocess.run(
+                command, capture_output=True, text=True,
+                timeout=None if hang_margin is None else time_limit + hang_margin)
+        except subprocess.TimeoutExpired:
+            return {"status": "hung", "wall_seconds": time.perf_counter() - started,
+                    "message": f"no exit within {time_limit + hang_margin:g} s",
+                    "verified": None}
         wall = time.perf_counter() - started
+        if keep_sol is not None and sol_path.exists():
+            shutil.copyfile(sol_path, keep_sol)
 
         if not stats_path.exists():
             return {

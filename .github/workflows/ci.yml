@@ -409,6 +409,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_gpu_runners.py
 
+      - name: The head-to-head's rival parsers, grading, profile and doc section (#766)
+        # Pure Python, no solver runs: Clp's and GLPK's output layouts, the .sol conversion
+        # and name reconciliation, GLPK's objective-constant restatement, the grading rules,
+        # the Dolan-More ratios and the generated section.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_head_to_head.py
+
       - name: Results CSVs are stamped from the binary, not the tree (#433)
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_stamp.py
