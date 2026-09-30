@@ -53,7 +53,7 @@ def main():
                    f"{count(r, 'independently_verified')} of {len(r)} verified")
     out["KENN_CSV"] = cite(name)
 
-    name = "netlib-infeasible-65eecbc.csv"
+    name = "netlib-infeasible-60455ce.csv"
     r = rows(name)
     claimed = sum(1 for x in r if x["status"] in ("optimal", "feasible", "unbounded"))
     out["INFEAS"] = (f"{count(r, 'status', 'infeasible')} of {len(r)} declared infeasible, "
