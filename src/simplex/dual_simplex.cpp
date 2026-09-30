@@ -114,6 +114,19 @@ constexpr double kDualWeightResetThreshold = 1e6;
 /// the basis, not of the tolerance, and the primal loop is the right place to be on it.
 constexpr double kPivotAgreement = 1e-8;
 
+/// Consecutive feasibility claims through the eta file that fresh factors refute, with the
+/// objective not moving between them, after which the dual loop hands the basis to the
+/// primal loop. Each such claim costs a refactorization, and a basis whose updated values
+/// say feasible and whose fresh values say a few 1e-6 infeasible can pivot back and forth
+/// between the two for as long as the time limit allows: on neos-3072252-nete with the root
+/// cut loop (#495) one node LP did 27,573 iterations and 13,774 refactorizations at a
+/// fixed objective, a refactorization every second pivot, until the time limit, where the
+/// unscaled retry then finished in a few dozen pivots. The primal loop is the documented
+/// last resort for a basis the dual loop cannot finish (see hand_over below); 20 is the
+/// order of the other stall limits here, not tuned: a genuine run of refuted claims is a
+/// cycle, and an honest one ends within one or two.
+constexpr int kRefutedFeasibilityLimit = 20;
+
 }  // namespace
 
 // -----------------------------------------------------------------------------------------
@@ -513,6 +526,8 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   if (options_.get_bool("dual_perturb_costs_at_start")) perturb_costs_at_start();
 
   int degenerate_run = 0;
+  int refuted_claims = 0;  // kRefutedFeasibilityLimit
+  double refuted_objective = kInfinity;
   const auto hand_over = [&](const std::string& why) -> std::optional<Solution> {
     logger_.info(
         "Dual simplex: {} at iteration {}; the primal simplex continues from this "
@@ -573,6 +588,19 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       // applies to its optimality claim, for the same reason: the basic values were
       // computed through whatever eta file is in play.
       if (m_ > 0 && lu_.eta_count() > 0) {
+        // A claim fresh factors refute again at the same objective is a cycle between
+        // the updated and the recomputed basic values; see kRefutedFeasibilityLimit.
+        const double objective = minimization_objective();
+        const bool moved = std::fabs(objective - refuted_objective) >
+                           tol::kDualityGap * std::max(1.0, std::fabs(objective));
+        refuted_claims = moved ? 1 : refuted_claims + 1;
+        refuted_objective = objective;
+        if (refuted_claims > kRefutedFeasibilityLimit) {
+          return hand_over(fmt::format(
+              "{} primal-feasible claims through the eta file refuted on fresh factors "
+              "at an unchanged objective",
+              refuted_claims));
+        }
         if (!refresh()) return singular();
         logger_.verbose(
             "iteration {}: primal feasible through the eta file; re-checking on "
