@@ -313,21 +313,36 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-**Without a build.** `.github/workflows/release.yml` (#748) builds three archives on clean
-runners - Linux x86-64 CPU, Linux x86-64 CUDA (the CUDA runtime and cuSPARSE linked
-statically, so a host needs only the driver) and Windows x64 CPU - and a container image
-from the `Dockerfile`, then unpacks each archive on a machine with no compiler and solves and
-verifies the demo from it. Each archive keeps this repository's layout (`build/sankhya`, the
-library, the Python package, `tools/`, `demo/`), so every command below works from the
-unpacked directory, and carries `MANIFEST.txt` (the `sankhya version` banner and the link
-dependencies of the shipped files, grepped for solver libraries) and `SHA256SUMS`. The
-archives are workflow artifacts; no GitHub Release has been published yet. There is no
-Windows CUDA archive: nvcc on Windows needs MSVC as its host compiler and this tree builds
-with MinGW GCC.
+**Without a build.** Download the pre-release
+[v1.0.0-rc1](https://github.com/thegoodengineers/SANKHYA/releases/tag/v1.0.0-rc1): Linux
+x86-64 CPU, Linux x86-64 CUDA (the CUDA runtime and cuSPARSE linked statically, so a host
+needs only the NVIDIA driver) and Windows x64 CPU, built by `.github/workflows/release.yml`
+(#748) on clean runners, each unpacked on a machine with no compiler and checked there (solve,
+verifier, Python bindings) before it was attached. Each archive keeps this repository's layout
+(`build/sankhya`, the library, the Python package, `tools/`, `demo/`), so every command in
+this README works from the unpacked directory, and carries `MANIFEST.txt` (the `sankhya
+version` banner and the link dependencies of the shipped files, grepped for solver libraries)
+and its own `SHA256SUMS`; the release's `SHA256SUMS` covers the archives. The archives of this
+pre-release are named `0.1.0`, the version the tree carried when it was tagged. There is no
+Windows CUDA archive: nvcc on Windows needs MSVC as its host compiler and this tree builds with
+MinGW GCC.
 
 ```bash
-docker build -t sankhya .
-docker run --rm --gpus all sankhya sankhya solve demo/crude_blend.mps --gpu
+tar -xzf sankhya-0.1.0-linux-x86_64-cpu.tar.gz && cd sankhya-0.1.0-linux-x86_64-cpu
+sha256sum -c SHA256SUMS
+build/sankhya solve demo/crude_blend.mps --write-sol blend.sol
+python3 tools/verify_solution.py demo/crude_blend.mps blend.sol
+demo/finale.sh                        # Windows: unzip, then demo\finale.cmd
+```
+
+The container image (the CUDA build, the verifier and the demo models) is attached to the
+release as `sankhya-image.tar.gz` and pushed to `ghcr.io/thegoodengineers/sankhya:v1.0.0-rc1`,
+which does not yet accept anonymous pulls (the package is not public); from the release asset:
+
+```bash
+docker load < sankhya-image.tar.gz
+docker run --rm --gpus all sankhya:ci sankhya solve demo/crude_blend.mps --gpu
+# or build it:  docker build -t sankhya . && docker run --rm --gpus all sankhya sankhya version
 ```
 
 `scripts/configure.sh` picks a C++20-capable compiler rather than trusting PATH order,
