@@ -2603,6 +2603,12 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     for (auto it = result.records.rbegin(); it != result.records.rend(); ++it) {
       if (it->kind != Record::Kind::kSingletonRow) continue;
       if (std::fabs(it->coefficient) <= tol::kZeroDrop) continue;
+      // depends_on_unresolved_fold reads original entries only, which is complete because a
+      // singleton-row column never has fill-in rows (#766): fill-in goes only to a doubleton's
+      // keep column (extra_rows_for_column, line 2040), which is marked doubleton_touched
+      // (line 1391); a singleton row skips such a column (line 1227), and a doubleton skips a
+      // column a singleton row already touched (line 1332).
+      assert(extra_rows_for_column[static_cast<std::size_t>(it->column)].empty());
       if (depends_on_unresolved_fold(it->column)) {
         deferred_singleton_rows.push_back(&*it);
         continue;
