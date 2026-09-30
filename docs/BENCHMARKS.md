@@ -1486,6 +1486,7 @@ Every failure, named:
 - `auto`, **no published reference** (1): `QPLIB_9002`.
 - `ipm`, **did not reach `optimal`** (5): `QPLIB_8515` (model_error), `QPLIB_8559` (numerical_error), `QPLIB_8567` (numerical_error), `QPLIB_8906` (numerical_error), `QPLIB_9002` (iteration_limit).
 - `ipm`, **no published reference** (1): `QPLIB_9002`.
+- **fetched and selected, not run in this CSV** (5): `QPLIB_10034`, `QPLIB_10038`, `QPLIB_8500`, `QPLIB_8602`, `QPLIB_8790` - `qplib.py` without `--tier` runs them.
 
 ---
 

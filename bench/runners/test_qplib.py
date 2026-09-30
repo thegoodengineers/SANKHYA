@@ -336,6 +336,17 @@ def test_doc() -> None:
     check("`ipm`, **did not reach `optimal`** (1): `QPLIB_1` (time_limit)" in text and
           "`auto`, **no published reference** (1): `QPLIB_2`" in text,
           "every failure named under its engine and reason")
+    check("not run in this CSV" not in text, "every fetched instance is in the CSV: none named")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "qplib-small-abc1234.csv"
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=runner.CSV_COLUMNS, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows[:2])
+        text = doc.section(path, manifest)
+    check("**fetched and selected, not run in this CSV** (1): `QPLIB_2` - " in text,
+          "a tier run names the fetched instances it left out, "
+          "not the ones skipped for size")
 
 
 def main() -> int:
