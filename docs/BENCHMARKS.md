@@ -141,6 +141,74 @@ Coverage: this run used **50 of the 97 instances** Netlib publishes an optimal v
 - worst relative error against a published optimum: **5.79e-07**
 - **failed: `e226`, `scrs8`** — kept in the table on purpose
 
+#### 1b.1 Dual pricing: Devex against dual steepest edge (#411)
+
+The dual simplex picks its leaving row by primal infeasibility over a weight. Devex
+approximates that weight with a reference framework; dual steepest edge keeps it exact as the
+norm of the row of the basis inverse, through the Forrest-Goldfarb update (Math. Programming
+57, 1992), at one extra solve per pivot. The question is whether the iterations it saves pay
+for that solve.
+
+All at commit `0134c92` on `cloud-container-IntelXeon-2.10GHz-4vCPU-15GB-quiet`, nothing else running.
+
+**Netlib medium tier**, 3 repeats under Devex and 3 under dual steepest edge, alternated, one thread.
+
+| rule | passed (every repeat) | not passed | iterations over the 49 passed by both | shifted geomean seconds (1 s) | total seconds |
+|---|---:|---|---:|---:|---:|
+| Devex | 49 of 51 | `e226`, `scrs8` | 16,339 | 0.0143 | 0.718 |
+| dual steepest edge | 49 of 51 | `e226`, `scrs8` | 13,665 | 0.0108 | 0.536 |
+
+Per instance, dual steepest edge took fewer iterations on 33, more on 13, the same on 3. The eight slowest under Devex:
+
+| instance | Devex iterations | DSE iterations | Devex s | DSE s |
+|---|---:|---:|---:|---:|
+| `grow22` | 2,264 | 1,639 | 0.120 | 0.097 |
+| `d6cube` | 868 | 353 | 0.114 | 0.049 |
+| `fit2d` | 226 | 126 | 0.093 | 0.060 |
+| `scsd8` | 1,563 | 786 | 0.069 | 0.033 |
+| `pilot4` | 4 | 641 | 0.049 | 0.028 |
+| `grow15` | 1,238 | 983 | 0.039 | 0.039 |
+| `wood1p` | 219 | 223 | 0.023 | 0.026 |
+| `degen2` | 611 | 434 | 0.022 | 0.019 |
+
+**Netlib full set**, once per rule: Devex from `certified-gap-netlib-full-0134c92.csv` (the default run at this commit), dual steepest edge from `netlib-full-0134c92-dse.csv`.
+
+| rule | passed | optimal | certified to 1e-6 | not optimal | iterations over the 92 optimal under both | shifted geomean seconds (1 s) |
+|---|---:|---:|---:|---|---:|---:|
+| Devex | 82 of 94 | 93 | 73 | `dfl001` (time_limit) | 150,029 | 0.1820 |
+| dual steepest edge | 83 of 94 | 93 | 72 | `pilot87` (time_limit) | 111,726 | 0.1569 |
+
+- passed under Devex only: none
+- passed under dual steepest edge only: `dfl001`
+- certified under Devex only: `25fv47`
+- certified under dual steepest edge only: none
+
+**The four scale sizes** (`scale.py`, random structure, dual simplex, 120 s per solve, once per rule):
+
+| rows x cols | rule | status | relative error | iterations | seconds |
+|---:|---|---|---:|---:|---:|
+| 1,000 | Devex | optimal | 1.3e-15 | 3,241 | 0.4 |
+| 1,000 | dual steepest edge | optimal | 5.0e-15 | 2,077 | 0.2 |
+| 5,000 | Devex | optimal | 3.7e-16 | 76,253 | 48.1 |
+| 5,000 | dual steepest edge | optimal | 5.5e-16 | 27,449 | 19.1 |
+| 20,000 | Devex | time_limit | 4.0e+00 | 30,897 | 120.0 |
+| 20,000 | dual steepest edge | time_limit | 8.5e-01 | 22,595 | 120.0 |
+| 100,000 | Devex | time_limit | 2.7e+01 | 17,961 | 120.1 |
+| 100,000 | dual steepest edge | time_limit | 2.8e+01 | 15,458 | 120.1 |
+
+To reproduce:
+
+```
+python bench/runners/fetch_data.py --set medium --offline-fallback
+python bench/runners/netlib.py --solver-option pricing=devex --out bench/results/netlib-medium-<sha>-devex-r1.csv
+python bench/runners/netlib.py --solver-option pricing=dual-steepest-edge --out bench/results/netlib-medium-<sha>-dse-r1.csv
+#   ... alternated, three repeats each
+python bench/runners/fetch_data.py --set full --offline-fallback
+python bench/runners/netlib.py --solver-option pricing=dual-steepest-edge --out bench/results/netlib-full-<sha>-dse.csv
+python bench/runners/scale.py --engines dual-simplex --solver-option pricing=devex --out bench/results/scale-<sha>-devex.csv
+python bench/runners/scale.py --engines dual-simplex --solver-option pricing=dual-steepest-edge --out bench/results/scale-<sha>-dse.csv
+```
+
 ### 1c. The full set — the honest headline
 
 Every instance in Netlib's summary table. Both tiers above are defined by a row cap, which
