@@ -59,6 +59,28 @@ def _ranging(decrease: dict, increase: dict, name: str) -> dict | None:
     return {"allow_decrease": decrease[name], "allow_increase": increase[name]}
 
 
+def _exact(entries: dict, name: str) -> dict | None:
+    """The certified sensitivity entry (#757) for `name`: its verdict, and for a row its
+    shadow price interval, as the exact text the .sol carries."""
+    entry = entries.get(name)
+    if entry is None:
+        return None
+    exact = {"certified": entry[0] == "certified", "value": entry[1]}
+    if len(entry) >= 6:
+        exact["shadow_left"], exact["shadow_right"] = entry[4], entry[5]
+    return exact
+
+
+def _mark(item: dict) -> str:
+    exact = item.get("exact")
+    if exact is None:
+        return ""
+    text = " (certified)" if exact["certified"] else f" (corrected: exact {exact['value']})"
+    if exact.get("shadow_left") not in (None, exact.get("shadow_right")):
+        text += f" [left {exact['shadow_left']}, right {exact['shadow_right']}]"
+    return text
+
+
 def binding_rows(model: Model, solution: Solution, tol: float) -> list[dict]:
     rows = []
     for i, name in enumerate(model.row_names):
@@ -78,6 +100,7 @@ def binding_rows(model: Model, solution: Solution, tol: float) -> list[dict]:
             "at": "lower" if at_lower else "upper",
             "shadow_price": shadow_price,
             "ranging": _ranging(solution.row_ranging_lower, solution.row_ranging_upper, name),
+            "exact": _exact(solution.exact_sensitivity_rows, name),
         })
     rows.sort(key=lambda r: -abs(r["shadow_price"]))
     return rows
@@ -94,6 +117,7 @@ def nonbasic_columns(model: Model, solution: Solution, tol: float) -> list[dict]
             "value": solution.col_value.get(name, 0.0),
             "reduced_cost": reduced_cost,
             "ranging": _ranging(solution.col_ranging_lower, solution.col_ranging_upper, name),
+            "exact": _exact(solution.exact_sensitivity_columns, name),
         })
     columns.sort(key=lambda c: -abs(c["reduced_cost"]))
     return columns
@@ -160,7 +184,7 @@ def render_markdown(report: dict) -> str:
                        f"+{_fmt(row['ranging']['allow_increase'])}"
                        if row["ranging"] else "-")
             lines.append(f"| {row['name']} | {row['at']} | {_fmt(row['activity'])} | "
-                         f"{_fmt(row['shadow_price'])} | {ranging} |")
+                         f"{_fmt(row['shadow_price'])}{_mark(row)} | {ranging} |")
     else:
         lines.append("*(none)*")
     lines.append("")
@@ -174,7 +198,7 @@ def render_markdown(report: dict) -> str:
                        f"+{_fmt(col['ranging']['allow_increase'])}"
                        if col["ranging"] else "-")
             lines.append(f"| {col['name']} | {_fmt(col['value'])} | "
-                         f"{_fmt(col['reduced_cost'])} | {ranging} |")
+                         f"{_fmt(col['reduced_cost'])}{_mark(col)} | {ranging} |")
     else:
         lines.append("*(none)*")
     lines.append("")

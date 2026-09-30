@@ -112,6 +112,46 @@ namespace {
   return to_string(u < v.size() ? v[u] : BasisStatus::kUnknown);
 }
 
+/// Certified sensitivity (#757): every exact value is `numerator/denominator` or +-inf.
+/// tools/verify_solution.py re-derives each one from the basis and rejects any mismatch.
+void write_exact_sensitivity(std::FILE* out, const Model& model, const Solution& solution) {
+  const auto n = static_cast<std::size_t>(model.num_cols());
+  const auto m = static_cast<std::size_t>(model.num_rows());
+  if (solution.exact_col_sensitivity.size() != n ||
+      solution.exact_row_sensitivity.size() != m) {
+    return;
+  }
+  const auto verdict = [](const Solution::ExactSensitivityEntry& e) {
+    return e.certified ? "certified" : "corrected";
+  };
+  fmt::print(
+      out,
+      "\n# Certified sensitivity (#757): the reduced cost and cost range of each column\n"
+      "# re-derived from the basis in exact rational arithmetic. `certified` when the\n"
+      "# floating-point values above agree to 1e-9 relative, `corrected` otherwise.\n"
+      "# name verdict reduced_cost allow_decrease allow_increase\n");
+  fmt::print(out, "begin exact_sensitivity_columns {}\n", n);
+  for (std::size_t j = 0; j < n; ++j) {
+    const auto& e = solution.exact_col_sensitivity[j];
+    fmt::print(out, "{} {} {} {} {}\n", quoted_name(column_name(model, static_cast<Index>(j))),
+               verdict(e), e.value, e.range_lower, e.range_upper);
+  }
+  fmt::print(out, "end exact_sensitivity_columns\n");
+  fmt::print(out,
+             "\n# Each row's exact dual and RHS range, and its shadow price interval: the\n"
+             "# left and right derivatives of the optimal value as the row's bounds shift.\n"
+             "# They differ only at a degenerate optimum, where the dual is not unique.\n"
+             "# name verdict dual allow_decrease allow_increase shadow_left shadow_right\n");
+  fmt::print(out, "begin exact_sensitivity_rows {}\n", m);
+  for (std::size_t i = 0; i < m; ++i) {
+    const auto& e = solution.exact_row_sensitivity[i];
+    fmt::print(out, "{} {} {} {} {} {} {}\n",
+               quoted_name(row_name(model, static_cast<Index>(i))), verdict(e), e.value,
+               e.range_lower, e.range_upper, e.shadow_left, e.shadow_right);
+  }
+  fmt::print(out, "end exact_sensitivity_rows\n");
+}
+
 }  // namespace
 
 bool write_solution(const std::string& path, const Model& model, const Solution& solution,
@@ -161,6 +201,16 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
   if (!solution.col_ranging_lower.empty()) {
     fmt::print(out, "ranging_basis {}\n",
                solution.ranging_basis_degenerate ? "degenerate" : "nondegenerate");
+  }
+  if (solution.sensitivity_status != Solution::ExactVerification::kNotAttempted) {
+    fmt::print(
+        out, "sensitivity_verification {}\n",
+        solution.sensitivity_status == Solution::ExactVerification::kVerified   ? "computed"
+        : solution.sensitivity_status == Solution::ExactVerification::kDeclined ? "declined"
+                                                                                : "failed");
+    if (!solution.sensitivity_message.empty()) {
+      fmt::print(out, "sensitivity_message {}\n", solution.sensitivity_message);
+    }
   }
   if (solution.exact_status != Solution::ExactVerification::kNotAttempted) {
     fmt::print(out, "exact_verification {}\n",
@@ -379,6 +429,7 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
     }
     fmt::print(out, "end ranging_rows\n");
   }
+  write_exact_sensitivity(out, model, solution);
 
   // The ray, read together with the point above: x + t*d stays feasible for every
   // t >= 0 and the objective improves without limit along it (#191).

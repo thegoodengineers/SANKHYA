@@ -245,8 +245,10 @@ set(SANKHYA_CORE_SOURCES
   src/api/c_api_nlp.cpp
   src/core/certificate.cpp
   src/core/elastic_certificate.cpp
+  src/exact/exact_sensitivity.cpp
   src/exact/exact_verify.cpp
   src/core/safe_bound.cpp
+  src/core/scenarios.cpp
   src/core/iis.cpp
   src/core/model.cpp
   src/core/resource_limits.cpp
@@ -523,7 +525,8 @@ set_target_properties(sankhya_shared PROPERTIES
 # CLI
 # -----------------------------------------------------------------------------------------
 
-add_executable(sankhya-cli apps/sankhya-cli/main.cpp apps/sankhya-cli/nonlinear_cli.cpp)
+add_executable(sankhya-cli apps/sankhya-cli/main.cpp apps/sankhya-cli/nonlinear_cli.cpp
+  apps/sankhya-cli/scenarios_cli.cpp)
 target_link_libraries(sankhya-cli
   PRIVATE sankhya_core CLI11::CLI11 nlohmann_json::nlohmann_json sankhya_flags)
 # `diagnose` is part of the CLI rather than of the public headers, so the front end reaches

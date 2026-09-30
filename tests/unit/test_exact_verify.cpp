@@ -6,11 +6,13 @@
 // so ExactVerify.ARejectedBasisFailsNotVerifies hand-builds a basis that is not actually
 // optimal and confirms verify_basis_exact() says so rather than rubber-stamping it.
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
 
+#include "exact/bigint.hpp"
 #include "exact/exact_verify.hpp"
 #include "exact/rational.hpp"
 #include "sankhya/model.hpp"
@@ -78,17 +80,51 @@ TEST(ExactRational, ArithmeticIsExactWhereDoubleWouldRound) {
   EXPECT_EQ(sum.to_double(), 0.1 + 0.2);
 }
 
-TEST(ExactRational, OverflowThrowsRatherThanWraps) {
-  // 1e300 already exceeds what __int128 can hold as an exact fraction (its magnitude alone
-  // is far past 2^127), so from_double(1e300) throws immediately - correct, but not what
-  // this test is for. 1e25 is comfortably representable (from_double must NOT throw here);
-  // its SQUARE, 1e50, is what overflows __int128 multiplication.
+TEST(ExactRational, ArithmeticPastOneHundredTwentyEightBitsIsExact) {
+  // Under __int128 this product overflowed and the modules declined; since #757 it is exact.
   const Rational large = Rational::from_double(1e25);
-  EXPECT_THROW(large * large, RationalOverflow);
+  const Rational square = large * large;
+  EXPECT_EQ(square / large, large);
+  EXPECT_EQ(square.to_double(), 1e25 * 1e25);
+  EXPECT_EQ(Rational::from_double(1e300).to_double(), 1e300);
+  EXPECT_THROW((void)Rational::from_double(kInfinity), RationalOverflow);
+  EXPECT_THROW((void)(large / Rational(0)), RationalOverflow);
 }
 
-TEST(ExactRational, FromDoubleItselfDeclinesAMagnitudeBeyondInt128) {
-  EXPECT_THROW((void)Rational::from_double(1e300), RationalOverflow);
+TEST(ExactBigInt, DivisionSatisfiesItsDefinitionOnRandomLargeNumbers) {
+  // a = q b + r with |r| < |b| and r carrying the sign of a: the definition of truncating
+  // division, checked on numbers of up to twelve limbs, where Algorithm D's correction
+  // steps are exercised, and against the built-in arithmetic where it can hold the value.
+  std::uint64_t state = 757;
+  const auto next = [&state]() {
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    return static_cast<long long>(state >> 33);
+  };
+  const auto random_big = [&](int limbs) {
+    BigInt v(next() % 1000 - 500);
+    for (int k = 0; k < limbs; ++k) v = v * BigInt(1LL << 31) + BigInt(next());
+    return v;
+  };
+  for (int trial = 0; trial < 400; ++trial) {
+    const BigInt a = random_big(trial % 12);
+    BigInt b = random_big((trial * 7) % 6);
+    if (b.is_zero()) b = BigInt(3);
+    const BigInt q = a / b;
+    const BigInt r = a % b;
+    ASSERT_EQ(q * b + r, a) << "trial " << trial;
+    ASSERT_LT(r.abs(), b.abs()) << "trial " << trial;
+    ASSERT_TRUE(r.is_zero() || r.sign() == a.sign()) << "trial " << trial;
+  }
+  for (long long x : {0LL, 1LL, -1LL, 12345678901LL, -98765432109876LL}) {
+    for (long long y : {1LL, -7LL, 4294967296LL, 99991LL}) {
+      EXPECT_EQ(BigInt(x) / BigInt(y), BigInt(x / y));
+      EXPECT_EQ(BigInt(x) % BigInt(y), BigInt(x % y));
+    }
+  }
+  EXPECT_EQ((BigInt(1LL << 62) * BigInt(1LL << 62)).to_string(),
+            "21267647932558653966460912964485513216");
+  EXPECT_EQ(BigInt(-1000000000000LL).to_string(), "-1000000000000");
+  EXPECT_EQ(BigInt::gcd(BigInt(-84), BigInt(36)), BigInt(12));
 }
 
 // A tiny LP with an exact, hand-checkable optimum: minimize x + y subject to x + 2y >= 4,

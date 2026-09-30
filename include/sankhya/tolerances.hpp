@@ -190,6 +190,14 @@ inline constexpr double kHyperSparseDensity = 0.10;
 /// Below this, a computed pivot element is treated as a singular basis rather than a pivot.
 inline constexpr double kPivotTolerance = 1e-9;
 
+/// A floating-point dual, reduced cost or range is reported as CERTIFIED (#757) when it is
+/// within this relative distance, max(1, |exact|), of the value the basis gives in exact
+/// rational arithmetic, and as corrected otherwise. The float values come from one LU solve
+/// of a basis the simplex has already accepted, so a well-conditioned basis lands within a
+/// few hundred ulps (~1e-13 relative); 1e-9 leaves four orders of magnitude for conditioning
+/// and still flags anything a planner would read as a different number.
+inline constexpr double kSensitivityAgreement = 1e-9;
+
 /// The dual ratio test's pivot floor RELATIVE to the row it is choosing from (#244):
 /// a candidate whose |alpha_rj| is below this fraction of the row's largest |alpha_rj| is
 /// skipped even when it clears kPivotTolerance. On an unscaled row whose entries are O(1e+3)
@@ -889,5 +897,11 @@ inline constexpr Count kNlpMaxRestorationIterations = 500;
 /// violation problem, exceeds this. Ten times kPrimalFeasibility's worth per unit, so that a
 /// feasible node whose minimum sits at the solver's tolerance is never declared empty.
 inline constexpr double kMinlpEmptyViolation = 1e-6;
+
+/// Scenario runs (#752): a scenario's objective and that of a separate single solve of the
+/// same edited model must agree to this relative difference, measured against max(1, |obj|).
+/// The acceptance figure of #752; both answers already pass the KKT check at
+/// kPrimalFeasibility and kDualFeasibility, so this is the bar on their agreement.
+inline constexpr double kScenarioAgreement = 1e-8;
 
 }  // namespace sankhya::tol

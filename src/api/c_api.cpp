@@ -769,6 +769,48 @@ int sankhya_solution_ranging_basis_degenerate(const sankhya_solution* solution) 
   return solution->solution.ranging_basis_degenerate ? 1 : 0;
 }
 
+int sankhya_solution_sensitivity_status(const sankhya_solution* solution) {
+  if (solution == nullptr) return 0;
+  switch (solution->solution.sensitivity_status) {
+    case sankhya::Solution::ExactVerification::kNotAttempted: return 0;
+    case sankhya::Solution::ExactVerification::kVerified: return 1;
+    case sankhya::Solution::ExactVerification::kDeclined: return 2;
+    case sankhya::Solution::ExactVerification::kFailed: return 3;
+  }
+  return 0;
+}
+
+sankhya_status sankhya_solution_row_shadow_price_interval(const sankhya_solution* solution,
+                                                          double* left, double* right,
+                                                          int count) {
+  if (solution == nullptr) return fail(SANKHYA_ERROR_ARGUMENT, "solution is null");
+  std::vector<double> lo, hi;
+  for (const auto& entry : solution->solution.exact_row_sensitivity) {
+    lo.push_back(entry.shadow_left_value);
+    hi.push_back(entry.shadow_right_value);
+  }
+  const sankhya_status status = copy_certificate(lo, left, count, "left shadow prices");
+  if (status != SANKHYA_OK) return status;
+  return copy_certificate(hi, right, count, "right shadow prices");
+}
+
+sankhya_status sankhya_solution_sensitivity_certified(const sankhya_solution* solution,
+                                                      double* columns, int column_count,
+                                                      double* rows, int row_count) {
+  if (solution == nullptr) return fail(SANKHYA_ERROR_ARGUMENT, "solution is null");
+  std::vector<double> col_flags, row_flags;
+  for (const auto& entry : solution->solution.exact_col_sensitivity) {
+    col_flags.push_back(entry.certified ? 1.0 : 0.0);
+  }
+  for (const auto& entry : solution->solution.exact_row_sensitivity) {
+    row_flags.push_back(entry.certified ? 1.0 : 0.0);
+  }
+  const sankhya_status status =
+      copy_certificate(col_flags, columns, column_count, "column certification flags");
+  if (status != SANKHYA_OK) return status;
+  return copy_certificate(row_flags, rows, row_count, "row certification flags");
+}
+
 int sankhya_solution_iis_row_count(const sankhya_solution* solution) {
   if (solution == nullptr) return 0;
   return static_cast<int>(solution->solution.iis_rows.size());

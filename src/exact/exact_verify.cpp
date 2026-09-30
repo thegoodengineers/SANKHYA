@@ -6,10 +6,9 @@
 // EVERYTHING IN THIS FILE EITHER PROVES THE BASIS EXACTLY OR SAYS WHY IT DID NOT TRY. There
 // is no tolerance anywhere below - exact arithmetic has no "close enough", so a bound
 // violation of any size, or a nonzero reduced cost of the wrong sign of any size, is
-// kFailed. An __int128 overflow is kDeclined, not kFailed: it says nothing about whether the
-// double answer was right, only that this module could not check it. Reporting kFailed for
-// an overflow would manufacture a false negative exactly as reporting kVerified past an
-// overflow would manufacture a false positive; both are worse than declining.
+// kFailed. A value with no exact result (a non-finite datum) is kDeclined, not kFailed: it
+// says nothing about whether the double answer was right. Since #757 the arithmetic is
+// arbitrary precision (bigint.hpp), so nothing overflows.
 //
 // SCOPE, STATED ONCE. Plain LP only (a quadratic objective or an integer column declines
 // outright - see verify_basis_exact). A dense m x m elimination, so a row-count cap keeps
@@ -36,29 +35,13 @@ using Sz = std::size_t;
 
 /// A row cap for the dense O(m^3) elimination below. Chosen so a verification attempt stays
 /// on the order of seconds rather than minutes: 300^3 is 27 million Rational multiply-adds,
-/// each a handful of __int128 operations. Declining above this is an honest capacity limit,
+/// each a few arbitrary-precision operations. Declining above this is an honest capacity limit,
 /// not a correctness one - nothing above this size is silently wrong, it is simply not
 /// attempted.
 constexpr Index kMaxRowsForExactVerification = 300;
 
-/// An __int128 in decimal. fmt's and the standard library's formatters stop at 64 bits, and
-/// a cast to long long printed only the low 64 bits of a larger numerator or denominator
-/// (min 0.1 x s.t. 0.3 x >= 0.1 has a denominator near 3.9e32; review of #622).
-std::string to_decimal(Rational::Int value) {
-  if (value == 0) return "0";
-  const bool negative = value < 0;
-  std::string digits;
-  while (value != 0) {
-    const int digit = static_cast<int>(value % 10);
-    digits.push_back(static_cast<char>('0' + (negative ? -digit : digit)));
-    value /= 10;
-  }
-  if (negative) digits.push_back('-');
-  return std::string(digits.rbegin(), digits.rend());
-}
-
 std::string to_fraction_string(const Rational& value) {
-  return to_decimal(value.numerator()) + "/" + to_decimal(value.denominator());
+  return value.to_string();
 }
 
 /// Solve `matrix * x = rhs` exactly, `matrix` given as m row-vectors of m entries (a dense
@@ -106,6 +89,24 @@ std::optional<std::vector<Rational>> solve_dense_exact(
   return x;
 }
 
+/// The exact value a nonbasic column or row-slack holds at its reported bound. kFixed uses
+/// the lower bound (equal to the upper by definition); kNonbasicFree is exactly zero, the
+/// only value at which a free variable can be nonbasic without an unbounded reduced cost.
+Rational nonbasic_value(BasisStatus status, double lower, double upper) {
+  switch (status) {
+    case BasisStatus::kAtLower:
+    case BasisStatus::kFixed: return Rational::from_double(lower);
+    case BasisStatus::kAtUpper: return Rational::from_double(upper);
+    case BasisStatus::kNonbasicFree: return Rational(0);
+    case BasisStatus::kBasic:
+    case BasisStatus::kUnknown:
+      break;  // unreachable: callers only ask this of nonbasic positions
+  }
+  return Rational(0);
+}
+
+}  // namespace
+
 /// The status a nonbasic column or row-slack really has (review of #622). Postsolve labels a
 /// column it removed kFixed whatever its bounds, so kFixed is taken as fixed only when the
 /// bounds are equal; otherwise the variable is at whichever bound its reported value equals
@@ -124,24 +125,6 @@ BasisStatus resolved_status(BasisStatus status, double lower, double upper, doub
     default: return status;
   }
 }
-
-/// The exact value a nonbasic column or row-slack holds at its reported bound. kFixed uses
-/// the lower bound (equal to the upper by definition); kNonbasicFree is exactly zero, the
-/// only value at which a free variable can be nonbasic without an unbounded reduced cost.
-Rational nonbasic_value(BasisStatus status, double lower, double upper) {
-  switch (status) {
-    case BasisStatus::kAtLower:
-    case BasisStatus::kFixed: return Rational::from_double(lower);
-    case BasisStatus::kAtUpper: return Rational::from_double(upper);
-    case BasisStatus::kNonbasicFree: return Rational(0);
-    case BasisStatus::kBasic:
-    case BasisStatus::kUnknown:
-      break;  // unreachable: callers only ask this of nonbasic positions
-  }
-  return Rational(0);
-}
-
-}  // namespace
 
 ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
   ExactResult result;
@@ -413,8 +396,7 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
   } catch (const RationalOverflow&) {
     result.verdict = ExactVerdict::kDeclined;
     result.message =
-        "an intermediate value overflowed exact __int128 arithmetic; the model or basis is "
-        "too large or too ill-scaled to verify this way";
+        "no exact rational result: a division by zero or a non-finite value in the data";
     return result;
   }
 }

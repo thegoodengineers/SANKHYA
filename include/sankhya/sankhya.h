@@ -441,6 +441,33 @@ sankhya_status sankhya_solution_row_ranging_upper(const sankhya_solution* soluti
  */
 int sankhya_solution_ranging_basis_degenerate(const sankhya_solution* solution);
 
+/* ---- Certified sensitivity (`exact=true` with `ranging=true`; #757) ------------------- */
+
+/**
+ * 0 not attempted, 1 computed (the vectors below are filled), 2 declined (too large, or not
+ * a plain LP with a basis), 3 failed (the reported basis is not exactly optimal).
+ */
+int sankhya_solution_sensitivity_status(const sankhya_solution* solution);
+
+/**
+ * Each row's shadow price interval, the nearest doubles of the exact left and right
+ * derivatives of the optimal value as the row's bounds shift. They differ only at a
+ * degenerate optimum; +-inf when no feasible point exists on that side. `count` is the row
+ * count, or 0 when the status above is not 1. The .sol file carries the exact fractions.
+ */
+sankhya_status sankhya_solution_row_shadow_price_interval(const sankhya_solution* solution,
+                                                          double* left, double* right,
+                                                          int count);
+
+/**
+ * 1.0 where the floating-point reduced cost or dual and both ranges agree with the exact
+ * ones to 1e-9 relative (certified), 0.0 where the .sol reports a correction. Counts as for
+ * sankhya_solution_col_ranging_lower and sankhya_solution_row_ranging_lower.
+ */
+sankhya_status sankhya_solution_sensitivity_certified(const sankhya_solution* solution,
+                                                      double* columns, int column_count,
+                                                      double* rows, int row_count);
+
 /* ---- Irreducible Infeasible Subsystem (`--option compute_iis=true`; #217) ------------- */
 
 /** Row indices (0-based) in the IIS. 0 when none was computed. */

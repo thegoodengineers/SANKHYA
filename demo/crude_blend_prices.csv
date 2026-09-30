@@ -1,0 +1,19 @@
+# Crude price scenarios for demo/crude_blend.mps (#752), run with
+#     sankhya scenarios demo/crude_blend.mps demo/crude_blend_prices.csv --compare
+# Each cost is the margin per barrel the model carries, 68 + 28 * diesel yield - crude price
+# (the model's header), so a price in $/bbl maps to  AL 76.40 - p,  BN 80.60 - p,  MU 78.64 - p.
+# Prices AL / BN / MU per scenario:
+#   base 74/79/77 (the model's own costs)   al_up_2 76/79/77   al_up_4 78/79/77
+#   al_down_2 72/79/77   bn_down_2 74/77/77   bn_down_4 74/75/77   mu_down_2 74/79/75
+#   mu_up_2 74/79/79   sour_discount 71/80/78   sweet_premium 75/82/78
+scenario,cost:AL,cost:BN,cost:MU
+base,2.40,1.60,1.64
+al_up_2,0.40,1.60,1.64
+al_up_4,-1.60,1.60,1.64
+al_down_2,4.40,1.60,1.64
+bn_down_2,2.40,3.60,1.64
+bn_down_4,2.40,5.60,1.64
+mu_down_2,2.40,1.60,3.64
+mu_up_2,2.40,1.60,-0.36
+sour_discount,5.40,0.60,0.64
+sweet_premium,1.40,-1.40,0.64
