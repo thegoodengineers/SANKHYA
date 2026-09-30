@@ -172,6 +172,14 @@ def section(path: Path | None, manifest: dict | None = None) -> str:
             f"| {num(row, 'solver_seconds', '.2f')} | {mark(row, 'verified')} "
             f"| {mark(row, 'passed')} |")
     failures = failure_lists(rows)
-    out += [""] + (["Every failure, named:", "", *failures] if failures
+    # A tier run leaves fetched instances out of the CSV: name them, or they drop silently.
+    ran = {row["instance"] for row in rows}
+    not_run = sorted(name for name, entry in (manifest or {}).get("instances", {}).items()
+                     if "skipped" not in entry and name not in ran)
+    if not_run:
+        failures.append(f"- **fetched and selected, not run in this CSV** ({len(not_run)}): "
+                        + ", ".join(f"`{n}`" for n in not_run)
+                        + " - `qplib.py` without `--tier` runs them.")
+    out +=[""] + (["Every failure, named:", "", *failures] if failures
                    else ["Every instance run passed under every engine."]) + [""]
     return "\n".join(out)
