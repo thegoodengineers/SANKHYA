@@ -252,12 +252,15 @@ def main() -> int:
                         help="write the generated instances here instead of a temporary "
                              "directory (a 100k instance is about 26 MB)")
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--machine", default=None,
+                        help="machine tag for the CSV (default: OS-architecture), e.g. to say "
+                             "which box and under what load the timings were taken")
     args = parser.parse_args()
 
     binary = args.binary or default_binary()
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     commit = git_commit(args.binary)
-    machine = f"{platform.system()}-{platform.machine()}"
+    machine = args.machine or f"{platform.system()}-{platform.machine()}"
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     options = " ".join(args.solver_option)
     rows: list[dict] = []
