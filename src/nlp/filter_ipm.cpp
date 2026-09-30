@@ -187,6 +187,13 @@ IpmResult FilterMethod::run(IpmIterate start) {
   w_ = start.w;
   w_.resize(static_cast<std::size_t>(n_), 0.0);
   if (s_.push_start_into_bounds) push_interior();
+  // Every exit returns an iterate whose vectors have the problem's sizes, including the exits
+  // below that come before the multipliers are initialised (a deadline in the symbolic
+  // analysis, a start outside the functions' domain): zero multipliers there, not empty
+  // vectors a caller would index up to n and m (a crash in the MINLP tree, #826).
+  lam_.assign(static_cast<std::size_t>(m_), 0.0);
+  zl_.assign(static_cast<std::size_t>(n_), 0.0);
+  zu_.assign(static_cast<std::size_t>(n_), 0.0);
   if (n_ == 0) return finish(IpmExit::kConverged, "no variables");
   if (!kkt_.analyze(p_, s_.should_stop)) {
     return finish(kkt_.stopped_early() ? IpmExit::kStopped : IpmExit::kFactorizationFailed,
