@@ -510,7 +510,12 @@ TEST(InteriorPointProximal, OffByDefaultAndTheDefaultPathIsTheExplicitlyOffPath)
   EXPECT_EQ(by_default.iterations, plain.iterations);
   EXPECT_EQ(by_default.objective, plain.objective);
   EXPECT_EQ(by_default.col_value, plain.col_value);
-  EXPECT_EQ(by_default.message, plain.message);
+  // The message is compared with its wall-clock readings blanked: crossover reports "in
+  // 0.01s", which is a measurement of the machine, not of the path taken. Comparing it raw
+  // failed whenever the two solves straddled a hundredth of a second (the sanitizer CI job).
+  const std::regex seconds(R"([0-9]+\.[0-9]+s\b)");
+  EXPECT_EQ(std::regex_replace(by_default.message, seconds, "<t>s"),
+            std::regex_replace(plain.message, seconds, "<t>s"));
   EXPECT_NEAR(plain.objective, proximal.objective, 1e-6 * std::fabs(plain.objective));
 }
 
