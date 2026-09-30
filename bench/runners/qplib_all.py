@@ -180,7 +180,11 @@ def main() -> int:
     parser.add_argument("--instances", nargs="*")
     parser.add_argument("--jobs", type=int, default=1,
                         help="instances solved at once; recorded in every row")
-    parser.add_argument("--machine-kind", default="cloud container")
+    parser.add_argument("--machine-kind", default="cloud container",
+                        help="the kind of machine the default tag starts with")
+    parser.add_argument("--machine", default=None,
+                        help="the whole machine tag, as the other runners take it (#836); by "
+                             "default the kind, CPU model, cores and RAM read from this box")
     parser.add_argument("--no-verify", action="store_true")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()
@@ -193,7 +197,8 @@ def main() -> int:
     names = args.instances or sorted(instances)
     binary = args.binary or mm.default_binary()
     stamp_fields = {
-        "git_commit": stamp.stamp(binary), "machine": compare_suite.machine_tag(args.machine_kind),
+        "git_commit": stamp.stamp(binary),
+        "machine": args.machine or compare_suite.machine_tag(args.machine_kind),
         "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
     }
     print(f"solver {binary}  commit {stamp_fields['git_commit']}\nmachine {stamp_fields['machine']}"
