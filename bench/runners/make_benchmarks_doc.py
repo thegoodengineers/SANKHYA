@@ -42,6 +42,7 @@ import gpu_ab_doc  # 1g.8 and 1g.9, the device A/Bs of #508 and #478
 import gpu_doc  # 1g.1 and 1g.3 (#488)
 import gpu_plot  # the speedup-against-nonzeros figure of 1g.3 (#488)
 import head_to_head_doc  # section 4a, the five-solver head-to-head (#766)
+import pricing_ab_doc  # 1b.1, dual pricing: Devex against dual steepest edge (#411)
 from gpu_doc import gpu_datacenter_table, gpu_real_section, ipm_cudss_section, multi_gpu_section
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -2898,6 +2899,15 @@ of Netlib.** Its pass rate is not the headline; section 1c is.
 ### 1b. The medium tier — instances up to 500 rows
 
 {medium_section(medium_csv)}
+#### 1b.1 Dual pricing: Devex against dual steepest edge (#411)
+
+The dual simplex picks its leaving row by primal infeasibility over a weight. Devex
+approximates that weight with a reference framework; dual steepest edge keeps it exact as the
+norm of the row of the basis inverse, through the Forrest-Goldfarb update (Math. Programming
+57, 1992), at one extra solve per pivot. The question is whether the iterations it saves pay
+for that solve.
+
+{pricing_ab_doc.section(latest_result.RESULTS_DIR)}
 ### 1c. The full set — the honest headline
 
 Every instance in Netlib's summary table. Both tiers above are defined by a row cap, which
