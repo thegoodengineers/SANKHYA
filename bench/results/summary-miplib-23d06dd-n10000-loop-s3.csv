@@ -1,0 +1,31 @@
+instance,seeds,seeds_matched,seeds_proved,matched_seeds,proved_seeds,sgm_seconds,sgm_first_feasible_seconds,mean_primal_integral,time_limit,git_commit,machine
+b-ball,3,3,1,0 1 2,0,147.4163,1.0195,1.1845,600,23d06dd,Windows-AMD64
+ej,3,0,0,,,600.0000,600.0000,7.3781,600,23d06dd,Windows-AMD64
+enlight8,3,0,0,,,600.0000,600.0000,14.3621,600,23d06dd,Windows-AMD64
+enlight_hard,3,0,0,,,600.0000,600.0000,70.1605,600,23d06dd,Windows-AMD64
+f2gap40400,3,3,3,0 1 2,0 1 2,3.0350,0.4774,0.5500,600,23d06dd,Windows-AMD64
+flugpl,3,3,3,0 1 2,0 1 2,8.0470,4.2252,9.0638,600,23d06dd,Windows-AMD64
+gen-ip016,3,0,0,,,600.0000,6.6921,9.5514,600,23d06dd,Windows-AMD64
+gen-ip054,3,0,0,,,600.0000,2.1033,3.5560,600,23d06dd,Windows-AMD64
+gr4x6,3,3,3,0 1 2,0 1 2,3.7748,2.0830,2.2528,600,23d06dd,Windows-AMD64
+gt2,3,3,3,0 1 2,0 1 2,9.3064,5.1892,6.4366,600,23d06dd,Windows-AMD64
+k16x240b,3,0,0,,,600.0000,9.7696,27.6754,600,23d06dd,Windows-AMD64
+markshare1,3,0,0,,,600.0000,5.3719,42.0308,600,23d06dd,Windows-AMD64
+markshare_4_0,3,0,0,,,600.0000,1.3772,36.0570,600,23d06dd,Windows-AMD64
+markshare_5_0,3,0,0,,,600.0000,0.1981,9.3362,600,23d06dd,Windows-AMD64
+neos-1425699,3,3,3,0 1 2,0 1 2,0.2308,0.0657,0.0668,600,23d06dd,Windows-AMD64
+neos-3072252-nete,3,0,0,,,600.0000,11.1357,21.8217,600,23d06dd,Windows-AMD64
+neos-3611689-kaihu,3,3,2,0 1 2,0 1,83.6306,8.6303,10.7788,600,23d06dd,Windows-AMD64
+neos-5140963-mincio,3,0,0,,,600.0000,13.0153,22.2518,600,23d06dd,Windows-AMD64
+neos-5192052-neckar,3,3,3,0 1 2,0 1 2,0.5324,0.3908,0.4249,600,23d06dd,Windows-AMD64
+neos5,3,1,0,2,,600.0000,2.6349,5.1323,600,23d06dd,Windows-AMD64
+noswot,3,0,0,,,600.0000,9.7221,16.5986,600,23d06dd,Windows-AMD64
+opt1217,3,2,0,0 2,,600.0000,9.9464,18.4914,600,23d06dd,Windows-AMD64
+p0201,3,3,3,0 1 2,0 1 2,10.2713,1.9986,2.7775,600,23d06dd,Windows-AMD64
+pk1,3,0,0,,,600.0000,3.1205,21.1862,600,23d06dd,Windows-AMD64
+ran12x21,3,0,0,,,600.0000,4.1449,9.5880,600,23d06dd,Windows-AMD64
+ran13x13,3,0,0,,,600.0000,1.0961,2.6226,600,23d06dd,Windows-AMD64
+rlp1,3,3,0,0 1 2,,600.0000,0.9528,1.9732,600,23d06dd,Windows-AMD64
+supportcase14,3,3,3,0 1 2,0 1 2,1.0752,0.3913,0.3974,600,23d06dd,Windows-AMD64
+supportcase16,3,3,3,0 1 2,0 1 2,1.1048,0.6331,0.6933,600,23d06dd,Windows-AMD64
+timtab1,3,0,0,,,600.0000,61.3985,27.2429,600,23d06dd,Windows-AMD64
