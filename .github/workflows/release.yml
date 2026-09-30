@@ -4,8 +4,10 @@
 # Every leg builds from a clean runner, packages with scripts/package_release.sh (which also
 # runs the provenance check on the SHIPPED binaries), then unpacks the archive on a machine
 # or container with no compiler and solves and verifies the demo from it. The outputs are
-# workflow artifacts. Publishing them - a GitHub Release, a push to a registry - is a
-# deliberate manual step and is not done here.
+# workflow artifacts. On a v* tag the image is also pushed to
+# ghcr.io/thegoodengineers/sankhya:<tag>, and a DRAFT pre-release is created with the
+# archives attached and its notes read from .github/release-notes/<tag>.md. Pushing the
+# tag is the decision to publish the image; making the release public is a click after it.
 #
 # What is not built, and why:
 #   Windows CUDA: nvcc on Windows requires MSVC as its host compiler, and this tree builds
@@ -196,8 +198,11 @@ jobs:
             dist/*.sha256
 
   container:
-    name: Container image (built, not pushed)
+    name: Container image (pushed to ghcr.io on a tag only)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -210,6 +215,15 @@ jobs:
           docker run --rm sankhya:ci sh -c \
             'sankhya solve demo/crude_blend.mps --gpu --write-sol /tmp/b.sol &&
              python3 tools/verify_solution.py demo/crude_blend.mps /tmp/b.sol'
+      - name: Push to ghcr.io (tag runs only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          image="ghcr.io/thegoodengineers/sankhya:${GITHUB_REF_NAME}"
+          docker tag sankhya:ci "$image"
+          docker push "$image"
       - name: Save the image
         run: docker save sankhya:ci | gzip > sankhya-image.tar.gz
       - uses: actions/upload-artifact@v4
@@ -234,3 +248,28 @@ jobs:
         with:
           name: sankhya-SHA256SUMS
           path: dist/SHA256SUMS
+
+  draft-release:
+    # A tag run leaves a DRAFT pre-release with every archive and the sums attached. Making
+    # it public is a person's click on the release page, after reading the notes.
+    name: Draft pre-release (tag runs only)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [checksums, container]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          [ -f "$notes" ] || { echo "no $notes: write the notes before tagging"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" --draft --prerelease \
+            --title "SANKHYA $GITHUB_REF_NAME" --notes-file "$notes" \
+            dist/*.tar.gz dist/*.zip dist/SHA256SUMS
