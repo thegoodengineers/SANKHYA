@@ -276,6 +276,27 @@ class _Problem:
         return self.lower[k] == self.upper[k]
 
 
+def _smaller_pair(a, b):
+    """The smaller of two ratios given as (numerator, positive denominator); None is +inf."""
+    if a is None:
+        return b
+    (n1, d1), (n2, d2) = a, b
+    s1, s2 = (n1 > 0) - (n1 < 0), (n2 > 0) - (n2 < 0)
+    if s1 != s2:
+        return a if s1 < s2 else b
+    if s1 == 0:
+        return a
+    # |n/d| lies in (2^(e-1), 2^(e+1)) for e = bits(n) - bits(d): two exponents two or more
+    # apart decide without the multiplications, which on numbers thousands of digits long
+    # are most of the cost.
+    e1 = abs(n1).bit_length() - d1.bit_length()
+    e2 = abs(n2).bit_length() - d2.bit_length()
+    if abs(e1 - e2) >= 2:
+        first_larger_in_size = e1 > e2
+        return b if first_larger_in_size == (s1 > 0) else a
+    return a if n1 * d2 <= n2 * d1 else b
+
+
 def _over_common_denominator(v: dict[int, Fraction]) -> tuple[int, dict[int, int]]:
     """The least common denominator D of v's entries and the integers v_i D."""
     lcd = math.lcm(1, *(x.denominator for x in v.values()))
@@ -371,6 +392,19 @@ class _Basis:
     def tableau_row(self, p: int, with_w: bool = False):
         """Row p of B^{-1} [A | -I] over the nonbasic variables, nonzeros only; with
         `with_w`, also w = e_p^T B^{-1} (by row) that it came from."""
+        w, lcd, total = self._scaled_row(p)
+        scale = self.problem.scale
+        row = {k: Fraction(t, lcd * scale[k]) for k, t in total.items()}
+        return (row, w) if with_w else row
+
+    def tableau_row_scaled(self, p: int) -> tuple[int, dict[int, int]]:
+        """Row p of the tableau unreduced: alpha_k = total[k] / (lcd * scale[k]). On a basis
+        whose inverse holds numbers thousands of digits long (25fv47) reducing every alpha_k
+        to a Fraction is most of the work, and a ratio test needs none of it."""
+        _, lcd, total = self._scaled_row(p)
+        return lcd, total
+
+    def _scaled_row(self, p: int):
         w = self.lu.solve_transpose({p: Fraction(1)})
         lcd, w_int = _over_common_denominator(w)
         total: dict[int, int] = {}
@@ -379,9 +413,7 @@ class _Basis:
             for k, a in self.problem.row_entries[i]:
                 if k in status:
                     total[k] = total.get(k, 0) + wi * a
-        scale = self.problem.scale
-        row = {k: Fraction(t, lcd * scale[k]) for k, t in total.items() if t}
-        return (row, w) if with_w else row
+        return w, lcd, {k: t for k, t in total.items() if t}
 
     def degenerate_pivot(self, p: int, entering: int, to: str, row: dict[int, Fraction],
                          w: dict[int, Fraction], deadline: float) -> "_Basis":
@@ -547,24 +579,30 @@ def derive(model, solution, seconds: float = 60.0) -> dict:
                 lo, hi = Fraction(0), Fraction(0)
         else:
             d = Fraction(0)
-            lo = hi = INF
-            for k, a in basis.tableau_row(basis.position[j]).items():
+            # Ratios as unreduced integer pairs (numerator, positive denominator), compared by
+            # cross-multiplication; only the two winners become Fractions. None is +inf.
+            lo_pair = hi_pair = None
+            lcd, total = basis.tableau_row_scaled(basis.position[j])
+            for k, t in total.items():
                 st = basis.status[k]
                 if problem.fixed(k):
                     continue
+                if st == "free":  # free nonbasic, d = 0: no room either way
+                    lo_pair = hi_pair = (0, 1)
+                    continue
                 dk = basis.d[k]
-                if st == "at_lower":
-                    if a > 0:
-                        hi = min(hi, dk / a)
-                    else:
-                        lo = min(lo, dk / -a)
-                elif st == "at_upper":
-                    if a > 0:
-                        lo = min(lo, -dk / a)
-                    else:
-                        hi = min(hi, -dk / -a)
-                else:  # free nonbasic, d = 0: no room either way
-                    lo = hi = Fraction(0)
+                # at_lower: d_k / |alpha_k|; at_upper: -d_k / |alpha_k|; alpha_k > 0 limits
+                # the increase at_lower and the decrease at_upper.
+                # Without the row's common factor lcd > 0, which cannot change which ratio
+                # is smallest; it goes back on the two winners only.
+                sign = 1 if st == "at_lower" else -1
+                pair = (sign * dk.numerator * problem.scale[k], dk.denominator * abs(t))
+                if (t > 0) == (st == "at_lower"):
+                    hi_pair = _smaller_pair(hi_pair, pair)
+                else:
+                    lo_pair = _smaller_pair(lo_pair, pair)
+            lo = INF if lo_pair is None else Fraction(lo_pair[0] * lcd, lo_pair[1])
+            hi = INF if hi_pair is None else Fraction(hi_pair[0] * lcd, hi_pair[1])
             lo, hi = max(lo, Fraction(0)), max(hi, Fraction(0))
         if sense < 0:
             lo, hi = hi, lo
