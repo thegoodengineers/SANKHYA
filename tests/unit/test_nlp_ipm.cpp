@@ -231,7 +231,12 @@ TEST(NlpIpm, ADeadlineOrABadStartBeforeTheFirstIterationIsAnAnswerNotACrash) {
   no_time.set_double("time_limit", 0.0);
   const Solution stopped = solve_nlp(disc, no_time);
   EXPECT_EQ(stopped.status, SolveStatus::kTimeLimit) << stopped.message;
-  EXPECT_FALSE(claims_a_point(stopped));
+  // A time limit reports the iterate it stopped at (here the start), with the model's sizes
+  // and zero multipliers: none had been computed.
+  ASSERT_EQ(stopped.col_value.size(), 2u);
+  ASSERT_EQ(stopped.row_dual.size(), 1u);
+  ASSERT_EQ(stopped.col_dual.size(), 2u);
+  EXPECT_EQ(stopped.row_dual[0], 0.0);
 
   // log(x0) from x = (0, 0) with x0 unbounded below: no push into the domain, so the first
   // evaluation fails, again before any multiplier exists.
