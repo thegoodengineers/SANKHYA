@@ -621,5 +621,25 @@ TEST(Presolve, PostsolvedStatusesAreABasisOfTheOriginalModel) {
   }
 }
 
+TEST(Presolve, AFillInRowFoldedAfterItsColumnWasFixedStillPricesThatColumn) {
+  // pilot.ja. Doubleton MPSF03 eliminates PRPP03 and its fill-in adds NPSF03 to KRPR03;
+  // NPSF03 is then fixed, and a LATER fold removes KRPR03, which NPSF03 - already gone -
+  // never receives. Postsolve's reduced_cost_of skipped every folded fill-in row, so it
+  // dropped KRPR03's dual from NPSF03's price: the doubleton pass priced MPSF03 against a
+  // reduced cost 8.2e-02 too high, NPSF03 came back at its lower bound with a reduced cost
+  // of -5.1e-02, and the status guard downgraded a correct optimum to `feasible`.
+  Model model;
+  const std::string path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+       "data/netlib/pilot.ja.mps")
+          .string();
+  const io::ReadResult read = io::read_model(path, &model);
+  ASSERT_TRUE(read.ok) << path << ": " << read.error;
+  const Solution s = solve(model, with_presolve(true));
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_LE(s.dual_infeasibility, tol::kDualFeasibility);
+  // Koch's exact optimum, data/netlib/koch_exact.json.
+  EXPECT_NEAR(s.objective, -6113.136465581343, 1e-6 * 6113.136465581343);
+}
 }  // namespace
 }  // namespace sankhya
