@@ -43,9 +43,7 @@ struct ExactResult {
 /// `solution` must be the Solution a plain LP solve() just returned with status kOptimal and
 /// a basis (col_status/row_status sized to the model). Declines outright on a quadratic
 /// objective (Hessian nonzero - #521 is the LP engines only, per its own title), on a MILP's
-/// integer columns (a candidate basis over relaxed bounds proves nothing about integrality),
-/// and on a basis larger than a row cap chosen so a dense exact Gaussian elimination stays
-/// fast (see exact_verify.cpp).
+/// integer columns (a candidate basis over relaxed bounds proves nothing about integrality).
 /// `seconds` bounds the exact work (option exact_seconds); past it the verdict is kDeclined.
 [[nodiscard]] ExactResult verify_basis_exact(const Model& model, const Solution& solution,
                                              double seconds = kInfinity);

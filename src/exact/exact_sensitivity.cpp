@@ -2,10 +2,10 @@
 // SANKHYA - certified shadow prices and sensitivity ranges (#757). See
 // exact_sensitivity.hpp for the citations and the definitions.
 //
-// Dense: the basis inverse is formed once per basis by Gauss-Jordan elimination over exact
-// rationals, which is O(m^3) and so capped at the same row count as the basis check
-// (exact_verify.cpp). Above it the certification declines; the independent verifier
-// (tools/verify_solution_sensitivity.py, sparse, arbitrary precision) covers larger models.
+// Sparse: each basis is factorised once by the exact LU (exact_lu.hpp) in the float LU's
+// pivot order, and every B^{-1} e_i and e_p^T B^{-1} below is one sparse solve. A basis change
+// in the parametric dual simplex is a product-form update. The dense Gauss-Jordan inverse this
+// replaced was O(m^3) and capped at 300 rows; the only limit now is the time budget.
 
 #include "exact/exact_sensitivity.hpp"
 
@@ -18,6 +18,7 @@
 
 #include <fmt/format.h>
 
+#include "exact/exact_lu.hpp"
 #include "exact/rational.hpp"
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
@@ -26,12 +27,13 @@ namespace sankhya::exact {
 namespace {
 
 using Sz = std::size_t;
-using Matrix = std::vector<std::vector<Rational>>;
-
-constexpr Index kMaxRowsForExactSensitivity = 300;
 /// Pivots allowed to one one-sided derivative before it declines. Bland's rule makes the
 /// dual simplex finite; this only bounds the time on a pathological model.
 constexpr int kMaxParametricPivots = 1000;
+/// Product-form updates on one exact factor before it is rebuilt: each eta costs every later
+/// solve its nonzeros, and a fresh factor in the float order is usually sparser than B
+/// E_1..E_t.
+constexpr Index kRefactorEvery = 32;
 
 /// A value that may be infinite: ranges are +inf, one-sided derivatives either sign.
 struct Ext {
@@ -83,7 +85,13 @@ struct Problem {
   int sense = 1;
   std::vector<Rational> cost, lower, upper;
   std::vector<char> has_lower, has_upper;
-  std::vector<std::vector<std::pair<Index, Rational>>> columns;
+  std::vector<RationalColumn> columns;
+  /// Each column over its own common denominator: column k is scaled_columns[k] / scale[k]
+  /// with integer entries, and scaled_rows holds the same integers row-wise as (variable,
+  /// entry). Dot products run in integers and are reduced once (common_denominator).
+  std::vector<BigInt> scale;
+  std::vector<std::vector<std::pair<Index, BigInt>>> scaled_columns;
+  std::vector<std::vector<std::pair<Index, BigInt>>> scaled_rows;
 
   explicit Problem(const Model& model)
       : n(model.num_cols()), m(model.num_rows()), sense(model.sense_multiplier() < 0 ? -1 : 1) {
@@ -114,6 +122,20 @@ struct Problem {
         columns[u].emplace_back(k - n, Rational(-1));
       }
     }
+    scale.resize(total);
+    scaled_columns.resize(total);
+    scaled_rows.resize(static_cast<Sz>(m));
+    for (Sz k = 0; k < total; ++k) {
+      std::vector<Rational> values;
+      for (const auto& entry : columns[k]) values.push_back(entry.second);
+      std::vector<BigInt> integers;
+      scale[k] = common_denominator(values, &integers);
+      for (Sz q = 0; q < integers.size(); ++q) {
+        const Index i = columns[k][q].first;
+        scaled_columns[k].emplace_back(i, integers[q]);
+        scaled_rows[static_cast<Sz>(i)].emplace_back(static_cast<Index>(k), integers[q]);
+      }
+    }
   }
   [[nodiscard]] bool fixed(Index k) const {
     const auto u = static_cast<Sz>(k);
@@ -121,60 +143,104 @@ struct Problem {
   }
 };
 
-/// Gauss-Jordan inverse; nullopt when exactly singular.
-std::optional<Matrix> invert(Matrix a, const Deadline& deadline) {
-  const Sz m = a.size();
-  Matrix inv(m, std::vector<Rational>(m, Rational(0)));
-  for (Sz i = 0; i < m; ++i) inv[i][i] = Rational(1);
-  for (Sz col = 0; col < m; ++col) {
-    deadline.check();
-    Sz pivot = m;
-    for (Sz r = col; r < m; ++r) {
-      if (!a[r][col].is_zero()) {
-        pivot = r;
-        break;
-      }
-    }
-    if (pivot == m) return std::nullopt;
-    std::swap(a[pivot], a[col]);
-    std::swap(inv[pivot], inv[col]);
-    const Rational scale = Rational(1) / a[col][col];
-    for (Sz c = 0; c < m; ++c) {
-      if (!a[col][c].is_zero()) a[col][c] = a[col][c] * scale;
-      if (!inv[col][c].is_zero()) inv[col][c] = inv[col][c] * scale;
-    }
-    for (Sz r = 0; r < m; ++r) {
-      if (r == col || a[r][col].is_zero()) continue;
-      const Rational factor = a[r][col];
-      for (Sz c = 0; c < m; ++c) {
-        if (!a[col][c].is_zero()) a[r][c] = a[r][c] - factor * a[col][c];
-        if (!inv[col][c].is_zero()) inv[r][c] = inv[r][c] - factor * inv[col][c];
-      }
-    }
-  }
-  return inv;
-}
-
-/// One basis: its inverse, the point at t = 0, the duals and reduced costs (minimise space).
+/// One basis: its exact LU, the point at t = 0, the duals and reduced costs (minimise space).
 struct Basis {
   std::vector<Index> basic;  ///< position -> variable
   std::vector<Nb> status;    ///< per variable
-  Matrix inverse;            ///< B^{-1}, row p for basis position p
+  ExactLu lu;
   std::vector<Rational> value, y, d;
 
-  /// False when the basis is exactly singular.
+  /// Factorise from scratch. False when the basis is exactly singular.
   bool build(const Problem& problem, const Deadline& deadline) {
-    const auto m = static_cast<Sz>(problem.m);
-    const auto total = static_cast<Sz>(problem.n + problem.m);
-    Matrix b(m, std::vector<Rational>(m, Rational(0)));
-    for (Sz p = 0; p < m; ++p) {
-      for (const auto& [i, a] : problem.columns[static_cast<Sz>(basic[p])]) {
-        b[static_cast<Sz>(i)][p] = a;
+    std::vector<const RationalColumn*> columns;
+    columns.reserve(basic.size());
+    for (const Index k : basic) columns.push_back(&problem.columns[static_cast<Sz>(k)]);
+    if (!lu.factorize(columns, problem.m, deadline)) return false;
+    refresh(problem);
+    return true;
+  }
+
+  /// B^{-1} e_row, by position.
+  [[nodiscard]] std::vector<Rational> column_of_inverse(const Problem& problem,
+                                                        Index row) const {
+    std::vector<Rational> v(static_cast<Sz>(problem.m), Rational(0));
+    v[static_cast<Sz>(row)] = Rational(1);
+    lu.solve(v);
+    return v;
+  }
+
+  /// Row p of B^{-1} [A | -I] over the nonbasic variables: (variable, nonzero alpha). With
+  /// `row_of_inverse`, e_p^T B^{-1} (by row) is left there too.
+  [[nodiscard]] std::vector<std::pair<Sz, Rational>> tableau_row(
+      const Problem& problem, Sz p, std::vector<Rational>* row_of_inverse = nullptr) const {
+    std::vector<Rational> w(static_cast<Sz>(problem.m), Rational(0));
+    w[p] = Rational(1);
+    lu.solve_transpose(w);
+    std::vector<BigInt> numerators;
+    const BigInt lcd = common_denominator(w, &numerators);
+    std::vector<BigInt> sum(status.size(), BigInt(0));
+    std::vector<Sz> touched;
+    for (Sz i = 0; i < w.size(); ++i) {
+      if (numerators[i].is_zero()) continue;
+      for (const auto& [k, a] : problem.scaled_rows[i]) {
+        const auto sk = static_cast<Sz>(k);
+        if (status[sk] == Nb::kBasic) continue;
+        if (sum[sk].is_zero()) touched.push_back(sk);
+        sum[sk] = sum[sk] + numerators[i] * a;
       }
     }
-    std::optional<Matrix> inv = invert(std::move(b), deadline);
-    if (!inv.has_value()) return false;
-    inverse = std::move(*inv);
+    std::sort(touched.begin(), touched.end());
+    touched.erase(std::unique(touched.begin(), touched.end()), touched.end());
+    std::vector<std::pair<Sz, Rational>> out;
+    for (const Sz k : touched) {
+      if (!sum[k].is_zero())
+        out.emplace_back(k, Rational(std::move(sum[k]), lcd * problem.scale[k]));
+    }
+    if (row_of_inverse != nullptr) *row_of_inverse = std::move(w);
+    return out;
+  }
+
+  /// A DEGENERATE pivot: the basic variable at `position` sits exactly on the bound `to` it
+  /// leaves to, so the primal step is zero and every value stays as it is. The duals and
+  /// reduced costs move by the standard dual update (theta = d_q / alpha_pq):
+  ///   d_k -= theta alpha_pk,  d_leaving = -theta,  d_q = 0,  y += theta e_p^T B^{-1},
+  /// from the tableau row the ratio test already computed. False when singular.
+  bool pivot_degenerate(const Problem& problem, Sz position, Index entering, Nb to,
+                        const std::vector<std::pair<Sz, Rational>>& row,
+                        const std::vector<Rational>& row_of_inverse, const Deadline& deadline) {
+    const auto q = static_cast<Sz>(entering);
+    const auto leaving = static_cast<Sz>(basic[position]);
+    Rational alpha_q(0);
+    for (const auto& [k, a] : row) {
+      if (k == q) alpha_q = a;
+    }
+    if (alpha_q.is_zero()) return false;
+    const Rational theta = d[q] / alpha_q;
+    std::vector<Rational> alpha(static_cast<Sz>(problem.m), Rational(0));
+    for (const auto& [i, a] : problem.columns[q]) alpha[static_cast<Sz>(i)] = a;
+    lu.solve(alpha);
+    if (alpha[position].is_zero()) return false;
+    status[leaving] = to;
+    status[q] = Nb::kBasic;
+    basic[position] = entering;
+    if (lu.num_updates() + 1 >= kRefactorEvery) return build(problem, deadline);
+    lu.update(static_cast<Index>(position), alpha);
+    if (!theta.is_zero()) {
+      for (const auto& [k, a] : row) d[k] -= theta * a;
+      for (Sz i = 0; i < y.size(); ++i) {
+        if (!row_of_inverse[i].is_zero()) y[i] += theta * row_of_inverse[i];
+      }
+    }
+    d[q] = Rational(0);
+    d[leaving] = -theta;
+    return true;
+  }
+
+ private:
+  /// The point, the duals and the reduced costs of the current factor.
+  void refresh(const Problem& problem) {
+    const auto m = static_cast<Sz>(problem.m);
+    const auto total = static_cast<Sz>(problem.n + problem.m);
     value.assign(total, Rational(0));
     std::vector<Rational> rhs(m, Rational(0));
     for (Sz k = 0; k < total; ++k) {
@@ -186,42 +252,27 @@ struct Basis {
       }
       if (value[k].is_zero()) continue;
       for (const auto& [i, a] : problem.columns[k]) {
-        rhs[static_cast<Sz>(i)] = rhs[static_cast<Sz>(i)] - a * value[k];
+        rhs[static_cast<Sz>(i)] -= a * value[k];
       }
     }
-    for (Sz p = 0; p < m; ++p) {
-      Rational x(0);
-      for (Sz i = 0; i < m; ++i) {
-        if (!inverse[p][i].is_zero() && !rhs[i].is_zero()) x += inverse[p][i] * rhs[i];
-      }
-      value[static_cast<Sz>(basic[p])] = x;
-    }
+    lu.solve(rhs);
+    for (Sz p = 0; p < m; ++p) value[static_cast<Sz>(basic[p])] = std::move(rhs[p]);
     y.assign(m, Rational(0));
-    for (Sz p = 0; p < m; ++p) {
-      const Rational& c = problem.cost[static_cast<Sz>(basic[p])];
-      if (c.is_zero()) continue;
-      for (Sz i = 0; i < m; ++i) {
-        if (!inverse[p][i].is_zero()) y[i] += c * inverse[p][i];
-      }
-    }
+    for (Sz p = 0; p < m; ++p) y[p] = problem.cost[static_cast<Sz>(basic[p])];
+    lu.solve_transpose(y);
+    std::vector<BigInt> numerators;
+    const BigInt lcd = common_denominator(y, &numerators);
     d.assign(total, Rational(0));
     for (Sz k = 0; k < total; ++k) {
       if (status[k] == Nb::kBasic) continue;
-      Rational dk = problem.cost[k];
-      for (const auto& [i, a] : problem.columns[k]) dk -= y[static_cast<Sz>(i)] * a;
-      d[k] = dk;
+      BigInt sum(0);
+      for (const auto& [i, a] : problem.scaled_columns[k]) {
+        const BigInt& yi = numerators[static_cast<Sz>(i)];
+        if (!yi.is_zero()) sum = sum + yi * a;
+      }
+      d[k] = sum.is_zero() ? problem.cost[k]
+                           : problem.cost[k] - Rational(std::move(sum), lcd * problem.scale[k]);
     }
-    return true;
-  }
-
-  /// Row p of B^{-1} [A | -I] at variable k.
-  [[nodiscard]] Rational alpha(const Problem& problem, Sz p, Sz k) const {
-    Rational sum(0);
-    for (const auto& [i, a] : problem.columns[k]) {
-      const Rational& w = inverse[p][static_cast<Sz>(i)];
-      if (!w.is_zero()) sum += w * a;
-    }
-    return sum;
   }
 };
 
@@ -249,20 +300,23 @@ std::string not_optimal(const Problem& problem, const Basis& basis) {
 /// d v / d t at t = 0 from the side `direction` (+1 right, -1 left), minimise space: the
 /// lexicographic dual simplex on row `row`'s bounds shifted by t, Bland's rule throughout.
 /// nullopt when it does not settle within kMaxParametricPivots or meets a singular basis.
-std::optional<Ext> one_sided(const Problem& problem, Basis basis, Index row, int direction,
-                             const Deadline& deadline) {
+std::optional<Ext> one_sided(const Problem& problem, const Basis& start, Index row,
+                             int direction, const Deadline& deadline) {
   const auto m = static_cast<Sz>(problem.m);
   const auto logical = static_cast<Sz>(problem.n + row);
+  std::optional<Basis> own;  // copied on the first pivot: most rows need none
   for (int pivot = 0; pivot < kMaxParametricPivots; ++pivot) {
+    const Basis& basis = own.has_value() ? *own : start;
     // First-order motion of each basic variable relative to its own (shifting) bounds.
     const bool shifted = basis.status[logical] != Nb::kBasic;
+    const std::vector<Rational> motion =
+        shifted ? basis.column_of_inverse(problem, row) : std::vector<Rational>(m, Rational(0));
     Sz leave_p = m;
     Nb leave_to = Nb::kLower;
     Index leave_k = -1;
     for (Sz p = 0; p < m; ++p) {
       const auto k = static_cast<Sz>(basis.basic[p]);
-      Rational slope =
-          shifted ? basis.inverse[p][static_cast<Sz>(row)] * Rational(direction) : Rational(0);
+      Rational slope = motion[p] * Rational(direction);
       if (k == logical) slope -= Rational(direction);
       const Rational& x = basis.value[k];
       Nb to = Nb::kBasic;
@@ -278,11 +332,12 @@ std::optional<Ext> one_sided(const Problem& problem, Basis basis, Index row, int
     const bool must_rise = leave_to == Nb::kLower;
     Index entering = -1;
     Rational best(0);
-    for (Sz k = 0; k < basis.status.size(); ++k) {
+    std::vector<Rational> row_of_inverse;
+    const std::vector<std::pair<Sz, Rational>> tableau =
+        basis.tableau_row(problem, leave_p, &row_of_inverse);
+    for (const auto& [k, a] : tableau) {
       const Nb st = basis.status[k];
-      if (st == Nb::kBasic || problem.fixed(static_cast<Index>(k))) continue;
-      const Rational a = basis.alpha(problem, leave_p, k);
-      if (a.is_zero()) continue;
+      if (problem.fixed(static_cast<Index>(k))) continue;
       // x_p = ... - a x_k: raising x_k moves x_p by -a, lowering it by +a.
       const bool can_rise = st == Nb::kLower || st == Nb::kFree;
       const bool can_fall = st == Nb::kUpper || st == Nb::kFree;
@@ -297,10 +352,11 @@ std::optional<Ext> one_sided(const Problem& problem, Basis basis, Index row, int
       }
     }
     if (entering < 0) return infinite(direction);  // no feasible point on that side
-    basis.basic[leave_p] = entering;
-    basis.status[static_cast<Sz>(entering)] = Nb::kBasic;
-    basis.status[static_cast<Sz>(leave_k)] = leave_to;
-    if (!basis.build(problem, deadline)) return std::nullopt;
+    if (!own.has_value()) own = start;
+    if (!own->pivot_degenerate(problem, leave_p, entering, leave_to, tableau, row_of_inverse,
+                               deadline)) {
+      return std::nullopt;
+    }
   }
   return std::nullopt;
 }
@@ -336,11 +392,6 @@ SensitivityResult certify_sensitivity(const Model& model, const Solution& soluti
       static_cast<Index>(solution.col_ranging_lower.size()) != n ||
       static_cast<Index>(solution.row_ranging_lower.size()) != m) {
     result.message = "no basis or no floating-point ranging to certify";
-    return result;
-  }
-  if (m > kMaxRowsForExactSensitivity) {
-    result.message = fmt::format("{} rows exceeds the {}-row cap for dense exact inversion", m,
-                                 kMaxRowsForExactSensitivity);
     return result;
   }
   try {
@@ -409,11 +460,9 @@ SensitivityResult certify_sensitivity(const Model& model, const Solution& soluti
           lo = hi = finite(Rational(0));
         }
       } else {
-        for (Sz k = 0; k < basis.status.size(); ++k) {
+        for (const auto& [k, a] : basis.tableau_row(problem, position[u])) {
           const Nb sk = basis.status[k];
-          if (sk == Nb::kBasic || problem.fixed(static_cast<Index>(k))) continue;
-          const Rational a = basis.alpha(problem, position[u], k);
-          if (a.is_zero()) continue;
+          if (problem.fixed(static_cast<Index>(k))) continue;
           const Rational& dk = basis.d[k];
           if (sk == Nb::kFree) {
             lo = hi = finite(Rational(0));
@@ -450,8 +499,9 @@ SensitivityResult certify_sensitivity(const Model& model, const Solution& soluti
       const auto r = static_cast<Sz>(i);
       Ext down = infinite(1);
       Ext up = infinite(1);
+      const std::vector<Rational> column = basis.column_of_inverse(problem, i);
       for (Sz p = 0; p < sm; ++p) {
-        const Rational& v = basis.inverse[p][r];
+        const Rational& v = column[p];
         if (v.is_zero()) continue;
         const auto k = static_cast<Sz>(basis.basic[p]);
         const Rational& x = basis.value[k];
