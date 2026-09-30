@@ -100,6 +100,9 @@ def main() -> int:
     parser.add_argument("--no-verify", action="store_true")
     parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--machine", default=None,
+                        help="machine tag for the CSV (default: OS-architecture), e.g. to say "
+                             "which box and under what load the timings were taken")
     args = parser.parse_args()
 
     manifest_path = DATA_DIR / "reference.json"
@@ -108,7 +111,8 @@ def main() -> int:
     instances = json.loads(manifest_path.read_text(encoding="utf-8"))["instances"]
     names = select(instances, args.tier, args.instances)
     binary = args.binary or mm.default_binary()
-    commit, machine = stamp.stamp(args.binary), f"{platform.system()}-{platform.machine()}"
+    commit = stamp.stamp(args.binary)
+    machine = args.machine or f"{platform.system()}-{platform.machine()}"
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     solver_options = " ".join(args.solver_option)
     print(f"solver   {binary}\ncommit   {commit}   machine {machine}   time limit "
