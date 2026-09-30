@@ -40,13 +40,15 @@ jobs:
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build g++-12
+          sudo apt-get install -y ninja-build g++
       - name: Build
-        # libstdc++ and libgcc linked statically, zlib built in (no system zlib is assumed on
-        # the target), libgomp shipped beside the binary and found through $ORIGIN.
+        # The distribution's GCC 11, as in the CUDA container: GCC 12 reports a -Wrestrict
+        # false positive inside libstdc++ under -Werror. libstdc++ and libgcc linked
+        # statically, zlib built in (no system zlib is assumed on the target), libgomp
+        # shipped beside the binary and found through $ORIGIN.
         run: |
           cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DSANKHYA_BUILD_TESTS=OFF \
-            -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON \
+            -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON \
             "-DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++ -static-libgcc" \
             "-DCMAKE_SHARED_LINKER_FLAGS=-static-libstdc++ -static-libgcc" \
             '-DCMAKE_BUILD_RPATH=$ORIGIN'
@@ -54,7 +56,7 @@ jobs:
       - name: Package
         run: |
           scripts/package_release.sh build linux-x86_64-cpu dist \
-            "$(g++-12 -print-file-name=libgomp.so.1)"
+            "$(g++ -print-file-name=libgomp.so.1)"
           ninja -C build -t commands sankhya | tail -1 > dist/link-line-linux-cpu.txt
       - name: Run the demo from the archive, in a container with no compiler
         run: |
@@ -169,7 +171,11 @@ jobs:
           Expand-Archive $zip.FullName -DestinationPath $env:RUNNER_TEMP
           $dir = Get-ChildItem $env:RUNNER_TEMP -Directory -Filter 'sankhya-*' | Select-Object -First 1
           Set-Location $dir.FullName
-          if (Get-Command g++ -ErrorAction SilentlyContinue) { throw "a compiler is on PATH" }
+          # The runner image carries compilers on PATH; the run gets Windows and Python only.
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:pythonLocation"
+          foreach ($cc in 'g++', 'gcc', 'cl', 'clang') {
+            if (Get-Command $cc -ErrorAction SilentlyContinue) { throw "$cc is on PATH" }
+          }
           $t = [Diagnostics.Stopwatch]::StartNew()
           .\build\sankhya.exe version
           .\build\sankhya.exe solve demo\crude_blend.mps --write-sol blend.sol
