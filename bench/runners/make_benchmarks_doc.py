@@ -2719,7 +2719,7 @@ def main() -> int:
     per_iteration_csv = newest("scale-iterations-*.csv")
     staircase_csv = newest("scale-staircase-*.csv")
     refinery_csv = newest("scale-refinery-*.csv")
-    million_csv = newest("million-cpu-*.csv")
+    million_csv = million_doc.latest_csv(RESULTS_DIR)
     # The same families under the default engine selection (#284, #357): one CSV per shape,
     # named auto-scale-<shape>-<commit>.csv so the patterns above never pick them up as a
     # family's evidence - they measure the SELECTOR, not an engine.
