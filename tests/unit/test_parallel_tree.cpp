@@ -14,6 +14,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdlib>
 #include <mutex>
 #include <random>
 #include <regex>
@@ -452,6 +453,79 @@ TEST(ParallelTree, ANodeLpStoppedByALimitKeepsItsBoundInTheAnswer) {
         << threads << ": " << to_string(stopped.status) << " " << stopped.message;
     EXPECT_FALSE(stopped.dual_bound > 0.0) << threads << ": the bound " << stopped.dual_bound
                                            << " claims more than the search proved";
+  }
+}
+
+// ===========================================================================================
+// #733: a rare numerical_error seen once on gen-ip016 at mip_threads=4 on a heavily loaded
+// box, not reproduced in six reruns on an idle one. Six reruns each on #720's branch and on
+// main ended feasible with a valid bound, so the failure needs the load, not a particular
+// commit. This is the reproducer the issue asks for: real CPU oversubscription (more busy
+// spinners than cores) held for the whole solve, on models with enough tree that every
+// worker actually runs node LPs while starved of a core, repeated across many seeds so a
+// once-a-month race gets many rolls of the dice. It is not expected to fail every run, or
+// perhaps any given run - if it ever does, the fixture prints the seed and the mip_threads
+// value it failed with, which is the fixed schedule #733 asks for before mip_threads>1
+// could become a default.
+
+/// Busy-spins on every hardware thread beyond what the solve itself is given, so the solve's
+/// worker threads are starved of a core the way the issue's "heavily loaded box" starved
+/// them - not merely present, but competing for CPU time throughout the solve.
+class BackgroundLoad {
+ public:
+  explicit BackgroundLoad(unsigned extra_spinners) {
+    spinners_.reserve(extra_spinners);
+    for (unsigned k = 0; k < extra_spinners; ++k) {
+      spinners_.emplace_back([this] {
+        // No sleep, no yield: the point is to occupy a core, not merely to exist.
+        volatile std::uint64_t sink = 0;
+        while (!stop_.load(std::memory_order_relaxed)) {
+          for (int i = 0; i < 100000; ++i) sink += static_cast<std::uint64_t>(i) * 2654435761u;
+        }
+        static_cast<void>(sink);  // read once, or GCC 16 calls it set but unused (-Werror)
+      });
+    }
+  }
+  ~BackgroundLoad() {
+    stop_.store(true, std::memory_order_relaxed);
+    for (std::thread& spinner : spinners_) spinner.join();
+  }
+  BackgroundLoad(const BackgroundLoad&) = delete;
+  BackgroundLoad& operator=(const BackgroundLoad&) = delete;
+
+ private:
+  std::atomic<bool> stop_{false};
+  std::vector<std::thread> spinners_;
+};
+
+TEST(ParallelTree, RepeatedSolvesUnderHeavyCpuOversubscriptionNeverEndInNumericalError) {
+  // A stress test, not a regression test: it pins every core for up to 40 x 2 s, which
+  // would slow every ctest run and skew any benchmark sharing the box. Opt in explicitly.
+  if (std::getenv("SANKHYA_STRESS") == nullptr) {
+    GTEST_SKIP() << "set SANKHYA_STRESS=1 to run the #733 load reproducer";
+  }
+  // Oversubscribe hard: mip_threads workers plus this much load, on a box that may itself
+  // have few cores (a CI runner), is what "heavily loaded" meant in #733.
+  const unsigned cores = std::max(1u, std::thread::hardware_concurrency());
+  const BackgroundLoad load(cores * 3);
+
+  const int kThreads = 4;
+  const int kTrials = 40;
+  for (int trial = 0; trial < kTrials; ++trial) {
+    const std::uint32_t seed = 733000u + static_cast<std::uint32_t>(trial);
+    // market_split is famously hard for branch and bound relative to its size (see above),
+    // so even a small instance keeps every worker running real node LPs, not idle for want
+    // of a subtree, for the whole trial.
+    const Model model = market_split(3, 24, seed);
+    Options options = on_threads(kThreads);
+    options.set_double("time_limit", 2.0);
+    const Solution solved = solve(model, options);
+    ASSERT_NE(solved.status, SolveStatus::kNumericalError)
+        << "#733 reproduced: mip_threads=" << kThreads << " seed=" << seed << " under "
+        << (cores * 3) << " background spinners on " << cores
+        << " hardware thread(s): " << solved.message;
+    ASSERT_NE(solved.status, SolveStatus::kModelError)
+        << "mip_threads=" << kThreads << " seed=" << seed << ": " << solved.message;
   }
 }
 

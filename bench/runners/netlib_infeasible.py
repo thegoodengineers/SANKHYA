@@ -267,6 +267,10 @@ def main() -> int:
                              "runs")
     parser.add_argument("--out", type=Path, default=None,
                         help="destination CSV; relative paths resolve against the repo root")
+    parser.add_argument("--machine", default=None,
+                        help="machine tag written to every row (say what the box is: "
+                             "container or laptop, CPU model, cores, RAM); defaults to "
+                             "<system>-<arch>")
     args = parser.parse_args()
 
     manifest_path = DATA_DIR / "reference.json"
@@ -278,7 +282,7 @@ def main() -> int:
     names = sorted(args.instances or instances)
     binary = args.binary or default_binary()
     commit = stamp.stamp(args.binary)
-    machine = f"{platform.system()}-{platform.machine()}"
+    machine = args.machine or f"{platform.system()}-{platform.machine()}"
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     solver_options = " ".join(args.solver_option)
 

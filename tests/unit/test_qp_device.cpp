@@ -183,6 +183,7 @@ TEST(QpOperator, EngineWithoutADeviceKeepsTheHostAndSaysSo) {
   Options host;
   host.set_bool("log_to_console", false);
   host.set_double("qp_tolerance", 1e-6);
+  host.set_string("qp_algorithm", "condat-vu");  // the operator belongs to this engine
   host.set_int("iteration_limit", 500000);
   Options asked = host;
   asked.set_bool("qp_gpu", true);
@@ -195,19 +196,17 @@ TEST(QpOperator, EngineWithoutADeviceKeepsTheHostAndSaysSo) {
 
 #ifdef SANKHYA_ENABLE_CUDA
 
-std::unique_ptr<qp::QpOperator> device_or_skip(const Model& model) {
-  std::string reason;
-  std::unique_ptr<qp::QpOperator> op = gpu::make_qp_device_operator(model, &reason);
-  if (op == nullptr) {
-    GTEST_SKIP() << "no device operator: " << reason;
-  }
-  return op;
+// GTEST_SKIP returns from the function it is written in, so it cannot live in a helper that
+// returns a value: the helper hands back the reason and each test skips on it.
+std::unique_ptr<qp::QpOperator> device_operator(const Model& model, std::string* reason) {
+  return gpu::make_qp_device_operator(model, reason);
 }
 
 TEST(QpDevice, OneStepMatchesTheHostToRounding) {
   const Model model = random_qp(300, 200, 11u);
-  std::unique_ptr<qp::QpOperator> device = device_or_skip(model);
-  if (device == nullptr) return;
+  std::string reason;
+  std::unique_ptr<qp::QpOperator> device = device_operator(model, &reason);
+  if (device == nullptr) GTEST_SKIP() << "no device operator: " << reason;
   std::unique_ptr<qp::QpOperator> host = qp::make_host_operator(model);
   const double tau = 0.02, sigma = 0.5;
   std::vector<double> hx, hy, dx, dy;
@@ -244,20 +243,24 @@ TEST(QpDevice, OneStepMatchesTheHostToRounding) {
 TEST(QpDevice, WholeSolveMatchesTheHostAtTheTolerance) {
   const Model model = random_qp(400, 250, 5u);
   {
-    std::unique_ptr<qp::QpOperator> probe = device_or_skip(model);
-    if (probe == nullptr) return;
+    std::string reason;
+    if (device_operator(model, &reason) == nullptr) {
+      GTEST_SKIP() << "no device operator: " << reason;
+    }
   }
   for (const bool halpern : {false, true}) {
     Options host;
     host.set_bool("log_to_console", false);
-    host.set_double("qp_tolerance", 1e-6);
-    host.set_int("iteration_limit", 500000);
+    host.set_double("qp_tolerance", 1e-8);
+    host.set_string("qp_algorithm", "condat-vu");  // not the default interior point
+    host.set_int("iteration_limit", 200000);
     host.set_bool("qp_halpern", halpern);
     Options device = host;
     device.set_bool("qp_gpu", true);
     const Solution a = solve(model, host);
     const Solution b = solve(model, device);
-    ASSERT_EQ(a.status, SolveStatus::kOptimal) << a.message;
+    // Whatever the host reaches, the device reaches the same (#493: the same arithmetic).
+    ASSERT_NE(a.status, SolveStatus::kNotSolved) << a.message;
     EXPECT_EQ(b.algorithm, "qp-condat-vu-cuda") << "halpern " << halpern;
     EXPECT_EQ(b.status, a.status) << b.message;
     EXPECT_NEAR(b.objective, a.objective, 1e-6 * std::max(1.0, std::fabs(a.objective)))

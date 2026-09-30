@@ -474,6 +474,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_pooling.py
 
+      - name: The million-row runner, its transport generator and doc section (#751)
+        # The generator's integer KKT construction and determinism, the attribution rule and
+        # the section's rendering; with the binary, a 1,100-row transport model through the
+        # runner's own solve-and-verify path on both arms.
+        if: matrix.name == 'Release'
+        run: SANKHYA_BINARY=build/sankhya python3 bench/runners/test_million.py
+
       - name: MIPLIB seeds, primal integral and the tier-2 rule (#504)
         # Pure Python, no network, no solver: the MPS permutation leaves the model unchanged
         # (read back by the independent verifier's reader), the shifted geometric mean, the

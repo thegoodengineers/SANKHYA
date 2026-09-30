@@ -387,7 +387,7 @@ TEST(MultiGpu, AnAbsentDeviceIdFallsBackToOneCard) {
   Logger silent(nullptr);
   // Device 99 does not exist on any box this runs on; and `0,<count>` is exactly the
   // "0,1 on a one-card machine" case when count is 1.
-  for (const std::vector<int> ids :
+  for (const std::vector<int>& ids :
        {std::vector<int>{0, 99}, std::vector<int>{0, gpu::device_count()}}) {
     const Solution s = gpu::solve_pdhg_multi_gpu(model, opts, ids, silent);
     EXPECT_EQ(s.algorithm, "pdhg-cuda")

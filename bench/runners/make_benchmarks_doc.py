@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kkt_crossings  # the relative-KKT crossing tables (#486)
 import latest_result
 import maros_meszaros_doc  # the QP section (#491), kept in its own file
+import million_doc  # 1f.5, a million rows (#751), kept in its own file
 import nlp_doc  # the nonlinear section (NLP stages 2-3), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
@@ -2603,11 +2604,13 @@ def commercial_agreement_section(path: Path | None) -> str:
             "No commercial-agreement run has been committed yet. Reproduce with:",
             "",
             "```bash",
-            "# install one or more of: gurobi_cl (Gurobi), cplex (CPLEX Community), glpsol (GLPK)",
-            "python bench/runners/commercial_agreement.py --suite netlib --time-limit 60",
+            "python -m venv editions && editions/bin/pip install cplex   # CPLEX Community",
+            "python bench/runners/commercial_agreement.py --python editions/bin/python",
             "```",
             "",
-            "Licence terms for each edition are checked in `docs/PROVENANCE.md` before any run.",
+            "Licence terms for each edition are in `docs/PROVENANCE.md`, judgement call 16: "
+            "the pip editions of Gurobi and Xpress forbid publishing benchmark results, so "
+            "only CPLEX Community is run by default.",
             "",
         ])
     rows = read_csv(path)
@@ -2704,6 +2707,7 @@ def main() -> int:
     per_iteration_csv = newest("scale-iterations-*.csv")
     staircase_csv = newest("scale-staircase-*.csv")
     refinery_csv = newest("scale-refinery-*.csv")
+    million_csv = newest("million-cpu-*.csv")
     # The same families under the default engine selection (#284, #357): one CSV per shape,
     # named auto-scale-<shape>-<commit>.csv so the patterns above never pick them up as a
     # family's evidence - they measure the SELECTOR, not an engine.
@@ -2962,6 +2966,10 @@ most have a few hundred, so none of them speaks to the size PS26119 asks about.
 #### 1f.4 The same families under `algorithm=auto`
 
 {auto_scale_section(auto_scale_csvs)}
+
+#### 1f.5 A million rows on the CPU
+
+{million_doc.million_section(million_csv)}
 ---
 
 ## 2. MIPLIB — the mixed-integer side

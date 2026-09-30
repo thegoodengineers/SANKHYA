@@ -1073,6 +1073,11 @@ Commit `e134aeb` · machine `Windows-AMD64` · 120.0s per solve · refinery stru
 | 779640 x 1208880 | `pdhg-cpu` | time_limit | 1.0e-08 | 1510 | 106.6 |
 
 **10 of 11** solves under `auto` reached the analytic optimum to a relative 1e-06 (commit 078cb24). The engine column is what ran, which after a decline is the fallback: `pdhg-cpu` on a row that the rule table sent to the interior point means the set-up passed `ipm_setup_share` of the limit and the first-order method took the rest (#357).
+
+#### 1f.5 A million rows on the CPU
+
+_No `million-cpu-*.csv` in `bench/results/`. Produce one with_ `python bench/runners/million.py --binary build/sankhya --keep DIR`.
+
 ---
 
 ## 2. MIPLIB — the mixed-integer side
@@ -1797,11 +1802,11 @@ one that does not, regardless of how it compares on a wall clock.
 No commercial-agreement run has been committed yet. Reproduce with:
 
 ```bash
-# install one or more of: gurobi_cl (Gurobi), cplex (CPLEX Community), glpsol (GLPK)
-python bench/runners/commercial_agreement.py --suite netlib --time-limit 60
+python -m venv editions && editions/bin/pip install cplex   # CPLEX Community
+python bench/runners/commercial_agreement.py --python editions/bin/python
 ```
 
-Licence terms for each edition are checked in `docs/PROVENANCE.md` before any run.
+Licence terms for each edition are in `docs/PROVENANCE.md`, judgement call 16: the pip editions of Gurobi and Xpress forbid publishing benchmark results, so only CPLEX Community is run by default.
 
 ---
 
