@@ -242,7 +242,31 @@ def _end_to_end(check) -> None:
         _solve_and_verify(check, binary, REPO / "demo" / "crude_blend.mps", "crude blend", tmp)
 
 
+def _exact_repair_farkas(check) -> None:
+    """x + y = 1 with x <= 0.5 and y <= 0.25: infeasible, and w = 1 on the row proves it (the
+    combined row x + y - s has greatest value 0.5 + 0.25 - 1 < 0). w = 0 proves nothing, and
+    a row the model does not have is refused."""
+    import verify_solution_exact_farkas as farkas
+    model = vs.Model()
+    for name in ("x", "y"):
+        model.add_column(name, False)
+    model.col_cost = [0.0, 0.0]
+    model.col_upper = [0.5, 0.25]
+    model.row_names = ["r"]
+    model.row_index = {"r": 0}
+    model.row_lower = [1.0]
+    model.row_upper = [1.0]
+    model.entries = [[(0, 1.0)], [(0, 1.0)]]
+    proved, detail = farkas.farkas_proves_infeasible(model, {"r": "1/1"})
+    check(proved, "exact repair Farkas row: a valid proof is accepted", detail)
+    proved, detail = farkas.farkas_proves_infeasible(model, {"r": "0/1"})
+    check(not proved, "exact repair Farkas row: a zero multiplier proves nothing", detail)
+    proved, detail = farkas.farkas_proves_infeasible(model, {"nope": "1/1"})
+    check(not proved, "exact repair Farkas row: a multiplier on no row is refused", detail)
+
+
 def run(check) -> None:
+    _exact_repair_farkas(check)
     _lu_matches_its_definition(check)
     _shadow_price_interval_at_a_degenerate_optimum(check)
     _a_non_optimal_basis_is_declined(check)

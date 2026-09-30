@@ -155,6 +155,14 @@ class Repair {
             "row does not prove infeasibility",
             leaving)};
       }
+      // The multipliers themselves, e_p^T B^{-1} by row, go to the .sol so that
+      // tools/verify_solution.py can re-derive the proof with its own arithmetic.
+      std::vector<Rational> w;
+      (void)basis_.tableau_row(problem_, p, &w);
+      for (Sz i = 0; i < w.size(); ++i) {
+        if (!w[i].is_zero())
+          result_.farkas_row.emplace_back(static_cast<Index>(i), w[i].to_string());
+      }
       throw Failed{fmt::format(
           "the model as read into doubles is exactly infeasible: the tableau row of variable "
           "{} cannot reach 0 over the bounds (a Farkas proof, checked)",
@@ -350,6 +358,7 @@ bool apply_exact_repair(const Model& model, Solution* solution, Logger& logger,
   solution->exact_repair_message = repair.message;
   solution->exact_repair_pivots = repair.dual_pivots + repair.primal_pivots;
   solution->exact_repair_flips = repair.bound_flips;
+  solution->exact_repair_farkas = std::move(repair.farkas_row);
   if (repair.verdict != ExactVerdict::kVerified) {
     if (repair.verdict == ExactVerdict::kFailed) {
       logger.warning("Exact repair FAILED: {}", repair.message);

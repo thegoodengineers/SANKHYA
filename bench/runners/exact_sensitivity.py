@@ -13,6 +13,8 @@ solver's own certification said (computed, or declined past its exact_seconds bu
 whether the exact repair (#757, option exact_repair) had to move the basis first: the
 exact_repair column is `optimal` when the reported basis is exactly optimal, with the exact
 pivots and bound flips it took from the engine's basis (0 and 0 when none were needed).
+When the repair finds the model as read into doubles infeasible, farkas_verified says
+whether tools/verify_solution_exact_farkas.py re-derives that proof from the Farkas row.
 
 The exact derivation has a time budget per instance; an instance past it is a row that says
 so, not a dropped row. The solver's own exact modules get --exact-seconds each (option
@@ -41,6 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import stamp  # noqa: E402
 from compare_suite import machine_tag  # noqa: E402
 import verify_solution_sensitivity as sens  # noqa: E402
+from verify_solution_exact_farkas import farkas_proves_infeasible  # noqa: E402
 from verify_solution_mps import parse_mps  # noqa: E402
 from verify_solution_sol import parse_sol  # noqa: E402
 
@@ -50,7 +53,8 @@ DEMO_LPS = ["crude_blend.mps", "crude_blend_infeasible.mps"]
 COLUMNS = [
     "instance", "instance_sha256", "rows", "columns", "status", "our_objective",
     "published_objective", "absolute_gap", "relative_gap", "exact_repair",
-    "exact_repair_pivots", "exact_repair_flips", "exact_verification", "solver_certification",
+    "exact_repair_pivots", "exact_repair_flips", "farkas_verified", "exact_verification",
+    "solver_certification",
     "exact_derivation", "values_compared", "values_disagreeing", "max_relative_disagreement",
     "worst_value", "rows_with_two_sided_shadow_price", "derive_seconds", "wall_seconds",
     "iterations", "exact_seconds", "git_commit", "machine", "timestamp_utc",
@@ -146,6 +150,11 @@ def main() -> int:
             row["exact_verification"] = solution.header.get("exact_verification", "")
             for key in ("exact_repair", "exact_repair_pivots", "exact_repair_flips"):
                 row[key] = solution.header.get(key, "")
+            if solution.exact_repair_farkas:
+                # The repair says the model as read is infeasible; the verifier re-derives it.
+                row["farkas_verified"] = (
+                    "yes" if farkas_proves_infeasible(model, solution.exact_repair_farkas)[0]
+                    else "no")
             if ref is not None and ours is not None:
                 row["published_objective"] = repr(ref)
                 row["absolute_gap"] = repr(abs(ours - ref))

@@ -177,6 +177,10 @@ TEST(ExactRepair, AnInfeasibleModelFailsInsteadOfBeingRepaired) {
   const RepairResult repair = repair_basis_exact(model, solution);
   EXPECT_EQ(repair.verdict, ExactVerdict::kFailed) << repair.message;
   EXPECT_FALSE(repair.changed());
+  // The proof: one multiplier on r. Its combined row x + y - s = 0 has, over x <= 1 - 2^-40,
+  // y <= 0 and s = 1, the greatest value -2^-40 < 0.
+  ASSERT_EQ(repair.farkas_row.size(), 1U);
+  EXPECT_EQ(repair.farkas_row[0].first, 0);
 }
 
 TEST(ExactRepair, NoBasisAtAllIsDeclinedNotFailed) {
