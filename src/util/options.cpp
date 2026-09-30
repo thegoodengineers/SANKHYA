@@ -1493,8 +1493,9 @@ const std::vector<OptionSpec>& Options::registry() {
          "primal and dual feasible, which for a nondegenerate basis is exact optimality. "
          "Checks the ONE basis double precision already found rather than searching for a "
          "better one, so a basis double precision got structurally wrong is reported FAILED, "
-         "not repaired. A basis with more rows than the exact module's dense-elimination cap "
-         "(300) is reported DECLINED, never guessed at. The arithmetic is arbitrary precision "
+         "not repaired. The basis is factorised by a sparse exact LU in the float LU's pivot "
+         "order (src/exact/exact_lu.hpp); one that does not finish within exact_seconds is "
+         "reported DECLINED, never guessed at. The arithmetic is arbitrary precision "
          "(src/exact/bigint.hpp, #757), so no value is too large. With ranging=true as well, "
          "the duals, reduced costs and both ranges are re-derived exactly and each marked "
          "certified or corrected, and every row gets its shadow price interval (left and "
@@ -1505,18 +1506,19 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
-    s.push_back({"exact_seconds",
-                 OptionType::Double,
-                 30.0,
-                 "Wall-clock budget, in seconds, for each of the exact modules option exact "
-                 "runs after the solve (the basis check and, with ranging, the certified "
-                 "sensitivity; #757). Their dense exact elimination grows as m^3 on numbers "
-                 "that lengthen as it goes, so past the budget the verdict is DECLINED rather "
-                 "than a solve that never returns. The solve's own time_limit does not cover "
-                 "them.",
-                 0.0,
-                 kNoLimit,
-                 {}});
+    s.push_back(
+        {"exact_seconds",
+         OptionType::Double,
+         30.0,
+         "Wall-clock budget, in seconds, for each of the exact modules option exact "
+         "runs after the solve (the basis check and, with ranging, the certified "
+         "sensitivity; #757). Exact factors grow with fill and with numbers that "
+         "lengthen as elimination goes, so past the budget the verdict is DECLINED "
+         "rather than a solve that never returns. The solve's own time_limit does not cover "
+         "them.",
+         0.0,
+         kNoLimit,
+         {}});
     s.push_back({"engine_race",
                  OptionType::Bool,
                  false,

@@ -11,8 +11,9 @@
 // arbitrary precision (bigint.hpp), so nothing overflows.
 //
 // SCOPE, STATED ONCE. Plain LP only (a quadratic objective or an integer column declines
-// outright - see verify_basis_exact). A dense m x m elimination, so a row-count cap keeps
-// this from being attempted on a model where it would be correct but impractically slow.
+// outright - see verify_basis_exact). The basis is factorised by the sparse exact LU
+// (exact_lu.hpp) in the float LU's pivot order; the dense elimination it replaced was capped
+// at 300 rows, and the only limit now is the time budget (option exact_seconds).
 // Every model coefficient is converted from the double the reader already produced via
 // Rational::from_double - bit-exact to that double, not to whatever decimal a human wrote in
 // the MPS file, which is the precision this feature can actually promise given the model
@@ -20,11 +21,11 @@
 
 #include "exact/exact_verify.hpp"
 
-#include <optional>
 #include <vector>
 
 #include <fmt/format.h>
 
+#include "exact/exact_lu.hpp"
 #include "exact/rational.hpp"
 #include "sankhya/types.hpp"
 
@@ -33,62 +34,8 @@ namespace {
 
 using Sz = std::size_t;
 
-/// A row cap for the dense O(m^3) elimination below. Chosen so a verification attempt stays
-/// on the order of seconds rather than minutes: 300^3 is 27 million Rational multiply-adds,
-/// each a few arbitrary-precision operations. Declining above this is an honest capacity limit,
-/// not a correctness one - nothing above this size is silently wrong, it is simply not
-/// attempted.
-constexpr Index kMaxRowsForExactVerification = 300;
-
 std::string to_fraction_string(const Rational& value) {
   return value.to_string();
-}
-
-/// Solve `matrix * x = rhs` exactly, `matrix` given as m row-vectors of m entries (a dense
-/// square matrix, mutated in place as the elimination workspace). Partial pivoting picks any
-/// nonzero entry in the working column - correctness in exact arithmetic does not depend on
-/// magnitude, only need-not-be-zero - preferring the first one found, which is the cheapest
-/// to locate. Returns std::nullopt when every candidate pivot in some column is exactly
-/// zero: the matrix is exactly singular, which for a basis matrix means the reported basis
-/// is not actually a basis in exact arithmetic.
-std::optional<std::vector<Rational>> solve_dense_exact(
-    std::vector<std::vector<Rational>> matrix, std::vector<Rational> rhs,
-    const Deadline& deadline) {
-  const Sz m = rhs.size();
-  std::vector<Sz> row_of(m);
-  for (Sz i = 0; i < m; ++i) row_of[i] = i;
-
-  for (Sz col = 0; col < m; ++col) {
-    deadline.check();
-    Sz pivot_row = m;
-    for (Sz r = col; r < m; ++r) {
-      if (!matrix[row_of[r]][col].is_zero()) {
-        pivot_row = r;
-        break;
-      }
-    }
-    if (pivot_row == m) return std::nullopt;  // exactly singular
-    std::swap(row_of[col], row_of[pivot_row]);
-
-    const Sz pivot = row_of[col];
-    const Rational pivot_value = matrix[pivot][col];
-    for (Sz r = col + 1; r < m; ++r) {
-      const Sz row = row_of[r];
-      if (matrix[row][col].is_zero()) continue;
-      const Rational factor = matrix[row][col] / pivot_value;
-      for (Sz c = col; c < m; ++c) matrix[row][c] = matrix[row][c] - factor * matrix[pivot][c];
-      rhs[row] = rhs[row] - factor * rhs[pivot];
-    }
-  }
-
-  std::vector<Rational> x(m);
-  for (Sz i = m; i-- > 0;) {
-    const Sz row = row_of[i];
-    Rational sum = rhs[row];
-    for (Sz c = i + 1; c < m; ++c) sum = sum - matrix[row][c] * x[c];
-    x[i] = sum / matrix[row][i];
-  }
-  return x;
 }
 
 /// The exact value a nonbasic column or row-slack holds at its reported bound. kFixed uses
@@ -158,12 +105,6 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution, dou
   if (static_cast<Index>(solution.col_status.size()) != n ||
       static_cast<Index>(solution.row_status.size()) != m) {
     result.message = "the engine produced no basis (the interior point and PDHG do not)";
-    return result;
-  }
-  if (m > kMaxRowsForExactVerification) {
-    result.message = fmt::format(
-        "{} rows exceeds the {}-row cap for a dense exact elimination in reasonable time", m,
-        kMaxRowsForExactVerification);
     return result;
   }
 
@@ -250,11 +191,9 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution, dou
       col_cost_min_sense[sj] = Rational::from_double(sense * model.col_cost[sj]);
     }
 
-    // --- Basis matrix B (dense, m x m: row i, column p) and its transpose (built directly,
-    // not derived, so a bug in one cannot hide in the other's transpose). ---
-    std::vector<std::vector<Rational>> basis(sm, std::vector<Rational>(sm, Rational(0)));
-    std::vector<std::vector<Rational>> basis_transpose(sm,
-                                                       std::vector<Rational>(sm, Rational(0)));
+    // --- Basis matrix B, column by basis position, factorised once by the sparse exact LU
+    // (exact_lu.hpp) and used for both B x = b and B^T y = c. ---
+    std::vector<RationalColumn> basis_columns(sm);
     std::vector<Rational> basic_cost_min_sense(sm);
     for (Index p = 0; p < m; ++p) {
       const Sz sp = static_cast<Sz>(p);
@@ -263,17 +202,20 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution, dou
         basic_cost_min_sense[sp] = col_cost_min_sense[static_cast<Sz>(col)];
         const ColumnView view = model.matrix.column(col);
         for (Index k = 0; k < view.size; ++k) {
-          const Sz row = static_cast<Sz>(view.rows[k]);
-          const Rational value = Rational::from_double(view.values[k]);
-          basis[row][sp] = value;
-          basis_transpose[sp][row] = value;
+          basis_columns[sp].emplace_back(view.rows[k], Rational::from_double(view.values[k]));
         }
       } else {
-        const Sz row = static_cast<Sz>(col - n);
         basic_cost_min_sense[sp] = Rational(0);  // a row's own slack is never costed
-        basis[row][sp] = Rational(-1);
-        basis_transpose[sp][row] = Rational(-1);
+        basis_columns[sp].emplace_back(col - n, Rational(-1));
       }
+    }
+    std::vector<const RationalColumn*> column_pointers;
+    for (const RationalColumn& column : basis_columns) column_pointers.push_back(&column);
+    ExactLu lu;
+    if (!lu.factorize(column_pointers, m, deadline)) {
+      result.verdict = ExactVerdict::kFailed;
+      result.message = "the reported basis is exactly singular - it is not a basis at all";
+      return result;
     }
 
     // --- Primal RHS: B x_B = -(sum over nonbasic columns of their exact column * their
@@ -300,12 +242,8 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution, dou
       rhs[si] = rhs[si] + value;
     }
 
-    const auto x_basic = solve_dense_exact(basis, rhs, deadline);
-    if (!x_basic.has_value()) {
-      result.verdict = ExactVerdict::kFailed;
-      result.message = "the reported basis is exactly singular - it is not a basis at all";
-      return result;
-    }
+    std::vector<Rational> x_basic = std::move(rhs);
+    lu.solve(x_basic);
 
     // --- Exact primal feasibility: every basic value inside its bounds, no tolerance. ---
     for (Index p = 0; p < m; ++p) {
@@ -315,7 +253,7 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution, dou
                                    : model.row_lower[static_cast<Sz>(col - n)];
       const double upper = col < n ? model.col_upper[static_cast<Sz>(col)]
                                    : model.row_upper[static_cast<Sz>(col - n)];
-      const Rational& value = (*x_basic)[sp];
+      const Rational& value = x_basic[sp];
       if (lower > -kInfinity && value < Rational::from_double(lower)) {
         result.verdict = ExactVerdict::kFailed;
         result.message = fmt::format(
@@ -333,12 +271,8 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution, dou
     }
 
     // --- Exact dual: B^T y = c_B (minimize sense). ---
-    const auto y = solve_dense_exact(basis_transpose, basic_cost_min_sense, deadline);
-    if (!y.has_value()) {
-      result.verdict = ExactVerdict::kFailed;
-      result.message = "the reported basis's transpose is exactly singular";
-      return result;
-    }
+    std::vector<Rational> y = std::move(basic_cost_min_sense);
+    lu.solve_transpose(y);
 
     // --- Exact dual feasibility: every nonbasic reduced cost has the sign optimality
     // requires (minimize sense), exactly - kNonbasicFree needs exactly zero. ---
@@ -348,8 +282,8 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution, dou
       Rational reduced_cost = col_cost_min_sense[sj];
       const ColumnView view = model.matrix.column(j);
       for (Index k = 0; k < view.size; ++k) {
-        reduced_cost = reduced_cost - (*y)[static_cast<Sz>(view.rows[k])] *
-                                          Rational::from_double(view.values[k]);
+        reduced_cost = reduced_cost -
+                       y[static_cast<Sz>(view.rows[k])] * Rational::from_double(view.values[k]);
       }
       const BasisStatus status = col_status[sj];
       const bool ok = status == BasisStatus::kFixed ||
@@ -366,7 +300,7 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution, dou
     for (Index i = 0; i < m; ++i) {
       const Sz si = static_cast<Sz>(i);
       if (pos_of[static_cast<Sz>(n + i)] != -1) continue;  // basic
-      const Rational reduced_cost = (*y)[si];  // logical column is -e_i, cost 0: 0-y*(-1)=y
+      const Rational reduced_cost = y[si];  // logical column is -e_i, cost 0: 0-y*(-1)=y
       const BasisStatus status = row_status[si];
       const bool ok = status == BasisStatus::kFixed ||
                       (status == BasisStatus::kAtLower && reduced_cost.sign() >= 0) ||
@@ -389,7 +323,7 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution, dou
       const Sz sj = static_cast<Sz>(j);
       col_value_exact[sj] =
           pos_of[sj] != -1
-              ? (*x_basic)[static_cast<Sz>(pos_of[sj])]
+              ? x_basic[static_cast<Sz>(pos_of[sj])]
               : nonbasic_value(col_status[sj], model.col_lower[sj], model.col_upper[sj]);
       objective = objective + col_cost[sj] * col_value_exact[sj];
     }
