@@ -84,8 +84,10 @@ def million_section(path: Path | None) -> str:
             "Every arm that did not finish, and the numbers that say why. `attribution` is "
             "read off the row by `bench/runners/million.py`: `iterations` when the method "
             "ran to the limit still converging, `fill` when the factor's size stopped it, "
-            "`polish` when PDHG's point was not finished by the interior point, `memory` "
-            "when the process was killed or its peak neared the machine's RAM.",
+            "`polish` when PDHG's point was not finished by the interior point, `stall` "
+            "when the interior point's step collapsed short of its optimality test, "
+            "`crossover` when the pivots from that point ran out of time, `memory` when "
+            "the process was killed or its peak neared the machine's RAM.",
             "",
             "| model | arm | attribution | status | iterations | primal inf | dual inf "
             "| peak memory | solver message |",
