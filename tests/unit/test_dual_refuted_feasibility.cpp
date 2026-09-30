@@ -11,9 +11,9 @@
 // time limit, where the unscaled retry then finished in 22. The loop now hands such a basis
 // to the primal loop after kRefutedFeasibilityLimit refuted claims (dual_simplex.cpp).
 
-#include <iostream>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -30,8 +30,7 @@ namespace sankhya {
 namespace {
 
 std::string fixture(const std::string& name) {
-  return (std::filesystem::path(__FILE__).parent_path().parent_path() / "data" / name)
-      .string();
+  return (std::filesystem::path(__FILE__).parent_path().parent_path() / "data" / name).string();
 }
 
 TEST(DualRefutedFeasibility, TheNeteNodeLpFinishesWithoutCycling) {
