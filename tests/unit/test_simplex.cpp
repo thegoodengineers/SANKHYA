@@ -1066,5 +1066,25 @@ TEST(PrimalSimplex, EntersAReducedCostInsideTheToleranceWhenThePivotStillPays) {
   EXPECT_NEAR(solved.objective, -0.05, 1e-12);
   EXPECT_NEAR(solved.col_value[0], 1e6, 1e-6);
 }
+
+// The same case twice over, in two rows, so the cleanup takes a second pivot while the first
+// is still in the eta file: that one is found on the updated factors rather than after a
+// refactorization, and the optimum is still the one the claim is made on fresh factors for.
+TEST(PrimalSimplex, TheCleanupsSecondPivotIsTakenOnTheUpdatedFactors) {
+  const Model model =
+      make_model(ObjSense::kMinimize, {-5e-8, -5e-8, 1.0, 1.0}, {0.0, 0.0, 0.0, 0.0},
+                 {kInf, kInf, kInf, kInf}, {{1.0, 0.0, 1.0, 0.0}, {0.0, 1.0, 0.0, 1.0}},
+                 {-kInf, -kInf}, {1e6, 1e6});
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_bool("presolve", false);
+  options.set_bool("scaling", false);
+  options.set_string("algorithm", "simplex");
+  const Solution solved = solve(model, options);
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+  EXPECT_NEAR(solved.objective, -0.1, 1e-12);
+  EXPECT_NEAR(solved.col_value[0], 1e6, 1e-6);
+  EXPECT_NEAR(solved.col_value[1], 1e6, 1e-6);
+}
 }  // namespace
 }  // namespace sankhya
