@@ -35,6 +35,7 @@ from verify_solution_io import INF
 from verify_solution_mps import Model, parse_mps
 from verify_solution_safe_bound import verify_safe_bound
 from verify_solution_sol import Solution, parse_sol
+from verify_solution_exact_farkas import check_exact_repair_farkas
 from verify_solution_sensitivity import check_certified as check_certified_sensitivity
 
 # Defaults mirror include/sankhya/tolerances.hpp. They are CLI-overridable because a judge
@@ -661,6 +662,9 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
 
     # ---- Certified sensitivity (#757): re-derived from the basis in exact arithmetic ----
     check_certified_sensitivity(model, solution, report)
+
+    # ---- Exact repair (#757): a claim that the model as read is infeasible, re-derived ----
+    check_exact_repair_farkas(model, solution, report)
 
     return report
 

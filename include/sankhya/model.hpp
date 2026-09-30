@@ -30,6 +30,7 @@
 
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "sankhya/options.hpp"
@@ -338,6 +339,11 @@ class Solution {
   std::string exact_repair_message;  ///< why declined or failed
   int exact_repair_pivots = 0;
   int exact_repair_flips = 0;
+  /// When the repair finds the model exactly infeasible as read (kFailed): the Farkas
+  /// multipliers w on the rows, (row, "numerator/denominator"), nonzeros only. The rows force
+  /// w^T [A | -I] (x, activity) = 0, and over the bounds of every column and row activity that
+  /// sum cannot reach 0. The .sol writes them; tools/verify_solution.py re-derives the proof.
+  std::vector<std::pair<Index, std::string>> exact_repair_farkas;
 
   // ---- Sensitivity ranging (populated only when options.get_bool("ranging") is true) ----
   //

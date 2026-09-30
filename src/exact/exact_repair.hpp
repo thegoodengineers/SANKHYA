@@ -35,6 +35,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "exact/exact_verify.hpp"
@@ -58,6 +59,10 @@ struct RepairResult {
   /// in the model's sense. Filled only on kVerified.
   std::vector<BasisStatus> col_status, row_status;
   std::vector<double> col_value, col_dual, row_dual;
+  /// On kFailed for exact infeasibility: the Farkas multipliers w, one per row with a nonzero
+  /// value, as (row, "numerator/denominator"). w^T [A | -I] z = 0 for every z the rows allow,
+  /// and its range over the variables' bounds excludes 0.
+  std::vector<std::pair<Index, std::string>> farkas_row;
 };
 
 /// `solution` must be an optimal plain LP with a basis. Declines otherwise.

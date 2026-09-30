@@ -33,6 +33,7 @@ class Solution:
         # Certified sensitivity (#757): name -> [verdict, exact values as text].
         self.exact_sensitivity_columns: dict[str, list[str]] = {}
         self.exact_sensitivity_rows: dict[str, list[str]] = {}
+        self.exact_repair_farkas: dict[str, str] = {}
         self.iis: list[tuple[str, str]] = []
         # One witness per IIS element: (kind, name, {column name: value}).
         self.iis_witnesses: list[tuple[str, str, dict[str, float]]] = []
@@ -159,6 +160,8 @@ def parse_sol(path: Path) -> Solution:
                 solution.exact_sensitivity_columns[fields[0]] = fields[1:5]
             elif block == "exact_sensitivity_rows" and len(fields) >= 7:
                 solution.exact_sensitivity_rows[fields[0]] = fields[1:7]
+            elif block == "exact_repair_farkas" and len(fields) >= 2:
+                solution.exact_repair_farkas[fields[0]] = fields[1]
             elif not block and len(fields) >= 2:
                 solution.header[fields[0]] = " ".join(fields[1:])
     return solution

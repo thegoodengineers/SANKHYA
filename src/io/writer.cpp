@@ -114,6 +114,22 @@ namespace {
 
 /// Certified sensitivity (#757): every exact value is `numerator/denominator` or +-inf.
 /// tools/verify_solution.py re-derives each one from the basis and rejects any mismatch.
+/// The exact repair's proof that the model as read into doubles is infeasible (#757).
+void write_exact_repair_farkas(std::FILE* out, const Model& model, const Solution& solution) {
+  if (solution.exact_repair_farkas.empty()) return;
+  fmt::print(out,
+             "\n# Exact repair (#757): the model as read into doubles is exactly infeasible.\n"
+             "# Multipliers w on the rows (numerator/denominator): the rows force\n"
+             "# w^T (A x - activity) = 0, and over the bounds of every column and row\n"
+             "# activity that sum cannot reach 0.\n"
+             "# row multiplier\n");
+  fmt::print(out, "begin exact_repair_farkas {}\n", solution.exact_repair_farkas.size());
+  for (const auto& [row, value] : solution.exact_repair_farkas) {
+    fmt::print(out, "{} {}\n", quoted_name(row_name(model, row)), value);
+  }
+  fmt::print(out, "end exact_repair_farkas\n");
+}
+
 void write_exact_sensitivity(std::FILE* out, const Model& model, const Solution& solution) {
   const auto n = static_cast<std::size_t>(model.num_cols());
   const auto m = static_cast<std::size_t>(model.num_rows());
@@ -475,6 +491,7 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
     fmt::print(out, "end ranging_rows\n");
   }
   write_exact_sensitivity(out, model, solution);
+  write_exact_repair_farkas(out, model, solution);
 
   // The ray, read together with the point above: x + t*d stays feasible for every
   // t >= 0 and the objective improves without limit along it (#191).
