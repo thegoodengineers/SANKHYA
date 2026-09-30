@@ -39,6 +39,7 @@ import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own 
 import gpu_ab_doc  # 1g.8 and 1g.9, the device A/Bs of #508 and #478
 import gpu_doc  # 1g.1 and 1g.3 (#488)
 import gpu_plot  # the speedup-against-nonzeros figure of 1g.3 (#488)
+import head_to_head_doc  # section 4a, the five-solver head-to-head (#766)
 from gpu_doc import gpu_datacenter_table, gpu_real_section, ipm_cudss_section, multi_gpu_section
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -2696,6 +2697,11 @@ def main() -> int:
     compare_small_csv = newest("compare-highs-small-*.csv")
     compare_medium_csv = newest("compare-highs-medium-*.csv")
     compare_csv = compare_medium_csv or compare_small_csv or newest("compare-highs-*.csv")
+    # The head-to-head (#766): only a run of all five solvers over the whole suite is named
+    # head-to-head-<suite>-<sha>.csv; a subset is -partial- and the prefix keeps it out.
+    head_to_head_csvs = {suite: newest(f"head-to-head-{suite}-*.csv",
+                                       prefix=f"head-to-head-{suite}")
+                         for suite in ("netlib", "kennington", "maros-meszaros")}
     robustness_csv = newest("robustness-*.csv")
     # The default run only; the per-engine runs carry `algorithm=` in solver_options, which
     # latest() skips and newest_option_run() picks (#529).
@@ -3085,6 +3091,36 @@ nothing: the instances we fail are exactly the ones a reader should want to see 
 mature solver.
 
 {comparison_section(compare_csv)}
+---
+
+## 4a. Head-to-head: HiGHS, SCIP, CBC/Clp and GLPK (#766)
+
+**The instance counts first, because they differ between reports.** netlib.org's `lp/data`
+ships **92** feasible LPs as EMPS files, and those 92 are the headline row below. Two more,
+`truss` and `stocfor3`, are shipped only as Fortran generators; they are generated and pinned
+by sha256 (#745) and reported in their own row. `qap8`, `qap12` and `qap15` are in the
+readme's table but not in `lp/data`. Published comparisons count differently: 93 or 94 when
+they add the generated or `qap` models, 114 when the sixteen Kennington LPs are folded in.
+Kennington is reported separately here (4a.2), and so is the 138-problem Maros-Meszaros set
+(4a.3).
+
+Every solver runs as a SEPARATE PROCESS on the same machine, with the same time limit and one
+thread: HiGHS through `highspy`, SCIP through `pyscipopt`, Clp (CBC's LP engine) and GLPK as
+the distribution's binaries. No rival code is linked into or read by SANKHYA; see judgement
+call 35 in `docs/PROVENANCE.md`. Every answer, a rival's included, is converted into the
+`.sol` layout and checked by `tools/verify_solution.py`: on primal and dual conditions where
+the solver gives usable duals, on primal feasibility and the objective only where it does not
+(SCIP; the `checked on` column says which). `solved` is the solver's own optimal status;
+`matched` is the objective recomputed at its point within a relative 1e-6 of the published
+optimum; `verified` is the verifier's acceptance. Only a run that is solved, verified and
+matched counts for the time - matched against the exact optimum where one is published, which
+for Netlib is Koch's (the readme is wrong on nine instances) - and any other is charged the
+full limit, and the shifted geometric mean uses a
+{head_to_head_doc.SHIFT_SECONDS:g}-second shift, Mittelmann's, not the 1 s of section 1.
+Times are each solver's own clock. Produced by `python bench/runners/compare.py --suite
+<suite>` (`bench/runners/compare_suite.py`, `bench/runners/rivals.py`).
+
+{head_to_head_doc.section(head_to_head_csvs, shifted_geometric_mean)}
 ---
 
 ## 4b. Agreement against size-limited commercial editions (#533)

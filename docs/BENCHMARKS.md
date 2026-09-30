@@ -1789,6 +1789,89 @@ The two are **within noise of each other** here, at 1.00x. A narrow claim: eight
 
 ---
 
+## 4a. Head-to-head: HiGHS, SCIP, CBC/Clp and GLPK (#766)
+
+**The instance counts first, because they differ between reports.** netlib.org's `lp/data`
+ships **92** feasible LPs as EMPS files, and those 92 are the headline row below. Two more,
+`truss` and `stocfor3`, are shipped only as Fortran generators; they are generated and pinned
+by sha256 (#745) and reported in their own row. `qap8`, `qap12` and `qap15` are in the
+readme's table but not in `lp/data`. Published comparisons count differently: 93 or 94 when
+they add the generated or `qap` models, 114 when the sixteen Kennington LPs are folded in.
+Kennington is reported separately here (4a.2), and so is the 138-problem Maros-Meszaros set
+(4a.3).
+
+Every solver runs as a SEPARATE PROCESS on the same machine, with the same time limit and one
+thread: HiGHS through `highspy`, SCIP through `pyscipopt`, Clp (CBC's LP engine) and GLPK as
+the distribution's binaries. No rival code is linked into or read by SANKHYA; see judgement
+call 35 in `docs/PROVENANCE.md`. Every answer, a rival's included, is converted into the
+`.sol` layout and checked by `tools/verify_solution.py`: on primal and dual conditions where
+the solver gives usable duals, on primal feasibility and the objective only where it does not
+(SCIP; the `checked on` column says which). `solved` is the solver's own optimal status;
+`matched` is the objective recomputed at its point within a relative 1e-6 of the published
+optimum; `verified` is the verifier's acceptance. Only a run that is solved, verified and
+matched counts for the time - matched against the exact optimum where one is published, which
+for Netlib is Koch's (the readme is wrong on nine instances) - and any other is charged the
+full limit, and the shifted geometric mean uses a
+10-second shift, Mittelmann's, not the 1 s of section 1.
+Times are each solver's own clock. Produced by `python bench/runners/compare.py --suite
+<suite>` (`bench/runners/compare_suite.py`, `bench/runners/rivals.py`).
+
+### 4a.1 Netlib LP
+
+Source CSV: `bench/results/head-to-head-netlib-fe8a61c.csv`  
+Commit `fe8a61c` · machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores; 16 GiB RAM; Linux-x86_64`  
+94 instances · time limit 120 s · 1 thread per solver · every solver a separate process
+
+**The 92 LPs netlib.org ships as EMPS files:**
+
+| solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
+|---|---|---:|---:|---:|---:|---:|---|---:|
+| SANKHYA | fe8a61c | 92 | 91 | 82 | 91 | 91 | primal+dual | 0.855 s |
+| HiGHS | 1.15.1 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.159 s |
+| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.387 s |
+| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.363 s |
+| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.481 s |
+
+**The two generated from netlib.org's Fortran bundles (#745), `truss` and `stocfor3`:**
+
+| solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
+|---|---|---:|---:|---:|---:|---:|---|---:|
+| SANKHYA | fe8a61c | 2 | 2 | 1 | 2 | 2 | primal+dual | 3.674 s |
+| HiGHS | 1.15.1 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.571 s |
+| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 2.051 s |
+| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.196 s |
+| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.918 s |
+
+`matched` grades against the readme's optimum and `matched exact` against Koch's exact rational optimum (`data/netlib/koch_exact.json`, #747); the timing counts the exact grade. Where the two differ the readme is the one that is wrong: on 80bau3b, ganges, greenbea, greenbeb, nesm, pilot, pilot.we, scrs8 and stocfor3 every solver here agrees with Koch.
+
+![Dolan-More performance profile, Netlib LP](img/profile-netlib.svg)
+
+*`docs/img/profile-netlib.svg`, drawn from the CSV by `bench/runners/perf_profile.py` each time this document is generated. A curve's height at tau is the fraction of the instances above on which that solver's run counted and took at most tau times the fastest counted run; times under 0.1 s are floored there (GLPK's clock resolution), so the fast end is a tie.*
+
+Every run that did not count, by solver:
+
+- **SANKHYA**, 1: `pilot.ja` (feasible)
+- **CBC/Clp**, 4: `pilot` (optimal, rejected by the verifier), `pilot.ja` (optimal, rejected by the verifier), `pilot.we` (optimal, rejected by the verifier), `pilotnov` (optimal, rejected by the verifier)
+- **GLPK**, 1: `dfl001` (optimal, rejected by the verifier)
+
+What the verifier rejected:
+
+- CBC/Clp on `pilot`: [FAIL] column bounds               worst violation 5.392e-07 (5.392e-07 relative) on UFO006
+- CBC/Clp on `pilot.ja`: [FAIL] column bounds               worst violation 1.538e-05 (1.538e-05 relative) on USLB06
+- CBC/Clp on `pilot.we`: [FAIL] column bounds               worst violation 1.000e-05 (1.000e-05 relative) on UOSE03
+- CBC/Clp on `pilotnov`: [FAIL] column bounds               worst violation 1.538e-05 (1.538e-05 relative) on USLB06
+- GLPK on `dfl001`: [FAIL] dual feasibility (columns)  worst 2.851e-07 (2.851e-07 relative) on C11729
+
+### 4a.2 Kennington LP
+
+No `head-to-head-kennington-*.csv` in `bench/results/`, so **no numbers are stated for this suite**. Run `python bench/runners/compare.py --suite kennington`.
+
+### 4a.3 Maros-Meszaros QP
+
+No `head-to-head-maros-meszaros-*.csv` in `bench/results/`, so **no numbers are stated for this suite**. Run `python bench/runners/compare.py --suite maros-meszaros`.
+
+---
+
 ## 4b. Agreement against size-limited commercial editions (#533)
 
 Gurobi Academic/Trial (≤2000 variables + constraints), CPLEX Community Edition (≤1000), and
