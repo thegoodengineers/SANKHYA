@@ -200,6 +200,7 @@ TEST(CutFilterPolicy, ASearchWithBothOnStillReachesTheExactOptimum) {
   // (#496) is off in both so the floor is what differs.
   Options on = every_root_family();
   on.set_int("cut_dense_max", 0);
+  on.set_int("cut_support_floor", 0);  // the density cap as the tree was measured (#496)
   Options off = on;
   off.set_int("cut_support_floor", 0);  // the fraction alone, the default before #496
   on.set_int("cut_support_floor", 100);
@@ -242,7 +243,9 @@ TEST(CutFilterPolicy, TheDenseAdmissionStillReachesTheExactOptimum) {
   // cut rows than the filter alone.
   Options off = every_root_family();
   off.set_int("cut_dense_max", 0);
+  off.set_int("cut_support_floor", 0);  // the density cap as the tree was measured (#496)
   Options on = every_root_family();
+  on.set_int("cut_support_floor", 0);  // on these small models the floor admits every cut
   const ExactComparison defaults = compare_with_exact(on, off, 20260927, 120);
   EXPECT_GE(defaults.solved, 80);
   EXPECT_GT(defaults.cuts_on, defaults.cuts_off) << "no dense cut was admitted";

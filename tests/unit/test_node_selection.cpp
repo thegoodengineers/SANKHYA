@@ -28,6 +28,7 @@ Options with_policy(const char* policy) {
   // The models here are a few columns, so every root cut is "dense" and the admission
   // (#496) would close them at the root; pinned off, since the tree is what is tested.
   options.set_int("cut_dense_max", 0);
+  options.set_int("cut_support_floor", 0);  // the density cap as the tree was measured (#496)
   options.set_int("node_limit", 200000);
   options.set_string("mip_node_selection", policy);
   return options;
