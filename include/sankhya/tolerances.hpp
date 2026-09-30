@@ -21,6 +21,13 @@ inline constexpr double kPrimalFeasibility = 1e-7;
 /// Max allowed violation of dual feasibility (sign conditions on reduced costs).
 inline constexpr double kDualFeasibility = 1e-7;
 
+/// The dual tolerance a simplex optimum is polished to (#548, src/simplex/reduced_cost_polish
+/// .cpp). A TIGHTENING, never a loosening: an LP optimum whose worst wrong-signed reduced cost
+/// is above this is restarted from its own basis with the primal simplex at this tolerance.
+/// pilot87 ended at 6.9e-8, inside kDualFeasibility and 1.14e-6 from Koch's exact optimum;
+/// at 1e-9 the same model ends on the exact optimum to 1e-12.
+inline constexpr double kReducedCostPolish = 1e-9;
+
 /// Max allowed distance from an integer before a value is called fractional.
 inline constexpr double kIntegrality = 1e-6;
 

@@ -865,8 +865,13 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         }
         return interior;
       }
-      return want_dual ? solve_dual_simplex(target, engine_options, logger, control)
-                       : solve_primal_simplex(target, engine_options, logger, control);
+      // A simplex optimum is polished to tol::kReducedCostPolish on the time that is left
+      // (#548: pilot87 was 1.14e-6 above its exact optimum with every residual in tolerance).
+      return polish_reduced_costs(
+          target,
+          want_dual ? solve_dual_simplex(target, engine_options, logger, control)
+                    : solve_primal_simplex(target, engine_options, logger, control),
+          with_the_time_that_is_left(options), logger, control);
     };
 
     if (options.get_bool("gpu") && !want_pdhg) {

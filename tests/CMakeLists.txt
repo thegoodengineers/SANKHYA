@@ -34,6 +34,7 @@ add_executable(sankhya_tests
   unit/test_simplex.cpp
   unit/test_dual_simplex.cpp
   unit/test_dual_harris.cpp
+  unit/test_reduced_cost_polish.cpp
   unit/test_ranging.cpp
   unit/test_dense_lu.cpp
   unit/test_sparse_lu.cpp

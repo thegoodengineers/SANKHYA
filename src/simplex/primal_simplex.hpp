@@ -104,4 +104,12 @@ struct WarmStart {
                                           const WarmStart* warm = nullptr,
                                           NodeFactorCache* factors = nullptr);
 
+/// Finish an optimal simplex answer on `model` whose dual infeasibility is above
+/// tol::kReducedCostPolish: the primal simplex from its basis, unscaled, at that tolerance
+/// (#548, reduced_cost_polish.cpp). The polished answer replaces `solution` only when it is
+/// optimal, primal feasible and less dual infeasible; anything else returns it unchanged.
+[[nodiscard]] Solution polish_reduced_costs(const Model& model, Solution solution,
+                                            const Options& options, Logger& logger,
+                                            SolveControl* control = nullptr);
+
 }  // namespace sankhya
