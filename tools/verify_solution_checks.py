@@ -103,13 +103,12 @@ def verify_iis(model: Model, solution: Solution, report: Report, primal_tol: flo
         outside_rows = [model.row_names[i] for i, m in enumerate(y)
                         if m != 0.0 and model.row_names[i] not in rows]
         d = transpose_times(model, y)
-        term_scale = 1.0
-        for j in range(model.num_cols):
-            for i, value in model.entries[j]:
-                term_scale = max(term_scale, abs(value * y[i]))
-        zero = 1e-11 * term_scale  # the same zero as verify_farkas and the C++ checker
+        largest_y = max(abs(v) for v in y)
         outside_bounds = []
         for j in range(model.num_cols):
+            # The same zero as verify_farkas and the C++ checker: per column (#762).
+            zero = 1e-11 * largest_y * max((abs(value) for i, value in model.entries[j]
+                                            if y[i] != 0.0), default=0.0)
             if d[j] > zero and model.col_names[j] not in hi:
                 outside_bounds.append(model.col_names[j] + " (upper)")
             elif d[j] < -zero and model.col_names[j] not in lo:
@@ -234,15 +233,18 @@ def verify_farkas(model: Model, solution: Solution, report: Report) -> Report:
     # crude-blend demo aggregate to exactly 0 on one column - two terms of 0.577 that
     # cancel - and floating point leaves 1e-17 behind; read as a sign, that "uses" a bound
     # the column does not have and rejects a correct certificate. The same rule the C++
-    # checker applies (src/core/certificate.cpp): below 1e-11 of the largest term is zero.
-    term_scale = 1.0
-    for j in range(model.num_cols):
-        for i, value in model.entries[j]:
-            term_scale = max(term_scale, abs(value * y[i]))
-    zero = 1e-11 * term_scale
+    # checker applies (src/core/certificate.cpp): below 1e-11 of the column's largest entry
+    # in a row the certificate uses, times the unit-size multiplier, is zero. Column by
+    # column and with no absolute floor (#762): a global max(1, largest term) read a real
+    # 7.3e-12 coefficient on a column with no upper bound as zero, on Netlib ganges scaled by
+    # powers of two, and passed a certificate for a feasible model.
+    column_scale = [max((abs(value) for i, value in model.entries[j] if y[i] != 0.0),
+                        default=0.0)
+                    for j in range(model.num_cols)]
     reachable = 0.0
     free = []
     for j in range(model.num_cols):
+        zero = 1e-11 * column_scale[j]
         if d[j] > zero:
             if not math.isfinite(model.col_upper[j]):
                 free.append(model.col_names[j])
