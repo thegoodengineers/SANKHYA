@@ -365,6 +365,13 @@ class Simplex {
   /// numerically_dependent_ is not eligible until the next factorization.
   [[nodiscard]] Index price(bool bland, int* direction) const;
 
+  /// The optimality cleanup (#548, tol::kPolishObjectiveGain): at a basis where price()
+  /// finds nothing, on fresh factors, the column whose improving-signed reduced cost is
+  /// inside the dual tolerance but whose pivot, by the ratio test, would still lower the
+  /// objective by more than the promised accuracy. Returns -1 when there is none or the
+  /// pass has spent its budget. Leaves alpha_ holding the returned column's FTRAN.
+  [[nodiscard]] Index polish_candidate(int* direction);
+
   /// Reset every reference weight to 1, restarting the reference framework.
   void reset_devex();
 
@@ -522,6 +529,10 @@ class Simplex {
   /// here, one flag per column, until refactorize() judges the next basis afresh.
   std::vector<char> numerically_dependent_;
   Count dependent_columns_skipped_ = 0;
+  /// Pivots made by polish_candidate() and the columns it ratio-tested and turned down at
+  /// the current basis (cleared on every pivot, since a new basis prices afresh).
+  Count polish_pivots_ = 0;
+  std::vector<char> polish_rejected_;
   /// WHERE A DUAL ITERATION'S TIME GOES (#210). Seconds accumulated per phase over the dual
   /// loop and reported at verbose level by finish(): the scale tables showed the iteration
   /// rate falling 38x for a 5x larger model, and the only honest way to say why is to
