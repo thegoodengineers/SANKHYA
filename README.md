@@ -304,6 +304,23 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
+**Without a build.** `.github/workflows/release.yml` (#748) builds three archives on clean
+runners - Linux x86-64 CPU, Linux x86-64 CUDA (the CUDA runtime and cuSPARSE linked
+statically, so a host needs only the driver) and Windows x64 CPU - and a container image
+from the `Dockerfile`, then unpacks each archive on a machine with no compiler and solves and
+verifies the demo from it. Each archive keeps this repository's layout (`build/sankhya`, the
+library, the Python package, `tools/`, `demo/`), so every command below works from the
+unpacked directory, and carries `MANIFEST.txt` (the `sankhya version` banner and the link
+dependencies of the shipped files, grepped for solver libraries) and `SHA256SUMS`. The
+archives are workflow artifacts; no GitHub Release has been published yet. There is no
+Windows CUDA archive: nvcc on Windows needs MSVC as its host compiler and this tree builds
+with MinGW GCC.
+
+```bash
+docker build -t sankhya .
+docker run --rm --gpus all sankhya sankhya solve demo/crude_blend.mps --gpu
+```
+
 `scripts/configure.sh` picks a C++20-capable compiler rather than trusting PATH order,
 which matters on Windows boxes carrying an old MinGW. It also reuses dependency sources
 from any build tree already on disk, so a second build directory costs seconds rather than
@@ -337,6 +354,28 @@ before the solve.
 ```bash
 ./build/sankhya diagnose demo/crude_blend.mps
 ./build/sankhya diagnose model.mps --format json
+```
+
+`sankhya scenarios` answers the planner's usual question - the same model under many price
+sets or demand forecasts - in one run (#752). Each CSV row overrides named costs, bounds or
+right-hand sides (`cost:COL`, `col_lower:COL`, `col_upper:COL`, `row_lower:ROW`,
+`row_upper:ROW`, `rhs:ROW`); the model is read and solved once, and every scenario is
+re-solved from that basis by the dual simplex. Every answer is checked against its own
+scenario's model (the KKT check, or the Farkas certificate for an infeasible one), re-solved
+cold if it fails, and printed `unverified-<status>` rather than optimal if it fails again;
+each row carries a Neumaier-Shcherbina safe bound, the binding rows and the decisions that
+moved. `--compare` also solves each scenario on its own and checks the two agree to 1e-8
+relative. On `main` at `de0f393` (`bench/results/scenarios-de0f393a.csv`, laptop CPU), all
+1130 scenarios verified and agreed with their single solves: 1000 crude-blend price sets in
+0.053 s against 0.300 s for 1000 single solves, and on the 365-day refinery year 10 price
+sets in 36.3 s and 10 demand forecasts in 19.5 s, base solve included, against 177.3 s and
+137.0 s for the single solves. A scenario that moves prices and demand at once leaves the base
+basis neither primal nor dual feasible, and there the run lost to single solves when it was
+tried (352.6 s against 245.9 s for ten, on the branch, #773). The batched first-order run on
+the device is not wired to scenarios yet.
+
+```bash
+./build/sankhya scenarios demo/crude_blend.mps demo/crude_blend_prices.csv --compare
 ```
 
 `sankhya engines` lists every engine in the build: the classes it solves, how it is reached
@@ -386,6 +425,19 @@ demo/run_sih_demo.sh         # the full PS26119 walkthrough, in the problem stat
 demo/run_demo.sh --list      # or pick a single instance
 demo/run_demo.sh share2b     # solve it live, then verify it independently
 ```
+
+```bash
+demo/finale.sh --dry         # the finale walk's machine check: binary, GPU, Python, tools
+demo/finale.sh               # one refinery MILP solved, proved, re-planned (Windows: demo\finale.cmd)
+```
+
+`demo/finale.sh` (#758, [`docs/FINALE.md`](docs/FINALE.md)) is six steps on the small refinery
+MILP, each one line and its time: the solve with a VIPR certificate (on the GPU when the binary
+reports one), the certificate checked in exact arithmetic and the plan by the independent
+verifier, the binding limits and their shadow prices on the LP, a delivery commitment raised
+until the plant cannot meet it with the Farkas proof checked and the smallest repair, an
+evidence bundle made and replayed, and twenty price sets through `sankhya scenarios`. On the
+laptop CPU at `04c372c` the whole walk took 34.5 s and 40.7 s in two runs on a busy machine, and 0.4 s in the CI Release leg; it has not been timed on a card.
 
 The nine Netlib instances are committed, so the demo needs no network. Every number it prints
 comes from a command it just ran.
