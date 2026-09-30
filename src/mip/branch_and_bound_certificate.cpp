@@ -139,6 +139,7 @@ void BranchAndBound::certificate_record(Index node, const Solution& relaxation,
   }
   CertificateTree::Node& record = grow_to(&certificate_nodes_, node);
   record.y.clear();
+  record.batch = false;
   if (source->size() != static_cast<std::size_t>(rows)) {
     // An LP that reported no multipliers proves nothing here; the node falls back on its
     // nearest ancestor's duals, which is weaker but still sound.
@@ -177,6 +178,7 @@ void BranchAndBound::certificate_record_duals(Index node, const double* y, Index
     if (v != 0.0 && std::isfinite(v)) record.y.emplace_back(i, v);
   }
   record.proof = CertificateTree::Proof::kDual;
+  record.batch = true;
   ++certificate_batch_leaves_;
 }
 

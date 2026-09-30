@@ -53,6 +53,7 @@ import hashlib
 import json
 import math
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -131,7 +132,17 @@ CSV_COLUMNS = [
     # #518, after the rest for the same reason; blank unless --certificate.
     "certificate",
     "certificate_check_seconds",
+    # #756, after the rest: the proof file's size, its dual-bounded leaves, and how many of
+    # those were bounded from the batched PDHG run's multipliers (gpu_batch_nodes), read from
+    # the solver's own "leaves:" log line. Blank unless --certificate.
+    "certificate_bytes",
+    "certificate_dual_leaves",
+    "certificate_batch_leaves",
 ]
+
+# The certificate writer's log line (src/mip/certificate_writer.cpp, #756).
+LEAVES_LINE = re.compile(r"leaves: (\d+) from their own LP duals, (\d+) from an ancestor's,.*?"
+                         r"(\d+) of the dual-bounded leaves from the batched PDHG run")
 
 SUMMARY_COLUMNS = [
     "instance", "seeds", "seeds_matched", "seeds_proved", "matched_seeds", "proved_seeds",
@@ -203,7 +214,8 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
                    "--time-limit", str(time_limit),
                    "--stats", str(stats_path),
                    "--write-sol", str(sol_path),
-                   "--option", "log_to_console=false"]
+                   # Under a certificate the log carries the leaf counts (#756).
+                   "--option", f"log_to_console={'true' if certificate else 'false'}"]
         for option in solver_options or []:
             command += ["--option", option]
         proof_path = Path(tmp) / "proof.vipr"
@@ -259,7 +271,19 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             flat["verified"] = check.returncode == 0
         if certificate:
             flat.update(check_certificate(proof_path, instance))
+            flat.update(leaf_counts(completed.stdout + completed.stderr))
+            flat["certificate_bytes"] = (proof_path.stat().st_size if proof_path.exists()
+                                         else None)
         return flat
+
+
+def leaf_counts(log: str) -> dict:
+    """The dual-bounded leaves of the written proof and how many the batch bounded (#756)."""
+    match = LEAVES_LINE.search(log)
+    if match is None:
+        return {"certificate_dual_leaves": None, "certificate_batch_leaves": None}
+    return {"certificate_dual_leaves": int(match.group(1)) + int(match.group(2)),
+            "certificate_batch_leaves": int(match.group(3))}
 
 
 def check_certificate(proof: Path, instance: Path) -> dict:
@@ -510,6 +534,9 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
         "certificate": blob.get("certificate") or "",
         "certificate_check_seconds": ("" if blob.get("certificate_check_seconds") is None
                                       else f"{blob['certificate_check_seconds']:.6f}"),
+        **{key: "" if blob.get(key) is None else blob[key]
+           for key in ("certificate_bytes", "certificate_dual_leaves",
+                       "certificate_batch_leaves")},
     }
 
 
