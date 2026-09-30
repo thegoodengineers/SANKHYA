@@ -577,6 +577,9 @@ jobs:
           echo '--- ten crude price sets in one run, each verified and equal to its own solve (#752) ---'
           ./build/sankhya scenarios demo/crude_blend.mps demo/crude_blend_prices.csv --compare
 
+          echo '--- the finale walk: solve, prove, plan, repair, bundle, prices (#758) ---'
+          python3 demo/finale.py --binary build/sankhya
+
       # The PS26119 case studies. These are the instances the demo is built on, so a
       # regression in any of them turns the demonstration into a wrong answer delivered
       # confidently to a judge. Each optimum below was established OUTSIDE the solver:
