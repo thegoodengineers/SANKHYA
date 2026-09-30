@@ -531,7 +531,7 @@ machine's own CPU, so a ratio here is card against host, not card against the la
 
 ![GPU speedup against nonzeros on the L4](img/gpu-speedup-l4.svg)
 
-The figure is regenerated from the two CSVs by `bench/runners/gpu_plot.py` each time this document is; each point is one instance and tolerance, the speedup against the faster CPU arm on the solver's clock; the dashed line is 1x, the crossover, and everything below it is a loss.
+The figure is regenerated from the two CSVs by `bench/runners/gpu_plot.py` each time this document is; each point is one instance and tolerance, the speedup against the faster CPU arm on the solver's clock (the synthetic ladder against one thread; the real instances against the faster of 1 thread and 16 threads); the dashed line is 1x, the crossover, and everything below it is a loss.
 
 The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, medians of repeats with their min-max):
 
@@ -635,7 +635,7 @@ GPU speedup on the solver's own clock (median of the repeats):
 
 ![GPU speedup against nonzeros on the A100](img/gpu-speedup-a100.svg)
 
-The figure is regenerated from the two CSVs by `bench/runners/gpu_plot.py` each time this document is; each point is one instance and tolerance, the speedup against the faster CPU arm on the solver's clock; the dashed line is 1x, the crossover, and everything below it is a loss.
+The figure is regenerated from the two CSVs by `bench/runners/gpu_plot.py` each time this document is; each point is one instance and tolerance, the speedup against the faster CPU arm on the solver's clock (the synthetic ladder against one thread; the real instances against the faster of 1 thread and 16 threads); the dashed line is 1x, the crossover, and everything below it is a loss.
 
 The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, medians of repeats with their min-max):
 
@@ -751,9 +751,10 @@ GPU speedup on the solver's own clock (median of the repeats):
 
 #### 1g.4 What the CPU side does with its cores
 
-The CPU column of the 1g crossover is one thread. The 1g.1 and 1g.3 files written since #488
-add an N-thread arm with the row-parallel A x; the older ones are one thread (the real
-instances) or 16 threads with a serial A x (the datacenter runner), as their notes say.
+The CPU column of every crossover table in 1g and 1g.3 is one thread: `threads` defaults
+to 1 and the crossover runner does not set it. The real-instance and datacenter tables name
+their CPU arms in their own columns, one thread with the serial A x and N threads with the
+row-parallel A x (`pdhg_parallel_spmv=true`), and a speed-up is printed against each arm.
 `pdhg_parallel_spmv` (#487) computes A x row-parallel
 over the `threads` workers, bitwise the same at any thread count (the test holds it to the
 bit); this is what it buys, per instance, at a fixed iteration count:
@@ -806,7 +807,7 @@ rows (`bench/runners/gpu_domain_prop.py`).
 Source CSV: `gpu-domain-prop-58a8374.csv`  
 Commit `58a8374` · machine `Linux-x86_64` · GPU NVIDIA L4 (compute 8.9, 22478 MiB VRAM) · median of 5 run(s) per cell, the propagation time the solver logs (on the device: the row-major copy, the transfers and the rounds).
 
-| rows | columns | nonzeros | rounds | bounds tightened | CPU (s) | GPU (s) | GPU / CPU | GPU context (s) | GPU without context (s) | same rounds and count |
+| rows | columns | nonzeros | rounds | bounds tightened | CPU, 1 thread (s) | GPU (s) | GPU / CPU | GPU context (s) | GPU without context (s) | same rounds and count |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | 1,000 | 1,000 | 5,000 | 2 | 797 | 0.000078 | 0.110972 | 1422.72x | 0.110305 | 0.000669 | yes |
 | 10,000 | 10,000 | 50,000 | 2 | 7,708 | 0.000802 | 0.114150 | 142.33x | 0.112876 | 0.001274 | yes |

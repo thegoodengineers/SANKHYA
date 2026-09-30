@@ -2440,8 +2440,9 @@ def gpu_cards_section() -> str:
             blocks.append("The figure is regenerated from the two CSVs by "
                           "`bench/runners/gpu_plot.py` each time this document is; each point "
                           "is one instance and tolerance, the speedup against the faster CPU "
-                          "arm on the solver's clock; the dashed line is 1x, the crossover, "
-                          "and everything below it is a loss.\n")
+                          f"arm on the solver's clock ({cpu_arms_named(crossover, real)}); the "
+                          "dashed line is 1x, the crossover, and everything below it is a "
+                          "loss.\n")
         if crossover is not None:
             blocks.append("The crossover, the same protocol as 1g (`bench/runners/gpu_report.py`, "
                           "medians of repeats with their min-max):\n")
@@ -2487,6 +2488,21 @@ def pdhg_threads_section(path: Path | None) -> str:
     return "\n".join(out) + "\n"
 
 
+def cpu_arms_named(crossover: Path | None, real: Path | None) -> str:
+    """The thread counts behind the figure's 'faster CPU arm', read from the CSVs (#487):
+    the crossover runner's CPU is one thread, the real-instance runner records cpu_threads."""
+    parts = []
+    if crossover is not None:
+        parts.append("the synthetic ladder against one thread")
+    if real is not None:
+        counts = sorted({int(r["cpu_threads"]) for r in read_csv(real)
+                         if (r.get("cpu_threads") or "").strip().isdigit()})
+        if counts:
+            parts.append("the real instances against the faster of "
+                         + " and ".join(f"{c} thread{'s' if c > 1 else ''}" for c in counts))
+    return "; ".join(parts) or "thread count not recorded"
+
+
 def gpu_domain_prop_section(path: Path | None) -> str:
     """1g.5: root domain propagation, the CPU reference against the CUDA propagator, over
     model size (#510), from bench/runners/gpu_domain_prop.py. The verdict is counted from the
@@ -2502,7 +2518,11 @@ def gpu_domain_prop_section(path: Path | None) -> str:
     for r in rows:
         by_size.setdefault(r.get("instance", ""), {})[r.get("backend", "")] = r
     has_split = any((r.get("context_seconds") or "").strip() for r in rows)
-    header = ("| rows | columns | nonzeros | rounds | bounds tightened | CPU (s) | GPU (s) "
+    # The CPU propagator (src/mip/domain_propagation.cpp) is serial code, so its column is
+    # one thread whether or not the CSV has the cpu_threads column the runner now writes.
+    threads = {(r.get("cpu_threads") or "1").strip() for r in rows if r.get("backend") == "cpu"}
+    cpu_label = f"CPU, {'/'.join(sorted(threads))} thread{'s' if threads != {'1'} else ''} (s)"
+    header = (f"| rows | columns | nonzeros | rounds | bounds tightened | {cpu_label} | GPU (s) "
               "| GPU / CPU |")
     rule = "|---:|---:|---:|---:|---:|---:|---:|---:|"
     if has_split:
@@ -2976,9 +2996,10 @@ machine's own CPU, so a ratio here is card against host, not card against the la
 {gpu_cards_section()}
 #### 1g.4 What the CPU side does with its cores
 
-The CPU column of the 1g crossover is one thread. The 1g.1 and 1g.3 files written since #488
-add an N-thread arm with the row-parallel A x; the older ones are one thread (the real
-instances) or 16 threads with a serial A x (the datacenter runner), as their notes say.
+The CPU column of every crossover table in 1g and 1g.3 is one thread: `threads` defaults
+to 1 and the crossover runner does not set it. The real-instance and datacenter tables name
+their CPU arms in their own columns, one thread with the serial A x and N threads with the
+row-parallel A x (`pdhg_parallel_spmv=true`), and a speed-up is printed against each arm.
 `pdhg_parallel_spmv` (#487) computes A x row-parallel
 over the `threads` workers, bitwise the same at any thread count (the test holds it to the
 bit); this is what it buys, per instance, at a fixed iteration count:

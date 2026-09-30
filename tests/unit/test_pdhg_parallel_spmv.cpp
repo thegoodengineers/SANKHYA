@@ -178,6 +178,25 @@ TEST(PdhgParallelSpmv, TheVectorUpdatesGiveTheSameBitsAtOneTwoFourAndEightThread
   }
 }
 
+TEST(PdhgParallelSpmv, RunToRunTheSameBitsAtAFixedThreadCount) {
+  // #487 acceptance 1 as written: the same thread count, solved again, gives the same bits.
+  // The across-thread-count test above implies it; this states it directly, on the fully
+  // parallel iteration and several chunks, with the solves repeated rather than paired once.
+  const Model model = spread_lp(6000, 9000);
+  for (const bool two_matvec : {false, true}) {
+    const Solution first = solve(model, updates_options(4, two_matvec));
+    ASSERT_NE(first.status, SolveStatus::kNotSolved) << first.message;
+    for (int again = 0; again < 2; ++again) {
+      const Solution other = solve(model, updates_options(4, two_matvec));
+      EXPECT_EQ(first.status, other.status);
+      EXPECT_EQ(first.iterations, other.iterations);
+      EXPECT_EQ(first.objective, other.objective);
+      EXPECT_EQ(first.col_value, other.col_value) << "the primal points differ";
+      EXPECT_EQ(first.row_dual, other.row_dual) << "the duals differ";
+    }
+  }
+}
+
 TEST(PdhgParallelSpmv, TheVectorUpdatesAgreeWithTheSerialLoopsToRounding) {
   // Against the serial loops the three sums are taken in a different order, so the
   // standard is rounding, and rounding in a step-rule sum is enough to move a restart by an

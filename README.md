@@ -13,11 +13,12 @@ reproduce are welcome.
 
 **Indigenous optimization solver — LP, MILP, convex QP, written from mathematical
 foundations. Its first-order engine is built for the GPU, and the CUDA port of it is on
-`main`, compiled in CI and measured on three cards: on a laptop card slower than the CPU
-below 10,000 rows, 1.37x to 1.63x faster at 10,000 x 10,000 across two named runs (section
-1g of `docs/BENCHMARKS.md`); on an A100 slower than the CPU up to 2,000 rows (0.07x to 0.79x)
-and 4.08x faster at 10,000 x 10,000; on Mittelmann's brazil3 at 1e-8, 8.10x on a datacenter L4
-and 8.72x on an A100 against the faster of that host's CPU arms, while HiGHS on the same A100
+`main`, compiled in CI and measured on three cards: on a laptop card slower than one CPU
+thread below 10,000 rows, 1.37x to 1.63x faster at 10,000 x 10,000 across two named runs
+(section 1g of `docs/BENCHMARKS.md`); on an A100 slower than one CPU thread up to 2,000 rows
+(0.07x to 0.79x) and 4.08x faster at 10,000 x 10,000; on Mittelmann's brazil3 at 1e-8, 8.10x
+on a datacenter L4 against one CPU thread and 8.72x on an A100 against 16 threads with the
+row-parallel A x (each the faster of that host's two CPU arms), while HiGHS on the same A100
 host solves it in 9.3 s against the card's 10.5 s (`gpu-real-{l4-58a8374,a100-fdd1f35}.csv`,
 section 1g.3).**
 
