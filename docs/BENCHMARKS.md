@@ -912,6 +912,39 @@ Instance `refinery_year.mps` (779640 rows, 1208880 columns, 9968834 nonzeros), e
 | deterministic | `deterministic=true` | 1007.4 | 805.8 | 0.800 | `pdhg-478-refinery-deterministic-ad57c03.csv` |
 | deterministic-loop | `deterministic=true gpu_on_device_loop=true` | 1009.4 | 824.4 | 0.817 | `pdhg-478-refinery-deterministic-loop-ad57c03.csv` |
 
+
+#### 1g.10 GPU MIP heuristics and batched node bounds on the full MIPLIB tier 2 (#509, #520)
+
+All 60 instances of the tier-2 list (`bench/runners/miplib_tier2.json`), 60 s each, one run
+per leg on one binary: the feasibility pump and fix-and-propagate on PDHG relaxations (#509,
+on the device and with `gpu_heur_backend=cpu`), and batched PDHG for node bounds and for
+strong-branching scores (#520, on the device and with `gpu_batch_backend=cpu`). All of
+these are off by default; each row says what turning one on does against `off`. "Closer" and
+"further" compare the incumbent, and the final dual bound, with the published optimum,
+instance by instance. Every leg runs with `miplib.py --profile` (profile=detailed), which
+records the seconds spent choosing the branching column (strong branching's probe LPs are
+inside them) and the batched-PDHG calls. The legs ran on a 64-core host with one V100 as two
+streams side by side, one single-threaded process each: the CPU-only legs (`off` and the
+`*-cpu` legs) in one, the device legs in the other, so exactly one process used the card.
+The CPU stream has four legs and the device stream six, so every leg except the last two
+device legs (`520-sb-filter`, `520-both`, which ran alone) shared the host with exactly one
+other single-threaded solve.
+
+Commit `a0cc065` · machine `Linux-x86_64` · 60 instances, one seed, one thread; every leg against `off`, the same binary with every GPU option off.
+
+| leg | solver options | feasible (verified) | matched | proved | nodes / s | branching s | batched SB s | primal closer / further | dual bound closer / further | source |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| off | `defaults` | 40 (40) | 4 | 0 | 1276 | 960.5 | 0.0 | - | - | `miplib-t2-full-off-a0cc065.csv` |
+| 509-fixprop-gpu | `gpu_fix_and_prop=true` | 42 (42) | 4 | 0 | 1270 | 949.1 | 0.0 | 9 / 4 | 14 / 14 | `miplib-t2-full-509-fixprop-gpu-a0cc065.csv` |
+| 509-fixprop-cpu | `gpu_fix_and_prop=true gpu_heur_backend=cpu` | 42 (42) | 4 | 0 | 1274 | 952.7 | 0.0 | 9 / 4 | 11 / 12 | `miplib-t2-full-509-fixprop-cpu-a0cc065.csv` |
+| 509-pump-gpu | `gpu_pump=true` | 44 (44) | 4 | 0 | 1241 | 922.2 | 0.0 | 5 / 5 | 3 / 28 | `miplib-t2-full-509-pump-gpu-a0cc065.csv` |
+| 509-pump-cpu | `gpu_pump=true gpu_heur_backend=cpu` | 44 (44) | 4 | 0 | 1260 | 924.8 | 0.0 | 5 / 6 | 6 / 22 | `miplib-t2-full-509-pump-cpu-a0cc065.csv` |
+| 520-nodes | `gpu_batch_nodes=true` | 40 (40) | 2 | 0 | 424 | 938.2 | 0.0 | 1 / 15 | 4 / 28 | `miplib-t2-full-520-nodes-a0cc065.csv` |
+| 520-sb-score | `gpu_batch_strong_branching=score` | 36 (36) | 2 | 0 | 844 | 1965.7 | 1958.8 | 9 / 29 | 5 / 34 | `miplib-t2-full-520-sb-score-a0cc065.csv` |
+| 520-sb-filter | `gpu_batch_strong_branching=filter` | 37 (37) | 2 | 0 | 1094 | 1865.0 | 1225.2 | 3 / 18 | 0 / 36 | `miplib-t2-full-520-sb-filter-a0cc065.csv` |
+| 520-both | `gpu_batch_nodes=true gpu_batch_strong_branching=score` | 36 (36) | 2 | 0 | 255 | 1914.4 | 1910.3 | 6 / 32 | 5 / 34 | `miplib-t2-full-520-both-a0cc065.csv` |
+| 520-both-cpu | `gpu_batch_nodes=true gpu_batch_strong_branching=score gpu_batch_backend=cpu` | 33 (33) | 1 | 0 | 185 | 2157.4 | 2155.2 | 5 / 32 | 1 / 38 | `miplib-t2-full-520-both-cpu-a0cc065.csv` |
+
 ---
 
 ### 1f. Scale — how far up this goes

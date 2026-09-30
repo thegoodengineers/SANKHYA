@@ -85,3 +85,89 @@ def refinery_478_section(paths: dict[str, Path | None]) -> str:
            f"between the full and the one-fifth run, as `pdhg_two_matvec_ab.py` defines it. "
            f"Commit `{header.get('git_commit', '?')}`, GPU {header.get('gpu', '?')}.", ""] + out
     return "\n".join(out) + "\n"
+
+
+def _num(row: dict, key: str) -> float | None:
+    try:
+        value = float(row.get(key, ""))
+    except (TypeError, ValueError):
+        return None
+    return value if value == value and abs(value) != float("inf") else None
+
+
+def _point(row: dict) -> float | None:
+    """The incumbent's objective, only when the solver claims a point (optimal or feasible):
+    a numerical_error row carries a placeholder objective that is not a point."""
+    return _num(row, "our_objective") if row.get("status") in ("optimal", "feasible") else None
+
+
+def _closer(a: float | None, b: float | None, target: float) -> int:
+    """+1 when a is closer to target than b, -1 when further, 0 when level (1e-6 relative)."""
+    tol = 1e-6 * max(1.0, abs(target))
+    if a is not None and (b is None or abs(a - target) < abs(b - target) - tol):
+        return 1
+    if b is not None and (a is None or abs(a - target) > abs(b - target) + tol):
+        return -1
+    return 0
+
+
+def tier2_legs_section(legs: dict[str, Path | None]) -> str:
+    """The #509 / #520 legs on the MIPLIB tier-2 set, each against the first (baseline) leg.
+
+    Per leg: feasible points found, published optimum matched and proved, node throughput
+    (total nodes over total solver seconds), the seconds spent choosing the branching column
+    (strong branching's probe LPs are inside them) and, of those, in the batched PDHG
+    strong-branching call (miplib.py --profile; "-" in a CSV without the columns), and per
+    instance against the baseline whether
+    the incumbent (primal) and the final dual bound are closer to or further from the
+    published optimum. All counted from the rows.
+    """
+    present = {label: p for label, p in legs.items() if p is not None}
+    if len(present) < 2:
+        return "Not yet run at this commit."
+    labels = list(present)
+    base_label = labels[0]
+    tables = {label: {r["instance"]: r for r in _rows(p)} for label, p in present.items()}
+    base = tables[base_label]
+    first = next(iter(base.values()))
+    out = [f"Commit `{first.get('git_commit', '?')}` · machine `{first.get('machine', '?')}` · "
+           f"{len(base)} instances, one seed, one thread; every leg against `{base_label}`, "
+           f"the same binary with every GPU option off.", "",
+           "| leg | solver options | feasible (verified) | matched | proved | nodes / s | branching s | "
+           "batched SB s | primal closer / further | dual bound closer / further | source |",
+           "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
+    for label in labels:
+        rows = tables[label]
+        feasible = sum(_point(r) is not None for r in rows.values())
+        verified = sum(_point(r) is not None and r.get("independently_verified") == "1"
+                       for r in rows.values())
+        matched = sum(r.get("matched_published") == "1" for r in rows.values())
+        proved = sum(r.get("proved_optimal") == "1" for r in rows.values())
+        nodes = sum(_num(r, "nodes") or 0.0 for r in rows.values())
+        secs = sum(_num(r, "solver_seconds") or 0.0 for r in rows.values())
+        primal = [0, 0]
+        dual = [0, 0]
+        if label != base_label:
+            for name, r in rows.items():
+                b = base.get(name)
+                pub = _num(r, "published_objective")
+                if b is None or pub is None:
+                    continue
+                p = _closer(_point(r), _point(b), pub)
+                d = _closer(_num(r, "dual_bound"), _num(b, "dual_bound"), pub)
+                primal[0] += p > 0
+                primal[1] += p < 0
+                dual[0] += d > 0
+                dual[1] += d < 0
+        opts = next(iter(rows.values())).get("solver_options") or "defaults"
+        pc = "-" if label == base_label else f"{primal[0]} / {primal[1]}"
+        dc = "-" if label == base_label else f"{dual[0]} / {dual[1]}"
+        rate = f"{nodes / secs:.0f}" if secs else "-"
+        profiled = [r for r in rows.values() if _num(r, "branching_seconds") is not None]
+        branching = (f"{sum(_num(r, 'branching_seconds') for r in profiled):.1f}"
+                     if profiled else "-")
+        sb = sum(_num(r, "batch_strong_branching_seconds") or 0.0 for r in profiled)
+        batched_sb = f"{sb:.1f}" if profiled else "-"
+        out.append(f"| {label} | `{opts}` | {feasible} ({verified}) | {matched} | {proved} | {rate} "
+                   f"| {branching} | {batched_sb} | {pc} | {dc} | `{present[label].name}` |")
+    return "\n".join(out) + "\n"
