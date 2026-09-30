@@ -39,16 +39,19 @@ def _count(rows: list[dict], key: str) -> int:
 
 def solver_table(rows: list[dict], sgm) -> list[str]:
     time_limit = float(rows[0]["time_limit"])
-    out = ["| solver | version | runs | solved | matched | verified | checked on | "
+    exact = any(r.get("matches_exact", "") != "" for r in rows)
+    out = ["| solver | version | runs | solved | matched | "
+           + ("matched exact | " if exact else "") + "verified | checked on | "
            f"SGM time, shift {SHIFT_SECONDS:g} s |",
-           "|---|---|---:|---:|---:|---:|---|---:|"]
+           "|---|---|---:|---:|---:|" + ("---:|" if exact else "") + "---:|---|---:|"]
     for solver in ORDER:
         mine = [r for r in rows if r["solver"] == solver]
         if not mine:
             continue
         if all(r["status"] == "unsupported" for r in mine):
             out.append(f"| {perf_profile.LABELS[solver]} | {mine[0]['solver_version'] or '-'} "
-                       f"| {len(mine)} | unsupported | - | - | - | - |")
+                       f"| {len(mine)} | unsupported | - | " + ("- | " if exact else "")
+                       + "- | - | - |")
             continue
         charged = [float(r["solver_seconds"]) if r["counted_for_time"] == "1" else time_limit
                    for r in mine]
@@ -58,7 +61,8 @@ def solver_table(rows: list[dict], sgm) -> list[str]:
         out.append(f"| {perf_profile.LABELS[solver]} | {version} | {len(mine)} "
                    f"| {sum(r['status'] == 'optimal' for r in mine)} "
                    f"| {_count(mine, 'matches_reference')} "
-                   f"| {_count(mine, 'independently_verified')} | {', '.join(kinds) or '-'} "
+                   + (f"| {_count(mine, 'matches_exact')} " if exact else "")
+                   + f"| {_count(mine, 'independently_verified')} | {', '.join(kinds) or '-'} "
                    f"| {sgm(charged, SHIFT_SECONDS):.3f} s |")
     return out
 
@@ -77,6 +81,8 @@ def failures(rows: list[dict]) -> list[str]:
                 what = r["status"]
             elif r["independently_verified"] == "0":
                 what = "optimal, rejected by the verifier"
+            elif r.get("matches_exact") == "0":
+                what = "optimal, away from the exact optimum"
             else:
                 what = f"optimal at relative gap {float(r['relative_gap'] or 'nan'):.1e}"
             items.append(f"`{r['instance']}` ({what})")
@@ -118,13 +124,13 @@ def suite_section(suite: str, path: Path, sgm) -> str:
                     "`truss` and `stocfor3`:**", ""]
             out += solver_table(extra, sgm)
             out.append("")
-        graded = [r for r in headline if r["matches_exact"] != ""]
-        if graded:
-            out.append("Against Koch's exact rational optima (`data/netlib/koch_exact.json`) "
-                       "instead of the readme, matched: " + ", ".join(
-                           f"{perf_profile.LABELS[s]} "
-                           f"{_count([r for r in graded if r['solver'] == s], 'matches_exact')}"
-                           for s in ORDER if any(r["solver"] == s for r in graded)) + ".")
+        if any(r["matches_exact"] != "" for r in headline):
+            out.append("`matched` grades against the readme's optimum and `matched exact` "
+                       "against Koch's exact rational optimum (`data/netlib/koch_exact.json`, "
+                       "#747); the timing counts the exact grade. Where the two differ the "
+                       "readme is the one that is wrong: on 80bau3b, ganges, greenbea, "
+                       "greenbeb, nesm, pilot, pilot.we, scrs8 and stocfor3 every solver here "
+                       "agrees with Koch.")
             out.append("")
     solvers = [s for s in ORDER if any(r["solver"] == s and r["status"] != "unsupported"
                                        for r in headline)]

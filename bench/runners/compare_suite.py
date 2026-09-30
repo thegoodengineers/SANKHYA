@@ -21,8 +21,12 @@ and one thread, and every answer judged by the same three tests:
     which conditions were checked: `primal+dual` when the solver gave usable duals,
     `primal-only` when it did not (SCIP).
 
-A run counts toward the timing only when all three hold; any other outcome is charged the
-full time limit, Mittelmann's rule. Times are each solver's own clock (`solver_seconds`);
+A run counts toward the timing only when it is solved, verified and correct - against the
+EXACT optimum where one is published (`matches_exact`, Koch's rational values for Netlib, since
+the readme is wrong on nine instances: 80bau3b, ganges, greenbea, greenbeb, nesm, pilot,
+pilot.we, scrs8 and stocfor3, where every solver agrees with Koch and not with the readme),
+else against the reference. Any other outcome is charged the full time limit, Mittelmann's
+rule. Times are each solver's own clock (`solver_seconds`);
 `wall_seconds` is the child process around it, which for HiGHS and SCIP includes starting a
 Python interpreter.
 
@@ -144,7 +148,7 @@ def verify(model_path: Path, sol_path: Path) -> tuple[bool, str]:
 
 
 def solve(solver: str, suite: dict, model_path: Path, time_limit: float, sol: Path,
-          binary: Path) -> dict:
+          binary: Path, commit: str) -> dict:
     """One solve, normalised: status, objective, seconds, wall, iterations, version,
     message, and whether the .sol file claims duals."""
     if solver != "sankhya":
@@ -163,7 +167,7 @@ def solve(solver: str, suite: dict, model_path: Path, time_limit: float, sol: Pa
             "message": str(blob.get("message") or blob.get("stderr") or "")[:200],
             "seconds": seconds if seconds is not None else blob.get("wall_seconds"),
             "wall_seconds": blob.get("wall_seconds"), "iterations": blob.get("iterations", ""),
-            "version": stamp.stamp(binary), "duals": True}
+            "version": commit, "duals": True}
 
 
 def grade(solver: str, suite: dict, model, model_path: Path, sol: Path, out: dict,
@@ -194,8 +198,10 @@ def grade(solver: str, suite: dict, model, model_path: Path, sol: Path, out: dic
     row["matches_exact"] = (None if exact is None else bool(
         status == "optimal" and ours is not None
         and abs(ours - exact) / max(1.0, abs(exact)) <= MATCH_TOLERANCE))
-    row["counted_for_time"] = bool(row["matches_reference"]
-                                   and row["independently_verified"] is True)
+    # The exact optimum where there is one (Koch's, for Netlib): the readme is wrong on nine
+    # of its instances, where all five solvers agree with each other and with Koch.
+    correct = row["matches_exact"] if exact is not None else row["matches_reference"]
+    row["counted_for_time"] = bool(correct and row["independently_verified"] is True)
     message = "; ".join(filter(None, [str(out.get("message", "")), *notes]))
     row["message"] = message[:300]
     return row
@@ -276,7 +282,7 @@ def run_suite(args) -> int:
         for solver in todo:
             with tempfile.TemporaryDirectory() as tmp:
                 sol = Path(tmp) / "solution.sol"
-                out = solve(solver, suite, path, time_limit, sol, binary)
+                out = solve(solver, suite, path, time_limit, sol, binary, commit)
                 verdict = grade(solver, suite, model, path, sol, out, reference, exact_value,
                                 time_limit)
             row = {"suite": args.suite, "instance": name, "instance_sha256": digest,
