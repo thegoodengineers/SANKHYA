@@ -116,6 +116,12 @@ Rational nonbasic_value(BasisStatus status, double lower, double upper) {
 /// accepted only when 0 lies inside the bounds. kUnknown means "cannot be resolved".
 BasisStatus resolved_status(BasisStatus status, double lower, double upper, double value) {
   switch (status) {
+    case BasisStatus::kAtLower:
+    case BasisStatus::kAtUpper:
+      // Equal bounds: the variable cannot move whichever bound it is labelled at, so its
+      // reduced cost may have either sign (#757: an equality row labelled at_lower with a
+      // negative dual is optimal, and was reported FAILED).
+      return lower == upper ? BasisStatus::kFixed : status;
     case BasisStatus::kFixed:
       if (lower == upper) return BasisStatus::kFixed;
       if (value == lower) return BasisStatus::kAtLower;
