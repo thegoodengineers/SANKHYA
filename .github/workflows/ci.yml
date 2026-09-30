@@ -481,6 +481,13 @@ jobs:
         if: matrix.name == 'Release'
         run: SANKHYA_BINARY=build/sankhya python3 bench/runners/test_million.py
 
+      - name: The stress set regenerates to its sha256 values, and its grade (#762)
+        # Hermetic: no solver. The adversarial and scaled-afiro instances regenerate
+        # byte for byte, their stated optima are attained, and correct/wrong/failed follow
+        # the rule bench/runners/stress.py documents.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_stress.py
+
       - name: MIPLIB seeds, primal integral and the tier-2 rule (#504)
         # Pure Python, no network, no solver: the MPS permutation leaves the model unchanged
         # (read back by the independent verifier's reader), the shifted geometric mean, the
