@@ -371,6 +371,22 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         gradient = [model.col_cost[j] + qx[j] for j in range(model.num_cols)]
     cost = [sigma * g for g in gradient]
 
+    # THE DUAL SCALE FLOOR IS THE COST'S, NOT ONE (#783). Every dual quantity below is judged
+    # against max(floor, the terms it is made of). A floor of 1 is a floor in objective units,
+    # and an LP is unchanged by multiplying c by any positive constant, so it silently assumes
+    # max|c| >= 1. Netlib sc205 with its columns scaled by powers of two has one cost, -3.05e-05:
+    # at x = 0 its one wrong-signed reduced cost, -3.9e-08 on C159, was 1e-3 of the cost that
+    # decides the answer and still passed as 3.9e-08 against 1e-7 - an `optimal` at objective 0
+    # against a true -52.2. So below 1 the floor is max|c| itself, which is exactly the test
+    # this script applies to the same model with c scaled to max|c| = 1; at or above 1, and
+    # on a zero cost vector, nothing changes. For a QP the gradient c + Qx moves with x and
+    # the floor stays 1.
+    dual_floor = 1.0
+    if not model.hessian:
+        largest_cost = max((abs(c) for c in cost), default=0.0)
+        if 0.0 < largest_cost < 1.0:
+            dual_floor = largest_cost
+
     if model.hessian:
         # The QP engine is a first-order method that carries no basis and reports no reduced
         # costs, so there is nothing of the solver's to cross-check here. d is DERIVED from
@@ -392,7 +408,7 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
             terms = [value * y[i] for i, value in model.entries[j]]
             expected = cost[j] - sum(terms)
             difference = abs(expected - d[j])
-            scale = max(1.0, abs(cost[j]), max((abs(t) for t in terms), default=0.0))
+            scale = max(dual_floor, abs(cost[j]), max((abs(t) for t in terms), default=0.0))
             if difference / scale > worst:
                 worst, where, worst_abs = difference / scale, name, difference
         report.check(worst <= 1e-6, "reduced costs",
@@ -429,7 +445,7 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
     worst, where, worst_abs = 0.0, "", 0.0
     for j, name in enumerate(model.col_names):
         violation = sign_violation(d[j], x[j], model.col_lower[j], model.col_upper[j])
-        scale = max(1.0, abs(cost[j]),
+        scale = max(dual_floor, abs(cost[j]),
                     max((abs(value * y[i]) for i, value in model.entries[j]), default=0.0))
         if violation / scale > worst:
             worst, where, worst_abs = violation / scale, name, violation
@@ -439,7 +455,7 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
     # A row price has no terms of its own to compare against, so it is judged relative to
     # the size of the prices it sits among - a weaker test than the column one, and stated
     # as such in model.hpp.
-    dual_norm = max(1.0, max((abs(v) for v in y), default=0.0))
+    dual_norm = max(dual_floor, max((abs(v) for v in y), default=0.0))
     worst, where, worst_abs = 0.0, "", 0.0
     for i, name in enumerate(model.row_names):
         violation = sign_violation(y[i], activity[i], model.row_lower[i], model.row_upper[i])
@@ -603,7 +619,7 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         return min(term, abs(multiplier) * nearest) if math.isfinite(nearest) else 0.0
 
     for j in range(model.num_cols):
-        scale_j = max(1.0, abs(cost[j]),
+        scale_j = max(dual_floor, abs(cost[j]),
                       max((abs(value * y[i]) for i, value in model.entries[j]), default=0.0))
         accounted += share(d[j], x[j], model.col_lower[j], model.col_upper[j], scale_j)
     for i in range(model.num_rows):

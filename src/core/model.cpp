@@ -315,6 +315,18 @@ void Solution::recompute_quality(const Model& model) {
     // Per-column numerical scale of the reduced cost: the cost itself and the largest term
     // of a_j^T y. See dual_infeasibility_scaled in model.hpp for why this is the right
     // denominator and why the rows get a different one.
+    // THE FLOOR IS THE COST'S, NOT ONE (#783), exactly as in tools/verify_solution.py. A
+    // floor of 1 is a floor in objective units, and an LP is unchanged by scaling c, so it
+    // assumed max|c| >= 1: scaled Netlib sc205 has one cost of -3.05e-05, and a wrong-signed
+    // reduced cost of -3.9e-08 at the objective-0 vertex passed an absolute 1e-7. Below 1 the
+    // floor is max|c|, which is the test at max|c| = 1 carried back; at or above 1, on a
+    // zero cost, and for a QP (whose gradient c + Qx moves with x) it stays 1.
+    double dual_floor = 1.0;
+    if (!model.has_quadratic_objective()) {
+      double largest_cost = 0.0;
+      for (const double c : model.col_cost) largest_cost = std::max(largest_cost, std::fabs(c));
+      if (largest_cost > 0.0 && largest_cost < 1.0) dual_floor = largest_cost;
+    }
     double dual_norm = 0.0;
     for (Index i = 0; i < m; ++i) {
       dual_norm = std::max(dual_norm, std::fabs(row_dual[static_cast<std::size_t>(i)]));
@@ -327,7 +339,7 @@ void Solution::recompute_quality(const Model& model) {
         const auto r = static_cast<std::size_t>(column.rows[k]);
         scale = std::max(scale, std::fabs(column.values[k] * row_dual[r]));
       }
-      return std::max(1.0, scale);
+      return std::max(dual_floor, scale);
     };
     const auto record_dual = [&](double violation, double scale) {
       if (violation <= 0.0) return;
@@ -402,7 +414,7 @@ void Solution::recompute_quality(const Model& model) {
         implied -= term;
         terms = std::max(terms, std::fabs(term));
       }
-      record_dual(std::fabs(implied - col_dual[u]), std::max(1.0, terms));
+      record_dual(std::fabs(implied - col_dual[u]), std::max(dual_floor, terms));
     }
 
     for (Index j = 0; j < n; ++j) {
@@ -436,7 +448,7 @@ void Solution::recompute_quality(const Model& model) {
       const double lo = model.row_lower[u];
       const double hi = model.row_upper[u];
       if (lo == hi) continue;  // equality row: any multiplier is admissible
-      const double price_scale = std::max(1.0, dual_norm);
+      const double price_scale = std::max(dual_floor, dual_norm);
       if (y > 0.0 && !is_finite_bound(lo)) record_dual(y, price_scale);
       if (y < 0.0 && !is_finite_bound(hi)) record_dual(-y, price_scale);
       record_complementarity(std::fabs(y), nearer_slack(a, lo, hi), price_scale, row_scale[u]);

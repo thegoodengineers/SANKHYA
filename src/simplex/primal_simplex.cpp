@@ -2027,6 +2027,34 @@ namespace detail {
 Solution solve_with_scaling(const Model& model, const Options& options, Logger& logger,
                             const NodeScaling& cache, Engine engine, const WarmStart* warm,
                             SolveControl* control, NodeFactorCache* factors) {
+  // OBJECTIVE SCALING, AROUND EVERYTHING BELOW (#783). The dual tolerance is absolute, so it
+  // means "1e-7 of a cost of order one", and since #783 the quality measure says so: a dual
+  // violation is judged against min(1, max|c|) rather than 1 (src/core/model.cpp). Scaled
+  // Netlib sc205, whose one cost is -3.05e-05, is the case that forced it. An engine aiming
+  // at the absolute 1e-7 on such a model aims at a looser target than it is then judged by,
+  // so it solves with sigma * c instead (sigma a power of two, so exact; src/la/scaling.hpp),
+  // for the scaled attempt and both unscaled retries alike. The minimiser is unchanged; y
+  // and d come back divided by sigma, and the quality is re-measured on the caller's model.
+  // Measured on the four Netlib LPs with max|c| < 1: the same optima, and pilot in 6,068
+  // dual iterations instead of 9,900, pilotnov in 1,633 instead of 2,311.
+  const double cost_factor = cost_scale_factor(model.col_cost);
+  if (cost_factor != 1.0) {
+    Model costed = model;
+    for (double& value : costed.col_cost) value *= cost_factor;
+    NodeScaling costed_cache = cache;  // ponytail: copies Ahat; paid only when max|c| < 1
+    for (double& value : costed_cache.scaling.cost) value *= cost_factor;
+    Solution solution = solve_with_scaling(costed, options, logger, costed_cache, engine, warm,
+                                           control, factors);
+    for (double& value : solution.row_dual) value /= cost_factor;
+    for (double& value : solution.col_dual) value /= cost_factor;
+    if (std::isfinite(solution.dual_bound)) {
+      solution.dual_bound =
+          (solution.dual_bound - model.objective_offset) / cost_factor + model.objective_offset;
+    }
+    solution.recompute_quality(model);
+    return solution;
+  }
+
   // One place chooses the loop, so the scaled attempt and the unscaled retry below cannot
   // disagree about which method they are running.
   // `factors` is handed only to the scaled attempt: its matrix is the one cache.id names.
