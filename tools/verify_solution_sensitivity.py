@@ -32,6 +32,9 @@ sense, and a maximize model's cost ranges exchange sides, as the .sol file write
 """
 from __future__ import annotations
 
+import copy
+import heapq
+import math
 import time
 from fractions import Fraction
 
@@ -50,9 +53,16 @@ class ExactLU:
     """Gaussian elimination in Fractions with a Markowitz pivot choice (Markowitz, Management
     Science 3, 1957): exact arithmetic needs no stability threshold, so the pivot is chosen
     for sparsity alone, which is what keeps the Fractions small enough to be practical.
+    The sparsest active columns are found from a heap keyed by their nonzero count, with
+    stale entries dropped when popped, rather than by sorting every active column per step.
 
     `columns[p]` is {row: value} for basis position p. After factorisation E B = U, with E
-    the recorded row eliminations and U triangular in pivot order."""
+    the recorded row eliminations and U triangular in pivot order. U is kept both by pivot
+    row and by pivot column, so both solves push from each nonzero and skip every zero.
+
+    A basis change is a product-form eta (Dantzig and Orchard-Hays, MTAC 8, 1954):
+    `with_eta` returns a new object sharing these factors, so a basis the caller still holds
+    is never changed underneath it."""
 
     def __init__(self, columns: list[dict[int, Fraction]], deadline: float) -> None:
         m = len(columns)
@@ -65,27 +75,41 @@ class ExactLU:
                     col_rows[p].add(i)
         self.m = m
         self.pivots: list[tuple[int, int]] = []          # (row, position) in order
+        self.pivot_values: list[Fraction] = []
         self.eliminations: list[list[tuple[int, Fraction]]] = []  # per step: (row, l)
-        self.u_rows: dict[int, dict[int, Fraction]] = {}
-        active_rows = set(range(m))
-        active_cols = set(range(m))
+        self.etas: tuple = ()                            # (position, {position: alpha})
+        u_rows: list[dict[int, Fraction]] = []           # per step: {position: value}
+        heap = [(len(col_rows[p]), p) for p in range(m)]
+        heapq.heapify(heap)
+        done: set[int] = set()
         for _ in range(m):
             if time.monotonic() > deadline:
                 raise Declined("the exact factorisation ran past its time budget")
             best = None
-            for p in sorted(active_cols, key=lambda c: len(col_rows[c]))[:4]:
+            looked: list[int] = []
+            while heap and len(looked) < 4:
+                count, p = heapq.heappop(heap)
+                if p in done or count != len(col_rows[p]):
+                    continue  # stale
+                looked.append(p)
                 if not col_rows[p]:
                     raise Declined("the basis is exactly singular")
                 for i in col_rows[p]:
-                    cost = (len(rows[i]) - 1) * (len(col_rows[p]) - 1)
+                    cost = (len(rows[i]) - 1) * (count - 1)
                     if best is None or cost < best[0]:
                         best = (cost, i, p)
-                if best is not None and best[0] == 0:
+                if best[0] == 0:
                     break
+            if best is None:
+                raise Declined("the basis is exactly singular")
+            for p in looked:
+                if p != best[2]:
+                    heapq.heappush(heap, (len(col_rows[p]), p))
             _, r, p = best
-            pivot_row = rows[r]
+            pivot_row = rows.pop(r)
             pivot = pivot_row[p]
             step = []
+            touched: set[int] = set()
             for i in list(col_rows[p]):
                 if i == r:
                     continue
@@ -93,23 +117,45 @@ class ExactLU:
                 step.append((i, factor))
                 target = rows[i]
                 for c, v in pivot_row.items():
-                    value = target.get(c, Fraction(0)) - factor * v
+                    value = target.get(c, 0) - factor * v
                     if value == 0:
                         if c in target:
                             del target[c]
                             col_rows[c].discard(i)
+                            touched.add(c)
                     else:
                         if c not in target:
                             col_rows[c].add(i)
+                            touched.add(c)
                         target[c] = value
             self.eliminations.append(step)
             self.pivots.append((r, p))
-            self.u_rows[r] = dict(pivot_row)
+            self.pivot_values.append(pivot)
+            u_rows.append({c: v for c, v in pivot_row.items() if c != p})
             for c in pivot_row:
                 col_rows[c].discard(r)
-            active_rows.discard(r)
-            active_cols.discard(p)
+                touched.add(c)
+            done.add(p)
             del col_rows[p]
+            for c in touched:
+                if c not in done:
+                    heapq.heappush(heap, (len(col_rows[c]), c))
+        step_of = {p: k for k, (_, p) in enumerate(self.pivots)}
+        # U by step: the row of step k over later steps, and the column of step k over
+        # earlier steps.
+        self.u_row: list[list[tuple[int, Fraction]]] = [
+            [(step_of[c], v) for c, v in u.items()] for u in u_rows]
+        self.u_col: list[list[tuple[int, Fraction]]] = [[] for _ in range(m)]
+        for k, entries in enumerate(self.u_row):
+            for l, v in entries:
+                self.u_col[l].append((k, v))
+
+    def with_eta(self, position: int, alpha: dict[int, Fraction]) -> "ExactLU":
+        """The factor of the basis with column `position` replaced by a column whose
+        B^{-1} a is `alpha` (by position); alpha[position] must be nonzero."""
+        other = copy.copy(self)
+        other.etas = self.etas + ((position, dict(alpha)),)
+        return other
 
     def solve(self, rhs: dict[int, Fraction]) -> dict[int, Fraction]:
         """x (by basis position) with B x = rhs (by row)."""
@@ -118,31 +164,61 @@ class ExactLU:
             br = b.get(r)
             if br:
                 for i, factor in step:
-                    b[i] = b.get(i, Fraction(0)) - factor * br
+                    b[i] = b.get(i, 0) - factor * br
         x: dict[int, Fraction] = {}
-        for r, p in reversed(self.pivots):
-            total = b.get(r, Fraction(0))
-            for c, v in self.u_rows[r].items():
-                if c != p and c in x:
-                    total -= v * x[c]
-            if total:
-                x[p] = total / self.u_rows[r][p]
+        pivots, values = self.pivots, self.pivot_values
+        for k in range(self.m - 1, -1, -1):
+            r, p = pivots[k]
+            v = b.get(r)
+            if v:
+                xk = v / values[k]
+                x[p] = xk
+                for j, u in self.u_col[k]:
+                    rj = pivots[j][0]
+                    b[rj] = b.get(rj, 0) - u * xk
+        for p, alpha in self.etas:
+            xp = x.get(p)
+            if not xp:
+                continue
+            xp = xp / alpha[p]
+            for i, a in alpha.items():
+                if i != p:
+                    value = x.get(i, 0) - a * xp
+                    if value:
+                        x[i] = value
+                    elif i in x:
+                        del x[i]
+            x[p] = xp
         return x
 
     def solve_transpose(self, rhs: dict[int, Fraction]) -> dict[int, Fraction]:
         """y (by row) with B^T y = rhs (by basis position)."""
         acc = dict(rhs)
+        for p, alpha in reversed(self.etas):
+            total = acc.get(p, 0)
+            for i, a in alpha.items():
+                if i != p:
+                    ai = acc.get(i)
+                    if ai:
+                        total -= a * ai
+            total = total / alpha[p]
+            if total:
+                acc[p] = total
+            elif p in acc:
+                del acc[p]
         w: dict[int, Fraction] = {}
-        for r, p in self.pivots:
-            value = acc.get(p, Fraction(0))
+        pivots, values = self.pivots, self.pivot_values
+        for k in range(self.m):
+            r, p = pivots[k]
+            value = acc.get(p)
             if value:
-                wr = value / self.u_rows[r][p]
+                wr = value / values[k]
                 w[r] = wr
-                for c, v in self.u_rows[r].items():
-                    if c != p:
-                        acc[c] = acc.get(c, Fraction(0)) - v * wr
+                for l, u in self.u_row[k]:
+                    pl = pivots[l][1]
+                    acc[pl] = acc.get(pl, 0) - u * wr
         for (r, _), step in zip(reversed(self.pivots), reversed(self.eliminations)):
-            total = w.get(r, Fraction(0))
+            total = w.get(r, 0)
             for i, factor in step:
                 wi = w.get(i)
                 if wi:
@@ -180,13 +256,51 @@ class _Problem:
             self.columns.append({i: v for i, v in column.items() if v != 0})
         for i in range(self.m):
             self.columns.append({i: Fraction(-1)})
-        self.row_entries: list[list[tuple[int, Fraction]]] = [[] for _ in range(self.m)]
+        # Each column over its own least common denominator: column k is
+        # int_columns[k] / scale[k] with integer entries, and row_entries holds the same
+        # integers row-wise. A dot product with a vector brought to one denominator
+        # (_over_common_denominator) then runs in Python's C-speed integers and is reduced
+        # once, instead of costing a Fraction gcd per term.
+        self.scale: list[int] = []
+        self.int_columns: list[list[tuple[int, int]]] = []
+        self.row_entries: list[list[tuple[int, int]]] = [[] for _ in range(self.m)]
         for k, column in enumerate(self.columns):
-            for i, v in column.items():
-                self.row_entries[i].append((k, v))
+            scale = math.lcm(1, *(v.denominator for v in column.values()))
+            entries = [(i, v.numerator * (scale // v.denominator)) for i, v in column.items()]
+            self.scale.append(scale)
+            self.int_columns.append(entries)
+            for i, a in entries:
+                self.row_entries[i].append((k, a))
 
     def fixed(self, k: int) -> bool:
         return self.lower[k] == self.upper[k]
+
+
+def _smaller_pair(a, b):
+    """The smaller of two ratios given as (numerator, positive denominator); None is +inf."""
+    if a is None:
+        return b
+    (n1, d1), (n2, d2) = a, b
+    s1, s2 = (n1 > 0) - (n1 < 0), (n2 > 0) - (n2 < 0)
+    if s1 != s2:
+        return a if s1 < s2 else b
+    if s1 == 0:
+        return a
+    # |n/d| lies in (2^(e-1), 2^(e+1)) for e = bits(n) - bits(d): two exponents two or more
+    # apart decide without the multiplications, which on numbers thousands of digits long
+    # are most of the cost.
+    e1 = abs(n1).bit_length() - d1.bit_length()
+    e2 = abs(n2).bit_length() - d2.bit_length()
+    if abs(e1 - e2) >= 2:
+        first_larger_in_size = e1 > e2
+        return b if first_larger_in_size == (s1 > 0) else a
+    return a if n1 * d2 <= n2 * d1 else b
+
+
+def _over_common_denominator(v: dict[int, Fraction]) -> tuple[int, dict[int, int]]:
+    """The least common denominator D of v's entries and the integers v_i D."""
+    lcd = math.lcm(1, *(x.denominator for x in v.values()))
+    return lcd, {i: x.numerator * (lcd // x.denominator) for i, x in v.items() if x}
 
 
 def _nonbasic_value(problem: _Problem, k: int, status: str):
@@ -257,25 +371,88 @@ class _Basis:
             self.value[k] = xb.get(p, Fraction(0))
         self.y = self.lu.solve_transpose(
             {p: problem.cost[k] for p, k in enumerate(basic) if problem.cost[k]})
-        self.d = {k: self.reduced_cost(k) for k in status}
+        lcd, y_int = _over_common_denominator(self.y)
+        self.d = {k: self.reduced_cost(k, lcd, y_int) for k in status}
 
-    def reduced_cost(self, k: int) -> Fraction:
-        total = self.problem.cost[k]
-        for i, a in self.problem.columns[k].items():
-            yi = self.y.get(i)
+    def reduced_cost(self, k: int, lcd: int | None = None,
+                     y_int: dict[int, int] | None = None) -> Fraction:
+        """c_k - a_k^T y; `lcd` and `y_int` are y over its common denominator, when the
+        caller has them."""
+        if y_int is None:
+            lcd, y_int = _over_common_denominator(self.y)
+        total = 0
+        for i, a in self.problem.int_columns[k]:
+            yi = y_int.get(i)
             if yi:
-                total -= yi * a
-        return total
+                total += yi * a
+        if not total:
+            return self.problem.cost[k]
+        return self.problem.cost[k] - Fraction(total, lcd * self.problem.scale[k])
 
-    def tableau_row(self, p: int) -> dict[int, Fraction]:
-        """Row p of B^{-1} [A | -I] over the nonbasic variables, nonzeros only."""
+    def tableau_row(self, p: int, with_w: bool = False):
+        """Row p of B^{-1} [A | -I] over the nonbasic variables, nonzeros only; with
+        `with_w`, also w = e_p^T B^{-1} (by row) that it came from."""
+        w, lcd, total = self._scaled_row(p)
+        scale = self.problem.scale
+        row = {k: Fraction(t, lcd * scale[k]) for k, t in total.items()}
+        return (row, w) if with_w else row
+
+    def tableau_row_scaled(self, p: int) -> tuple[int, dict[int, int]]:
+        """Row p of the tableau unreduced: alpha_k = total[k] / (lcd * scale[k]). On a basis
+        whose inverse holds numbers thousands of digits long (25fv47) reducing every alpha_k
+        to a Fraction is most of the work, and a ratio test needs none of it."""
+        _, lcd, total = self._scaled_row(p)
+        return lcd, total
+
+    def _scaled_row(self, p: int):
         w = self.lu.solve_transpose({p: Fraction(1)})
-        alpha: dict[int, Fraction] = {}
-        for i, wi in w.items():
+        lcd, w_int = _over_common_denominator(w)
+        total: dict[int, int] = {}
+        status = self.status
+        for i, wi in w_int.items():
             for k, a in self.problem.row_entries[i]:
-                if k in self.status:
-                    alpha[k] = alpha.get(k, Fraction(0)) + wi * a
-        return {k: a for k, a in alpha.items() if a != 0}
+                if k in status:
+                    total[k] = total.get(k, 0) + wi * a
+        return w, lcd, {k: t for k, t in total.items() if t}
+
+    def degenerate_pivot(self, p: int, entering: int, to: str, row: dict[int, Fraction],
+                         w: dict[int, Fraction], deadline: float) -> "_Basis":
+        """The basis with `entering` in position p, whose variable sits exactly on the bound
+        `to` it leaves to. The primal step is zero, so every value is unchanged; the duals
+        move by theta = d_q / alpha_pq: d_k -= theta alpha_pk, d_leaving = -theta, y += theta
+        w. The factor takes a product-form eta, rebuilt from scratch every 32."""
+        problem = self.problem
+        leaving = self.basic[p]
+        theta = self.d[entering] / row[entering]
+        other = copy.copy(self)
+        other.basic = list(self.basic)
+        other.basic[p] = entering
+        other.position = dict(self.position)
+        del other.position[leaving]
+        other.position[entering] = p
+        other.status = dict(self.status)
+        del other.status[entering]
+        other.status[leaving] = to
+        other.y = dict(self.y)
+        other.d = dict(self.d)
+        del other.d[entering]
+        if theta:
+            for i, wi in w.items():
+                value = other.y.get(i, 0) + theta * wi
+                if value:
+                    other.y[i] = value
+                elif i in other.y:
+                    del other.y[i]
+            for k, a in row.items():
+                if k != entering:
+                    other.d[k] -= theta * a
+        other.d[leaving] = -theta
+        if len(self.lu.etas) >= 32:
+            other.lu = ExactLU([problem.columns[k] for k in other.basic], deadline)
+        else:
+            alpha = self.lu.solve(problem.columns[entering])
+            other.lu = self.lu.with_eta(p, alpha)
+        return other
 
 
 def _check_optimal(basis: _Basis) -> None:
@@ -322,7 +499,7 @@ def _one_sided_derivative(start: _Basis, row: int, direction: int, deadline: flo
         if leaving is None:
             return basis.y.get(row, Fraction(0))
         p, k_out, to = leaving
-        alpha = basis.tableau_row(p)
+        alpha, w = basis.tableau_row(p, with_w=True)
         must_rise = to == "at_lower"  # the basic value must move up off its lower bound
         best = None
         for k, a in sorted(alpha.items()):
@@ -340,13 +517,7 @@ def _one_sided_derivative(start: _Basis, row: int, direction: int, deadline: flo
             # No feasible point on that side: v is +infinity there, so the derivative from
             # the right is +infinity and from the left -infinity.
             return direction * INF
-        entering = best[1]
-        basic = list(basis.basic)
-        basic[p] = entering
-        status = dict(basis.status)
-        del status[entering]
-        status[k_out] = to
-        basis = _Basis(problem, basic, status, deadline)
+        basis = basis.degenerate_pivot(p, best[1], to, alpha, w, deadline)
     raise Declined("the parametric dual simplex did not settle within its pivot cap")
 
 
@@ -408,24 +579,30 @@ def derive(model, solution, seconds: float = 60.0) -> dict:
                 lo, hi = Fraction(0), Fraction(0)
         else:
             d = Fraction(0)
-            lo = hi = INF
-            for k, a in basis.tableau_row(basis.position[j]).items():
+            # Ratios as unreduced integer pairs (numerator, positive denominator), compared by
+            # cross-multiplication; only the two winners become Fractions. None is +inf.
+            lo_pair = hi_pair = None
+            lcd, total = basis.tableau_row_scaled(basis.position[j])
+            for k, t in total.items():
                 st = basis.status[k]
                 if problem.fixed(k):
                     continue
+                if st == "free":  # free nonbasic, d = 0: no room either way
+                    lo_pair = hi_pair = (0, 1)
+                    continue
                 dk = basis.d[k]
-                if st == "at_lower":
-                    if a > 0:
-                        hi = min(hi, dk / a)
-                    else:
-                        lo = min(lo, dk / -a)
-                elif st == "at_upper":
-                    if a > 0:
-                        lo = min(lo, -dk / a)
-                    else:
-                        hi = min(hi, -dk / -a)
-                else:  # free nonbasic, d = 0: no room either way
-                    lo = hi = Fraction(0)
+                # at_lower: d_k / |alpha_k|; at_upper: -d_k / |alpha_k|; alpha_k > 0 limits
+                # the increase at_lower and the decrease at_upper.
+                # Without the row's common factor lcd > 0, which cannot change which ratio
+                # is smallest; it goes back on the two winners only.
+                sign = 1 if st == "at_lower" else -1
+                pair = (sign * dk.numerator * problem.scale[k], dk.denominator * abs(t))
+                if (t > 0) == (st == "at_lower"):
+                    hi_pair = _smaller_pair(hi_pair, pair)
+                else:
+                    lo_pair = _smaller_pair(lo_pair, pair)
+            lo = INF if lo_pair is None else Fraction(lo_pair[0] * lcd, lo_pair[1])
+            hi = INF if hi_pair is None else Fraction(hi_pair[0] * lcd, hi_pair[1])
             lo, hi = max(lo, Fraction(0)), max(hi, Fraction(0))
         if sense < 0:
             lo, hi = hi, lo
