@@ -439,8 +439,7 @@ void Solution::recompute_quality(const Model& model) {
       const double price_scale = std::max(1.0, dual_norm);
       if (y > 0.0 && !is_finite_bound(lo)) record_dual(y, price_scale);
       if (y < 0.0 && !is_finite_bound(hi)) record_dual(-y, price_scale);
-      record_complementarity(std::fabs(y), nearer_slack(a, lo, hi), price_scale,
-                             row_scale[u]);
+      record_complementarity(std::fabs(y), nearer_slack(a, lo, hi), price_scale, row_scale[u]);
     }
   }
 
