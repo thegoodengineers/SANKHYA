@@ -20,6 +20,9 @@
 #ifndef SANKHYA_BUILD_TYPE
 #define SANKHYA_BUILD_TYPE "unknown"
 #endif
+#ifndef SANKHYA_CUDA_TOOLKIT
+#define SANKHYA_CUDA_TOOLKIT ""
+#endif
 #ifndef SANKHYA_COMPILER
 #define SANKHYA_COMPILER "unknown"
 #endif
@@ -67,9 +70,15 @@ const char* repository_url() noexcept {
 }
 
 const char* banner() noexcept {
-  static const std::string text = fmt::format(
-      "SANKHYA {} ({}, {}, {}, CUDA {}, GPU {})", version_string(), git_commit(), build_type(),
-      compiler_string(), cuda_enabled() ? "on" : "off", cuda_device_description());
+  // The toolkit version rides on "CUDA on" so a release binary names the nvcc that built it
+  // (#748); bench/runners/stamp.py reads only the commit, first in the parentheses.
+  const std::string cuda = !cuda_enabled() ? std::string("off")
+                           : std::string(SANKHYA_CUDA_TOOLKIT).empty()
+                               ? std::string("on")
+                               : fmt::format("on, toolkit {}", SANKHYA_CUDA_TOOLKIT);
+  static const std::string text =
+      fmt::format("SANKHYA {} ({}, {}, {}, CUDA {}, GPU {})", version_string(), git_commit(),
+                  build_type(), compiler_string(), cuda, cuda_device_description());
   return text.c_str();
 }
 

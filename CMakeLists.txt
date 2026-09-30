@@ -34,6 +34,7 @@ endif()
 # -----------------------------------------------------------------------------------------
 
 option(SANKHYA_ENABLE_CUDA  "Build the CUDA backend (Phase 4)"          OFF)
+option(SANKHYA_CUDA_STATIC  "Link the CUDA runtime and cuSPARSE statically, so a release binary needs only the driver (#748)" OFF)
 option(SANKHYA_ENABLE_CUDSS "Interior point normal equations factored by NVIDIA cuDSS (#489); needs SANKHYA_ENABLE_CUDA" OFF)
 option(SANKHYA_BUILD_PYTHON "Build the pybind11 bindings (Phase 10)"    OFF)
 option(SANKHYA_BUILD_TESTS  "Build the GoogleTest suite"                ON)
@@ -432,6 +433,9 @@ if(SANKHYA_ENABLE_CUDA)
   set(CMAKE_CUDA_STANDARD_REQUIRED ON)
   enable_language(CUDA)
   find_package(CUDAToolkit REQUIRED)
+  # The banner names the toolkit that built the binary (#748); known only from here on.
+  set_property(SOURCE src/util/version.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+    SANKHYA_CUDA_TOOLKIT="${CMAKE_CUDA_COMPILER_VERSION}")
   # Collect every .cu file under src/gpu/ so adding a new kernel needs no CMake edit.
   file(GLOB SANKHYA_GPU_SOURCES "src/gpu/*.cu")
   target_sources(sankhya_objects PRIVATE ${SANKHYA_GPU_SOURCES})
@@ -457,7 +461,11 @@ if(SANKHYA_ENABLE_CUDA)
   endif()
   # cuSPARSE supplies SpMV on device — matrix arithmetic, not an optimisation algorithm.
   # See docs/PROVENANCE.md section 2.
-  target_link_libraries(sankhya_objects PRIVATE CUDA::cusparse CUDA::cudart)
+  if(SANKHYA_CUDA_STATIC)
+    target_link_libraries(sankhya_objects PRIVATE CUDA::cusparse_static CUDA::cudart_static)
+  else()
+    target_link_libraries(sankhya_objects PRIVATE CUDA::cusparse CUDA::cudart)
+  endif()
   target_compile_definitions(sankhya_objects PUBLIC SANKHYA_ENABLE_CUDA)
 endif()
 
