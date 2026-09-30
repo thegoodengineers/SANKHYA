@@ -208,7 +208,8 @@ def end_to_end() -> None:
             cert = Path(tmp) / "dense.vipr"
             if cert.exists():
                 cert.unlink()
-            base.solve(binary, mps, cert, "enable_root_cuts=true", dense)
+            # the density cap alone decides what is dense, as before the floor (#496)
+            base.solve(binary, mps, cert, "enable_root_cuts=true", dense, "cut_support_floor=0")
             counts.append(len(cut_indices(cert.read_text())) if cert.exists() else -1)
         base.check(counts[1] > counts[0] >= 0, "gomory: the dense admission writes more cut "
                    "rows, and they verified above", f"cut rows without/with: {counts}")
