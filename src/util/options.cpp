@@ -1244,14 +1244,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  {"auto", "cpu"}});
     s.push_back({"gpu_on_device_loop",
                  OptionType::Bool,
-                 false,
+                 true,
                  "Keep the PDHG iteration loop on the device via a CUDA Graph (#478): "
                  "capture one iteration (both products, the primal and dual kernels, the "
                  "interaction, the adaptive step rule and the commit of an accepted "
                  "step) and replay it 32 times per host synchronisation, instead of "
                  "copying three scalars to the host every iteration. "
-                 "Default OFF until an A/B on a card; the per-iteration path is "
-                 "unchanged when off, and runs instead if the capture fails. "
+                 "Default ON since the A/B on cards: on the 779,640-row refinery year on "
+                 "an A100 (pdhg-478-refinery-{default,loop}-fdd1f35.csv) 553 against 598 us "
+                 "per iteration with three products and 479 against 489 with two; on an L4 "
+                 "the deterministic loop beat the default per-iteration path on 13 of 14 "
+                 "three-product cells (not kkt_2000x2000). False restores the per-iteration "
+                 "path, which also runs whenever the capture fails. "
                  "References: Lu & Yang, arXiv:2311.12180; NVIDIA CUDA Graphs guide.",
                  0.0,
                  0.0,
