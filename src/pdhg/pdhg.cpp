@@ -144,8 +144,8 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   const bool geometric_evaluation = options.get_bool("pdhg_geometric_evaluation");
   const bool use_halpern = options.get_bool("pdhg_halpern");
   // pdhg_two_matvec (#479): "cpu", the default, is two products here unless Halpern is on,
-  // where the default falls back to three rather than refusing; only an explicit "true"
-  // with Halpern is refused below.
+  // where the default keeps three until an A/B says otherwise; an explicit "true" with
+  // Halpern blends the cached product with the anchor's, below.
   const std::string& two_matvec_mode = options.get_string("pdhg_two_matvec");
   const bool two_matvec =
       two_matvec_mode == "true" || (two_matvec_mode == "cpu" && !use_halpern);
@@ -155,16 +155,6 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         "pdhg_halpern and pdhg_restart cannot both be true: the Halpern path has its own "
         "fixed-point-residual restart logic and is incompatible with the averaged-path "
         "PDLP restarts. Set pdhg_restart=false when using pdhg_halpern.";
-    return solution;
-  }
-  if (use_halpern && two_matvec) {
-    // The blend moves x_{k+1} after A x_{k+1} was computed, so the cached product would be
-    // A of the unblended point and every derived A xbar and A dx after it wrong (review of
-    // #613). Refused, like the restart combination above, rather than silently wrong.
-    solution.status = SolveStatus::kModelError;
-    solution.message =
-        "pdhg_halpern and pdhg_two_matvec cannot both be true: the Halpern blend moves the "
-        "iterate after the cached A x was computed. Set pdhg_two_matvec=false.";
     return solution;
   }
   // ROW-PARALLEL A x (#487). The serial product scatters column by column into y and
@@ -223,6 +213,10 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   // A*xbar and A*dx are derived by vector ops instead of extra mat-vecs (#479).
   std::vector<double> a_x_cached(m, 0.0);
   std::vector<double> a_x_new(m, 0.0);
+  // With Halpern the accepted iterate is the blend alpha T(z_k) + (1 - alpha) z_0 [LY24], so
+  // by linearity A x_{k+1} = alpha A T(x_k) + (1 - alpha) A x_0: the anchor's product is
+  // kept, computed afresh at every Halpern restart, and the blend costs no product (#479).
+  std::vector<double> a_x_anchor(use_halpern && two_matvec ? m : 0, 0.0);
   // pdhg_parallel_updates: x_next - x from the primal pass and A of it, kept across
   // iterations instead of allocated in each (#487).
   std::vector<double> step_dx(parallel_updates ? n : 0, 0.0);
@@ -262,6 +256,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   };
 
   if (two_matvec && rows > 0) a_times(x.data(), a_x_cached.data());
+  if (use_halpern && two_matvec) a_x_anchor = a_x_cached;
 
   double eta = spectral_norm > 0.0 ? 1.0 / spectral_norm : 1.0;
   double omega = 1.0;  // primal weight
@@ -478,6 +473,11 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       // Accept.  Apply Halpern blend to (x_next, y_next) before swapping (#481).
       if (use_halpern) {
         last_halpern_res = pdhg_halpern_step(x, y, x_next, y_next, halpern, omega, options);
+        if (two_matvec) {
+          const double alpha = last_halpern_res.alpha;
+          for (std::size_t i = 0; i < m; ++i)
+            a_x_new[i] = alpha * a_x_new[i] + (1.0 - alpha) * a_x_anchor[i];
+        }
       }
       x.swap(x_next);
       y.swap(y_next);
@@ -671,6 +671,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       const double r0 =
           std::sqrt(omega * last_halpern_res.fp_x2 + last_halpern_res.fp_y2 / omega);
       halpern_reset(x, y, r0, halpern);
+      if (two_matvec && rows > 0) {
+        // The new anchor is x itself; its product is taken exactly, so the blend's rounding
+        // does not carry from one period into the next.
+        std::fill(a_x_cached.begin(), a_x_cached.end(), 0.0);
+        a_times(x.data(), a_x_cached.data());
+        a_x_anchor = a_x_cached;
+      }
       x_restart = x;
       y_restart = y;
       last_restart = iteration;

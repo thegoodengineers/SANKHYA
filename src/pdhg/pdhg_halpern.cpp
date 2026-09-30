@@ -49,7 +49,7 @@ HalpernResult pdhg_halpern_step(const std::vector<double>& x, const std::vector<
   // Also restart on the very first step (r0 == 0 sentinel from halpern_reset).
   const bool should_restart = (state.r0 <= 0.0) || (r_k < 0.2 * state.r0);
 
-  return {true, r_k, fx2, fy2, should_restart};
+  return {true, r_k, fx2, fy2, should_restart, alpha};
 }
 
 void halpern_reset(const std::vector<double>& x, const std::vector<double>& y,
