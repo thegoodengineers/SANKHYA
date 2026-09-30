@@ -336,13 +336,13 @@ python3 tools/verify_solution.py demo/crude_blend.mps blend.sol
 demo/finale.sh                        # Windows: unzip, then demo\finale.cmd
 ```
 
-The container image (the CUDA build, the verifier and the demo models) is attached to the
-release as `sankhya-image.tar.gz` and pushed to `ghcr.io/thegoodengineers/sankhya:v1.0.0-rc1`,
-which does not yet accept anonymous pulls (the package is not public); from the release asset:
+The container image (the CUDA build, the verifier and the demo models) is public at
+`ghcr.io/thegoodengineers/sankhya:v1.0.0-rc1`:
 
 ```bash
-docker load < sankhya-image.tar.gz
-docker run --rm --gpus all sankhya:ci sankhya solve demo/crude_blend.mps --gpu
+docker pull ghcr.io/thegoodengineers/sankhya:v1.0.0-rc1
+docker run --rm --gpus all ghcr.io/thegoodengineers/sankhya:v1.0.0-rc1 sankhya solve demo/crude_blend.mps --gpu
+# offline: docker load < sankhya-image.tar.gz (a release asset), then run it as sankhya:ci
 # or build it:  docker build -t sankhya . && docker run --rm --gpus all sankhya sankhya version
 ```
 
