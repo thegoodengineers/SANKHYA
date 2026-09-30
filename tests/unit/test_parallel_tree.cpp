@@ -503,7 +503,10 @@ class BackgroundLoad {
         // No sleep, no yield: the point is to occupy a core, not merely to exist.
         volatile std::uint64_t sink = 0;
         while (!stop_.load(std::memory_order_relaxed)) {
-          for (int i = 0; i < 100000; ++i) sink += static_cast<std::uint64_t>(i) * 2654435761u;
+          // `sink = sink + ...`, not `+=`: a compound assignment to a volatile is deprecated
+          // in C++20 and GCC 11 rejects it under -Werror=volatile.
+          for (int i = 0; i < 100000; ++i)
+            sink = sink + static_cast<std::uint64_t>(i) * 2654435761u;
         }
         static_cast<void>(sink);  // read once, or GCC 16 calls it set but unused (-Werror)
       });
