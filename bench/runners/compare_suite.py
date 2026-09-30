@@ -294,9 +294,12 @@ def run_suite(args) -> int:
                    "threads": 1, "git_commit": commit, "machine": machine,
                    "timestamp_utc": timestamp}
             rows.append({key: text(row.get(key)) for key in CSV_COLUMNS})
+            # The exact grade where the suite has one, as counted_for_time uses it.
+            correct = (verdict["matches_exact"] if verdict["matches_exact"] is not None
+                       else verdict["matches_reference"])
             mark = ("ok" if verdict["counted_for_time"] else
-                    "WRONG" if verdict["status"] == "optimal" and not verdict["matches_reference"]
-                    else "REJ" if verdict["independently_verified"] is False
+                    "REJ" if verdict["independently_verified"] is False
+                    else "WRONG" if verdict["status"] == "optimal" and not correct
                     else verdict["status"])
             seconds = out.get("seconds")
             line.append(f"{solver}={mark}" + (f"/{seconds:.2f}s" if seconds is not None
@@ -311,8 +314,10 @@ def run_suite(args) -> int:
     import make_benchmarks_doc  # noqa: PLC0415 - the one shifted geometric mean
     summarise(rows, solvers, time_limit, make_benchmarks_doc.shifted_geometric_mean)
     wrong = sorted({r["instance"] for r in rows if r["solver"] == "sankhya"
-                    and r["status"] == "optimal" and r["matches_reference"] != "1"})
+                    and r["status"] == "optimal"
+                    and (r["matches_exact"] or r["matches_reference"]) != "1"})
     if wrong:
-        print(f"SANKHYA claimed optimal away from the reference on: {', '.join(wrong)}")
+        print(f"SANKHYA claimed optimal away from the "
+              f"{'exact optimum' if exact else 'reference'} on: {', '.join(wrong)}")
     print(f"wrote {out_path}")
     return 0
