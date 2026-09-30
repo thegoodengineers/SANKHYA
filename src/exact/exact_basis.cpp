@@ -235,6 +235,23 @@ LoadResult load_basis(const Model& model, const Solution& solution, const Proble
   const Index m = model.num_rows();
   basis->basic.clear();
   basis->status.assign(static_cast<Sz>(n + m), Nb::kBasic);
+  // No basis at all - an interior point answer without crossover labels every variable
+  // kUnknown - is a decline: there is nothing to check, not a basis that fails a check.
+  Index labelled_basic = 0;
+  for (Index k = 0; k < n + m; ++k) {
+    const BasisStatus reported = k < n ? solution.col_status[static_cast<Sz>(k)]
+                                       : solution.row_status[static_cast<Sz>(k - n)];
+    if (reported == BasisStatus::kUnknown) {
+      result.message = fmt::format("the engine reported no basis status for variable {}", k);
+      return result;
+    }
+    labelled_basic += reported == BasisStatus::kBasic ? 1 : 0;
+  }
+  if (labelled_basic != m) {
+    result.message = fmt::format("the reported basis has {} basic variable(s) for {} row(s)",
+                                 labelled_basic, m);
+    return result;
+  }
   for (Index k = 0; k < n + m; ++k) {
     const auto u = static_cast<Sz>(k);
     const bool structural = k < n;
@@ -256,11 +273,6 @@ LoadResult load_basis(const Model& model, const Solution& solution, const Proble
       return result;
     }
     basis->status[u] = nb;
-  }
-  if (static_cast<Index>(basis->basic.size()) != m) {
-    result.message = fmt::format("the reported basis has {} basic variable(s) for {} row(s)",
-                                 basis->basic.size(), m);
-    return result;
   }
   if (!basis->build(problem, deadline)) {
     result.verdict = ExactVerdict::kFailed;

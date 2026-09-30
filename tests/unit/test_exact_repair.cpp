@@ -8,6 +8,7 @@
 // verify it.
 
 #include <cmath>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -176,6 +177,18 @@ TEST(ExactRepair, AnInfeasibleModelFailsInsteadOfBeingRepaired) {
   const RepairResult repair = repair_basis_exact(model, solution);
   EXPECT_EQ(repair.verdict, ExactVerdict::kFailed) << repair.message;
   EXPECT_FALSE(repair.changed());
+}
+
+TEST(ExactRepair, NoBasisAtAllIsDeclinedNotFailed) {
+  // An interior point answer without crossover labels every variable kUnknown (Netlib
+  // maros-r7 under algorithm=auto): there is no basis to repair, which is a decline. It was
+  // reported FAILED, "variable 0 is nonbasic at no finite bound".
+  const Model model = primal_off_by_tiny();
+  const Solution solution = reported(model, {BasisStatus::kUnknown, BasisStatus::kUnknown},
+                                     {BasisStatus::kUnknown}, {1.0 - kTiny, kTiny});
+  const RepairResult repair = repair_basis_exact(model, solution);
+  EXPECT_EQ(repair.verdict, ExactVerdict::kDeclined) << repair.message;
+  EXPECT_NE(repair.message.find("no basis status"), std::string::npos) << repair.message;
 }
 
 TEST(ExactRepair, SolveWithExactReportsTheRepairedBasisAndVerifiesIt) {
