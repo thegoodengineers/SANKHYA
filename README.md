@@ -238,8 +238,11 @@ Kennington: **15 of 16** matched and verified at 600 s (`bench/results/kenningto
 its complementarity 1.5e-6 above the verifier's 1e-6). Netlib's infeasible set: **13 of 29**
 infeasible with a Farkas certificate the verifier accepts, the other 16 correct `infeasible`
 verdicts without one (12 from the dual simplex and phase 1, 3 from presolve) and `cplex2` a
-`numerical_error`; no wrong verdict (`bench/results/netlib-infeasible-65eecbc.csv`, #559 for the
-certificates). Maros-Meszaros, all 138 convex QPs at 60 s with the proximal interior point the
+`numerical_error`; no wrong verdict (`bench/results/netlib-infeasible-65eecbc.csv`). On `main`
+at `60455ce`, after #559's certificates, **28 of 29** carry a Farkas certificate the verifier
+accepts; `cplex2` stays a `numerical_error`, since its elastic optimum is zero at the 1e-7
+tolerance and no certificate exists there (`bench/results/netlib-infeasible-60455ce.csv`, a
+laptop with desktop apps open; every instance ends in under 14 s of its 60 s limit). Maros-Meszaros, all 138 convex QPs at 60 s with the proximal interior point the
 default QP engine (#740): **`optimal` on 106, within 1e-6 of the reference on 106,
 verifier-accepted on 120, and no `optimal` the verifier rejects** (`bench/results/maros-meszaros-9094e1c.csv`,
 `docs/BENCHMARKS.md` section 2b). The run before it, Condat-Vu at 300 s, read 45, 44 and 39 with
