@@ -34,6 +34,7 @@ from verify_solution_checks import (STATUSES_ASSERTING_FEASIBILITY, STATUSES_WIT
 from verify_solution_io import INF
 from verify_solution_mps import Model, parse_mps
 from verify_solution_sol import Solution, parse_sol
+from verify_solution_sensitivity import check_certified as check_certified_sensitivity
 
 # Defaults mirror include/sankhya/tolerances.hpp. They are CLI-overridable because a judge
 # should be able to tighten them and watch what happens.
@@ -631,6 +632,9 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
             f"{checked} nonbasic column(s): the bound side equals |d_j| and the other side is "
             f"unbounded, max relative error {worst:.3e}"
             + (f" on {worst_where}" if worst_where else ""))
+
+    # ---- Certified sensitivity (#757): re-derived from the basis in exact arithmetic ----
+    check_certified_sensitivity(model, solution, report)
 
     return report
 

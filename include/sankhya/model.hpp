@@ -345,6 +345,31 @@ class Solution {
   std::vector<double> row_ranging_upper;
   bool ranging_basis_degenerate = false;
 
+  // ---- Certified sensitivity (#757, options "exact" and "ranging" together) ----
+  //
+  // An ADDITION to this frozen interface, called out here as farkas_dual was in #191; it
+  // defaults to kNotAttempted and empty and every existing consumer ignores it. The duals,
+  // reduced costs and both ranges re-derived from the reported basis in exact rational
+  // arithmetic (src/exact/exact_sensitivity.hpp), each entry marked `certified` when the
+  // floating-point value above agrees with the exact one to tol::kSensitivityAgreement and
+  // corrected otherwise. Every row also carries its shadow price INTERVAL: the left and right
+  // derivatives of the optimal value as the row's bounds shift, which differ exactly when the
+  // optimum is degenerate and the dual is not unique.
+  struct ExactSensitivityEntry {
+    /// Exact values, "numerator/denominator", or "inf" / "-inf". `value` is the reduced cost
+    /// of a column and the dual of a row, in the model's sense; the ranges are as
+    /// col_ranging_* / row_ranging_*; the shadow prices are rows only.
+    std::string value, range_lower, range_upper, shadow_left, shadow_right;
+    /// The nearest doubles of shadow_left / shadow_right (rows only).
+    double shadow_left_value = 0.0;
+    double shadow_right_value = 0.0;
+    bool certified = false;
+  };
+  ExactVerification sensitivity_status = ExactVerification::kNotAttempted;
+  std::string sensitivity_message;  ///< why declined or failed
+  std::vector<ExactSensitivityEntry> exact_col_sensitivity;
+  std::vector<ExactSensitivityEntry> exact_row_sensitivity;
+
   // ---- Irreducible Infeasible Subsystem (IIS), computed by the deletion filter (#217) ----
   //
   // An ADDITION to this frozen interface, called out here as farkas_dual was in #191. These

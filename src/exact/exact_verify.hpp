@@ -34,7 +34,7 @@ struct ExactResult {
   std::string message;  ///< why declined/failed; empty on kVerified
 
   /// Populated only on kVerified. Decimal "numerator/denominator" strings (exact, not
-  /// rounded) - kept as strings here so this header does not expose __int128 across the
+  /// rounded) - kept as strings here so this header does not expose the big integers across the
   /// module boundary; exact_verify.cpp does the Rational arithmetic internally.
   std::string exact_objective;
   std::vector<std::string> exact_col_value;
@@ -47,5 +47,11 @@ struct ExactResult {
 /// and on a basis larger than a row cap chosen so a dense exact Gaussian elimination stays
 /// fast (see exact_verify.cpp).
 [[nodiscard]] ExactResult verify_basis_exact(const Model& model, const Solution& solution);
+
+/// The status a nonbasic variable really has (review of #622): kFixed with unequal bounds is
+/// whichever bound `value` equals exactly, kNonbasicFree only with 0 inside the bounds, and
+/// kUnknown when it cannot be resolved. Shared with exact_sensitivity.cpp.
+[[nodiscard]] BasisStatus resolved_status(BasisStatus status, double lower, double upper,
+                                          double value);
 
 }  // namespace sankhya::exact

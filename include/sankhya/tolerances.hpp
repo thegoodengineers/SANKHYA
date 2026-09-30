@@ -190,6 +190,14 @@ inline constexpr double kHyperSparseDensity = 0.10;
 /// Below this, a computed pivot element is treated as a singular basis rather than a pivot.
 inline constexpr double kPivotTolerance = 1e-9;
 
+/// A floating-point dual, reduced cost or range is reported as CERTIFIED (#757) when it is
+/// within this relative distance, max(1, |exact|), of the value the basis gives in exact
+/// rational arithmetic, and as corrected otherwise. The float values come from one LU solve
+/// of a basis the simplex has already accepted, so a well-conditioned basis lands within a
+/// few hundred ulps (~1e-13 relative); 1e-9 leaves four orders of magnitude for conditioning
+/// and still flags anything a planner would read as a different number.
+inline constexpr double kSensitivityAgreement = 1e-9;
+
 /// The dual ratio test's pivot floor RELATIVE to the row it is choosing from (#244):
 /// a candidate whose |alpha_rj| is below this fraction of the row's largest |alpha_rj| is
 /// skipped even when it clears kPivotTolerance. On an unscaled row whose entries are O(1e+3)

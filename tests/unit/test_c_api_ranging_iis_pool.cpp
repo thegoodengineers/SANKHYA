@@ -137,6 +137,38 @@ TEST(CApiRanging, CrossesTheBoundaryAndMatchesAnIndependentCppSolve) {
             SANKHYA_ERROR_ARGUMENT);
 }
 
+TEST(CApiRanging, CertifiedSensitivityCrossesTheBoundary) {
+  // #757: with exact=true beside ranging=true the exact report is computed, every float value
+  // on this well-conditioned LP is certified, and each row's shadow price interval is the
+  // single dual (the optimum x = (1, 3) is not degenerate: r0 and r2 bind, r1 does not).
+  ModelHandle model;
+  build_ranging_lp(model);
+  OptionsHandle options;
+  ASSERT_EQ(sankhya_options_set_bool(options, "log_to_console", 0), SANKHYA_OK);
+  ASSERT_EQ(sankhya_options_set_bool(options, "ranging", 1), SANKHYA_OK);
+  ASSERT_EQ(sankhya_options_set_bool(options, "exact", 1), SANKHYA_OK);
+  SolutionHandle solution;
+  ASSERT_EQ(sankhya_solve(model, options, &solution.handle), SANKHYA_OK)
+      << sankhya_last_error();
+  ASSERT_EQ(sankhya_solution_sensitivity_status(solution.handle), 1);
+  std::vector<double> left(3), right(3), duals(3), col_flags(2), row_flags(3);
+  ASSERT_EQ(
+      sankhya_solution_row_shadow_price_interval(solution.handle, left.data(), right.data(), 3),
+      SANKHYA_OK);
+  ASSERT_EQ(sankhya_solution_row_duals(solution.handle, duals.data(), 3), SANKHYA_OK);
+  const std::vector<double> want = {-1.0, 0.0, -1.0};
+  for (std::size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(left[i], want[i]) << "row " << i;
+    EXPECT_EQ(right[i], want[i]) << "row " << i;
+    EXPECT_NEAR(duals[i], want[i], 1e-12) << "row " << i;
+  }
+  ASSERT_EQ(sankhya_solution_sensitivity_certified(solution.handle, col_flags.data(), 2,
+                                                   row_flags.data(), 3),
+            SANKHYA_OK);
+  for (const double flag : col_flags) EXPECT_EQ(flag, 1.0);
+  for (const double flag : row_flags) EXPECT_EQ(flag, 1.0);
+}
+
 TEST(CApiRanging, IsAbsentAndLengthZeroWhenTheOptionIsOff) {
   ModelHandle model;
   build_ranging_lp(model);

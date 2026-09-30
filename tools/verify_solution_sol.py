@@ -30,6 +30,9 @@ class Solution:
         self.col_ranging_upper: dict[str, float] = {}
         self.row_ranging_lower: dict[str, float] = {}
         self.row_ranging_upper: dict[str, float] = {}
+        # Certified sensitivity (#757): name -> [verdict, exact values as text].
+        self.exact_sensitivity_columns: dict[str, list[str]] = {}
+        self.exact_sensitivity_rows: dict[str, list[str]] = {}
         self.iis: list[tuple[str, str]] = []
         # One witness per IIS element: (kind, name, {column name: value}).
         self.iis_witnesses: list[tuple[str, str, dict[str, float]]] = []
@@ -131,6 +134,10 @@ def parse_sol(path: Path) -> Solution:
             elif block == "ranging_rows" and len(fields) >= 3:
                 solution.row_ranging_lower[fields[0]] = float(fields[1])
                 solution.row_ranging_upper[fields[0]] = float(fields[2])
+            elif block == "exact_sensitivity_columns" and len(fields) >= 5:
+                solution.exact_sensitivity_columns[fields[0]] = fields[1:5]
+            elif block == "exact_sensitivity_rows" and len(fields) >= 7:
+                solution.exact_sensitivity_rows[fields[0]] = fields[1:7]
             elif not block and len(fields) >= 2:
                 solution.header[fields[0]] = " ".join(fields[1:])
     return solution

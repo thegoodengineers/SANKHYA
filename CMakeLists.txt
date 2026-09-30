@@ -245,6 +245,7 @@ set(SANKHYA_CORE_SOURCES
   src/api/c_api_nlp.cpp
   src/core/certificate.cpp
   src/core/elastic_certificate.cpp
+  src/exact/exact_sensitivity.cpp
   src/exact/exact_verify.cpp
   src/core/safe_bound.cpp
   src/core/iis.cpp
