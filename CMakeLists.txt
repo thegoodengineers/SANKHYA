@@ -405,8 +405,7 @@ set_property(SOURCE src/util/version.cpp PROPERTY COMPILE_DEFINITIONS
   SANKHYA_VERSION="${PROJECT_VERSION}"
   SANKHYA_GIT_COMMIT="${SANKHYA_GIT_COMMIT}"
   SANKHYA_BUILD_TYPE="$<CONFIG>"
-  SANKHYA_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
-  SANKHYA_CUDA_TOOLKIT="${CMAKE_CUDA_COMPILER_VERSION}")
+  SANKHYA_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 
 # The batched PDHG's CPU reference (#520) must round every product and sum on its own, as
 # the CUDA kernels do with explicit intrinsics, for the two to agree bit for bit: no fused
@@ -432,6 +431,9 @@ if(SANKHYA_ENABLE_CUDA)
   set(CMAKE_CUDA_STANDARD_REQUIRED ON)
   enable_language(CUDA)
   find_package(CUDAToolkit REQUIRED)
+  # The banner names the toolkit that built the binary (#748); known only from here on.
+  set_property(SOURCE src/util/version.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+    SANKHYA_CUDA_TOOLKIT="${CMAKE_CUDA_COMPILER_VERSION}")
   # Collect every .cu file under src/gpu/ so adding a new kernel needs no CMake edit.
   file(GLOB SANKHYA_GPU_SOURCES "src/gpu/*.cu")
   target_sources(sankhya_objects PRIVATE ${SANKHYA_GPU_SOURCES})

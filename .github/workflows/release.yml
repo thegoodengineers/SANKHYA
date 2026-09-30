@@ -85,9 +85,8 @@ jobs:
     container:
       image: nvidia/cuda:12.6.0-devel-ubuntu22.04
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      # git before the checkout: without it actions/checkout downloads a tarball with no
+      # history, and the binary is stamped "unknown" instead of its commit.
       - name: Install toolchain
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -98,7 +97,10 @@ jobs:
             [ "$attempt" = 3 ] && exit 1
             sleep 30
           done
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Build
         # The CUDA runtime and cuSPARSE linked statically (SANKHYA_CUDA_STATIC), so the host
         # needs only the NVIDIA driver, not a toolkit of a matching version.
