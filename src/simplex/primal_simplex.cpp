@@ -794,6 +794,46 @@ Index Simplex::price(bool bland, int* direction) const {
   return best;
 }
 
+Index Simplex::polish_candidate(int* direction) {
+  // Dantzig's rule restricted to the columns price() declined for being inside the dual
+  // tolerance, each accepted only on what its pivot actually buys: |d_q| times the step the
+  // ratio test allows is the objective decrease (Chvatal, "Linear Programming", ch. 3), and
+  // it is the quantity an optimality claim's accuracy is about, where |d_q| alone is not.
+  if (polish_pivots_ >= tol::kPolishPivotLimit) return -1;
+  polish_rejected_.resize(static_cast<std::size_t>(total_), 0);
+  const double needed =
+      tol::kPolishObjectiveGain * std::max(1.0, std::fabs(minimization_objective()));
+  for (int tried = 0; tried < tol::kPolishCandidates; ++tried) {
+    Index best = -1;
+    int best_direction = 0;
+    double best_magnitude = tol::kPolishReducedCost;
+    for (Index k = 0; k < total_; ++k) {
+      const auto u = static_cast<std::size_t>(k);
+      if (basis_position_[u] >= 0 || status_[u] == BasisStatus::kFixed) continue;
+      if (polish_rejected_[u] != 0) continue;
+      if (!numerically_dependent_.empty() && numerically_dependent_[u] != 0) continue;
+      const double d = reduced_cost_[u];
+      int candidate = 0;
+      if (d < 0.0 && status_[u] != BasisStatus::kAtUpper) candidate = 1;
+      if (d > 0.0 && status_[u] != BasisStatus::kAtLower) candidate = -1;
+      if (candidate == 0 || std::fabs(d) <= best_magnitude) continue;
+      best = k;
+      best_direction = candidate;
+      best_magnitude = std::fabs(d);
+    }
+    if (best < 0) return -1;
+    ftran_entering_column(best);
+    const RatioResult ratio = ratio_test(best, best_direction, false);
+    if (!ratio.unbounded && best_magnitude * ratio.step > needed) {
+      ++polish_pivots_;
+      *direction = best_direction;
+      return best;
+    }
+    polish_rejected_[static_cast<std::size_t>(best)] = 1;
+  }
+  return -1;
+}
+
 void Simplex::reset_devex() {
   std::fill(devex_weight_.begin(), devex_weight_.end(), 1.0);
   ++devex_resets_;
@@ -1505,7 +1545,7 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
     }
 
     int direction = 0;
-    const Index entering = price(bland, &direction);
+    Index entering = price(bland, &direction);
 
     if (entering < 0) {
       if (phase_one) {
@@ -1579,7 +1619,19 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
             iterations);
         continue;
       }
-      return finish(SolveStatus::kOptimal, {}, iterations, timer.elapsed_seconds());
+      // THE CLEANUP (#548): a reduced cost inside the tolerance whose pivot still buys more
+      // than the claim's accuracy is entered here, on these fresh factors, and the loop goes
+      // on; only when no such column remains is optimality declared.
+      entering = polish_candidate(&direction);
+      if (entering < 0) {
+        if (polish_pivots_ > 0) {
+          logger_.verbose(
+              "optimality cleanup: {} pivot(s) on reduced costs inside the dual "
+              "tolerance that still lowered the objective (#548)",
+              polish_pivots_);
+        }
+        return finish(SolveStatus::kOptimal, {}, iterations, timer.elapsed_seconds());
+      }
     }
 
     ftran_entering_column(entering);
@@ -1859,6 +1911,8 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
     }
 
     ++iterations;
+    // A new basis: a column the cleanup turned down may buy something from here.
+    std::fill(polish_rejected_.begin(), polish_rejected_.end(), 0);
 
     if (limits_.iterations_exhausted(iterations)) {
       compute_reduced_costs(false);

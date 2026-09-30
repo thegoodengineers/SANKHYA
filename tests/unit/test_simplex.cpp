@@ -1048,5 +1048,23 @@ TEST(PrimalSimplex, TheRouteAnAnswerTookIsRecorded) {
   EXPECT_EQ(solved.message.find("route:"), std::string::npos) << solved.message;
 }
 
+// #548, reduced to two columns. x is at its lower bound priced at -5e-08, inside the 1e-07
+// dual tolerance, and nothing but the row x + y <= 1e6 stops it: entering it lowers the
+// objective by 0.05. A basis that is optimal "to tolerance" at x = 0 is therefore 0.05 from
+// the optimum, which is what pilot87 did at 1.1e-06 relative. The cleanup at the optimal exit
+// must take that pivot; a reduced cost below the tolerance is not permission to stop there.
+TEST(PrimalSimplex, EntersAReducedCostInsideTheToleranceWhenThePivotStillPays) {
+  const Model model = make_model(ObjSense::kMinimize, {-5e-8, 1.0}, {0.0, 0.0}, {kInf, kInf},
+                                 {{1.0, 1.0}}, {-kInf}, {1e6});
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_bool("presolve", false);
+  options.set_bool("scaling", false);
+  options.set_string("algorithm", "simplex");
+  const Solution solved = solve(model, options);
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+  EXPECT_NEAR(solved.objective, -0.05, 1e-12);
+  EXPECT_NEAR(solved.col_value[0], 1e6, 1e-6);
+}
 }  // namespace
 }  // namespace sankhya

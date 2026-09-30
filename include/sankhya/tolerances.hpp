@@ -227,6 +227,21 @@ inline constexpr double kDualSteepestEdgeWeightFloor = 1e-4;
 /// and not the default (Chvatal, "Linear Programming", ch. 3).
 inline constexpr int kBlandSwitchIterations = 50;
 
+/// The primal simplex's optimality cleanup (#548). "No reduced cost beyond kDualFeasibility"
+/// bounds each dual violation, not what it costs: a column at its lower bound priced at
+/// -6.9e-08 with no upper bound still lowered pilot87's objective by 3.4e-04 when entered,
+/// 1.1e-06 relative, so the tolerance-optimal basis stopped away from the exact optimum. At the
+/// optimal exit, on fresh factors, a nonbasic column whose reduced cost has the improving sign
+/// and a magnitude above kPolishReducedCost is pivoted in when the ratio test shows the pivot
+/// lowers the objective by more than kPolishObjectiveGain relative, which is kDualityGap: the
+/// accuracy an optimality claim promises. Every such pivot strictly lowers the objective by a
+/// finite amount, so the pass cannot cycle; kPolishPivotLimit bounds it anyway, and at most
+/// kPolishCandidates columns are ratio-tested per round before the claim is made as before.
+inline constexpr double kPolishReducedCost = kZeroDrop;
+inline constexpr double kPolishObjectiveGain = kDualityGap;
+inline constexpr int kPolishPivotLimit = 1000;
+inline constexpr int kPolishCandidates = 8;
+
 /// Feasibility tolerance used inside the ratio test, deliberately looser than
 /// kPrimalFeasibility so that a marginally infeasible basic variable does not block a pivot.
 inline constexpr double kRatioTestFeasibility = 1e-9;
