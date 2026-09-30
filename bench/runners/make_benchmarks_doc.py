@@ -3295,8 +3295,10 @@ relative); **wrong** is a contradicted verdict, an objective off the known optim
 the verifier rejects; **failed** is no verdict (a limit, a numerical error, `feasible`).
 
 Reading it: SANKHYA's scaled-Netlib failures are the status guard refusing a claim it cannot
-support, not answers; why the engine gets there (presolve's absolute 1e-11 coefficient drop,
-an equilibration that does not undo a 2^40 spread, no objective scaling) is #792 and #783.
+support, or a time limit, not answers. Presolve reading real coefficients below 1e-11 as zero
+was the largest cause and was fixed in #824 (#792); what remains is tracked as #792 (the
+engine's numerics on these models), #783 (no objective scaling) and #806 (complementary
+slackness judged absolutely).
 HiGHS runs with its defaults, under which a matrix entry below `small_matrix_value` = 1e-9 is
 dropped and a bound at or above `infinite_bound` = 1e20 is infinite. The scaled files carry
 entries far below 1e-9, which is consistent with most of its scaled-Netlib points violating a
