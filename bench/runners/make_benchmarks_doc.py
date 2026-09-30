@@ -483,6 +483,48 @@ def full_section(path: Path | None) -> str:
     return netlib_section(path)
 
 
+def certified_gap_section(path: Path | None) -> str:
+    """Section 1c.2 (#763): how many optimal Netlib answers are within 1e-6 relative of the
+    Neumaier-Shcherbina safe bound of their own duals - a bound valid by construction, which
+    tools/verify_solution.py re-derived exactly for every row. Read from the run's
+    certified_relative_gap column; nothing is typed in."""
+    if path is None:
+        return ("Not yet run. Reproduce with `python bench/runners/netlib.py` over the full "
+                "set and file the CSV as `certified-gap-netlib-full-<sha>.csv`.\n")
+    rows = read_csv(path)
+    optimal = [row for row in rows if row.get("status") == "optimal"]
+    gaps = {row["instance"]: as_float(row, "certified_relative_gap") for row in optimal}
+    finite = {name: gap for name, gap in gaps.items()
+              if gap is not None and math.isfinite(gap)}
+    certified = sorted(name for name, gap in finite.items() if abs(gap) <= 1e-6)
+    loose = sorted(name for name, gap in finite.items() if abs(gap) > 1e-6)
+    none = sorted(name for name in gaps if name not in finite)
+    verified = sum(row.get("independently_verified") == "1" for row in optimal)
+    first = rows[0] if rows else {}
+    worst = max((abs(finite[name]) for name in certified), default=0.0)
+    lines = [
+        f"Run at `{first.get('git_commit', '?')}` on `{first.get('machine', '?')}` "
+        f"(`{path.name}`).",
+        "",
+        "| optimal answers | certified to 1e-6 relative | finite bound, looser | no finite "
+        "bound | stated bound re-derived exactly by the verifier |",
+        "|---:|---:|---:|---:|---:|",
+        f"| {len(optimal)} | **{len(certified)}** (worst {worst:.1e}) | {len(loose)} | "
+        f"{len(none)} | {verified} of {len(optimal)} |",
+        "",
+    ]
+    if loose:
+        lines.append("Finite but looser than 1e-6: " + ", ".join(
+            f"{name} ({finite[name]:.2e})" for name in loose) + ".")
+        lines.append("")
+    if none:
+        lines.append("No finite bound from the reported duals, even after bound propagation "
+                     "and the basis shift (the file says `safe_lower_bound -inf` and claims "
+                     "nothing): " + ", ".join(none) + ".")
+        lines.append("")
+    return chr(10).join(lines)
+
+
 KENNINGTON_ENGINES = ("dual-simplex", "simplex", "pdhg", "ipm")
 
 
@@ -2682,6 +2724,8 @@ def main() -> int:
     small_csv = newest("netlib-small-*.csv")
     medium_csv = newest("netlib-medium-*.csv")
     full_csv = newest("netlib-full-*.csv")
+    # #763: filed under its own name so it never replaces full_csv as the tier's evidence.
+    certified_gap_csv = newest("certified-gap-netlib-full-*.csv")
     # The full sixteen when there is such a run, else the small set (#530). Option runs carry
     # `algorithm=` in solver_options: latest() skips them and newest_option_run() picks them.
     kennington_csv = newest("kennington-full-*.csv") or newest("kennington-small-*.csv")
@@ -2860,6 +2904,16 @@ hashed by `bench/runners/fetch_kennington.py`, which parses the published optima
 directory's own readme; run by `bench/runners/kennington.py` under the full-set rules.
 
 {kennington_section(kennington_csv, kennington_engine_csvs)}
+### 1c.2 Certified gaps on the full Netlib set — a bound valid by construction (#763)
+
+Every LP reported `optimal` carries the Neumaier-Shcherbina safe bound of its own duals,
+computed with outward rounding (Math. Programming 99, 2004), and the gap from the objective
+to it. `tools/verify_solution.py` re-derives each stated bound from the model and the .sol
+file in exact rational arithmetic. A certified relative gap at or under 1e-6 means the
+reported objective is within 1e-6 of a proven bound on the true optimum, so that closeness
+rests on a proof and not on a solver tolerance. The timings of this run are not used anywhere.
+
+{certified_gap_section(certified_gap_csv)}
 ### 1d. Beyond Netlib — Mittelmann's LP set
 
 Netlib's largest instance has about 6,000 rows. PS26119 asks about "thousands to millions
