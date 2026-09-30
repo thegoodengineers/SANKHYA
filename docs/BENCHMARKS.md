@@ -325,6 +325,25 @@ Commit `65eecbc` · machine `Windows-AMD64` · generated 2026-09-23T22:38:22+00:
 
 No per-engine option run is committed yet (`--solver-option algorithm=dual-simplex`, `simplex`, `pdhg`, `ipm`).
 
+### 1c.2 Certified gaps on the full Netlib set — a bound valid by construction (#763)
+
+Every LP reported `optimal` carries the Neumaier-Shcherbina safe bound of its own duals,
+computed with outward rounding (Math. Programming 99, 2004), and the gap from the objective
+to it. `tools/verify_solution.py` re-derives each stated bound from the model and the .sol
+file in exact rational arithmetic. A certified relative gap at or under 1e-6 means the
+reported objective is within 1e-6 of a proven bound on the true optimum, so that closeness
+rests on a proof and not on a solver tolerance. The timings of this run are not used anywhere.
+
+Run at `8c58fb91` on `laptop-7.7GB-Windows-AMD64-shared-with-other-agents` (`certified-gap-netlib-full-8c58fb91.csv`).
+
+| optimal answers | certified to 1e-6 relative | finite bound, looser | no finite bound | stated bound re-derived exactly by the verifier |
+|---:|---:|---:|---:|---:|
+| 91 | **73** (worst 5.1e-08) | 1 | 17 | 91 of 91 |
+
+Finite but looser than 1e-6: modszk1 (1.09e-04).
+
+No finite bound from the reported duals, even after bound propagation and the basis shift (the file says `safe_lower_bound -inf` and claims nothing): bnl2, brandy, finnis, greenbea, greenbeb, lotfi, maros, maros-r7, perold, pilot.ja, pilot4, scfxm1, scfxm2, scfxm3, scorpion, scrs8, stair.
+
 ### 1d. Beyond Netlib — Mittelmann's LP set
 
 Netlib's largest instance has about 6,000 rows. PS26119 asks about "thousands to millions
