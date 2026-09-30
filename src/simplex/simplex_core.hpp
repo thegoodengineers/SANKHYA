@@ -683,6 +683,11 @@ class Simplex {
   std::vector<char> artificial_upper_;   ///< upper_[k] is an artificial bound
   Count dual_iterations_ = 0;
   Count bound_flips_ = 0;
+  /// Basic slots whose pivot the row and the column disagree on even on fresh factors,
+  /// passed over by choose_leaving_row() until the next refactorization (see the loop).
+  std::vector<char> dual_row_rejected_;
+  Count dual_rows_rejected_now_ = 0;  ///< how many are set, since the last refactorization
+  Count dual_row_rejections_ = 0;     ///< over the whole solve, for the log
   Count dual_weight_resets_ = 0;
 };
 
