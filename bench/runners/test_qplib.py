@@ -220,13 +220,36 @@ def test_layouts() -> None:
             check(False, f"{what} is refused")
         except ValueError as error:
             check(True, f"{what} is refused", str(error)[:60])
-    integer = fmt.parse("I\nCIB\nminimize\n1\n1\n1 1 1.0\n0.0\n0\n0.0\n1e30\n0\n0\n4\n0\n"
-                        "0\n0\n0\n0\n0\n0\n")
-    try:
-        fmt.to_qps(integer)
-        check(False, "integer variables are refused by the writer")
-    except ValueError:
-        check(True, "integer variables are refused by the writer")
+    # Mixed: x1 continuous, x2 integer (kind 1) and unbounded above, x3 binary (kind 2).
+    mixed = fmt.parse("M\nCML\nminimize\n3\n1\n1\n2 2 1.0\n0.0\n0\n0.0\n1\n1 3 1.0\n1e30\n"
+                      "0\n0\n1e30\n0\n0\n1\n1 -5\n1e30\n1\n1 4\n0\n2\n2 1\n3 2\n"
+                      "0\n0\n0\n0\n0\n0\n0\n0\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "mixed.qps"
+        path.write_text(fmt.to_qps(mixed), encoding="utf-8", newline="\n")
+        reread = parse_mps(path)
+    check(reread.col_integer == [False, True, True], "integer and binary columns get markers",
+          str(reread.col_integer))
+    check((reread.col_lower, reread.col_upper) == ([-5.0, 0.0, 0.0], [4.0, math.inf, 1.0]),
+          "and their bounds survive, the unbounded integer's +inf included",
+          f"{reread.col_lower} {reread.col_upper}")
+    # Quadratic rows: c1 = x1 + 0.5 (2 x1^2 + 3 x2 x1) in [-1e30, 4], the triangle reading.
+    qc = fmt.parse("Q\nLCQ\nminimize\n2\n1\n0.0\n0\n0.0\n2\n1 1 1 2.0\n1 2 1 3.0\n1\n1 1 1.0\n"
+                   "1e30\n-1e30\n0\n4.0\n0\n-10\n0\n10\n0\n0.0\n0\n0.0\n0\n0.0\n0\n0\n0\n")
+    x = [1.5, -2.0]
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "qc.qps"
+        path.write_text(fmt.to_qps(qc), encoding="utf-8", newline="\n")
+        reread = parse_mps(path)
+    activity = [0.0]
+    for j, column in enumerate(reread.entries):
+        for i, value in column:
+            activity[i] += value * x[j]
+    reread.add_quadratic_rows(x, activity, [0.0])
+    want = 1.5 + 0.5 * (2.0 * 1.5 * 1.5 + 3.0 * -2.0 * 1.5)
+    check(close(activity[0], want) and close(qc.activity(x)[0], want),
+          "a quadratic row through QCMATRIX keeps the triangle reading", repr(activity[0]))
+    check(reread.row_upper == [4.0], "and its side", str(reread.row_upper))
 
 
 def test_real_file() -> None:

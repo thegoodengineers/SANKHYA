@@ -209,12 +209,17 @@ def converter_check(qps: Path, model: qplib_format.QplibModel, sol_text: str,
     for j, column in enumerate(reread.entries):
         for i, value in column:
             activity[i] += value * point[j]
+    reread.add_quadratic_rows(point, activity, [0.0] * reread.num_rows)  # QCMATRIX (#835)
     violation = 0.0
     for i in range(reread.num_rows):
         violation = max(violation, reread.row_lower[i] - activity[i],
                         activity[i] - reread.row_upper[i])
     for j in range(reread.num_cols):
         violation = max(violation, reread.col_lower[j] - point[j], point[j] - reread.col_upper[j])
+        if reread.col_integer[j] != model.integer[j]:
+            violation = math.inf  # the conversion lost or invented an integer marker
+        elif model.integer[j]:
+            violation = max(violation, abs(point[j] - round(point[j])))
     objective_ok = objvar is not None and math.isfinite(objective) and (
         abs(objective - objvar) <= OBJECTIVE_CHECK * max(1.0, abs(objvar)))
     violation_ok = violation <= (solinfeasibility or 0.0) + VIOLATION_SLACK

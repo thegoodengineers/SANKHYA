@@ -1580,6 +1580,20 @@ Every failure, named:
 - `ipm`, **no published reference** (1): `QPLIB_9002`.
 - **fetched and selected, not run in this CSV** (5): `QPLIB_10034`, `QPLIB_10038`, `QPLIB_8500`, `QPLIB_8602`, `QPLIB_8790` - `qplib.py` without `--tier` runs them.
 
+### Every QPLIB instance through the reader and the dispatcher
+
+All of QPLIB, not only the convex continuous selection above: integer, nonconvex and
+quadratically constrained instances too, fetched and converted to QPS (integer markers and
+`QCMATRIX` rows included) by `bench/runners/fetch_qplib_all.py`, each conversion checked at
+QPLIB's published point, then solved by `bench/runners/qplib_all.py` under the CLI's defaults.
+
+Not yet run: no `bench/results/qplib-all-<commit>.csv`. Reproduce with
+
+```
+python bench/runners/fetch_qplib_all.py
+python bench/runners/qplib_all.py --time-limit 60
+```
+
 ---
 
 ## 2e. Nonlinear programs - Hock-Schittkowski, and convex MINLPLib

@@ -478,6 +478,12 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_qplib.py
 
+      - name: The whole-QPLIB runner's verdicts and doc section pass their tests (#835)
+        # Hermetic: no download and no solve. Refusal classes, the 1e-6 / kMipRelativeGap
+        # match tolerances, better-than-reference flags and the rendered section.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_qplib_all.py
+
       - name: The pooling instances match their published data and generator (#516)
         # Hermetic: no download and no solve. The GAMS data parser, the committed models
         # against pooling_models.py, sizes against MINLPLib, Haverly's optima as feasible

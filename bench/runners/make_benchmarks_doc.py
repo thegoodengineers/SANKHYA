@@ -37,6 +37,7 @@ import nlp_doc  # the nonlinear section (NLP stages 2-3), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
 import miplib_ab_doc  # #504 tier 2 over seeds, and the #501 and #506 A/Bs
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
+import qplib_all_doc  # every QPLIB instance through the reader and dispatcher (#835)
 import stress_doc  # the stress set, badly scaled Netlib and adversarial LPs (#762)
 import gpu_ab_doc  # 1g.8 and 1g.9, the device A/Bs of #508 and #478
 import gpu_doc  # 1g.1 and 1g.3 (#488)
@@ -2805,6 +2806,8 @@ def main() -> int:
     # qplib-small-<sha>.csv. Any other subset is qplib-partial-<sha>.csv and never read.
     qplib_csv = (newest("qplib-*.csv", prefix="qplib")
                  or newest("qplib-small-*.csv", prefix="qplib-small"))
+    # Every QPLIB instance (#835): qplib-all-<sha>.csv; a subset is qplib-all-partial-<sha>.csv.
+    qplib_all_csv = newest("qplib-all-*.csv", prefix="qplib-all")
     gpu_pdlp_csv = newest("gpu-pdlp-*.csv")
     # The nonlinear sets (NLP stages 2-3): nlp_bench.py names its CSV after the data
     # directory, nlp-<set>-<sha>[-<host>].csv, so each set has its own pattern.
@@ -3155,6 +3158,14 @@ Programming Computation 11, 2019), selected from the site's own listing by
 engine and the interior point.
 
 {qplib_doc.section(qplib_csv)}
+### Every QPLIB instance through the reader and the dispatcher
+
+All of QPLIB, not only the convex continuous selection above: integer, nonconvex and
+quadratically constrained instances too, fetched and converted to QPS (integer markers and
+`QCMATRIX` rows included) by `bench/runners/fetch_qplib_all.py`, each conversion checked at
+QPLIB's published point, then solved by `bench/runners/qplib_all.py` under the CLI's defaults.
+
+{qplib_all_doc.section(qplib_all_csv)}
 ---
 
 ## 2e. Nonlinear programs - Hock-Schittkowski, and convex MINLPLib
