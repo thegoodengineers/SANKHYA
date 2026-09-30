@@ -202,8 +202,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  {"dual", "primal"}});
     s.push_back({"pricing",
                  OptionType::String,
-                 std::string("devex"),
-                 "Simplex entering-variable rule: devex (default) or dantzig. Devex was "
+                 std::string("dual-steepest-edge"),
+                 "Simplex entering-variable rule: devex or dantzig. Devex was "
                  "opt-in while it drove two Netlib medium instances to a singular basis; "
                  "that failure class was removed by #144 and #147, and re-measured on the "
                  "medium tier devex solves the same 49 instances in a third fewer "
@@ -212,7 +212,7 @@ const std::vector<OptionSpec>& Options::registry() {
                  "Goldfarb 1992) keeps the primal on devex and prices the DUAL's leaving row "
                  "by the exact norm of its row of the basis inverse, maintained by an update "
                  "that costs one FTRAN more per pivot; the norms start exact on a warm basis "
-                 "of up to 2,000 rows and at 1 beyond that. Not the default until its A/B.",
+                 "of up to 2,000 rows and at 1 beyond that. The default since its A/B (#411).",
                  0.0,
                  0.0,
                  {"devex", "dantzig", "dual-steepest-edge"}});

@@ -40,6 +40,9 @@ TEST(UnscaledRetryWarm, Pilot4IsCleanedUpFromTheScaledBasisAndStillVerifies) {
   const Model model = netlib("pilot4");
   Options options;
   options.set_bool("log_to_console", false);
+  // The retry route is taken under Devex; under dual steepest edge, the default since #411,
+  // the scaled attempt already meets the tolerance in original units and no retry is needed.
+  options.set_string("pricing", "devex");
   const Solution solution = solve(model, options);
   ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
   EXPECT_NE(solution.message.find("the unscaled retry from its basis produced this answer"),
