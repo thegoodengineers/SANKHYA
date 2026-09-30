@@ -35,6 +35,7 @@ import maros_meszaros_doc  # the QP section (#491), kept in its own file
 import million_doc  # 1f.5, a million rows (#751), kept in its own file
 import nlp_doc  # the nonlinear section (NLP stages 2-3), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
+import miplib_ab_doc  # #504 tier 2 over seeds, and the #501 and #506 A/Bs
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
 import stress_doc  # the stress set, badly scaled Netlib and adversarial LPs (#762)
 import gpu_ab_doc  # 1g.8 and 1g.9, the device A/Bs of #508 and #478
@@ -2687,6 +2688,9 @@ def main() -> int:
                                                         f"algorithm={engine}")
                               for engine in KENNINGTON_ENGINES}
     milp_csv = newest("miplib-*.csv", prefix="miplib")
+    milp_tier2_csv = newest("miplib-tier2-seeds*-*.csv")
+    cache_ab = (newest("miplib-501-cache0-*.csv"), newest("miplib-501-cache8-*.csv"))
+    fj_ab = (newest("miplib-506-fj-off-seeds*-*.csv"), newest("miplib-506-fj-on-seeds*-*.csv"))
     milp_long_csv = newest_named("miplib-600s-*.csv")
     # prefix: pdhg-threads-*, pdhg-two-matvec-* and pdhg-478-* share the glob, and since #592
     # section 1e had been reading the thread-scaling CSV as its own (0 instances shown).
@@ -2983,6 +2987,17 @@ is a harder library: MIPLIB instances are chosen to be difficult for mature solv
 #### The same set at 600 s
 
 {milp_long_section(milp_csv, milp_long_csv)}
+#### The 60-instance tier over three seeds (#504)
+
+{miplib_ab_doc.tier2_section(milp_tier2_csv)}
+#### A/B: the node LP factor cache (#501)
+
+{miplib_ab_doc.node_rate_ab(*cache_ab, "mip_node_factor_cache=8") or "Not yet run on an idle machine."}
+
+#### A/B: Feasibility Jump on the seed harness (#506)
+
+{miplib_ab_doc.seeds_ab(*fj_ab, "mip_heur_fj") or "Not yet run on an idle machine."}
+
 ---
 
 ## 2b. Maros-Meszaros, the convex QP set

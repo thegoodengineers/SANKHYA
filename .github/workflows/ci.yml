@@ -402,6 +402,12 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_kkt_crossings.py
 
+      - name: The MIPLIB A/B and tier-2 doc sections (#501, #504, #506)
+        # Pure Python, no solve: node-count mismatches and moved seeds are named, the
+        # nodes-per-second ratio and the tier's failed runs come out of synthetic CSVs.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_miplib_ab_doc.py
+
       - name: The GPU runners' CPU arms, gaps and doc tables (#488)
         # Pure Python, no solve, no GPU: the two CPU arms and the options each passes (the
         # N-thread one must turn pdhg_parallel_spmv on), the |obj-ref|/max(1,|ref|) gap, the

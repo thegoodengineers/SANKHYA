@@ -1223,6 +1223,23 @@ At 600 s: **15 of 30** reach the published optimum, **9 of 30** prove it.
 
 **Needed time** (proved at 600 s, not at 60 s): none. **Needs a bound** (optimum reached at both limits, proved at neither): `b-ball`, `neos-3611689-kaihu`, `neos5`, `noswot`, `opt1217`, `rlp1`. **Needs an incumbent** (wrong answer even at 600 s): `ej`, `enlight8`, `enlight_hard`, `gen-ip016`, `gen-ip054`, `k16x240b`, `markshare1`, `markshare_4_0`, `markshare_5_0`, `neos-3072252-nete`, `neos-5140963-mincio`, `pk1`, `ran12x21`, `ran13x13`, `timtab1`.
 
+#### The 60-instance tier over three seeds (#504)
+
+Not yet run. Reproduce with:
+
+```
+python bench/runners/fetch_miplib.py --tier 2
+python bench/runners/miplib.py --tier 2 --seeds 3 --time-limit 300
+```
+
+#### A/B: the node LP factor cache (#501)
+
+Not yet run on an idle machine.
+
+#### A/B: Feasibility Jump on the seed harness (#506)
+
+Not yet run on an idle machine.
+
 ---
 
 ## 2b. Maros-Meszaros, the convex QP set
