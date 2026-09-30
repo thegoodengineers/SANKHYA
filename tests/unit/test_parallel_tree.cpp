@@ -212,7 +212,6 @@ Model market_split(int rows, int columns, std::uint32_t seed) {
 
 TEST(ParallelTree, EveryThreadCountAgreesWithEnumeration) {
   std::mt19937 rng(222);
-  long long donated = 0;
   int infeasible = 0;
   for (int trial = 0; trial < 120; ++trial) {
     const Model model = random_integer_program(rng, trial % 2 == 1);
@@ -231,14 +230,20 @@ TEST(ParallelTree, EveryThreadCountAgreesWithEnumeration) {
           << "trial " << trial << " threads " << threads;
       EXPECT_LE(solved.primal_infeasibility, 1e-6);
       EXPECT_LE(solved.integrality_violation, 1e-6);
-      donated += std::max(0LL, given_away(solved));
+      EXPECT_GE(given_away(solved), 0) << "trial " << trial << ": not a parallel answer";
     }
   }
   EXPECT_GT(infeasible, 3);
-  EXPECT_GT(donated, 50) << "the workers must actually have shared the trees";
+  // No floor on how many subtrees were given away. Whether a subtree is given away is
+  // scheduling: a worker donates only while another is idle, and these trees are a few dozen
+  // nodes, often finished before the other threads have even been scheduled. With six busy
+  // loops beside it on four cores the count fell from over 50 to 18-37 in eight runs of eight,
+  // and to 0 in one run of 40, with every answer above still exact - so any floor measured the
+  // machine, not the search. That subtrees are given away is asserted on trees long enough to
+  // outlast thread start-up, in SubtreesAreGivenAwayOnATreeThatOutlastsThreadStartup below.
 }
 
-TEST(ParallelTree, AKnapsackIsSplitAcrossTheWorkersAndSolvedToTheSameOptimum) {
+TEST(ParallelTree, AKnapsackOnFourThreadsReachesTheSequentialOptimum) {
   for (const std::uint32_t seed : {1u, 2u, 3u}) {
     const Model model = knapsack(30, seed);
     const Solution sequential = solve(model, on_threads(1));
@@ -248,7 +253,25 @@ TEST(ParallelTree, AKnapsackIsSplitAcrossTheWorkersAndSolvedToTheSameOptimum) {
     ASSERT_EQ(parallel.status, SolveStatus::kOptimal) << parallel.message;
     EXPECT_NEAR(parallel.objective, sequential.objective, 1e-6) << "seed " << seed;
     EXPECT_LE(parallel.primal_infeasibility, 1e-6);
-    EXPECT_GT(given_away(parallel), 0) << parallel.message;
+    // A parallel answer; whether this 30-item tree lasted long enough to be shared is
+    // scheduling (under load it read "1 subtrees, 0 given away"), asserted on longer trees
+    // in SubtreesAreGivenAwayOnATreeThatOutlastsThreadStartup.
+    EXPECT_GE(given_away(parallel), 0) << parallel.message;
+  }
+}
+
+TEST(ParallelTree, SubtreesAreGivenAwayOnATreeThatOutlastsThreadStartup) {
+  // market_split keeps branch and bound busy for seconds at this size, so the idle workers
+  // are scheduled and ask for work long before the tree runs out, even on a loaded machine:
+  // with six busy loops beside it on four cores these two seeds gave away 669 subtrees at the
+  // fewest, over fifteen runs. The time limit only bounds the test; donation is the claim.
+  for (const std::uint32_t seed : {733001u, 733004u}) {
+    const Model model = market_split(3, 24, seed);
+    Options options = on_threads(4);
+    options.set_double("time_limit", 2.0);
+    const Solution solved = solve(model, options);
+    ASSERT_NE(solved.status, SolveStatus::kNumericalError) << solved.message;
+    EXPECT_GT(given_away(solved), 0) << "seed " << seed << ": " << solved.message;
   }
 }
 
