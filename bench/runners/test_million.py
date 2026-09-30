@@ -52,6 +52,13 @@ def test_attribution_rule() -> None:
     assert million.attribute({**base, "verified": "1", "status": "optimal"}, 16000) == ""
     assert million.attribute(base, 16000) == "iterations"
     assert million.attribute({**base, "status": "killed"}, 16000) == "memory"
+    # The refinery with the supernodal factor at b561fba: killed by the runner at 6,000 s
+    # for a 3,600 s limit, 11,806 MB peak on a 16,094 MB machine.
+    overran = {**base, "status": "killed", "time_limit": "3600", "wall_seconds": "6000.325",
+               "peak_rss_mb": "11806", "message": "exit -9; "}
+    assert million.attribute(overran, 16094) == "overran"
+    assert million.attribute({**overran, "peak_rss_mb": "15500"}, 16094) == "memory"
+    assert million.attribute({**overran, "wall_seconds": "900"}, 16094) == "memory"
     assert million.attribute({**base, "peak_rss_mb": "15000"}, 16000) == "memory"
     declined = "the interior-point polish declined: factor would hold 3e9 nonzeros"
     assert million.attribute({**base, "message": declined}, 16000) == "polish"

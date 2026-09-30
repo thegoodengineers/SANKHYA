@@ -23,7 +23,7 @@ did, the primal and dual infeasibility it stopped at, the peak resident memory o
 process (from wait4, so the kernel's number, not an estimate), the solver's own message -
 which names the factor's nonzeros when the interior point or the polish declines - and the
 termination reason. `attribution` is one word read off those numbers (iterations, fill,
-memory, polish, stall, crossover); docs/BENCHMARKS.md renders the table from this CSV.
+memory, polish, stall, crossover, overran); docs/BENCHMARKS.md renders the table from this CSV.
 
 The machine tag is measured, not typed: CPU model, logical cores and RAM from /proc, and
 whether this is a container. `--host-label` adds what /proc cannot know (the provider).
@@ -210,12 +210,30 @@ def run_measured(command: list[str], timeout: float, log: Path) -> tuple[int, fl
     return code, wall, usage.ru_maxrss / 1024.0  # ru_maxrss is in KiB on Linux
 
 
+def backstop_seconds(time_limit: float) -> float:
+    """When the runner kills a solve that has not stopped by itself."""
+    return time_limit * OVERRUN_FACTOR + 600
+
+
 def attribute(row: dict, ram_mb: float) -> str:
     """One word for why an arm did not end verified optimal, read off the row's numbers."""
     if row["verified"] == "1" and row["status"] == "optimal":
         return ""
     message = row["message"].lower()
     rss = float(row["peak_rss_mb"] or 0)
+    # A solve the runner itself stopped at its backstop (backstop_seconds) is not a memory
+    # failure: the solver checks its clock between iterations, and one factorization that
+    # outlasts the limit and the grace after it is killed here with SIGKILL. The status
+    # stays what the process did (`killed`); the attribution says who stopped it. Read from
+    # the wall time, so --reattribute can tell it from a CSV that predates this rule.
+    try:
+        backstop = backstop_seconds(float(row.get("time_limit") or 0))
+        wall = float(row.get("wall_seconds") or 0)
+    except ValueError:
+        backstop, wall = 0.0, 0.0
+    if row["status"] == "killed" and backstop and wall >= backstop and (
+            not ram_mb or rss <= 0.9 * ram_mb):
+        return "overran"
     if row["status"] in ("killed", "crashed") or "bad_alloc" in message or (
             ram_mb and rss > 0.9 * ram_mb):
         return "memory"
@@ -276,7 +294,7 @@ def solve(binary: Path, instance: dict, arm: str, time_limit: float, work: Path,
                "--write-sol", str(sol), "--time-limit", str(time_limit)]
     for option in options:
         command += ["--option", option]
-    code, wall, rss = run_measured(command, time_limit * OVERRUN_FACTOR + 600, log)
+    code, wall, rss = run_measured(command, backstop_seconds(time_limit), log)
     row = {"arm": arm, "wall_seconds": f"{wall:.3f}", "peak_rss_mb": f"{rss:.0f}",
            "solver_options": " ".join(options), "time_limit": f"{time_limit:g}",
            "status": "", "route": "", "our_objective": "", "iterations": "",
