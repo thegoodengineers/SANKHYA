@@ -1835,29 +1835,29 @@ Times are each solver's own clock. Produced by `python bench/runners/compare.py 
 
 ### 4a.1 Netlib LP
 
-Source CSV: `bench/results/head-to-head-netlib-fe8a61c.csv`  
-Commit `fe8a61c` · machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores; 16 GiB RAM; Linux-x86_64`  
+Source CSV: `bench/results/head-to-head-netlib-5e490ef.csv`  
+Commit `5e490ef` · machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores; 16 GiB RAM; Linux-x86_64`  
 94 instances · time limit 120 s · 1 thread per solver · every solver a separate process
 
 **The 92 LPs netlib.org ships as EMPS files:**
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | fe8a61c | 92 | 91 | 82 | 91 | 91 | primal+dual | 0.855 s |
-| HiGHS | 1.15.1 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.159 s |
-| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.387 s |
-| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.363 s |
-| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.481 s |
+| SANKHYA | 5e490ef | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.575 s |
+| HiGHS | 1.15.1 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.163 s |
+| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.398 s |
+| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.355 s |
+| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.486 s |
 
 **The two generated from netlib.org's Fortran bundles (#745), `truss` and `stocfor3`:**
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | fe8a61c | 2 | 2 | 1 | 2 | 2 | primal+dual | 3.674 s |
-| HiGHS | 1.15.1 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.571 s |
-| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 2.051 s |
-| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.196 s |
-| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.918 s |
+| SANKHYA | 5e490ef | 2 | 2 | 1 | 2 | 2 | primal+dual | 3.874 s |
+| HiGHS | 1.15.1 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.397 s |
+| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 2.314 s |
+| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.279 s |
+| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 2.164 s |
 
 `matched` grades against the readme's optimum and `matched exact` against Koch's exact rational optimum (`data/netlib/koch_exact.json`, #747); the timing counts the exact grade. Where the two differ the readme is the one that is wrong: on 80bau3b, ganges, greenbea, greenbeb, nesm, pilot, pilot.we, scrs8 and stocfor3 every solver here agrees with Koch.
 
@@ -1867,7 +1867,6 @@ Commit `fe8a61c` · machine `cloud container (docker); Intel(R) Xeon(R) Processo
 
 Every run that did not count, by solver:
 
-- **SANKHYA**, 1: `pilot.ja` (feasible)
 - **CBC/Clp**, 4: `pilot` (optimal, rejected by the verifier), `pilot.ja` (optimal, rejected by the verifier), `pilot.we` (optimal, rejected by the verifier), `pilotnov` (optimal, rejected by the verifier)
 - **GLPK**, 1: `dfl001` (optimal, rejected by the verifier)
 
