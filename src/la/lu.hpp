@@ -47,6 +47,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -311,6 +312,21 @@ class SparseLu {
   /// Scratch state for the elimination, discarded once the factors are built. Kept out of
   /// the class proper so that a factorized SparseLu carries only what the solves need.
   struct Workspace;
+
+  /// The workspace, KEPT between factorize() calls so its 4m per-row and per-column vectors
+  /// keep their capacity. Building them afresh was two thirds of a refactorization: on fit2p
+  /// (m = 3000) 2.06 s of allocation against 0.60 s of elimination over 234 factorizations.
+  /// A copy of a SparseLu (the node factor cache stores them) starts with none.
+  struct WorkspaceCache {
+    std::unique_ptr<Workspace> ptr;
+    WorkspaceCache() noexcept;
+    ~WorkspaceCache();
+    WorkspaceCache(const WorkspaceCache&) noexcept;
+    WorkspaceCache& operator=(const WorkspaceCache&) noexcept;
+    WorkspaceCache(WorkspaceCache&&) noexcept;
+    WorkspaceCache& operator=(WorkspaceCache&&) noexcept;
+  };
+  WorkspaceCache workspace_;
 
   [[nodiscard]] bool eliminate(Workspace& w, double pivot_tolerance, double threshold,
                                const ShouldStop& should_stop);

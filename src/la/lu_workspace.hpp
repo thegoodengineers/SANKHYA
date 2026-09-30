@@ -89,12 +89,20 @@ struct SparseLu::Workspace {
   /// then taken from the column storage exactly as before #463.
   bool fast = false;
 
+  /// Empty every per-row and per-column vector for an m x m factorization. clear(), not
+  /// reassignment: a workspace is reused across factorizations (SparseLu::workspace_) and
+  /// the vectors' capacity is what the reuse is for.
   void init(Index dimension) {
     m = dimension;
     const auto u = static_cast<std::size_t>(dimension);
-    col_rows.assign(u, {});
-    col_values.assign(u, {});
-    row_cols.assign(u, {});
+    for (auto* nested : {&col_rows, &row_cols}) {
+      nested->resize(u);
+      for (auto& v : *nested) v.clear();
+    }
+    for (auto* nested : {&col_values, &row_values}) {
+      nested->resize(u);
+      for (auto& v : *nested) v.clear();
+    }
     row_count.assign(u, 0);
     col_count.assign(u, 0);
     row_active.assign(u, 1);
@@ -102,7 +110,6 @@ struct SparseLu::Workspace {
     acc.assign(u, 0.0);
     acc_present.assign(u, 0);
     column_seen.assign(u, 0);
-    row_values.assign(u, {});
     row_values_valid.assign(u, 1);
     col_max.assign(u, 0.0);
     col_max_valid.assign(u, 0);
