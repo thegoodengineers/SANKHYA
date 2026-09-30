@@ -1077,7 +1077,8 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     detail::compute_ranging(model, options, logger, solution);
     compute_iis(model, &solution, options, logger);
     if (options.get_bool("exact")) {
-      const exact::ExactResult exact_result = exact::verify_basis_exact(model, solution);
+      const exact::ExactResult exact_result =
+          exact::verify_basis_exact(model, solution, options.get_double("exact_seconds"));
       switch (exact_result.verdict) {
         case exact::ExactVerdict::kVerified:
           solution.exact_status = Solution::ExactVerification::kVerified;
@@ -1100,7 +1101,8 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           break;
       }
       if (!solution.col_ranging_lower.empty())
-        exact::apply_certified_sensitivity(model, &solution, logger);
+        exact::apply_certified_sensitivity(model, &solution, logger,
+                                           options.get_double("exact_seconds"));
     }
     logger.info("Result: {}  objective {:.10g}  {} iterations  {:.3f}s",
                 to_string(solution.status), solution.objective, solution.iterations,

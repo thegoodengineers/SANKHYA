@@ -264,6 +264,17 @@ TEST(ExactVerify, AFractionWiderThan64BitsIsWrittenInFull) {
   }
 }
 
+TEST(ExactVerify, PastItsTimeBudgetTheVerdictIsDeclinedNotAHang) {
+  // brandy (220 rows) ran for over forty minutes in the exact modules before #757's budget.
+  const Model model = tiny_lp();
+  const Solution solution = solve(model, quiet_exact());
+  ASSERT_EQ(solution.status, SolveStatus::kOptimal);
+  const ExactResult result = verify_basis_exact(model, solution, 1e-9);
+  EXPECT_EQ(result.verdict, ExactVerdict::kDeclined);
+  EXPECT_NE(result.message.find("exact_seconds"), std::string::npos) << result.message;
+  EXPECT_EQ(verify_basis_exact(model, solution).verdict, ExactVerdict::kVerified);
+}
+
 TEST(ExactVerify, NoBasisIsDeclinedNotCrashed) {
   const Model model = tiny_lp();
   Solution solution;

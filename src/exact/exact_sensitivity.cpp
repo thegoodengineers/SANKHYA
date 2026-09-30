@@ -122,11 +122,12 @@ struct Problem {
 };
 
 /// Gauss-Jordan inverse; nullopt when exactly singular.
-std::optional<Matrix> invert(Matrix a) {
+std::optional<Matrix> invert(Matrix a, const Deadline& deadline) {
   const Sz m = a.size();
   Matrix inv(m, std::vector<Rational>(m, Rational(0)));
   for (Sz i = 0; i < m; ++i) inv[i][i] = Rational(1);
   for (Sz col = 0; col < m; ++col) {
+    deadline.check();
     Sz pivot = m;
     for (Sz r = col; r < m; ++r) {
       if (!a[r][col].is_zero()) {
@@ -162,7 +163,7 @@ struct Basis {
   std::vector<Rational> value, y, d;
 
   /// False when the basis is exactly singular.
-  bool build(const Problem& problem) {
+  bool build(const Problem& problem, const Deadline& deadline) {
     const auto m = static_cast<Sz>(problem.m);
     const auto total = static_cast<Sz>(problem.n + problem.m);
     Matrix b(m, std::vector<Rational>(m, Rational(0)));
@@ -171,7 +172,7 @@ struct Basis {
         b[static_cast<Sz>(i)][p] = a;
       }
     }
-    std::optional<Matrix> inv = invert(std::move(b));
+    std::optional<Matrix> inv = invert(std::move(b), deadline);
     if (!inv.has_value()) return false;
     inverse = std::move(*inv);
     value.assign(total, Rational(0));
@@ -248,7 +249,8 @@ std::string not_optimal(const Problem& problem, const Basis& basis) {
 /// d v / d t at t = 0 from the side `direction` (+1 right, -1 left), minimise space: the
 /// lexicographic dual simplex on row `row`'s bounds shifted by t, Bland's rule throughout.
 /// nullopt when it does not settle within kMaxParametricPivots or meets a singular basis.
-std::optional<Ext> one_sided(const Problem& problem, Basis basis, Index row, int direction) {
+std::optional<Ext> one_sided(const Problem& problem, Basis basis, Index row, int direction,
+                             const Deadline& deadline) {
   const auto m = static_cast<Sz>(problem.m);
   const auto logical = static_cast<Sz>(problem.n + row);
   for (int pivot = 0; pivot < kMaxParametricPivots; ++pivot) {
@@ -298,7 +300,7 @@ std::optional<Ext> one_sided(const Problem& problem, Basis basis, Index row, int
     basis.basic[leave_p] = entering;
     basis.status[static_cast<Sz>(entering)] = Nb::kBasic;
     basis.status[static_cast<Sz>(leave_k)] = leave_to;
-    if (!basis.build(problem)) return std::nullopt;
+    if (!basis.build(problem, deadline)) return std::nullopt;
   }
   return std::nullopt;
 }
@@ -315,8 +317,10 @@ Nb nb_of(BasisStatus status) {
 
 }  // namespace
 
-SensitivityResult certify_sensitivity(const Model& model, const Solution& solution) {
+SensitivityResult certify_sensitivity(const Model& model, const Solution& solution,
+                                      double seconds) {
   SensitivityResult result;
+  const Deadline deadline(seconds);
   const Index n = model.num_cols();
   const Index m = model.num_rows();
   if (solution.status != SolveStatus::kOptimal) {
@@ -371,7 +375,7 @@ SensitivityResult certify_sensitivity(const Model& model, const Solution& soluti
                                    basis.basic.size(), m);
       return result;
     }
-    if (!basis.build(problem)) {
+    if (!basis.build(problem, deadline)) {
       result.verdict = ExactVerdict::kFailed;
       result.message = "the reported basis is exactly singular";
       return result;
@@ -389,6 +393,7 @@ SensitivityResult certify_sensitivity(const Model& model, const Solution& soluti
 
     // --- Columns: reduced cost and cost range. ---
     for (Index j = 0; j < n; ++j) {
+      deadline.check();
       const auto u = static_cast<Sz>(j);
       Ext lo = infinite(1);
       Ext hi = infinite(1);
@@ -441,6 +446,7 @@ SensitivityResult certify_sensitivity(const Model& model, const Solution& soluti
 
     // --- Rows: dual, RHS range and the shadow price interval. ---
     for (Index i = 0; i < m; ++i) {
+      deadline.check();
       const auto r = static_cast<Sz>(i);
       Ext down = infinite(1);
       Ext up = infinite(1);
@@ -464,8 +470,10 @@ SensitivityResult certify_sensitivity(const Model& model, const Solution& soluti
       const Ext dual = finite(basis.y[r]);
       const bool right_here = up.inf != 0 || up.v.sign() > 0;
       const bool left_here = down.inf != 0 || down.v.sign() > 0;
-      const std::optional<Ext> right = right_here ? dual : one_sided(problem, basis, i, 1);
-      const std::optional<Ext> left = left_here ? dual : one_sided(problem, basis, i, -1);
+      const std::optional<Ext> right =
+          right_here ? dual : one_sided(problem, basis, i, 1, deadline);
+      const std::optional<Ext> left =
+          left_here ? dual : one_sided(problem, basis, i, -1, deadline);
       if (!right.has_value() || !left.has_value()) {
         result.verdict = ExactVerdict::kDeclined;
         result.message =
@@ -491,6 +499,13 @@ SensitivityResult certify_sensitivity(const Model& model, const Solution& soluti
     }
     result.verdict = ExactVerdict::kVerified;
     return result;
+  } catch (const ExactBudgetExceeded&) {
+    result.verdict = ExactVerdict::kDeclined;
+    result.message = fmt::format(
+        "the exact derivation ran past its {} s budget (option exact_seconds)", seconds);
+    result.columns.clear();
+    result.rows.clear();
+    return result;
   } catch (const RationalOverflow&) {
     result.verdict = ExactVerdict::kDeclined;
     result.message = "no exact rational result: a non-finite value in the data";
@@ -504,8 +519,9 @@ SensitivityResult certify_sensitivity(const Model& model, const Solution& soluti
 
 namespace sankhya::exact {
 
-void apply_certified_sensitivity(const Model& model, Solution* solution, Logger& logger) {
-  SensitivityResult sensitivity = certify_sensitivity(model, *solution);
+void apply_certified_sensitivity(const Model& model, Solution* solution, Logger& logger,
+                                 double seconds) {
+  SensitivityResult sensitivity = certify_sensitivity(model, *solution, seconds);
   switch (sensitivity.verdict) {
     case ExactVerdict::kVerified: {
       solution->sensitivity_status = Solution::ExactVerification::kVerified;

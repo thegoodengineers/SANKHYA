@@ -1489,6 +1489,18 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back({"exact_seconds",
+                 OptionType::Double,
+                 30.0,
+                 "Wall-clock budget, in seconds, for each of the exact modules option exact "
+                 "runs after the solve (the basis check and, with ranging, the certified "
+                 "sensitivity; #757). Their dense exact elimination grows as m^3 on numbers "
+                 "that lengthen as it goes, so past the budget the verdict is DECLINED rather "
+                 "than a solve that never returns. The solve's own time_limit does not cover "
+                 "them.",
+                 0.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"engine_race",
                  OptionType::Bool,
                  false,

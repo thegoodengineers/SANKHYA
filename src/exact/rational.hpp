@@ -10,6 +10,7 @@
 // the exact modules decline where they were most wanted.
 #pragma once
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <exception>
@@ -27,6 +28,34 @@ struct RationalOverflow : std::exception {
   [[nodiscard]] const char* what() const noexcept override {
     return "no exact rational result (a division by zero or a non-finite input)";
   }
+};
+
+/// Thrown when an exact computation runs past its time budget (option exact_seconds). The
+/// callers turn it into a declined verdict: running out of time proves nothing either way.
+struct ExactBudgetExceeded : std::exception {
+  [[nodiscard]] const char* what() const noexcept override {
+    return "the exact computation ran past its time budget";
+  }
+};
+
+/// A wall-clock budget for the exact modules. Exact arithmetic on a dense basis is O(m^3)
+/// operations on numbers that grow with the elimination, so a 220-row Netlib basis (brandy)
+/// ran for over forty minutes after the solve itself had finished; the budget makes that a
+/// stated decline instead of a hang.
+class Deadline {
+ public:
+  explicit Deadline(double seconds)
+      : unlimited_(!(seconds < 1e18)),
+        end_(std::chrono::steady_clock::now() +
+             std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                 std::chrono::duration<double>(unlimited_ ? 0.0 : seconds))) {}
+  void check() const {
+    if (!unlimited_ && std::chrono::steady_clock::now() > end_) throw ExactBudgetExceeded();
+  }
+
+ private:
+  bool unlimited_;
+  std::chrono::steady_clock::time_point end_;
 };
 
 class Rational {

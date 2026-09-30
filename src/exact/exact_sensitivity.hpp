@@ -43,10 +43,12 @@ struct SensitivityResult {
 /// `solution` must carry an optimal basis and the float ranging (option "ranging"). Declines
 /// on what verify_basis_exact declines, and fails when the basis is not exactly optimal.
 [[nodiscard]] SensitivityResult certify_sensitivity(const Model& model,
-                                                    const Solution& solution);
+                                                    const Solution& solution,
+                                                    double seconds = kInfinity);
 
 /// certify_sensitivity, stored into `solution` (sensitivity_status and the exact entries)
 /// and summarised in the log. solve() calls it under options "exact" and "ranging".
-void apply_certified_sensitivity(const Model& model, Solution* solution, Logger& logger);
+void apply_certified_sensitivity(const Model& model, Solution* solution, Logger& logger,
+                                 double seconds);
 
 }  // namespace sankhya::exact
