@@ -14,6 +14,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdlib>
 #include <mutex>
 #include <random>
 #include <regex>
@@ -481,6 +482,7 @@ class BackgroundLoad {
         while (!stop_.load(std::memory_order_relaxed)) {
           for (int i = 0; i < 100000; ++i) sink += static_cast<std::uint64_t>(i) * 2654435761u;
         }
+        static_cast<void>(sink);  // read once, or GCC 16 calls it set but unused (-Werror)
       });
     }
   }
@@ -497,6 +499,11 @@ class BackgroundLoad {
 };
 
 TEST(ParallelTree, RepeatedSolvesUnderHeavyCpuOversubscriptionNeverEndInNumericalError) {
+  // A stress test, not a regression test: it pins every core for up to 40 x 2 s, which
+  // would slow every ctest run and skew any benchmark sharing the box. Opt in explicitly.
+  if (std::getenv("SANKHYA_STRESS") == nullptr) {
+    GTEST_SKIP() << "set SANKHYA_STRESS=1 to run the #733 load reproducer";
+  }
   // Oversubscribe hard: mip_threads workers plus this much load, on a box that may itself
   // have few cores (a CI runner), is what "heavily loaded" meant in #733.
   const unsigned cores = std::max(1u, std::thread::hardware_concurrency());
