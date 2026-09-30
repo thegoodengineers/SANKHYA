@@ -45,7 +45,29 @@ def _lu_matches_its_definition(check) -> None:
         for p, col in enumerate(columns):
             if sum((v * y.get(i, 0) for i, v in col.items()), Fraction(0)) != c[p]:
                 ok, worst = False, f"B^T y != c, trial {trial}"
-    check(ok, "exact LU: B x = b and B^T y = c hold exactly on 40 random bases", worst)
+        # Product-form etas: replace a column, and the solves must be those of the new
+        # basis, while the factor the eta was taken from still solves the old one.
+        a = {i: Fraction(rng.randint(-4, 4)) for i in range(m) if rng.random() < 0.6}
+        alpha = lu.solve(a)
+        position = next((p for p in range(m) if alpha.get(p)), None)
+        if position is None:
+            continue
+        updated = lu.with_eta(position, alpha)
+        changed = list(columns)
+        changed[position] = a
+        for factor, cols, label in ((updated, changed, "after an eta"),
+                                    (lu, columns, "the original, after an eta was taken")):
+            x = factor.solve(b)
+            y = factor.solve_transpose(c)
+            for i in range(m):
+                if sum((col.get(i, 0) * x.get(p, 0) for p, col in enumerate(cols)),
+                       Fraction(0)) != b[i]:
+                    ok, worst = False, f"B x != b {label}, trial {trial}"
+            for p, col in enumerate(cols):
+                if sum((v * y.get(i, 0) for i, v in col.items()), Fraction(0)) != c[p]:
+                    ok, worst = False, f"B^T y != c {label}, trial {trial}"
+    check(ok, "exact LU: B x = b and B^T y = c hold exactly on 40 random bases, and after "
+          "a product-form eta", worst)
 
 
 def _degenerate_model() -> vs.Model:
