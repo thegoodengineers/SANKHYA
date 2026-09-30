@@ -95,6 +95,12 @@ def _num(row: dict, key: str) -> float | None:
     return value if value == value and abs(value) != float("inf") else None
 
 
+def _point(row: dict) -> float | None:
+    """The incumbent's objective, only when the solver claims a point (optimal or feasible):
+    a numerical_error row carries a placeholder objective that is not a point."""
+    return _num(row, "our_objective") if row.get("status") in ("optimal", "feasible") else None
+
+
 def _closer(a: float | None, b: float | None, target: float) -> int:
     """+1 when a is closer to target than b, -1 when further, 0 when level (1e-6 relative)."""
     tol = 1e-6 * max(1.0, abs(target))
@@ -127,12 +133,14 @@ def tier2_legs_section(legs: dict[str, Path | None]) -> str:
     out = [f"Commit `{first.get('git_commit', '?')}` · machine `{first.get('machine', '?')}` · "
            f"{len(base)} instances, one seed, one thread; every leg against `{base_label}`, "
            f"the same binary with every GPU option off.", "",
-           "| leg | solver options | feasible | matched | proved | nodes / s | branching s | "
+           "| leg | solver options | feasible (verified) | matched | proved | nodes / s | branching s | "
            "batched SB s | primal closer / further | dual bound closer / further | source |",
            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
     for label in labels:
         rows = tables[label]
-        feasible = sum(_num(r, "our_objective") is not None for r in rows.values())
+        feasible = sum(_point(r) is not None for r in rows.values())
+        verified = sum(_point(r) is not None and r.get("independently_verified") == "1"
+                       for r in rows.values())
         matched = sum(r.get("matched_published") == "1" for r in rows.values())
         proved = sum(r.get("proved_optimal") == "1" for r in rows.values())
         nodes = sum(_num(r, "nodes") or 0.0 for r in rows.values())
@@ -145,7 +153,7 @@ def tier2_legs_section(legs: dict[str, Path | None]) -> str:
                 pub = _num(r, "published_objective")
                 if b is None or pub is None:
                     continue
-                p = _closer(_num(r, "our_objective"), _num(b, "our_objective"), pub)
+                p = _closer(_point(r), _point(b), pub)
                 d = _closer(_num(r, "dual_bound"), _num(b, "dual_bound"), pub)
                 primal[0] += p > 0
                 primal[1] += p < 0
@@ -160,6 +168,6 @@ def tier2_legs_section(legs: dict[str, Path | None]) -> str:
                      if profiled else "-")
         sb = sum(_num(r, "batch_strong_branching_seconds") or 0.0 for r in profiled)
         batched_sb = f"{sb:.1f}" if profiled else "-"
-        out.append(f"| {label} | `{opts}` | {feasible} | {matched} | {proved} | {rate} "
+        out.append(f"| {label} | `{opts}` | {feasible} ({verified}) | {matched} | {proved} | {rate} "
                    f"| {branching} | {batched_sb} | {pc} | {dc} | `{present[label].name}` |")
     return "\n".join(out) + "\n"
