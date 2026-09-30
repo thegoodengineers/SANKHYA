@@ -1,190 +1,148 @@
 // SPDX-License-Identifier: Apache-2.0
-// SANKHYA - exact rational arithmetic for basis verification (#521).
+// SANKHYA - exact rational arithmetic for basis verification (#521) and certified
+// sensitivity (#757).
 //
 // A separate, independent copy of tests/oracles/rational.hpp's design (that file is TESTS
 // ONLY by deliberate choice, documented there: nothing in src/ includes it, and changing that
-// boundary is a bigger decision than this feature needs to make). Same representation and
-// the same reason for it: a normalised fraction over __int128 with a strictly positive
-// denominator, every operation overflow-checked and throwing rather than wrapping, because a
-// wrapped intermediate here would manufacture a false proof of exactness - worse than no
-// proof. See exact_verify.hpp for what OVERFLOW means in practice: this module declines
-// rather than lies.
+// boundary is a bigger decision than this feature needs to make): a normalised fraction with
+// a strictly positive denominator. Since #757 over the arbitrary-precision BigInt
+// (bigint.hpp) rather than __int128, which overflowed on almost any decimal data and made
+// the exact modules decline where they were most wanted.
 #pragma once
 
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <exception>
+#include <string>
+#include <utility>
+
+#include "exact/bigint.hpp"
 
 namespace sankhya::exact {
 
-/// Thrown when an exact operation, or a double-to-exact conversion, cannot be represented in
-/// __int128. Caught once, at the top of verify_basis_exact() (exact_verify.cpp), and turned
-/// into a declined-not-failed verdict.
+/// Thrown on an operation with no exact rational result: a division by zero, or a double
+/// that is not finite. The name is kept from the __int128 days, when overflow was the common
+/// cause; callers turn it into a declined-not-failed verdict.
 struct RationalOverflow : std::exception {
   [[nodiscard]] const char* what() const noexcept override {
-    return "exact rational arithmetic overflowed __int128";
+    return "no exact rational result (a division by zero or a non-finite input)";
   }
 };
 
 class Rational {
  public:
-  using Int = __int128;
+  using Int = BigInt;
 
   Rational() = default;
-  Rational(Int numerator) : numerator_(numerator), denominator_(1) {}  // NOLINT: implicit
-  Rational(Int numerator, Int denominator) : numerator_(numerator), denominator_(denominator) {
+  Rational(long long numerator) : numerator_(numerator), denominator_(1) {}       // NOLINT
+  Rational(Int numerator) : numerator_(std::move(numerator)), denominator_(1) {}  // NOLINT
+  Rational(Int numerator, Int denominator)
+      : numerator_(std::move(numerator)), denominator_(std::move(denominator)) {
     normalize();
   }
 
-  [[nodiscard]] Int numerator() const noexcept { return numerator_; }
-  [[nodiscard]] Int denominator() const noexcept { return denominator_; }
+  [[nodiscard]] const Int& numerator() const noexcept { return numerator_; }
+  [[nodiscard]] const Int& denominator() const noexcept { return denominator_; }
 
-  [[nodiscard]] bool is_zero() const noexcept { return numerator_ == 0; }
-  [[nodiscard]] int sign() const noexcept {
-    return numerator_ > 0 ? 1 : (numerator_ < 0 ? -1 : 0);
+  [[nodiscard]] bool is_zero() const noexcept { return numerator_.is_zero(); }
+  [[nodiscard]] int sign() const noexcept { return numerator_.sign(); }
+
+  /// Nearest double, near enough to report (the leading 64 bits of each side). Never used
+  /// inside this module's own arithmetic.
+  [[nodiscard]] double to_double() const noexcept {
+    if (numerator_.is_zero()) return 0.0;
+    std::uint64_t num = 0;
+    std::uint64_t den = 0;
+    int num_exp = 0;
+    int den_exp = 0;
+    numerator_.leading_bits(&num, &num_exp);
+    denominator_.leading_bits(&den, &den_exp);
+    const double ratio = static_cast<double>(num) / static_cast<double>(den);
+    return (numerator_.sign() < 0 ? -1.0 : 1.0) * std::ldexp(ratio, num_exp - den_exp);
   }
 
-  /// Nearest double. Used only to report a result or to compare against the float solver -
-  /// never inside this module's own arithmetic.
-  [[nodiscard]] double to_double() const noexcept {
-    return static_cast<double>(numerator_) / static_cast<double>(denominator_);
+  /// "numerator/denominator" in decimal, exact.
+  [[nodiscard]] std::string to_string() const {
+    return numerator_.to_string() + "/" + denominator_.to_string();
   }
 
   /// The EXACT value of a finite double, bit for bit - not the decimal a human wrote, which
   /// this module never sees (the MPS reader already rounded it to the nearest double before
   /// the Model existed). A double is exactly mantissa * 2^exponent with a 53-bit mantissa
   /// (std::frexp normalises the mantissa to [0.5, 1), so scaling it by 2^53 is exactly an
-  /// integer - no rounding happens in this function; the only way it loses information is if
-  /// the caller already handed it a value that lost information becoming a double, which is
-  /// not this function's problem to fix.
+  /// integer), so no rounding happens in this function.
   [[nodiscard]] static Rational from_double(double value) {
     if (value == 0.0) return Rational(0);
     if (!std::isfinite(value)) throw RationalOverflow();
     int exponent = 0;
     const double mantissa = std::frexp(value, &exponent);
     constexpr int kMantissaBits = 53;
-    const auto scaled_mantissa = static_cast<Int>(std::ldexp(mantissa, kMantissaBits));
-    // value == scaled_mantissa * 2^(exponent - kMantissaBits)
-    const int shift = exponent - kMantissaBits;
-    if (shift >= 0) {
-      // An integer: scaled_mantissa << shift. Bounded by the sign bit and the magnitude
-      // already occupying up to 53 bits of scaled_mantissa.
-      if (shift >= 127 - kMantissaBits) throw RationalOverflow();
-      return Rational(shift_left_checked(scaled_mantissa, shift));
-    }
-    // A proper fraction: scaled_mantissa / 2^(-shift).
-    const int negative_shift = -shift;
-    if (negative_shift >= 127) throw RationalOverflow();
-    return Rational(scaled_mantissa, shift_left_checked(Int(1), negative_shift));
+    const auto scaled_mantissa = static_cast<long long>(std::ldexp(mantissa, kMantissaBits));
+    const int shift = exponent - kMantissaBits;  // value == scaled_mantissa * 2^shift
+    if (shift >= 0) return Rational(Int(scaled_mantissa) * Int::power_of_two(shift));
+    return Rational(Int(scaled_mantissa), Int::power_of_two(-shift));
   }
 
   Rational operator-() const {
     Rational r;
-    r.numerator_ = negate(numerator_);
+    r.numerator_ = -numerator_;
     r.denominator_ = denominator_;
     return r;
   }
 
   Rational operator+(const Rational& other) const {
-    // a/b + c/d = (a*d + c*b) / (b*d)
-    return Rational(
-        add(multiply(numerator_, other.denominator_), multiply(other.numerator_, denominator_)),
-        multiply(denominator_, other.denominator_));
+    if (denominator_ == other.denominator_) {
+      return Rational(numerator_ + other.numerator_, denominator_);
+    }
+    return Rational(numerator_ * other.denominator_ + other.numerator_ * denominator_,
+                    denominator_ * other.denominator_);
   }
-
   Rational operator-(const Rational& other) const { return *this + (-other); }
-
   Rational operator*(const Rational& other) const {
-    return Rational(multiply(numerator_, other.numerator_),
-                    multiply(denominator_, other.denominator_));
+    if (is_zero() || other.is_zero()) return Rational(0);
+    return Rational(numerator_ * other.numerator_, denominator_ * other.denominator_);
   }
-
   Rational operator/(const Rational& other) const {
-    if (other.numerator_ == 0) throw RationalOverflow();  // division by zero is a bug here
-    return Rational(multiply(numerator_, other.denominator_),
-                    multiply(denominator_, other.numerator_));
+    if (other.is_zero()) throw RationalOverflow();
+    return Rational(numerator_ * other.denominator_, denominator_ * other.numerator_);
   }
 
   Rational& operator+=(const Rational& other) { return *this = *this + other; }
   Rational& operator-=(const Rational& other) { return *this = *this - other; }
   Rational& operator*=(const Rational& other) { return *this = *this * other; }
 
-  /// Exact comparison. a/b < c/d with b, d > 0 is a*d < c*b, and the products are checked.
   bool operator<(const Rational& other) const {
-    return multiply(numerator_, other.denominator_) < multiply(other.numerator_, denominator_);
+    return numerator_ * other.denominator_ < other.numerator_ * denominator_;
   }
   bool operator>(const Rational& other) const { return other < *this; }
   bool operator<=(const Rational& other) const { return !(other < *this); }
   bool operator>=(const Rational& other) const { return !(*this < other); }
   bool operator==(const Rational& other) const {
-    // Both sides are normalised, so equality is componentwise and needs no multiplication.
+    // Both sides are normalised, so equality is componentwise.
     return numerator_ == other.numerator_ && denominator_ == other.denominator_;
   }
   bool operator!=(const Rational& other) const { return !(*this == other); }
 
  private:
-  static Int absolute(Int v) { return v < 0 ? negate(v) : v; }
-
-  static Int negate(Int v) {
-    if (v == kMin)
-      throw RationalOverflow();  // the most negative value has no positive counterpart
-    return -v;
-  }
-
-  static Int add(Int a, Int b) {
-    Int result = 0;
-    if (__builtin_add_overflow(a, b, &result)) throw RationalOverflow();
-    return result;
-  }
-
-  static Int multiply(Int a, Int b) {
-    Int result = 0;
-    if (__builtin_mul_overflow(a, b, &result)) throw RationalOverflow();
-    return result;
-  }
-
-  /// v * 2^shift, checked. Callers bound `shift` to at most 126 so `Int(1) << shift` is
-  /// itself representable; the multiply below is where an over-large `v` is caught, reusing
-  /// the same overflow check as every other operation here rather than a second, hand-rolled
-  /// one for shifting.
-  static Int shift_left_checked(Int v, int shift) {
-    if (v == 0) return 0;
-    return multiply(v, static_cast<Int>(1) << shift);
-  }
-
-  static Int greatest_common_divisor(Int a, Int b) {
-    a = absolute(a);
-    b = absolute(b);
-    while (b != 0) {
-      const Int t = a % b;
-      a = b;
-      b = t;
-    }
-    return a;
-  }
-
   void normalize() {
-    if (denominator_ == 0) throw RationalOverflow();  // 1/0 is a bug in the caller
-    if (denominator_ < 0) {
-      numerator_ = negate(numerator_);
-      denominator_ = negate(denominator_);
+    if (denominator_.is_zero()) throw RationalOverflow();
+    if (denominator_.sign() < 0) {
+      numerator_ = -numerator_;
+      denominator_ = -denominator_;
     }
-    if (numerator_ == 0) {
-      denominator_ = 1;
+    if (numerator_.is_zero()) {
+      denominator_ = Int(1);
       return;
     }
-    const Int g = greatest_common_divisor(numerator_, denominator_);
-    if (g > 1) {
-      numerator_ /= g;
-      denominator_ /= g;
+    const Int g = Int::gcd(numerator_, denominator_);
+    if (g != Int(1)) {
+      numerator_ = numerator_ / g;
+      denominator_ = denominator_ / g;
     }
   }
 
-  static constexpr Int kMin = static_cast<Int>(1) << 127;
-
-  Int numerator_ = 0;
-  Int denominator_ = 1;
+  Int numerator_;
+  Int denominator_ = Int(1);
 };
 
 }  // namespace sankhya::exact

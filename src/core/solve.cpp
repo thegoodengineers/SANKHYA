@@ -66,6 +66,7 @@
 #include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
 #include "core/status_guard.hpp"
+#include "exact/exact_sensitivity.hpp"
 #include "exact/exact_verify.hpp"
 #include "mip/components.hpp"
 #include "sankhya/certificate.hpp"
@@ -1070,6 +1071,8 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
               exact_result.message);
           break;
       }
+      if (!solution.col_ranging_lower.empty())
+        exact::apply_certified_sensitivity(model, &solution, logger);
     }
     logger.info("Result: {}  objective {:.10g}  {} iterations  {:.3f}s",
                 to_string(solution.status), solution.objective, solution.iterations,
