@@ -195,19 +195,17 @@ TEST(QpOperator, EngineWithoutADeviceKeepsTheHostAndSaysSo) {
 
 #ifdef SANKHYA_ENABLE_CUDA
 
-std::unique_ptr<qp::QpOperator> device_or_skip(const Model& model) {
-  std::string reason;
-  std::unique_ptr<qp::QpOperator> op = gpu::make_qp_device_operator(model, &reason);
-  if (op == nullptr) {
-    GTEST_SKIP() << "no device operator: " << reason;
-  }
-  return op;
+// GTEST_SKIP returns from the function it is written in, so it cannot live in a helper that
+// returns a value: the helper hands back the reason and each test skips on it.
+std::unique_ptr<qp::QpOperator> device_operator(const Model& model, std::string* reason) {
+  return gpu::make_qp_device_operator(model, reason);
 }
 
 TEST(QpDevice, OneStepMatchesTheHostToRounding) {
   const Model model = random_qp(300, 200, 11u);
-  std::unique_ptr<qp::QpOperator> device = device_or_skip(model);
-  if (device == nullptr) return;
+  std::string reason;
+  std::unique_ptr<qp::QpOperator> device = device_operator(model, &reason);
+  if (device == nullptr) GTEST_SKIP() << "no device operator: " << reason;
   std::unique_ptr<qp::QpOperator> host = qp::make_host_operator(model);
   const double tau = 0.02, sigma = 0.5;
   std::vector<double> hx, hy, dx, dy;
@@ -244,8 +242,10 @@ TEST(QpDevice, OneStepMatchesTheHostToRounding) {
 TEST(QpDevice, WholeSolveMatchesTheHostAtTheTolerance) {
   const Model model = random_qp(400, 250, 5u);
   {
-    std::unique_ptr<qp::QpOperator> probe = device_or_skip(model);
-    if (probe == nullptr) return;
+    std::string reason;
+    if (device_operator(model, &reason) == nullptr) {
+      GTEST_SKIP() << "no device operator: " << reason;
+    }
   }
   for (const bool halpern : {false, true}) {
     Options host;
