@@ -176,22 +176,48 @@ def main() -> int:
     if report.returncode != 0:
         fail(3, "plan", "the report failed", report)
     binding = json.loads(report.stdout)["binding_constraints"]
-    # What one more unit of each limit is worth, and how far the price holds (the ranging
-    # interval of the reported basis; 0 means the vertex is degenerate there).
-    worth = []
-    for row in binding[:3]:
-        up = (row.get("ranging") or {}).get("allow_increase")
-        holds = (f"holds for +{up:.4g}" if isinstance(up, (int, float)) and up < 1e29
-                 else "holds without limit")
-        worth.append(f"{row['name']} {abs(row['shadow_price']):.4g}/unit ({holds})")
-    step(3, "plan", t, f"LP optimum {field(proc.stdout, 'objective')}; {len(binding)} binding "
-         f"limits; worth relaxing most: " + "; ".join(worth))
-
-    # 4. an impossible demand, proved and repaired
-    t = time.perf_counter()
     sys.path.insert(0, str(ROOT / "tools"))
     from verify_solution_mps import parse_mps
     source = parse_mps(lp)
+    # What one more unit of each limit is worth. The shadow price alone can overstate it: at
+    # a degenerate vertex the price holds for no relaxation at all (its ranging interval is
+    # 0 on the relaxing side), and on this plant the limits with the largest prices are all
+    # of that kind. So the eight limits with the largest price are each re-solved one unit
+    # looser, ranked by the gain those re-solves measured, and the step prints the top three
+    # beside their prices. Balance rows (equalities) are not limits a planner can relax, and
+    # are skipped.
+    base = float(field(proc.stdout, "objective"))
+    sense = -1.0 if source.maximize else 1.0
+    probe, probe_sol = work / "refinery_probe.mps", work / "probe.sol"
+    limits = [row for row in binding
+              if source.row_lower[source.row_index[row["name"]]]
+              != source.row_upper[source.row_index[row["name"]]]]
+    measured = []
+    for row in limits[:8]:
+        looser = row["bound"] + (1.0 if row["at"] == "upper" else -1.0)
+        raise_rhs(lp, row["name"], looser, probe)
+        if probe.read_text() == lp.read_text():
+            continue  # the limit sits at 0 with no RHS entry; nothing to loosen in place
+        again = run([binary, "solve", probe, "--write-sol", probe_sol])
+        if field(again.stdout, "status") != "optimal":
+            continue
+        measured.append((sense * (base - float(field(again.stdout, "objective"))), row))
+    measured.sort(key=lambda pair: -pair[0])
+    worth = [f"{row['name']} {gain:.4g} (price {abs(row['shadow_price']):.4g})"
+             for gain, row in measured[:3] if gain > 0] or ["none of them gains"]
+    overstated = sum(1 for gain, row in measured if gain < 0.5 * abs(row["shadow_price"]))
+    degenerate = sum(1 for row in limits
+                     if (row.get("ranging") or {}).get(
+                         "allow_increase" if row["at"] == "upper" else "allow_decrease",
+                         1.0) <= 1e-9 * max(1.0, abs(row["bound"])))
+    step(3, "plan", t, f"LP optimum {field(proc.stdout, 'objective')}; {len(limits)} binding "
+         f"limits, {degenerate} priced at a degenerate vertex; one more unit, re-solved, "
+         f"is worth most on: " + "; ".join(worth)
+         + (f"; the price overstates the next unit on {overstated} of the {len(measured)} "
+            f"re-solved" if overstated else ""))
+
+    # 4. an impossible demand, proved and repaired
+    t = time.perf_counter()
     target = next(n for n in source.row_names if n.startswith("COMMIT_"))
     base = source.row_lower[source.row_index[target]]
     bad, bad_sol = work / "refinery_impossible.mps", work / "impossible.sol"
