@@ -2043,8 +2043,10 @@ relative); **wrong** is a contradicted verdict, an objective off the known optim
 the verifier rejects; **failed** is no verdict (a limit, a numerical error, `feasible`).
 
 Reading it: SANKHYA's scaled-Netlib failures are the status guard refusing a claim it cannot
-support, not answers; why the engine gets there (presolve's absolute 1e-11 coefficient drop,
-an equilibration that does not undo a 2^40 spread, no objective scaling) is #792 and #783.
+support, or a time limit, not answers. Presolve reading real coefficients below 1e-11 as zero
+was the largest cause and was fixed in #824 (#792); what remains is tracked as #792 (the
+engine's numerics on these models), #783 (no objective scaling) and #806 (complementary
+slackness judged absolutely).
 HiGHS runs with its defaults, under which a matrix entry below `small_matrix_value` = 1e-9 is
 dropped and a bound at or above `infinite_bound` = 1e20 is infinite. The scaled files carry
 entries far below 1e-9, which is consistent with most of its scaled-Netlib points violating a
@@ -2052,113 +2054,65 @@ row of the file as written and most of its certificates failing to prove the fil
 (each failing check is named below); Klee-Minty from n = 30, whose last right-hand sides
 reach 5^29 > 1e20, comes back unbounded.
 
-Measured on SANKHYA commit `90f5d356` against HiGHS 1.15.1 (highspy, separate process), machine `laptop-i5-1135G7-7.7GB-Windows-AMD64-shared`, 126 instances. Source: `stress-90f5d356.csv`.
+Measured on SANKHYA commit `0e1a0d25` against HiGHS 1.15.1 (highspy, separate process), machine `laptop-i5-1135G7-7.7GB-Windows-AMD64-shared`, 126 instances. Source: `stress-0e1a0d25.csv`.
 
 | family | instances | sankhya correct / wrong / failed | highs correct / wrong / failed |
 |---|---|---|---|
 | `degenerate` | 5 | 5 / 0 / 0 | 5 / 0 / 0 |
 | `klee_minty` | 7 | 4 / 0 / 3 | 4 / 3 / 0 |
 | `near_singular` | 8 | 8 / 0 / 0 | 8 / 0 / 0 |
-| `scaled_netlib` | 94 | 7 / 0 / 87 | 0 / 86 / 8 |
+| `scaled_netlib` | 94 | 55 / 0 / 39 | 0 / 85 / 9 |
 | `thin_infeasible` | 8 | 7 / 0 / 1 | 8 / 0 / 0 |
 | `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 |
-| **all** | 126 | 35 / 0 / 91 | 29 / 89 / 8 |
+| **all** | 126 | 83 / 0 / 43 | 29 / 88 / 9 |
 
-**sankhya, failed** (91):
+**sankhya, failed** (43):
 
 - `klee_minty_20`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 1.562e-02, above the 1.0e-06 the independent verifier ac)
 - `klee_minty_25`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 6.400e+01, above the 1.0e-06 the independent verifier ac)
 - `klee_minty_30`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 1.311e+05, above the 1.0e-06 the independent verifier ac)
-- `scaled_25fv47`: no verdict: numerical_error (route: the scaled attempt returned optimal after 3.5 s of its 30 s share; neither attempt produced a usable point; the s)
-- `scaled_80bau3b`: no verdict: numerical_error (phase 1 stalled at max bound violation 5.226e-05, only just above the 1.0e-07 feasibility tolerance; no column prices as)
-- `scaled_adlittle`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 5.417e-06 (5.417e-06 relative to the scale)
-- `scaled_agg`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.484e-02 (3.484e-02 relative to the scale)
-- `scaled_agg2`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 4.268e-02 (3.703e-02 relative to the scale)
-- `scaled_agg3`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.101e-01 (1.101e-01 relative to the scale)
-- `scaled_bandm`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 4.486e-05 (4.486e-05 relative to the scale)
-- `scaled_beaconfd`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 2.810e-04 (2.810e-04 relative to the scale)
-- `scaled_blend`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 4.485e-05 (4.485e-05 relative to the terms the)
-- `scaled_bnl1`: no verdict: numerical_error (phase 1 terminated with max bound violation 2.328e+02, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
-- `scaled_bnl2`: no verdict: numerical_error (phase 1 terminated with max bound violation 1.893e+02, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
-- `scaled_boeing1`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 8.332e-04 (8.332e-04 relative to the scale)
-- `scaled_bore3d`: no verdict: numerical_error (route: the scaled attempt returned optimal after 0.0 s of its 30 s share; nothing was left for an unscaled retry; engine)
-- `scaled_brandy`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.305e-05 (1.305e-05 relative to the scale)
-- `scaled_capri`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 4.835e-04 (4.835e-04 relative to the scale)
-- `scaled_cycle`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 2.975e+08 from a least of 0.000e+00, which cannot happen on faithf)
-- `scaled_czprob`: no verdict: numerical_error (phase 1 terminated with max bound violation 2.308e-04, far above the 1.0e-07 feasibility tolerance; no machine-checkable)
-- `scaled_d2q06c`: no verdict: time_limit (time limit 29.9865s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_d6cube`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 7.629e-06 (7.629e-06 relative to the scale)
-- `scaled_degen2`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 4.091e-05 (4.091e-05 relative to the terms the)
-- `scaled_degen3`: no verdict: numerical_error (phase 1 terminated with max bound violation 2.054e+00, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
-- `scaled_dfl001`: no verdict: numerical_error (dual simplex: basic variable 57 is outside its bounds by 1.016e+00, far above the 1.0e-07 feasibility tolerance, and no )
-- `scaled_e226`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.224e-06 (1.224e-06 relative to the scale)
-- `scaled_etamacro`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 6.408e-05 (6.408e-05 relative to the scale)
-- `scaled_fffff800`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.567e-04 (1.567e-04 relative to the scale)
-- `scaled_finnis`: no verdict: numerical_error (phase 1 terminated with max bound violation 4.299e+01, far above the 1.0e-07 feasibility tolerance; no machine-checkable)
-- `scaled_fit1d`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.831e-05 (1.831e-05 relative to the scale)
-- `scaled_fit1p`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 6.936e-05 (6.936e-05 relative to the scale)
-- `scaled_fit2d`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 6.847e-06 (6.847e-06 relative to the scale)
-- `scaled_fit2p`: no verdict: time_limit (time limit 29.9484s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_forplan`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 2.252e-04 (2.252e-04 relative to the scale)
-- `scaled_ganges`: no verdict: numerical_error (dual simplex: basic variable 1494 is outside its bounds by 5.634e+03, far above the 1.0e-07 feasibility tolerance, and n)
-- `scaled_gfrd-pnc`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.335e-01 (1.335e-01 relative to the scale)
-- `scaled_greenbea`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 6.987e-03 (6.987e-03 relative to the scale)
-- `scaled_greenbeb`: no verdict: time_limit (time limit 37.4059s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned nume)
-- `scaled_grow15`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 4.257e+00 (1.000e+00 relative to the scale)
-- `scaled_grow22`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.815e+00 (1.000e+00 relative to the scale)
-- `scaled_grow7`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 9.577e-01 (9.577e-01 relative to the scale)
-- `scaled_lotfi`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 9.695e-03 (9.695e-03 relative to the scale)
-- `scaled_maros`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 2.184e+09 from a least of 0.000e+00, which cannot happen on faithf)
-- `scaled_maros-r7`: no verdict: time_limit (time limit 59.9759s reached inside the assembly of the normal equations, which was abandoned)
-- `scaled_modszk1`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 7.700e-02 (7.700e-02 relative to the scale)
-- `scaled_nesm`: no verdict: numerical_error (dual simplex: basic variable 2864 is outside its bounds by 8.766e+00, far above the 1.0e-07 feasibility tolerance, and n)
-- `scaled_perold`: no verdict: time_limit (time limit 29.9961s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 1.281e+21 from a least of 1.570e+08, which cannot happen on faithf)
-- `scaled_pilot.ja`: no verdict: time_limit (time limit 29.9585s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot.we`: no verdict: numerical_error (phase 1 terminated with max bound violation 3.956e-01, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
-- `scaled_pilot4`: no verdict: time_limit (time limit 29.999s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
-- `scaled_pilot87`: no verdict: time_limit (stopped at the time limit of 29.9879s after 30.23s, 5754 iterations, 0 nodes; route: the scaled attempt returned time_li)
-- `scaled_pilotnov`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 3.304e+08 from a least of 2.700e+01, which cannot happen on faithf)
-- `scaled_recipe`: no verdict: numerical_error (dual simplex: basic variable 203 is outside its bounds by 8.975e+01, far above the 1.0e-07 feasibility tolerance, and no)
-- `scaled_sc205`: no verdict: feasible (route: the scaled attempt returned optimal after 0.1 s of its 30 s share; the unscaled retry produced this answer; engin)
-- `scaled_sc50b`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.150e-04 (1.150e-04 relative to the scale)
-- `scaled_scagr25`: no verdict: numerical_error (phase 1 terminated with max bound violation 3.639e+05, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
-- `scaled_scagr7`: no verdict: numerical_error (phase 1 terminated with max bound violation 3.526e+03, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
-- `scaled_scfxm1`: no verdict: numerical_error (phase 1 terminated with max bound violation 1.172e-01, far above the 1.0e-07 feasibility tolerance; the scaled attempt c)
-- `scaled_scfxm2`: no verdict: time_limit (time limit 59.5956s reached inside the basis factorization, which was abandoned; the scaled attempt claimed unbounded bu)
-- `scaled_scfxm3`: no verdict: numerical_error (phase 1 terminated with max bound violation 5.460e+03, far above the 1.0e-07 feasibility tolerance; no machine-checkable)
-- `scaled_scorpion`: no verdict: numerical_error (phase 1 stalled at max bound violation 3.662e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as)
-- `scaled_scrs8`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.406e-06 (1.406e-06 relative to the scale)
-- `scaled_scsd1`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.815e-06 (3.815e-06 relative to the scale)
-- `scaled_scsd6`: no verdict: numerical_error (route: the scaled attempt returned optimal after 1.2 s of its 30 s share; neither attempt produced a usable point; the s)
-- `scaled_scsd8`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 4.937e-05 (4.937e-05 relative to the scale)
-- `scaled_sctap1`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 2.384e-06 (2.384e-06 relative to the terms the)
-- `scaled_sctap2`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 2.861e-05 (2.861e-05 relative to the scale)
-- `scaled_sctap3`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.431e-05 (1.431e-05 relative to the scale)
-- `scaled_seba`: no verdict: numerical_error (dual simplex: basic variable 994 is outside its bounds by 1.404e-02, far above the 1.0e-07 feasibility tolerance, and no)
-- `scaled_share1b`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 1.751e-04 (1.751e-04 relative to the scale)
-- `scaled_share2b`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 5.958e-06 (5.958e-06 relative to the terms the)
-- `scaled_shell`: no verdict: numerical_error (dual simplex: basic variable 1480 is outside its bounds by 1.470e+03, far above the 1.0e-07 feasibility tolerance, and n)
-- `scaled_ship04l`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 5.186e-04 (5.186e-04 relative to the scale)
-- `scaled_ship04s`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.796e-05 (3.796e-05 relative to the scale)
-- `scaled_ship08l`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 2.342e-04 (2.342e-04 relative to the scale)
-- `scaled_ship08s`: no verdict: numerical_error (phase 1 stalled at max bound violation 5.993e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as)
-- `scaled_ship12l`: no verdict: numerical_error (phase 1 stalled at max bound violation 3.499e-07, only just above the 1.0e-07 feasibility tolerance; no column prices as)
-- `scaled_ship12s`: no verdict: numerical_error (phase 1 stalled at max bound violation 1.797e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as)
-- `scaled_sierra`: no verdict: numerical_error (route: the scaled attempt returned optimal after 0.5 s of its 30 s share; neither attempt produced a usable point; the s)
-- `scaled_stair`: no verdict: numerical_error (phase 1 terminated with max bound violation 4.518e+03, far above the 1.0e-07 feasibility tolerance; no machine-checkable)
-- `scaled_standata`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 2.237e-06 (2.237e-06 relative to the terms the)
-- `scaled_standmps`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 9.346e-07 (9.346e-07 relative to the scale)
-- `scaled_stocfor1`: no verdict: numerical_error (phase 1 terminated with max bound violation 8.000e+00, far above the 1.0e-07 feasibility tolerance; route: the scaled at)
-- `scaled_stocfor2`: no verdict: numerical_error (phase 1 terminated with max bound violation 1.710e+04, far above the 1.0e-07 feasibility tolerance; no machine-checkable)
-- `scaled_stocfor3`: no verdict: time_limit (time limit 29.7081s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_truss`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.693e-04 (3.693e-04 relative to the scale)
-- `scaled_tuff`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 9.506e-05 (9.506e-05 relative to the scale)
-- `scaled_vtp.base`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 1.095e-05 (1.095e-05 relative to the terms the)
-- `scaled_woodw`: no verdict: numerical_error (engine reported optimal but the returned point violates primal feasibility by 3.486e-07 (3.486e-07 relative to the scale)
+- `scaled_25fv47`: no verdict: time_limit (stopped at the time limit of 29.9965s after 30.02s, 20490 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_80bau3b`: no verdict: time_limit (time limit 29.9295s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_bnl2`: no verdict: time_limit (time limit 29.9901s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_bore3d`: no verdict: feasible (route: the scaled attempt returned optimal after 0.1 s of its 30 s share; neither attempt produced a usable point; the s)
+- `scaled_cycle`: no verdict: time_limit (stopped at the time limit of 29.2122s after 29.44s, 1032 iterations, 0 nodes; route: the scaled attempt returned time_li)
+- `scaled_d2q06c`: no verdict: time_limit (time limit 29.9667s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_degen3`: no verdict: time_limit (stopped at the time limit of 29.9894s after 30.03s, 19954 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_dfl001`: no verdict: time_limit (stopped at the time limit of 29.9851s after 30.51s, 14742 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_e226`: no verdict: feasible (engine reported optimal but the reduced costs violate dual feasibility by 3.817e+05 (9.026e-02 relative to the terms the)
+- `scaled_etamacro`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 1.122e-02, above the 1.0e-06 the independent verifier ac)
+- `scaled_finnis`: no verdict: feasible (engine reported optimal but strong duality fails (primal 1.727911256272e+05, dual 1.727881240454e+05, gap 3.002e+00, 1.8)
+- `scaled_fit2p`: no verdict: time_limit (time limit 29.9871s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_ganges`: no verdict: numerical_error (route: the scaled attempt returned optimal after 4.2 s of its 30 s share; neither attempt produced a usable point; the s)
+- `scaled_greenbea`: no verdict: time_limit (stopped at the time limit of 29.9882s after 31.28s, 13755 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_greenbeb`: no verdict: time_limit (stopped at the time limit of 29.9937s after 30.29s, 23874 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_maros`: no verdict: time_limit (stopped at the time limit of 29.9975s after 30.28s, 7208 iterations, 0 nodes; route: the scaled attempt returned time_li)
+- `scaled_maros-r7`: no verdict: time_limit (time limit 59.9476s reached inside the factorization, which was abandoned)
+- `scaled_modszk1`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 1.824e+06 from a least of 6.093e-08, which cannot happen on faithf)
+- `scaled_nesm`: no verdict: time_limit (stopped at the time limit of 29.9928s after 30.08s, 8861 iterations, 0 nodes; route: the scaled attempt returned time_li)
+- `scaled_perold`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 9.832e+09 from a least of 1.151e-13, which cannot happen on faithf)
+- `scaled_pilot`: no verdict: time_limit (time limit 29.9919s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot.ja`: no verdict: time_limit (stopped at the time limit of 29.9957s after 30.01s, 6166 iterations, 0 nodes; route: the scaled attempt returned time_li)
+- `scaled_pilot.we`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 9.043e+06 from a least of 2.229e+00, which cannot happen on faithf)
+- `scaled_pilot4`: no verdict: time_limit (time limit 29.9976s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot87`: no verdict: time_limit (time limit 29.9266s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilotnov`: no verdict: numerical_error (route: the scaled attempt returned optimal after 3.0 s of its 30 s share; neither attempt produced a usable point; the s)
+- `scaled_sc205`: no verdict: feasible (route: the scaled attempt returned optimal after 0.4 s of its 30 s share; the unscaled retry produced this answer; engin)
+- `scaled_scagr25`: no verdict: time_limit (stopped at the time limit of 29.9881s after 30.76s, 493 iterations, 0 nodes; route: the scaled attempt returned time_lim)
+- `scaled_scorpion`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 3.178e-01, above the 1.0e-06 the independent verifier ac)
+- `scaled_scrs8`: no verdict: numerical_error (basis became singular at iteration 1685; route: the scaled attempt returned numerical_error after 9.7 s of its 30 s shar)
+- `scaled_scsd8`: no verdict: numerical_error (route: the scaled attempt returned optimal after 2.5 s of its 30 s share; neither attempt produced a usable point; the s)
+- `scaled_ship04s`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 2.810e+02, above the 1.0e-06 the independent verifier ac)
+- `scaled_ship08s`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 4.014e+02, above the 1.0e-06 the independent verifier ac)
+- `scaled_ship12l`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 3.303e+02, above the 1.0e-06 the independent verifier ac)
+- `scaled_ship12s`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 2.235e+02, above the 1.0e-06 the independent verifier ac)
+- `scaled_stair`: no verdict: time_limit (time limit 29.9992s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_stocfor3`: no verdict: time_limit (stopped at the time limit of 29.7533s after 29.76s, 2542 iterations, 0 nodes; route: the scaled attempt returned time_li)
+- `scaled_truss`: no verdict: time_limit (stopped at the time limit of 29.7501s after 29.75s, 16629 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_woodw`: no verdict: numerical_error (route: the scaled attempt returned optimal after 1.6 s of its 30 s share; neither attempt produced a usable point; the s)
 - `thin_infeasible_1e-6_1`: no verdict: numerical_error (phase 1 stalled at max bound violation 1.746e-07, only just above the 1.0e-07 feasibility tolerance; no column prices as)
 
-**highs, wrong** (89):
+**highs, wrong** (88):
 
 - `klee_minty_30`: unbounded, verifier rejects: [FAIL] ray respects the row bounds     17 would be crossed: R13, R14, R15, R16, R17
 - `klee_minty_35`: unbounded, verifier rejects: [FAIL] ray respects the row bounds     22 would be crossed: R13, R14, R15, R16, R17
@@ -2245,12 +2199,11 @@ Measured on SANKHYA commit `90f5d356` against HiGHS 1.15.1 (highspy, separate pr
 - `scaled_stocfor1`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C86
 - `scaled_stocfor2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         3 unbounded in the direction used, so the aggregate proves nothing: C28, C742, C1253
 - `scaled_stocfor3`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         4 unbounded in the direction used, so the aggregate proves nothing: C102, C566, C1782, C1836
-- `scaled_truss`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.562e-02 (1.562e-02 relative to the row's terms) on R458; [FAIL] activity agreement                max /ours - solver's/ = 1.562e-02; [
 - `scaled_tuff`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C399
 - `scaled_vtp.base`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C114
 - `scaled_wood1p`: optimal, verifier rejects: [FAIL] reduced costs                     max /c - A^T y - d/ = 9.080e-06 (9.080e-06 relative to its terms) on C305
 
-**highs, failed** (8):
+**highs, failed** (9):
 
 - `scaled_fit1p`: no verdict: kSolveError
 - `scaled_fit2d`: no verdict: killed (no exit within 3x the time limit)
@@ -2259,6 +2212,7 @@ Measured on SANKHYA commit `90f5d356` against HiGHS 1.15.1 (highspy, separate pr
 - `scaled_pilot.ja`: no verdict: kNotset
 - `scaled_pilotnov`: no verdict: kNotset
 - `scaled_sierra`: no verdict: kNotset
+- `scaled_truss`: no verdict: killed (no exit within 3x the time limit)
 - `scaled_woodw`: no verdict: kNotset
 
 13 thin-infeasible answers are `optimal` at a point the verifier accepts with every row inside 1e-7: at the stated tolerance that point is feasible, so the answer is graded correct, and named here so the grade is not mistaken for a proof of infeasibility.
