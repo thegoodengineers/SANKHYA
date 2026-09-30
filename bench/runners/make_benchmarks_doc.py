@@ -2985,8 +2985,10 @@ instance by instance. Every leg runs with `miplib.py --profile` (profile=detaile
 records the seconds spent choosing the branching column (strong branching's probe LPs are
 inside them) and the batched-PDHG calls. The legs ran on a 64-core host with one V100 as two
 streams side by side, one single-threaded process each: the CPU-only legs (`off` and the
-`*-cpu` legs) in one, the device legs in the other, so exactly one process used the card and
-every leg shared the host with exactly one other solve.
+`*-cpu` legs) in one, the device legs in the other, so exactly one process used the card.
+The CPU stream has four legs and the device stream six, so every leg except the last two
+device legs (`520-sb-filter`, `520-both`, which ran alone) shared the host with exactly one
+other single-threaded solve.
 
 {gpu_ab_doc.tier2_legs_section(tier2_legs)}
 ---
