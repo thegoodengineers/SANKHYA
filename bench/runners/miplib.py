@@ -52,7 +52,6 @@ import datetime
 import hashlib
 import json
 import math
-import platform
 import re
 import subprocess
 import sys
@@ -60,6 +59,7 @@ import tempfile
 from pathlib import Path
 import stamp  # noqa: E402  (#433: stamps from the binary)
 import miplib_seeds  # noqa: E402  (#504: permutations and the per-seed summary)
+from compare_suite import machine_tag  # noqa: E402  (kind, CPU model, cores, RAM, OS)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data" / "miplib"
@@ -365,6 +365,9 @@ def main() -> int:
     parser.add_argument("--certificate", action="store_true",
                         help="write a VIPR proof of every answer and check it with "
                              "tools/verify_certificate.py (#518)")
+    parser.add_argument("--machine-kind", default=None,
+                        help="what kind of machine this is, for the machine tag, e.g. "
+                             "'cloud container' (default: systemd-detect-virt's answer)")
     args = parser.parse_args()
     if args.seeds < 1:
         parser.error("--seeds must be at least 1")
@@ -385,7 +388,7 @@ def main() -> int:
 
     names = args.instances or sorted(reference)
     commit = git_commit(args.binary)
-    machine = f"{platform.system()}-{platform.machine()}"
+    machine = machine_tag(args.machine_kind)
     stamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
     if args.threads is not None:
