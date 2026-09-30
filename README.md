@@ -89,7 +89,10 @@ reported `feasible` (below). The count is the same CSV regraded, by
 covers all **94**, `truss` and `stocfor3` generated from netlib.org's own bundles (#746): SANKHYA
 returns `optimal` on 94, within 1e-6 of Koch's exact optimum and independently verified on
 **94 of 94**, and matching the readme's value on 84. The table above is the earlier laptop run
-and stays as it was measured.
+and stays as it was measured. Three more full runs of `main` at `5c15999` (`bench/results/netlib-timing-main-5c15999-r{1,2,3}.csv`,
+#840; a 4-core cloud container, one thread, 120 s) read the same in every run: `optimal`, within
+1e-6 of the exact optimum and verified on **94 of 94**, and 83 matching the readme, the one
+less being `e226`, whose objective constant `netlib.py` leaves out and the head-to-head runner adds.
 
 The second is the number Phase 6's ">= 95% of Netlib" criterion is measured against, and it
 grades us against Netlib's own readme table. The third says how often the solver finishes
