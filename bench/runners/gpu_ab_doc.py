@@ -109,7 +109,10 @@ def tier2_legs_section(legs: dict[str, Path | None]) -> str:
     """The #509 / #520 legs on the MIPLIB tier-2 set, each against the first (baseline) leg.
 
     Per leg: feasible points found, published optimum matched and proved, node throughput
-    (total nodes over total solver seconds), and per instance against the baseline whether
+    (total nodes over total solver seconds), the seconds spent choosing the branching column
+    (strong branching's probe LPs are inside them) and, of those, in the batched PDHG
+    strong-branching call (miplib.py --profile; "-" in a CSV without the columns), and per
+    instance against the baseline whether
     the incumbent (primal) and the final dual bound are closer to or further from the
     published optimum. All counted from the rows.
     """
@@ -124,9 +127,9 @@ def tier2_legs_section(legs: dict[str, Path | None]) -> str:
     out = [f"Commit `{first.get('git_commit', '?')}` · machine `{first.get('machine', '?')}` · "
            f"{len(base)} instances, one seed, one thread; every leg against `{base_label}`, "
            f"the same binary with every GPU option off.", "",
-           "| leg | solver options | feasible | matched | proved | nodes / s | primal closer / "
-           "further | dual bound closer / further | source |",
-           "|---|---|---:|---:|---:|---:|---:|---:|---|"]
+           "| leg | solver options | feasible | matched | proved | nodes / s | branching s | "
+           "batched SB s | primal closer / further | dual bound closer / further | source |",
+           "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
     for label in labels:
         rows = tables[label]
         feasible = sum(_num(r, "our_objective") is not None for r in rows.values())
@@ -152,6 +155,11 @@ def tier2_legs_section(legs: dict[str, Path | None]) -> str:
         pc = "-" if label == base_label else f"{primal[0]} / {primal[1]}"
         dc = "-" if label == base_label else f"{dual[0]} / {dual[1]}"
         rate = f"{nodes / secs:.0f}" if secs else "-"
-        out.append(f"| {label} | `{opts}` | {feasible} | {matched} | {proved} | {rate} | {pc} "
-                   f"| {dc} | `{present[label].name}` |")
+        profiled = [r for r in rows.values() if _num(r, "branching_seconds") is not None]
+        branching = (f"{sum(_num(r, 'branching_seconds') for r in profiled):.1f}"
+                     if profiled else "-")
+        sb = sum(_num(r, "batch_strong_branching_seconds") or 0.0 for r in profiled)
+        batched_sb = f"{sb:.1f}" if profiled else "-"
+        out.append(f"| {label} | `{opts}` | {feasible} | {matched} | {proved} | {rate} "
+                   f"| {branching} | {batched_sb} | {pc} | {dc} | `{present[label].name}` |")
     return "\n".join(out) + "\n"
