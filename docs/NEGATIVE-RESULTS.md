@@ -84,6 +84,23 @@ Not a feature demoted but a *number* demoted: the CPU-vs-GPU PDHG crossover at 1
 
 Same instances, same card, opposite movements at the two tolerances. The spread is the honest width of a laptop-GPU measurement, and a single two-decimal figure hides it. The runner now takes N repeats per cell and reports the median with its min–max (#449); a committed repeats CSV is #445.
 
+### The Forrest–Tomlin basis update (`basis_update=forrest-tomlin`)
+
+Landed in #279: the entering column folded into U with a sparse spike and one row eta, against the product-form default; #396 added Tomlin's loss-of-significance test (`kFtCancellationThreshold`), a row-eta bound and the pivot test after the fold was measured drifting 2.5e-3. Measured against the product form on the full Netlib set (94 instances), both sides the same binary built at `462fa39e`, alternated, 3 runs a side, `threads=1`, 600 s wall limit, on the shared Windows laptop at 100% CPU:
+
+| | product form | Forrest–Tomlin |
+|---|---:|---:|
+| `pilot` | optimal, 9,900 iterations, 3 of 3 | **feasible, not optimal** (strong duality fails), 7,525 iterations, 3 of 3 |
+| `pilot87` | optimal, 21,163 iterations, 2 of 3 (the third stopped by the limit at 21,044) | **time limit** 2 of 3 at 23,727 and 26,150 iterations, **phase 1 diverged** in the third |
+| `dfl001` | optimal, 85,012 iterations | optimal, 70,654 iterations |
+| exact-grade matches (Koch), per run | 92, 92, 93 | 90, 91, 91 |
+| shifted geomean, 10 s, per-instance median | 1.000× | 1.025× |
+
+It takes fewer iterations and less time on many mid-size instances (`d2q06c`, `truss`, `greenbea`, `dfl001`), but it loses `pilot` outright and `pilot87` in every run, and a wrong answer scores zero. The product form stays the default.
+
+Files: `bench/results/lu-ft-ab-netlib-{product-form,forrest-tomlin}-462fa39e-r{1,2,3}.csv` and `lu-ft-ab-netlib-462fa39e-summary.csv`.
+What would earn the default: `pilot` and `pilot87` optimal under it in every run — the accuracy of the row-eta file on the pilot family, not its speed.
+
 ---
 
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
@@ -111,12 +128,6 @@ Re-run that would settle it: the same A/B at a `main` commit, with the analysis 
 Rounding, fractional diving, RENS and the diving family each behind `mip_heur_*`, with a counted budget. The master switch is off because, measured together, they cost proofs; the per-heuristic A/B that would say which one is not on `main` (`docs/BENCHMARKS.md` reports "not measured on this checkout").
 
 Re-run that would settle it: `bench/runners/miplib_heuristics_ab.py` at one `main` commit, all legs in one sitting.
-
-### The Forrest–Tomlin basis update (`basis_update=forrest-tomlin`)
-
-Landed in #279: the entering column folded into U with a sparse spike and one row eta, against the product-form default. The fold was measured drifting 2.5e-3 where the product form stayed at 1e-9 over a full eta file, which #396 closed with Tomlin's loss-of-significance test (`kFtCancellationThreshold`), a row-eta bound and the pivot test — the unit test now holds it to the product form's drift over six seeds and 128 updates. Still opt-in: on the branch it won iterations on `greenbea` and `d2q06c` and lost them on `perold` and `pilotnov`, and no committed run puts a number on the trade.
-
-Re-run that would settle it: the Netlib full set under both updates at one `main` commit.
 
 ---
 
