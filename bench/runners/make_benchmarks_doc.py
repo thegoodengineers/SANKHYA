@@ -2981,7 +2981,12 @@ on the device and with `gpu_heur_backend=cpu`), and batched PDHG for node bounds
 strong-branching scores (#520, on the device and with `gpu_batch_backend=cpu`). All of
 these are off by default; each row says what turning one on does against `off`. "Closer" and
 "further" compare the incumbent, and the final dual bound, with the published optimum,
-instance by instance.
+instance by instance. Every leg runs with `miplib.py --profile` (profile=detailed), which
+records the seconds spent choosing the branching column (strong branching's probe LPs are
+inside them) and the batched-PDHG calls. The legs ran on a 64-core host with one V100 as two
+streams side by side, one single-threaded process each: the CPU-only legs (`off` and the
+`*-cpu` legs) in one, the device legs in the other, so exactly one process used the card and
+every leg shared the host with exactly one other solve.
 
 {gpu_ab_doc.tier2_legs_section(tier2_legs)}
 ---
