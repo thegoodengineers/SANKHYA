@@ -174,6 +174,16 @@ inline constexpr double kVerifierObjective = 1e-9;
 /// matrix is finalised, and are never accepted as pivots.
 inline constexpr double kZeroDrop = 1e-11;
 
+/// Presolve fill-in cancellation, RELATIVE (#792). A doubleton substitution adds -a'b/a to
+/// an existing coefficient; when the two nearly cancel, what is left is rounding and is set to
+/// an exact zero. The test is |sum| <= kFillInCancellation * max(|before|, |added|): the
+/// same 1e-11 that kZeroDrop applied absolutely, so on a model whose entries are of order one
+/// nothing changes, but a coefficient of 1e-12 that is DATA (a row or column scaled by 2^-20,
+/// Netlib under the stress set of #762) is no longer read as zero. Every other coefficient
+/// presolve reads from the model is data too, and is zero only when it is exactly zero, the
+/// rule the MPS reader follows since #590.
+inline constexpr double kFillInCancellation = 1e-11;
+
 /// Markowitz threshold for sparse LU pivoting (Phase 6). A candidate pivot must be at
 /// least this fraction of the largest magnitude in its column to be numerically eligible.
 /// 0.01 is the standard simplex compromise between sparsity and stability (Suhl & Suhl).

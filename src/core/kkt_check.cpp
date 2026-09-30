@@ -280,8 +280,14 @@ KktVerdict check_optimality(const Model& model, const Solution& s,
     if (s.col_status.size() == un && s.row_status.size() == um && known(s.col_status) &&
         (m == 0 || known(s.row_status))) {
       Index basic = 0;
-      const auto off_bound = [&](BasisStatus status, double value, double lower, double upper) {
-        const double scale = std::max(1.0, std::fabs(value));
+      // `floor` is the row's term scale for a row and 1 for a column: a row's distance from
+      // its bound is judged in the units the row-activity check above uses, as
+      // tools/verify_solution.py has since #782 (#792: scaled Netlib finnis failed only this
+      // check here, so the strong-duality guard below never ran, and the verifier then
+      // rejected the point it let out as optimal).
+      const auto off_bound = [&](BasisStatus status, double value, double lower, double upper,
+                                 double floor) {
+        const double scale = std::max(floor, std::fabs(value));
         if (status == BasisStatus::kAtLower && is_finite_bound(lower)) {
           return std::fabs(value - lower) / scale;
         }
@@ -294,14 +300,14 @@ KktVerdict check_optimality(const Model& model, const Solution& s,
       for (Index j = 0; j < n; ++j) {
         const auto u = static_cast<std::size_t>(j);
         if (s.col_status[u] == BasisStatus::kBasic) ++basic;
-        worst = std::max(
-            worst, off_bound(s.col_status[u], x[u], model.col_lower[u], model.col_upper[u]));
+        worst = std::max(worst, off_bound(s.col_status[u], x[u], model.col_lower[u],
+                                          model.col_upper[u], 1.0));
       }
       for (Index i = 0; i < m; ++i) {
         const auto u = static_cast<std::size_t>(i);
         if (s.row_status[u] == BasisStatus::kBasic) ++basic;
         worst = std::max(worst, off_bound(s.row_status[u], activity[u], model.row_lower[u],
-                                          model.row_upper[u]));
+                                          model.row_upper[u], row_scale[u]));
       }
       if (basic != m) {
         return fail("basis", fmt::format("{} basic entries for {} rows", basic, m));
