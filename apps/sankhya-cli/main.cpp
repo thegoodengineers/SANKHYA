@@ -268,6 +268,11 @@ int main(int argc, char** argv) {
   solve_cmd->add_flag("--ranging", compute_ranging,
                       "Compute LP sensitivity ranges (objective and RHS) at optimality "
                       "and write them to the .sol file");
+  std::string start_path;
+  solve_cmd->add_option("--start", start_path,
+                        "MILP: a user-supplied starting point, checked and offered as the "
+                        "first incumbent (a SANKHYA .sol, or `name value` lines as in a "
+                        "MIPLIB .sol; the same as --option mip_start=FILE)");
 
   CLI::App* info_cmd = app.add_subcommand("info", "Report the dimensions of a model file");
   std::string info_path;
@@ -330,6 +335,7 @@ int main(int argc, char** argv) {
   if (time_limit > 0.0) options.set_double("time_limit", time_limit);
   if (use_gpu) options.set_bool("gpu", true);
   if (compute_ranging) options.set_bool("ranging", true);
+  if (!start_path.empty()) options.set_string("mip_start", start_path);
 
   if (scenarios_cmd->parsed()) {
     // One solver log per scenario would bury the table; --option log_to_console=true restores.

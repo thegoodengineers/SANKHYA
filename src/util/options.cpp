@@ -925,6 +925,25 @@ const std::vector<OptionSpec>& Options::registry() {
          {},
          /*planned_for=*/std::string(""),
          /*case_sensitive=*/true});
+    s.push_back(
+        {"mip_start",
+         OptionType::String,
+         std::string(""),
+         "MILP: a user-supplied starting point (#753) - a SANKHYA .sol, or `name value` "
+         "lines as in a MIPLIB .sol - read the same way debug_solution is. Checked against "
+         "the model at the usual tolerances (bounds, integrality, every row) before the root "
+         "LP; accepted as the first incumbent only when it passes whole, so it prunes from "
+         "the first node. A missing column is 0, the MIPLIB convention; a start that is "
+         "missing a column, fails a bound, an integrality check or a row is rejected, not "
+         "repaired, and the search proceeds exactly as if mip_start were empty - the file "
+         "never changes the reported status or objective of a run whose point is rejected. "
+         "Wired into the sequential search only so far; mip_threads>1 logs that it was not "
+         "used rather than applying it. Off (empty) by default.",
+         0.0,
+         0.0,
+         {},
+         /*planned_for=*/std::string(""),
+         /*case_sensitive=*/true});
     s.push_back({"nlp_tolerance",
                  OptionType::Double,
                  1e-6,

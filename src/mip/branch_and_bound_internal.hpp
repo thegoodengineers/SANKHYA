@@ -260,6 +260,12 @@ class BranchAndBound {
     seed_ = seed;
   }
 
+  /// mip_start (#753): offer a user-supplied point as the search's first incumbent, before
+  /// run() does anything else. Goes through the same check every heuristic's point does
+  /// (offer_incumbent: integrality against the original bounds, every column bound, every
+  /// row, recomputed rather than assumed) - a start is accepted or rejected, never repaired.
+  bool offer_start(const std::vector<double>& x) { return offer_incumbent(x); }
+
  private:
   // ---- Parallel tree search (branch_and_bound_parallel.cpp, #222) ----------------------
 

@@ -1084,11 +1084,39 @@ Solution solve_branch_and_bound(const Model& model, const Options& requested, Lo
   // not a pool_complete search (whose pruning reads the pool's cutoff at every node), and
   // not in deterministic mode (the tree a parallel search explores depends on timing).
   const int threads = certify ? 1 : parallel_threads(searched, options, logger);
-  if (threads > 1)
+  if (threads > 1) {
+    // mip_start (#753) is wired into the sequential path only so far; the parallel driver
+    // has no incumbent to seed before its workers start. Said once, not silently dropped.
+    if (!options.get_string("mip_start").empty()) {
+      logger.info("mip_start: not yet used by the parallel tree search (mip_threads>1, #753)");
+    }
     return checked(
         solve_branch_and_bound_parallel(searched, options, logger, control, threads));
+  }
 
   BranchAndBound search(searched, options, logger, control);
+  const std::string mip_start_path = options.get_string("mip_start");
+  if (!mip_start_path.empty()) {
+    std::string error;
+    Index missing = 0;
+    const std::optional<DebugSolution> start =
+        DebugSolution::load(mip_start_path, searched, &error, &missing);
+    if (!start.has_value()) {
+      logger.info("mip_start: {} not used: {}", mip_start_path, error);
+    } else if (missing > 0) {
+      logger.info(
+          "mip_start: {} not used: {} of {} column(s) missing; a partial start is not "
+          "accepted yet (#753)",
+          mip_start_path, missing, searched.num_cols());
+    } else {
+      const std::string violation = start->model_violation(searched);
+      if (!violation.empty()) {
+        logger.info("mip_start: {} rejected: {}", mip_start_path, violation);
+      } else if (search.offer_start(start->x())) {
+        logger.info("mip_start: {} accepted as the first incumbent", mip_start_path);
+      }
+    }
+  }
   return checked(search.run());
 }
 

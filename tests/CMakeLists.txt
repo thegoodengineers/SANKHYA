@@ -100,6 +100,7 @@ add_executable(sankhya_tests
   unit/test_miqp_node_ipm.cpp
   unit/test_heuristics.cpp
   unit/test_local_mip.cpp
+  unit/test_mip_start.cpp
   unit/test_restarts.cpp
   unit/test_flow_cover_cuts.cpp
   unit/test_implied_bound_cuts.cpp
