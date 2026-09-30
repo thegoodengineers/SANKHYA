@@ -2765,6 +2765,10 @@ def main() -> int:
                                            "deterministic=true"),
         "deterministic-loop": newest_option_run(
             "pdhg-478-refinery-deterministic-loop-[0-9a-f]*.csv", "gpu_on_device_loop=true"),
+        # The device loop on the default (non-deterministic) path: the A/B the default flip
+        # rests on.
+        "loop": newest_option_run("pdhg-478-refinery-loop-[0-9a-f]*.csv",
+                                  "gpu_on_device_loop=true"),
     }
 
     # Legacy untagged CSVs predate the tier tag; fall back so an old results directory still
