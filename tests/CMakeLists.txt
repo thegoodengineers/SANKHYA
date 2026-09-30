@@ -115,6 +115,7 @@ add_executable(sankhya_tests
   unit/test_knapsack_cover_separation.cpp
   unit/test_cut_filter_policy.cpp
   unit/test_presolve_parallel_rows.cpp
+  unit/test_presolve_scaled.cpp
   unit/test_presolve_probing.cpp
   unit/test_presolve_implied_integer.cpp
   unit/test_presolve_propagation.cpp

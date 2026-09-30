@@ -606,7 +606,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         const auto& deltas = work.extra_row_delta[u];
         const auto consider = [&](Index row, double coefficient) {
           const auto r = static_cast<std::size_t>(row);
-          if (work.row_dead[r] || std::fabs(coefficient) <= tol::kZeroDrop) return;
+          if (work.row_dead[r] || coefficient == 0.0) return;  // data, not rounding (#792)
           const bool has_lower = finite(work.row_lower[r]);
           const bool has_upper = finite(work.row_upper[r]);
           if (coefficient > 0.0) {
@@ -788,10 +788,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         // the row's activity by ds moves x_j by ds/a, and the objective by cj*ds/a.
         const double rate = model.sense_multiplier() * cj / a;
         double target = 0.0;
-        if (rate > tol::kZeroDrop) {
+        if (rate > 0.0) {  // the sign decides, not an absolute threshold (#792)
           if (!finite(work.row_lower[r])) continue;
           target = work.row_lower[r];
-        } else if (rate < -tol::kZeroDrop) {
+        } else if (rate < 0.0) {
           if (!finite(work.row_upper[r])) continue;
           target = work.row_upper[r];
         } else {
@@ -862,7 +862,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         const ColumnView view = model.matrix.column(j);
         for (Index k = 0; k < view.size; ++k) {
           if (work.row_dead[static_cast<std::size_t>(view.rows[k])]) continue;
-          if (std::fabs(view.values[k]) <= tol::kZeroDrop) continue;
+          if (view.values[k] == 0.0) continue;
           support.push_back(view.rows[k]);
         }
         if (support.empty()) continue;
@@ -881,9 +881,9 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         Index kb = 0;
         while (ka < va.size && kb < vb.size) {
           const auto r = static_cast<std::size_t>(va.rows[ka]);
-          const bool live_a = !work.row_dead[r] && std::fabs(va.values[ka]) > tol::kZeroDrop;
-          const bool live_b = !work.row_dead[static_cast<std::size_t>(vb.rows[kb])] &&
-                              std::fabs(vb.values[kb]) > tol::kZeroDrop;
+          const bool live_a = !work.row_dead[r] && va.values[ka] != 0.0;
+          const bool live_b =
+              !work.row_dead[static_cast<std::size_t>(vb.rows[kb])] && vb.values[kb] != 0.0;
           if (!live_a) {
             ++ka;
             continue;
@@ -1413,7 +1413,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           const auto orr = static_cast<std::size_t>(other_row);
           if (work.row_dead[orr]) continue;
           const double a_other = elim_view.values[t];
-          if (std::fabs(a_other) < tol::kZeroDrop) continue;
+          if (a_other == 0.0) continue;  // data, not rounding (#792); postsolve mirrors this
 
           const double factor = a_other / a;  // a_i'e / a
           work.row_combined[orr] = true;
@@ -1424,7 +1424,16 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           bool found = false;
           for (auto& entry : work.rows[orr]) {
             if (entry.first == keep) {
+              // Cancellation is judged against the two terms, not absolutely (#792): what
+              // is left of a near-cancellation is rounding and becomes an exact zero, which
+              // the reduced model then leaves out; a small coefficient that is data stays.
+              const double before = entry.second;
               entry.second += delta_keep;
+              if (std::fabs(entry.second) <=
+                  tol::kFillInCancellation *
+                      std::max(std::fabs(before), std::fabs(delta_keep))) {
+                entry.second = 0.0;
+              }
               found = true;
               break;
             }
@@ -1465,7 +1474,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         out->clear();
         for (const auto& [column, coefficient] : work.rows[static_cast<std::size_t>(row)]) {
           if (work.col_dead[static_cast<std::size_t>(column)]) continue;
-          if (std::fabs(coefficient) <= tol::kZeroDrop) continue;
+          if (coefficient == 0.0) continue;  // fill-in residue is already an exact zero
           out->emplace_back(column, coefficient);
         }
         std::sort(out->begin(), out->end());
@@ -1650,10 +1659,16 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       const auto col = static_cast<std::size_t>(entry.first);
       if (work.col_dead[col]) continue;
       const Index mapped_col = new_col_index[col];
-      if (mapped_col >= 0) reduced.matrix.add_entry(mapped_row, mapped_col, entry.second);
+      if (mapped_col >= 0 && entry.second != 0.0) {
+        reduced.matrix.add_entry(mapped_row, mapped_col, entry.second);
+      }
     }
   }
-  reduced.matrix.finalize();
+  // Every coefficient here is the model's, or a fill-in sum whose cancellation was already
+  // judged relative to its terms above, so nothing is dropped by size (#792): the default
+  // absolute 1e-11 read a real 1e-12 coefficient of a scaled row as zero and solved another
+  // model (Netlib adlittle under the stress set, 5 coefficients).
+  reduced.matrix.finalize(0.0);
 
   // BINARY PROBING (#512; Savelsbergh 1994; Achterberg et al. 2020), on the reduced model
   // after the passes, like a bound-only reduction: its fixings and tightenings hold at every
@@ -2016,7 +2031,7 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
         // row_removed_at[other_row] < p is that same fact seen from postsolve's side.
         if (row_removed_at[static_cast<std::size_t>(other_row)] < p) continue;
         const double a_other = elim_view.values[t];
-        if (std::fabs(a_other) < tol::kZeroDrop) continue;
+        if (a_other == 0.0) continue;  // presolve()'s fill-in rule (#792)
         const double delta = -(a_other / rec.coefficient) * rec.partner_coefficient;
         auto& overrides_here = row_overrides[static_cast<std::size_t>(other_row)];
         const bool is_new_key = overrides_here.find(rec.partner_column) == overrides_here.end();
