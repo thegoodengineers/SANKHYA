@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SANKHYA - command line front end.
 //
-// Subcommands: version, options, engines, info, diagnose, solve. The generic --option
-// name=value passthrough reaches every entry in the registry, so a knob added in
+// Subcommands: version, options, engines, info, diagnose, solve, scenarios. The generic
+// --option name=value passthrough reaches every entry in the registry, so a knob added in
 // src/util/options.cpp is reachable from the command line without touching this file.
 //
 // `solve` returns a meaningful exit code rather than always zero: the benchmark runners in
 // bench/ branch on it, and a script that has to grep stdout to find out whether the solve
 // succeeded will eventually mis-parse and quietly record a wrong result.
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <csignal>
@@ -36,6 +37,7 @@
 #include "nonlinear_cli.hpp"
 #include "sankhya/solve_control.hpp"
 #include "sankhya/version.hpp"
+#include "scenarios_cli.hpp"
 
 namespace {
 
@@ -284,6 +286,20 @@ int main(int argc, char** argv) {
   diagnose_cmd->add_option("--format", diagnose_format, "text (default) or json");
   diagnose_cmd->add_option("--option", option_assignments, "Set a solver option (name=value)");
 
+  CLI::App* scenarios_cmd = app.add_subcommand(
+      "scenarios", "Solve one LP under every cost / bound / RHS set of a CSV, each verified");
+  std::string scenarios_model;
+  std::string scenarios_csv;
+  std::string scenarios_out;
+  bool scenarios_compare = false;
+  scenarios_cmd->add_option("file", scenarios_model, "Model file (.mps, .lp)")->required();
+  scenarios_cmd->add_option("scenarios", scenarios_csv, "Scenario CSV")->required();
+  scenarios_cmd->add_option("--option", option_assignments, "Set a solver option (name=value)");
+  scenarios_cmd->add_option("--out", scenarios_out, "Also write the table as CSV here");
+  scenarios_cmd->add_flag("--compare", scenarios_compare,
+                          "Also solve each scenario on its own and report the agreement");
+  scenarios_cmd->add_flag("--gpu", use_gpu, "As for solve");
+
   CLI11_PARSE(app, argc, argv);
 
   if (version_cmd->parsed()) {
@@ -314,6 +330,18 @@ int main(int argc, char** argv) {
   if (time_limit > 0.0) options.set_double("time_limit", time_limit);
   if (use_gpu) options.set_bool("gpu", true);
   if (compute_ranging) options.set_bool("ranging", true);
+
+  if (scenarios_cmd->parsed()) {
+    // One solver log per scenario would bury the table; --option log_to_console=true restores.
+    if (std::none_of(option_assignments.begin(), option_assignments.end(),
+                     [](const std::string& a) { return a.rfind("log_to_console=", 0) == 0; })) {
+      options.set_bool("log_to_console", false);
+    }
+    sankhya::Model model;
+    if (!load_model(scenarios_model, options, &model)) return 3;
+    return sankhya::cli::run_scenarios(model, scenarios_model, scenarios_csv, options,
+                                       scenarios_out, scenarios_compare);
+  }
 
   if (info_cmd->parsed()) {
     if (sankhya::nlp::looks_like_nl(info_path)) return sankhya::cli::nonlinear_info(info_path);

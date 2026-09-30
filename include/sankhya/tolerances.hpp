@@ -875,4 +875,10 @@ inline constexpr Count kNlpMaxRestorationIterations = 500;
 /// feasible node whose minimum sits at the solver's tolerance is never declared empty.
 inline constexpr double kMinlpEmptyViolation = 1e-6;
 
+/// Scenario runs (#752): a scenario's objective and that of a separate single solve of the
+/// same edited model must agree to this relative difference, measured against max(1, |obj|).
+/// The acceptance figure of #752; both answers already pass the KKT check at
+/// kPrimalFeasibility and kDualFeasibility, so this is the bar on their agreement.
+inline constexpr double kScenarioAgreement = 1e-8;
+
 }  // namespace sankhya::tol
