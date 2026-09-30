@@ -183,6 +183,7 @@ TEST(QpOperator, EngineWithoutADeviceKeepsTheHostAndSaysSo) {
   Options host;
   host.set_bool("log_to_console", false);
   host.set_double("qp_tolerance", 1e-6);
+  host.set_string("qp_algorithm", "condat-vu");  // the operator belongs to this engine
   host.set_int("iteration_limit", 500000);
   Options asked = host;
   asked.set_bool("qp_gpu", true);
@@ -251,6 +252,7 @@ TEST(QpDevice, WholeSolveMatchesTheHostAtTheTolerance) {
     Options host;
     host.set_bool("log_to_console", false);
     host.set_double("qp_tolerance", 1e-6);
+    host.set_string("qp_algorithm", "condat-vu");  // not the default interior point
     host.set_int("iteration_limit", 500000);
     host.set_bool("qp_halpern", halpern);
     Options device = host;
