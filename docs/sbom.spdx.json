@@ -2,15 +2,15 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "creationInfo": {
     "comment": "Generated from the FetchContent_Declare blocks of CMakeLists.txt and the dependency table of docs/PROVENANCE.md. Not a binary scan: it states what the build declares, which is the thing a reader can check against the source. `ldd` output for the built binary is printed by the provenance job of .github/workflows/ci.yml and is the complementary check.",
-    "created": "2026-09-16T17:47:32Z",
+    "created": "2026-09-30T09:27:35Z",
     "creators": [
       "Tool: tools/make_sbom.py",
       "Organization: SANKHYA (SIH 2026 PS26119)"
     ]
   },
   "dataLicense": "CC0-1.0",
-  "documentNamespace": "https://github.com/thegoodengineers/SANKHYA/spdx/sankhya-0.1.0",
-  "name": "sankhya-0.1.0",
+  "documentNamespace": "https://github.com/thegoodengineers/SANKHYA/spdx/sankhya-1.0.0",
+  "name": "sankhya-1.0.0",
   "packages": [
     {
       "SPDXID": "SPDXRef-Package-sankhya",
@@ -22,7 +22,7 @@
       "licenseDeclared": "Apache-2.0",
       "name": "sankhya",
       "supplier": "Organization: SANKHYA (SIH 2026 PS26119)",
-      "versionInfo": "0.1.0"
+      "versionInfo": "1.0.0"
     },
     {
       "SPDXID": "SPDXRef-Package-fmt",
