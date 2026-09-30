@@ -46,7 +46,9 @@ struct ExactResult {
 /// integer columns (a candidate basis over relaxed bounds proves nothing about integrality),
 /// and on a basis larger than a row cap chosen so a dense exact Gaussian elimination stays
 /// fast (see exact_verify.cpp).
-[[nodiscard]] ExactResult verify_basis_exact(const Model& model, const Solution& solution);
+/// `seconds` bounds the exact work (option exact_seconds); past it the verdict is kDeclined.
+[[nodiscard]] ExactResult verify_basis_exact(const Model& model, const Solution& solution,
+                                             double seconds = kInfinity);
 
 /// The status a nonbasic variable really has (review of #622): kFixed with unequal bounds is
 /// whichever bound `value` equals exactly, kNonbasicFree only with 0 inside the bounds, and

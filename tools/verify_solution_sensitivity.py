@@ -387,8 +387,13 @@ def derive(model, solution, seconds: float = 60.0) -> dict:
         return (x - problem.lower[k] if problem.lower[k] != -INF else INF,
                 problem.upper[k] - x if problem.upper[k] != INF else INF)
 
+    def on_time():
+        if time.monotonic() > deadline:
+            raise Declined("the exact derivation ran past its time budget")
+
     columns: dict[str, dict] = {}
     for j in range(n):
+        on_time()
         name = model.col_names[j]
         if j in basis.status:
             d = basis.d[j]
@@ -428,6 +433,7 @@ def derive(model, solution, seconds: float = 60.0) -> dict:
 
     rows: dict[str, dict] = {}
     for i in range(m):
+        on_time()
         name = model.row_names[i]
         v = basis.lu.solve({i: Fraction(1)})
         down = up = INF

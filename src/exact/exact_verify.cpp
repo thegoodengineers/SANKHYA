@@ -52,12 +52,14 @@ std::string to_fraction_string(const Rational& value) {
 /// zero: the matrix is exactly singular, which for a basis matrix means the reported basis
 /// is not actually a basis in exact arithmetic.
 std::optional<std::vector<Rational>> solve_dense_exact(
-    std::vector<std::vector<Rational>> matrix, std::vector<Rational> rhs) {
+    std::vector<std::vector<Rational>> matrix, std::vector<Rational> rhs,
+    const Deadline& deadline) {
   const Sz m = rhs.size();
   std::vector<Sz> row_of(m);
   for (Sz i = 0; i < m; ++i) row_of[i] = i;
 
   for (Sz col = 0; col < m; ++col) {
+    deadline.check();
     Sz pivot_row = m;
     for (Sz r = col; r < m; ++r) {
       if (!matrix[row_of[r]][col].is_zero()) {
@@ -126,8 +128,9 @@ BasisStatus resolved_status(BasisStatus status, double lower, double upper, doub
   }
 }
 
-ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
+ExactResult verify_basis_exact(const Model& model, const Solution& solution, double seconds) {
   ExactResult result;
+  const Deadline deadline(seconds);
 
   if (solution.status != SolveStatus::kOptimal) {
     result.message = fmt::format("status is {}, exact verification is defined at optimal only",
@@ -291,7 +294,7 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
       rhs[si] = rhs[si] + value;
     }
 
-    const auto x_basic = solve_dense_exact(basis, rhs);
+    const auto x_basic = solve_dense_exact(basis, rhs, deadline);
     if (!x_basic.has_value()) {
       result.verdict = ExactVerdict::kFailed;
       result.message = "the reported basis is exactly singular - it is not a basis at all";
@@ -324,7 +327,7 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
     }
 
     // --- Exact dual: B^T y = c_B (minimize sense). ---
-    const auto y = solve_dense_exact(basis_transpose, basic_cost_min_sense);
+    const auto y = solve_dense_exact(basis_transpose, basic_cost_min_sense, deadline);
     if (!y.has_value()) {
       result.verdict = ExactVerdict::kFailed;
       result.message = "the reported basis's transpose is exactly singular";
@@ -392,6 +395,11 @@ ExactResult verify_basis_exact(const Model& model, const Solution& solution) {
       result.exact_col_value[static_cast<Sz>(j)] =
           to_fraction_string(col_value_exact[static_cast<Sz>(j)]);
     }
+    return result;
+  } catch (const ExactBudgetExceeded&) {
+    result.verdict = ExactVerdict::kDeclined;
+    result.message = fmt::format(
+        "the exact elimination ran past its {} s budget (option exact_seconds)", seconds);
     return result;
   } catch (const RationalOverflow&) {
     result.verdict = ExactVerdict::kDeclined;
