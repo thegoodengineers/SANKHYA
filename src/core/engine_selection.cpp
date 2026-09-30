@@ -101,19 +101,20 @@ EngineSelection select_engine(const Model& model, const Options& options, bool w
     return s;
   }
   const double work = static_cast<double>(s.rows) * static_cast<double>(s.nonzeros);
-  if (work >= kSimplexWorkCeiling) {
-    // qap15 (#417): optimal on the device interior point in 23 s and on CPU PDHG in 126 s;
-    // the CPU factor spends the whole limit in 19 dense factorizations, so without the
-    // device the first-order method is the one that finishes.
-    s.algorithm = device_factor ? "ipm" : "pdhg";
-    s.rule = device_factor ? "work:ipm-device" : "work:pdhg";
+  if (device_factor && work >= kSimplexWorkCeiling) {
+    // qap15 (#417): optimal on the device interior point in 23 s where the dual simplex
+    // times out at 300 s. ONLY WITH THE DEVICE FACTOR: without it the rule would send
+    // Kennington's ken-11 (7.2e8) and pds-06 off the dual simplex, which solves them in
+    // about 2.5 s, onto CPU PDHG, which took 84 s and 35 s and returns no basis. qap15 is
+    // the one model in the measured sets that loses by staying, and it loses less than the
+    // Kennington pair would.
+    s.algorithm = "ipm";
+    s.rule = "work:ipm-device";
     s.reason = fmt::format(
         "{}: rows x nonzeros is {:.3g}, over {:.0e}, beyond the dual simplex's measured reach "
-        "(dfl001 at 2.2e8 solves on it in 47 s; qap15 at 6.0e8 times out at 300 s, and is "
-        "optimal on {}; #417)",
-        shape, work, kSimplexWorkCeiling,
-        device_factor ? "the interior point with the device factor in 23 s"
-                      : "PDHG in 126 s where the CPU factor times out");
+        "(dfl001 at 2.2e8 solves on it in 47 s; qap15 at 6.0e8 times out at 300 s and is "
+        "optimal on the interior point with the device factor in 23 s; #417)",
+        shape, work, kSimplexWorkCeiling);
     return s;
   }
   s.algorithm = "dual-simplex";

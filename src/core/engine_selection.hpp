@@ -78,13 +78,15 @@ inline constexpr Index kPdhgRowFloor = 100000;
 ///   137 s where PDHG, which the row floor chose, stops short of the project tolerance.
 /// - kSimplexWorkCeiling, on rows x nonzeros, a proxy for the dual simplex's work (about
 ///   one pass over the nonzeros per iteration, iterations a small multiple of the rows):
-///   below the row limit and the nonzero floor, a model over it leaves the dual simplex -
-///   for the interior point with a device factor, for PDHG without one. qap15 (6,330 x
-///   94,950 = 6.0e8) times out on the dual simplex at 300 s, is optimal on the device
-///   interior point in 23 s and on CPU PDHG in 126 s, and runs the CPU factor out of time
-///   in 19 dense factorizations. The largest Netlib product the dual simplex solves is
-///   dfl001 (6,071 x 35,632 = 2.2e8, 47 s), and no other Netlib model is above 1.5e8 except
-///   maros-r7 (4.5e8), which kIpmNonzeroFloor already sends to the interior point.
+///   below the row limit and the nonzero floor, a model over it leaves the dual simplex
+///   for the interior point, ONLY when the build has a device factor. qap15 (6,330 x
+///   94,950 = 6.0e8) times out on the dual simplex at 300 s and is optimal on the device
+///   interior point in 23 s. Without the device factor the rule does not fire: Kennington's
+///   ken-11 (14,694 x 49,058 = 7.2e8) and pds-06 are over the ceiling too, and the dual
+///   simplex solves them in about 2.5 s where CPU PDHG took 84 s and 35 s with no basis. The
+///   largest Netlib product the dual simplex solves is dfl001 (6,071 x 35,632 = 2.2e8, 47 s),
+///   and no other Netlib model is above 1.5e8 except maros-r7 (4.5e8), which kIpmNonzeroFloor
+///   already sends to the interior point.
 inline constexpr double kNormalEquationsCeiling = 1e8;
 inline constexpr double kSimplexWorkCeiling = 3e8;
 

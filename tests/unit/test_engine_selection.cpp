@@ -177,13 +177,11 @@ TEST(EngineSelection, WithADeviceFactorLargeAffordableModelsGoToTheInteriorPoint
 
 TEST(EngineSelection, PastTheDualSimplexWorkCeilingTheDualSimplexIsLeft) {
   // qap15: 6,330 rows x 94,950 nonzeros = 6.0e8, under the row limit and the nonzero floor,
-  // a time limit on the dual simplex (#417). Without the device factor it goes to PDHG
-  // (optimal in 126 s where the CPU factor times out), with it to the interior point (23 s).
+  // a time limit on the dual simplex (#417). With the device factor it goes to the interior
+  // point (23 s); without one it stays on the dual simplex (see the Kennington test below).
   const EngineSelection qap =
       select_engine(shaped_lp(6330, 22275, 94950), auto_options(), false);
-  EXPECT_EQ(qap.algorithm, "pdhg");
-  EXPECT_EQ(qap.rule, "work:pdhg");
-  EXPECT_FALSE(qap.use_gpu);
+  EXPECT_EQ(qap.rule, "default:dual-simplex");
   const EngineSelection device = select_engine(shaped_lp(6330, 22275, 94950), auto_options(),
                                                false, true, "Test GPU", /*device_factor=*/true);
   EXPECT_EQ(device.algorithm, "ipm");
@@ -192,6 +190,19 @@ TEST(EngineSelection, PastTheDualSimplexWorkCeilingTheDualSimplexIsLeft) {
   const EngineSelection dfl =
       select_engine(shaped_lp(6071, 12230, 35632), auto_options(), false);
   EXPECT_EQ(dfl.rule, "default:dual-simplex");
+}
+
+TEST(EngineSelection, KenningtonsKen11StaysOnTheDualSimplexWithoutADeviceFactor) {
+  // ken-11: 14,694 rows x 49,058 nonzeros = 7.2e8, over the work ceiling. The dual simplex
+  // solves it in about 2.5 s and CPU PDHG took 84 s with no basis (pds-06: 35 s), so in a
+  // build without the device factor - every CPU build, and a GPU build without cuDSS - the
+  // work rule must not fire. A GPU for PDHG does not change that.
+  for (const bool gpu : {false, true}) {
+    const EngineSelection ken = select_engine(shaped_lp(14694, 21349, 49058), auto_options(),
+                                              false, gpu, gpu ? "Test GPU" : "");
+    EXPECT_EQ(ken.algorithm, "dual-simplex") << "gpu " << gpu << ": " << ken.reason;
+    EXPECT_EQ(ken.rule, "default:dual-simplex") << "gpu " << gpu;
+  }
 }
 
 TEST(EngineSelection, TheAnswerCarriesTheRuleAndTheReason) {
