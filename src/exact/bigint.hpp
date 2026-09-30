@@ -96,16 +96,72 @@ class BigInt {
   friend bool operator<=(const BigInt& a, const BigInt& b) { return !(b < a); }
   friend bool operator>=(const BigInt& a, const BigInt& b) { return !(a < b); }
 
-  /// Greatest common divisor of the magnitudes (Euclid); gcd(0, 0) is 0.
-  [[nodiscard]] static BigInt gcd(BigInt a, BigInt b) {
-    a.neg_ = false;
-    b.neg_ = false;
-    while (!b.is_zero()) {
-      BigInt t = a % b;
-      a = std::move(b);
-      b = std::move(t);
+  /// Greatest common divisor of the magnitudes; gcd(0, 0) is 0. Lehmer's algorithm (Knuth,
+  /// TAOCP vol. 2, 3rd ed., section 4.5.2, Algorithm L): Euclid's steps are simulated on the
+  /// leading 62 bits of both numbers with single-word cofactors, and the whole numbers are
+  /// touched once per batch of steps - a linear combination - instead of once per step. A
+  /// batch that cannot be certified from the leading bits (B = 0 below) takes one full
+  /// division. Euclid with a full division per step, which this replaces, was where the exact
+  /// modules spent most of their time (#757).
+  [[nodiscard]] static BigInt gcd(const BigInt& a, const BigInt& b) {
+    // Every coefficient the exact modules start from is a double, whose denominator is a
+    // power of two; against one the gcd is a power of two, read off the trailing zeros.
+    if (!a.mag_.empty() && !b.mag_.empty() &&
+        (power_of_two_mag(a.mag_) || power_of_two_mag(b.mag_))) {
+      return power_of_two(std::min(trailing_zeros(a.mag_), trailing_zeros(b.mag_)));
     }
-    return a;
+    Limbs u = a.mag_;
+    Limbs v = b.mag_;
+    if (cmp_mag(u, v) < 0) std::swap(u, v);
+    while (!v.empty()) {
+      if (u.size() <= 2) {
+        std::uint64_t x = low64(u);
+        std::uint64_t y = low64(v);
+        while (y != 0) {
+          const std::uint64_t t = x % y;
+          x = y;
+          y = t;
+        }
+        return BigInt(
+            Limbs{static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(x >> 32)});
+      }
+      // The top 62 bits of u, and the bits of v in the same window (possibly zero).
+      const int shift = bit_length_of(u) - 62;
+      std::int64_t x = static_cast<std::int64_t>(bits_from(u, shift));
+      std::int64_t y = static_cast<std::int64_t>(bits_from(v, shift));
+      std::int64_t ca = 1;
+      std::int64_t cb = 0;
+      std::int64_t cc = 0;
+      std::int64_t cd = 1;
+      while (y + cc != 0 && y + cd != 0) {
+        const std::int64_t q = (x + ca) / (y + cc);
+        if (q != (x + cb) / (y + cd)) break;
+        std::int64_t t = ca - q * cc;
+        ca = cc;
+        cc = t;
+        t = cb - q * cd;
+        cb = cd;
+        cd = t;
+        t = x - q * y;
+        x = y;
+        y = t;
+      }
+      if (cb == 0) {
+        Limbs q, r;
+        divmod_mag(u, v, &q, &r);
+        u = std::move(v);
+        v = std::move(r);
+      } else {
+        Limbs next_u = combine(u, v, ca, cb);
+        v = combine(u, v, cc, cd);
+        u = std::move(next_u);
+      }
+    }
+    return make(std::move(u), false);
+  }
+
+  [[nodiscard]] bool is_one() const noexcept {
+    return !neg_ && mag_.size() == 1 && mag_[0] == 1;
   }
 
   /// The value as top * 2^exponent, `top` holding the leading (at most) 64 bits, so a ratio
@@ -147,6 +203,64 @@ class BigInt {
 
  private:
   using Limbs = std::vector<std::uint32_t>;
+  __extension__ using Wide = __int128;
+
+  explicit BigInt(Limbs mag) : mag_(std::move(mag)) { trim(&mag_); }
+
+  static bool power_of_two_mag(const Limbs& v) {
+    for (std::size_t i = 0; i + 1 < v.size(); ++i) {
+      if (v[i] != 0) return false;
+    }
+    return (v.back() & (v.back() - 1)) == 0;
+  }
+  static int trailing_zeros(const Limbs& v) {
+    int zeros = 0;
+    for (const std::uint32_t w : v) {
+      if (w != 0) return zeros + __builtin_ctz(w);
+      zeros += 32;
+    }
+    return zeros;
+  }
+  static std::uint64_t low64(const Limbs& v) {
+    std::uint64_t r = 0;
+    if (!v.empty()) r = v[0];
+    if (v.size() > 1) r |= static_cast<std::uint64_t>(v[1]) << 32;
+    return r;
+  }
+  static int bit_length_of(const Limbs& v) {
+    if (v.empty()) return 0;
+    int top = 0;
+    for (std::uint32_t w = v.back(); w != 0; w >>= 1) ++top;
+    return static_cast<int>(32 * (v.size() - 1)) + top;
+  }
+  /// Bits [shift, shift + 64) of v, as an integer; shift >= 0.
+  static std::uint64_t bits_from(const Limbs& v, int shift) {
+    std::uint64_t r = 0;
+    const auto limb = static_cast<std::size_t>(shift / 32);
+    const int offset = shift % 32;
+    for (std::size_t k = 0; k < 3; ++k) {
+      const std::size_t i = limb + k;
+      if (i >= v.size()) break;
+      const auto w = static_cast<Wide>(v[i]) << (32 * static_cast<int>(k));
+      r |= static_cast<std::uint64_t>(w >> offset);
+    }
+    return r;
+  }
+  /// a*u + b*v for single-word cofactors of which Lehmer guarantees a non-negative result.
+  static Limbs combine(const Limbs& u, const Limbs& v, std::int64_t a, std::int64_t b) {
+    const std::size_t n = std::max(u.size(), v.size());
+    Limbs r(n + 1, 0);
+    Wide carry = 0;
+    for (std::size_t i = 0; i < n; ++i) {
+      carry += static_cast<Wide>(a) * (i < u.size() ? u[i] : 0U) +
+               static_cast<Wide>(b) * (i < v.size() ? v[i] : 0U);
+      r[i] = static_cast<std::uint32_t>(carry & 0xFFFFFFFF);
+      carry >>= 32;  // arithmetic: the floor, matching the two's-complement low word above
+    }
+    r[n] = static_cast<std::uint32_t>(carry & 0xFFFFFFFF);
+    trim(&r);
+    return r;
+  }
 
   static BigInt make(Limbs mag, bool negative) {
     BigInt r;

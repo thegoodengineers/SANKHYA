@@ -119,21 +119,45 @@ class Rational {
     return r;
   }
 
+  // Sums and products follow Knuth (TAOCP vol. 2, 3rd ed., section 4.5.1): the gcds are
+  // taken of the operands' smaller parts before multiplying, so the result is already in
+  // lowest terms and no gcd of the full-size product is ever needed. A gcd of 1 - the common
+  // case - skips the divisions as well.
   Rational operator+(const Rational& other) const {
-    if (denominator_ == other.denominator_) {
-      return Rational(numerator_ + other.numerator_, denominator_);
+    if (is_zero()) return other;
+    if (other.is_zero()) return *this;
+    const Int g = Int::gcd(denominator_, other.denominator_);
+    if (g.is_one()) {
+      return raw(numerator_ * other.denominator_ + other.numerator_ * denominator_,
+                 denominator_ * other.denominator_);
     }
-    return Rational(numerator_ * other.denominator_ + other.numerator_ * denominator_,
-                    denominator_ * other.denominator_);
+    const Int mine = denominator_ / g;
+    Int t = numerator_ * (other.denominator_ / g) + other.numerator_ * mine;
+    if (t.is_zero()) return Rational(0);
+    const Int g2 = Int::gcd(t, g);
+    if (g2.is_one()) return raw(std::move(t), mine * other.denominator_);
+    return raw(t / g2, mine * (other.denominator_ / g2));
   }
   Rational operator-(const Rational& other) const { return *this + (-other); }
   Rational operator*(const Rational& other) const {
     if (is_zero() || other.is_zero()) return Rational(0);
-    return Rational(numerator_ * other.numerator_, denominator_ * other.denominator_);
+    const Int g1 = Int::gcd(numerator_, other.denominator_);
+    const Int g2 = Int::gcd(other.numerator_, denominator_);
+    return raw(reduced(numerator_, g1) * reduced(other.numerator_, g2),
+               reduced(denominator_, g2) * reduced(other.denominator_, g1));
   }
   Rational operator/(const Rational& other) const {
     if (other.is_zero()) throw RationalOverflow();
-    return Rational(numerator_ * other.denominator_, denominator_ * other.numerator_);
+    if (is_zero()) return Rational(0);
+    const Int g1 = Int::gcd(numerator_, other.numerator_);
+    const Int g2 = Int::gcd(other.denominator_, denominator_);
+    Int num = reduced(numerator_, g1) * reduced(other.denominator_, g2);
+    Int den = reduced(denominator_, g2) * reduced(other.numerator_, g1);
+    if (den.sign() < 0) {
+      num = -num;
+      den = -den;
+    }
+    return raw(std::move(num), std::move(den));
   }
 
   Rational& operator+=(const Rational& other) { return *this = *this + other; }
@@ -141,6 +165,8 @@ class Rational {
   Rational& operator*=(const Rational& other) { return *this = *this * other; }
 
   bool operator<(const Rational& other) const {
+    if (sign() != other.sign()) return sign() < other.sign();
+    if (denominator_ == other.denominator_) return numerator_ < other.numerator_;
     return numerator_ * other.denominator_ < other.numerator_ * denominator_;
   }
   bool operator>(const Rational& other) const { return other < *this; }
@@ -153,6 +179,17 @@ class Rational {
   bool operator!=(const Rational& other) const { return !(*this == other); }
 
  private:
+  /// Already in lowest terms with a positive denominator: no gcd.
+  static Rational raw(Int numerator, Int denominator) {
+    Rational r;
+    r.numerator_ = std::move(numerator);
+    r.denominator_ = std::move(denominator);
+    return r;
+  }
+  static Int reduced(const Int& value, const Int& divisor) {
+    return divisor.is_one() ? value : value / divisor;
+  }
+
   void normalize() {
     if (denominator_.is_zero()) throw RationalOverflow();
     if (denominator_.sign() < 0) {
@@ -164,7 +201,7 @@ class Rational {
       return;
     }
     const Int g = Int::gcd(numerator_, denominator_);
-    if (g != Int(1)) {
+    if (!g.is_one()) {
       numerator_ = numerator_ / g;
       denominator_ = denominator_ / g;
     }
