@@ -138,11 +138,22 @@ CSV_COLUMNS = [
     "certificate_bytes",
     "certificate_dual_leaves",
     "certificate_batch_leaves",
+    # #520, after the rest for the same reason; blank unless --profile. Inclusive seconds of
+    # the solver's profile regions (profile=detailed): the branching decision with strong
+    # branching's probe LPs inside it, and the two batched-PDHG calls.
+    "branching_seconds",
+    "batch_strong_branching_seconds",
+    "batch_node_bounds_seconds",
 ]
 
 # The certificate writer's log line (src/mip/certificate_writer.cpp, #756).
 LEAVES_LINE = re.compile(r"leaves: (\d+) from their own LP duals, (\d+) from an ancestor's,.*?"
                          r"(\d+) of the dual-bounded leaves from the batched PDHG run")
+
+# --profile's columns -> the profile region each one sums (src/mip/branch_and_bound*.cpp).
+PROFILE_REGIONS = {"branching_seconds": "branching",
+                   "batch_strong_branching_seconds": "batched strong branching",
+                   "batch_node_bounds_seconds": "batched node bounds"}
 
 SUMMARY_COLUMNS = [
     "instance", "seeds", "seeds_matched", "seeds_proved", "matched_seeds", "proved_seeds",
@@ -204,7 +215,7 @@ def git_commit(binary=None) -> str:
 
 def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
           solver_options: list[str] | None = None, verify_against: Path | None = None,
-          certificate: bool = False) -> dict:
+          certificate: bool = False, profile: bool = False) -> dict:
     import time
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -221,6 +232,9 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
         proof_path = Path(tmp) / "proof.vipr"
         if certificate:
             command += ["--option", f"write_certificate={proof_path}"]
+        profile_path = Path(tmp) / "profile.json"
+        if profile:
+            command += ["--option", "profile=detailed", "--option", f"profile_out={profile_path}"]
         started = time.perf_counter()
         completed = subprocess.run(command, capture_output=True, text=True)
         wall = time.perf_counter() - started
@@ -274,6 +288,8 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             flat.update(leaf_counts(completed.stdout + completed.stderr))
             flat["certificate_bytes"] = (proof_path.stat().st_size if proof_path.exists()
                                          else None)
+        if profile:
+            flat.update(profile_seconds(profile_path))
         return flat
 
 
@@ -284,6 +300,21 @@ def leaf_counts(log: str) -> dict:
         return {"certificate_dual_leaves": None, "certificate_batch_leaves": None}
     return {"certificate_dual_leaves": int(match.group(1)) + int(match.group(2)),
             "certificate_batch_leaves": int(match.group(3))}
+
+
+def profile_seconds(path: Path) -> dict:
+    """PROFILE_REGIONS' inclusive seconds from a profile_out JSON; blank when none was written.
+    A region's path is `parent/child`; one nested under a region of its own name is already
+    inside that region's time, so only the outermost occurrence is summed."""
+    if not path.exists():
+        return {}
+    regions = json.loads(path.read_text()).get("regions", [])
+    out = {}
+    for column, name in PROFILE_REGIONS.items():
+        out[column] = sum(r["inclusive_seconds"] for r in regions
+                          if r["path"].split("/")[-1] == name
+                          and r["path"].split("/").count(name) == 1)
+    return out
 
 
 def check_certificate(proof: Path, instance: Path) -> dict:
@@ -324,7 +355,8 @@ def run_seed(binary: Path, instance: Path, seed: int, scratch: Path, args,
             raise PermutationError(str(error)) from error
         digest = hashlib.sha256(target.read_bytes()).hexdigest()
     blob = solve(binary, target, args.time_limit, not args.no_verify, args.solver_option,
-                 verify_against=instance, certificate=args.certificate)
+                 verify_against=instance, certificate=args.certificate,
+                 profile=args.profile)
     if seed != 0:
         target.unlink(missing_ok=True)
     trace = blob.get("incumbent_trace") or []
@@ -368,6 +400,9 @@ def main() -> int:
     parser.add_argument("--machine-kind", default=None,
                         help="what kind of machine this is, for the machine tag, e.g. "
                              "'cloud container' (default: systemd-detect-virt's answer)")
+    parser.add_argument("--profile", action="store_true",
+                        help="run with profile=detailed and record the branching and batched-"
+                             "PDHG seconds (#520)")
     args = parser.parse_args()
     if args.seeds < 1:
         parser.error("--seeds must be at least 1")
@@ -535,6 +570,8 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
         "machine": machine,
         "timestamp_utc": stamp,
         "certificate": blob.get("certificate") or "",
+        **{column: ("" if blob.get(column) is None else f"{blob[column]:.6f}")
+           for column in PROFILE_REGIONS},
         "certificate_check_seconds": ("" if blob.get("certificate_check_seconds") is None
                                       else f"{blob['certificate_check_seconds']:.6f}"),
         **{key: "" if blob.get(key) is None else blob[key]
