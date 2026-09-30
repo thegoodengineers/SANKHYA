@@ -11,9 +11,9 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <limits>
 #include <random>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -417,7 +417,9 @@ TEST(SafeBound, AnOptimalMaximisationReportsAnUpperBoundWithItsOffsetInEveryOutp
   ASSERT_TRUE(io::write_stats_json(json.path(), model, solved, nullptr));
   const auto slurp = [](const std::string& path) {
     std::ifstream in(path);
-    return std::string(std::istreambuf_iterator<char>(in), {});
+    std::stringstream text;
+    text << in.rdbuf();
+    return text.str();
   };
   const std::string sol_text = slurp(sol.path());
   EXPECT_NE(sol_text.find("\nsafe_lower_bound "), std::string::npos);
