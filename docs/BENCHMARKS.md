@@ -1076,7 +1076,36 @@ Commit `e134aeb` · machine `Windows-AMD64` · 120.0s per solve · refinery stru
 
 #### 1f.5 A million rows on the CPU
 
-_No `million-cpu-*.csv` in `bench/results/`. Produce one with_ `python bench/runners/million.py --binary build/sankhya --keep DIR`.
+Source CSV: `bench/results/million-cpu-b561fba.csv`  
+Commit `b561fba` · machine `cloud container; Linux-x86_64; Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores; 15.7 GiB RAM` · 3600s per solve
+
+Three generated models at a million rows or more (#751), each with its optimum exact by construction and each written from a seed; the sha256 in the CSV names the file that was solved. `verified` is `tools/verify_solution.py`'s exit code on the written solution, which parses the model itself and recomputes every residual.
+
+| model | rows x cols | nonzeros | arm | route | status | relative error | verified | seconds | peak memory |
+|---|---:|---:|---|---|---|---:|---:|---:|---:|
+| transport | 1,000,000 x 2,000,000 | 4,000,000 | `ipm` | ipm | feasible | 1.9e-11 | yes | 34 | 1,865 MB |
+| transport | 1,000,000 x 2,000,000 | 4,000,000 | `ipm-xover` | ipm | feasible | 1.9e-11 | yes | 3,611 | 1,870 MB |
+| transport | 1,000,000 x 2,000,000 | 4,000,000 | `pdhg` | pdhg-cpu | optimal | 4.1e-14 | yes | 119 | 1,091 MB |
+| staircase | 1,000,000 x 1,000,000 | 5,000,000 | `ipm` | ipm | numerical error | - | no | 23 | 1,534 MB |
+| staircase | 1,000,000 x 1,000,000 | 5,000,000 | `ipm-xover` | ipm | numerical error | - | no | 23 | 1,534 MB |
+| staircase | 1,000,000 x 1,000,000 | 5,000,000 | `pdhg` | pdhg-cpu | time limit | 2.0e-08 | yes | 2,542 | 1,604 MB |
+| refinery | 1,007,400 x 1,892,160 | 17,940,408 | `ipm` | ipm | numerical error | - | no | 44 | 3,221 MB |
+| refinery | 1,007,400 x 1,892,160 | 17,940,408 | `ipm-xover` | ipm | numerical error | - | no | 44 | 3,221 MB |
+| refinery | 1,007,400 x 1,892,160 | 17,940,408 | `pdhg` | pdhg-cpu | optimal | 3.1e-14 | yes | 2,336 | 2,312 MB |
+
+**2 of 9** arms end `optimal` and verified.
+
+Every arm that did not finish, and the numbers that say why. `attribution` is read off the row by `bench/runners/million.py`: `iterations` when the method ran to the limit still converging, `fill` when the factor's size stopped it, `polish` when PDHG's point was not finished by the interior point, `stall` when the interior point's step collapsed short of its optimality test, `crossover` when the pivots from that point ran out of time, `memory` when the process was killed or its peak neared the machine's RAM.
+
+| model | arm | attribution | status | iterations | primal inf | dual inf | peak memory | solver message |
+|---|---|---|---|---:|---:|---:|---:|---|
+| transport | `ipm` | **stall** | feasible | 21 | 1.8e-08 | 5.3e-09 | 1,865 MB | the interior-point iteration stalled after 21 iterations (steps 3.4e-11 / 1.4e-11); the best iterate is reported as a feasible point |
+| transport | `ipm-xover` | **crossover** | feasible | 21 | 1.8e-08 | 5.3e-09 | 1,870 MB | the interior-point iteration stalled after 21 iterations (steps 3.4e-11 / 1.4e-11); the best iterate is reported as a feasible point; crossover did not reach a vertex (time_limit after 198900 pivots, 3576.36s), the interior point's answer stands |
+| staircase | `ipm` | **fill** | numerical error | 0 | 3.7e+02 | 3.0e+02 | 1,534 MB | declined: the factor of the normal equations would hold more than 175797034 nonzeros, above ipm_max_factor_nonzeros = 175797034; raise the option or use another engine |
+| staircase | `ipm-xover` | **fill** | numerical error | 0 | 3.7e+02 | 3.0e+02 | 1,534 MB | declined: the factor of the normal equations would hold more than 175797034 nonzeros, above ipm_max_factor_nonzeros = 175797034; raise the option or use another engine; the best iterate (merit 5.0e+03) is attached for crossover_from_nonoptimal, and is not claimed as a point; crossover not attempted from this numerical_error answer: its scaled infeasibility 4.7e+00 / 1.0e+00 is above 1e-04, or it holds no finite point |
+| staircase | `pdhg` | **polish** | time limit | 229633 | 2.6e-05 | 2.1e-12 | 1,604 MB | stopped at relative primal 1.466e-09, dual 0.000e+00, gap 1.349e-07 after 229633 iterations and 18 restarts (target 1.0e-04); the interior-point polish did not improve it (not_solved after 0 iterations: declined: the factor of the normal equations would hold more than 175797034 nonzeros, above polish_max_factor_nonzeros = 175797034; raise the option or use another engine) |
+| refinery | `ipm` | **fill** | numerical error | 0 | 5.9e+02 | 3.6e+01 | 3,221 MB | declined: the factor of the normal equations would hold more than 175797034 nonzeros, above ipm_max_factor_nonzeros = 175797034; raise the option or use another engine |
+| refinery | `ipm-xover` | **fill** | numerical error | 0 | 5.9e+02 | 3.6e+01 | 3,221 MB | declined: the factor of the normal equations would hold more than 175797034 nonzeros, above ipm_max_factor_nonzeros = 175797034; raise the option or use another engine; the best iterate (merit 1.5e+05) is attached for crossover_from_nonoptimal, and is not claimed as a point; crossover not attempted from this numerical_error answer: its scaled infeasibility 5.4e+01 / 4.2e+00 is above 1e-04, or it holds no finite point |
 
 ---
 
