@@ -103,6 +103,26 @@ TEST(PresolveParallelRows, AScaledCopyMergesAndTheDualGoesWhereTheBoundBinds) {
   EXPECT_NEAR(off.objective, high.objective, 1e-9);
 }
 
+TEST(PresolveParallelRows, AMergeThatMakesAnEqualityPricesTheRowWhoseBoundBinds) {
+  //   x0 + x1 + x2 <= 4   (row 0, kept)      x0 + x1 + x2 == 3   (row 1, removed)
+  // The merge leaves row 0 as an equality at 3, whose status (fixed) does not say which
+  // bound binds. Minimising -x0 - x1 - x2 prices it at -1: the upper bound, row 1's.
+  // Leaving that price on row 0, slack by 1 in the original model, broke complementary
+  // slackness; on fffff800 it was 1.3e+05 of dual infeasibility. Three columns, so the
+  // equality is not a doubleton for that reduction to take first.
+  const Model model = build({{1, 1, 1}, {1, 1, 1}}, {-kInf, 3.0}, {4.0, 3.0}, {-1, -1, -1},
+                            {0, 0, 0}, {10, 10, 10});
+  EXPECT_EQ(reduce(model, true).report.parallel_rows, 1);
+  const Solution on = solve(model, with_parallel_rows(true));
+  ASSERT_EQ(on.status, SolveStatus::kOptimal) << on.message;
+  EXPECT_NEAR(on.objective, -3.0, 1e-9);
+  EXPECT_NEAR(on.row_dual[0], 0.0, 1e-9);
+  EXPECT_NEAR(on.row_dual[1], -1.0, 1e-9);
+  EXPECT_EQ(on.row_status[0], BasisStatus::kBasic);
+  EXPECT_LE(on.complementarity_violation, 1e-9);
+  EXPECT_LE(on.dual_infeasibility, 1e-7);
+}
+
 TEST(PresolveParallelRows, ANegativeScaleSwapsTheBounds) {
   //   x0 + x1 >= 1   (row 0)        -x0 - x1 >= -3   (row 1, minus row 0)
   // Row 1's LOWER bound is, in row 0's units, an UPPER bound of 3. Minimising -x0 - x1

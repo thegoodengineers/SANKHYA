@@ -2094,13 +2094,23 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
         solution.row_dual[removed] = 0.0;
         solution.row_status[removed] = BasisStatus::kBasic;
         const BasisStatus kept_status = solution.row_status[kept];
-        const bool moves =
-            (kept_status == BasisStatus::kAtLower && record.lower_from_removed) ||
-            (kept_status == BasisStatus::kAtUpper && record.upper_from_removed);
+        // A merge can make the kept row an equality (fffff800: RPPST <= 0.39 kept, Z4 ==
+        // 0.27 removed), and a fixed row's status does not say which bound binds. The sign
+        // of its dual does: in minimise space a positive price is the lower bound's, a
+        // negative one the upper's. Leaving the price on RPPST gave a <= row a positive
+        // dual, 1.3e+05 of dual infeasibility on the original model.
+        const double signed_dual = original.sense_multiplier() * solution.row_dual[kept];
+        const bool fixed = kept_status == BasisStatus::kFixed;
+        const bool lower_binds =
+            kept_status == BasisStatus::kAtLower || (fixed && signed_dual > 0.0);
+        const bool upper_binds =
+            kept_status == BasisStatus::kAtUpper || (fixed && signed_dual < 0.0);
+        const bool moves = (lower_binds && record.lower_from_removed) ||
+                           (upper_binds && record.upper_from_removed);
         if (moves && record.scale != 0.0) {
           solution.row_dual[removed] = solution.row_dual[kept] / record.scale;
           solution.row_dual[kept] = 0.0;
-          const bool at_lower = kept_status == BasisStatus::kAtLower;
+          const bool at_lower = lower_binds;
           solution.row_status[removed] = (at_lower == (record.scale > 0.0))
                                              ? BasisStatus::kAtLower
                                              : BasisStatus::kAtUpper;
@@ -2125,9 +2135,8 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
       case Record::Kind::kDualFixedColumn:
       case Record::Kind::kDominatedColumn: {
         // At a bound of the ORIGINAL box when the value is one, which is what dual fixing
-        // and the dominated-column fixing chose; basic when a singleton row or an integer
-        // rounding had moved the bound inside the box first, in which case the pricing
-        // below hands the row its dual.
+        // and the dominated-column fixing chose. When a singleton row or an integer rounding
+        // had moved the bound inside the box first, see below.
         const auto c = static_cast<std::size_t>(record.index);
         solution.col_value[c] = record.value;
         if (record.value == original.col_lower[c]) {
@@ -2135,7 +2144,18 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
         } else if (record.value == original.col_upper[c]) {
           solution.col_status[c] = BasisStatus::kAtUpper;
         } else {
-          solution.col_status[c] = BasisStatus::kBasic;
+          // NOT BASIC HERE. Inside the original box the column is held by the singleton row
+          // that moved its bound, and process_singleton_row makes it basic and THAT row's
+          // logical nonbasic - one basic entry for the restored row. Marking it basic here
+          // first made that test see a basic column and leave the row's logical basic too:
+          // finnis came back with 534 basic entries for 497 rows under dual fixing, and
+          // 80bau3b with 2312 for 2262 under dominated columns, and the verifier rejected
+          // both. The side it is parked on is a placeholder until then.
+          const double lo = original.col_lower[c];
+          const double hi = original.col_upper[c];
+          const bool nearer_lower =
+              std::fabs(record.value - lo) <= std::fabs(hi - record.value);
+          solution.col_status[c] = nearer_lower ? BasisStatus::kAtLower : BasisStatus::kAtUpper;
         }
         break;
       }
