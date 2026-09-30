@@ -227,5 +227,32 @@ TEST(NlpIpm, IntegerColumnsGoToTheBranchAndBound) {
   EXPECT_EQ(s.algorithm, "minlp-nlp-bnb");
 }
 
+TEST(NlpIpm, AStopBeforeTheFirstIterationStillReportsSizedMultipliers) {
+  // A time limit that has already passed stops the method during its symbolic analysis,
+  // before it initialises its multipliers. The answer must still carry one row dual per row
+  // and one column dual per column, all zero - not entries read past the end of the method's
+  // empty vectors, which UBSan caught in MinlpLib under the slow sanitizer build (#835).
+  Model base = columns(2, -10.0, 10.0);
+  base.resize_rows(1);
+  SparseMatrix a(1, 2);
+  a.add_entry(0, 0, 1.0);
+  a.add_entry(0, 1, 1.0);
+  a.finalize();
+  base.matrix = std::move(a);
+  base.row_lower[0] = 1.0;
+  base.row_upper[0] = kInf;
+  NonlinearModel m(std::move(base));
+  ExpressionGraph& g = m.graph;
+  m.objective = g.add(g.exp(g.variable(0)), g.power(g.variable(1), 2.0));
+  m.constraints.push_back({g.power(g.variable(0), 2.0), -kInf, 4.0, "square"});
+  Options options = quiet();
+  options.set_double("time_limit", 0.0);
+  const Solution s = solve_nlp(m, options);
+  EXPECT_NE(s.status, SolveStatus::kOptimal) << s.message;
+  ASSERT_EQ(s.row_dual.size(), 2U) << s.message;
+  ASSERT_EQ(s.col_dual.size(), 2U) << s.message;
+  for (const double v : s.row_dual) EXPECT_EQ(v, 0.0);
+}
+
 }  // namespace
 }  // namespace sankhya::nlp

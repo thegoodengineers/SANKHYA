@@ -186,6 +186,13 @@ IpmResult FilterMethod::finish(IpmExit exit, std::string message) const {
 IpmResult FilterMethod::run(IpmIterate start) {
   w_ = start.w;
   w_.resize(static_cast<std::size_t>(n_), 0.0);
+  // Every exit hands back multipliers of the problem's sizes, zero until the method sets
+  // them. The exits before the multipliers are initialised below - a stop during the
+  // symbolic analysis, a start outside the functions' domain - used to return them EMPTY,
+  // and nlp_solve.cpp's to_model_terms() read m and n entries past their ends (UBSan, #835).
+  lam_.assign(static_cast<std::size_t>(m_), 0.0);
+  zl_.assign(w_.size(), 0.0);
+  zu_.assign(w_.size(), 0.0);
   if (s_.push_start_into_bounds) push_interior();
   if (n_ == 0) return finish(IpmExit::kConverged, "no variables");
   if (!kkt_.analyze(p_, s_.should_stop)) {
