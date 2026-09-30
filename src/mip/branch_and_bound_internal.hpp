@@ -481,7 +481,9 @@ class BranchAndBound {
   /// col_value only, which they already did.
   [[nodiscard]] Solution solve_node() { return solve_node_with(node_options_); }
 
-  [[nodiscard]] Solution solve_node_with(const Options& options) {
+  /// `options` is one of the tree's own (node_options_, probe_options_): its time_limit is
+  /// overwritten with what is left before a simplex solve, see below.
+  [[nodiscard]] Solution solve_node_with(Options& options) {
     if (quadratic_) {
       if (miqp_node_ipm_) return solve_qp_node_ipm(options);  // #494
       return qp::solve_convex_qp(working_, options, logger_, control_);
@@ -494,25 +496,49 @@ class BranchAndBound {
     // The primal stays as the fallback, cold, for a node the dual could not finish: a
     // numerical answer at a node cannot be fathomed honestly, and the search below stops
     // on it, so it is worth one more solve to avoid.
-    if (node_engine_dual_ && !current_warm_.empty()) {
-      Solution warm = solve_dual_simplex(working_, options, logger_, scaling_, control_,
-                                         &current_warm_, factor_cache_.get());
-      if (warm.status == SolveStatus::kOptimal || warm.status == SolveStatus::kInfeasible ||
-          warm.status == SolveStatus::kUnbounded ||
-          warm.status == SolveStatus::kIterationLimit) {
-        ++warm_node_solves_;
-        warm_node_iterations_ += warm.iterations;
-        return warm;
+    //
+    // A COLD NODE LP - THE ROOT - IS THE DUAL SIMPLEX'S TOO (#803). With no basis to start
+    // from, the dual simplex runs from the slack basis (artificial bounds, Koberstein 2005,
+    // sec. 4.5), which is the engine solve() picks for an LP of this size (#284). The cold
+    // primal it replaces failed the root of two MIPLIB tier-2 instances with no time limit
+    // at all: cvs16r128-89 stalled for 1,001 degenerate iterations under Bland's rule, and
+    // ran14x18-disj-8's phase 1 diverged to a bound violation of 1.9e8 through seven basis
+    // repairs; the dual simplex solves both relaxations (-128 in 25 s, 3444.42 in 2 s).
+    // Only a dual that returns no verdict hands over to the primal, as a warm one does.
+    //
+    // A NODE LP RUNS ON THE TIME THAT IS LEFT (#803), not on the whole time_limit, which
+    // node_options_ carries from the caller. Each node LP used to get the full budget
+    // afresh: once the root LP of cvs16r128-89 took 25 s, the cold re-solve after its cut
+    // round was given another 60, and a 60 s run ended at 88.6 s. For the same reason a
+    // dual stopped by the clock is reported as it stands - the node stays open, the caller
+    // decides - rather than handed to a primal solve on a budget that is already spent.
+    // Written in place: a copy of the options per node LP measured 4.8 us, the set 0.3 us,
+    // against node LPs of tens of microseconds on the small instances.
+    if (limits_.has_time_limit()) {
+      options.set_double("time_limit", limits_.remaining_seconds(timer_.elapsed_seconds()));
+    }
+    if (node_engine_dual_) {
+      const bool warm_start = !current_warm_.empty();
+      Solution dual =
+          solve_dual_simplex(working_, options, logger_, scaling_, control_,
+                             warm_start ? &current_warm_ : nullptr, factor_cache_.get());
+      if (dual.status == SolveStatus::kOptimal || dual.status == SolveStatus::kInfeasible ||
+          dual.status == SolveStatus::kUnbounded ||
+          dual.status == SolveStatus::kIterationLimit ||
+          dual.status == SolveStatus::kTimeLimit || dual.status == SolveStatus::kInterrupted) {
+        ++(warm_start ? warm_node_solves_ : cold_node_solves_);
+        (warm_start ? warm_node_iterations_ : cold_node_iterations_) += dual.iterations;
+        return dual;
       }
       logger_.verbose(
-          "node LP: the warm-started dual simplex returned {}; re-solving cold "
-          "with the primal simplex",
-          to_string(warm.status));
+          "node LP: the {} dual simplex returned {}; re-solving cold with the primal simplex",
+          warm_start ? "warm-started" : "cold", to_string(dual.status));
       ++cold_fallbacks_;
     }
     Solution cold = solve_primal_simplex(working_, options, logger_, scaling_, control_,
                                          nullptr, factor_cache_.get());
     ++cold_node_solves_;
+    ++cold_primal_solves_;
     cold_node_iterations_ += cold.iterations;
     return cold;
   }
@@ -883,6 +909,7 @@ class BranchAndBound {
   std::unique_ptr<NodeFactorCache> factor_cache_;
   Count warm_node_solves_ = 0;
   Count cold_node_solves_ = 0;
+  Count cold_primal_solves_ = 0;  ///< of cold_node_solves_, the primal simplex's (#803)
   Count cold_fallbacks_ = 0;
   Count warm_node_iterations_ = 0;
   Count cold_node_iterations_ = 0;

@@ -724,7 +724,8 @@ and puts every answer through `tools/verify_solution.py`.
   separate files that share the termination test (`src/pdhg/pdhg_evaluate.hpp`) and are chosen
   by the selector; a backend class over them would be a rewrite of working, measured code.
 - *No relaxation-engine interface inside the branch and bound.* The node relaxation is one
-  function that runs the warm-started dual simplex, the primal simplex (`mip_node_engine`) or,
+  function that runs the dual simplex (warm from the parent's basis, cold from the slack basis
+  at the root, #803), the primal simplex (`mip_node_engine`, or a dual with no verdict) or,
   for an MIQP, the convex QP engine (`src/mip/branch_and_bound_internal.hpp`); MIQP reuses the
   whole tree rather than copying it. `mip::describe_components` reports the composition.
 - *No hardware-context object.* The selector probes the device through `gpu::device_available`

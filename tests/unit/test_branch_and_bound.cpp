@@ -379,13 +379,23 @@ TEST(BranchAndBound, TheRelaxationIsNotTheAnswer) {
 
 TEST(BranchAndBound, MixedIntegerAndContinuous) {
   // min -x - y  s.t.  x + y <= 3.5,  x integer in [0,10], y continuous in [0,10].
-  // x takes 3, y takes 0.5, objective -3.5.
+  // The optimum is -3.5 and it is not unique: any integer x in 0..3 with y = 3.5 - x. Which
+  // one comes back is the root LP's vertex (x = 0 from the dual simplex since #803, x = 3
+  // from the primal before), so the test holds the answer to what makes it optimal - an
+  // integral x, the row, the objective - rather than to one vertex.
   const Model model =
       make_milp({{1.0, 1.0}}, {-kInfinity}, {3.5}, {-1.0, -1.0}, {10.0, 10.0}, {true, false});
   const Solution s = solve(model, mip_options());
   EXPECT_EQ(s.status, SolveStatus::kOptimal);
   EXPECT_NEAR(s.objective, -3.5, 1e-7);
-  EXPECT_NEAR(s.col_value[0], 3.0, 1e-6);
+  ASSERT_EQ(s.col_value.size(), 2U);
+  const double x = s.col_value[0];
+  const double y = s.col_value[1];
+  EXPECT_NEAR(x, std::round(x), 1e-6) << "x must be integral";
+  EXPECT_GE(x, -1e-9);
+  EXPECT_LE(x, 3.0 + 1e-6);
+  EXPECT_GE(y, -1e-9);
+  EXPECT_NEAR(x + y, 3.5, 1e-7) << "x = " << x << ", y = " << y;
 }
 
 TEST(BranchAndBound, DetectsIntegerInfeasibility) {
