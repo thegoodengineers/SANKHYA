@@ -3270,6 +3270,29 @@ full limit, and the shifted geometric mean uses a
 Times are each solver's own clock. Produced by `python bench/runners/compare.py --suite
 <suite>` (`bench/runners/compare_suite.py`, `bench/runners/rivals.py`).
 
+**Where the Kennington and Maros-Meszaros files came from.** netlib.org and www.doc.ic.ac.uk
+refuse connections from the cloud container these suites ran on, so the files were taken from
+public mirrors and accepted only because every one has the sha256 pinned in
+`data/kennington/reference.json` (`mps_lf_sha256`, all 16) and
+`data/maros-meszaros/reference.json` (the readme, the three archives and all 138 QPS files).
+The mirrors are named in judgement call 37 of `docs/PROVENANCE.md`.
+
+**Reading the Maros-Meszaros table.** GLPK has no quadratic objective, so it is listed as
+unsupported rather than left out. `values` has a non-convex objective; SANKHYA refuses it as a
+model error (its LDL^T of Q meets a negative pivot), and HiGHS and Clp return a local optimum at
+the published value. SANKHYA also refuses `cvxqp1l`, `cvxqp2l` and `cvxqp3l` as non-convex (its LDL^T meets a pivot of -3.5e-3), which HiGHS and Clp solve as convex; that is a miss of SANKHYA's, present in every Maros-Meszaros CSV since `9094e1c`, not a wrong answer. On `hues-mod` SANKHYA and Clp agree with each other to 1e-13 relative and
+SANKHYA's answer passes the verifier on primal and dual conditions, yet both sit 6.5e-6 from the
+readme's eight-figure OPT: the readme is the likely outlier there, as it is for nine Netlib
+instances, but with no exact value published the row is graded against it and not counted. On
+`dpklo1` HiGHS's MPS reader takes the RHS section, whose set is named `1` beside numeric row
+names, differently from our reader and the other three solvers (50 right-hand sides differ;
+matrix, costs and bounds are identical), so it solves another model and the verifier rejects
+its point. Most rival rejections below are not wrong answers but conditions missed by more
+than the verifier allows: complementary slackness and dual feasibility at 1e-7 (HiGHS), or a
+stated objective that differs from the one recomputed at the solver's own point by more than
+1e-9 relative (Clp, SCIP). The verifier and its tolerances are the same for every solver,
+SANKHYA included.
+
 {head_to_head_doc.section(head_to_head_csvs, shifted_geometric_mean)}
 ---
 
