@@ -89,6 +89,17 @@ constexpr Index kMaxEtaCount = 128;
 
 }  // namespace
 
+SparseLu::WorkspaceCache::WorkspaceCache() noexcept = default;
+SparseLu::WorkspaceCache::~WorkspaceCache() = default;
+SparseLu::WorkspaceCache::WorkspaceCache(const WorkspaceCache& /*other*/) noexcept {}
+SparseLu::WorkspaceCache& SparseLu::WorkspaceCache::operator=(
+    const WorkspaceCache& /*other*/) noexcept {
+  return *this;
+}
+SparseLu::WorkspaceCache::WorkspaceCache(WorkspaceCache&&) noexcept = default;
+SparseLu::WorkspaceCache& SparseLu::WorkspaceCache::operator=(WorkspaceCache&&) noexcept =
+    default;
+
 // =========================================================================================
 // Factorization
 // =========================================================================================
@@ -134,7 +145,8 @@ bool SparseLu::factorize(const std::vector<LuColumn>& columns, Index m, double p
   if (m == 0) return true;
   if (static_cast<Index>(columns.size()) != m) return false;
 
-  Workspace w;
+  if (!workspace_.ptr) workspace_.ptr = std::make_unique<Workspace>();
+  Workspace& w = *workspace_.ptr;
   w.init(m);
   w.fast = !reference_elimination_;
 
