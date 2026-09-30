@@ -426,6 +426,11 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_stamp.py
 
+      - name: The presolve shrink runner's arm parsing and phase split
+        # Pure Python, no solve.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_presolve_shrink.py
+
       - name: The independent verifier passes its own self-test (#542)
         if: matrix.name == 'Release'
         run: python3 tools/test_verify_solution.py
