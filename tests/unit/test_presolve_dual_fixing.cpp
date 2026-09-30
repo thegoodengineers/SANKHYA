@@ -91,6 +91,28 @@ TEST(PresolveDualFixing, ACostlyColumnThatOnlyHurtsARowIsFixedAtItsLowerBound) {
                                             "non-negative reduced cost, and this one has it";
 }
 
+TEST(PresolveDualFixing, AColumnFixedAtASingletonRowsBoundHandsBackOneBasicEntryPerRow) {
+  // min x0 + x1 + x2  s.t.  x2 >= 2 (a singleton row),  x0 + x1 >= 1,  x0 + x2 <= 10,
+  // 0 <= x <= 10. The singleton row lifts x2's lower bound to 2 in the first pass; in the
+  // second x2's only entry is in a row bounded above, so it is dual fixed at 2 - inside
+  // its original box. Postsolve used to mark it basic AND leave the singleton row's logical
+  // basic: 4 basic entries for 3 rows, which the verifier rejects (finnis, 80bau3b).
+  const Model model = build({{0, 0, 1}, {1, 1, 0}, {1, 0, 1}}, {2.0, 1.0, -kInf},
+                            {kInf, kInf, 10.0}, {1, 1, 1}, {0, 0, 0}, {10, 10, 10});
+  EXPECT_EQ(dual_fixed(model, true), 1);
+  const Solution on = solve(model, with_dual_fixing(true));
+  ASSERT_EQ(on.status, SolveStatus::kOptimal) << on.message;
+  EXPECT_NEAR(on.objective, 3.0, 1e-9);
+  EXPECT_EQ(on.col_value[2], 2.0);
+  Index basic = 0;
+  for (const BasisStatus s : on.col_status) basic += s == BasisStatus::kBasic;
+  for (const BasisStatus s : on.row_status) basic += s == BasisStatus::kBasic;
+  EXPECT_EQ(basic, model.num_rows()) << "one basic entry per row";
+  EXPECT_EQ(on.col_status[2], BasisStatus::kBasic) << "held inside its box by row 0";
+  EXPECT_NE(on.row_status[0], BasisStatus::kBasic) << "row 0 is what holds it";
+  EXPECT_LE(on.dual_infeasibility, 1e-7);
+}
+
 TEST(PresolveDualFixing, AProfitableColumnThatOnlyHelpsIsFixedAtItsUpperBound) {
   // max x2  s.t.  -x0 + x2 >= -5,  0 <= x <= 3. In minimise space x2 costs -1, and moving it
   // down never helps the row (a positive entry in a row bounded below), so it is fixed at
