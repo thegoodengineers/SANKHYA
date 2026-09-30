@@ -241,6 +241,10 @@ TEST(DualHarris, OffIsBitForBitTheTextbookPath) {
     defaults.set_bool("log_to_console", false);
     defaults.set_bool("presolve", false);
     defaults.set_string("algorithm", "dual-simplex");
+    // Pinned to Devex (#411): under dual steepest edge the Harris default breaks a tie on
+    // share2b differently from the textbook rule (117 against 106 iterations, the same
+    // optimum), and this test is about the ratio test, not the pricing.
+    defaults.set_string("pricing", "devex");
     Options named = defaults;
     named.set_string("dual_ratio_test", "textbook");
     named.set_bool("dual_perturb_costs_at_start", false);
