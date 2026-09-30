@@ -326,6 +326,30 @@ TEST(ExactVerify, AColumnLabelledFixedWithUnequalBoundsIsNotTakenAsFixed) {
   EXPECT_EQ(result.verdict, ExactVerdict::kFailed) << result.message;
 }
 
+TEST(ExactVerify, AnEqualityRowLabelledAtABoundIsFixedWhateverTheSignOfItsDual) {
+  // max x + y  s.t.  r: x + y = 2,  x <= 1.5: optimum x = 1.5, y = 0.5, basis {y}, x at its
+  // upper bound, r's logical nonbasic. In minimise space y_r = -1, so r's reduced cost is -1:
+  // the wrong sign for a row labelled at_lower, but r is an equality, whose logical never
+  // moves, so any sign is optimal. The engines label such rows kAtLower as often as kFixed;
+  // the check took the label at its word and reported this optimum FAILED (#757).
+  Model model = make_lp({{1.0, 1.0}}, {2.0}, {2.0}, {1.0, 1.0}, {0.0, 0.0}, {1.5, kInfinity});
+  model.sense = ObjSense::kMaximize;
+  Solution solution;
+  solution.allocate_for(model);
+  solution.status = SolveStatus::kOptimal;
+  solution.col_value = {1.5, 0.5};
+  solution.row_activity = {2.0};
+  solution.col_status = {BasisStatus::kAtUpper, BasisStatus::kBasic};
+  solution.objective = 2.0;
+  for (const BasisStatus label :
+       {BasisStatus::kAtLower, BasisStatus::kAtUpper, BasisStatus::kFixed}) {
+    solution.row_status = {label};
+    const ExactResult result = verify_basis_exact(model, solution);
+    EXPECT_EQ(result.verdict, ExactVerdict::kVerified)
+        << to_string(label) << ": " << result.message;
+  }
+}
+
 TEST(ExactVerify, AFractionWiderThan64BitsIsWrittenInFull) {
   // 0.1 and 0.3 are not dyadic, so their exact values carry large power-of-two denominators;
   // min 0.1 x s.t. 0.3 x >= 0.1 has an exact objective whose denominator passes 2^64, and a
