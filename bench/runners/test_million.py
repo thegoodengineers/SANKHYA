@@ -130,6 +130,26 @@ def test_latest_csv_keeps_rows_with_arm_options() -> None:
         assert million_doc.latest_csv(directory / "empty") is None
 
 
+def test_experiments_are_listed_apart_with_their_options() -> None:
+    row = {key: "" for key in million.CSV_COLUMNS}
+    row.update({"family": "staircase", "arm": "ipm", "status": "time_limit",
+                "relative_error": "1.5e-4", "verified": "0", "wall_seconds": "3613",
+                "peak_rss_mb": "4347", "iterations": "65",
+                "solver_options": "algorithm=ipm ipm_max_factor_nonzeros=600000000"})
+    with tempfile.TemporaryDirectory() as tmp:
+        directory = Path(tmp)
+        assert million_doc.experiments_section(directory) == ""
+        for name in ("million-cpu-abc1234.csv", "million-factor-cap-abc1234.csv"):
+            with (directory / name).open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=million.CSV_COLUMNS)
+                writer.writeheader()
+                writer.writerow(row)
+        text = million_doc.experiments_section(directory)
+        assert "`million-factor-cap-abc1234.csv`" in text, text
+        assert "million-cpu-abc1234" not in text, "the default run is never an experiment"
+        assert "ipm_max_factor_nonzeros=600000000" in text, text
+
+
 def test_runner_solves_and_verifies_a_small_instance() -> None:
     binary = os.environ.get("SANKHYA_BINARY")
     if not binary:

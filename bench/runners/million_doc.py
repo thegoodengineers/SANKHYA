@@ -130,6 +130,39 @@ def million_section(path: Path | None) -> str:
     return "\n".join(out)
 
 
+def experiments_section(results_dir: Path) -> str:
+    """The million-row runs made with an option set on purpose (#751), each in its own
+    `million-<name>-<sha>.csv` beside the default run: the interior point with its factor
+    cap raised, with the supernodal factor, and so on. Never mixed into the table above,
+    whose rows are the arms as they ship; every row here shows the options it ran with."""
+    paths = sorted(p for p in results_dir.glob("million-*.csv")
+                   if not p.name.startswith("million-cpu-"))
+    if not paths:
+        return ""
+    out = [
+        "",
+        "**Past the defaults.** The same models and verifier with an option changed on "
+        "purpose, one CSV per experiment; `options` is what the solver was given.",
+        "",
+        "| CSV | model | arm | options | status | relative error | verified | iterations "
+        "| seconds | peak memory | solver message |",
+        "|---|---|---|---|---|---:|---:|---:|---:|---:|---|",
+    ]
+    for path in paths:
+        for r in _rows(path):
+            answered = r.get("status") in WITH_A_POINT
+            message = (r.get("message") or "-").replace("|", "/")
+            out.append(
+                f"| `{path.name}` | {r['family']} | `{r['arm']}` "
+                f"| `{r.get('solver_options', '')}` | {r.get('status', '').replace('_', ' ')} "
+                f"| {_sci(r, 'relative_error') if answered else '-'} "
+                f"| {'yes' if r.get('verified') == '1' else 'no'} "
+                f"| {r.get('iterations') or '-'} | {_seconds(r)} "
+                f"| {int(float(r.get('peak_rss_mb') or 0)):,} MB | {message} |")
+    out.append("")
+    return "\n".join(out)
+
+
 def readme_scale_line(path: Path) -> str:
     """The README's million-row sentence, from the CSV."""
     rows = _rows(path)

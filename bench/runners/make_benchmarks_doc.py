@@ -3072,7 +3072,7 @@ most have a few hundred, so none of them speaks to the size PS26119 asks about.
 
 #### 1f.5 A million rows on the CPU
 
-{million_doc.million_section(million_csv)}
+{million_doc.million_section(million_csv)}{million_doc.experiments_section(RESULTS_DIR)}
 ---
 
 ## 2. MIPLIB — the mixed-integer side
