@@ -114,6 +114,22 @@ def test_section_renders_both_tables() -> None:
     assert "No `million-cpu-*.csv`" in million_doc.million_section(None)
 
 
+def test_latest_csv_keeps_rows_with_arm_options() -> None:
+    row = {key: "" for key in million.CSV_COLUMNS}
+    row.update({"git_commit": "abc1234", "solver_options": "algorithm=pdhg",
+                "timestamp_utc": "2026-09-30T00:00:00+00:00"})
+    with tempfile.TemporaryDirectory() as tmp:
+        directory = Path(tmp)
+        for name in ("million-cpu-abc1234.csv", "million-cpu-cap-experiment.csv"):
+            with (directory / name).open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=million.CSV_COLUMNS)
+                writer.writeheader()
+                writer.writerow(row)
+        chosen = million_doc.latest_csv(directory)
+        assert chosen is not None and chosen.name == "million-cpu-abc1234.csv", chosen
+        assert million_doc.latest_csv(directory / "empty") is None
+
+
 def test_runner_solves_and_verifies_a_small_instance() -> None:
     binary = os.environ.get("SANKHYA_BINARY")
     if not binary:

@@ -17,6 +17,32 @@ from pathlib import Path
 WITH_A_POINT = ("optimal", "feasible", "iteration_limit", "time_limit")
 
 
+def latest_csv(results_dir: Path) -> Path | None:
+    """The newest `million-cpu-<sha>.csv`, by git history then the CSV's own timestamp.
+
+    Not latest_result.latest(): that skips every CSV with a non-empty `solver_options`
+    column, because elsewhere such a file is an option experiment beside the tier's default
+    run. Here every row carries its arm's options by design, so that filter would hide the
+    only evidence there is and the section would print its placeholder. The ordering is the
+    same one, taken from latest_result so the two cannot drift; the name must be
+    `million-cpu-<sha>.csv`, so a named experiment beside it is never picked."""
+    import latest_result
+
+    candidates = [p for p in results_dir.glob("million-cpu-*.csv")
+                  if latest_result.is_default_named(p, "million-cpu")]
+    if not candidates:
+        return None
+    order = latest_result.commit_order()
+
+    def rank(path: Path) -> tuple[int, float, str]:
+        recorded = latest_result.commit_of(path)
+        position = next((i for i, sha in enumerate(order)
+                         if recorded and sha.startswith(recorded)), len(order))
+        return (position, -latest_result.timestamp_of(path), path.name)
+
+    return sorted(candidates, key=rank)[0]
+
+
 def _rows(path: Path) -> list[dict]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
