@@ -59,4 +59,12 @@ struct KktVerdict {
 [[nodiscard]] KktVerdict check_qp_optimality(const Model& model, const Solution& solution,
                                              const KktTolerances& tolerances = {});
 
+/// The worst complementary-slackness product of an LP answer, each |multiplier| * slack
+/// divided by max(1, 1e-6 * |multiplier| * magnitude) of the numbers its slack is a
+/// difference of (#806; tol::kComplementarity and tol::kComplementarityRounding). The status
+/// guard in solve() judges an optimality claim by this, exactly as check_lp_optimality() and
+/// tools/verify_solution.py do. Infinity when the answer's vectors are not the model's size.
+[[nodiscard]] double worst_relative_complementarity(const Model& model,
+                                                    const Solution& solution);
+
 }  // namespace sankhya

@@ -75,7 +75,65 @@ double nearer_slack(double value, double lower, double upper) {
   return std::min(below, above);
 }
 
+/// |multiplier| * slack, divided by max(1, (kComplementarityRounding / kComplementarity) *
+/// |multiplier| * magnitude), so that comparing it with kComplementarity is the test
+/// tolerances.hpp states (#806): the absolute product, or the rounding a slack of that
+/// magnitude can carry, whichever is larger. `magnitude` is the size of the numbers the slack
+/// is a difference of - the row's largest term or its bound, the column's value or its
+/// bound. A slack that cannot close keeps the absolute test.
+double relative_complementarity(double multiplier, double value, double lower, double upper,
+                                double terms) {
+  const double slack = nearer_slack(value, lower, upper);
+  const double product = complementarity(multiplier, slack);
+  if (!std::isfinite(slack)) return product;
+  const double bound = (is_finite_bound(lower) && value - lower == slack) ? lower : upper;
+  const double magnitude = std::max(terms, std::fabs(bound));
+  constexpr double kRatio = tol::kComplementarityRounding / tol::kComplementarity;
+  return product / std::max(1.0, kRatio * std::fabs(multiplier) * magnitude);
+}
+
 }  // namespace
+
+double worst_relative_complementarity(const Model& model, const Solution& s) {
+  const Index n = model.num_cols();
+  const Index m = model.num_rows();
+  if (s.col_value.size() != static_cast<std::size_t>(n) ||
+      s.col_dual.size() != static_cast<std::size_t>(n) ||
+      s.row_dual.size() != static_cast<std::size_t>(m)) {
+    return kUnbounded;
+  }
+  const double sigma = model.sense_multiplier();
+  std::vector<double> activity(static_cast<std::size_t>(m), 0.0);
+  std::vector<double> row_scale(static_cast<std::size_t>(m), 1.0);
+  for (Index j = 0; j < n; ++j) {
+    const double xj = s.col_value[static_cast<std::size_t>(j)];
+    if (xj == 0.0) continue;
+    const ColumnView column = model.matrix.column(j);
+    for (Index p = 0; p < column.size; ++p) {
+      const auto i = static_cast<std::size_t>(column.rows[p]);
+      const double term = column.values[p] * xj;
+      activity[i] += term;
+      row_scale[i] = std::max(row_scale[i], std::fabs(term));
+    }
+  }
+  double worst = 0.0;
+  for (Index i = 0; i < m; ++i) {
+    const auto u = static_cast<std::size_t>(i);
+    if (model.row_lower[u] == model.row_upper[u]) continue;
+    worst = std::max(
+        worst, relative_complementarity(sigma * s.row_dual[u], activity[u], model.row_lower[u],
+                                        model.row_upper[u], row_scale[u]));
+  }
+  for (Index j = 0; j < n; ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    if (model.col_lower[u] == model.col_upper[u]) continue;
+    const double x = s.col_value[u];
+    worst =
+        std::max(worst, relative_complementarity(sigma * s.col_dual[u], x, model.col_lower[u],
+                                                 model.col_upper[u], std::fabs(x)));
+  }
+  return worst;
+}
 
 KktVerdict check_optimality(const Model& model, const Solution& s,
                             const KktTolerances& tolerances, bool allow_hessian);
@@ -246,15 +304,17 @@ KktVerdict check_optimality(const Model& model, const Solution& s,
     }
   }
 
-  // ---- Complementary slackness, absolutely, as the verifier judges it -----------------
+  // ---- Complementary slackness, relative to its magnitudes, as the verifier judges it --
   for (Index i = 0; i < m; ++i) {
     const auto u = static_cast<std::size_t>(i);
     if (model.row_lower[u] == model.row_upper[u]) continue;
-    const double product = complementarity(
-        y[u], nearer_slack(activity[u], model.row_lower[u], model.row_upper[u]));
-    if (product > tol::kComplementarity) {
+    const double measure = relative_complementarity(y[u], activity[u], model.row_lower[u],
+                                                    model.row_upper[u], row_scale[u]);
+    if (measure > tol::kComplementarity) {
       return fail("complementary slackness",
-                  fmt::format("|multiplier| * slack = {:.3e} on row {}", product, i));
+                  fmt::format("|multiplier| * slack = {:.3e} relative to its magnitudes on "
+                              "row {}",
+                              measure, i));
     }
   }
   for (Index j = 0; j < n; ++j) {
@@ -262,11 +322,13 @@ KktVerdict check_optimality(const Model& model, const Solution& s,
     if (model.col_lower[u] == model.col_upper[u]) continue;
     // For a QP the multiplier priced here is the derived one, as in the sign check above.
     const double column_dual = quadratic ? derived_dual[u] : sigma * s.col_dual[u];
-    const double product = complementarity(
-        column_dual, nearer_slack(x[u], model.col_lower[u], model.col_upper[u]));
-    if (product > tol::kComplementarity) {
+    const double measure = relative_complementarity(column_dual, x[u], model.col_lower[u],
+                                                    model.col_upper[u], std::fabs(x[u]));
+    if (measure > tol::kComplementarity) {
       return fail("complementary slackness",
-                  fmt::format("|multiplier| * slack = {:.3e} on column {}", product, j));
+                  fmt::format("|multiplier| * slack = {:.3e} relative to its magnitudes on "
+                              "column {}",
+                              measure, j));
     }
   }
 
