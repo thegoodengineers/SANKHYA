@@ -2299,6 +2299,14 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     const auto found = overrides_here.find(column);
     return found == overrides_here.end() ? original_value : original_value + found->second;
   };
+  // Whether `column`'s price from `row` is already inside adjusted_cost: the row was folded
+  // away by a free-column singleton or a doubleton AND the column was live in it when the
+  // fold fired (folded_row_recipients).
+  const auto received_fold_of = [&](Index row, Index column) {
+    if (!row_is_folded[static_cast<std::size_t>(row)]) return false;
+    const auto& recipients = folded_row_recipients[static_cast<std::size_t>(row)];
+    return std::find(recipients.begin(), recipients.end(), column) != recipients.end();
+  };
   const auto reduced_cost_of = [&](Index column) {
     // adjusted_cost, not original.col_cost: a column whose row was folded away by
     // kFreeColumnSingleton or kDoubletonEquation carries that fold's cost adjustment here,
@@ -2314,18 +2322,20 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
       // an earlier, unrelated reduction, say - never received that bake-in, so its true
       // contribution from this row must still be counted normally, from whatever dual this
       // row ends up with (see folded_row_recipients' comment above).
-      if (row_is_folded[static_cast<std::size_t>(row)]) {
-        const auto& recipients = folded_row_recipients[static_cast<std::size_t>(row)];
-        const bool is_recipient =
-            std::find(recipients.begin(), recipients.end(), column) != recipients.end();
-        if (is_recipient) continue;
-      }
+      if (received_fold_of(row, column)) continue;
       const double coefficient = effective_coefficient(row, column, view.values[k]);
       d -= coefficient * solution.row_dual[static_cast<std::size_t>(row)];
     }
     // Rows fill-in added this column to for the first time - absent from `view` entirely.
+    // The same recipient test as above, not "is the row folded" (pilot.ja): fill-in put
+    // NPSF03 into KRPR03 when doubleton MPSF03 eliminated PRPP03, NPSF03 was then fixed,
+    // and KRPR03 was folded by a LATER reduction that NPSF03, already gone, never received.
+    // Skipping that row dropped its dual from NPSF03's price, the doubleton pass priced
+    // MPSF03 against a reduced cost 8.2e-02 too high, and NPSF03 came back at its lower
+    // bound with a reduced cost of -5.1e-02, which the status guard rightly refused to call
+    // optimal.
     for (const Index row : extra_rows_for_column[static_cast<std::size_t>(column)]) {
-      if (row_is_folded[static_cast<std::size_t>(row)]) continue;
+      if (received_fold_of(row, column)) continue;
       const double coefficient = effective_coefficient(row, column, 0.0);
       d -= coefficient * solution.row_dual[static_cast<std::size_t>(row)];
     }
