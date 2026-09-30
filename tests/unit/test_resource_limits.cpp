@@ -389,12 +389,16 @@ TEST(ResourceLimits, ANodeLpOutOfIterationsIsALimitAndNotANumericalFailure) {
   // leaves a node whose bound is unknown, so the search cannot go on - but a search that was
   // told to stop is not a solver that broke.
   const Model model = milp_with_a_negative_optimum();
+  // One iteration: the dual simplex that solves the root since #803 finishes this knapsack's
+  // node LPs in two pivots, which a limit of 2 no longer stops; 0 stops the solve before the
+  // tree, which is not the path under test.
   Options options = quiet();
-  options.set_int("iteration_limit", 2);
+  options.set_int("iteration_limit", 1);
   const Solution stopped = solve(model, options);
   EXPECT_NE(stopped.status, SolveStatus::kNumericalError) << stopped.message;
   EXPECT_EQ(stopped.status, SolveStatus::kIterationLimit) << stopped.message;
   EXPECT_EQ(stopped.stopped_by, LimitReason::kIterations);
+  EXPECT_NE(stopped.message.find("the node LP at node"), std::string::npos) << stopped.message;
 }
 
 TEST(ResourceLimits, TheReasonIsNoneWhenNothingStoppedTheSolve) {
