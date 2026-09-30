@@ -923,13 +923,14 @@ refinery year (`generate_refinery_lp.py --periods 8760 --seed 42`), with three a
 sparse products per iteration, and with the whole iteration loop kept on the device
 (`gpu_on_device_loop=true`).
 
-Instance `refinery_year.mps` (779640 rows, 1208880 columns, 9968834 nonzeros), engine `cuda`, 10000 iterations per solve, median of 3 repeats; the per-iteration figure is the marginal time between the full and the one-fifth run, as `pdhg_two_matvec_ab.py` defines it. Commit `ad57c03`, GPU Tesla V100-PCIE-32GB (compute 7.0, 32494 MiB VRAM).
+Instance `refinery_year.mps` (779640 rows, 1208880 columns, 9968834 nonzeros), engine `cuda`, 10000 iterations per solve, median of 3 repeats; the per-iteration figure is the marginal time between the full and the one-fifth run, as `pdhg_two_matvec_ab.py` defines it. Commit `fdd1f35`, GPU NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM, CUDA runtime 12.4, driver API 12.4).
 
 | leg | solver options | three products (us/iter) | two products (us/iter) | two / three | source |
 |---|---|---:|---:|---:|---|
-| default | `defaults` | 985.7 | 808.7 | 0.820 | `pdhg-478-refinery-default-ad57c03.csv` |
-| deterministic | `deterministic=true` | 1007.4 | 805.8 | 0.800 | `pdhg-478-refinery-deterministic-ad57c03.csv` |
-| deterministic-loop | `deterministic=true gpu_on_device_loop=true` | 1009.4 | 824.4 | 0.817 | `pdhg-478-refinery-deterministic-loop-ad57c03.csv` |
+| default | `defaults` | 598.1 | 489.5 | 0.818 | `pdhg-478-refinery-default-fdd1f35.csv` |
+| deterministic | `deterministic=true` | 569.0 | 495.8 | 0.871 | `pdhg-478-refinery-deterministic-fdd1f35.csv` |
+| deterministic-loop | `deterministic=true gpu_on_device_loop=true` | 575.7 | 448.1 | 0.778 | `pdhg-478-refinery-deterministic-loop-fdd1f35.csv` |
+| loop | `gpu_on_device_loop=true` | 553.3 | 479.1 | 0.866 | `pdhg-478-refinery-loop-fdd1f35.csv` |
 
 
 #### 1g.10 GPU MIP heuristics and batched node bounds on the full MIPLIB tier 2 (#509, #520)
