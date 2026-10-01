@@ -44,6 +44,7 @@ and `repr` for every number written.
 from __future__ import annotations
 
 import argparse
+from decimal import Decimal
 import hashlib
 import json
 import random
@@ -159,8 +160,14 @@ def scaled_netlib(names: list[str] | None):
             model.entries[j] = [(i, v * r[i] * s[j]) for i, v in model.entries[j]]
         model.row_lower = [lo * r[i] for i, lo in enumerate(model.row_lower)]
         model.row_upper = [hi * r[i] for i, hi in enumerate(model.row_upper)]
+        # Koch's optima, like the readme's, leave out the objective row's constant (an RHS on
+        # the objective row); the solver and the verifier both include it, so the reference
+        # does too. Added in decimal so Koch's 32 digits are not rounded on the way.
+        exact = koch[name]["exact_objective"]
+        if model.objective_offset != 0.0:
+            exact = str(Decimal(exact) + Decimal(repr(model.objective_offset)))
         yield (f"scaled_{name}", "scaled_netlib", f"2^+-{SCALE_EXPONENT}", model, "optimal",
-               koch[name]["exact_objective"])
+               exact)
 
 
 def klee_minty(n: int) -> Model:
