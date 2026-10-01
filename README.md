@@ -483,7 +483,7 @@ reports one), the certificate checked in exact arithmetic and the plan by the in
 verifier, the binding limits and their shadow prices on the LP, a delivery commitment raised
 until the plant cannot meet it with the Farkas proof checked and the smallest repair, an
 evidence bundle made and replayed, twenty price sets through `sankhya scenarios`, and the plan
-re-solved with today's prices and commitments cold and from yesterday's basis (`--warm-start`). On the
+re-solved with today's prices and demands cold and from yesterday's basis (`--warm-start`). On the
 laptop CPU at `04c372c` the whole walk took 34.5 s and 40.7 s in two runs on a busy machine, and 0.4 s in the CI Release leg; it has not been timed on a card.
 
 The nine Netlib instances are committed, so the demo needs no network. Every number it prints
