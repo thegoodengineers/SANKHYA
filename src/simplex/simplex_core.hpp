@@ -601,6 +601,7 @@ class Simplex {
   bool devex_ = true;  ///< pricing=dantzig selects the old rule; see #66 and ratio_test_ below
   std::vector<double> devex_weight_;
   std::vector<double> rho_;  ///< B^-T e_r, scratch: rho . a_j gives the leaving row's alpha_rj
+  std::vector<Index> rho_support_;  ///< rho_'s nonzero rows, ascending (compute_pivot_row)
   Count devex_resets_ = 0;
 
   // ---- Ratio test (issue #67) ------------------------------------------------------------
