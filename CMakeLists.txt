@@ -276,6 +276,7 @@ set(SANKHYA_CORE_SOURCES
   src/io/mps_quadratic.cpp
   src/io/mps_reader.cpp
   src/io/model_writer.cpp
+  src/io/sol_reader.cpp
   src/io/writer.cpp
   src/diagnose/diagnose.cpp
   src/qp/convexity.cpp

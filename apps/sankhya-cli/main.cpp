@@ -268,6 +268,10 @@ int main(int argc, char** argv) {
   solve_cmd->add_flag("--ranging", compute_ranging,
                       "Compute LP sensitivity ranges (objective and RHS) at optimality "
                       "and write them to the .sol file");
+  std::string warm_start_path;
+  solve_cmd->add_option("--warm-start", warm_start_path,
+                        "Start the simplex from the basis in this .sol file, a previous "
+                        "solve of this model (presolve is bypassed)");
 
   CLI::App* info_cmd = app.add_subcommand("info", "Report the dimensions of a model file");
   std::string info_path;
@@ -409,6 +413,14 @@ int main(int argc, char** argv) {
     control.progress_callback = [](const sankhya::Progress&) {
       return g_cli_interrupt ? 1 : 0;
     };
+    if (!warm_start_path.empty()) {
+      std::string error;
+      if (!sankhya::io::read_solution_basis(warm_start_path, model, &control.start_col_status,
+                                            &control.start_row_status, &error)) {
+        fmt::print(stderr, "error: {}\n", error);
+        return 3;
+      }
+    }
 
     const sankhya::Solution solution = global ? sankhya::solve_global(qcqp, options, &control)
                                               : sankhya::solve(model, options, &control);

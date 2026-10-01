@@ -60,6 +60,15 @@ ReadResult read_lp(const std::string& path, Model* model);
 /// with a `.gz` suffix. An unrecognised extension is read as MPS.
 ReadResult read_model(const std::string& path, Model* model);
 
+/// Read the basis a .sol file carries (the basis_status field of its columns and rows
+/// sections) for `model`, matched by name, into `col_status` / `row_status` - what
+/// `sankhya solve --warm-start previous.sol` seeds SolveControl with (#218). Returns false
+/// and fills `error` when the file cannot be read, names a column or row the model lacks,
+/// or carries no complete basis (a verdict with no point, or an engine that produces none).
+bool read_solution_basis(const std::string& path, const Model& model,
+                         std::vector<BasisStatus>* col_status,
+                         std::vector<BasisStatus>* row_status, std::string* error);
+
 // -----------------------------------------------------------------------------------------
 // Writers
 // -----------------------------------------------------------------------------------------
