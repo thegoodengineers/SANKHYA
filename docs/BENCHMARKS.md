@@ -1583,12 +1583,75 @@ Bilinear quality terms make every one a non-convex QCQP. A run passes only on `o
 the published optimum with a solution the independent verifier accepts; a model the solver
 refuses is listed as refused, not dropped (`bench/runners/pooling.py`).
 
-Not yet run on `main`. Reproduce with:
+Source CSV: `bench/results/pooling-5a39fb2.csv`  
+Commit `5a39fb2` · machine `Windows-AMD64` · time limit 60 s per run · `nonconvex=global` (set by the runner, #516), otherwise solver defaults
 
-```
-python bench/runners/pooling_models.py --check
-python bench/runners/pooling.py --time-limit 60
-```
+**32 of 39 runs** (13 instances) reached the published global optimum within 1e-4 relative, claimed `optimal`, and were accepted by `tools/verify_solution.py` against the original non-convex model.
+
+| instance | form | status | our objective | global optimum | proven bound | root bound | nodes | time (s) | verified |
+|---|---|---|---:|---:|---:|---:|---:|---:|:--:|
+| `adhya1` | P | optimal | -549.7948331 | -549.8030502 | -549.8487943 | -989.18928 | 3601 | 5.50 | yes |
+| `adhya1` | PQ | optimal | -549.765337 | -549.8030502 | -549.8199626 | -840.27056 | 181 | 0.28 | yes |
+| `adhya1` | Q | optimal | -549.7938835 | -549.8030502 | -549.847225 | -1335 | 5699 | 5.30 | yes |
+| `adhya2` | P | optimal | -549.7707537 | -549.8030502 | -549.8256722 | -847.00386 | 13359 | 24.88 | yes |
+| `adhya2` | PQ | optimal | -549.7936477 | -549.8030502 | -549.8479255 | -574.78261 | 149 | 0.20 | yes |
+| `adhya2` | Q | optimal | -549.7841738 | -549.8030502 | -549.8387989 | -1335 | 5347 | 4.54 | yes |
+| `adhya3` | P | feasible | -558.1999612 | -561.0446875 | -578.0302274 | -876.20685 | 20917 | 60.04 | yes |
+| `adhya3` | PQ | optimal | -561.0446804 | -561.0446875 | -561.0446909 | -574.78261 | 130 | 0.33 | yes |
+| `adhya3` | Q | feasible | -559.2204679 | -561.0446875 | -662.3196974 | -1335 | 21838 | 60.03 | yes |
+| `adhya4` | P | optimal | -877.6417921 | -877.6457399 | -877.6767281 | -992.66728 | 890 | 1.48 | yes |
+| `adhya4` | PQ | optimal | -877.6457443 | -877.6457399 | -877.6462669 | -961.93218 | 40 | 0.12 | yes |
+| `adhya4` | Q | feasible | -857.8808973 | -877.6457399 | -1023.391537 | -1345 | 27903 | 60.04 | yes |
+| `bental4` | P | optimal | -450 | -450 | -450 | -550 | 3 | 0.02 | yes |
+| `bental4` | PQ | optimal | -450 | -450 | -450 | -550 | 3 | 0.03 | yes |
+| `bental4` | Q | optimal | -450.0000003 | -450 | -450.0132749 | -2933.3333 | 197 | 0.11 | yes |
+| `bental5` | P | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.03 | yes |
+| `bental5` | PQ | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.03 | yes |
+| `bental5` | Q | feasible | -3500 | -3500 | -7035.831399 | -9700 | 28251 | 60.04 | yes |
+| `foulds2` | P | optimal | -1100 | -1100 | -1100 | -1100 | 1 | 0.03 | yes |
+| `foulds2` | PQ | optimal | -1100 | -1100 | -1100 | -1100 | 1 | 0.03 | yes |
+| `foulds2` | Q | optimal | -1100.000001 | -1100 | -1100.107363 | -6900 | 15523 | 12.40 | yes |
+| `foulds3` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.04 | yes |
+| `foulds3` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.08 | yes |
+| `foulds3` | Q | feasible | -8 | -8 | -260 | -260 | 9499 | 60.05 | yes |
+| `foulds4` | P | optimal | -8 | -8 | -8 | -8 | 2 | 0.06 | yes |
+| `foulds4` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.09 | yes |
+| `foulds4` | Q | feasible | -8 | -8 | -260 | -260 | 9543 | 60.04 | yes |
+| `foulds5` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.03 | yes |
+| `foulds5` | PQ | optimal | -8 | -8 | -8 | -8 | 2 | 0.12 | yes |
+| `foulds5` | Q | feasible | -8 | -8 | -258.5134801 | -260 | 6580 | 60.04 | yes |
+| `haverly1` | P | optimal | -400 | -400 | -400 | -500 | 3 | 0.02 | yes |
+| `haverly1` | PQ | optimal | -400 | -400 | -400 | -500 | 3 | 0.03 | yes |
+| `haverly1` | Q | optimal | -400.0000011 | -400 | -400.0000011 | -2450 | 41 | 0.05 | yes |
+| `haverly2` | P | optimal | -600 | -600 | -600 | -1000 | 7 | 0.03 | yes |
+| `haverly2` | PQ | optimal | -600 | -600 | -600 | -1000 | 3 | 0.03 | yes |
+| `haverly2` | Q | optimal | -600 | -600 | -600.0000002 | -4700 | 33 | 0.04 | yes |
+| `haverly3` | P | optimal | -750 | -750 | -750 | -800 | 7 | 0.03 | yes |
+| `haverly3` | PQ | optimal | -750 | -750 | -750 | -800 | 3 | 0.03 | yes |
+| `haverly3` | Q | optimal | -750.0000011 | -750 | -750.0000011 | -2450 | 29 | 0.05 | yes |
+
+#### Root relaxation: PQ against P
+
+| instance | P root bound | Q root bound | PQ root bound | global optimum | P root gap closed by PQ |
+|---|---:|---:|---:|---:|---:|
+| `adhya1` | -989.18928 | -1335 | -840.27056 | -549.8030502 | 33.9 % |
+| `adhya2` | -847.00386 | -1335 | -574.78261 | -549.8030502 | 91.6 % |
+| `adhya3` | -876.20685 | -1335 | -574.78261 | -561.0446875 | 95.6 % |
+| `adhya4` | -992.66728 | -1345 | -961.93218 | -877.6457399 | 26.7 % |
+| `bental4` | -550 | -2933.3333 | -550 | -450 | 0.0 % |
+| `bental5` | -3500 | -9700 | -3500 | -3500 | - |
+| `foulds2` | -1100 | -6900 | -1100 | -1100 | - |
+| `foulds3` | -8 | -260 | -8 | -8 | - |
+| `foulds4` | -8 | -260 | -8 | -8 | - |
+| `foulds5` | -8 | -260 | -8 | -8 | - |
+| `haverly1` | -500 | -2450 | -500 | -400 | 0.0 % |
+| `haverly2` | -1000 | -4700 | -1000 | -600 | 0.0 % |
+| `haverly3` | -800 | -2450 | -800 | -750 | 0.0 % |
+
+Every run that did not pass, named:
+
+- **gap not closed** (4): `bental5_q`, `foulds3_q`, `foulds4_q`, `foulds5_q`.
+- **gap not closed, incumbent worse than the optimum** (3): `adhya3_p`, `adhya3_q`, `adhya4_q`.
 
 ---
 
@@ -1605,48 +1668,57 @@ engine and the interior point.
 
 Selection, read from QPLIB's listing: instances.html: Cvx ticked, O in {C, D}, V = C, C in {N, B, L} (doc.html PROBTYPE and CONVEX). **19 instances** of the 453 listed; 17 fetched (12 in the small tier, at most 100,000 stored coefficients), 2 over the size cap and not run: `QPLIB_8547`, `QPLIB_9008`. QPLIB publishes no solution point for `QPLIB_9002`: run, named, and outside the pass count. Convex continuous instances outside the selection, by type: LCD 13 (quadratic constraints: #514's set). Licence, as the site states it: QPLIB is licensed under CC-BY 4.0. (https://creativecommons.org/licenses/by/4.0/)
 
-Source CSV: `bench/results/qplib-small-ad57c03.csv`  
-Commit `ad57c03` · machine `Linux-x86_64` · time limit 1000 s per instance · solver defaults
+Source CSV: `bench/results/qplib-5a39fb2.csv`  
+Commit `5a39fb2` · machine `laptop, Intel i7-1355U 10 cores 12 threads, 16 GB, on mains, overnight with no other jobs` · time limit 1000 s per instance · solver defaults
 
-- `auto`: **passed 6 of 11** with a published reference; `optimal` on 6 of 12, within 1e-6 of QPLIB's value on 6, accepted by the verifier on 6.
-- `ipm` (`qp_algorithm=ipm`): **passed 7 of 11** with a published reference; `optimal` on 7 of 12, within 1e-6 of QPLIB's value on 7, accepted by the verifier on 7.
+- `auto`: **passed 9 of 16** with a published reference; `optimal` on 9 of 17, within 1e-6 of QPLIB's value on 9, accepted by the verifier on 10.
+- `ipm` (`qp_algorithm=ipm`): **passed 9 of 16** with a published reference; `optimal` on 9 of 17, within 1e-6 of QPLIB's value on 9, accepted by the verifier on 10.
 
 A pass is `optimal`, within 1e-6 relative of QPLIB's value (qplib.solu, a best known point, not a proven optimum), all three QP residuals of `qp_residuals.py` within 1e-6 relative, and accepted by the independent verifier, all on the QPS file `qplib_format.py` converted the `.qplib` file to - a conversion checked at QPLIB's own published point for every instance when it was fetched.
 
 | instance | engine | rows | cols | status | our objective | QPLIB value | rel. gap | worst residual | iters | solver time (s) | verified | passed |
 |---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|:--:|:--:|
-| `QPLIB_8495` | auto | 8000 | 27543 | optimal | 42857.49638 | 42857.49639 | 1.8e-10 | 5.9e-10 | 1200 | 0.65 | yes | yes |
-| `QPLIB_8495` | ipm | 8000 | 27543 | optimal | 42857.4964 | 42857.49639 | 3.3e-10 | 7.7e-10 | 14 | 4.34 | yes | yes |
-| `QPLIB_8515` | auto | 8002 | 16002 | model_error | 0 | 319.9999887 | 1.0e+00 | - | 0 | 0.00 | - | **no** |
-| `QPLIB_8515` | ipm | 8002 | 16002 | model_error | 0 | 319.9999887 | 1.0e+00 | - | 0 | 0.00 | - | **no** |
-| `QPLIB_8559` | auto | 5000 | 10000 | iteration_limit | 74222438.31 | 74223239.83 | 1.1e-05 | 5.0e-06 | 1000000 | 357.39 | - | **no** |
-| `QPLIB_8559` | ipm | 5000 | 10000 | numerical_error | - | 74223239.83 | - | - | 34 | 113.76 | - | **no** |
-| `QPLIB_8567` | auto | 7500 | 10000 | iteration_limit | 78962705.39 | 78965987.95 | 4.2e-05 | 9.7e-06 | 1000000 | 424.47 | - | **no** |
-| `QPLIB_8567` | ipm | 7500 | 10000 | numerical_error | - | 78965987.95 | - | - | 71 | 287.27 | - | **no** |
-| `QPLIB_8616` | auto | 10404 | 13870 | optimal | 245.0686414 | 245.0685978 | 1.8e-07 | 1.9e-07 | 19450 | 5.55 | yes | yes |
-| `QPLIB_8616` | ipm | 10404 | 13870 | optimal | 245.0685978 | 245.0685978 | 1.6e-10 | 3.4e-10 | 11 | 0.13 | yes | yes |
-| `QPLIB_8785` | auto | 11362 | 10399 | optimal | 7867.491149 | 7867.491149 | 3.1e-11 | 1.9e-09 | 175750 | 64.90 | yes | yes |
-| `QPLIB_8785` | ipm | 11362 | 10399 | optimal | 7867.491149 | 7867.491149 | 1.8e-11 | 2.9e-08 | 14 | 16.02 | yes | yes |
-| `QPLIB_8792` | auto | 0 | 15129 | optimal | 3593.516294 | 3593.518355 | 5.7e-07 | 1.5e-08 | 50 | 0.05 | yes | yes |
-| `QPLIB_8792` | ipm | 0 | 15129 | optimal | 3593.516294 | 3593.518355 | 5.7e-07 | 1.2e-10 | 10 | 0.40 | yes | yes |
-| `QPLIB_8845` | auto | 777 | 1546 | iteration_limit | 10911434.52 | 10907992.49 | 3.2e-04 | 7.6e-04 | 1000000 | 224.02 | - | **no** |
-| `QPLIB_8845` | ipm | 777 | 1546 | optimal | 10907992.49 | 10907992.49 | 3.7e-10 | 9.0e-13 | 31 | 0.54 | yes | yes |
-| `QPLIB_8906` | auto | 838 | 5223 | optimal | 2699111.513 | 2699111.513 | 1.7e-10 | 5.9e-12 | 211100 | 47.05 | yes | yes |
-| `QPLIB_8906` | ipm | 838 | 5223 | numerical_error | - | 2699111.513 | - | - | 25 | 0.76 | - | **no** |
-| `QPLIB_8938` | auto | 11999 | 4001 | iteration_limit | -36.31075388 | -35.77945295 | 1.5e-02 | 1.5e-02 | 1000000 | 167.04 | - | **no** |
-| `QPLIB_8938` | ipm | 11999 | 4001 | optimal | -35.77945295 | -35.77945295 | 6.5e-11 | 8.3e-12 | 20 | 0.12 | yes | yes |
-| `QPLIB_8991` | auto | 0 | 14400 | optimal | -0.001667867378 | -0.001667867378 | 8.6e-14 | 2.2e-08 | 50 | 0.05 | yes | yes |
-| `QPLIB_8991` | ipm | 0 | 14400 | optimal | -0.001667867378 | -0.001667867378 | 8.6e-14 | 9.5e-12 | 6 | 0.20 | yes | yes |
-| `QPLIB_9002` | auto | 1649 | 2890 | iteration_limit | 1.958722727e+10 | - | - | 1.0e+00 | 1000000 | 55.59 | - | - |
-| `QPLIB_9002` | ipm | 1649 | 2890 | iteration_limit | 1.732126844e+11 | - | - | 1.2e+00 | 200 | 6.55 | - | - |
+| `QPLIB_10034` | auto | 40200 | 40400 | iteration_limit | -0.0665712768 | -0.06601017605 | 5.6e-04 | 1.0e+00 | 1000000 | 618.82 | - | **no** |
+| `QPLIB_10034` | ipm | 40200 | 40400 | iteration_limit | -0.0665712768 | -0.06601017605 | 5.6e-04 | 1.0e+00 | 1000000 | 597.40 | - | **no** |
+| `QPLIB_10038` | auto | 160400 | 160800 | time_limit | -0.06666457598 | 0 | 6.7e-02 | 1.4e-01 | 286160 | 866.77 | - | **no** |
+| `QPLIB_10038` | ipm | 160400 | 160800 | time_limit | -0.06666444289 | 0 | 6.7e-02 | 1.4e-01 | 272740 | 867.90 | - | **no** |
+| `QPLIB_8495` | auto | 8000 | 27543 | optimal | 42857.4964 | 42857.49639 | 3.3e-10 | 7.7e-10 | 14 | 2.16 | yes | yes |
+| `QPLIB_8495` | ipm | 8000 | 27543 | optimal | 42857.4964 | 42857.49639 | 3.3e-10 | 7.7e-10 | 14 | 2.24 | yes | yes |
+| `QPLIB_8500` | auto | 250498 | 250997 | time_limit | -0.08904792676 | 0.01792173763 | 1.1e-01 | 1.0e+00 | 142650 | 700.88 | - | **no** |
+| `QPLIB_8500` | ipm | 250498 | 250997 | time_limit | -0.08775810513 | 0.01792173763 | 1.1e-01 | 1.0e+00 | 140531 | 690.75 | - | **no** |
+| `QPLIB_8515` | auto | 8002 | 16002 | model_error | 0 | 319.9999887 | 1.0e+00 | - | 0 | 0.01 | - | **no** |
+| `QPLIB_8515` | ipm | 8002 | 16002 | model_error | 0 | 319.9999887 | 1.0e+00 | - | 0 | 0.01 | - | **no** |
+| `QPLIB_8559` | auto | 5000 | 10000 | iteration_limit | 74222438.31 | 74223239.83 | 1.1e-05 | 5.0e-06 | 1000000 | 209.41 | - | **no** |
+| `QPLIB_8559` | ipm | 5000 | 10000 | iteration_limit | 74222438.31 | 74223239.83 | 1.1e-05 | 5.0e-06 | 1000000 | 201.23 | - | **no** |
+| `QPLIB_8567` | auto | 7500 | 10000 | iteration_limit | 78962705.39 | 78965987.95 | 4.2e-05 | 9.7e-06 | 1000000 | 240.67 | - | **no** |
+| `QPLIB_8567` | ipm | 7500 | 10000 | iteration_limit | 78962705.39 | 78965987.95 | 4.2e-05 | 9.7e-06 | 1000000 | 242.82 | - | **no** |
+| `QPLIB_8602` | auto | 52983 | 34552 | optimal | 27353.3872 | 27353.3872 | 3.4e-12 | 4.8e-09 | 16 | 566.45 | yes | yes |
+| `QPLIB_8602` | ipm | 52983 | 34552 | optimal | 27353.3872 | 27353.3872 | 3.4e-12 | 4.8e-09 | 16 | 547.67 | yes | yes |
+| `QPLIB_8616` | auto | 10404 | 13870 | optimal | 245.0685978 | 245.0685978 | 1.6e-10 | 3.4e-10 | 11 | 0.10 | yes | yes |
+| `QPLIB_8616` | ipm | 10404 | 13870 | optimal | 245.0685978 | 245.0685978 | 1.6e-10 | 3.4e-10 | 11 | 0.10 | yes | yes |
+| `QPLIB_8785` | auto | 11362 | 10399 | optimal | 7867.491149 | 7867.491149 | 1.8e-11 | 2.9e-08 | 14 | 12.31 | yes | yes |
+| `QPLIB_8785` | ipm | 11362 | 10399 | optimal | 7867.491149 | 7867.491149 | 1.8e-11 | 2.9e-08 | 14 | 11.99 | yes | yes |
+| `QPLIB_8790` | auto | 0 | 39204 | optimal | -0.0001562421091 | -0.0001562421091 | 5.0e-14 | 1.8e-12 | 6 | 0.63 | yes | yes |
+| `QPLIB_8790` | ipm | 0 | 39204 | optimal | -0.0001562421091 | -0.0001562421091 | 5.0e-14 | 1.8e-12 | 6 | 0.63 | yes | yes |
+| `QPLIB_8792` | auto | 0 | 15129 | optimal | 3593.516294 | 3593.518355 | 5.7e-07 | 1.2e-10 | 10 | 0.30 | yes | yes |
+| `QPLIB_8792` | ipm | 0 | 15129 | optimal | 3593.516294 | 3593.518355 | 5.7e-07 | 1.2e-10 | 10 | 0.30 | yes | yes |
+| `QPLIB_8845` | auto | 777 | 1546 | optimal | 10907992.49 | 10907992.49 | 3.7e-10 | 8.4e-15 | 32 | 0.41 | yes | yes |
+| `QPLIB_8845` | ipm | 777 | 1546 | optimal | 10907992.49 | 10907992.49 | 3.7e-10 | 8.4e-15 | 32 | 0.41 | yes | yes |
+| `QPLIB_8906` | auto | 838 | 5223 | feasible | 2699111.515 | 2699111.513 | 7.9e-10 | 6.2e-10 | 25 | 0.52 | yes | **no** |
+| `QPLIB_8906` | ipm | 838 | 5223 | feasible | 2699111.515 | 2699111.513 | 7.9e-10 | 6.2e-10 | 25 | 0.51 | yes | **no** |
+| `QPLIB_8938` | auto | 11999 | 4001 | optimal | -35.77945295 | -35.77945295 | 6.5e-11 | 8.3e-12 | 20 | 0.10 | yes | yes |
+| `QPLIB_8938` | ipm | 11999 | 4001 | optimal | -35.77945295 | -35.77945295 | 6.5e-11 | 8.3e-12 | 20 | 0.10 | yes | yes |
+| `QPLIB_8991` | auto | 0 | 14400 | optimal | -0.001667867378 | -0.001667867378 | 8.6e-14 | 9.5e-12 | 6 | 0.15 | yes | yes |
+| `QPLIB_8991` | ipm | 0 | 14400 | optimal | -0.001667867378 | -0.001667867378 | 8.6e-14 | 9.5e-12 | 6 | 0.15 | yes | yes |
+| `QPLIB_9002` | auto | 1649 | 2890 | iteration_limit | 1.729346531e+11 | - | - | 1.2e+00 | 200 | 3.56 | - | - |
+| `QPLIB_9002` | ipm | 1649 | 2890 | iteration_limit | 1.729346531e+11 | - | - | 1.2e+00 | 200 | 3.56 | - | - |
 
 Every failure, named:
 
-- `auto`, **did not reach `optimal`** (6): `QPLIB_8515` (model_error), `QPLIB_8559` (iteration_limit), `QPLIB_8567` (iteration_limit), `QPLIB_8845` (iteration_limit), `QPLIB_8938` (iteration_limit), `QPLIB_9002` (iteration_limit).
+- `auto`, **did not reach `optimal`** (8): `QPLIB_10034` (iteration_limit), `QPLIB_10038` (time_limit), `QPLIB_8500` (time_limit), `QPLIB_8515` (model_error), `QPLIB_8559` (iteration_limit), `QPLIB_8567` (iteration_limit), `QPLIB_8906` (feasible), `QPLIB_9002` (iteration_limit).
 - `auto`, **no published reference** (1): `QPLIB_9002`.
-- `ipm`, **did not reach `optimal`** (5): `QPLIB_8515` (model_error), `QPLIB_8559` (numerical_error), `QPLIB_8567` (numerical_error), `QPLIB_8906` (numerical_error), `QPLIB_9002` (iteration_limit).
+- `ipm`, **did not reach `optimal`** (8): `QPLIB_10034` (iteration_limit), `QPLIB_10038` (time_limit), `QPLIB_8500` (time_limit), `QPLIB_8515` (model_error), `QPLIB_8559` (iteration_limit), `QPLIB_8567` (iteration_limit), `QPLIB_8906` (feasible), `QPLIB_9002` (iteration_limit).
 - `ipm`, **no published reference** (1): `QPLIB_9002`.
-- **fetched and selected, not run in this CSV** (5): `QPLIB_10034`, `QPLIB_10038`, `QPLIB_8500`, `QPLIB_8602`, `QPLIB_8790` - `qplib.py` without `--tier` runs them.
 
 ### Every QPLIB instance through the reader and the dispatcher
 

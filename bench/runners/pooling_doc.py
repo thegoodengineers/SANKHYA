@@ -80,7 +80,8 @@ def section(path: Path | None) -> str:
         f"Source CSV: `bench/results/{path.name}`  ",
         f"Commit `{commit}` · machine `{rows[0].get('machine', 'unknown')}` · time limit "
         f"{'-' if limit is None else f'{limit:g}'} s per run"
-        + (f" · solver options `{options}`" if options else " · solver defaults"),
+        + " · `nonconvex=global` (set by the runner, #516)"
+        + (f" · solver options `{options}`" if options else ", otherwise solver defaults"),
         "",
         f"**{passed} of {len(rows)} runs** ({len(instances)} instances) reached the published "
         "global optimum within 1e-4 relative, claimed `optimal`, and were accepted by "
