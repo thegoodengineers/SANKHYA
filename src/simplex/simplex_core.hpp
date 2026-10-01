@@ -276,7 +276,16 @@ class Simplex {
   [[nodiscard]] bool any_artificial_bound_active() const;
   [[nodiscard]] bool any_artificial_bound() const;
   /// Dual pricing: the basic slot with the largest weighted primal infeasibility, or -1.
-  [[nodiscard]] Index choose_leaving_row() const;
+  /// Reads infeasible_slots_ and drops the slots on it that are feasible again.
+  [[nodiscard]] Index choose_leaving_row();
+  /// How far slot's basic variable is outside its bounds, beyond primal_tolerance_; 0 inside.
+  [[nodiscard]] double slot_infeasibility(Index slot) const;
+  /// infeasible_slots_ from every slot's current value (after a dense change to x_basic_).
+  void rebuild_infeasible_list();
+  /// Put slot on infeasible_slots_ if it is outside its bounds and not listed already.
+  void note_slot(Index slot);
+  /// alpha_support_ = the nonzero slots of alpha_, ascending.
+  void collect_alpha_support();
   /// rho_ = B^-T e_r and pivot_row_[j] = rho . a_j for every nonbasic column j.
   void compute_pivot_row(Index leaving_slot);
   /// The bounded dual ratio test with bound flipping (Maros ch. 10; Koberstein 2005), by
@@ -660,11 +669,21 @@ class Simplex {
   // to sit at is given an ARTIFICIAL one so that it can. Those bounds are bookkept here and
   // removed before any answer is reported: a point at an artificial bound is a point of a
   // different problem, and the primal loop finishes from that basis instead.
-  std::vector<double> dual_weight_;  ///< dual devex weight per basic slot, or the exact
-                                     ///< steepest-edge norm under pricing=dual-steepest-edge
-  bool dual_steepest_edge_ = false;  ///< #411: the exact update, one FTRAN more per pivot
-  std::vector<double> tau_;          ///< B^-1 rho, the steepest-edge update's cross term
-  std::vector<double> pivot_row_;    ///< row r of B^-1 [A | -I] over every column
+  /// THE INFEASIBILITY LIST (Hall and McKinnon 2005, sec. 4: hyper-sparse CHUZR). Every
+  /// basic slot outside its bounds is on infeasible_slots_ (slot_listed_ marks membership);
+  /// a listed slot that has come back inside is dropped when pricing next visits it. The
+  /// list is rebuilt after a dense change to x_basic_ (a refactorization, a set of flips)
+  /// and extended from alpha's support after a pivot, since x_B moves only there. Pricing
+  /// then reads the list instead of every slot: on stocfor3 (15,929 rows) the full scan was
+  /// a fifth of the dual's time.
+  std::vector<Index> infeasible_slots_;
+  std::vector<char> slot_listed_;
+  std::vector<Index> alpha_support_;  ///< nonzero slots of alpha_ (collect_alpha_support)
+  std::vector<double> dual_weight_;   ///< dual devex weight per basic slot, or the exact
+                                      ///< steepest-edge norm under pricing=dual-steepest-edge
+  bool dual_steepest_edge_ = false;   ///< #411: the exact update, one FTRAN more per pivot
+  std::vector<double> tau_;           ///< B^-1 rho, the steepest-edge update's cross term
+  std::vector<double> pivot_row_;     ///< row r of B^-1 [A | -I] over every column
   /// THE PIVOT ROW, ROW-WISE (#243). pivot_row_[k] = rho . a_k is a gather over every
   /// nonbasic column, O(nnz(A)) per iteration however sparse rho is. When rho is sparse -
   /// and on a planning model it is - the same numbers come from rho's support: for each
