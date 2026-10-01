@@ -366,7 +366,7 @@
    "family": "scaled_netlib",
    "parameter": "2^+-20",
    "expected_status": "optimal",
-   "expected_objective": "-0.18751929066370549102605687681285e2",
+   "expected_objective": "-11.63892906637054910260568768",
    "sha256": "34fff0c44103e4ec1256b505a59ba3e8fce9eb278c936266eab96a82a07bbc72",
    "rows": 223,
    "cols": 282

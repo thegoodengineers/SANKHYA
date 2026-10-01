@@ -57,6 +57,13 @@ VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
 # same `[PASS] infeasibility proof` prefix when no certificate was offered ("nothing is
 # claimed and nothing is checked"), so the prefix alone matches a file that proved nothing.
 PROOF_PASSED = re.compile(r"\[PASS\] infeasibility proof\s+the rows aggregate to at least")
+# The IIS (#217, Chinneck & Dravnieks 1991): the verifier's two properties, each a check of
+# its own. `IIS is infeasible on its own` re-proves the Farkas aggregate using nothing outside
+# the set; `IIS is irreducible` checks one witness per element, a point satisfying every other
+# element and violating that one - dropping any member makes the rest feasible.
+IIS_ELEMENTS = re.compile(r"\[PASS\] IIS\s+(\d+) element\(s\)")
+IIS_INFEASIBLE = re.compile(r"\[PASS\] IIS is infeasible on its own")
+IIS_IRREDUCIBLE = re.compile(r"\[PASS\] IIS is irreducible")
 
 CSV_COLUMNS = [
     "instance",
@@ -78,6 +85,11 @@ CSV_COLUMNS = [
     "absolute_gap",
     "relative_gap",
     "independently_verified",
+    # The IIS the .sol file names: how many rows and bounds, and 1 when the verifier passed
+    # both properties (infeasible on its own, and irreducible by one witness per element);
+    # 0 when an IIS was written and either check failed; "" when none was written.
+    "iis_elements",
+    "iis_verified",
     "verifier_message",
     "passed",
     # Why a row is not a pass, in one phrase; empty on a pass. The doc groups by it.
@@ -171,6 +183,15 @@ def independently_verified(status: str, certificate: str, multipliers: int,
     if status in ("optimal", "feasible", "unbounded"):
         return int(verifier_rc == 0)
     return ""
+
+
+def iis_verdict(verifier_text: str) -> tuple[int | str, int | str]:
+    """(elements, verified) from the verifier's report: ("", "") when the file names no IIS."""
+    found = IIS_ELEMENTS.search(verifier_text)
+    if not found:
+        return "", ""
+    both = bool(IIS_INFEASIBLE.search(verifier_text)) and bool(IIS_IRREDUCIBLE.search(verifier_text))
+    return int(found.group(1)), int(both)
 
 
 def verifier_failures(text: str) -> str:
@@ -309,6 +330,7 @@ def main() -> int:
         verified = independently_verified(flat["status"], flat["certificate"],
                                           flat["multipliers"], flat["verifier_rc"],
                                           flat["verifier_text"])
+        iis_elements, iis_verified = iis_verdict(flat["verifier_text"])
         rows.append({
             "instance": name, "instance_sha256": sha,
             "matches_manifest": int(same),
@@ -319,6 +341,7 @@ def main() -> int:
             "certificate": flat["certificate"], "certificate_multipliers": flat["multipliers"],
             "our_objective": "", "published_objective": "", "absolute_gap": "",
             "relative_gap": "", "independently_verified": verified,
+            "iis_elements": iis_elements, "iis_verified": iis_verified,
             "verifier_message": verifier_failures(flat["verifier_text"]),
             "passed": int(reason == ""), "failure_reason": reason,
             "wall_seconds": round(flat.get("wall_seconds", 0.0), 6),
@@ -340,6 +363,10 @@ def main() -> int:
     print("-" * 106)
     print(f"{passes}/{len(rows)} reported infeasible with a Farkas certificate that "
           f"tools/verify_solution.py accepted")
+    with_iis = [row for row in rows if row["iis_elements"] != ""]
+    print(f"{sum(row['iis_verified'] == 1 for row in with_iis)}/{len(rows)} named an IIS the "
+          f"verifier proved infeasible on its own and irreducible "
+          f"({len(with_iis)} named one)")
     grouped: dict[str, list[str]] = {}
     for row in rows:
         if row["failure_reason"]:

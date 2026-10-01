@@ -35,6 +35,7 @@ add_executable(sankhya_tests
   unit/test_presolve_report.cpp
   unit/test_simplex.cpp
   unit/test_dual_simplex.cpp
+  unit/test_cost_scaling.cpp
   unit/test_dual_harris.cpp
   unit/test_ranging.cpp
   unit/test_dense_lu.cpp
@@ -72,6 +73,7 @@ add_executable(sankhya_tests
   unit/test_solver_engine.cpp
   unit/test_solver_engine_conformance.cpp
   unit/test_warm_start.cpp
+  unit/test_sol_reader.cpp
   unit/test_scenarios.cpp
   unit/test_writer.cpp
   unit/test_iis.cpp
@@ -120,6 +122,7 @@ add_executable(sankhya_tests
   unit/test_cut_filter_policy.cpp
   unit/test_presolve_parallel_rows.cpp
   unit/test_presolve_scaled.cpp
+  unit/test_prescale.cpp
   unit/test_presolve_probing.cpp
   unit/test_presolve_implied_integer.cpp
   unit/test_presolve_propagation.cpp

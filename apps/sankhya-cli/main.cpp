@@ -268,6 +268,15 @@ int main(int argc, char** argv) {
   solve_cmd->add_flag("--ranging", compute_ranging,
                       "Compute LP sensitivity ranges (objective and RHS) at optimality "
                       "and write them to the .sol file");
+  std::string warm_start_path;
+  solve_cmd->add_option("--warm-start", warm_start_path,
+                        "Start the simplex from the basis in this .sol file, a previous "
+                        "solve of this model (presolve is bypassed)");
+  bool compute_iis = false;
+  solve_cmd->add_flag("--iis", compute_iis,
+                      "On an infeasible model, name the irreducible infeasible subsystem: "
+                      "printed, and written to the .sol and --stats files (the same as "
+                      "--option compute_iis=true, the default)");
 
   CLI::App* info_cmd = app.add_subcommand("info", "Report the dimensions of a model file");
   std::string info_path;
@@ -330,6 +339,7 @@ int main(int argc, char** argv) {
   if (time_limit > 0.0) options.set_double("time_limit", time_limit);
   if (use_gpu) options.set_bool("gpu", true);
   if (compute_ranging) options.set_bool("ranging", true);
+  if (compute_iis) options.set_bool("compute_iis", true);
 
   if (scenarios_cmd->parsed()) {
     // One solver log per scenario would bury the table; --option log_to_console=true restores.
@@ -409,6 +419,14 @@ int main(int argc, char** argv) {
     control.progress_callback = [](const sankhya::Progress&) {
       return g_cli_interrupt ? 1 : 0;
     };
+    if (!warm_start_path.empty()) {
+      std::string error;
+      if (!sankhya::io::read_solution_basis(warm_start_path, model, &control.start_col_status,
+                                            &control.start_row_status, &error)) {
+        fmt::print(stderr, "error: {}\n", error);
+        return 3;
+      }
+    }
 
     const sankhya::Solution solution = global ? sankhya::solve_global(qcqp, options, &control)
                                               : sankhya::solve(model, options, &control);

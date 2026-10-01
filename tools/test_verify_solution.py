@@ -267,6 +267,26 @@ def test_strong_duality_accepts_a_gap_made_of_accepted_per_item_violations() -> 
           or _strong_duality(report)[2])
 
 
+def test_a_wrong_sign_is_judged_against_the_cost_not_against_one() -> None:
+    """Scaled Netlib sc205 (#783) at unit scale. min -3.05e-5 x0 s.t. x0 - 1.28e-3 x1 <= 0,
+    both columns in [0, inf). At x = 0 with y = -3.05e-5 the reduced costs are d0 = 0 and
+    d1 = -3.9e-8: a wrong sign on a column with no upper bound, 1.3e-3 of the only cost in
+    the model. Against a floor of 1 it was 3.9e-8 < 1e-7 and the point verified as optimal,
+    on a model whose objective goes to -inf along x1. Against the cost it fails - and it
+    fails the same way with the costs multiplied by 2^15, which is the same LP."""
+    for factor in (1.0, 2.0 ** 15):
+        c0, a1 = -3.05e-5 * factor, -1.28e-3
+        model = _one_row_lp(cost=[c0, 0.0], lower=[0.0, 0.0], upper=[vs.INF, vs.INF],
+                            row_lower=-vs.INF, row_upper=0.0, entries=[1.0, a1])
+        solution = _certificate(model, x=[0.0, 0.0], d=[0.0, -a1 * c0], y=c0)
+        report = vs.verify(model, solution, vs.DEFAULT_PRIMAL_TOL, vs.DEFAULT_DUAL_TOL,
+                           vs.DEFAULT_INTEGER_TOL, vs.DEFAULT_DUALITY_TOL)
+        failed = [name for ok, name, _ in report.lines if not ok]
+        check(failed == ["dual feasibility (columns)"],
+              f"a wrong sign 1.3e-3 of the cost is rejected at cost scale {factor:g}",
+              f"failed: {failed}")
+
+
 QPS_WITH_OFF_DIAGONAL = """NAME          QCONV
 ROWS
  N  COST
@@ -920,6 +940,7 @@ def main() -> int:
     test_known_bad_solution_is_rejected()
     test_strong_duality_still_rejects_a_reduced_cost_pricing_the_wrong_bound()
     test_strong_duality_accepts_a_gap_made_of_accepted_per_item_violations()
+    test_a_wrong_sign_is_judged_against_the_cost_not_against_one()
     print("test_qps_convention_is_read_as_qps_means_it")
     test_qps_convention_is_read_as_qps_means_it()
     print("test_qp_optimum_verifies_and_a_wrong_one_does_not")

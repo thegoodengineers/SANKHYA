@@ -257,6 +257,14 @@ KktVerdict check_optimality(const Model& model, const Solution& s,
   for (Index i = 0; i < m; ++i) {
     y[static_cast<std::size_t>(i)] = sigma * s.row_dual[static_cast<std::size_t>(i)];
   }
+  // The floor of every dual scale is min(1, max|c|) on an LP, not 1 (#783): the verifier's
+  // dual_floor, argued there. A QP's gradient moves with x, and its floor stays 1.
+  double dual_floor = 1.0;
+  if (!quadratic) {
+    double largest_cost = 0.0;
+    for (const double c : model.col_cost) largest_cost = std::max(largest_cost, std::fabs(c));
+    if (largest_cost > 0.0 && largest_cost < 1.0) dual_floor = largest_cost;
+  }
   std::vector<double> column_scale(un, 1.0);
   std::vector<double> derived_dual(un, 0.0);
   for (Index j = 0; j < n; ++j) {
@@ -266,7 +274,7 @@ KktVerdict check_optimality(const Model& model, const Solution& s,
     const double cost = sigma * (model.col_cost[u] + qx[u]);
     const ColumnView column = model.matrix.column(j);
     double expected = cost;
-    double scale = std::max(1.0, std::fabs(cost));
+    double scale = std::max(dual_floor, std::fabs(cost));
     for (Index p = 0; p < column.size; ++p) {
       const double term = column.values[p] * y[static_cast<std::size_t>(column.rows[p])];
       expected -= term;
@@ -292,7 +300,7 @@ KktVerdict check_optimality(const Model& model, const Solution& s,
                               violation / scale, j));
     }
   }
-  double dual_norm = 1.0;
+  double dual_norm = dual_floor;
   for (const double v : y) dual_norm = std::max(dual_norm, std::fabs(v));
   for (Index i = 0; i < m; ++i) {
     const auto u = static_cast<std::size_t>(i);

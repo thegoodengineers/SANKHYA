@@ -19,6 +19,16 @@ namespace sankhya::tol {
 inline constexpr double kPrimalFeasibility = 1e-7;
 
 /// Max allowed violation of dual feasibility (sign conditions on reduced costs).
+///
+/// STATED FOR COSTS OF ORDER ONE (#783). An LP is unchanged by multiplying c by a positive
+/// constant; its reduced costs scale with it and an absolute 1e-7 does not. On scaled Netlib
+/// sc205 (one cost, -3.05e-05) a wrong-signed reduced cost of -3.9e-08 passed and the answer
+/// was objective 0 against -52.2. So the value is not changed; what it is measured against
+/// is: the simplex solves with c scaled by a power of two to max|c| in [1, 2)
+/// (cost_scale_factor, src/la/scaling.hpp), and the quality measure and the verifier divide
+/// each dual violation by max(min(1, max|c|), its own terms) instead of max(1, its terms).
+/// For max|c| >= 1 nothing moves; of the Netlib LPs four are below 1 (ganges 0.5, pilot
+/// 0.026, pilotnov 0.89, tuff 0.005), and the A/B in the #783 pull request covers them.
 inline constexpr double kDualFeasibility = 1e-7;
 
 /// Max allowed distance from an integer before a value is called fractional.

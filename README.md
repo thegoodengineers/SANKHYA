@@ -377,6 +377,7 @@ the count is not typed here, because a typed count goes stale the day a test is 
 ./build/sankhya solve demo/crude_blend.mps --write-sol blend.sol --stats blend.json
 ./build/sankhya solve demo/crude_blend.mps --progress-out progress.jsonl
 ./build/sankhya solve demo/crude_blend.mps --warm-start blend.sol
+./build/sankhya solve demo/crude_blend_infeasible.mps --iis --write-sol why.sol
 ```
 
 `demo/crude_blend.mps` is a small crude-blending LP: three crudes into a diesel pool, with a
@@ -462,6 +463,14 @@ same model carries (#218), matched by name, presolve bypassed: yesterday's plan 
 with today's prices and demands. `bench/runners/replan_warm_start.py` measures it cold
 against warm on the refinery case study, and `demo/finale.sh` step 7 shows it.
 
+`--iis` names, on an infeasible model, the irreducible infeasible subsystem (#217): the
+rows and bounds that cannot hold together, printed, written to the `.sol` file with one
+witness per element and to the `--stats` JSON by name, and reachable from C
+(`sankhya_solution_iis_*`) and Python (`Solution.iis_rows` and friends). It is on by
+default (`compute_iis`); the flag is the spelling. `tools/verify_solution.py` proves both
+properties with its own arithmetic: the set is infeasible using nothing outside it, and
+dropping any one member makes the rest feasible.
+
 The solver supports graceful interruption. Pressing Ctrl-C (`SIGINT`) in the CLI stops the solve at the next safe point and returns the best found point as an `interrupted` result. The Python bindings expose `Model.interrupt()` and support progress callbacks; returning a non-zero value from a Python callback (or via `sankhya_set_callback` in C) interrupts the solve gracefully.
 
 ## Demo
@@ -483,7 +492,7 @@ reports one), the certificate checked in exact arithmetic and the plan by the in
 verifier, the binding limits and their shadow prices on the LP, a delivery commitment raised
 until the plant cannot meet it with the Farkas proof checked and the smallest repair, an
 evidence bundle made and replayed, twenty price sets through `sankhya scenarios`, and the plan
-re-solved with today's prices and commitments cold and from yesterday's basis (`--warm-start`). On the
+re-solved with today's prices and demands cold and from yesterday's basis (`--warm-start`). On the
 laptop CPU at `04c372c` the whole walk took 34.5 s and 40.7 s in two runs on a busy machine, and 0.4 s in the CI Release leg; it has not been timed on a card.
 
 The nine Netlib instances are committed, so the demo needs no network. Every number it prints

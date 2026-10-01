@@ -1,6 +1,6 @@
 # The finale walk
 
-One refinery MILP, solved, proved, checked and re-planned in front of the jury, with nothing
+One refinery MILP, solved, proved, checked and re-planned from yesterday's basis in front of the jury, with nothing
 on the stage machine that can fail for want of a network or a compiler (#758).
 
     demo/finale.sh --dry      # check the machine first: binary, GPU, Python, the tools
@@ -11,7 +11,7 @@ which keeps the repository's layout. It needs the `sankhya` binary, Python 3.9 o
 nothing else: the model is generated on the spot by `bench/case_studies/refinery/generator.py`
 from a fixed seed (synthetic data), and every checker is in `tools/`.
 
-## The six steps
+## The seven steps
 
 Each prints one line of result and the seconds it took. Every number comes from a command the
 script runs; the script stops at the first step whose check fails.
@@ -24,6 +24,7 @@ script runs; the script stops at the first step whose check fails.
 | 4 repair | one delivery commitment raised tenfold (then 100x, 1000x) until the plant cannot meet it; `tools/verify_solution.py` checks the Farkas certificate; `tools/repair_infeasibility.py` finds the smallest repair | the proof, the repair's size and the limits it moves |
 | 5 bundle | `tools/bundle.py` then `tools/replay_bundle.py` on the MILP run | the bundle replays: manifest intact, verifier passes |
 | 6 prices | twenty crude price sets through `sankhya scenarios` (#752) | how many verified, the objective's range |
+| 7 replan | today's crude prices and product demands (market and commitment together) moved (`bench/runners/replan_warm_start.py`'s edit), the LP solved cold and with `--warm-start` from step 3's `.sol` (#218), both checked by `tools/verify_solution.py` | the pivot counts side by side, the shared optimum |
 
 ## Why step 3 re-solves
 

@@ -151,6 +151,15 @@ Scaling build_scaling(const Model& model, const std::vector<double>& min_space_c
   return scaling;
 }
 
+double cost_scale_factor(const std::vector<double>& cost) {
+  double largest = 0.0;
+  for (const double value : cost) largest = std::max(largest, std::fabs(value));
+  if (!(largest > 0.0) || largest >= 1.0 || !std::isfinite(largest)) return 1.0;
+  int exponent = 0;
+  std::frexp(largest, &exponent);  // largest = f * 2^exponent, f in [0.5, 1), exponent <= 0
+  return std::ldexp(1.0, 1 - exponent);  // largest * factor = 2f, in [1, 2)
+}
+
 double estimate_spectral_norm(const SparseMatrix& matrix, int iterations, unsigned seed) {
   const Index rows = matrix.num_rows();
   const Index cols = matrix.num_cols();
