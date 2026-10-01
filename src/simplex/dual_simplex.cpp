@@ -275,35 +275,67 @@ std::vector<double> Simplex::exact_dual_weights_for_testing() {
   return weights;
 }
 
-Index Simplex::choose_leaving_row() const {
+double Simplex::slot_infeasibility(Index slot) const {
+  const auto s = static_cast<std::size_t>(slot);
+  const auto k = static_cast<std::size_t>(basis_[s]);
+  const double x = x_basic_[s];
+  const double lo = lower_[k];
+  const double hi = upper_[k];
+  if (is_finite_bound(lo) && x < lo - primal_tolerance_) return lo - x;
+  if (is_finite_bound(hi) && x > hi + primal_tolerance_) return x - hi;
+  return 0.0;
+}
+
+void Simplex::rebuild_infeasible_list() {
+  infeasible_slots_.clear();
+  slot_listed_.assign(static_cast<std::size_t>(m_), 0);
+  for (Index slot = 0; slot < m_; ++slot) note_slot(slot);
+}
+
+void Simplex::note_slot(Index slot) {
+  const auto s = static_cast<std::size_t>(slot);
+  if (slot_listed_[s] != 0 || slot_infeasibility(slot) == 0.0) return;
+  slot_listed_[s] = 1;
+  infeasible_slots_.push_back(slot);
+}
+
+void Simplex::collect_alpha_support() {
+  alpha_support_.clear();
+  for (Index i = 0; i < m_; ++i) {
+    if (alpha_[static_cast<std::size_t>(i)] != 0.0) alpha_support_.push_back(i);
+  }
+}
+
+Index Simplex::choose_leaving_row() {
   // The basic variable furthest outside its bounds, in the dual devex metric: infeasibility
   // squared over the row's reference weight. The weight approximates the norm of row r of
   // B^-1, which is what turns a primal infeasibility into a dual step length - the dual
   // analogue of why the primal prices on d^2 / w rather than on |d|.
+  //
+  // Over the infeasibility list, not every slot (simplex_core.hpp). A listed slot found
+  // feasible is dropped here. Ties go to the lowest slot, which is what the scan over every
+  // slot in order chose, so the list's order does not change the pivot.
   Index best = -1;
   double best_score = 0.0;
   const bool any_rejected = dual_rows_rejected_now_ > 0;
-  for (Index slot = 0; slot < m_; ++slot) {
+  std::size_t kept = 0;
+  for (std::size_t at = 0; at < infeasible_slots_.size(); ++at) {
+    const Index slot = infeasible_slots_[at];
     const auto s = static_cast<std::size_t>(slot);
-    if (any_rejected && dual_row_rejected_[s] != 0) continue;
-    const Index k = basis_[s];
-    const double x = x_basic_[s];
-    const double lo = lower_[static_cast<std::size_t>(k)];
-    const double hi = upper_[static_cast<std::size_t>(k)];
-    double infeasibility = 0.0;
-    if (is_finite_bound(lo) && x < lo - primal_tolerance_) {
-      infeasibility = lo - x;
-    } else if (is_finite_bound(hi) && x > hi + primal_tolerance_) {
-      infeasibility = x - hi;
-    } else {
+    const double infeasibility = slot_infeasibility(slot);
+    if (infeasibility == 0.0) {
+      slot_listed_[s] = 0;
       continue;
     }
+    infeasible_slots_[kept++] = slot;
+    if (any_rejected && dual_row_rejected_[s] != 0) continue;
     const double score = infeasibility * infeasibility / dual_weight_[s];
-    if (score > best_score) {
+    if (score > best_score || (score == best_score && best >= 0 && slot < best)) {
       best_score = score;
       best = slot;
     }
   }
+  infeasible_slots_.resize(kept);
   return best;
 }
 
@@ -447,11 +479,11 @@ void Simplex::update_dual_weights(Index leaving_slot, double pivot) {
     lu_.solve(tau_.data());  // tau = B^-1 rho_r: the cross terms rho_i . rho_r
     const double inverse_pivot = 1.0 / pivot;
     bool healthy = std::isfinite(weight_r) && weight_r > 0.0;
-    for (Index slot = 0; slot < m_ && healthy; ++slot) {
+    for (const Index slot : alpha_support_) {
+      if (!healthy) break;
       const auto s = static_cast<std::size_t>(slot);
       if (s == r) continue;
       const double a = alpha_[s];
-      if (a == 0.0) continue;
       const double ratio = a * inverse_pivot;
       const double w = dual_weight_[s] - 2.0 * ratio * tau_[s] + ratio * ratio * weight_r;
       if (!std::isfinite(w)) {
@@ -480,11 +512,10 @@ void Simplex::update_dual_weights(Index leaving_slot, double pivot) {
   // column takes over gets w_r / alpha_rq^2, floored at 1. Exact steepest edge subtracts a
   // cross term that needs a second FTRAN; devex drops it and keeps the max, so the weights
   // only grow inside a reference framework and are reset once they drift too far.
-  for (Index slot = 0; slot < m_; ++slot) {
+  for (const Index slot : alpha_support_) {
     const auto s = static_cast<std::size_t>(slot);
     if (s == r) continue;
     const double a = alpha_[s];
-    if (a == 0.0) continue;
     const double ratio = a * inverse_pivot;
     const double candidate = ratio * ratio * weight_r;
     if (candidate > dual_weight_[s]) dual_weight_[s] = candidate;
@@ -514,6 +545,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
 #endif
   compute_reduced_costs(false);
   make_dual_feasible();
+  rebuild_infeasible_list();
   reset_dual_weights();
   // #465: the Harris ratio test is the LP default since its A/B ("auto"; branch and bound
   // resolves "auto" to textbook for its own LPs, mip::with_node_lp_defaults); the start
@@ -555,6 +587,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     if (!refactorize()) return false;
     ++refactorizations_;
     compute_basic_values();
+    rebuild_infeasible_list();
     compute_reduced_costs(false);
     return true;
   };
@@ -752,6 +785,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       for (Index i = 0; i < m_; ++i) {
         x_basic_[static_cast<std::size_t>(i)] += flip_rhs_[static_cast<std::size_t>(i)];
       }
+      rebuild_infeasible_list();
       charge(6);
     }
 
@@ -832,6 +866,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     const Index entering = ratio.entering;
     const auto e = static_cast<std::size_t>(entering);
     ftran_entering_column(entering);
+    collect_alpha_support();
     charge(3);
     const double pivot = alpha_[static_cast<std::size_t>(leaving_slot)];
     const double pivot_by_row = pivot_row_[e];
@@ -877,6 +912,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
         for (Index i = 0; i < m_; ++i) {
           x_basic_[static_cast<std::size_t>(i)] -= flip_rhs_[static_cast<std::size_t>(i)];
         }
+        rebuild_infeasible_list();
       }
       dual_row_rejected_[static_cast<std::size_t>(leaving_slot)] = 1;
       ++dual_rows_rejected_now_;
@@ -955,10 +991,14 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     // and pivot_row_ holds 0 there because it was basic, so its reduced cost is set by hand;
     // the entering column's is zero by construction. The recomputation still happens
     // wherever the factors are fresh: at every refactorization, and at every refresh().
-    for (Index i = 0; i < m_; ++i) {
+    // x_B moves only on alpha's support; the slots it moves are the ones that can have
+    // left their bounds, so they join the infeasibility list here (simplex_core.hpp).
+    for (const Index i : alpha_support_) {
       x_basic_[static_cast<std::size_t>(i)] -= delta * alpha_[static_cast<std::size_t>(i)];
     }
     x_basic_[static_cast<std::size_t>(leaving_slot)] = nonbasic_value_[e];
+    for (const Index i : alpha_support_) note_slot(i);
+    note_slot(leaving_slot);
     charge(6);
     // HYPER-SPARSE WHEN THE ROW IS (Hall and McKinnon, "Hyper-sparsity in the revised
     // simplex method and how to exploit it", Comput. Optim. Appl. 32 (2005)): the entries
@@ -999,6 +1039,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       charge(5);
       // Fresh factors: whatever the updates above accumulated is replaced by the truth.
       compute_basic_values();
+      rebuild_infeasible_list();
       charge(6);
       compute_reduced_costs(false);
       charge(7);
