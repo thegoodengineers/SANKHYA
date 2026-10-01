@@ -250,14 +250,15 @@ def main() -> int:
     # 5. evidence bundle and replay
     t = time.perf_counter()
     bundle = work / "finale_bundle.zip"
-    made = run([PY, "tools/bundle.py", milp, "--binary", binary, "--bundle", bundle])
+    made = run([PY, "tools/bundle.py", milp, "--binary", binary, "--certificate", "--bundle",
+                bundle])
     if made.returncode != 0:
         fail(5, "bundle", "bundling failed", made)
     replay = run([PY, "tools/replay_bundle.py", bundle])
     if replay.returncode != 0:
         fail(5, "bundle", "the replay failed", replay)
     step(5, "bundle", t, f"{bundle.name} ({bundle.stat().st_size // 1024} KiB) replayed: "
-         f"manifest intact, verifier passes")
+         f"manifest intact, verifier passes, proof checked exactly")
 
     # 6. crude price scenarios in one run
     t = time.perf_counter()

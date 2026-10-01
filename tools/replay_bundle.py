@@ -10,7 +10,10 @@
    manifest - was edited after the fact fails HERE, before anything downstream trusts it.
 2. `tools/verify_solution.py` is run on the bundled model and solution: the same independent
    check (no code shared with the solver) a fresh solve gets.
-3. With `--resolve <binary>`, the bundled model is re-solved with the bundled options and
+3. When the bundle carries a MILP proof (`tools/bundle.py --certificate`),
+   `tools/verify_certificate.py` checks it against the bundled model in exact rational
+   arithmetic, with the same 1e-9 row tolerance on the plan as `demo/finale.py` step 2.
+4. With `--resolve <binary>`, the bundled model is re-solved with the bundled options and
    the objective/status compared against the bundled `stats.json` - the strongest replay,
    available whenever a matching binary exists to run.
 
@@ -33,6 +36,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VERIFY_SOLUTION = REPO_ROOT / "tools" / "verify_solution.py"
+VERIFY_CERTIFICATE = REPO_ROOT / "tools" / "verify_certificate.py"
 
 
 def _subprocess_env() -> dict:
@@ -110,6 +114,24 @@ def replay(bundle_path: Path, resolve_binary: Path | None) -> None:
                 f"verify_solution.py rejected the bundled solution (exit {result.returncode}):\n"
                 f"{result.stdout}\n{result.stderr}")
         print("[PASS] verify_solution.py accepts the bundled model/solution pair")
+
+        certificate = manifest.get("certificate_file")
+        if certificate:
+            cert_path = staging / certificate
+            if not cert_path.is_file():
+                raise ReplayError(f"the manifest names {certificate}, which is not in the bundle")
+            proof = subprocess.run(
+                [sys.executable, str(VERIFY_CERTIFICATE), str(cert_path), "--mps",
+                 str(model_path), "--feas-tol", "1e-9"],
+                capture_output=True, text=True)
+            if proof.returncode != 0:
+                raise ReplayError(
+                    f"verify_certificate.py rejected the bundled proof (exit {proof.returncode}):"
+                    f"\n{proof.stdout}\n{proof.stderr}")
+            print("[PASS] verify_certificate.py accepts the bundled MILP proof in exact "
+                  "arithmetic")
+        else:
+            print("[----] no MILP proof in the bundle (made without --certificate, or an LP)")
 
         if resolve_binary is not None:
             stats_before = json.loads((staging / "stats.json").read_text(encoding="utf-8"))

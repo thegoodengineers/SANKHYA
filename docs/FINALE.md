@@ -22,7 +22,7 @@ script runs; the script stops at the first step whose check fails.
 | 2 prove | `tools/verify_certificate.py` (exact rational arithmetic, VIPR) and `tools/verify_solution.py` | both verdicts |
 | 3 plan | the same plant as an LP with `--ranging`, read by `tools/report.py`; then the eight binding limits with the largest shadow price, each re-solved one unit looser | the LP optimum, how many limits bind and how many are priced at a degenerate vertex, the limits whose next unit is worth most as the re-solves measured it, beside their prices, and on how many the price overstates the next unit |
 | 4 repair | one delivery commitment raised tenfold (then 100x, 1000x) until the plant cannot meet it; `tools/verify_solution.py` checks the Farkas certificate; `tools/repair_infeasibility.py` finds the smallest repair | the proof, the repair's size and the limits it moves |
-| 5 bundle | `tools/bundle.py` then `tools/replay_bundle.py` on the MILP run | the bundle replays: manifest intact, verifier passes |
+| 5 bundle | `tools/bundle.py --certificate` then `tools/replay_bundle.py` on the MILP run | the bundle replays: manifest intact, verifier passes, the bundled VIPR proof checked by `tools/verify_certificate.py` |
 | 6 prices | twenty crude price sets through `sankhya scenarios` (#752) | how many verified, the objective's range |
 | 7 replan | today's crude prices and product demands (market and commitment together) moved (`bench/runners/replan_warm_start.py`'s edit), the LP solved cold and with `--warm-start` from step 3's `.sol` (#218), both checked by `tools/verify_solution.py` | the pivot counts side by side, the shared optimum |
 
