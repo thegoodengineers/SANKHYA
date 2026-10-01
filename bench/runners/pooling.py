@@ -27,7 +27,7 @@ Usage:
     python bench/runners/pooling.py
     python bench/runners/pooling.py --binary build/sankhya --time-limit 60
     python bench/runners/pooling.py --instances haverly1 foulds2 --formulations pq
-    python bench/runners/pooling.py --solver-option nonconvex=global
+    python bench/runners/pooling.py --solver-option node_limit=1000
 """
 from __future__ import annotations
 
@@ -169,6 +169,13 @@ def default_binary() -> Path:
         raise SystemExit(str(error))
 
 
+# Every pooling model has quadratic rows, and the reader refuses a non-convex one unless
+# nonconvex=global asks for spatial branch-and-bound: without it all 39 runs are `refused`.
+# This benchmark measures the global optimum, so the mode is part of the runner, not a
+# --solver-option, and a run with it is the tier's default run (latest_result.is_default_run).
+RUNNER_OPTIONS = ["nonconvex=global"]
+
+
 def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
             solver_options: list[str]) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
@@ -177,7 +184,7 @@ def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
         command = [str(binary), "solve", str(mps), "--stats", str(stats_path), "--write-sol",
                    str(sol_path), "--time-limit", str(time_limit), "--option",
                    "log_to_console=false"]
-        for option in solver_options:
+        for option in RUNNER_OPTIONS + solver_options:
             command += ["--option", option]
         started = time.perf_counter()
         completed = subprocess.run(command, capture_output=True, text=True)
