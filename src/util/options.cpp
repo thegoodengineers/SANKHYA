@@ -232,13 +232,16 @@ const std::vector<OptionSpec>& Options::registry() {
                  {"product-form", "forrest-tomlin"}});
     s.push_back({"lu_hyper_sparse",
                  OptionType::Bool,
-                 false,
+                 true,
                  "Hyper-sparse FTRAN and BTRAN in the simplex (#464; Gilbert and Peierls "
                  "1988, Hall and McKinnon 2005): a search over the LU factors' graphs from "
                  "the right-hand side's nonzeros finds the steps the result can reach, and "
                  "the solve runs over those alone, in the same order as the full loops, so "
                  "the results and the pivots are identical. Falls back to the full loops "
-                 "above 10% of the rows. Off by default until its A/B on main.",
+                 "above 10% of the rows, and skips the search for a solve kind whose recent "
+                 "results were that dense (#873). On by default from its CPU-time A/B "
+                 "(bench/results/lu-hs-auto-cpu-ab-*): Netlib 0.974x, Kennington 0.706x, "
+                 "iteration counts unchanged.",
                  0.0,
                  0.0,
                  {}});

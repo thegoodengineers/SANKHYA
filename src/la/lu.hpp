@@ -139,7 +139,8 @@ class SparseLu {
   /// the full loops visit them - so the result is the same to the last bit. A right-hand
   /// side or a reach above tol::kHyperSparseDensity of m falls back to the full loops, and
   /// a solve whose DensityHistory predicts a result above that fraction goes to them
-  /// without the search (#464). Off by default until its A/B; sticky across factorize().
+  /// without the search (#464). On by default in the simplex since its A/B; sticky across
+  /// factorize().
   void use_hyper_sparse(bool on) noexcept { hyper_sparse_ = on; }
   [[nodiscard]] bool hyper_sparse() const noexcept { return hyper_sparse_; }
   /// Result densities of every solve since construction, whichever path took it.
