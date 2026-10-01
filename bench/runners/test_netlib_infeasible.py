@@ -120,6 +120,17 @@ def test_read_certificate() -> None:
     check(read("") == ("", 0), "an empty file has no certificate")
 
 
+def test_iis_verdict() -> None:
+    both = ("  [PASS] IIS                          3 element(s): 2 row(s), 1 col_lo bound(s), "
+            "0 col_hi bound(s)\n  [PASS] IIS is infeasible on its own  ...\n"
+            "  [PASS] IIS is irreducible            each of the 3 witnesses ...\n")
+    one = both.replace("[PASS] IIS is irreducible", "[FAIL] IIS is irreducible")
+    verdict = netlib_infeasible.iis_verdict
+    check(verdict(both) == (3, 1), "both properties passed", str(verdict(both)))
+    check(verdict(one) == (3, 0), "a failed property is not verified", str(verdict(one)))
+    check(verdict("VERIFIED: 4 checks passed") == ("", ""), "no IIS named")
+
+
 def test_classify() -> None:
     ok = ("  [PASS] infeasibility proof                the rows aggregate to at least "
           "1.1e+01, the column bounds allow at most 0\nVERIFIED: 4 checks passed")
@@ -169,6 +180,7 @@ if __name__ == "__main__":
     test_summary_table()
     test_line_ending_blind_hash()
     test_read_certificate()
+    test_iis_verdict()
     test_classify()
     print(f"{FAILURES} check(s) FAILED" if FAILURES else "all checks passed")
     sys.exit(1 if FAILURES else 0)
