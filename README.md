@@ -367,6 +367,7 @@ the count is not typed here, because a typed count goes stale the day a test is 
 ./build/sankhya info  demo/crude_blend.mps
 ./build/sankhya solve demo/crude_blend.mps --write-sol blend.sol --stats blend.json
 ./build/sankhya solve demo/crude_blend.mps --progress-out progress.jsonl
+./build/sankhya solve demo/crude_blend.mps --warm-start blend.sol
 ```
 
 `demo/crude_blend.mps` is a small crude-blending LP: three crudes into a diesel pool, with a
@@ -447,6 +448,11 @@ which ones. The demo's production-planning scene prints the top three.
 runs, flushed immediately - an operator can `tail -f` it during a long solve to watch the
 bound close in on the answer without waiting for the final report.
 
+`--warm-start previous.sol` starts the simplex from the basis a previous `.sol` file of the
+same model carries (#218), matched by name, presolve bypassed: yesterday's plan re-solved
+with today's prices and demands. `bench/runners/replan_warm_start.py` measures it cold
+against warm on the refinery case study, and `demo/finale.sh` step 7 shows it.
+
 The solver supports graceful interruption. Pressing Ctrl-C (`SIGINT`) in the CLI stops the solve at the next safe point and returns the best found point as an `interrupted` result. The Python bindings expose `Model.interrupt()` and support progress callbacks; returning a non-zero value from a Python callback (or via `sankhya_set_callback` in C) interrupts the solve gracefully.
 
 ## Demo
@@ -462,12 +468,13 @@ demo/finale.sh --dry         # the finale walk's machine check: binary, GPU, Pyt
 demo/finale.sh               # one refinery MILP solved, proved, re-planned (Windows: demo\finale.cmd)
 ```
 
-`demo/finale.sh` (#758, [`docs/FINALE.md`](docs/FINALE.md)) is six steps on the small refinery
+`demo/finale.sh` (#758, [`docs/FINALE.md`](docs/FINALE.md)) is seven steps on the small refinery
 MILP, each one line and its time: the solve with a VIPR certificate (on the GPU when the binary
 reports one), the certificate checked in exact arithmetic and the plan by the independent
 verifier, the binding limits and their shadow prices on the LP, a delivery commitment raised
 until the plant cannot meet it with the Farkas proof checked and the smallest repair, an
-evidence bundle made and replayed, and twenty price sets through `sankhya scenarios`. On the
+evidence bundle made and replayed, twenty price sets through `sankhya scenarios`, and the plan
+re-solved with today's prices and commitments cold and from yesterday's basis (`--warm-start`). On the
 laptop CPU at `04c372c` the whole walk took 34.5 s and 40.7 s in two runs on a busy machine, and 0.4 s in the CI Release leg; it has not been timed on a card.
 
 The nine Netlib instances are committed, so the demo needs no network. Every number it prints

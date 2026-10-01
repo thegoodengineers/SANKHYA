@@ -72,6 +72,7 @@ add_executable(sankhya_tests
   unit/test_solver_engine.cpp
   unit/test_solver_engine_conformance.cpp
   unit/test_warm_start.cpp
+  unit/test_sol_reader.cpp
   unit/test_scenarios.cpp
   unit/test_writer.cpp
   unit/test_iis.cpp

@@ -5,7 +5,7 @@
     demo/finale.sh            (Linux, macOS, Git Bash)      demo\\finale.cmd   (Windows)
     python demo/finale.py [--dry] [--binary PATH] [--keep DIR]
 
-Six steps, each printing one line of result and the seconds it took. Every number printed
+Seven steps, each printing one line of result and the seconds it took. Every number printed
 comes from a command this script runs in front of the audience; nothing is typed in.
 
   1. solve   the small refinery MILP (bench/case_studies/refinery, #517; the medium one does
@@ -21,6 +21,9 @@ comes from a command this script runs in front of the audience; nothing is typed
   5. bundle  the MILP run is packed into an evidence bundle (#526) and replayed
   6. prices  twenty crude price sets solved in one scenario run (#752), every answer
              verified
+  7. replan  today's prices and commitments moved, the plan re-solved cold and from
+             yesterday's basis (`--warm-start`, #218): the same verified optimum, the
+             pivot counts side by side
 
 Runs from a checkout or an unpacked release archive (#748): it needs the `sankhya` binary in
 build/ (or --binary), the Python standard library, and nothing from the network. `--dry`
@@ -117,7 +120,8 @@ def main() -> int:
     print(f"engine  {'GPU: ' + gpu_match.group(1) if gpu else 'CPU (no GPU device reported)'}")
     needed = ["tools/verify_certificate.py", "tools/verify_solution.py", "tools/report.py",
               "tools/bundle.py", "tools/replay_bundle.py", "tools/repair_infeasibility.py",
-              "bench/case_studies/refinery/generator.py", "bindings/python/sankhya/__init__.py"]
+              "bench/case_studies/refinery/generator.py", "bench/runners/replan_warm_start.py",
+              "bindings/python/sankhya/__init__.py"]
     missing = [p for p in needed if not (ROOT / p).is_file()]
     if missing:
         print("missing: " + ", ".join(missing))
@@ -275,6 +279,40 @@ def main() -> int:
     objectives = [float(r["objective"]) for r in rows if r["objective"] not in ("", "-")]
     step(6, "prices", t, f"{len(rows)} price sets, {sum(r['verified'] == 'yes' for r in rows)} "
          f"verified, objective {min(objectives):,.0f} to {max(objectives):,.0f}")
+
+    # 7. re-plan from yesterday's basis
+    t = time.perf_counter()
+    sys.path.insert(0, str(ROOT / "bench" / "runners"))
+    from replan_warm_start import perturb_mps
+    today = work / "refinery_today.mps"
+    # A morning whose commitments the plant cannot meet is step 4's story, not this one's:
+    # the small plant runs near its limits, so a draw that makes today infeasible is skipped
+    # (the line says how many were) and the next seed's morning is re-planned.
+    for skipped in range(10):
+        prices, commits = perturb_mps(lp, today, random.Random(759 + skipped), 0.10)
+        probe = run([binary, "solve", today])
+        if field(probe.stdout, "status") == "optimal":
+            break
+    else:
+        fail(7, "replan", "ten mornings in a row were infeasible", probe)
+    pivots, objectives = {}, {}
+    for arm, extra in (("cold", []), ("warm", ["--warm-start", lp_sol])):
+        sol, stats = work / f"today_{arm}.sol", work / f"today_{arm}.json"
+        proc = run([binary, "solve", today, "--write-sol", sol, "--stats", stats, *extra])
+        if field(proc.stdout, "status") != "optimal":
+            fail(7, "replan", f"the {arm} re-solve did not reach optimal", proc)
+        check = run([PY, "tools/verify_solution.py", today, sol, "--quiet"])
+        if check.returncode != 0:
+            fail(7, "replan", f"the verifier rejected the {arm} re-solve", check)
+        blob = json.loads(stats.read_text())
+        pivots[arm], objectives[arm] = blob["effort"]["iterations"], blob["result"]["objective"]
+    if abs(objectives["cold"] - objectives["warm"]) > 1e-6 * max(1.0, abs(objectives["cold"])):
+        fail(7, "replan", f"cold {objectives['cold']} and warm {objectives['warm']} disagree",
+             proc)
+    step(7, "replan", t, f"{prices} prices and {commits} commitments moved"
+         f"{f' ({skipped} infeasible morning(s) skipped)' if skipped else ''}: cold {pivots['cold']} "
+         f"pivots, from yesterday's basis {pivots['warm']}; same optimum "
+         f"{objectives['warm']:,.2f}, both verified")
 
     print(f"\nthe whole walk: {time.perf_counter() - total:.1f} s")
     if args.keep:
