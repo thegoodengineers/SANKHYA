@@ -2154,6 +2154,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"prescale_retry",
+                 OptionType::Bool,
+                 true,
+                 "When an LP ends in a numerical error or a withdrawn optimality claim, solve "
+                 "it once more on the model equilibrated by powers of two (an exact change of "
+                 "variables) on the remaining time, and adopt that answer only when the status "
+                 "guard accepts it against the original model (#792). Disable to skip the "
+                 "extra solve.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"certificate_elastic",
                  OptionType::Bool,
                  true,
