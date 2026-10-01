@@ -21,7 +21,7 @@ comes from a command this script runs in front of the audience; nothing is typed
   5. bundle  the MILP run is packed into an evidence bundle (#526) and replayed
   6. prices  twenty crude price sets solved in one scenario run (#752), every answer
              verified
-  7. replan  today's prices and commitments moved, the plan re-solved cold and from
+  7. replan  today's prices and demands moved, the plan re-solved cold and from
              yesterday's basis (`--warm-start`, #218): the same verified optimum, the
              pivot counts side by side
 
@@ -285,7 +285,7 @@ def main() -> int:
     sys.path.insert(0, str(ROOT / "bench" / "runners"))
     from replan_warm_start import perturb_mps
     today = work / "refinery_today.mps"
-    # A morning whose commitments the plant cannot meet is step 4's story, not this one's:
+    # A morning whose demands the plant cannot meet is step 4's story, not this one's:
     # the small plant runs near its limits, so a draw that makes today infeasible is skipped
     # (the line says how many were) and the next seed's morning is re-planned.
     for skipped in range(10):
@@ -309,7 +309,7 @@ def main() -> int:
     if abs(objectives["cold"] - objectives["warm"]) > 1e-6 * max(1.0, abs(objectives["cold"])):
         fail(7, "replan", f"cold {objectives['cold']} and warm {objectives['warm']} disagree",
              proc)
-    step(7, "replan", t, f"{prices} prices and {commits} commitments moved"
+    step(7, "replan", t, f"{prices} prices and {commits} demands moved"
          f"{f' ({skipped} infeasible morning(s) skipped)' if skipped else ''}: cold {pivots['cold']} "
          f"pivots, from yesterday's basis {pivots['warm']}; same optimum "
          f"{objectives['warm']:,.2f}, both verified")

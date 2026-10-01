@@ -24,7 +24,7 @@ script runs; the script stops at the first step whose check fails.
 | 4 repair | one delivery commitment raised tenfold (then 100x, 1000x) until the plant cannot meet it; `tools/verify_solution.py` checks the Farkas certificate; `tools/repair_infeasibility.py` finds the smallest repair | the proof, the repair's size and the limits it moves |
 | 5 bundle | `tools/bundle.py` then `tools/replay_bundle.py` on the MILP run | the bundle replays: manifest intact, verifier passes |
 | 6 prices | twenty crude price sets through `sankhya scenarios` (#752) | how many verified, the objective's range |
-| 7 replan | today's crude prices and delivery commitments moved (`bench/runners/replan_warm_start.py`'s edit), the LP solved cold and with `--warm-start` from step 3's `.sol` (#218), both checked by `tools/verify_solution.py` | the pivot counts side by side, the shared optimum |
+| 7 replan | today's crude prices and product demands (market and commitment together) moved (`bench/runners/replan_warm_start.py`'s edit), the LP solved cold and with `--warm-start` from step 3's `.sol` (#218), both checked by `tools/verify_solution.py` | the pivot counts side by side, the shared optimum |
 
 ## Why step 3 re-solves
 
