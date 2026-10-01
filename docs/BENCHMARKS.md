@@ -2044,6 +2044,17 @@ Commit `5e490ef` · machine `cloud container (docker); Intel(R) Xeon(R) Processo
 | CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.355 s |
 | GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.486 s |
 
+**Instance by instance, SANKHYA against each rival:**
+
+| against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
+|---|---:|---:|---:|---:|---:|---:|
+| HiGHS | 92 | 3 | 72 | 17 | 1.00x | 1.08x |
+| SCIP | 92 | 20 | 65 | 7 | 1.00x | 0.42x |
+| CBC/Clp | 92 | 6 | 71 | 15 | 1.00x | 0.72x |
+| GLPK | 92 | 7 | 72 | 13 | 1.00x | 1.86x |
+
+*A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
+
 **The two generated from netlib.org's Fortran bundles (#745), `truss` and `stocfor3`:**
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
@@ -2087,6 +2098,17 @@ Commit `1860864` · machine `cloud container (docker); Intel(R) Xeon(R) Processo
 | CBC/Clp | 1.17.9 | 16 | 16 | 16 | 16 | primal+dual | 0.795 s |
 | GLPK | 5.0 | 16 | 15 | 15 | 15 | primal+dual | 7.345 s |
 
+**Instance by instance, SANKHYA against each rival:**
+
+| against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
+|---|---:|---:|---:|---:|---:|---:|
+| HiGHS | 16 | 3 | 2 | 11 | 2.83x | 3.12x |
+| SCIP | 16 | 6 | 1 | 9 | 1.25x | 1.25x |
+| CBC/Clp | 16 | 1 | 2 | 13 | 2.86x | 4.39x |
+| GLPK | 16 | 9 | 1 | 6 | 0.98x | 0.74x |
+
+*A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
+
 ![Dolan-More performance profile, Kennington LP](img/profile-kennington.svg)
 
 *`docs/img/profile-kennington.svg`, drawn from the CSV by `bench/runners/perf_profile.py` each time this document is generated. A curve's height at tau is the fraction of the instances above on which that solver's run counted and took at most tau times the fastest counted run; times under 0.1 s are floored there (GLPK's clock resolution), so the fast end is a tie.*
@@ -2110,6 +2132,16 @@ Commit `1860864` · machine `cloud container (docker); Intel(R) Xeon(R) Processo
 | SCIP | 10.0.2 | 138 | 78 | 76 | 53 | primal-only | 27.436 s |
 | CBC/Clp | 1.17.9 | 138 | 127 | 113 | 62 | primal+dual | 20.974 s |
 | GLPK | - | 138 | unsupported | - | - | - | - |
+
+**Instance by instance, SANKHYA against each rival:**
+
+| against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
+|---|---:|---:|---:|---:|---:|---:|
+| HiGHS | 109 | 82 | 22 | 5 | 1.00x | 0.26x |
+| SCIP | 114 | 87 | 19 | 8 | 0.52x | 0.03x |
+| CBC/Clp | 118 | 75 | 28 | 15 | 1.00x | 0.24x |
+
+*A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
 
 ![Dolan-More performance profile, Maros-Meszaros QP](img/profile-maros-meszaros.svg)
 

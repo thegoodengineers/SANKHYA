@@ -192,6 +192,24 @@ check(perf_profile.profile(r["highs"], 1.0) == 1.0
 image = perf_profile.svg("t", r)
 check(image.startswith("<svg") and image.count("<polyline") == 2, "one curve per solver")
 
+print("per-instance wins")
+EXTRA = [
+    {"instance": "d", "solver": "sankhya", "counted_for_time": "1", "solver_seconds": "1.05"},
+    {"instance": "d", "solver": "highs", "counted_for_time": "1", "solver_seconds": "1"},
+    {"instance": "e", "solver": "sankhya", "counted_for_time": "1", "solver_seconds": "1"},
+    {"instance": "e", "solver": "highs", "counted_for_time": "0", "solver_seconds": "9"},
+    {"instance": "f", "solver": "sankhya", "counted_for_time": "0", "solver_seconds": "1"},
+    {"instance": "f", "solver": "highs", "counted_for_time": "0", "solver_seconds": "1"},
+]
+s = head_to_head_doc.per_instance(ROWS + EXTRA, "highs")
+check((s["wins"], s["ties"], s["losses"], s["compared"]) == (1, 2, 2, 5),
+      "2x slower and a failure lose, under the floor and within 10% tie, a rival's failure "
+      "wins, neither counting is left out", str(s))
+check(s["median"] == 1.05 and s["median_raw"] == 1.05,
+      "median ratio over the three both counted on: floored 2, 1, 1.05; raw 2, 0.5, 1.05",
+      str(s))
+check(head_to_head_doc.per_instance(ROWS, "glpk") is None, "an absent rival gets no row")
+
 print("doc section")
 with tempfile.TemporaryDirectory() as tmp:
     path = Path(tmp) / "head-to-head-netlib-abc1234.csv"
@@ -225,6 +243,8 @@ with tempfile.TemporaryDirectory() as tmp:
           "the headline excludes the generated truss and stocfor3")
     check("`truss` and `stocfor3`" in text, "and reports them beside it")
     check("`e226` (optimal, rejected by the verifier)" in text, "a rejection is named")
+    check("| GLPK | 2 | 0 | 0 | 2 | 5.00x | 5.00x |" in text,
+          "the per-instance row: afiro 5x slower, e226 not counted, both losses")
     check("### 4a.3 Maros-Meszaros QP" in text and "no numbers" in text,
           "a missing suite states no numbers")
     check((img / "profile-netlib.svg").exists(), "the profile figure is written")
