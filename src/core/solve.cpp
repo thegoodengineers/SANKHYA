@@ -64,6 +64,7 @@
 #include "core/iis.hpp"
 #include "core/kkt_check.hpp"
 #include "core/lp_safe_bound.hpp"
+#include "core/prescale.hpp"
 #include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
 #include "core/status_guard.hpp"
@@ -363,6 +364,9 @@ void polish_with_the_interior_point(Solution* first, const Model& model, const O
 
 /// PDHG's share of a finite time limit when a polish is to follow; the rest is the polish's.
 constexpr double kPdhgShareOfTheTimeLimit = 0.7;
+/// Ruiz rounds for the prescaled retry (#792): the engine's own equilibration uses 10; the
+/// factors are rounded to powers of two afterwards, so a few more rounds cost nothing.
+constexpr int kPrescalePasses = 20;
 
 void reconcile_status_with_measurement(const Model& model, Solution* solution,
                                        const Options& options, Logger& logger,
@@ -1091,6 +1095,77 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     }
     if (!race && !warm_requested) certify_by_elastic();
     refuse_an_unproved_infeasibility(model, &solution, logger);
+    // THE PRESCALED RETRY (#792). An LP that came back without a verdict - a numerical
+    // error, or an optimality claim the guard withdrew - is solved once more through the
+    // same pipeline on the model equilibrated by powers of two (src/core/prescale.hpp),
+    // so presolve, the engine's own scaling and the status guard all see numbers of one
+    // size, and the answer maps back exactly. The retry runs on what the time limit has
+    // left, and is adopted only when the guard accepts it against the ORIGINAL model;
+    // otherwise the first answer stands and the message says the retry was made. Never
+    // on the engine race or a warm start (both bypass this pipeline's presolve), never
+    // when equilibration would change nothing, and never for a MIP or QP, which presolve
+    // and postsolve treat differently. Measured on the stress set of #762: 15 of the 18
+    // scaled Netlib models the default path left without a verdict at 0e1a0d25 solve.
+    const bool no_verdict = solution.status == SolveStatus::kNumericalError ||
+                            solution.status == SolveStatus::kFeasible;
+    if (no_verdict && !race && !warm_requested && !model.has_integrality() &&
+        !model.has_quadratic_objective() && options.get_bool("prescale_retry")) {
+      const PrescaledModel prescaled = prescale_by_powers_of_two(model, kPrescalePasses);
+      const bool changes_something =
+          std::any_of(prescaled.row.begin(), prescaled.row.end(),
+                      [](double r) { return r != 1.0; }) ||
+          std::any_of(prescaled.column.begin(), prescaled.column.end(),
+                      [](double c) { return c != 1.0; });
+      const bool time_left =
+          !limits.has_time_limit() || limits.remaining_seconds(timer.elapsed_seconds()) > 0.0;
+      if (changes_something && time_left) {
+        logger.info(
+            "Prescaled retry (#792): the answer was {}; solving the model equilibrated "
+            "by powers of two on the remaining time",
+            to_string(solution.status));
+        bool proved_on_retry = false;
+        const std::function<Solution(const Model&)> run_engine_fn = run_lp_engine;
+        PresolveOutcome outcome = run_with_presolve(prescaled.model, options, logger, timer,
+                                                    problem_class, run_engine_fn);
+        proved_on_retry = outcome.proved;
+        Solution retry = std::move(outcome.solution);
+        unscale_solution(prescaled, &retry);
+        retry.recompute_quality(model);
+        retry.solve_seconds = timer.elapsed_seconds();
+        if (!proved_on_retry) {
+          reconcile_status_with_measurement(model, &retry, options, logger,
+                                            /*check_dual=*/true);
+        }
+        refuse_a_non_finite_answer(&retry, logger);
+        record_why_it_stopped(&retry);
+        say_which_engine_ran(&retry);
+        verify_and_keep_certificate(&retry, model, logger);
+        refuse_an_unproved_infeasibility(model, &retry, logger);
+        const bool adopt =
+            retry.status == SolveStatus::kOptimal ||
+            (retry.status == SolveStatus::kInfeasible && !retry.farkas_dual.empty()) ||
+            (retry.status == SolveStatus::kUnbounded && !retry.primal_ray.empty());
+        if (adopt) {
+          retry.engine_rule = solution.engine_rule;
+          retry.engine_reason = solution.engine_reason;
+          const std::string note = fmt::format(
+              "the first attempt ended {}; this answer is the retry on the model "
+              "equilibrated by powers of two (#792)",
+              to_string(solution.status));
+          retry.message = retry.message.empty() ? note : retry.message + "; " + note;
+          solution = std::move(retry);
+          logger.info("Prescaled retry (#792): adopted, {}", to_string(solution.status));
+        } else {
+          solution.message += fmt::format(
+              "; a retry on the model equilibrated by powers of two ended {} and was not "
+              "adopted (#792)",
+              to_string(retry.status));
+          solution.solve_seconds = timer.elapsed_seconds();
+          logger.info("Prescaled retry (#792): ended {}; the first answer stands",
+                      to_string(retry.status));
+        }
+      }
+    }
     // Sensitivity ranging runs on the ORIGINAL model after postsolve so the vectors are
     // full-size and the basis is expressed in terms of original column and row indices.
     detail::compute_ranging(model, options, logger, solution);

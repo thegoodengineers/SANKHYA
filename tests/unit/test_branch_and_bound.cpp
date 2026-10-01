@@ -35,6 +35,9 @@ using testing::TempFile;
 
 Options mip_options() {
   Options options;
+  // One root round: these tests measure the tree, and on models this small the root
+  // separation loop (#495, on by default) closes the gap before there is a tree.
+  options.set_bool("root_cut_loop", false);
   options.set_bool("log_to_console", false);
   options.set_int("node_limit", 20000);
   return options;
@@ -1024,7 +1027,8 @@ TEST(ObjectiveIntegrality, RoundsTheBoundAndProvesTheIncumbentAtTheRoot) {
   const Model model = make_integral_objective_model();
   Options on = mip_options();
   on.set_int("cut_dense_max", 0);  // tiny model: every cut is dense, and the tree is the test
-  on.set_int("cut_support_floor", 0);  // the density cap as the tree was measured (#496)
+  on.set_bool("root_cut_loop", false);  // one root round, as the tree was measured (#495)
+  on.set_int("cut_support_floor", 0);   // the density cap as the tree was measured (#496)
   Options off = on;
   off.set_bool("mip_objective_integrality", false);
   const Solution with = solve(model, on);
@@ -1041,7 +1045,8 @@ TEST(ObjectiveIntegrality, SeesThroughAColumnDefinedByRowsFromIntegerColumns) {
   const Model model = make_defined_objective_model();
   Options on = mip_options();
   on.set_int("cut_dense_max", 0);  // tiny model: every cut is dense, and the tree is the test
-  on.set_int("cut_support_floor", 0);  // the density cap as the tree was measured (#496)
+  on.set_bool("root_cut_loop", false);  // one root round, as the tree was measured (#495)
+  on.set_int("cut_support_floor", 0);   // the density cap as the tree was measured (#496)
   Options off = on;
   off.set_bool("mip_objective_integrality", false);
   const Solution with = solve(model, on);
@@ -1060,7 +1065,8 @@ TEST(ObjectiveIntegrality, LeavesAFractionalObjectiveAlone) {
   const Model model = make_non_integral_objective_model();
   Options on = mip_options();
   on.set_int("cut_dense_max", 0);  // tiny model: every cut is dense, and the tree is the test
-  on.set_int("cut_support_floor", 0);  // the density cap as the tree was measured (#496)
+  on.set_bool("root_cut_loop", false);  // one root round, as the tree was measured (#495)
+  on.set_int("cut_support_floor", 0);   // the density cap as the tree was measured (#496)
   Options off = on;
   off.set_bool("mip_objective_integrality", false);
   const Solution with = solve(model, on);

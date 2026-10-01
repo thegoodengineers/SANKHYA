@@ -216,6 +216,15 @@ inline constexpr double kMarkowitzThreshold = 0.01;
 /// density bins the LU logs (LuSolveStats) are there to re-set it from our own data.
 inline constexpr double kHyperSparseDensity = 0.10;
 
+/// The weight of the newest result in a solve kind's predicted density
+/// (SparseLu::DensityHistory): predicted += w * (latest - predicted), a memory of roughly
+/// 1/w solves. From a sparse history, one fully dense result lifts the prediction to the
+/// kHyperSparseDensity switch and the next solve skips the symbolic search; a kind that
+/// stays dense stays skipped, and one that turns sparse again comes back under the switch
+/// within about twenty sparse results (0.9^22 < 0.1). A heuristic weight, not a tolerance: it
+/// decides only which of two bitwise-identical solves runs.
+inline constexpr double kHyperSparseHistoryWeight = 0.1;
+
 /// Below this, a computed pivot element is treated as a singular basis rather than a pivot.
 inline constexpr double kPivotTolerance = 1e-9;
 

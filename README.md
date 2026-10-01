@@ -93,6 +93,12 @@ and stays as it was measured. Three more full runs of `main` at `5c15999` (`benc
 #840; a 4-core cloud container, one thread, 120 s) read the same in every run: `optimal`, within
 1e-6 of the exact optimum and verified on **94 of 94**, and 83 matching the readme, the one
 less being `e226`, whose objective constant `netlib.py` leaves out and the head-to-head runner adds.
+On time in that head-to-head run, over the 92 EMPS files: a shifted geometric mean (10 s shift)
+of 0.575 s against HiGHS 1.15.1's 0.163 s, and instance by instance SANKHYA faster on 3, a tie
+on 72 (within 10%, or both under 0.1 s) and HiGHS faster on 17; on the 16 Kennington LPs
+(`head-to-head-kennington-1860864.csv`) 9.430 s against 1.855 s, faster on 3, tied on 2, slower
+on 11. The per-instance split is stated the way rivals state theirs, and the SGM is the number
+to read: most Netlib pairs are ties because most instances finish in milliseconds.
 
 The second is the number Phase 6's ">= 95% of Netlib" criterion is measured against, and it
 grades us against Netlib's own readme table. The third says how often the solver finishes
@@ -104,7 +110,10 @@ Nothing is left to the clock at 120 s. The narrower tiers read higher
 (**48 of 50** on the medium tier, **9 of 9** on the small set the demo runs) because both are
 defined by a row cap, which makes them the easier half by construction. See
 [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md), generated from the CSVs in `bench/results/` so it
-cannot drift.
+cannot drift. [`docs/REPORT.md`](docs/REPORT.md) is the one-document version for a jury,
+generated the same way by `tools/make_report.py`: every headline number with its CSV and
+commit, the head-to-head, the verification story, the limits, and a 25-question Q&A whose
+every answer names the file or section it rests on.
 
 **The eight verified answers that do not match the readme match the exact optimum.** Koch
 recomputed every Netlib optimum in exact rational arithmetic (T. Koch, *The final NETLIB-LP
@@ -367,6 +376,7 @@ the count is not typed here, because a typed count goes stale the day a test is 
 ./build/sankhya info  demo/crude_blend.mps
 ./build/sankhya solve demo/crude_blend.mps --write-sol blend.sol --stats blend.json
 ./build/sankhya solve demo/crude_blend.mps --progress-out progress.jsonl
+./build/sankhya solve demo/crude_blend.mps --warm-start blend.sol
 ```
 
 `demo/crude_blend.mps` is a small crude-blending LP: three crudes into a diesel pool, with a
@@ -447,6 +457,11 @@ which ones. The demo's production-planning scene prints the top three.
 runs, flushed immediately - an operator can `tail -f` it during a long solve to watch the
 bound close in on the answer without waiting for the final report.
 
+`--warm-start previous.sol` starts the simplex from the basis a previous `.sol` file of the
+same model carries (#218), matched by name, presolve bypassed: yesterday's plan re-solved
+with today's prices and demands. `bench/runners/replan_warm_start.py` measures it cold
+against warm on the refinery case study, and `demo/finale.sh` step 7 shows it.
+
 The solver supports graceful interruption. Pressing Ctrl-C (`SIGINT`) in the CLI stops the solve at the next safe point and returns the best found point as an `interrupted` result. The Python bindings expose `Model.interrupt()` and support progress callbacks; returning a non-zero value from a Python callback (or via `sankhya_set_callback` in C) interrupts the solve gracefully.
 
 ## Demo
@@ -462,12 +477,13 @@ demo/finale.sh --dry         # the finale walk's machine check: binary, GPU, Pyt
 demo/finale.sh               # one refinery MILP solved, proved, re-planned (Windows: demo\finale.cmd)
 ```
 
-`demo/finale.sh` (#758, [`docs/FINALE.md`](docs/FINALE.md)) is six steps on the small refinery
+`demo/finale.sh` (#758, [`docs/FINALE.md`](docs/FINALE.md)) is seven steps on the small refinery
 MILP, each one line and its time: the solve with a VIPR certificate (on the GPU when the binary
 reports one), the certificate checked in exact arithmetic and the plan by the independent
 verifier, the binding limits and their shadow prices on the LP, a delivery commitment raised
 until the plant cannot meet it with the Farkas proof checked and the smallest repair, an
-evidence bundle made and replayed, and twenty price sets through `sankhya scenarios`. On the
+evidence bundle made and replayed, twenty price sets through `sankhya scenarios`, and the plan
+re-solved with today's prices and commitments cold and from yesterday's basis (`--warm-start`). On the
 laptop CPU at `04c372c` the whole walk took 34.5 s and 40.7 s in two runs on a busy machine, and 0.4 s in the CI Release leg; it has not been timed on a card.
 
 The nine Netlib instances are committed, so the demo needs no network. Every number it prints
