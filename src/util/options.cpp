@@ -822,6 +822,30 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"certified_gap",
+                 OptionType::Bool,
+                 true,
+                 "LP (#763): give every optimal answer the Neumaier-Shcherbina safe bound of "
+                 "its duals and the certified gap to it (safe_lower_bound in the .sol file "
+                 "and the stats JSON). When the float duals prove no bound within 1e-6 the "
+                 "basis's exact rational duals are tried (within exact_seconds), then, with "
+                 "certified_gap_resolve on, a re-solve with slightly perturbed costs. Off "
+                 "skips all of it.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"certified_gap_resolve",
+                 OptionType::Bool,
+                 false,
+                 "LP (#763), stage 5 of certified_gap: when the float and exact duals of the "
+                 "answer prove no bound within 1e-6, re-solve the LP from scratch with its "
+                 "one-sided columns' costs moved by 1e-9 up to 1e-6, at most four times, all "
+                 "within exact_seconds and the time_limit left. Off by default: on an answer "
+                 "with no basis (PDHG, the GPU) each try is a whole extra solve, so it stays "
+                 "off until a clean A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_strong_branch_fix",
                  OptionType::Bool,
                  false,

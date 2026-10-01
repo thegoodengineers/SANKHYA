@@ -100,6 +100,43 @@ def run(check) -> None:
     check(records == [("A   21 1", "upper", 0.0, "AZ  20"), ("x1", "lower", -2.5, "r0")],
           "safe bound: column-bound records with quoted names parse", repr(records))
 
+    # Exact rational multipliers (the basis's exact duals): min x1 - 2 x0 + 2 x2 over
+    # 3 x0 - x1 - 3 x2 = 1, x >= 0 has the dual -2/3 exactly and the optimum -2/3. A file
+    # carries it as the fraction "-2/3", and the bound it proves is -2/3 exactly: the double
+    # below it is accepted, the double above it is not.
+    face = vs.Model()
+    face.col_names = ["x0", "x1", "x2"]
+    face.col_index = {name: j for j, name in enumerate(face.col_names)}
+    face.col_cost = [-2.0, 1.0, 2.0]
+    face.col_lower = [0.0] * 3
+    face.col_upper = [inf] * 3
+    face.col_integer = [False] * 3
+    face.row_names = ["r0"]
+    face.row_index = {"r0": 0}
+    face.row_lower = [1.0]
+    face.row_upper = [1.0]
+    face.entries = [[(0, 3.0)], [(0, -1.0)], [(0, -3.0)]]
+    check(exact_safe_bound(face, [Fraction(-2, 3)]) == Fraction(-2, 3),
+          "safe bound: an exact fractional multiplier proves the exact optimum")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "exact.sol"
+        path.write_text("status optimal\nbegin safe_multipliers 1\nr0 -2/3\nend safe_multipliers\n")
+        parsed = vs.parse_sol(path).safe_multipliers["r0"]
+    check(parsed == Fraction(-2, 3), "safe bound: a fraction in the file is read exactly",
+          repr(parsed))
+    check(_verdict(face, Fraction(-2, 3), -0.6666666666666667).failures == 0,
+          "safe bound: the double just below -2/3 is accepted")
+    check(_verdict(face, Fraction(-2, 3), -0.6666666666666666).failures == 1,
+          "safe bound: the double just above -2/3 is rejected")
+
+    # A multiplier on a side the row lacks: min -x0 with x0 + x1 <= 3, 0 <= x <= 2 (both
+    # boxed) and the multiplier +1 (which prices the lower side, absent). The row's activity
+    # over the box is at least 0, so the term is 0, and the reduced costs are -2 and -1,
+    # priced at the upper bounds: -4 - 2 = -6. Dropping the multiplier instead would give -2.
+    crossed = _lp([-1.0, 0.0], [2.0, 2.0], -inf, 3.0)
+    check(exact_safe_bound(crossed, [1.0]) == -6,
+          "safe bound: a multiplier on a missing side is priced at the row's activity bound")
+
     # max x0 + x1, x0 + x1 <= 2: the bound is an UPPER bound, and one below 2 is wrong.
     packing = _lp([1.0, 1.0], [inf, inf], -inf, 2.0, maximize=True)
     check(_verdict(packing, 1.0, 2.0).failures == 0,

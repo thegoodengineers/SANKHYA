@@ -16,7 +16,8 @@ the right side of the exact value. It follows the same rules the solver states i
 src/core/safe_bound.hpp and lp_safe_bound.cpp, each of which only changes WHICH valid bound
 is computed:
 
-* a multiplier that prices a missing row side is replaced by zero;
+* a multiplier that prices a missing row side is priced at the row's exact activity bound
+  over the box on that side, or replaced by zero when that is unbounded too;
 * a column whose reduced cost needs a missing bound gets the tightest bound one row implies
   from the other columns' bounds (Savelsbergh, ORSA J. Computing 6(4), 1994) - exact here,
   so at least as tight as the solver's rounded one;
@@ -159,18 +160,30 @@ def exact_safe_bound(model, multipliers: list[float],
     """
     if ranges is None:
         ranges = _RowRanges(model, model.col_lower, model.col_upper)
-    sigma = -1.0 if model.maximize else 1.0
+    # An int, so an exact Fraction multiplier stays a Fraction (a float sign would round it).
+    sigma = -1 if model.maximize else 1
     y = [sigma * v for v in multipliers]
 
     total = Fraction(0)
     used: list[Fraction] = []
     for i, yi in enumerate(y):
-        side = model.row_lower[i] if yi > 0 else model.row_upper[i]
-        if yi == 0.0 or not _finite(yi) or not _finite(side):
+        if yi == 0.0 or not _finite(yi):
             used.append(Fraction(0))
             continue
+        side = model.row_lower[i] if yi > 0 else model.row_upper[i]
+        if _finite(side):
+            side_value = Fraction(side)
+        else:
+            # A multiplier pricing a side the row lacks: the row's exact activity bound over
+            # the box on that side holds for every feasible point, so it stands in for the
+            # side; with no such bound the multiplier is dropped (priced at zero).
+            lo, lo_inf, hi, hi_inf = ranges.range(i)
+            if (lo_inf if yi > 0 else hi_inf):
+                used.append(Fraction(0))
+                continue
+            side_value = lo if yi > 0 else hi
         used.append(Fraction(yi))
-        total += Fraction(yi) * Fraction(side)
+        total += Fraction(yi) * side_value
 
     for j in range(model.num_cols):
         r = Fraction(sigma * model.col_cost[j])

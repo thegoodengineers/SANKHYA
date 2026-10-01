@@ -365,7 +365,7 @@ TEST(SafeBound, ABasicColumnWithOnlyALowerBoundIsCertifiedThroughPropagatedBound
   solution.row_status = {BasisStatus::kAtUpper, BasisStatus::kAtUpper};
   ASSERT_FALSE(std::isfinite(safe_dual_bound(model, solution.row_dual).value));
 
-  attach_safe_lower_bound(model, &solution);
+  attach_safe_lower_bound(model, Options{}, &solution);
   ASSERT_TRUE(std::isfinite(solution.safe_lower_bound));
   EXPECT_LE(solution.safe_lower_bound, -5.0);  // the exact optimum is -5
   EXPECT_GT(solution.safe_lower_bound, -5.0 - 1e-9);
@@ -384,6 +384,32 @@ TEST(SafeBound, ABasicColumnWithOnlyALowerBoundIsCertifiedThroughPropagatedBound
         b.value;
   }
   EXPECT_EQ(safe_dual_bound(boxed, solution.safe_multipliers).value, solution.safe_lower_bound);
+}
+
+TEST(SafeBound, AnUnboundedOptimalFaceIsCertifiedByTheExactBasisDuals) {
+  // min x1 - 2 x0 + 2 x2  s.t.  3 x0 - x1 - 3 x2 = 1,  x >= 0 with no upper bounds.
+  // Optimum -2/3 at x = (1/3, 0, 0), the unique dual y = -2/3, and the optimal face is
+  // unbounded along (1, 0, 1). No double y makes the reduced costs of x0 and x2 exactly
+  // zero, the basis shift pushes x2's to the side with no bound, and moving the costs makes
+  // the LP unbounded: only the exact dual -2/3 proves a finite bound (#763, stage 4).
+  Model model;
+  model.resize_columns(3);
+  model.col_cost = {-2.0, 1.0, 2.0};
+  model.resize_rows(1);
+  model.row_lower = {1.0};
+  model.row_upper = {1.0};
+  model.matrix.reset(1, 3);
+  model.matrix.add_entry(0, 0, 3.0);
+  model.matrix.add_entry(0, 1, -1.0);
+  model.matrix.add_entry(0, 2, -3.0);
+  model.matrix.finalize();
+  const Solution solved = solve_float(model);
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal);
+  ASSERT_TRUE(std::isfinite(solved.safe_lower_bound)) << "no finite bound was proved";
+  EXPECT_LE(rational_at_least(solved.safe_lower_bound), Rational(-2, 3));
+  EXPECT_GT(solved.safe_lower_bound, -2.0 / 3.0 - 1e-12);
+  ASSERT_EQ(solved.safe_multipliers_exact.size(), 1U);
+  EXPECT_TRUE(solved.safe_multipliers.empty());
 }
 
 TEST(SafeBound, AnOptimalMaximisationReportsAnUpperBoundWithItsOffsetInEveryOutput) {

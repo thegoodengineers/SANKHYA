@@ -657,6 +657,25 @@ inline constexpr double kSafeBoundShiftGrowth = 100.0;
 /// Rounds of bound propagation before the certified-gap bound gives up on a missing column
 /// bound; on Netlib most instances stop finding new bounds well before ten (#763).
 inline constexpr int kSafeBoundPropagationPasses = 10;
+/// Stage 4 of the certified-gap bound (src/core/lp_safe_bound.cpp): the relative cost moves
+/// tried on one-sided columns, from First up by Growth to Last. First sits two orders above
+/// the 1e-11 rounding floor of a reduced cost; Last is the 1e-6 target itself, since the
+/// bound gives up about delta per unit of the moved columns' values.
+inline constexpr double kSafeBoundCostPerturbationFirst = 1e-9;
+inline constexpr double kSafeBoundCostPerturbationLast = 1e-6;
+inline constexpr double kSafeBoundCostPerturbationGrowth = 10.0;
+/// The exact basis duals of the certified-gap bound (src/core/lp_exact_dual.cpp): leading bits
+/// of each floating-point correction kept exactly (at most 62, so it fits a long long);
+/// residual bits gained before the first rational reconstruction is tried (each later try
+/// waits for 25% more); the iteration cap; a step that removes fewer bits than
+/// kExactDualMinProgress counts as a stall, and kExactDualMaxStalls in a row give up; and
+/// the bits of slack allowed on the estimate |x - y| <~ |z| 2^top(r).
+inline constexpr int kExactDualStepBits = 50;
+inline constexpr int kExactDualFirstAttemptBits = 128;
+inline constexpr int kExactDualMaxIterations = 4000;
+inline constexpr int kExactDualMinProgress = 4;
+inline constexpr int kExactDualMaxStalls = 5;
+inline constexpr int kExactDualErrorMargin = 16;
 
 /// MILP certificates (#518): how many ancestors' duals a leaf tries before it gives up on a
 /// bound, and the largest magnitude an objective step or its rounded bound may have for the

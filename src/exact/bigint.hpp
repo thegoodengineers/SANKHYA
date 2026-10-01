@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -35,6 +36,18 @@ class BigInt {
       mag_.push_back(static_cast<std::uint32_t>(magnitude));
       magnitude >>= 32;
     }
+  }
+
+  /// The magnitude given as 64-bit words, least significant first, with the sign.
+  [[nodiscard]] static BigInt from_words(const std::uint64_t* words, std::size_t count,
+                                         bool negative) {
+    Limbs mag;
+    mag.reserve(2 * count);
+    for (std::size_t i = 0; i < count; ++i) {
+      mag.push_back(static_cast<std::uint32_t>(words[i]));
+      mag.push_back(static_cast<std::uint32_t>(words[i] >> 32));
+    }
+    return make(std::move(mag), negative);
   }
 
   /// 2^k.
@@ -95,6 +108,42 @@ class BigInt {
   friend bool operator>(const BigInt& a, const BigInt& b) { return b < a; }
   friend bool operator<=(const BigInt& a, const BigInt& b) { return !(b < a); }
   friend bool operator>=(const BigInt& a, const BigInt& b) { return !(a < b); }
+
+  /// Bits in the magnitude (0 for zero): |value| < 2^bits().
+  [[nodiscard]] int bits() const { return bit_length(); }
+
+  /// value * 2^k for k >= 0, by moving limbs rather than multiplying.
+  [[nodiscard]] BigInt shifted_left(int k) const {
+    if (mag_.empty() || k <= 0) return *this;
+    const auto words = static_cast<std::size_t>(k / 32);
+    const int s = k % 32;
+    Limbs r(words, 0);
+    r.reserve(words + mag_.size() + 1);
+    std::uint32_t carry = 0;
+    for (const std::uint32_t limb : mag_) {
+      r.push_back(s == 0 ? limb : static_cast<std::uint32_t>((limb << s) | carry));
+      carry = s == 0 ? 0 : static_cast<std::uint32_t>(limb >> (32 - s));
+    }
+    if (carry != 0) r.push_back(carry);
+    return make(std::move(r), neg_);
+  }
+
+  /// The magnitude divided by 2^k, truncated towards zero, with the sign kept (k >= 0).
+  [[nodiscard]] BigInt shifted_right(int k) const {
+    if (mag_.empty() || k <= 0) return *this;
+    const auto words = static_cast<std::size_t>(k / 32);
+    const int s = k % 32;
+    if (words >= mag_.size()) return {};
+    Limbs r(mag_.begin() + static_cast<std::ptrdiff_t>(words), mag_.end());
+    if (s != 0) {
+      for (std::size_t i = 0; i < r.size(); ++i) {
+        const std::uint32_t high = i + 1 < r.size() ? r[i + 1] : 0;
+        r[i] = static_cast<std::uint32_t>((r[i] >> s) |
+                                          (static_cast<std::uint64_t>(high) << (32 - s)));
+      }
+    }
+    return make(std::move(r), neg_);
+  }
 
   /// Greatest common divisor of the magnitudes; gcd(0, 0) is 0. Lehmer's algorithm (Knuth,
   /// TAOCP vol. 2, 3rd ed., section 4.5.2, Algorithm L): Euclid's steps are simulated on the
