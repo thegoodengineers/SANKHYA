@@ -232,16 +232,13 @@ const std::vector<OptionSpec>& Options::registry() {
                  {"product-form", "forrest-tomlin"}});
     s.push_back({"lu_hyper_sparse",
                  OptionType::Bool,
-                 true,
+                 false,
                  "Hyper-sparse FTRAN and BTRAN in the simplex (#464; Gilbert and Peierls "
                  "1988, Hall and McKinnon 2005): a search over the LU factors' graphs from "
                  "the right-hand side's nonzeros finds the steps the result can reach, and "
                  "the solve runs over those alone, in the same order as the full loops, so "
                  "the results and the pivots are identical. Falls back to the full loops "
-                 "above 10% of the rows, and skips the search for a solve kind whose recent "
-                 "results were that dense (#873). On by default from its CPU-time A/B "
-                 "(bench/results/lu-hs-auto-cpu-ab-*): Netlib 0.974x, Kennington 0.706x, "
-                 "iteration counts unchanged.",
+                 "above 10% of the rows. Off by default until its A/B on main.",
                  0.0,
                  0.0,
                  {}});
@@ -515,16 +512,14 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"root_cut_loop",
                  OptionType::Bool,
-                 true,
+                 false,
                  "Root cuts (#495): after the first round, separate again at the new LP "
                  "point, add, re-solve warm, and repeat until the bound stalls (3 rounds "
                  "moving it by at most 1e-3 of the gap, or of max(1, |bound|) with no "
                  "incumbent), 20 rounds, 20 percent of time_limit, a round that takes "
                  "nothing, or max(100, m) cut rows added in all, m the rows before the first "
-                 "cut. Logs one line per round. Only read when enable_root_cuts is set. On by "
-                 "default since the A/B on main 4797f7e (MIPLIB easy, node_limit 10000, 3 "
-                 "seeds: 30 of 90 proved and 39 matched against 28 and 37; "
-                 "bench/results/miplib-4797f7e-n10000-loop-s3.csv).",
+                 "cut. Logs one line per round. Only read when enable_root_cuts is set. Off "
+                 "until an A/B on main.",
                  0.0,
                  0.0,
                  {}});
@@ -815,6 +810,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  "bound by weak duality with outward rounding, valid whatever the LP's "
                  "tolerances did; children inherit it. The log reports the largest gap between "
                  "the believed bound (the primal objective) and the safe one. Off by default.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"certified_gap",
+                 OptionType::Bool,
+                 true,
+                 "LP (#763): give every optimal answer the Neumaier-Shcherbina safe bound of "
+                 "its duals and the certified gap to it (safe_lower_bound in the .sol file "
+                 "and the stats JSON). When the float duals prove no bound within 1e-6 the "
+                 "basis's exact rational duals are tried (within exact_seconds), then a "
+                 "re-solve with slightly perturbed costs. Off skips all of it.",
                  0.0,
                  0.0,
                  {}});

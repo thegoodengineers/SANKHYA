@@ -316,23 +316,21 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
   Timer clock;
   std::fill(rho_.begin(), rho_.end(), 0.0);
   rho_[static_cast<std::size_t>(leaving_slot)] = 1.0;
-  lu_.solve_transpose(rho_.data(), &row_history_);
+  lu_.solve_transpose(rho_.data());
   pivot_row_btran_seconds_ += clock.elapsed_seconds();
   clock.reset();
 
-  // rho's support, in ascending order, and what a row-wise pass over it would cost: one
-  // entry per nonzero of each row it touches, plus the row's logical column. The passes
-  // below, and the dual update in the loop, read the support rather than every row.
-  rho_support_.clear();
+  // rho's support, and what a row-wise pass over it would cost: one entry per nonzero of
+  // each row it touches, plus the row's logical column.
+  Index rho_nonzeros = 0;
   double row_work = 0.0;
   const std::vector<Index>& row_starts = by_row_.row_starts();
   for (Index i = 0; i < m_; ++i) {
     if (rho_[static_cast<std::size_t>(i)] == 0.0) continue;
-    rho_support_.push_back(i);
+    ++rho_nonzeros;
     row_work += 1.0 + static_cast<double>(row_starts[static_cast<std::size_t>(i) + 1] -
                                           row_starts[static_cast<std::size_t>(i)]);
   }
-  const auto rho_nonzeros = static_cast<Index>(rho_support_.size());
   rho_nonzeros_total_ += static_cast<double>(rho_nonzeros);
   ++pivot_rows_computed_;
 
@@ -363,8 +361,9 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
         pivot_row_[u] += value;
       }
     };
-    for (const Index i : rho_support_) {
+    for (Index i = 0; i < m_; ++i) {
       const double rho_i = rho_[static_cast<std::size_t>(i)];
+      if (rho_i == 0.0) continue;
       // The logical column of row i is -e_i, so its entry is -rho_i.
       if (basis_position_[static_cast<std::size_t>(n_ + i)] < 0) touch(n_ + i, -rho_i);
       const ColumnView row = by_row_.row(i);
@@ -398,8 +397,9 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
       row_work < static_cast<double>(model_.num_nonzeros()) + static_cast<double>(m_)) {
     ++pivot_rows_row_wise_;
     std::fill(pivot_row_.begin(), pivot_row_.end(), 0.0);
-    for (const Index i : rho_support_) {
+    for (Index i = 0; i < m_; ++i) {
       const double rho_i = rho_[static_cast<std::size_t>(i)];
+      if (rho_i == 0.0) continue;
       // The logical column of row i is -e_i, so its entry is -rho_i.
       pivot_row_[static_cast<std::size_t>(n_ + i)] = -rho_i;
       const ColumnView row = by_row_.row(i);
@@ -444,7 +444,7 @@ void Simplex::update_dual_weights(Index leaving_slot, double pivot) {
     double weight_r = 0.0;
     for (const double v : rho_) weight_r += v * v;
     tau_ = rho_;
-    lu_.solve(tau_.data(), &tau_history_);  // tau = B^-1 rho_r: the cross terms rho_i . rho_r
+    lu_.solve(tau_.data());  // tau = B^-1 rho_r: the cross terms rho_i . rho_r
     const double inverse_pivot = 1.0 / pivot;
     bool healthy = std::isfinite(weight_r) && weight_r > 0.0;
     for (Index slot = 0; slot < m_ && healthy; ++slot) {
@@ -748,7 +748,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       ++bound_flips_;
     }
     if (!ratio.flips.empty()) {
-      lu_.solve(flip_rhs_.data(), &flip_history_);
+      lu_.solve(flip_rhs_.data());
       for (Index i = 0; i < m_; ++i) {
         x_basic_[static_cast<std::size_t>(i)] += flip_rhs_[static_cast<std::size_t>(i)];
       }
@@ -960,25 +960,13 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     }
     x_basic_[static_cast<std::size_t>(leaving_slot)] = nonbasic_value_[e];
     charge(6);
-    // HYPER-SPARSE WHEN THE ROW IS (Hall and McKinnon, "Hyper-sparsity in the revised
-    // simplex method and how to exploit it", Comput. Optim. Appl. 32 (2005)): the entries
-    // the pivot row does not hold are exact zeros, and so are rho's off its support, so
-    // the two updates run over the touched columns and the support alone. Same arithmetic
-    // on every entry that moves; the rest were being moved by zero.
-    if (pivot_row_held_sparse_) {
-      for (const Index k : pivot_row_touched_) {
-        reduced_cost_[static_cast<std::size_t>(k)] -=
-            dual_step * pivot_row_[static_cast<std::size_t>(k)];
-      }
-    } else {
-      for (Index k = 0; k < total_; ++k) {
-        reduced_cost_[static_cast<std::size_t>(k)] -=
-            dual_step * pivot_row_[static_cast<std::size_t>(k)];
-      }
+    for (Index k = 0; k < total_; ++k) {
+      reduced_cost_[static_cast<std::size_t>(k)] -=
+          dual_step * pivot_row_[static_cast<std::size_t>(k)];
     }
     reduced_cost_[e] = 0.0;
     reduced_cost_[l] = -dual_step;
-    for (const Index i : rho_support_) {
+    for (Index i = 0; i < m_; ++i) {
       y_[static_cast<std::size_t>(i)] += dual_step * rho_[static_cast<std::size_t>(i)];
     }
     charge(7);

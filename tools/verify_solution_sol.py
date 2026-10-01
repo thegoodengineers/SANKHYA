@@ -6,9 +6,17 @@ documented layout - it does not link that C++, only reads what it wrote.
 """
 from __future__ import annotations
 
+import sys
+from fractions import Fraction
 from pathlib import Path
 
 from verify_solution_io import open_text
+
+# An exact multiplier (#763) is a fraction whose parts run to thousands of digits; Python
+# 3.11 refuses to convert more than 4300 by default, as a defence against quadratic parsing
+# of untrusted input. These are our own files, read once.
+if hasattr(sys, "set_int_max_str_digits"):
+    sys.set_int_max_str_digits(0)
 
 class Solution:
     def __init__(self) -> None:
@@ -126,7 +134,9 @@ def parse_sol(path: Path) -> Solution:
             elif block == "farkas" and len(fields) >= 2:
                 solution.farkas[fields[0]] = float(fields[1])
             elif block == "safe_multipliers" and len(fields) >= 2:
-                solution.safe_multipliers[fields[0]] = float(fields[1])
+                # An exact fraction "p/q" when the solver used the basis's exact duals.
+                solution.safe_multipliers[fields[0]] = (
+                    Fraction(fields[1]) if "/" in fields[1] else float(fields[1]))
             elif block == "safe_column_bounds" and len(fields) >= 4:
                 # `column side value row`: two names, either of which may be quoted.
                 column = leading_name(line)

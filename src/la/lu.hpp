@@ -118,29 +118,16 @@ class SparseLu {
     return uncovered_rows_;
   }
 
-  /// How dense one kind of solve's results have been lately: an exponentially weighted
-  /// average of their density, which the hyper-sparse switch below reads as its prediction
-  /// for the next solve of that kind. Hall & McKinnon (2005) predict a result's density
-  /// from the recent results of the same operation and choose the solver from it; one
-  /// history per operation matters because the kinds differ - on fit2p the dual's entering
-  /// column comes back under 1% dense and its steepest-edge solve over 30%. A caller keeps
-  /// one per call site; a solve given none always tries the symbolic reach.
-  struct DensityHistory {
-    double predicted = 0.0;
-  };
-
   /// Solve B z = b in place. FTRAN.
-  void solve(double* b, DensityHistory* history = nullptr) const;
+  void solve(double* b) const;
 
   /// HYPER-SPARSE SOLVES (#464; Gilbert & Peierls 1988, Hall & McKinnon 2005). When on,
   /// solve() and solve_transpose() on product-form factors first find, by a search over
   /// the factors' graphs from the right-hand side's nonzeros, every elimination step the
   /// result can reach, and run the numeric passes over those steps alone, in the same order
   /// the full loops visit them - so the result is the same to the last bit. A right-hand
-  /// side or a reach above tol::kHyperSparseDensity of m falls back to the full loops, and
-  /// a solve whose DensityHistory predicts a result above that fraction goes to them
-  /// without the search (#464). On by default in the simplex since its A/B; sticky across
-  /// factorize().
+  /// side or a reach above tol::kHyperSparseDensity of m falls back to the full loops.
+  /// Off by default until its A/B; sticky across factorize().
   void use_hyper_sparse(bool on) noexcept { hyper_sparse_ = on; }
   [[nodiscard]] bool hyper_sparse() const noexcept { return hyper_sparse_; }
   /// Result densities of every solve since construction, whichever path took it.
@@ -149,8 +136,8 @@ class SparseLu {
   /// U, kept as the reference the hyper-sparse push form is tested against (#68). Tests only.
   void solve_reference(double* b) const;
 
-  /// Solve B^T z = b in place. BTRAN. `history` as for solve().
-  void solve_transpose(double* b, DensityHistory* history = nullptr) const;
+  /// Solve B^T z = b in place. BTRAN.
+  void solve_transpose(double* b) const;
   /// The same solve with the transposed elimination factors applied as a gather over every
   /// entry of L, kept as the reference the hyper-sparse push form is tested against (#243).
   /// Tests only.
@@ -365,14 +352,8 @@ class SparseLu {
   [[nodiscard]] bool solve_hyper(double* b) const;
   /// The BTRAN after the etas, over the reached steps; false, touching nothing, as above.
   [[nodiscard]] bool solve_transpose_hyper(double* b) const;
-  /// Record one result's density in `bins`, and as last_density_.
-  void record_density(std::array<std::int64_t, 5>& bins, Index nonzeros, Index m) const;
-  mutable double last_density_ = 0.0;
-  /// The two solves proper; `try_hyper` says whether the symbolic reach is attempted.
-  void solve_base(double* b, bool try_hyper) const;
-  void solve_transpose_base(double* b, bool try_hyper) const;
-  [[nodiscard]] bool attempt_hyper(const DensityHistory* history) const noexcept;
-  void remember(DensityHistory* history) const noexcept;
+  /// Record one result's density in `bins`.
+  static void record_density(std::array<std::int64_t, 5>& bins, Index nonzeros, Index m);
   bool reference_elimination_ = false;  ///< see use_reference_elimination()
 
   // ---- the factors --------------------------------------------------------------------

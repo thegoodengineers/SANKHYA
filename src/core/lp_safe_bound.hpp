@@ -8,12 +8,14 @@
 #pragma once
 
 #include "sankhya/model.hpp"
+#include "sankhya/options.hpp"
 
 namespace sankhya {
 
 /// Fill solution->safe_lower_bound, certified_gap, certified_relative_gap and
 /// safe_multipliers (model.hpp) when `model` is an LP and the solution is kOptimal with one
-/// dual per row; leave them untouched otherwise.
-void attach_safe_lower_bound(const Model& model, Solution* solution);
+/// dual per row and option certified_gap is on; leave them untouched otherwise. May re-solve
+/// a cost-perturbed copy of the model once per perturbation size (lp_safe_bound.cpp, stage 4).
+void attach_safe_lower_bound(const Model& model, const Options& options, Solution* solution);
 
 }  // namespace sankhya

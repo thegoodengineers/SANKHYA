@@ -1,2 +1,0 @@
-instance,seeds,seeds_matched,seeds_proved,matched_seeds,proved_seeds,sgm_seconds,sgm_first_feasible_seconds,mean_primal_integral,time_limit,git_commit,machine
-neos-5140963-mincio,3,0,0,,,600.0000,20.3876,34.3639,600,4797f7ec,"unknown; Intel64 Family 6 Model 140 Stepping 1, GenuineIntel; 8 cores; unknown RAM; Windows-AMD64"

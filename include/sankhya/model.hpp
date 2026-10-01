@@ -625,6 +625,9 @@ class Solution {
   double certified_gap = std::numeric_limits<double>::quiet_NaN();
   double certified_relative_gap = std::numeric_limits<double>::quiet_NaN();
   std::vector<double> safe_multipliers;
+  /// The same multipliers as exact "numerator/denominator" strings, in place of
+  /// safe_multipliers, when the bound came from the basis's exact rational duals.
+  std::vector<std::string> safe_multipliers_exact;
   struct SafeColumnBound {
     Index column = -1;
     Index row = -1;

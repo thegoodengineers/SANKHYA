@@ -29,7 +29,32 @@
 //     A'y); the first finite bound is kept. It costs about e |b'dy| of the bound, and
 //     nothing needs dy to be accurate: whatever y + e dy comes out as, its bound is rigorous.
 //
-// 2 and 3 are our additions to the paper's formula, not part of it.
+//  4. The exact rational duals of the reported basis (lp_exact_dual.hpp): every basic reduced
+//     cost exactly zero, so no basic column needs a bound, and the bound, evaluated
+//     exactly, is finite whenever the basis is exactly dual feasible over the box. The
+//     multipliers are reported as exact fractions. Within option exact_seconds. When the
+//     reported basis is not exactly dual feasible, the exact repair of #757 pivots to one
+//     that is exactly optimal first, and its exact duals are used.
+//
+//  5. When 1-4 leave the bound infinite or the gap above the target, the one-sided columns
+//     of that box are what is left: a zero reduced cost - basic, or nonbasic at a dual-
+//     degenerate vertex - straddles zero, and moving y along a basis direction moves the
+//     degenerate nonbasic ones to either side. So the LP is re-solved (certified_gap off,
+//     so once) with each one-sided column's cost moved by delta = d * (the largest term of
+//     its reduced cost) towards the side its bound prices: c - delta with only a lower
+//     bound, c + delta with only an upper. The new optimum's duals, dual feasible for the
+//     moved costs to the solver's tolerance, leave every such column's reduced cost against
+//     the ORIGINAL costs about delta away from zero on the right side, and 1-3 run on them.
+//     d runs from kSafeBoundCostPerturbationFirst up by kSafeBoundCostPerturbationGrowth to
+//     kSafeBoundCostPerturbationLast. The bound gives up about delta per unit of those
+//     columns' values; a free column (no bound after propagation) needs its reduced cost
+//     exactly zero, which no floating-point y gives, and stays unpriced. Neumaier and
+//     Shcherbina (sec. 3) point the same way for unbounded variables: a perturbed problem
+//     whose dual has slack where a bound is missing. When the re-solve's float duals still
+//     prove nothing, stage 4 runs on its basis with the moved costs: exact duals that are
+//     dual feasible for the moved costs leave the original reduced costs delta clear.
+//
+// 2, 3, 4 and 5 are our additions to the paper's formula, not part of it.
 
 #include "core/lp_safe_bound.hpp"
 
@@ -37,10 +62,15 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <span>
+#include <string>
 #include <vector>
 
+#include "core/lp_exact_dual.hpp"
 #include "core/safe_bound.hpp"
+#include "exact/exact_repair.hpp"
 #include "la/lu.hpp"
+#include "sankhya/options.hpp"
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
 
@@ -105,18 +135,17 @@ std::vector<double> sign_fixing_direction(const Model& model, const Solution& so
 
 }  // namespace
 
-void attach_safe_lower_bound(const Model& model, Solution* solution) {
+void attach_safe_lower_bound(const Model& model, const Options& options, Solution* solution) {
   if (solution->status != SolveStatus::kOptimal || model.has_integrality() ||
       model.has_quadratic_objective() ||
-      solution->row_dual.size() != static_cast<Sz>(model.num_rows())) {
+      solution->row_dual.size() != static_cast<Sz>(model.num_rows()) ||
+      !options.get_bool("certified_gap")) {
     return;
   }
   const bool maximize = model.sense == ObjSense::kMaximize;
   const double sense = model.sense_multiplier();
   std::vector<double> cost(model.col_cost.size());
   for (Sz j = 0; j < cost.size(); ++j) cost[j] = sense * model.col_cost[j];
-  std::vector<double> y(solution->row_dual.size());
-  for (Sz i = 0; i < y.size(); ++i) y[i] = sense * solution->row_dual[i];
   SafeBoundProblem problem;
   problem.matrix = &model.matrix;
   problem.cost = cost;
@@ -135,14 +164,15 @@ void attach_safe_lower_bound(const Model& model, Solution* solution) {
     return (maximize ? bound - solution->objective : solution->objective - bound) /
            std::max(1.0, std::fabs(solution->objective));
   };
-  const auto good_enough = [&](const SafeBound& b) {
-    return std::isfinite(b.value) && relative_gap(b.value) <= tol::kCertifiedGapTarget;
-  };
 
-  // 1. The duals over the model's own bounds.
+  SafeBound best;
   SafeBoundDetail detail;
-  SafeBound best = safe_dual_bound(problem, y, true, &detail);
   bool best_uses_propagation = false;
+  std::vector<std::string> exact_multipliers;  // set when stage 4 gave the best bound
+  bool exact_timed_out = false;                // stage 4 ran out of budget: do not retry it
+  const auto good_enough = [&] {
+    return std::isfinite(best.value) && relative_gap(best.value) <= tol::kCertifiedGapTarget;
+  };
   const auto consider = [&](const SafeBound& candidate, SafeBoundDetail&& candidate_detail,
                             bool uses_propagation) {
     if (!std::isfinite(candidate.value)) return;
@@ -150,47 +180,134 @@ void attach_safe_lower_bound(const Model& model, Solution* solution) {
     best = candidate;
     detail = std::move(candidate_detail);
     best_uses_propagation = uses_propagation;
+    exact_multipliers.clear();
   };
 
-  // 2. Over the propagated box.
+  // The propagated box, computed once, the first time a stage needs it.
   std::vector<double> lower = model.col_lower;
   std::vector<double> upper = model.col_upper;
   std::vector<PropagatedBound> propagated;
-  if (!good_enough(best)) {
-    propagated =
-        propagate_missing_bounds(problem, &lower, &upper, tol::kSafeBoundPropagationPasses);
+  bool propagation_ran = false;
+  SafeBoundProblem boxed = problem;
+
+  // Stages 1-3 of the file header for the duals y (minimise space) and the basis `source`
+  // carries, each run only while the bound is not yet good enough.
+  const auto try_duals = [&](const std::vector<double>& y, const Solution& source) {
+    SafeBoundDetail own_detail;
+    const SafeBound own = safe_dual_bound(problem, y, true, &own_detail);
+    consider(own, std::move(own_detail), false);
+    if (good_enough()) return;
+    if (!propagation_ran) {
+      propagation_ran = true;
+      propagated =
+          propagate_missing_bounds(problem, &lower, &upper, tol::kSafeBoundPropagationPasses);
+      boxed.col_lower = lower;
+      boxed.col_upper = upper;
+    }
     if (!propagated.empty()) {
-      problem.col_lower = lower;
-      problem.col_upper = upper;
-      SafeBoundDetail candidate_detail;
-      const SafeBound candidate = safe_dual_bound(problem, y, true, &candidate_detail);
-      consider(candidate, std::move(candidate_detail), true);
+      SafeBoundDetail boxed_detail;
+      const SafeBound candidate = safe_dual_bound(boxed, y, true, &boxed_detail);
+      consider(candidate, std::move(boxed_detail), true);
+      if (good_enough()) return;
+    }
+    const std::vector<double> dy = sign_fixing_direction(model, source, lower, upper);
+    if (dy.empty()) return;
+    // The scale of a reduced cost's terms, which its rounding width is a fraction of.
+    double scale = 1.0;
+    for (Index j = 0; j < model.num_cols(); ++j) {
+      scale = std::max(scale, std::fabs(cost[static_cast<Sz>(j)]));
+      const ColumnView col = model.matrix.column(j);
+      for (Index k = 0; k < col.size; ++k) {
+        scale = std::max(scale, std::fabs(col.values[k] * y[static_cast<Sz>(col.rows[k])]));
+      }
+    }
+    std::vector<double> shifted(y.size());
+    for (double e = tol::kSafeBoundShiftFirst;
+         e <= tol::kSafeBoundShiftLast * (1.0 + tol::kSafeBoundShiftFirst);
+         e *= tol::kSafeBoundShiftGrowth) {
+      for (Sz i = 0; i < y.size(); ++i) shifted[i] = y[i] + e * scale * dy[i];
+      SafeBoundDetail shifted_detail;
+      const SafeBound candidate = safe_dual_bound(boxed, shifted, true, &shifted_detail);
+      if (!std::isfinite(candidate.value)) continue;
+      consider(candidate, std::move(shifted_detail), !propagated.empty());
+      return;
+    }
+  };
+
+  std::vector<double> y(solution->row_dual.size());
+  for (Sz i = 0; i < y.size(); ++i) y[i] = sense * solution->row_dual[i];
+  try_duals(y, *solution);
+
+  // 4. The exact duals of a basis, over the box stage 2 left: the reported one here, and in
+  // stage 5 the re-solve's, for the costs it was optimal for.
+  const auto try_exact = [&](std::span<const double> dual_cost, const Solution& source) {
+    if (exact_timed_out) return;
+    ExactDualBound exact_bound = exact_dual_bound(model, dual_cost, cost, lower, upper, source,
+                                                  options.get_double("exact_seconds"));
+    exact_timed_out = exact_bound.timed_out;
+    if (exact_bound.proved && (!std::isfinite(best.value) || exact_bound.value > best.value)) {
+      best.value = exact_bound.value;
+      best_uses_propagation = !propagated.empty();
+      exact_multipliers = std::move(exact_bound.multipliers);
+    }
+  };
+  if (!good_enough()) try_exact(cost, *solution);
+  // The reported basis is often optimal only to tolerance: exactly, a nonbasic reduced cost
+  // of -1e-14 on a column with no upper bound, and then its exact duals prove nothing. The
+  // exact repair (#757, src/exact/exact_repair.hpp) pivots from it, in rational arithmetic,
+  // to a basis that is exactly optimal, whose exact duals are dual feasible by construction.
+  if (!good_enough() && !exact_timed_out) {
+    const exact::RepairResult repair =
+        exact::repair_basis_exact(model, *solution, options.get_double("exact_seconds"));
+    if (repair.verdict == exact::ExactVerdict::kVerified && repair.changed()) {
+      Solution repaired;
+      repaired.col_status = repair.col_status;
+      repaired.row_status = repair.row_status;
+      try_exact(cost, repaired);
     }
   }
 
-  // 3. Shifted duals, over the box 2 left (the model's own when it found nothing).
-  if (!good_enough(best)) {
-    const std::vector<double> dy = sign_fixing_direction(model, *solution, lower, upper);
-    if (!dy.empty()) {
-      // The scale of a reduced cost's terms, which its rounding width is a fraction of.
-      double scale = 1.0;
+  // 5. The duals of the same LP with its one-sided columns' costs moved by delta towards
+  // the side their bound prices (see the file header), re-solved from scratch.
+  if (!good_enough()) {
+    Options inner = options;
+    inner.set_bool("certified_gap", false);  // no recursion
+    inner.set_bool("log_to_console", false);
+    for (double delta = tol::kSafeBoundCostPerturbationFirst;
+         delta <= tol::kSafeBoundCostPerturbationLast * (1.0 + tol::kSafeBoundShiftFirst) &&
+         !good_enough();
+         delta *= tol::kSafeBoundCostPerturbationGrowth) {
+      Model perturbed = model;
       for (Index j = 0; j < model.num_cols(); ++j) {
-        scale = std::max(scale, std::fabs(cost[static_cast<Sz>(j)]));
+        const auto uj = static_cast<Sz>(j);
+        const bool has_lower = is_finite_bound(lower[uj]);
+        const bool has_upper = is_finite_bound(upper[uj]);
+        if (has_lower == has_upper) continue;  // boxed (any sign is priced) or free
+        double scale = std::max(1.0, std::fabs(cost[uj]));
         const ColumnView col = model.matrix.column(j);
         for (Index k = 0; k < col.size; ++k) {
           scale = std::max(scale, std::fabs(col.values[k] * y[static_cast<Sz>(col.rows[k])]));
         }
+        // Minimise space: c - delta where only a lower bound exists, so the new optimum's
+        // reduced cost against the ORIGINAL cost is at least delta; c + delta for an upper.
+        const double moved = (has_lower ? -1.0 : 1.0) * delta * scale;
+        perturbed.col_cost[uj] = sense * (cost[uj] + moved);
       }
-      std::vector<double> shifted(y.size());
-      for (double e = tol::kSafeBoundShiftFirst;
-           e <= tol::kSafeBoundShiftLast * (1.0 + tol::kSafeBoundShiftFirst);
-           e *= tol::kSafeBoundShiftGrowth) {
-        for (Sz i = 0; i < y.size(); ++i) shifted[i] = y[i] + e * scale * dy[i];
-        SafeBoundDetail candidate_detail;
-        const SafeBound candidate = safe_dual_bound(problem, shifted, true, &candidate_detail);
-        if (!std::isfinite(candidate.value)) continue;
-        consider(candidate, std::move(candidate_detail), !propagated.empty());
-        break;
+      const Solution resolved = solve(perturbed, inner);
+      // Lowering a cost makes any zero-cost ray of the original improving: unbounded for
+      // the smallest move means unbounded for every larger one.
+      if (resolved.status == SolveStatus::kUnbounded) break;
+      if (resolved.status != SolveStatus::kOptimal ||
+          resolved.row_dual.size() != static_cast<Sz>(model.num_rows())) {
+        continue;
+      }
+      std::vector<double> resolved_y(resolved.row_dual.size());
+      for (Sz i = 0; i < resolved_y.size(); ++i) resolved_y[i] = sense * resolved.row_dual[i];
+      try_duals(resolved_y, resolved);
+      if (!good_enough()) {
+        std::vector<double> moved_cost(cost.size());
+        for (Sz j = 0; j < cost.size(); ++j) moved_cost[j] = sense * perturbed.col_cost[j];
+        try_exact(moved_cost, resolved);
       }
     }
   }
@@ -201,6 +318,7 @@ void attach_safe_lower_bound(const Model& model, Solution* solution) {
     solution->certified_gap = kInf;
     solution->certified_relative_gap = kInf;
     solution->safe_multipliers.clear();
+    solution->safe_multipliers_exact.clear();
     return;
   }
   solution->safe_lower_bound = to_model_sense(best.value);
@@ -208,8 +326,17 @@ void attach_safe_lower_bound(const Model& model, Solution* solution) {
                                      : solution->objective - solution->safe_lower_bound;
   solution->certified_relative_gap = relative_gap(best.value);
   // In the model's sense, as the file's duals are: negation is exact.
-  solution->safe_multipliers = std::move(detail.multipliers);
-  for (double& v : solution->safe_multipliers) v *= sense;
+  solution->safe_multipliers_exact.clear();
+  if (!exact_multipliers.empty()) {
+    solution->safe_multipliers.clear();
+    for (std::string& v : exact_multipliers) {
+      if (maximize && v.rfind("0/", 0) != 0) v = v[0] == '-' ? v.substr(1) : "-" + v;
+      solution->safe_multipliers_exact.push_back(std::move(v));
+    }
+  } else {
+    solution->safe_multipliers = std::move(detail.multipliers);
+    for (double& v : solution->safe_multipliers) v *= sense;
+  }
   if (best_uses_propagation) {
     for (const PropagatedBound& b : propagated) {
       solution->safe_column_bounds.push_back({b.column, b.row, b.is_upper, b.value});

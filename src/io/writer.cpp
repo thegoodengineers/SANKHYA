@@ -388,14 +388,19 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
   }
   fmt::print(out, "end rows\n");
 
-  if (solution.safe_multipliers.size() == static_cast<std::size_t>(m)) {
+  const bool exact_multipliers =
+      solution.safe_multipliers_exact.size() == static_cast<std::size_t>(m);
+  if (exact_multipliers || solution.safe_multipliers.size() == static_cast<std::size_t>(m)) {
     fmt::print(out,
                "\n# The row multipliers safe_lower_bound was proved from (#763), in the sign\n"
-               "# convention of the duals above.\n");
+               "# convention of the duals above; exact fractions when they are the basis's\n"
+               "# exact rational duals.\n");
     fmt::print(out, "begin safe_multipliers {}\n", m);
     for (Index i = 0; i < m; ++i) {
       fmt::print(out, "{} {}\n", quoted_name(row_name(model, i)),
-                 exact(solution.safe_multipliers[static_cast<std::size_t>(i)]));
+                 exact_multipliers
+                     ? solution.safe_multipliers_exact[static_cast<std::size_t>(i)]
+                     : exact(solution.safe_multipliers[static_cast<std::size_t>(i)]));
     }
     fmt::print(out, "end safe_multipliers\n");
   }

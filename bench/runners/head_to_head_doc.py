@@ -12,7 +12,6 @@ suite gets a Dolan-More profile drawn by perf_profile.py.
 from __future__ import annotations
 
 import csv
-import statistics
 import sys
 from pathlib import Path
 
@@ -68,74 +67,6 @@ def solver_table(rows: list[dict], sgm) -> list[str]:
     return out
 
 
-TIE_FRACTION = 0.10  # two times within 10% of the larger are a tie
-
-
-def per_instance(rows: list[dict], rival: str) -> dict | None:
-    """SANKHYA against one rival, instance by instance: {compared, wins, ties, losses,
-    median}. A run that did not count loses to one that did; an instance neither counted on
-    is left out. A tie is both under the profile's time floor or within TIE_FRACTION. `median`
-    is the median of SANKHYA's time over the rival's where both counted, on floored times,
-    and `median_raw` the same on the clocks as recorded."""
-    def times(solver: str) -> dict[str, float | None]:
-        return {r["instance"]: (float(r["solver_seconds"]) if r["counted_for_time"] == "1"
-                                else None)
-                for r in rows if r["solver"] == solver and r.get("status") != "unsupported"}
-    mine, theirs = times("sankhya"), times(rival)
-    floor = perf_profile.TIME_FLOOR_SECONDS
-    wins = ties = losses = 0
-    ratios, raw = [], []
-    for instance in mine.keys() & theirs.keys():
-        a, b = mine[instance], theirs[instance]
-        if a is None and b is None:
-            continue
-        if a is None or b is None:
-            wins, losses = wins + (b is None), losses + (a is None)
-            continue
-        ratios.append(max(a, floor) / max(b, floor))
-        if b > 0:
-            raw.append(a / b)
-        if (a < floor and b < floor) or abs(a - b) <= TIE_FRACTION * max(a, b):
-            ties += 1
-        elif a < b:
-            wins += 1
-        else:
-            losses += 1
-    if not wins + ties + losses:
-        return None
-    return {"compared": wins + ties + losses, "wins": wins, "ties": ties, "losses": losses,
-            "median": statistics.median(ratios) if ratios else None,
-            "median_raw": statistics.median(raw) if raw else None}
-
-
-def per_instance_table(rows: list[dict]) -> list[str]:
-    """The win/tie/loss count beside the SGM: what "faster on N of M" would read here."""
-    out = []
-    for rival in ORDER[1:]:
-        s = per_instance(rows, rival)
-        if s is None:
-            continue
-        medians = " | ".join("-" if s[k] is None else f"{s[k]:.2f}x"
-                             for k in ("median", "median_raw"))
-        out.append(f"| {perf_profile.LABELS[rival]} | {s['compared']} | {s['wins']} "
-                   f"| {s['ties']} | {s['losses']} | {medians} |")
-    if not out:
-        return []
-    return ["**Instance by instance, SANKHYA against each rival:**", "",
-            "| against | instances compared | SANKHYA faster | tie | rival faster "
-"| median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |",
-            "|---|---:|---:|---:|---:|---:|---:|", *out, "",
-            f"*A tie is two times within {TIE_FRACTION:.0%} of each other, or both under "
-            f"{perf_profile.TIME_FLOOR_SECONDS:g} s (the coarsest clock here cannot tell "
-            "those apart). A run that did not count loses to one that did, and an instance on "
-            "which neither counted is left out. Both medians are over the instances both "
-            "solvers counted on, and above 1x SANKHYA is the slower one: the first floors "
-            f"each time at {perf_profile.TIME_FLOOR_SECONDS:g} s as the profile below does, "
-            "the second takes each solver's clock as recorded, which on instances of a few "
-            "milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is "
-            "left out.*", ""]
-
-
 def failures(rows: list[dict]) -> list[str]:
     """Every run that did not count, named with what happened, per solver."""
     out = []
@@ -186,7 +117,6 @@ def suite_section(suite: str, path: Path, sgm) -> str:
         out += [f"**The {shipped} LPs netlib.org ships as EMPS files:**", ""]
     out += solver_table(headline, sgm)
     out.append("")
-    out += per_instance_table(headline)
     if suite == "netlib":
         extra = [r for r in rows if r["instance"] in GENERATED_NETLIB]
         if extra:

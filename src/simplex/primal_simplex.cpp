@@ -852,7 +852,7 @@ void Simplex::update_devex_weights(Index entering, Index leaving_row, double piv
   // column j. One BTRAN, then one dot product per nonbasic column.
   std::fill(rho_.begin(), rho_.end(), 0.0);
   rho_[static_cast<std::size_t>(leaving_row)] = 1.0;
-  lu_.solve_transpose(rho_.data(), &row_history_);
+  lu_.solve_transpose(rho_.data());
 
   const double inverse_pivot = 1.0 / pivot;
   const double scaled_weight_q = weight_q * inverse_pivot * inverse_pivot;
@@ -895,7 +895,7 @@ void Simplex::ftran_entering_column(Index entering) {
   for_each_entry(entering, [&](Index row, double value) {
     alpha_[static_cast<std::size_t>(row)] += value;
   });
-  lu_.solve(alpha_.data(), &column_history_);
+  lu_.solve(alpha_.data());
 }
 
 double Simplex::ftran_residual(Index entering) const {

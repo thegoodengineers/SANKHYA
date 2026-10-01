@@ -206,53 +206,6 @@ TEST(SparseLuHyper, SolvesAreTheFullLoopsToTheBitOnFreshAndUpdatedFactors) {
   EXPECT_GT(hyper_btrans, 500);
 }
 
-TEST(SparseLuHyper, ADensityHistorySkipsTheSearchWhileItsResultsAreDenseAndReturnsToIt) {
-  // The automatic switch: a solve kind whose recent results were dense goes straight to the
-  // full loops, and one whose results turn sparse again goes back to the symbolic reach.
-  // Either way the result is the full loops' to the bit.
-  std::mt19937 rng(4640);
-  const Index m = 400;
-  const Basis basis = random_basis(&rng, m, 1);
-  SparseLu full;
-  SparseLu hyper;
-  hyper.use_hyper_sparse(true);
-  const std::vector<LuColumn> columns = basis.columns();
-  ASSERT_TRUE(full.factorize(columns, m, tol::kPivotTolerance, tol::kMarkowitzThreshold));
-  ASSERT_TRUE(hyper.factorize(columns, m, tol::kPivotTolerance, tol::kMarkowitzThreshold));
-  SparseLu::DensityHistory history;
-  const auto solve_both = [&](const std::vector<double>& rhs) {
-    std::vector<double> x_full = rhs;
-    std::vector<double> x_hyper = rhs;
-    full.solve(x_full.data());
-    hyper.solve(x_hyper.data(), &history);
-    for (std::size_t i = 0; i < rhs.size(); ++i) ASSERT_EQ(x_full[i], x_hyper[i]) << i;
-  };
-  const auto unit = [&] {
-    std::vector<double> e(static_cast<std::size_t>(m), 0.0);
-    e[static_cast<std::size_t>(sample_rows(&rng, m, 1)[0])] = 1.0;
-    return e;
-  };
-
-  // Sparse results: the search is tried and taken.
-  for (int k = 0; k < 10; ++k) solve_both(unit());
-  const std::int64_t sparse_taken = hyper.solve_stats().ftran_hyper;
-  EXPECT_GT(sparse_taken, 0);
-  EXPECT_LT(history.predicted, tol::kHyperSparseDensity);
-
-  // Dense results lift the prediction past the switch; from then on no search is tried,
-  // so nothing more is taken even for a unit right-hand side while the prediction is high.
-  for (int k = 0; k < 3; ++k) solve_both(sparse_vector(&rng, m, m / 2));
-  EXPECT_GE(history.predicted, tol::kHyperSparseDensity);
-  const std::int64_t after_dense = hyper.solve_stats().ftran_hyper;
-  solve_both(unit());
-  EXPECT_EQ(hyper.solve_stats().ftran_hyper, after_dense);
-
-  // A run of sparse results brings it back under the switch, and the search resumes.
-  for (int k = 0; k < 40; ++k) solve_both(unit());
-  EXPECT_LT(history.predicted, tol::kHyperSparseDensity);
-  EXPECT_GT(hyper.solve_stats().ftran_hyper, after_dense);
-}
-
 TEST(SparseLuHyper, NetlibIterationCountsAndObjectivesDoNotMove) {
   // The acceptance item of #464: the arithmetic is the same, so the simplex takes the same
   // pivots. Primal and dual, presolve off so the engines do the work.
