@@ -492,14 +492,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"mir_cmir",
                  OptionType::Bool,
-                 false,
+                 true,
                  "MIR cuts as c-MIR (#498; Marchand and Wolsey 2001): each continuous column "
                  "substituted by its closest simple or variable bound (x <= u y + c or "
                  "x >= l y + c, read off two-nonzero rows), divisor trials delta/2, /4, /8 "
                  "after the best delta, complementation of the integer columns, the most "
                  "efficacious cut kept. Only read when enable_root_cuts is set; the root "
                  "round also needs enable_mir_cuts, the tree rounds (tree_cut_depth) always "
-                 "separate MIR. Off until an A/B on main.",
+                 "separate MIR. On by default since the A/B on main 4797f7e (MIPLIB easy, "
+                 "node_limit 10000, 3 seeds: 28 of 90 proved and 37 matched either way, "
+                 "ran12x21 root gap closed 0.054 -> 0.192; "
+                 "bench/results/miplib-4797f7e-n10000-cmir-s3.csv). Off in certificate "
+                 "mode, where its cuts state no derivation.",
                  0.0,
                  0.0,
                  {}});
