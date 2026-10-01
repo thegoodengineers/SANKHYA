@@ -87,12 +87,23 @@ void SparseLu::build_step_inverses() {
   hs_second_.clear();
 }
 
-void SparseLu::record_density(std::array<std::int64_t, 5>& bins, Index nonzeros, Index m) {
+void SparseLu::record_density(std::array<std::int64_t, 5>& bins, Index nonzeros,
+                              Index m) const {
   const double density =
       static_cast<double>(nonzeros) / static_cast<double>(std::max<Index>(m, 1));
+  last_density_ = density;
   std::size_t bin = 0;
   while (bin < LuSolveStats::kBinEdges.size() && density >= LuSolveStats::kBinEdges[bin]) ++bin;
   ++bins[bin];
+}
+
+bool SparseLu::attempt_hyper(const DensityHistory* history) const noexcept {
+  return hyper_sparse_ && (history == nullptr || history->predicted < tol::kHyperSparseDensity);
+}
+
+void SparseLu::remember(DensityHistory* history) const noexcept {
+  if (history == nullptr) return;
+  history->predicted += tol::kHyperSparseHistoryWeight * (last_density_ - history->predicted);
 }
 
 bool SparseLu::solve_hyper(double* b) const {

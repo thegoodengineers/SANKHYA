@@ -316,7 +316,7 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
   Timer clock;
   std::fill(rho_.begin(), rho_.end(), 0.0);
   rho_[static_cast<std::size_t>(leaving_slot)] = 1.0;
-  lu_.solve_transpose(rho_.data());
+  lu_.solve_transpose(rho_.data(), &row_history_);
   pivot_row_btran_seconds_ += clock.elapsed_seconds();
   clock.reset();
 
@@ -444,7 +444,7 @@ void Simplex::update_dual_weights(Index leaving_slot, double pivot) {
     double weight_r = 0.0;
     for (const double v : rho_) weight_r += v * v;
     tau_ = rho_;
-    lu_.solve(tau_.data());  // tau = B^-1 rho_r: the cross terms rho_i . rho_r
+    lu_.solve(tau_.data(), &tau_history_);  // tau = B^-1 rho_r: the cross terms rho_i . rho_r
     const double inverse_pivot = 1.0 / pivot;
     bool healthy = std::isfinite(weight_r) && weight_r > 0.0;
     for (Index slot = 0; slot < m_ && healthy; ++slot) {
@@ -748,7 +748,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       ++bound_flips_;
     }
     if (!ratio.flips.empty()) {
-      lu_.solve(flip_rhs_.data());
+      lu_.solve(flip_rhs_.data(), &flip_history_);
       for (Index i = 0; i < m_; ++i) {
         x_basic_[static_cast<std::size_t>(i)] += flip_rhs_[static_cast<std::size_t>(i)];
       }
