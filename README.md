@@ -93,6 +93,12 @@ and stays as it was measured. Three more full runs of `main` at `5c15999` (`benc
 #840; a 4-core cloud container, one thread, 120 s) read the same in every run: `optimal`, within
 1e-6 of the exact optimum and verified on **94 of 94**, and 83 matching the readme, the one
 less being `e226`, whose objective constant `netlib.py` leaves out and the head-to-head runner adds.
+On time in that head-to-head run, over the 92 EMPS files: a shifted geometric mean (10 s shift)
+of 0.575 s against HiGHS 1.15.1's 0.163 s, and instance by instance SANKHYA faster on 3, a tie
+on 72 (within 10%, or both under 0.1 s) and HiGHS faster on 17; on the 16 Kennington LPs
+(`head-to-head-kennington-1860864.csv`) 9.430 s against 1.855 s, faster on 3, tied on 2, slower
+on 11. The per-instance split is stated the way rivals state theirs, and the SGM is the number
+to read: most Netlib pairs are ties because most instances finish in milliseconds.
 
 The second is the number Phase 6's ">= 95% of Netlib" criterion is measured against, and it
 grades us against Netlib's own readme table. The third says how often the solver finishes
@@ -104,7 +110,10 @@ Nothing is left to the clock at 120 s. The narrower tiers read higher
 (**48 of 50** on the medium tier, **9 of 9** on the small set the demo runs) because both are
 defined by a row cap, which makes them the easier half by construction. See
 [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md), generated from the CSVs in `bench/results/` so it
-cannot drift.
+cannot drift. [`docs/REPORT.md`](docs/REPORT.md) is the one-document version for a jury,
+generated the same way by `tools/make_report.py`: every headline number with its CSV and
+commit, the head-to-head, the verification story, the limits, and a 25-question Q&A whose
+every answer names the file or section it rests on.
 
 **The eight verified answers that do not match the readme match the exact optimum.** Koch
 recomputed every Netlib optimum in exact rational arithmetic (T. Koch, *The final NETLIB-LP
