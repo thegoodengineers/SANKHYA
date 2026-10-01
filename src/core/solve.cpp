@@ -992,7 +992,9 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // #559: an infeasible answer whose certificate did not survive presolve is retried once
     // against the ORIGINAL model, and the retry is adopted only when it is infeasible WITH a
     // certificate that verifies; otherwise the first answer stands (see the two call sites).
-    const auto certify_by_retry = [&](const char* note) {
+    // #783 uses the same retry for an optimality claim that did not survive postsolve, and
+    // adopts it only when it is optimal as measured on the original model.
+    const auto retry_on_original = [&](const char* note, auto&& adopt, const char* declined) {
       Solution retry = run_lp_engine(model);
       retry.solve_seconds = timer.elapsed_seconds();
       reconcile_status_with_measurement(model, &retry, options, logger, /*check_dual=*/true);
@@ -1000,15 +1002,22 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       record_why_it_stopped(&retry);
       say_which_engine_ran(&retry);
       verify_and_keep_certificate(&retry, model, logger);
-      if (retry.status != SolveStatus::kInfeasible || retry.farkas_dual.empty()) {
-        logger.info(
-            "Certificate retry (#559): no verified certificate; the first answer stands");
+      if (!adopt(retry)) {
+        logger.info("{}", declined);
         return;
       }
       retry.engine_rule = solution.engine_rule;
       retry.engine_reason = solution.engine_reason;
       retry.message = retry.message.empty() ? std::string(note) : retry.message + "; " + note;
       solution = std::move(retry);
+    };
+    const auto certify_by_retry = [&](const char* note) {
+      retry_on_original(
+          note,
+          [](const Solution& retry) {
+            return retry.status == SolveStatus::kInfeasible && !retry.farkas_dual.empty();
+          },
+          "Certificate retry (#559): no verified certificate; the first answer stands");
     };
     // #559, the last resort after the retry: the row duals of the elastic LP (every finite
     // row side given a slack, the total slack minimised) are a Farkas certificate whenever
@@ -1092,6 +1101,24 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       certify_by_retry(
           "presolve found no certifiable proof; retried directly against the original model "
           "and this is that retry's result");
+    }
+    // #783: AN OPTIMALITY CLAIM THAT DID NOT SURVIVE POSTSOLVE is retried against the original
+    // model too. Netlib sc205 with its rows and columns scaled by powers of two in
+    // 2^-20..2^20: presolve eliminates the one costed column through a doubleton equation
+    // whose pivot is 9.3e-10, the reduced LP stops at x = 0, and the guard above rightly
+    // downgrades that to `feasible` at objective 0 against a true -52.2. The same model
+    // solved directly reaches -52.2020612117 and verifies. Only `feasible` (an optimality
+    // claim the measurement refused) and `numerical_error` qualify - limits, and verdicts
+    // with a certificate, are answers - and the retry is adopted only when it is optimal
+    // after the same guard, so the first answer stands whenever the retry is no better.
+    if ((solution.status == SolveStatus::kFeasible ||
+         solution.status == SolveStatus::kNumericalError) &&
+        !race && !warm_requested && options.get_bool("presolve")) {
+      retry_on_original(
+          "the presolved solve made no optimality claim that survived postsolve; retried "
+          "directly against the original model and this is that retry's result",
+          [](const Solution& retry) { return retry.status == SolveStatus::kOptimal; },
+          "Retry without presolve (#783): not optimal either; the first answer stands");
     }
     if (!race && !warm_requested) certify_by_elastic();
     refuse_an_unproved_infeasibility(model, &solution, logger);
