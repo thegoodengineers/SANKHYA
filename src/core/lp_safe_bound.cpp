@@ -268,15 +268,23 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
   }
 
   // 5. The duals of the same LP with its one-sided columns' costs moved by delta towards
-  // the side their bound prices (see the file header), re-solved from scratch.
-  if (!good_enough()) {
+  // the side their bound prices (see the file header), re-solved from scratch. Each try is
+  // a whole solve, so it runs only with certified_gap_resolve on, and all tries together
+  // share exact_seconds and whatever is left of the caller's time_limit.
+  double resolve_budget = options.get_double("exact_seconds");
+  const double caller_limit = options.get_double("time_limit");
+  if (std::isfinite(caller_limit)) {
+    resolve_budget = std::min(resolve_budget, caller_limit - solution->solve_seconds);
+  }
+  if (!good_enough() && options.get_bool("certified_gap_resolve") && resolve_budget > 0.0) {
     Options inner = options;
     inner.set_bool("certified_gap", false);  // no recursion
     inner.set_bool("log_to_console", false);
     for (double delta = tol::kSafeBoundCostPerturbationFirst;
          delta <= tol::kSafeBoundCostPerturbationLast * (1.0 + tol::kSafeBoundShiftFirst) &&
-         !good_enough();
+         !good_enough() && resolve_budget > 0.0;
          delta *= tol::kSafeBoundCostPerturbationGrowth) {
+      inner.set_double("time_limit", resolve_budget);
       Model perturbed = model;
       for (Index j = 0; j < model.num_cols(); ++j) {
         const auto uj = static_cast<Sz>(j);
@@ -294,6 +302,7 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
         perturbed.col_cost[uj] = sense * (cost[uj] + moved);
       }
       const Solution resolved = solve(perturbed, inner);
+      resolve_budget -= resolved.solve_seconds;
       // Lowering a cost makes any zero-cost ray of the original improving: unbounded for
       // the smallest move means unbounded for every larger one.
       if (resolved.status == SolveStatus::kUnbounded) break;
