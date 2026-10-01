@@ -118,6 +118,9 @@ Model random_model(std::mt19937& rng, int trial) {
 
 Options quiet() {
   Options options;
+  // One root round: these tests measure the tree, and on models this small the root
+  // separation loop (#495, on by default) closes the gap before there is a tree.
+  options.set_bool("root_cut_loop", false);
   options.set_bool("log_to_console", false);
   options.set_bool("presolve", false);
   options.set_bool("mip_objective_branching", true);

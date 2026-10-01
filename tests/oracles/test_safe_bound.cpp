@@ -522,6 +522,7 @@ TEST(SafeBound, AnUnprovedNodeBoundDoesNotPoisonThePseudocosts) {
   options.set_bool("safe_bounds", true);
   options.set_bool("deterministic", true);
   options.set_bool("presolve", false);
+  options.set_bool("root_cut_loop", false);  // the test needs a 400-node tree to checkpoint (#495)
   options.set_int("node_limit", 400);
   options.set_string("checkpoint", file.path());
   options.set_int("checkpoint_nodes", 400);

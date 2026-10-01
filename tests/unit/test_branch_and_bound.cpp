@@ -35,6 +35,9 @@ using testing::TempFile;
 
 Options mip_options() {
   Options options;
+  // One root round: these tests measure the tree, and on models this small the root
+  // separation loop (#495, on by default) closes the gap before there is a tree.
+  options.set_bool("root_cut_loop", false);
   options.set_bool("log_to_console", false);
   options.set_int("node_limit", 20000);
   return options;
