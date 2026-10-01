@@ -272,6 +272,11 @@ int main(int argc, char** argv) {
   solve_cmd->add_option("--warm-start", warm_start_path,
                         "Start the simplex from the basis in this .sol file, a previous "
                         "solve of this model (presolve is bypassed)");
+  bool compute_iis = false;
+  solve_cmd->add_flag("--iis", compute_iis,
+                      "On an infeasible model, name the irreducible infeasible subsystem: "
+                      "printed, and written to the .sol and --stats files (the same as "
+                      "--option compute_iis=true, the default)");
 
   CLI::App* info_cmd = app.add_subcommand("info", "Report the dimensions of a model file");
   std::string info_path;
@@ -334,6 +339,7 @@ int main(int argc, char** argv) {
   if (time_limit > 0.0) options.set_double("time_limit", time_limit);
   if (use_gpu) options.set_bool("gpu", true);
   if (compute_ranging) options.set_bool("ranging", true);
+  if (compute_iis) options.set_bool("compute_iis", true);
 
   if (scenarios_cmd->parsed()) {
     // One solver log per scenario would bury the table; --option log_to_console=true restores.

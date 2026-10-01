@@ -2224,6 +2224,19 @@ def infeasible_section(path: Path | None, engines: dict[str, Path | None]) -> st
         f"verdict is unproven.",
         "",
     ]
+    named = [r for r in rows if r.get("iis_elements", "") != ""]
+    if named:
+        proved = [r for r in named if r.get("iis_verified") == "1"]
+        unproved = sorted(r["instance"] for r in named if r.get("iis_verified") != "1")
+        out += [
+            f"**{len(proved)} of {len(rows)}** also named an irreducible infeasible subsystem "
+            f"(#217, the Chinneck-Dravnieks deletion filter) that the verifier proved on its "
+            f"own arithmetic: infeasible using nothing outside the set, and irreducible by one "
+            f"witness per element, a point that satisfies every other element and violates "
+            f"that one. {len(named)} named one"
+            + (f"; not proved on {', '.join(unproved)}" if unproved else "") + ".",
+            "",
+        ]
     if failed:
         grouped: dict[str, list[str]] = {}
         for row in failed:
@@ -2237,17 +2250,22 @@ def infeasible_section(path: Path | None, engines: dict[str, Path | None]) -> st
     else:
         out += ["Every instance in the collection passed.", ""]
     out += ["| instance | rows | cols | status | engine | certificate | multipliers | "
-            "time (s) | verified | the solver's message |",
-            "|---|---:|---:|---|---|---|---:|---:|:--:|---|"]
+            "time (s) | verified | IIS | the solver's message |",
+            "|---|---:|---:|---|---|---|---:|---:|:--:|---|---|"]
     for row in sorted(rows, key=lambda r: r["instance"]):
         seconds = as_float(row, "wall_seconds")
         mark = {"1": "yes", "0": "**NO**"}.get(str(row.get("independently_verified", "")), "-")
+        iis = "-"
+        if row.get("iis_elements", "") != "":
+            iis = (f"{row['iis_elements']} "
+                   f"{'proved' if row.get('iis_verified') == '1' else '**not proved**'}")
         message = (row.get("message") or "").replace("|", "/")[:120]
         out.append(f"| `{row['instance']}` | {row.get('rows', '')} | {row.get('columns', '')} "
                    f"| {row.get('status', '')} | {row.get('algorithm', '')} "
                    f"| {row.get('certificate') or '-'} "
                    f"| {row.get('certificate_multipliers', '')} "
-                   f"| {'-' if seconds is None else f'{seconds:.3f}'} | {mark} | {message} |")
+                   f"| {'-' if seconds is None else f'{seconds:.3f}'} | {mark} | {iis} "
+                   f"| {message} |")
     out.append("")
     present = [(engine, p) for engine, p in engines.items() if p is not None]
     if present:

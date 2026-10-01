@@ -150,7 +150,14 @@ def run_sankhya(binary: Path, mps: Path, sol: Path, time_limit: float) -> dict:
                 "reason": completed.stderr.strip()[:160]}
     blob = json.loads(stats.read_text())
     result = blob.get("result", {})
-    return {"status": result.get("status", "unknown"), "objective": result.get("objective"),
+    # Koch's optima exclude the objective-row constant (e226: 7.113), so the objective is
+    # graded without it, as netlib.py grades matches_exact (#783: scaled_e226 was never
+    # optimal before, so the units never met).
+    objective = result.get("objective")
+    offset = blob.get("model", {}).get("objective_offset") or 0.0
+    if isinstance(objective, (int, float)) and offset:
+        objective -= offset
+    return {"status": result.get("status", "unknown"), "objective": objective,
             "iterations": blob.get("effort", {}).get("iterations", ""),
             "reason": result.get("message", "")}
 

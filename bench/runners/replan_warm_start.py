@@ -15,8 +15,12 @@ looks like and is the case where the old basis is neither primal nor dual feasib
 THE DAYS. Day 0 is the refinery case study LP (bench/case_studies/refinery/generator.py,
 #517) solved cold; its .sol is "yesterday". Each following day copies the previous day's
 MPS with every crude purchase cost (`BUY_*`) scaled by a random factor in [1 - delta,
-1 + delta] and every delivery commitment (`COMMIT_*` right-hand side) by one in
-[1 - delta/2, 1 + delta/2]. The SAME edited file is then solved twice: cold (the slack
+1 + delta], and every product's demand - its market (the `SELL_*` upper bound) and its
+delivery commitment (the `COMMIT_*` right-hand side), together - by one in
+[1 - demand_delta, 1 + demand_delta] (--demand-delta, default 0.05). The generator sets a
+tight commitment equal to the market, so moving the commitment alone pushes it past the
+market and makes every day infeasible by construction (the first run of this runner did
+exactly that). The SAME edited file is then solved twice: cold (the slack
 basis, what a fresh read-and-solve does) and warm (from the previous day's WARM .sol), so the
 two arms see the same model and differ only in the starting basis.
 
@@ -67,17 +71,30 @@ CSV_COLUMNS = [
 ]
 
 
-def perturb_mps(source: Path, out: Path, rng: random.Random, delta: float) -> tuple[int, int]:
-    """Copy `source` with every BUY_* cost and COMMIT_* right-hand side moved.
+def perturb_mps(source: Path, out: Path, rng: random.Random, delta: float,
+                demand_delta: float | None = None) -> tuple[int, int]:
+    """Copy `source` with every crude price and every product's demand moved.
 
-    The generator writes one `NAME  COST  value` line per priced column in COLUMNS and one
-    `RHS  NAME  value` line per row in RHS, so both edits are line-local. Returns how many
-    prices and how many commitments moved.
+    Prices: each `BUY_*` cost (one `NAME  COST  value` line in COLUMNS) by a factor in
+    [1 - delta, 1 + delta]. Demands: product j's market in period t is the upper bound of
+    `SELL_j_t` (BOUNDS) and its delivery commitment the right-hand side of `COMMIT_j_t` (RHS);
+    the generator sets a tight commitment equal to the market, so the two move by ONE factor
+    in [1 - demand_delta, 1 + demand_delta] (default delta / 2) - moving the commitment alone
+    raises it past the market and makes every morning infeasible by construction. Returns
+    how many prices and how many demands moved.
     """
-    lines, section, prices, commits = [], "", 0, 0
+    spread = delta / 2 if demand_delta is None else demand_delta
+    factors: dict[str, float] = {}
+
+    def demand(key: str) -> float:
+        if key not in factors:
+            factors[key] = rng.uniform(1.0 - spread, 1.0 + spread)
+        return factors[key]
+
+    lines, section, prices = [], "", 0
     for line in source.read_text().splitlines():
         if line.startswith("* LP analytic optimum:"):
-            line = "* re-planned by bench/runners/replan_warm_start.py: costs and commitments moved"
+            line = "* re-planned by bench/runners/replan_warm_start.py: prices and demands moved"
         elif line and not line[0].isspace():
             section = line.split()[0]
         elif section == "COLUMNS":
@@ -89,12 +106,16 @@ def perturb_mps(source: Path, out: Path, rng: random.Random, delta: float) -> tu
         elif section == "RHS":
             tokens = line.split()
             if len(tokens) == 3 and tokens[1].startswith("COMMIT_"):
-                factor = rng.uniform(1.0 - delta / 2, 1.0 + delta / 2)
-                line = f"    RHS  {tokens[1]}  {float(tokens[2]) * factor:.9g}"
-                commits += 1
+                key = tokens[1][len("COMMIT_"):]
+                line = f"    RHS  {tokens[1]}  {float(tokens[2]) * demand(key):.9g}"
+        elif section == "BOUNDS":
+            tokens = line.split()
+            if len(tokens) == 4 and tokens[0] == "UP" and tokens[2].startswith("SELL_"):
+                key = tokens[2][len("SELL_"):]
+                line = f" UP BND  {tokens[2]}  {float(tokens[3]) * demand(key):.9g}"
         lines.append(line)
     out.write_text("\n".join(lines) + "\n")
-    return prices, commits
+    return prices, len(factors)
 
 
 def solve(binary: Path, mps: Path, sol: Path, time_limit: float,
@@ -146,7 +167,10 @@ def main() -> int:
     parser.add_argument("--days", type=int, default=10)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--delta", type=float, default=0.10,
-                        help="prices move by up to this fraction, commitments by half of it")
+                        help="prices move by up to this fraction")
+    parser.add_argument("--demand-delta", type=float, default=0.05,
+                        help="each product's market and commitment move together by up to "
+                             "this fraction")
     parser.add_argument("--time-limit", type=float, default=300.0)
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--machine", default=None,
@@ -166,7 +190,8 @@ def main() -> int:
         subprocess.run([sys.executable, str(GENERATOR), "--size", args.size, "--seed",
                         str(args.seed), "--out", str(today)], check=True, capture_output=True)
         print(f"solver   {binary}\ncommit   {commit}   machine {machine}   "
-              f"size {args.size}   days {args.days}   delta {args.delta:g}")
+              f"size {args.size}   days {args.days}   delta {args.delta:g}   "
+              f"demand delta {args.demand_delta:g}")
         print(f"{'day':>3} {'arm':<5} {'status':<10} {'objective':>16} {'iters':>8} "
               f"{'solve s':>9} {'wall s':>8}  verified")
         rows: list[dict] = []
@@ -182,7 +207,7 @@ def main() -> int:
         agree = infeasible_days = 0
         for day in range(1, args.days + 1):
             source, today = today, work / f"day{day}.mps"
-            perturb_mps(source, today, rng, args.delta)
+            perturb_mps(source, today, rng, args.delta, args.demand_delta)
             cold = solve(binary, today, work / f"day{day}-cold.sol", args.time_limit, None)
             warm_sol = work / f"day{day}-warm.sol"
             warm = solve(binary, today, warm_sol, args.time_limit, yesterday)

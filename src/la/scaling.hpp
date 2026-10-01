@@ -66,6 +66,17 @@ struct Scaling {
                                     const std::vector<double>& min_space_cost,
                                     int ruiz_iterations);
 
+/// Objective scaling (#783): the power of two sigma >= 1 that brings the largest |c_j| into
+/// [1, 2), or 1 when that is already at least 1 or c is zero. The simplex solves with
+/// sigma * c and divides y and d by sigma afterwards, so its absolute dual tolerance is
+/// stated on costs of order one. Cost scaling: Koberstein, "The dual simplex method,
+/// techniques for a fast and stable implementation" (PhD thesis, Paderborn 2005); Bixby,
+/// "Solving real-world linear programs: a decade and more of progress", Operations Research
+/// 50 (2002). Written from those; no solver's source was consulted.
+/// Only ever scales UP: a power of two is exact, and for max|c| >= 1 the absolute test is
+/// already at least as strict as a relative one.
+[[nodiscard]] double cost_scale_factor(const std::vector<double>& cost);
+
 /// Largest singular value of `matrix`, by power iteration on A^T A. PDHG's step size is
 /// bounded by 1 / ||A||_2, so this sets the starting point that the adaptive rule then
 /// refines. An underestimate diverges, so the estimate is deliberately rounded up.

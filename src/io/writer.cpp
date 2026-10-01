@@ -665,6 +665,22 @@ bool write_stats_json(const std::string& path, const Model& model, const Solutio
           {"integer_reductions_declined", report.integer_reductions_declined}}}};
   }
 
+  // The IIS by name (#217), the same set the .sol file's iis section carries, so a caller
+  // reading only the JSON gets the planner's diagnosis too.
+  if (!solution.iis_rows.empty() || !solution.iis_col_lo.empty() ||
+      !solution.iis_col_hi.empty()) {
+    const auto names = [&](const std::vector<Index>& indices, bool columns) {
+      nlohmann::json list = nlohmann::json::array();
+      for (const Index k : indices)
+        list.push_back(columns ? column_name(model, k) : row_name(model, k));
+      return list;
+    };
+    blob["iis"] = {{"rows", names(solution.iis_rows, false)},
+                   {"col_lower", names(solution.iis_col_lo, true)},
+                   {"col_upper", names(solution.iis_col_hi, true)},
+                   {"irreducible", !solution.iis_inconclusive}};
+  }
+
   std::FILE* out = std::fopen(path.c_str(), "wb");
   if (out == nullptr) {
     if (error != nullptr) *error = fmt::format("{}: cannot open for writing", path);

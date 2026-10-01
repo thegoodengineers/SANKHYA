@@ -35,6 +35,7 @@ add_executable(sankhya_tests
   unit/test_presolve_report.cpp
   unit/test_simplex.cpp
   unit/test_dual_simplex.cpp
+  unit/test_cost_scaling.cpp
   unit/test_dual_harris.cpp
   unit/test_ranging.cpp
   unit/test_dense_lu.cpp
