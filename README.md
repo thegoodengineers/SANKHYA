@@ -463,7 +463,11 @@ bound close in on the answer without waiting for the final report.
 `--warm-start previous.sol` starts the simplex from the basis a previous `.sol` file of the
 same model carries (#218), matched by name, presolve bypassed: yesterday's plan re-solved
 with today's prices and demands. `bench/runners/replan_warm_start.py` measures it cold
-against warm on the refinery case study, and `demo/finale.sh` step 7 shows it.
+against warm on the refinery case study, and `demo/finale.sh` step 7 shows it. On the medium
+refinery LP over ten mornings of moved crude prices and product demands, at `5a39fb2`, both arms
+reach the same optimum every day and `tools/verify_solution.py` accepts all twenty answers; warm
+takes **353 simplex iterations against cold's 5091 (0.069x)**, and 0.27x the solver time
+(`bench/results/replan-warm-start-medium-5a39fb2.csv`, laptop, no other jobs).
 
 `--iis` names, on an infeasible model, the irreducible infeasible subsystem (#217): the
 rows and bounds that cannot hold together, printed, written to the `.sol` file with one
