@@ -422,6 +422,15 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_head_to_head.py
 
+      - name: docs/REPORT.md is what tools/make_report.py generates from the CSVs on main
+        # The jury report is generated, like docs/BENCHMARKS.md: every number in it is
+        # computed from a results CSV and printed with that file's name and commit, so a
+        # committed copy that differs from the generator's output is a stale claim. A PDF is
+        # produced only where pandoc has a PDF engine, which this runner does not; the
+        # Markdown is the deliverable and the PDF a convenience.
+        if: matrix.name == 'Release'
+        run: python3 tools/make_report.py --check
+
       - name: Results CSVs are stamped from the binary, not the tree (#433)
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_stamp.py
