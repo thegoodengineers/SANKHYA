@@ -327,6 +327,7 @@ TEST(WarmStart, ManyRandomStructuralEditsGiveTheColdAnswer) {
   int optimal_pairs = 0;
   int warm_fewer = 0;
   int warm_routes = 0;
+  int completed = 0;  // warm starts whose basis the edit left short or long
   int added_cols = 0;
   int added_rows = 0;
   int removed_cols = 0;
@@ -417,6 +418,7 @@ TEST(WarmStart, ManyRandomStructuralEditsGiveTheColdAnswer) {
       const bool warm_route = warm.message.find("presolve bypassed") != std::string::npos &&
                               warm.message.find("#883") == std::string::npos;
       warm_routes += warm_route ? 1 : 0;
+      completed += warm.message.find("was completed with") != std::string::npos ? 1 : 0;
       warm_fewer += warm.iterations < cold.iterations ? 1 : 0;
       warm_pivots += warm.iterations;
       cold_pivots += cold.iterations;
@@ -431,10 +433,11 @@ TEST(WarmStart, ManyRandomStructuralEditsGiveTheColdAnswer) {
   // The record: what the edits were, and the pivots warm against cold.
   std::printf(
       "[ structural ] %d steps compared, %d optimal pairs (%d columns added, %d removed; %d "
-      "rows added, %d removed); warm route on %d; warm fewer pivots on %d; pivots warm %lld "
-      "against cold %lld\n",
+      "rows added, %d removed); warm route on %d, its basis completed on %d; warm fewer "
+      "pivots on %d; pivots warm %lld against cold %lld\n",
       compared, optimal_pairs, added_cols, removed_cols, added_rows, removed_rows, warm_routes,
-      warm_fewer, static_cast<long long>(warm_pivots), static_cast<long long>(cold_pivots));
+      completed, warm_fewer, static_cast<long long>(warm_pivots),
+      static_cast<long long>(cold_pivots));
   EXPECT_EQ(compared, 160);
   EXPECT_GE(optimal_pairs, 80) << "most edits should leave the model with an optimum";
   EXPECT_GE(added_cols, 20);
@@ -442,6 +445,7 @@ TEST(WarmStart, ManyRandomStructuralEditsGiveTheColdAnswer) {
   EXPECT_GE(removed_cols, 20);
   EXPECT_GE(removed_rows, 20);
   EXPECT_GE(4 * warm_routes, 3 * optimal_pairs) << "the warm start should seldom fall back";
+  EXPECT_GE(completed, 20) << "the edits should leave many bases short or long";
   EXPECT_GT(2 * warm_fewer, optimal_pairs) << "warm should take fewer pivots on most edits";
   EXPECT_LT(warm_pivots, cold_pivots);
 }
@@ -459,14 +463,23 @@ TEST(WarmStart, ABasisOfTheWrongShapeRunsColdUnlessMappedByName) {
     EXPECT_NEAR(s.objective, -464.75314286, 1e-6 * 464.0);
     EXPECT_EQ(s.message.find("warm start"), std::string::npos) << s.message;
   }
-  // The basis of afiro before a column and a row were removed: passed as it is it does not
-  // fit and the solve runs cold; mapped by name it warm-starts and gives the cold answer.
+  // The basis of afiro before the edit below: passed as it is it does not fit and the solve
+  // runs cold; mapped by name it warm-starts and gives the cold answer.
   Model before = netlib("afiro");
   const Solution first = solve(before, quiet("auto"));
   ASSERT_EQ(first.status, SolveStatus::kOptimal) << first.message;
+  // A column at its lower bound of zero removed (the optimum does not need it), and a new
+  // capacity row and a new column added.
   Model after = before;
-  remove_column(&after, 0);
-  remove_row(&after, 0);
+  Index at_zero = -1;
+  for (Index j = 0; j < before.num_cols() && at_zero < 0; ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    if (first.col_status[u] == BasisStatus::kAtLower && before.col_lower[u] == 0.0) at_zero = j;
+  }
+  ASSERT_GE(at_zero, 0);
+  remove_column(&after, at_zero);
+  add_column(&after, "NEWCOL", 1.0, 0.0, 10.0, {{0, 0, 1.0}});
+  add_row(&after, "NEWROW", -kInfinity, 1e3, {{0, 0, 1.0}, {0, 1, 1.0}});
   const Solution cold = solve(after, quiet("auto"));
   ASSERT_EQ(cold.status, SolveStatus::kOptimal) << cold.message;
   {

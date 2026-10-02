@@ -867,8 +867,8 @@ bool map_basis_by_name(const std::vector<std::string>& from_col_names,
                        const std::vector<std::string>& from_row_names,
                        const std::vector<BasisStatus>& from_col_status,
                        const std::vector<BasisStatus>& from_row_status, const Model& model,
-                       std::vector<BasisStatus>* col_status, std::vector<BasisStatus>* row_status,
-                       BasisMapping* mapping = nullptr);
+                       std::vector<BasisStatus>* col_status,
+                       std::vector<BasisStatus>* row_status, BasisMapping* mapping = nullptr);
 
 /// The same from the earlier model itself and the statuses its solve reported, which is
 /// the API path: `map_basis_by_name(yesterday, first.col_status, first.row_status, today,
@@ -879,7 +879,7 @@ bool map_basis_by_name(const std::vector<std::string>& from_col_names,
 /// cold solve when it does not.
 bool map_basis_by_name(const Model& from_model, const std::vector<BasisStatus>& from_col_status,
                        const std::vector<BasisStatus>& from_row_status, const Model& model,
-                       std::vector<BasisStatus>* col_status, std::vector<BasisStatus>* row_status,
-                       BasisMapping* mapping = nullptr);
+                       std::vector<BasisStatus>* col_status,
+                       std::vector<BasisStatus>* row_status, BasisMapping* mapping = nullptr);
 
 }  // namespace sankhya
