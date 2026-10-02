@@ -1702,7 +1702,13 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   // two columns are still alive here and the remap is total.
   reduced.hessian.reset(reduced_cols, reduced_cols);
   bool hessian_column_lost = false;
-  for (Index j = 0; j < model.hessian.num_cols() && !hessian_column_lost; ++j) {
+  // An LP's Hessian has no entries, and nothing makes its stored dimensions follow the
+  // columns: a caller that adds or removes columns can leave an empty Hessian of the old
+  // width, which Model::validate() accepts because it checks the shape only when there are
+  // entries. Walking that stale width read past new_col_index (#913's random-edit test under
+  // ASan), so an entry-free Hessian is not walked at all.
+  const Index hessian_cols = model.has_quadratic_objective() ? model.hessian.num_cols() : 0;
+  for (Index j = 0; j < hessian_cols && !hessian_column_lost; ++j) {
     const ColumnView column = model.hessian.column(j);
     const Index mapped_col = new_col_index[static_cast<std::size_t>(j)];
     for (Index k = 0; k < column.size; ++k) {

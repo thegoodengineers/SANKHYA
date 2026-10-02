@@ -39,6 +39,12 @@ inline void rebuild(Model* model, const std::vector<Entry>& entries) {
   for (const Entry& e : entries) matrix.add_entry(e.row, e.col, e.value);
   matrix.finalize();
   model->matrix = std::move(matrix);
+  // The models these tests edit are LPs: keep their (empty) Hessian the width of the
+  // columns, as a reader would have built it.
+  if (!model->has_quadratic_objective()) {
+    model->hessian.reset(model->num_cols(), model->num_cols());
+    model->hessian.finalize(0.0);
+  }
 }
 
 /// Remove column `j`; the model must carry column names.
