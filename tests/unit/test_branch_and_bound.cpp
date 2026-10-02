@@ -1149,7 +1149,7 @@ TEST(BranchAndBound, MipStart_ValidStartIsAccepted) {
   model.sense = ObjSense::kMaximize;
 
   SolveControl control;
-  control.start_solution = {1.0, 1.0}; // The optimal point
+  control.start_solution = {1.0, 1.0};  // The optimal point
   Solution sol = solve(model, mip_options(), &control);
 
   EXPECT_EQ(sol.status, SolveStatus::kOptimal);
@@ -1166,12 +1166,15 @@ TEST(BranchAndBound, MipStart_InfeasibleStartIsRejected) {
   model.sense = ObjSense::kMaximize;
 
   SolveControl control;
-  control.start_solution = {1.0, 1.0}; // Infeasible (x+y=2 > 1)
+  control.start_solution = {1.0, 1.0};  // Infeasible (x+y=2 > 1)
   Solution sol = solve(model, mip_options(), &control);
 
   // The solve is cleanly rejected before running.
   EXPECT_EQ(sol.status, SolveStatus::kModelError);
-  EXPECT_NE(sol.message.find("starting solution is either infeasible or not an integer assignment"), std::string::npos) << sol.message;
+  EXPECT_NE(
+      sol.message.find("starting solution is either infeasible or not an integer assignment"),
+      std::string::npos)
+      << sol.message;
 }
 
 TEST(BranchAndBound, MipStart_FractionalStartIsRejected) {
@@ -1179,11 +1182,14 @@ TEST(BranchAndBound, MipStart_FractionalStartIsRejected) {
   model.sense = ObjSense::kMaximize;
 
   SolveControl control;
-  control.start_solution = {0.5, 0.5}; // Feasible but fractional
+  control.start_solution = {0.5, 0.5};  // Feasible but fractional
   Solution sol = solve(model, mip_options(), &control);
 
   EXPECT_EQ(sol.status, SolveStatus::kModelError);
-  EXPECT_NE(sol.message.find("starting solution is either infeasible or not an integer assignment"), std::string::npos) << sol.message;
+  EXPECT_NE(
+      sol.message.find("starting solution is either infeasible or not an integer assignment"),
+      std::string::npos)
+      << sol.message;
 }
 
 TEST(BranchAndBound, MipStart_NoStartLeavesBehaviorUnchanged) {
