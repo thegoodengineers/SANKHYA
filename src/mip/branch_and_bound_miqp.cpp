@@ -53,11 +53,10 @@ Solution BranchAndBound::solve_qp_node_ipm(const Options& options) {
   // A strong-branching probe (probe_options_) only scores a column; its status is read for
   // kInfeasible alone, so it is not worth the fallback below.
   const bool node_solve = &options == &node_options_;
-  const bool warm_usable =
-      node_solve && miqp_node_ipm_warm_start_ && !current_qp_warm_.empty();
-  Solution ipm = qp::solve_convex_qp_ipm(working_, node_solve ? node_ipm_options_ : options,
-                                         logger_, control_,
-                                         warm_usable ? &current_qp_warm_ : nullptr);
+  const bool warm_usable = node_solve && miqp_node_ipm_warm_start_ && !current_qp_warm_.empty();
+  Solution ipm =
+      qp::solve_convex_qp_ipm(working_, node_solve ? node_ipm_options_ : options, logger_,
+                              control_, warm_usable ? &current_qp_warm_ : nullptr);
   if (!node_solve) return ipm;
   ++miqp_ipm_nodes_;
   if (ipm.status == SolveStatus::kOptimal || ipm.status == SolveStatus::kTimeLimit ||

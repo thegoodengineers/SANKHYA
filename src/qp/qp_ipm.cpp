@@ -46,13 +46,13 @@
 // the iteration ceiling or a non-finite iterate and says so, as before.
 //
 // WARM START (#494, #893): when the caller offers a QpIpmWarmStart whose col_value is the
-// model's own size, the usual least-squares start (Mehrotra 1992 sec. 7, "after Mehrotra" below)
-// is skipped; the point is mapped onto the internal columns instead, slacks recovered from it by
-// M v = b, pulled inside this node's (possibly tighter) bounds by the same margin the cold start
-// uses, with the bound multipliers always recomputed fresh from the residual there - never
-// carried over. y seeds from row_dual when given and its size matches, else the usual zero.
-// Not in this slice: continuing the proximal path itself (rho, delta) or the bound multipliers
-// from the parent, and scaling (#490's "Not done" otherwise still applies).
+// model's own size, the usual least-squares start (Mehrotra 1992 sec. 7, "after Mehrotra"
+// below) is skipped; the point is mapped onto the internal columns instead, slacks recovered
+// from it by M v = b, pulled inside this node's (possibly tighter) bounds by the same margin
+// the cold start uses, with the bound multipliers always recomputed fresh from the residual
+// there - never carried over. y seeds from row_dual when given and its size matches, else the
+// usual zero. Not in this slice: continuing the proximal path itself (rho, delta) or the bound
+// multipliers from the parent, and scaling (#490's "Not done" otherwise still applies).
 
 #include "sankhya/qp.hpp"
 #include "sankhya/solve_control.hpp"
@@ -401,11 +401,11 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   // ---- starting point ----------------------------------------------------------------------
   // Warm (#494, #893): the caller's point, mapped onto the internal columns, slacks recovered
   // from it by M v = b, and the equality duals from row_dual when its size matches. Cold, after
-  // Mehrotra (1992, sec. 7), adapted to bounds: v and y from min g'v + v'(H + I)v/2 s.t. M v = b,
-  // one factorization of the same pattern with Theta^{-1} = I, so the start already nearly
+  // Mehrotra (1992, sec. 7), adapted to bounds: v and y from min g'v + v'(H + I)v/2 s.t. M v =
+  // b, one factorization of the same pattern with Theta^{-1} = I, so the start already nearly
   // satisfies the rows (from the unit start the primal residual stayed at 1.0 for thirty
-  // iterations on qpcboei2). Either way v is then moved inside its bounds by a margin that grows
-  // with how far outside the point was, and the bound multipliers take the sign-split
+  // iterations on qpcboei2). Either way v is then moved inside its bounds by a margin that
+  // grows with how far outside the point was, and the bound multipliers take the sign-split
   // stationarity residual plus a shift that balances them against the slacks - never carried
   // over from the warm point, which is why this is a partial warm start.
   {

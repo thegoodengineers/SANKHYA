@@ -16,9 +16,10 @@ namespace sankhya::qp {
 /// when given (model sense, matching Solution::row_dual) and is otherwise left at the engine's
 /// usual zero start. A value that falls outside the child's bounds - branching only tightens
 /// them, but a caller may pass anything - is pulled back to the interior by the same margin the
-/// cold start uses, and the bound multipliers are always recomputed from the residual there, not
-/// carried over: this is a PARTIAL warm start (the point, and optionally the duals on the rows),
-/// not a continuation of the proximal path, its regularization, or the bound multipliers.
+/// cold start uses, and the bound multipliers are always recomputed from the residual there,
+/// not carried over: this is a PARTIAL warm start (the point, and optionally the duals on the
+/// rows), not a continuation of the proximal path, its regularization, or the bound
+/// multipliers.
 struct QpIpmWarmStart {
   std::vector<double> col_value;
   std::vector<double> row_dual;
