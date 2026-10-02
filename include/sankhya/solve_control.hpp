@@ -56,11 +56,14 @@ class SolveControl {
   /// it - the dual simplex when bounds or right-hand sides moved (the old basis is still
   /// dual feasible), the primal simplex (`algorithm=simplex`) when costs moved (still primal
   /// feasible) - and finish in a handful of pivots where a cold solve takes thousands. It
-  /// must describe a basis of THIS model: one status per column and per row and exactly
-  /// `num_rows()` of them basic, which is what a Solution's statuses are after #341. Presolve
-  /// is bypassed on a warm solve, since the statuses name the caller's rows and columns, and
-  /// the message says so. A basis that does not seed (wrong lengths, wrong count, singular
-  /// beyond repair) is reported and the solve runs cold; other engines ignore it with a note.
+  /// must have one status per column and per row of THIS model; a Solution's statuses have
+  /// exactly `num_rows()` of them basic after #341. After rows or columns were added or
+  /// removed, map_basis_by_name() (model.hpp) places the earlier basis on this model by
+  /// name, and a count of basic entries other than `num_rows()` that the edit leaves is
+  /// completed by solve() before the engine starts (#913). Presolve is bypassed on a warm
+  /// solve, since the statuses name the caller's rows and columns, and the message says so.
+  /// A basis that does not seed (wrong lengths, singular beyond repair) is reported and the
+  /// solve runs cold; other engines ignore it with a note.
   std::vector<BasisStatus> start_col_status;
   std::vector<BasisStatus> start_row_status;
   [[nodiscard]] bool has_starting_basis() const noexcept {
