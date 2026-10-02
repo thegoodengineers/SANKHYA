@@ -72,6 +72,40 @@ def load_manifest(path: Path = MANIFEST) -> dict | None:
         return None
 
 
+def references(manifest: dict) -> list[str]:
+    """Where every reference comes from, read from the manifest: the count, each exclusion
+    by reason, each override of the catalogue and each integer print a proven value confirms."""
+    instances, excluded = manifest.get("instances", {}), manifest.get("excluded", {})
+    groups: dict[str, list[str]] = {}
+    for name, entry in sorted(excluded.items()):
+        reason = entry.get("reason", "")
+        key = ("marked \"(not opt)\"" if "(not opt)" in reason
+               else "no catalogue row" if reason.startswith("no row")
+               else "printed as an integer while the objective can be fractional, with no "
+                    "proven value with more digits to confirm it")
+        groups.setdefault(key, []).append(name)
+    overrides = {n: e for n, e in instances.items() if e.get("reference_source") == "override"}
+    confirmed = {n: e for n, e in instances.items()
+                 if e.get("reference_source") != "override" and e.get("reference_note")}
+    lines = [
+        f"The archive holds {manifest.get('models_in_archive', '?')} models; **{len(instances)}** "
+        f"carry a reference and are the instances below. Excluded, with no reference: "
+        + "; ".join(f"{_names(names)} ({key})" for key, names in groups.items()) + ".",
+        "",
+    ]
+    if overrides:
+        lines += ["**References that override the catalogue** (`reference_source: override` in "
+                  "the manifest), each a later PROVEN optimum of the same model: "
+                  + "; ".join(f"`{n}` {e.get('catalogue_int_soln', '?')} -> "
+                              f"{e['published_text']}: {e['reference_note']}"
+                              for n, e in sorted(overrides.items())) + ".", ""]
+    if confirmed:
+        lines += ["**Integer prints kept because a proven optimum confirms them**: "
+                  + "; ".join(f"`{n}` {e['published_text']}: {e['reference_note']}"
+                              for n, e in sorted(confirmed.items())) + ".", ""]
+    return lines
+
+
 def intro(manifest: dict | None) -> str:
     lines = [
         "The 1998 set much of the published record and most teaching material still report "
@@ -84,31 +118,19 @@ def intro(manifest: dict | None) -> str:
         "",
     ]
     if manifest:
-        excluded = manifest.get("excluded", {})
-        not_opt = sorted(n for n, e in excluded.items() if "(not opt)" in e.get("reason", ""))
-        no_row = sorted(n for n in excluded if n not in not_opt)
-        lines += [
-            f"The archive holds {manifest.get('models_in_archive', '?')} models. "
-            f"**{len(manifest.get('instances', {}))}** have an optimum in the catalogue's "
-            f"INDEX PART A that it does not mark \"(not opt)\"; they are the instances below. "
-            f"Excluded, with no reference: {_names(not_opt)} (marked \"(not opt)\"), and "
-            f"{_names(no_row)} (no catalogue row).",
-            "",
-        ]
-        for name, entry in sorted(manifest.get("instances", {}).items()):
-            if entry.get("caveat"):
-                lines += [f"**Caveat on `{name}`**, kept as the catalogue prints it "
-                          f"({entry.get('published_text')}): {entry['caveat']}.", ""]
+        lines += references(manifest)
     lines += [
         "**Matching rule.** The catalogue prints its optima to limited precision, and one is "
         "truncated: `rgn` is printed 82.1999 and its optimum is 82.19999924. A run REACHES "
         "the published optimum when its objective is within max(1e-6 x max(1, |published|), "
         "one unit in the last printed decimal place after trailing zeros are stripped) of "
-        "it, so 82.1999 allows 1e-4 and a value printed as an integer (7350.0, 21166.000) "
-        "gets the 1e-6 rule alone. PROVED means the run also reported optimal, its gap "
-        "target (1e-4 relative) met; VERIFIED means `tools/verify_solution.py` accepted the "
-        "point as feasible and integral. HiGHS runs as a separate process on the same file, "
-        "same machine, same limit, one thread, and its point is converted by "
+        "it, so 82.1999 allows 1e-4 and a value printed as an integer (21166.000, 1201500) "
+        "gets the 1e-6 rule alone; that is why an integer print under 1e6 of an objective "
+        "that can be fractional is kept only when a proven value confirms it. PROVED means "
+        "the run also reported optimal, its gap target (1e-4 relative) met; VERIFIED means "
+        "`tools/verify_solution.py` accepted the point as feasible and integral. HiGHS runs "
+        "as a separate process on the same file, same machine, same limit, one thread, and "
+        "its point is converted by "
         "`bench/runners/rivals.py`, checked by the same verifier and graded by the same rule; "
         "its result counts only an optimal status (its default gap target is also 1e-4 "
         "relative).",
@@ -223,14 +245,11 @@ def limit_section(limit: int, sankhya: Path | None, highs: Path | None,
 
     out.append("")
     if rows:
-        def mark(name: str) -> str:
-            return " (caveat above)" if reference.get(name, {}).get("caveat") else ""
-
-        missed = [f"`{r['instance']}` seed {r.get('seed', 0)} ({r['status']})"
-                  f"{mark(r['instance'])}" for r in rows if r.get("matched_published") != "1"]
+        missed = [f"`{r['instance']}` seed {r.get('seed', 0)} ({r['status']})" for r in rows
+                  if r.get("matched_published") != "1"]
         rejected = [f"`{r['instance']}` seed {r.get('seed', 0)}" for r in rows
                     if r.get("status") == "optimal" and r.get("independently_verified") == "0"]
-        wrong = [f"`{r['instance']}` seed {r.get('seed', 0)}{mark(r['instance'])}" for r in rows
+        wrong = [f"`{r['instance']}` seed {r.get('seed', 0)}" for r in rows
                  if r.get("status") == "optimal" and r.get("matched_published") != "1"]
         absent = sorted(set(reference) - set(by_instance))
         out += [f"SANKHYA runs that did not reach the published optimum, named: "
@@ -244,10 +263,7 @@ def limit_section(limit: int, sankhya: Path | None, highs: Path | None,
             out += [f"Instances with a reference but no SANKHYA run in the CSV: "
                     f"{_names(absent)}.", ""]
     if highs_rows:
-        def caveat(name: str) -> str:
-            return "; caveat above" if reference.get(name, {}).get("caveat") else ""
-
-        failed = [f"`{n}` ({_highs_cell(r)}{caveat(n)})" for n, r in sorted(highs_rows.items())
+        failed = [f"`{n}` ({_highs_cell(r)})" for n, r in sorted(highs_rows.items())
                   if not (r.get("status") == "optimal" and r.get("matches_reference") == "1"
                           and r.get("independently_verified") == "1")]
         out += [f"HiGHS runs that did not end optimal, matched and verified, named: "

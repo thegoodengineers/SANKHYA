@@ -56,9 +56,12 @@ dano3mip  3202  13873 552   ALL    13321   728.1111 (not opt)       576.23162474
 danoint   664   521   56    ALL    465     65.67                    62.637280418
 dsbmip    1182  1886  192   160    1694    -305.19817501            -305.19817501
 flugpl    18    18    11    0      7       1201500                  1167185.73
+gen       780   870   150   144    726     112313                   112130.0
 gt2       29    188   188   24     0       21166.000                13460.233074
 harp2     112   2993  2993  ALL    0       -73899798.00             -74353341.502
+misc03    96    160   159   ALL    1       3360                     1910.0
 noswot    182   128   100   75     25      -43                      -43.0
+pk1       45    86    55    ALL    31      11.0                     0.0
 pp08a     136   240   64    ALL    176     7350.0                   2748.3452381
 rgn       24    180   100   ALL    80      82.1999                  48.7999
 seymour   4944  1372  1372  ALL    0       423 (not opt)            403.84647413
@@ -75,7 +78,7 @@ rgn      Linus E. Schrage                    Laurence A. Wolsey
 
 print("catalogue")
 cat = fetch_miplib3.parse_catalogue(CATALOGUE)
-check(len(cat) == 12, "every PART A row and nothing from PART B", str(sorted(cat)))
+check(len(cat) == 15, "every PART A row and nothing from PART B", str(sorted(cat)))
 check({n for n, r in cat.items() if r["not_opt"]} == {"arki001", "dano3mip", "seymour"},
       "the three (not opt) rows are marked")
 check(cat["arki001"]["int_soln"] == "7580813.0459" and cat["seymour"]["int_soln"] == "423",
@@ -102,25 +105,92 @@ for bad in ("1e-3", "n/a"):
     except ValueError:
         check(True, f"{bad!r} refused")
 
+print("objective integrality and rounding risk")
+check(fetch_miplib3.objective_integral([3.0, 0.0, -2.0], [True, False, True]),
+      "integer costs on integer columns only: an integral objective")
+check(not fetch_miplib3.objective_integral([3.0, 1.0], [True, False]),
+      "a cost on a continuous column: possibly fractional")
+check(not fetch_miplib3.objective_integral([0.5], [True]),
+      "a fractional cost on an integer column: possibly fractional")
+check(not fetch_miplib3.objective_integral([1.0], [True], offset=0.5),
+      "a fractional objective constant: possibly fractional")
+risk = fetch_miplib3.rounding_risk
+check(risk("112313", 112313.0, False) and risk("7350.0", 7350.0, False),
+      "an integer print of a possibly fractional objective below 1e6 is at risk (gen, pp08a)")
+check(not risk("-43", -43.0, True), "not when the objective is integral: the print is exact")
+check(not risk("1201500", 1201500.0, False) and not risk("106940226", 106940226.0, False),
+      "not at 1e6 and above, where one unit is inside the 1e-6 rule (flugpl, khb05250)")
+check(not risk("82.1999", 82.1999, False) and not risk("65.67", 65.67, False),
+      "not with decimals: published_tolerance covers one unit in the last place")
+
 print("manifest")
+INTEGRAL = {"bell3a": False, "danoint": False, "dsbmip": False, "flugpl": False, "gen": False,
+            "gt2": True, "harp2": True, "misc03": False, "noswot": True, "pk1": False,
+            "pp08a": False, "rgn": False}
 models = {n: f"* header\nNAME {n}\nENDATA\n".encode() for n in cat}
 models["mas74"] = b"NAME mas74\nENDATA\n"
-manifest = fetch_miplib3.build_manifest(models, cat, CATALOGUE.encode())
+manifest = fetch_miplib3.build_manifest(models, cat, CATALOGUE.encode(), INTEGRAL)
 inst, excl = manifest["instances"], manifest["excluded"]
-check(set(inst) == set(cat) - {"arki001", "dano3mip", "seymour"},
-      "a reference for every row not marked (not opt)", str(sorted(inst)))
-check(set(excl) == {"arki001", "dano3mip", "seymour", "mas74"}, "the rest are excluded")
-check(excl["mas74"]["reason"].startswith("no row") and "(not opt)" in excl["seymour"]["reason"],
-      "each with its reason")
+check(set(inst) == set(cat) - {"arki001", "dano3mip", "seymour", "misc03", "pp08a"},
+      "a reference for every row not marked (not opt) and not at unconfirmed rounding risk",
+      str(sorted(inst)))
+check(set(excl) == {"arki001", "dano3mip", "seymour", "mas74", "misc03", "pp08a"},
+      "the rest are excluded")
+check(excl["mas74"]["reason"].startswith("no row") and "(not opt)" in excl["seymour"]["reason"]
+      and "no proven value" in excl["pp08a"]["reason"]
+      and excl["pp08a"]["catalogue_int_soln"] == "7350.0", "each with its reason")
 check(inst["rgn"]["published_optimal"] == 82.1999 and inst["rgn"]["published_tolerance"] == 1e-4
-      and inst["pp08a"]["published_tolerance"] == 0.0, "rgn's and pp08a's tolerances recorded")
+      and inst["gt2"]["published_tolerance"] == 0.0, "rgn's and gt2's tolerances recorded")
 check(inst["rgn"]["sha256"] == fetch_miplib3.hashlib.sha256(models["rgn"]).hexdigest()
       and inst["rgn"]["file"] == "rgn.mps", "the sha256 of the bytes written and solved")
-check("caveat" in inst["noswot"] and "-41" in inst["noswot"]["caveat"]
-      and inst["noswot"]["published_optimal"] == -43.0,
-      "noswot keeps the catalogue's -43 and carries its caveat")
+check(inst["noswot"]["published_optimal"] == -41.00000885
+      and inst["noswot"]["reference_source"] == "override"
+      and inst["noswot"]["catalogue_int_soln"] == "-43"
+      and "line 23" in inst["noswot"]["reference_note"]
+      and "same model" in inst["noswot"]["reference_note"],
+      "noswot: the catalogue's -43 overridden by MIPLIB 2017's proven -41.00000885, with why")
+check(inst["gen"]["published_optimal"] == 112313.3627179998
+      and inst["gen"]["reference_source"] == "override"
+      and inst["gen"]["catalogue_int_soln"] == "112313", "gen: the rounded print overridden")
+check(inst["pk1"]["reference_source"] == "miplib.cat" and inst["pk1"]["published_optimal"] == 11.0
+      and "confirmed by" in inst["pk1"]["reference_note"],
+      "pk1: an at-risk integer print kept because a proven value confirms it")
+check(inst["flugpl"]["reference_source"] == "miplib.cat"
+      and "reference_note" not in inst["flugpl"], "flugpl: from the catalogue, no note")
+check(all(e["objective_integral"] == INTEGRAL[n] for n, e in inst.items()),
+      "objective_integral recorded per instance")
+saved = dict(fetch_miplib3.CONFIRMED)
+fetch_miplib3.CONFIRMED["misc03"] = fetch_miplib3._pinned("misc03", "3361", 1, "test")
 try:
-    fetch_miplib3.build_manifest({"rgn": b""}, cat, b"")
+    fetch_miplib3.build_manifest(models, cat, b"", INTEGRAL)
+    check(False, "a CONFIRMED value that does not confirm the print is refused")
+except ValueError:
+    check(True, "a CONFIRMED value that does not confirm the print is refused")
+finally:
+    fetch_miplib3.CONFIRMED.clear()
+    fetch_miplib3.CONFIRMED.update(saved)
+check(set(fetch_miplib3.OVERRIDES) == {"noswot", "gen"}
+      and set(fetch_miplib3.CONFIRMED) == {"10teams", "dcmulti", "misc07", "pk1"},
+      "the errata and confirmation tables are the ones the docstring names")
+
+COMMITTED = REPO_ROOT / "data" / "miplib3" / "manifest.json"
+if COMMITTED.exists():
+    import json
+    real = json.loads(COMMITTED.read_text(encoding="utf-8"))
+    ri, rx = real["instances"], real["excluded"]
+    check(len(ri) == 52 and len(rx) == 13, "the committed manifest: 52 references, 13 excluded",
+          f"{len(ri)} and {len(rx)}")
+    check({n for n, e in ri.items() if e["reference_source"] == "override"} == {"noswot", "gen"},
+          "the committed overrides are noswot and gen")
+    unsafe = [n for n, e in ri.items()
+              if e["reference_source"] != "override" and "confirmed by" not in
+              e.get("reference_note", "") and fetch_miplib3.rounding_risk(
+                  e["published_text"], e["published_optimal"], e["objective_integral"])]
+    check(not unsafe, "no committed reference is an unconfirmed integer print at risk", str(unsafe))
+    check({n for n, e in rx.items() if "no proven value" in e["reason"]}
+          == {"fixnet6", "misc03", "pp08a", "pp08aCUTS"}, "the rounding exclusions")
+try:
+    fetch_miplib3.build_manifest({"rgn": b""}, cat, b"", INTEGRAL)
     check(False, "a catalogue row with no model file is refused")
 except ValueError:
     check(True, "a catalogue row with no model file is refused")
@@ -137,7 +207,7 @@ check(miplib.matches_published(82.19999924, 82.1999, rgn),
 check(not miplib.matches_published(82.19999924, 82.1999, {}),
       "and would not under the 1e-6 rule alone (the reason for the field)")
 check(not miplib.matches_published(82.2002, 82.1999, rgn), "more than one unit off misses")
-check(not miplib.matches_published(7350.01, 7350.0, inst["pp08a"]),
+check(not miplib.matches_published(21166.05, 21166.0, inst["gt2"]),
       "an integer-printed value gets no extra tolerance")
 check(miplib.match_tolerance(1201500.0, {}) == 1e-6 * 1201500.0
       and miplib.match_tolerance(1201500.0, inst["flugpl"]) == 1e-6 * 1201500.0,
@@ -337,7 +407,9 @@ with tempfile.TemporaryDirectory() as tmp:
         w.writerows(hrows)
     man = {"models_in_archive": 4,
            "instances": {"rgn": {"published_text": "82.1999"},
-                         "noswot": {"published_text": "-43", "caveat": "see -41"},
+                         "noswot": {"published_text": "-41.00000885",
+                                    "catalogue_int_soln": "-43", "reference_source": "override",
+                                    "reference_note": "the catalogue prints -43"},
                          "gt2": {"published_text": "21166.000"},
                          "p0033": {"published_text": "3089"}},
            "excluded": {"seymour": {"reason": "INT SOLN marked (not opt) in miplib.cat"}}}
@@ -348,14 +420,16 @@ with tempfile.TemporaryDirectory() as tmp:
           "a per-instance row: reached and proved seeds, verified")
     check("Reported optimal but rejected by the verifier: `gt2` seed 0." in text,
           "an optimal the verifier rejects is named on its own line")
-    check("`noswot` seed 1 (caveat above)" in text and "Caveat on `noswot`" in text,
-          "a miss the manifest's caveat explains is marked")
+    check("References that override the catalogue" in text
+          and "`noswot` -43 -> -41.00000885: the catalogue prints -43" in text,
+          "an override is stated with the printed value, the proven one and why")
     check("| `p0033` | 3089 | no run | - | - | - |" in text
           and "no SANKHYA run in the CSV: `p0033`" in text, "an instance with no run is named")
-    check("`noswot` (optimal, NOT matched, verified, 3.0 s; caveat above)" in text
+    check("`noswot` (optimal, NOT matched, verified, 3.0 s)" in text
           and "| `gt2` | 21166.000 |" in text and "not run |" in text,
           "HiGHS's verdicts, its misses named, an instance it did not run")
-    check("Excluded, with no reference: `seymour`" in text, "exclusions named")
+    check("Excluded, with no reference: `seymour` (marked \"(not opt)\")" in text,
+          "exclusions named with their reason")
     check("#### At 300 s\n\nNot yet run." in text, "the other limit still says Not yet run")
 
 print(f"\n{'all passed' if FAILURES == 0 else f'{FAILURES} FAILED'}")
