@@ -1,0 +1,10 @@
+parameter,objective,status,change,git_commit,machine,instance_sha256
+100.0,173.12499999999983,optimal,initial basis,0fe40ba,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+107.81351351351357,214.14594594594607,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+107.81352429486492,214.14594594594604,optimal,entered: row THRUPUT; left: row SULPHUR,0fe40ba,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+125.62703780837849,214.14594594594604,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+143.44055132189206,214.14594594594604,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+161.25406483540564,214.14594594594604,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+179.0675783489192,214.14594594594604,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+196.88109186243275,214.14594594594604,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40
+200.0,214.14594594594604,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,8b785238423400708bcd8d67abe195e141cdc63b55a005803d3dd0f543b8ea40

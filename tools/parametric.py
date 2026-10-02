@@ -81,10 +81,11 @@ def sweep_cost(model_path: Path, column: str, from_value: float, to_value: float
     rows = []
     previous_result = None
     previous_basis: dict[str, str] | None = None
+    stalls = 0
     for _ in range(MAX_BREAKPOINTS):
         result = model.solve(ranging=True, start=previous_result, log_to_console=False,
                              **options)
-        basis = dict(zip(source.col_names, result.col_statuses))
+        basis = _basis(source, result)
         rows.append({
             "parameter": t, "objective": result.objective if result.claims_a_point else "",
             "status": result.status,
@@ -96,14 +97,8 @@ def sweep_cost(model_path: Path, column: str, from_value: float, to_value: float
                 direction < 0 and t <= to_value + TOLERANCE):
             break
         step = result.col_ranging_upper[j] if direction > 0 else -result.col_ranging_lower[j]
-        if step == 0.0 or not _finite(step):
-            t = to_value  # the basis never changes again in this direction - one more solve
-        else:
-            t = t + step if direction > 0 else t + step
-            if direction > 0:
-                t = min(t, to_value)
-            else:
-                t = max(t, to_value)
+        stalls = stalls + 1 if direction * step <= TOLERANCE * max(1.0, abs(t)) else 0
+        t = _next_parameter(t, step, direction, to_value, stalls - 1 if stalls else 0)
         model.set_cost(j, t)
     return rows
 
@@ -135,10 +130,11 @@ def sweep_row(model_path: Path, row: str, side: str, from_value: float, to_value
     rows = []
     previous_result = None
     previous_basis: dict[str, str] | None = None
+    stalls = 0
     for _ in range(MAX_BREAKPOINTS):
         result = model.solve(ranging=True, start=previous_result, log_to_console=False,
                              **options)
-        basis = dict(zip(source.col_names, result.col_statuses))
+        basis = _basis(source, result)
         rows.append({
             "parameter": t, "objective": result.objective if result.claims_a_point else "",
             "status": result.status,
@@ -150,13 +146,37 @@ def sweep_row(model_path: Path, row: str, side: str, from_value: float, to_value
                 direction < 0 and t <= to_value + TOLERANCE):
             break
         step = result.row_ranging_upper[i] if direction > 0 else -result.row_ranging_lower[i]
-        if step == 0.0 or not _finite(step):
-            t = to_value
-        else:
-            t = t + step
-            t = min(t, to_value) if direction > 0 else max(t, to_value)
+        stalls = stalls + 1 if direction * step <= TOLERANCE * max(1.0, abs(t)) else 0
+        t = _next_parameter(t, step, direction, to_value, stalls - 1 if stalls else 0)
         apply(t)
     return rows
+
+
+def _basis(source, result) -> dict[str, str]:
+    """Every column's and every row's status. A breakpoint is often a row's slack entering
+    or leaving the basis with no column changing; comparing the columns alone labelled such
+    a breakpoint "no basis change" although the slope changed there (#522)."""
+    basis = dict(zip(source.col_names, result.col_statuses))
+    basis.update((f"row {name}", status)
+                 for name, status in zip(source.row_names, result.row_statuses))
+    return basis
+
+
+def _next_parameter(t: float, step: float, direction: float, to_value: float,
+                    stalls: int = 0) -> float:
+    """The next point of the walk, always forward. An infinite step means the basis never
+    changes again in this direction: one more solve at the end. A step that does not move
+    forward is a degenerate vertex, where the basis in hand holds for no move at all (or a
+    warm start kept a basis that is still optimal to tolerance just past the end of its own
+    range); jumping to the end there (as this tool used to) skipped every breakpoint after
+    it, so the walk steps just past the vertex instead and re-solves, by 1e-7 relative and
+    ten times more for each step in a row that made no progress (#522)."""
+    if not _finite(step):
+        return to_value
+    if direction * step <= TOLERANCE * max(1.0, abs(t)):
+        step = direction * 1e-7 * (10.0 ** min(stalls, 6)) * max(1.0, abs(t))
+    t = t + step
+    return min(t, to_value) if direction > 0 else max(t, to_value)
 
 
 def _finite(value: float) -> bool:

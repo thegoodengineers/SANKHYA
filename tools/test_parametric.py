@@ -116,6 +116,42 @@ def test_row_sweep_breakpoints_match_independent_resolves() -> None:
           str(mismatches))
 
 
+def test_every_segment_is_linear_on_the_refinery_through_a_degenerate_vertex() -> None:
+    """Between two reported points the optimal value must be linear, so a fresh solve at a
+    segment's midpoint lies on its chord. On the small refinery LP (#517) the crude price
+    BUY_1_0 reaches a degenerate vertex at 7, where ranging gives a zero step; the walk used
+    to jump from there to the end of the range and reported 7 to 30 as one straight segment
+    with two breakpoints inside it."""
+    import subprocess
+    import sankhya
+    from verify_solution_mps import parse_mps
+
+    with tempfile.TemporaryDirectory() as tmp:
+        model_path = Path(tmp) / "refinery_small.mps"
+        subprocess.run([sys.executable, str(REPO_ROOT / "bench" / "case_studies" / "refinery"
+                                            / "generator.py"), "--size", "small", "--seed", "1",
+                        "--out", str(model_path)], check=True, capture_output=True)
+        rows = [r for r in sweep_cost(model_path, "BUY_1_0", 0.0, 30.0, {})
+                if r["objective"] != ""]
+        check(len(rows) >= 5, "the sweep walks past the degenerate vertex at 7",
+              str([round(r["parameter"], 4) for r in rows]))
+        j = parse_mps(model_path).col_index["BUY_1_0"]
+        off_chord = []
+        for left, right in zip(rows, rows[1:]):
+            if right["parameter"] - left["parameter"] < 1e-6:
+                continue
+            middle = 0.5 * (left["parameter"] + right["parameter"])
+            model = sankhya.Model.read(str(model_path))
+            model.set_cost(j, middle)
+            fresh = model.solve(log_to_console=False)
+            chord = 0.5 * (left["objective"] + right["objective"])
+            if fresh.status != "optimal" or abs(fresh.objective - chord) > 1e-6 * max(
+                    1.0, abs(chord)):
+                off_chord.append((round(middle, 4), fresh.status, fresh.objective, chord))
+        check(not off_chord, "a fresh solve at every segment's midpoint lies on its chord",
+              str(off_chord))
+
+
 def main() -> int:
     print("tools/parametric.py tests\n")
     for name, function in sorted(globals().items()):
