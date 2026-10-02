@@ -214,7 +214,7 @@ def relaxation_objective(binary: Path, mps: Path, model: Mps, time_limit: float)
     """The objective of the model with the conditions dropped (both families minimise), so
     the CSV shows on which instances they change the answer and the branching had work."""
     relaxed = mps.with_suffix(".relaxed.mps")
-    relaxed.write_text(model.text(relaxed=True))
+    relaxed.write_text(model.text(relaxed=True), newline="\n")
     stats = relaxed.with_suffix(".json")
     subprocess.run([str(binary), "solve", str(relaxed), "--stats", str(stats), "--time-limit",
                     str(time_limit), "--option", "log_to_console=false"],
@@ -266,7 +266,8 @@ def main() -> int:
         work = Path(tmp)
         for family, a, b, seed, model in jobs:
             mps = work / f"{model.name.lower()}.mps"
-            mps.write_text(model.text())
+            # LF on every platform, so the sha256 in the CSV is the same wherever it ran.
+            mps.write_text(model.text(), newline="\n")
             native = solve(binary, mps, False, args.time_limit)
             reform = solve(binary, mps, True, args.time_limit)
             relaxation = relaxation_objective(binary, mps, model, args.time_limit)
