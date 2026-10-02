@@ -96,7 +96,7 @@ IterateTraceHook& iterate_trace_for_testing() {
 }
 
 Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
-                    SolveControl* control) {
+                    SolveControl* control, const PdhgWarmStart* warm_start) {
   Timer timer;
   Solution solution;
   solution.allocate_for(model);
@@ -204,11 +204,34 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   const auto m = static_cast<std::size_t>(rows);
   std::vector<double> x(n, 0.0);
   std::vector<double> y(m, 0.0);
-  for (Index j = 0; j < cols; ++j) {
-    // Start at the projection of zero, which is the closest feasible point to the origin.
-    x[static_cast<std::size_t>(j)] =
-        project(0.0, scaling.col_lower[static_cast<std::size_t>(j)],
-                scaling.col_upper[static_cast<std::size_t>(j)]);
+  // #913 part 2: a caller's previous primal-dual pair, in the MODEL's own (unscaled) space,
+  // carried into this solve instead of the usual projection of zero. x = Dc xhat and
+  // y = Dr yhat (scaling.hpp), so the model-space point is divided by this solve's own
+  // scaling - which need not be the scaling the point was found under, since the model may
+  // have been edited since - to land in the scaled space the iteration runs in. x is then
+  // projected into THIS solve's bounds exactly as the cold start projects zero, so a point
+  // from before a bound moved is pulled back rather than handed to the iteration outside it.
+  const bool warm_usable = warm_start != nullptr && !warm_start->empty() &&
+                           warm_start->x.size() == static_cast<std::size_t>(cols);
+  if (warm_usable) {
+    for (Index j = 0; j < cols; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      const double xhat = warm_start->x[u] / scaling.column[u];
+      x[u] = project(xhat, scaling.col_lower[u], scaling.col_upper[u]);
+    }
+    if (warm_start->y.size() == static_cast<std::size_t>(rows)) {
+      for (Index i = 0; i < rows; ++i) {
+        const auto u = static_cast<std::size_t>(i);
+        y[u] = warm_start->y[u] / scaling.row[u];
+      }
+    }
+  } else {
+    for (Index j = 0; j < cols; ++j) {
+      // Start at the projection of zero, which is the closest feasible point to the origin.
+      x[static_cast<std::size_t>(j)] =
+          project(0.0, scaling.col_lower[static_cast<std::size_t>(j)],
+                  scaling.col_upper[static_cast<std::size_t>(j)]);
+    }
   }
 
   std::vector<double> x_next(n, 0.0);
@@ -266,7 +289,12 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   if (use_halpern && two_matvec) a_x_anchor = a_x_cached;
 
   double eta = spectral_norm > 0.0 ? 1.0 / spectral_norm : 1.0;
-  double omega = 1.0;  // primal weight
+  // #913 part 2: the caller's primal weight carried over, when offered and positive and
+  // finite; the usual unit start otherwise (every restart below still re-derives omega from
+  // the iterates, so a bad carried value only costs the first step, never the answer).
+  double omega = (warm_usable && std::isfinite(warm_start->omega) && warm_start->omega > 0.0)
+                     ? warm_start->omega
+                     : 1.0;  // primal weight
   Count iteration = 0;
   Count consecutive_no_information = 0;
   Count restarts = 0;

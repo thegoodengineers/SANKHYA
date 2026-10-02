@@ -24,8 +24,10 @@
 #include <nlohmann/json.hpp>
 
 #include "sankhya/io.hpp"
+#include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/pdhg.hpp"
 #include "sankhya/tolerances.hpp"
 
 #include "core/status_guard.hpp"
@@ -155,6 +157,89 @@ TEST(Pdhg, StopsAtTheIterationLimitWithoutClaimingOptimality) {
   // An unfinished first-order run must not present its incumbent as a proven bound.
   EXPECT_TRUE(std::isinf(s.dual_bound));
   EXPECT_NE(s.message, "");
+}
+
+// ---- the warm start (#913 part 2) -------------------------------------------------------
+
+TEST(Pdhg, AWarmStartAtTheConvergedPointReachesTheSameOptimum) {
+  // NOT a claim that the warm start is faster: convergence is only checked every
+  // kEvaluationInterval = 40 iterations (pdhg.cpp), and a real sweep (PR description) found
+  // the iteration count at these checkpoints moves either way between cold and warm on
+  // different generated instances - PDHG's restart and extrapolation state do not make
+  // "start exactly at the fixed point" strictly dominant the way it is for the QP interior
+  // point (#494). What has to hold regardless is correctness: seeding x and y at a point that
+  // already satisfies every optimality condition must not derail the iteration away from it.
+  std::mt19937_64 rng(913914);
+  oracle::GeneratorConfig config;
+  config.max_rows = 8;
+  config.max_cols = 8;
+  Logger logger(nullptr);
+  Options options = pdhg_options(1e-9);
+
+  int checked = 0;
+  for (int trial = 0; trial < 30; ++trial) {
+    const oracle::KktInstance instance = oracle::kkt_lp(rng, config);
+    const Model model = oracle::to_model(instance.lp);
+    const Solution cold = pdhg::solve_pdhg(model, options, logger);
+    if (cold.status != SolveStatus::kOptimal) continue;
+    pdhg::PdhgWarmStart warm;
+    warm.x = cold.col_value;
+    warm.y = cold.row_dual;
+    const Solution started = pdhg::solve_pdhg(model, options, logger, nullptr, &warm);
+    ASSERT_EQ(started.status, SolveStatus::kOptimal)
+        << "trial " << trial << ": " << started.message;
+    EXPECT_NEAR(started.objective, cold.objective,
+                1e-6 * std::max(1.0, std::fabs(cold.objective)))
+        << "trial " << trial;
+    ++checked;
+  }
+  EXPECT_GT(checked, 15) << "too few instances converged for this to mean anything";
+}
+
+TEST(Pdhg, AWarmStartAfterARightHandSideEditStillReachesTheNewOptimum) {
+  // The model PDHG converges on, then a right-hand side move (as a re-solve after an edit
+  // would see): the warm point is now infeasible for the row it used to satisfy exactly, and
+  // the engine must still reach the NEW optimum, not get stuck near the old one.
+  Model model = make_lp({{1.0, 1.0}}, {4.0}, {4.0}, {1.0, 2.0});  // optimum 4 at (4, 0)
+  Logger logger(nullptr);
+  Options options = pdhg_options(1e-10);
+  const Solution first = pdhg::solve_pdhg(model, options, logger);
+  ASSERT_EQ(first.status, SolveStatus::kOptimal) << first.message;
+  EXPECT_NEAR(first.objective, 4.0, 1e-6);
+
+  model.row_lower[0] = 10.0;  // x + y = 10 now; optimum 10 at (10, 0)
+  model.row_upper[0] = 10.0;
+  pdhg::PdhgWarmStart warm;
+  warm.x = first.col_value;
+  warm.y = first.row_dual;
+  const Solution started = pdhg::solve_pdhg(model, options, logger, nullptr, &warm);
+  ASSERT_EQ(started.status, SolveStatus::kOptimal) << started.message;
+  EXPECT_NEAR(started.objective, 10.0, 1e-6);
+  EXPECT_NEAR(started.col_value[0], 10.0, 1e-5);
+}
+
+TEST(Pdhg, AWarmStartOfTheWrongSizeIsIgnoredAndTheColdStartRuns) {
+  const Model model = make_lp({{1.0, 1.0}}, {4.0}, {4.0}, {1.0, 2.0});
+  Logger logger(nullptr);
+  Options options = pdhg_options(1e-10);
+  pdhg::PdhgWarmStart warm;
+  warm.x = {1.0};  // one entry short of the model's two columns
+  const Solution started = pdhg::solve_pdhg(model, options, logger, nullptr, &warm);
+  const Solution cold = pdhg::solve_pdhg(model, options, logger);
+  ASSERT_EQ(started.status, SolveStatus::kOptimal) << started.message;
+  EXPECT_EQ(started.iterations, cold.iterations)
+      << "a mismatched warm start should fall back to the usual cold start exactly";
+}
+
+TEST(Pdhg, AnEmptyWarmStartBehavesExactlyLikeNoWarmStartAtAll) {
+  const Model model = make_lp({{1.0, 1.0}}, {4.0}, {4.0}, {1.0, 2.0});
+  Logger logger(nullptr);
+  Options options = pdhg_options(1e-10);
+  pdhg::PdhgWarmStart empty;
+  const Solution with_empty = pdhg::solve_pdhg(model, options, logger, nullptr, &empty);
+  const Solution without = pdhg::solve_pdhg(model, options, logger);
+  EXPECT_EQ(with_empty.status, without.status);
+  EXPECT_EQ(with_empty.iterations, without.iterations);
 }
 
 TEST(Pdhg, IsSelectedOnlyWhenAskedFor) {
