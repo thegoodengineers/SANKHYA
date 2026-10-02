@@ -458,25 +458,40 @@ Each one attributed to one cause (#417), read from the engine that ran and the s
 
 #### The same eight under each engine
 
-Source CSVs: `bench/results/mittelmann-72123ff.csv` (dual simplex), `bench/results/mittelmann-pdhg-5c7efbc.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
+Source CSVs: `bench/results/mittelmann-72123ff.csv` (dual simplex), `bench/results/mittelmann-pdhg-0fe40ba.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
 Same 300 s limit per instance and engine; HiGHS is not re-run here.
 
 | instance | dual simplex: status · verified · time (s) | PDHG: status · verified · time (s) | interior point: status · verified · time (s) |
 |---|---|---|---|
-| `Linf_520c` | time_limit · - · 300.1 | time_limit · - · 231.4 | not run |
-| `bdry2` | time_limit · - · 253.4 | time_limit · - · 241.1 | not run |
-| `brazil3` | optimal · yes · 5.9 | optimal · yes · 58.0 | optimal · yes · 2.7 |
-| `chromaticindex1024-7` | optimal · yes · 57.9 | optimal · yes · 0.7 | not run |
+| `Linf_520c` | time_limit · - · 300.1 | time_limit · - · 210.2 | not run |
+| `bdry2` | time_limit · - · 253.4 | time_limit · - · 210.5 | not run |
+| `brazil3` | optimal · yes · 5.9 | optimal · yes · 82.7 | optimal · yes · 2.7 |
+| `chromaticindex1024-7` | optimal · yes · 57.9 | optimal · yes · 0.8 | not run |
 | `datt256_lp` | optimal · yes · 153.0 | not run | not run |
 | `ex10` | optimal · yes · 77.6 | not run | not run |
-| `irish-electricity` | time_limit · - · 240.2 | time_limit · - · 240.0 | not run |
+| `irish-electricity` | time_limit · - · 240.2 | time_limit · - · 240.1 | not run |
 | `physiciansched3-3` | time_limit · - · 216.8 | not run | not run |
-| `qap15` | time_limit · - · 300.1 | optimal · yes · 93.4 | not run |
-| `rmine15` | time_limit · - · 216.7 | time_limit · - · 216.2 | not run |
+| `qap15` | time_limit · - · 300.1 | optimal · yes · 93.0 | not run |
+| `rmine15` | time_limit · - · 216.7 | time_limit · - · 216.3 | not run |
 | `s250r10` | optimal · yes · 185.0 | not run | not run |
-| `supportcase10` | time_limit · - · 220.7 | time_limit · - · 220.9 | not run |
+| `supportcase10` | time_limit · - · 220.7 | time_limit · - · 210.3 | not run |
 
 Finished and verified inside the limit: dual simplex **5 of 12**, PDHG **3 of 12**, interior point **1 of 12**.
+
+**PDHG at the feasibility-page standard (#486).** The same PDHG runs, read at the standard Mittelmann's LP feasibility page uses: the relative KKT error at or under 1e-6, no basis, no polish (the crossing is taken in the first-order phase, before any polish). This is a first-order tolerance, **not an optimal basis** and not what `optimal` means elsewhere in this document; the last two columns are what the full run went on to report and the verifier's verdict on that point.
+
+| instance | relative KKT <= 1e-6 at (s) | run status | verified |
+|---|---:|---|---|
+| `Linf_520c` | not reached | time_limit | - |
+| `bdry2` | not reached | time_limit | - |
+| `brazil3` | 41.2 | optimal | yes |
+| `chromaticindex1024-7` | 0.579 | optimal | yes |
+| `irish-electricity` | not reached | time_limit | - |
+| `qap15` | 6.41 | optimal | yes |
+| `rmine15` | not reached | time_limit | - |
+| `supportcase10` | not reached | time_limit | - |
+
+Reached the feasibility-page standard: **3 of 8**.
 
 ### 1e. The first-order engine — PDHG
 
@@ -486,8 +501,8 @@ accuracy asked of it - which is why this section reports two tolerances separate
 than one blended number. It is also the engine the GPU work targets, so its CPU behaviour is
 the baseline every GPU claim will be measured against.
 
-Source CSV: `bench/results/pdhg-4177ae6.csv`  
-Commit `4177ae6` · machine `Windows-AMD64` · 9 instances, the ones committed to the repository
+Source CSV: `bench/results/pdhg-0fe40ba.csv`  
+Commit `0fe40ba` · machine `Windows-AMD64` · 9 instances, the ones committed to the repository
 
 - **9 of 9** reach `optimal` at a requested 0.0001 with restarts on.
 - **9 of 9** reach `optimal` at a requested 1e-08 with restarts on, **9 of 9** with restarts off.
@@ -498,31 +513,45 @@ Commit `4177ae6` · machine `Windows-AMD64` · 9 instances, the ones committed t
 
 | instance | simplex | PDHG 0.0001: objective / iterations | PDHG 1e-08: objective / iterations |
 |---|---:|---:|---:|
-| `adlittle` | 225494.9632 | 225494.9632 / 192080 | 225494.9632 / 192080 |
-| `afiro` | -464.7531429 | -464.7531428 / 1040 | -464.7531428 / 1040 |
-| `blend` | -30.81214985 | -30.81214988 / 44520 | -30.81214988 / 44520 |
-| `israel` | -896644.8219 | -896644.8219 / 368720 | -896644.8219 / 368720 |
-| `sc105` | -52.20206121 | -52.20206122 / 61440 | -52.20206122 / 61440 |
-| `sc50a` | -64.57507706 | -64.57507705 / 7680 | -64.57507705 / 7680 |
-| `sc50b` | -70 | -69.99999999 / 8360 | -69.99999999 / 8360 |
+| `adlittle` | 225494.9632 | 225494.9632 / 194440 | 225494.9632 / 194440 |
+| `afiro` | -464.7531429 | -464.7531429 / 1120 | -464.7531429 / 1120 |
+| `blend` | -30.81214985 | -30.8121499 / 59720 | -30.8121499 / 59720 |
+| `israel` | -896644.8219 | -896644.8219 / 460960 | -896644.8219 / 460960 |
+| `sc105` | -52.20206121 | -52.20206122 / 86640 | -52.20206122 / 86640 |
+| `sc50a` | -64.57507706 | -64.575077 / 8800 | -64.575077 / 8800 |
+| `sc50b` | -70 | -69.99999998 / 7560 | -69.99999998 / 7560 |
 | `share2b` | -415.7322407 | -415.7322407 / 1000009 | -415.7322407 / 1000009 |
-| `stocfor1` | -41131.97622 | -41131.97619 / 321000 | -41131.97619 / 321000 |
+| `stocfor1` | -41131.97622 | -41131.97621 / 352160 | -41131.97621 / 352160 |
 
 **Restarts, measured at 1e-08.** The claim that restarting the averaging helps is checked rather than repeated:
 
 | instance | restarts on | restarts off | ratio |
 |---|---:|---:|---:|
-| `adlittle` | 192080 | 207040 | 1.08x |
-| `afiro` | 1040 | 2800 | 2.69x |
-| `blend` | 44520 | 76400 | 1.72x |
-| `israel` | 368720 | 1000005 | 2.71x |
-| `sc105` | 61440 | 291200 | 4.74x |
-| `sc50a` | 7680 | 28280 | 3.68x |
-| `sc50b` | 8360 | 33200 | 3.97x |
+| `adlittle` | 194440 | 206600 | 1.06x |
+| `afiro` | 1120 | 2960 | 2.64x |
+| `blend` | 59720 | 72720 | 1.22x |
+| `israel` | 460960 | 1000005 | 2.17x |
+| `sc105` | 86640 | 282640 | 3.26x |
+| `sc50a` | 8800 | 27880 | 3.17x |
+| `sc50b` | 7560 | 33880 | 4.48x |
 | `share2b` | 1000009 | 1000009 | 1.00x |
-| `stocfor1` | 321000 | 496320 | 1.55x |
+| `stocfor1` | 352160 | 494680 | 1.40x |
 
 A ratio above 1 means restarts saved iterations on that instance.
+
+**Relative KKT crossings in the 1e-08 run (#486).** Seconds on the solver clock at which the relative KKT error (defined below) first came at or under each level, in the same run, beside what that run reported and whether the independent verifier accepted the point:
+
+| instance | 1e-4 (s) | 1e-6 (s) | 1e-8 (s) | status | verified |
+|---|---:|---:|---:|---|---|
+| `adlittle` | 0.00491 | 0.0611 | 0.256 | optimal | yes |
+| `afiro` | 0.00548 | 0.00589 | 0.00686 | optimal | yes |
+| `blend` | 0.00923 | 0.0472 | 0.138 | optimal | yes |
+| `israel` | 0.0371 | 0.133 | 0.309 | optimal | yes |
+| `sc105` | 0.00822 | 0.0529 | 0.18 | optimal | yes |
+| `sc50a` | 0.00522 | 0.0137 | 0.0169 | optimal | yes |
+| `sc50b` | 0.00392 | 0.012 | 0.0215 | optimal | yes |
+| `share2b` | 0.633 | 2.81 | not reached | optimal | yes |
+| `stocfor1` | 0.0447 | 0.2 | 0.767 | optimal | yes |
 
 
 **The relative KKT error, and the three crossing times (#486).** Every PDHG run records
