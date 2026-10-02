@@ -444,6 +444,18 @@ These are the smallest archives in Mittelmann's LP directory; against Netlib's l
 
 **Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `irish-electricity`, `physiciansched3-3`, `qap15`, `rmine15`, `supportcase10`.
 
+Each one attributed to one cause (#417), read from the engine that ran and the solver's own message in the CSV, which is the log line quoted:
+
+| instance | status | engine | cause | the solver's message |
+|---|---|---|---|---|
+| `Linf_520c` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 8.439e-02, dual 2.181e-04, gap 9.999e-01 after 24039 iterations and 13 restarts (target 1.0e-04); no time left for the interior-point polish; the interior point declined (th |
+| `bdry2` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 6.027e-02, dual 4.566e-07, gap 9.911e-01 after 7019 iterations and 10 restarts (target 1.0e-04); the interior-point polish did not improve it (time_limit after 0 iterations: |
+| `irish-electricity` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 6.079e-06, dual 1.151e-04, gap 1.793e-06 after 36902 iterations and 16 restarts (target 1.0e-04); the interior-point polish did not improve it (time_limit after 11 iteration |
+| `physiciansched3-3` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 3.097e-04, dual 5.597e+00, gap 6.016e-02 after 21399 iterations and 14 restarts (target 1.0e-04); the interior-point polish did not improve it (not_solved after 0 iterations |
+| `qap15` | time_limit | simplex-dual+primal | too large for the simplex at this iteration cost | time limit 149.994s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_limit after 150.0 s of its 150 s share; neither attempt produced a usable point |
+| `rmine15` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 1.508e-05, dual 0.000e+00, gap 5.528e-06 after 20597 iterations and 14 restarts (target 1.0e-04); the interior-point polish did not improve it (not_solved after 0 iterations |
+| `supportcase10` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 2.308e-08, dual 0.000e+00, gap 1.843e-05 after 22080 iterations and 13 restarts (target 1.0e-04); the interior-point polish did not improve it (not_solved after 0 iterations |
+
 #### The same eight under each engine
 
 Source CSVs: `bench/results/mittelmann-72123ff.csv` (dual simplex), `bench/results/mittelmann-pdhg-5c7efbc.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  

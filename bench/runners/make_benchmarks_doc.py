@@ -729,13 +729,54 @@ def mittelmann_section(path: Path | None) -> str:
             f"| {'-' if diff is None or not math.isfinite(diff) else f'{diff:.1e}'} "
             f"| {row.get('iterations', '')} "
             f"| {'-' if seconds is None else f'{seconds:.1f}'} | {mark} |")
-    unsolved = sorted(r["instance"] for r in rows if r.get("status") != "optimal")
+    unsolved = sorted((r for r in rows if r.get("status") != "optimal"),
+                      key=lambda r: r["instance"])
     if unsolved:
         out += ["", "**Not solved inside the limit**, named rather than dropped: "
-                + ", ".join(f"`{n}`" for n in unsolved) + ".", ""]
+                + ", ".join(f"`{r['instance']}`" for r in unsolved) + ".", "",
+                "Each one attributed to one cause (#417), read from the engine that ran and the "
+                "solver's own message in the CSV, which is the log line quoted:", "",
+                "| instance | status | engine | cause | the solver's message |",
+                "|---|---|---|---|---|"]
+        for row in unsolved:
+            message = " ".join((row.get("message") or "").split()).replace("|", "/")
+            if len(message) > 220:
+                message = message[:217] + "..."
+            out.append(f"| `{row['instance']}` | {row.get('status', '')} "
+                       f"| {row.get('algorithm', '') or '-'} | {mittelmann_cause(row)} "
+                       f"| {message or '-'} |")
+        out.append("")
     else:
         out += ["", "Every instance in the set finished inside the limit.", ""]
     return chr(10).join(out)
+
+
+def mittelmann_cause(row: dict) -> str:
+    """One cause per unsolved Mittelmann instance, from the five #417 names: memory, the
+    interior point's ordering or factorization not fitting or finishing, a numerical
+    failure, PDHG converging too slowly, or the LP too large for the simplex at its
+    iteration cost. Read from the status, the engine and the solver's message only, so the
+    attribution is reproducible from the CSV and changes when the run does."""
+    status = row.get("status", "")
+    engine = (row.get("algorithm") or "").lower()
+    message = (row.get("message") or "").lower()
+    # The engine that produced the answer decides: a PDHG message can quote the interior
+    # point's polish, and that is not why PDHG stopped.
+    if "out of memory" in message or status == "out_of_memory":
+        return "out of memory"
+    if status == "numerical_error":
+        return "numerical failure"
+    if "pdhg" in engine:
+        return "PDHG converges too slowly for the tolerance"
+    if "ipm" in engine or "interior" in engine:
+        if any(phrase in message for phrase in ("declined", "ipm_setup_share",
+                                                "ipm_max_factor_nonzeros",
+                                                "inside the factorization")):
+            return "interior point: the ordering or factorization does not fit or finish"
+        return "interior point does not converge inside the limit"
+    if "simplex" in engine:
+        return "too large for the simplex at this iteration cost"
+    return f"other ({status})"
 
 
 def newest_option_run(pattern: str, option: str) -> Path | None:
