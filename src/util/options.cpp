@@ -864,6 +864,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"sos_reformulate",
+         OptionType::Bool,
+         false,
+         "Semi-continuous columns and special ordered sets (#754): write every one "
+         "whose columns have finite bounds as binaries and big-M rows and solve that "
+         "MILP, instead of branching on the conditions natively. The answer is reported "
+         "on the original model. Off by default; kept so the two routes can be A/B'd on "
+         "the same model.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"mip_strong_branch_fix",
                  OptionType::Bool,
                  false,

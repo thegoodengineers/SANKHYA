@@ -434,8 +434,11 @@ def verify_pool(model: Model, solution: Solution, report: Report, x: list[float]
             v = values[n]
             if model.col_integer[j]:
                 worst_integrality = max(worst_integrality, abs(v - round(v)))
+            # A semi-continuous column (#754) may also sit at 0, below its run range.
+            lower = (min(0.0, model.col_lower[j]) if j in model.semicontinuous
+                     else model.col_lower[j])
             worst_bound = max(worst_bound,
-                              (model.col_lower[j] - v) / max(1.0, abs(v)),
+                              (lower - v) / max(1.0, abs(v)),
                               (v - model.col_upper[j]) / max(1.0, abs(v)))
     report.check(worst_integrality <= integer_tol and worst_bound <= primal_tol,
                  "pool: integrality and column bounds",
@@ -464,6 +467,8 @@ def verify_pool(model: Model, solution: Solution, report: Report, x: list[float]
                     magnitude = max(magnitude, abs(term))
                 else:
                     lo, hi = model.col_lower[j], model.col_upper[j]
+                    if j in model.semicontinuous:
+                        lo = min(0.0, lo)  # #754: it may be off
                     low += a * lo if a > 0 else a * hi
                     high += a * hi if a > 0 else a * lo
             violation = max(model.row_lower[i] - high, low - model.row_upper[i], 0.0)

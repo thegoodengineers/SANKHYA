@@ -242,6 +242,44 @@ def test_cli_flags() -> None:
 # Test: deterministic — same seed gives same file
 # ---------------------------------------------------------------------------
 
+def test_crude_minimum_run_is_semi_continuous() -> None:
+    """--crude-min-run (#754): every RUN column gets an SC bound, and the condition changes
+    the MILP's answer the same way through both of the solver's routes."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        base = Path(tmpdir) / "base.mps"
+        minrun = Path(tmpdir) / "minrun.mps"
+        generator.main(["--size", "small", "--seed", "1", "--milp", "--out", str(base)])
+        generator.main(["--size", "small", "--seed", "1", "--milp", "--crude-min-run", "1/6",
+                        "--out", str(minrun)])
+        text = minrun.read_text(encoding="utf-8")
+        sc = [line for line in text.splitlines() if line.startswith(" SC BND  RUN_")]
+        lo = [line for line in text.splitlines() if line.startswith(" LO BND  RUN_")]
+        check(len(sc) == 12 and len(lo) == 12, "every crude run carries an SC bound and a LO",
+              f"{len(sc)} SC, {len(lo)} LO")
+        binary = _find_binary()
+        if binary is None:
+            print("  [skip] no sankhya binary found; solve checks skipped")
+            return
+        base_status, base_obj = _solve(binary, base)
+        status, native = _solve(binary, minrun)
+        reformulated_path = Path(tmpdir) / "minrun_r.mps"
+        reformulated_path.write_text(text, encoding="utf-8")
+        result = subprocess.run([binary, "solve", str(reformulated_path), "--time-limit", "60",
+                                 "--option", "sos_reformulate=true"],
+                                capture_output=True, text=True, timeout=120)
+        import re
+        found = re.search(r"^objective\s+(\S+)", result.stdout, flags=re.M)
+        reformulated = float(found.group(1)) if found else None
+        check(status == "optimal" and base_status == "optimal", "both MILPs solve",
+              f"{base_status}, {status}")
+        check(native is not None and base_obj is not None
+              and native > base_obj + 1e-6 * max(1.0, abs(base_obj)),
+              "the minimum run rate makes the plan strictly dearer", f"{native} vs {base_obj}")
+        check(native is not None and reformulated is not None
+              and abs(native - reformulated) <= 1e-6 * max(1.0, abs(native)),
+              "native branching and the binary reformulation agree", f"{native} vs {reformulated}")
+
+
 def test_deterministic() -> None:
     results = []
     for _ in range(2):
@@ -267,6 +305,7 @@ if __name__ == "__main__":
     test_verify_lp_catches_infeasibility()
     test_size_presets_produce_different_sizes()
     test_cli_flags()
+    test_crude_minimum_run_is_semi_continuous()
     test_deterministic()
     print()
     if FAILURES:

@@ -395,8 +395,10 @@ TEST(MpsBounds, UiWithZeroLeavesTheImplicitLowerBound) {
   EXPECT_DOUBLE_EQ(model.col_upper[static_cast<std::size_t>(x)], 0.0);
 }
 
-TEST(MpsBounds, SemiContinuousIsRejectedRatherThanMisread) {
-  const std::string error = parse_expecting_failure(
+TEST(MpsBounds, SemiContinuousIsReadAsSemiContinuous) {
+  // Refused until #754, so that it could not be misread as an ordinary bound; now the column
+  // carries the flag and [0, 5] is its run range. tests/unit/test_sc_sos_io.cpp has the rest.
+  const Model model = parse_or_fail(
       "NAME          SC\n"
       "ROWS\n"
       " N  COST\n"
@@ -406,7 +408,12 @@ TEST(MpsBounds, SemiContinuousIsRejectedRatherThanMisread) {
       "BOUNDS\n"
       " SC BND       X            5.0\n"
       "ENDATA\n");
-  EXPECT_NE(error.find("semi-continuous"), std::string::npos) << error;
+  const Index x = col_of(model, "X");
+  ASSERT_GE(x, 0);
+  ASSERT_EQ(model.semicontinuous.size(), 1u);
+  EXPECT_EQ(model.semicontinuous[0], x);
+  EXPECT_DOUBLE_EQ(model.col_lower[static_cast<std::size_t>(x)], 0.0);
+  EXPECT_DOUBLE_EQ(model.col_upper[static_cast<std::size_t>(x)], 5.0);
 }
 
 TEST(MpsBounds, TheVectorNameMayBeOmitted) {

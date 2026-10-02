@@ -15,6 +15,8 @@
 
 #include <fmt/format.h>
 
+#include "core/sc_sos.hpp"
+
 namespace sankhya {
 
 const char* to_string(SolveStatus status) noexcept {
@@ -62,7 +64,8 @@ const char* to_string(VarType type) noexcept {
 // =========================================================================================
 
 bool Model::has_integrality() const noexcept {
-  return std::any_of(col_type.begin(), col_type.end(),
+  return has_semicontinuous_or_sos() ||
+         std::any_of(col_type.begin(), col_type.end(),
                      [](VarType t) { return t == VarType::kInteger; });
 }
 
@@ -228,6 +231,8 @@ std::string Model::validate() const {
   }
 
   if (std::isnan(objective_offset)) return "objective offset is NaN";
+  // Semi-continuous columns and special ordered sets (#754), in core/sc_sos.cpp.
+  if (has_semicontinuous_or_sos()) return validate_semicontinuous_and_sos(*this);
   return {};
 }
 
@@ -279,11 +284,18 @@ void Solution::recompute_quality(const Model& model) {
     primal_infeasibility_scaled =
         std::max(primal_infeasibility_scaled, violation / std::max(1.0, scale));
   };
+  // A semi-continuous column (#754) may also sit at 0, below its run range: its bound
+  // is measured from min(0, l), and the gap between 0 and l is measured below, with
+  // integrality, because it is a combinatorial condition rather than a bound.
+  const std::vector<char> semicontinuous = semicontinuous_mask(model);
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
     const double x = col_value[u];
     if (is_finite_bound(model.col_lower[u])) {
-      record(model.col_lower[u] - x, std::fabs(x));
+      const double lower = !semicontinuous.empty() && semicontinuous[u] != 0
+                               ? std::min(0.0, model.col_lower[u])
+                               : model.col_lower[u];
+      record(lower - x, std::fabs(x));
     }
     if (is_finite_bound(model.col_upper[u])) {
       record(x - model.col_upper[u], std::fabs(x));
@@ -291,6 +303,13 @@ void Solution::recompute_quality(const Model& model) {
     if (model.col_type[u] == VarType::kInteger) {
       integrality_violation = std::max(integrality_violation, std::fabs(x - std::round(x)));
     }
+  }
+  // A semi-continuous value strictly between 0 and its lower bound, or a special ordered set
+  // with too many nonzero members (#754), is reported as an integrality violation: the
+  // status guard holds it to the integrality tolerance, as it does a fractional integer.
+  if (model.has_semicontinuous_or_sos()) {
+    integrality_violation = std::max(integrality_violation,
+                                     semicontinuous_and_sos_violation(model, col_value.data()));
   }
   for (Index i = 0; i < m; ++i) {
     const auto u = static_cast<std::size_t>(i);
@@ -533,6 +552,19 @@ std::uint64_t Model::fingerprint() const noexcept {
   for (const VarType type : col_type) mix_bytes(&hash, &type, sizeof(type));
   mix_matrix(&hash, matrix);
   mix_matrix(&hash, hessian);
+  // Semi-continuous columns and special ordered sets (#754), only when present: a model
+  // without them fingerprints exactly as it did before they existed.
+  if (has_semicontinuous_or_sos()) {
+    mix_index(&hash, static_cast<Index>(semicontinuous.size()));
+    for (const Index j : semicontinuous) mix_index(&hash, j);
+    mix_index(&hash, static_cast<Index>(sos.size()));
+    for (const SosSet& set : sos) {
+      mix_bytes(&hash, &set.type, sizeof(set.type));
+      mix_index(&hash, static_cast<Index>(set.columns.size()));
+      for (const Index j : set.columns) mix_index(&hash, j);
+      mix_doubles(&hash, set.weights);
+    }
+  }
   // Names are metadata: two models that differ only in what their columns are called solve
   // identically, so they fingerprint identically and the report says so.
   return hash;

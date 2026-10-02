@@ -11,7 +11,7 @@ which keeps the repository's layout. It needs the `sankhya` binary, Python 3.9 o
 nothing else: the model is generated on the spot by `bench/case_studies/refinery/generator.py`
 from a fixed seed (synthetic data), and every checker is in `tools/`.
 
-## The seven steps
+## The eight steps
 
 Each prints one line of result and the seconds it took. Every number comes from a command the
 script runs; the script stops at the first step whose check fails.
@@ -25,6 +25,7 @@ script runs; the script stops at the first step whose check fails.
 | 5 bundle | `tools/bundle.py --certificate` then `tools/replay_bundle.py` on the MILP run | the bundle replays: manifest intact, verifier passes, the bundled VIPR proof checked by `tools/verify_certificate.py` |
 | 6 prices | twenty crude price sets through `sankhya scenarios` (#752) | how many verified, the objective's range |
 | 7 replan | today's crude prices and product demands (market and commitment together) moved (`bench/runners/replan_warm_start.py`'s edit), the LP solved cold and with `--warm-start` from step 3's `.sol` (#218), both checked by `tools/verify_solution.py` | the pivot counts side by side, the shared optimum |
+| 8 units | the step 1 plant with a minimum run rate on its crude unit (#754): `generator.py --crude-min-run 1/6` makes every crude run semi-continuous, 0 or at least 1/6 of the unit's capacity (an MPS SC bound); solved by the native semi-continuous branching and again with `--option sos_reformulate=true` (binaries and big-M rows), both checked by `tools/verify_solution.py` | the optimum beside step 1's, how many runs are idle, the nodes the native branching took, and that the two routes agree |
 
 ## Why step 3 re-solves
 
@@ -41,7 +42,8 @@ the price overstates the next unit. Certified two-sided prices are #757.
 
 On the 7.7 GB Windows laptop (CPU, no GPU), at the commit this document was merged with, the
 whole walk took 4.1 s; the CI Release leg runs it on every pull request. Record a stage machine's
-own time with `demo/finale.sh` before the finale, not this figure.
+own time with `demo/finale.sh` before the finale, not this figure. With step 8 (#754) added,
+one run on the same laptop, with another build running on it, took 9.0 s, step 8 1.37 s of it.
 
 **From a fresh release archive, Windows.** `sankhya-0.1.0-windows-x64-cpu.zip` from the
 `v1.0.0-rc1` release, its SHA-256 matching the release's `SHA256SUMS`, unpacked outside any
@@ -58,8 +60,6 @@ it was built before the version bump in #822.
   been timed on a card: the GPU instances are stopped. On a CUDA build with a device the solve
   runs the device paths the MILP search already has; the certified GPU tree (#756) and a timed
   GPU run remain.
-- **Semi-continuous units (#754)** are not in the generator's MILP yet; step 1 solves the
-  ordering-cost MILP (binary purchase decisions with big-M links).
 - **Certified shadow prices (#757).** Step 3 reports the simplex's own duals and ranging on
   the LP, not prices re-derived in exact arithmetic; the one-unit re-solves are floating point.
 - **Linux from a release archive.** Only the Windows archive has been run fresh (above).

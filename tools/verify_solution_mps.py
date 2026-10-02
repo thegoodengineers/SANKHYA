@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from verify_solution_io import INF, normalize_infinity, open_text
+from verify_solution_sos import SosReader
 
 # =========================================================================================
 # An independent MPS reader
@@ -41,6 +42,12 @@ class Model:
         # is a'x + sum over listed entries of value * x_i * x_j. Kept entry by entry, so the
         # reading is the format's and not a folded form of it.
         self.qc_entries: dict[tuple[int, int, int], float] = {}
+        # Semi-continuous columns and special ordered sets (#754), read by
+        # verify_solution_sos.py's own rules: an SC column takes 0 or a value in
+        # [col_lower, col_upper]; a set is (type, name, columns, weights), members in weight
+        # order.
+        self.semicontinuous: set[int] = set()
+        self.sos: list[tuple[int, str, list[int], list[float]]] = []
 
     def add_quadratic_rows(self, x: list[float], activity: list[float],
                            row_scale: list[float]) -> None:
@@ -149,6 +156,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
     row_rhs: list[float] = []
     row_range: list[float | None] = []
     integer_marker = False
+    sos = SosReader()  # #754
     qc_row = -1
     lower_set: list[bool] = []
 
@@ -169,6 +177,10 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                         model.maximize = head[1].upper().startswith("MAX")
                 elif key in ("ROWS", "COLUMNS", "RHS", "RANGES", "BOUNDS"):
                     section = key
+                elif key in ("SOS", "SETS"):
+                    # Special ordered sets (#754): CPLEX spells the section SOS, older files
+                    # SETS; the lines under either are read by verify_solution_sos.py.
+                    section = "SOS"
                 elif key in ("QUADOBJ", "QMATRIX", "QSECTION", "QUADS"):
                     # All four spellings are in circulation and denote the same thing.
                     section = "QUADOBJ"
@@ -225,12 +237,15 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
             if section == "COLUMNS":
                 upper_fields = [f.upper().replace("'", "").replace('"', "") for f in fields]
                 if "MARKER" in upper_fields:
+                    if sos.marker_line(fields, f"{path}:{lineno}"):
+                        continue  # a set's 'SOSORG' or 'SOSEND' (#754)
                     if "INTORG" in upper_fields:
                         integer_marker = True
                     elif "INTEND" in upper_fields:
                         integer_marker = False
                     continue
                 col = model.add_column(fields[0], integer_marker)
+                sos.marker_member(col)
                 while len(lower_set) < model.num_cols:
                     lower_set.append(False)
                 for k in range(1, len(fields) - 1, 2):
@@ -271,6 +286,10 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                         row_rhs[i] = value
                     else:
                         row_range[i] = value
+                continue
+
+            if section == "SOS":
+                sos.section_line(fields, model.col_index, f"{path}:{lineno}")
                 continue
 
             if section == "QCMATRIX":
@@ -363,6 +382,12 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 elif kind == "UI":
                     model.col_integer[j] = True
                     model.col_upper[j] = value
+                elif kind == "SC":
+                    # Semi-continuous (#754): the value is the upper end of the run range, and
+                    # the column may also be 0. Its lower end is the lower bound as LO (or the
+                    # default 0) left it.
+                    model.col_upper[j] = value
+                    model.semicontinuous.add(j)
                 else:
                     raise ValueError(f"{path}:{lineno}: unsupported bound type {kind}")
                 continue
@@ -389,6 +414,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
 
     model.col_lower = [normalize_infinity(v) for v in model.col_lower]
     model.col_upper = [normalize_infinity(v) for v in model.col_upper]
+    model.sos = sos.finish()
     return model
 
 

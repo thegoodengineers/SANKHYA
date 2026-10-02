@@ -29,6 +29,9 @@
 #include "sankhya/sparse.hpp"
 #include "sankhya/types.hpp"
 
+#include "core/sc_sos.hpp"
+#include "model_writer_sos.hpp"
+
 namespace sankhya::io {
 namespace {
 
@@ -324,6 +327,7 @@ bool write_mps(const std::string& path, const Model& model, std::string* error) 
     }
   };
 
+  const std::vector<char> semicontinuous = semicontinuous_mask(model);  // #754
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
     const double lo = model.col_lower[u];
@@ -331,6 +335,11 @@ bool write_mps(const std::string& path, const Model& model, std::string* error) 
     const bool is_int = (model.col_type[u] == VarType::kInteger);
     const std::string cname = names.col[static_cast<std::size_t>(j)];
 
+    if (!semicontinuous.empty() && semicontinuous[u] != 0) {
+      bounds_header();
+      write_mps_semicontinuous_bounds(out, cname, lo, hi, is_int);
+      continue;
+    }
     if (is_int) {
       // Binary: [0, 1] integer — single BV line overrides both bounds and marks integer.
       if (lo == 0.0 && hi == 1.0) {
@@ -421,6 +430,8 @@ bool write_mps(const std::string& path, const Model& model, std::string* error) 
       }
     }
   }
+
+  write_mps_sos(out, model, names.col);  // #754
 
   fmt::print(out, "ENDATA\n");
   const bool ok = (std::fclose(out) == 0);
@@ -581,6 +592,7 @@ bool write_lp(const std::string& path, const Model& model, std::string* error) {
   if (!binary_names.empty()) {
     fmt::print(out, "Binary\n{}", binary_names);
   }
+  write_lp_sc_sos(out, model, names.col);  // #754
 
   fmt::print(out, "End\n");
   const bool ok = (std::fclose(out) == 0);

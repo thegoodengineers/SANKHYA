@@ -129,6 +129,23 @@ enum class LimitReason : std::uint8_t { kNone, kInterrupt, kTime, kIterations, k
 // Model
 // =========================================================================================
 
+/// A special ordered set (#754): at most one member nonzero (type 1), or at most two
+/// members nonzero and those two adjacent in weight order (type 2). Beale and Tomlin (1970)
+/// introduced both; SOS2 is how a piecewise-linear curve is written, SOS1 picks one mode.
+///
+/// `columns` and `weights` have the same length and are stored in strictly increasing weight
+/// order: the weights define the order "adjacent" refers to, and the branching rule splits at
+/// their weighted centre. Model::validate() enforces both, and that no column repeats.
+struct SosSet {
+  std::uint8_t type = 1;  ///< 1 or 2
+  std::string name;
+  /// The file's branching priority for the set. Carried through the readers and the MPS
+  /// writer so a round trip keeps it; the search does not read it.
+  double priority = 0.0;
+  std::vector<Index> columns;
+  std::vector<double> weights;
+};
+
 /// A linear, mixed-integer or convex quadratic optimization model.
 ///
 ///     optimize   objective_offset + c.x + 0.5 x^T Q x
@@ -183,13 +200,39 @@ class Model {
   /// engine sees it; validate() enforces that.
   SparseMatrix matrix;
 
+  // ---- Semi-continuous columns and special ordered sets (#754) ------------------------
+  //
+  // FROZEN INTERFACE, ADDITION. Two fields appended, both empty by default, so every model
+  // that existed before them is the same model and every reader, writer and engine that
+  // ignores them sees what it saw. A model that carries either is a combinatorial problem:
+  // has_integrality() says so, which routes it to branch and bound, and presolve leaves it
+  // alone (src/core/presolve_pipeline.cpp).
+
+  /// Semi-continuous columns, ascending, no repeats. Column j listed here takes
+  ///     x_j = 0   or   col_lower[j] <= x_j <= col_upper[j],
+  /// so col_lower and col_upper hold the run range [l, u] of the "on" state; validate()
+  /// requires 0 <= l. An integer column listed here is semi-integer. An engine that does not
+  /// read this field sees x_j in [l, u], a restriction rather than a relaxation.
+  std::vector<Index> semicontinuous;
+
+  /// Special ordered sets of type 1 and 2, see SosSet.
+  std::vector<SosSet> sos;
+
+  /// True when the model carries a semi-continuous column or a special ordered set.
+  [[nodiscard]] bool has_semicontinuous_or_sos() const noexcept {
+    return !semicontinuous.empty() || !sos.empty();
+  }
+
   // ---- Derived queries ----------------------------------------------------------------
 
   [[nodiscard]] Index num_cols() const noexcept { return static_cast<Index>(col_cost.size()); }
   [[nodiscard]] Index num_rows() const noexcept { return static_cast<Index>(row_lower.size()); }
   [[nodiscard]] Index num_nonzeros() const noexcept { return matrix.num_nonzeros(); }
 
-  /// True when any column is integral - i.e. this is a MILP or MIQP.
+  /// True when any column is integral - i.e. this is a MILP or MIQP. Also true when the model
+  /// carries a semi-continuous column or a special ordered set (#754): those are
+  /// combinatorial conditions the continuous relaxation drops, exactly as it drops
+  /// integrality, so every caller that asks "is this a MIP?" gets the answer that is safe.
   [[nodiscard]] bool has_integrality() const noexcept;
 
   /// Number of integral columns.

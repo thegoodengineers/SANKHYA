@@ -69,7 +69,12 @@ namespace sankhya::mip {
 // substitution would produce if it ran on these models.
 void BranchAndBound::detect_objective_integrality() {
   objective_step_ = 0.0;
-  if (quadratic_ || !options_.get_bool("mip_objective_integrality")) return;
+  // Not with semi-continuous columns or sets (#754): the defining-rows rule below reads a
+  // column's value at a node optimum off its rows and bounds, and a semi-continuous or SOS
+  // column's value is also decided by the branching on its condition.
+  if (quadratic_ || sc_sos_ != nullptr || !options_.get_bool("mip_objective_integrality")) {
+    return;
+  }
   const Index n = original_.num_cols();
   const auto is_integer_column = [&](Index j) {
     return original_.col_type[static_cast<std::size_t>(j)] == VarType::kInteger;
@@ -224,7 +229,9 @@ Solution BranchAndBound::run() {
   detect_objective_integrality();
   // Reduced-cost fixing and restarts (#418), both off unless asked for.
   reduced_cost_fixing_ = options_.get_bool("mip_reduced_cost_fixing");
-  restarts_allowed_ = reduced_cost_fixing_ ? options_.get_int("mip_restarts") : 0;
+  // A restart re-roots the search on the relaxation (#754 keeps it to the plain case).
+  restarts_allowed_ =
+      reduced_cost_fixing_ && sc_sos_ == nullptr ? options_.get_int("mip_restarts") : 0;
   restart_fraction_ = options_.get_double("mip_restart_fraction");
   restart_node_limit_ = options_.get_int("mip_restart_node_limit");
   // Objective branching (#418): only with a known step, and only in a search that owns its
@@ -276,7 +283,9 @@ Solution BranchAndBound::run() {
   // A certificate (#518) cannot derive the ordering rows, so with a proof asked for the
   // search runs without them, as it runs without tree cut rounds, rather than refusing the
   // proof on every symmetric model now that the option is on by default.
-  if (options_.get_bool("mip_symmetry") && !quadratic_) {
+  // Nor with semi-continuous columns or sets (#754): the detection reads the relaxed model,
+  // whose symmetries need not respect the conditions the search enforces on top of it.
+  if (options_.get_bool("mip_symmetry") && !quadratic_ && sc_sos_ == nullptr) {
     if (certificate_mode()) {
       logger_.info(
           "Certificate (#518): formulation symmetry is off in this mode (mip_symmetry)");
@@ -306,7 +315,9 @@ Solution BranchAndBound::run() {
   probe_options_.set_int("iteration_limit", tol::kStrongBranchingIterations);
   // #502, each off by default until an A/B on main. The heap is one worker's: a parallel
   // worker donates open nodes by erasing them from the middle of open_.
-  strong_branch_fix_ = options_.get_bool("mip_strong_branch_fix");
+  // #754: a fixing round that makes the node integral closes it as an incumbent, which a
+  // point breaking a semi-continuous or SOS condition is not.
+  strong_branch_fix_ = options_.get_bool("mip_strong_branch_fix") && sc_sos_ == nullptr;
   incremental_propagation_ = options_.get_bool("mip_incremental_propagation");
   heap_open_list_ = options_.get_bool("mip_heap_open_list") && shared_ == nullptr;
   // First factorizations kept across node LPs (#501): off by default until an A/B on main.
@@ -341,6 +352,17 @@ Solution BranchAndBound::run() {
   // this model, or this build's format, is refused - never loaded on a best-effort basis.
   checkpoint_path_ = options_.get_string("checkpoint");
   checkpoint_nodes_ = options_.get_int("checkpoint_nodes");
+  // A checkpoint names the model by the fingerprint of what the tree searches, which for
+  // #754 is the relaxation: two models with different sets would share it.
+  if (sc_sos_ != nullptr &&
+      (!checkpoint_path_.empty() || !options_.get_string("resume").empty())) {
+    solution.status = SolveStatus::kNotSolved;
+    solution.message =
+        "checkpoint and resume are not available with semi-continuous columns or special "
+        "ordered sets (#754)";
+    logger_.warning("{}", solution.message);
+    return solution;
+  }
   if (const std::string resume = options_.get_string("resume"); !resume.empty()) {
     if (const std::string refused = restore_checkpoint(resume); !refused.empty()) {
       solution.status = SolveStatus::kNotSolved;
@@ -656,6 +678,7 @@ Solution BranchAndBound::run() {
     // The gain is taken against the parent's LP objective, not the proved bound safe_bounds
     // may have stored in `bound` (#519): that one is -inf when no bound could be proved, and
     // an infinite gain would stay in the column's pseudocost sum for the rest of the search.
+    if (node.sc_sos_item >= 0) record_sc_sos_pseudocost(node, node_bound);  // #754
     if (node.has_change && node.fraction > 0.0) {
       const double parent_lp =
           std::isnan(node.parent_lp_bound) ? node.bound : node.parent_lp_bound;
@@ -701,7 +724,10 @@ Solution BranchAndBound::run() {
       run_node_heuristics(node_index, relaxation);
     }
 
-    if (most_fractional(relaxation.col_value) < 0) {
+    // Semi-continuous columns and sets (#754): an integral point that breaks one of them is
+    // not a solution, and is branched on below instead of closing the node.
+    const bool fractional = most_fractional(relaxation.col_value) >= 0;
+    if (!fractional && !sc_sos_violated(relaxation.col_value)) {
       // Integral relaxation: this node's optimum is a MILP solution.
       offer_incumbent(relaxation.col_value);
       if (pool_complete_ && split_integral_node(node_index, relaxation)) {
@@ -736,7 +762,9 @@ Solution BranchAndBound::run() {
     // is always processing it. Every dive fixes bounds on the same saved_ stack propagate()
     // pushed onto for this node and unwinds them itself before returning, so the branching
     // decision below sees the node's own domain.
-    {
+    // The dives, the pump and the PDHG heuristics work on fractional integer columns; a node
+    // here only for a semi-continuous or SOS condition (#754) has none.
+    if (fractional) {
       ProfileScope timed(logger_.profiler(), "heuristics", ProfileMode::kDetailed);
       run_dives(node_index, relaxation.col_value);
       current_warm_ = children_warm;
@@ -749,6 +777,14 @@ Solution BranchAndBound::run() {
       // cut round (12fcc3c) spent their budget on instances whose root rounding would have
       // found an incumbent anyway, and delayed it.
       if (node_index == 0 && restarts_ == 0) run_pdhg_heuristics(relaxation);
+    }
+
+    // SEMI-CONTINUOUS AND SOS BRANCHING (#754), before any integer column: a violated
+    // condition is split on, and the node is done (branch_and_bound_sos.cpp).
+    if (sc_sos_ != nullptr && branch_sc_sos(node_index, relaxation, node_bound, prune_bound,
+                                            children_warm, children_qp_warm)) {
+      dive = true;
+      continue;
     }
 
     // The branching decision, with the node's bounds still entered: strong branching
@@ -894,6 +930,7 @@ Solution BranchAndBound::run() {
   }
 
   report_conflicts();
+  report_sc_sos();  // #754
   report_safe_bounds();
   report_miqp_ipm();
   report_branching_fixpoint();
@@ -1099,9 +1136,36 @@ Options with_node_lp_defaults(const Options& requested) {
 
 }  // namespace
 
-Solution solve_branch_and_bound(const Model& model, const Options& requested, Logger& logger,
+Solution solve_branch_and_bound(const Model& given, const Options& requested, Logger& logger,
                                 SolveControl* control) {
   const Options options = with_node_lp_defaults(requested);
+  // SEMI-CONTINUOUS COLUMNS AND SPECIAL ORDERED SETS (#754) are taken off the model here,
+  // and everything below - the row tightening, OBBT, propagation, the tree - runs on the
+  // relaxation that leaves (sc_sos_spec.hpp says why that is sound); the search enforces
+  // them through `sc_sos`. A VIPR certificate has no way to state such a branching.
+  const bool combinatorial = given.has_semicontinuous_or_sos();
+  if (combinatorial && !options.get_string("write_certificate").empty()) {
+    Solution refused;
+    refused.allocate_for(given);
+    refused.algorithm = "branch-and-bound";
+    refused.status = SolveStatus::kNotSolved;
+    refused.message =
+        "write_certificate: a VIPR certificate cannot state a semi-continuous or SOS "
+        "branching; solve with sos_reformulate=true to certify the binary reformulation";
+    logger.warning("{}", refused.message);
+    return refused;
+  }
+  Model relaxed;
+  ScSosSpec sc_sos;
+  if (combinatorial) {
+    relaxed = given;
+    sc_sos = ScSosSpec::take_from(&relaxed);
+    logger.info(
+        "Semi-continuous / SOS (#754): {} semi-continuous column(s) and {} set(s), branched "
+        "on before any integer column",
+        sc_sos.sc_columns.size(), sc_sos.sets.size());
+  }
+  const Model& model = combinatorial ? relaxed : given;
   // ROOT CUTS, applied once before the search rather than per node.
   //
   // Integer rounding tightens a row IN PLACE, so unlike a generated cut it adds no row, grows
@@ -1147,13 +1211,28 @@ Solution solve_branch_and_bound(const Model& model, const Options& requested, Lo
   // PARALLEL TREE SEARCH (#222), when asked for and when the model is one it takes: a MILP,
   // not a pool_complete search (whose pruning reads the pool's cutoff at every node), and
   // not in deterministic mode (the tree a parallel search explores depends on timing).
-  const int threads = certify ? 1 : parallel_threads(searched, options, logger);
+  // A worker of the parallel search builds its own tree from the model alone, without the
+  // conditions #754 adds, so such a model is searched on one thread.
+  if (combinatorial && options.get_int("mip_threads") != 1) {
+    logger.info("mip_threads ignored: semi-continuous / SOS models are searched on one thread");
+  }
+  const int threads =
+      certify || combinatorial ? 1 : parallel_threads(searched, options, logger);
   if (threads > 1)
     return checked(
         solve_branch_and_bound_parallel(searched, options, logger, control, threads));
 
   BranchAndBound search(searched, options, logger, control);
-  return checked(search.run());
+  if (!combinatorial) return checked(search.run());
+  search.attach_sc_sos(&sc_sos);
+  Solution result = checked(search.run());
+  // Measured against the model as given, so the answer's violations are the conditions'
+  // too, as tools/verify_solution.py will measure them.
+  if ((result.status == SolveStatus::kOptimal || result.status == SolveStatus::kFeasible) &&
+      result.col_value.size() == static_cast<std::size_t>(given.num_cols())) {
+    result.recompute_quality(given);
+  }
+  return result;
 }
 
 }  // namespace sankhya::mip

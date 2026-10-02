@@ -31,6 +31,14 @@ With --milp, one binary per crude-period purchase decision is added:
   together with the big-M linking constraint:
     BUY_{k}_{t} <= bigM * ZDEC_{k}_{t}
 
+With --crude-min-run F (#754), the crude unit has a minimum run rate: a crude it processes in
+a period runs at no less than F of the unit's capacity, or not at all, so each run is
+semi-continuous
+    RUN_{k}_{t}   - 0, or in [F * CDU_cap, CDU_cap]                          (SC)
+written as an MPS SC bound (LO for the minimum, SC for the capacity), which the solver
+branches on natively (or, with --option sos_reformulate=true, through a binary and two
+big-M rows per run).
+
 Constraints (per period):
     crude balance   CS_{k,t} = CS_{k,t-1} + BUY_{k,t} - RUN_{k,t}       (E)
     CDU capacity    sum_k RUN_{k,t}                            <= cap_CDU  (L)
@@ -131,6 +139,8 @@ class Instance:
         self.x: list[Fraction] = []                        # primal plan
         self.y: list[Fraction] = []                        # dual multipliers
         self.cost: list[Fraction] = []
+        # Semi-continuous columns (#754): column index -> the lower end of its run range.
+        self.sc_lower: dict[int, Fraction] = {}
 
     def add_col(self, name: str, value: Fraction,
                 upper: Fraction | None, integer: bool = False) -> int:
@@ -385,6 +395,28 @@ def extend_to_milp(inst: Instance, periods: int, crudes: int) -> None:
             inst.cost.append(FIXED_ORDER_SHARE * max(abs(inst.cost[buy_col]), fr(1)) * max_buy)
 
 
+def add_crude_minimum_run(inst: Instance, periods: int, crudes: int,
+                          fraction: Fraction) -> int:
+    """Give the crude unit a minimum run rate (#754): every RUN_{k}_{t} becomes
+    semi-continuous, 0 or in [fraction * cap, cap]. No column or row is added, so the LP's
+    prices and rows are unchanged; only the runs' domains are.
+
+    Returns how many runs of the LP plan sit strictly between 0 and the minimum: the plan is
+    no longer feasible there and the optimum has to move.
+    """
+    name_to_col = {name: j for j, name in enumerate(inst.cols)}
+    below = 0
+    for t in range(periods):
+        for k in range(crudes):
+            col = name_to_col[f"RUN_{k}_{t}"]
+            cap = inst.upper[col]
+            assert cap is not None
+            inst.sc_lower[col] = fraction * cap
+            if 0 < inst.x[col] < fraction * cap:
+                below += 1
+    return below
+
+
 # ---------------------------------------------------------------------------
 # KKT verifier (LP only; called before any file is written)
 # ---------------------------------------------------------------------------
@@ -464,14 +496,17 @@ def write_mps(inst: Instance, out: Path, milp: bool,
 
     with out.open("w", encoding="utf-8", newline="\n") as f:
         f.write(f"NAME          REFINERY_CS_T{periods}_K{crudes}_P{products}"
-                f"_U{units}_S{seed}{'_MILP' if milp else ''}\n")
+                f"_U{units}_S{seed}{'_MILP' if milp else ''}"
+                f"{'_SC' if inst.sc_lower else ''}\n")
         f.write("* SYNTHETIC DATA — see bench/case_studies/refinery/generator.py (#517)\n")
         f.write("* All yields, qualities, costs and capacities are pseudo-random.\n")
         f.write("* Structure follows Floudas & Lin (2005) and Pochet & Wolsey (2006).\n")
         f.write(f"* periods={periods}  crudes={crudes}  products={products}"
                 f"  units={units}  seed={seed}\n")
         f.write(f"* {'MILP with binary crude-purchase decisions' if milp else 'LP relaxation'}\n")
-        if not milp:
+        if inst.sc_lower:
+            f.write("* with a minimum crude run rate: RUN_k_t semi-continuous (#754)\n")
+        if not milp and not inst.sc_lower:
             f.write(f"* LP analytic optimum: {float(optimum)!r}\n")
         f.write("ROWS\n N  COST\n")
         for name, sense in inst.rows:
@@ -500,7 +535,12 @@ def write_mps(inst: Instance, out: Path, milp: bool,
                 f.write(f"    RHS  {name}  {_decimal(inst.rhs[i])}\n")
         f.write("BOUNDS\n")
         for j, name in enumerate(inst.cols):
-            if inst.integer[j]:
+            if j in inst.sc_lower:
+                # Semi-continuous (#754): the lower end of the run range, then the SC bound,
+                # whose value is the upper end.
+                f.write(f" LO BND  {name}  {_decimal(inst.sc_lower[j])}\n")
+                f.write(f" SC BND  {name}  {_decimal(inst.upper[j])}\n")
+            elif inst.integer[j]:
                 # Binary: 0/1 bounds with UI (upper integer) bound type
                 f.write(f" UI BND  {name}  1\n")
             elif inst.upper[j] is not None:
@@ -513,7 +553,9 @@ def write_mps(inst: Instance, out: Path, milp: bool,
     print(f"wrote {out}")
     print(f"  rows={n_rows}  cols={n_cols}  nonzeros={nnz}"
           f"  binary={len(int_cols)}")
-    if not milp:
+    if inst.sc_lower:
+        print(f"  semi-continuous={len(inst.sc_lower)}")
+    if not milp and not inst.sc_lower:
         print(f"  LP analytic optimum: {float(optimum)!r}")
 
 
@@ -536,9 +578,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed",     type=int, default=1, help="RNG seed (default: 1)")
     parser.add_argument("--milp",     action="store_true",
                         help="add binary crude-purchase decision variables")
+    parser.add_argument("--crude-min-run", type=Fraction, default=None,
+                        help="give the crude unit a minimum run rate: a crude it runs in a "
+                             "period runs at least this fraction of its capacity, or not at "
+                             "all, as semi-continuous RUN columns (#754); e.g. 1/6")
     parser.add_argument("--out",      type=Path, required=True,
                         help="output .mps file path")
     args = parser.parse_args(argv)
+    if args.crude_min_run is not None and not 0 < args.crude_min_run <= 1:
+        print("--crude-min-run is a fraction of capacity in (0, 1]", file=sys.stderr)
+        return 2
 
     # Start from size preset, then apply any explicit overrides
     dims = dict(periods=4, crudes=3, products=4, units=5, specs=3, commits=2)
@@ -558,6 +607,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.milp:
         extend_to_milp(inst, dims["periods"], dims["crudes"])
+    if args.crude_min_run is not None:
+        below = add_crude_minimum_run(inst, dims["periods"], dims["crudes"], args.crude_min_run)
+        print(f"  crude unit minimum run rate {args.crude_min_run} of capacity: "
+              f"{below} of the LP plan's {dims['periods'] * dims['crudes']} runs are below it")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     write_mps(inst, args.out, milp=args.milp,
