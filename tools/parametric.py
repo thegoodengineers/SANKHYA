@@ -96,14 +96,7 @@ def sweep_cost(model_path: Path, column: str, from_value: float, to_value: float
                 direction < 0 and t <= to_value + TOLERANCE):
             break
         step = result.col_ranging_upper[j] if direction > 0 else -result.col_ranging_lower[j]
-        if step == 0.0 or not _finite(step):
-            t = to_value  # the basis never changes again in this direction - one more solve
-        else:
-            t = t + step if direction > 0 else t + step
-            if direction > 0:
-                t = min(t, to_value)
-            else:
-                t = max(t, to_value)
+        t = _next_parameter(t, step, direction, to_value)
         model.set_cost(j, t)
     return rows
 
@@ -150,11 +143,7 @@ def sweep_row(model_path: Path, row: str, side: str, from_value: float, to_value
                 direction < 0 and t <= to_value + TOLERANCE):
             break
         step = result.row_ranging_upper[i] if direction > 0 else -result.row_ranging_lower[i]
-        if step == 0.0 or not _finite(step):
-            t = to_value
-        else:
-            t = t + step
-            t = min(t, to_value) if direction > 0 else max(t, to_value)
+        t = _next_parameter(t, step, direction, to_value)
         apply(t)
     return rows
 
@@ -167,6 +156,20 @@ def _basis(source, result) -> dict[str, str]:
     basis.update((f"row {name}", status)
                  for name, status in zip(source.row_names, result.row_statuses))
     return basis
+
+
+def _next_parameter(t: float, step: float, direction: float, to_value: float) -> float:
+    """The next point of the walk. An infinite step means the basis never changes again in
+    this direction: one more solve at the end. A zero step is a degenerate vertex, where the
+    basis just found holds for no move at all; jumping to the end there (as this tool used
+    to) skipped every breakpoint after it, so the walk steps just past the vertex instead and
+    re-solves, which gives a basis with a range of its own (#522)."""
+    if not _finite(step):
+        return to_value
+    if abs(step) <= TOLERANCE * max(1.0, abs(t)):
+        step = direction * 1e-7 * max(1.0, abs(t))
+    t = t + step
+    return min(t, to_value) if direction > 0 else max(t, to_value)
 
 
 def _finite(value: float) -> bool:
