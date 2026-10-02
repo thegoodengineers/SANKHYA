@@ -40,6 +40,17 @@ double BranchAndBound::safe_node_bound(const Solution& relaxation, double believ
   return safe;
 }
 
+void BranchAndBound::record_safe_bounds(Solution* solution) const {
+  if (!safe_bounds_) return;
+  solution->safe_bound_nodes = safe_bound_nodes_;
+  solution->safe_bound_infinite = safe_bound_infinite_;
+  solution->safe_bound_refusals = safe_bound_refusals_;
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  solution->safe_bound_max_gap = std::isfinite(safe_bound_max_gap_) ? safe_bound_max_gap_ : nan;
+  solution->safe_bound_max_rel_gap =
+      std::isfinite(safe_bound_max_rel_gap_) ? safe_bound_max_rel_gap_ : nan;
+}
+
 void BranchAndBound::report_safe_bounds() const {
   if (!safe_bounds_) return;
   logger_.info(
