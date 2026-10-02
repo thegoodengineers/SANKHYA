@@ -409,6 +409,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_miplib_ab_doc.py
 
+      - name: The MIPLIB 3 catalogue, its match tolerance, CSV names and doc section (#761)
+        # Pure Python, no solve, no download: the catalogue parse on an excerpt with its
+        # "(not opt)" rows, one unit in the last printed decimal as the tolerance (rgn), no
+        # MIPLIB 2017 glob matching a MIPLIB 3 name, the HiGHS worker on a MIP, the section.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_miplib3.py
+
       - name: The GPU runners' CPU arms, gaps and doc tables (#488)
         # Pure Python, no solve, no GPU: the two CPU arms and the options each passes (the
         # N-thread one must turn pdhg_parallel_spmv on), the |obj-ref|/max(1,|ref|) gap, the

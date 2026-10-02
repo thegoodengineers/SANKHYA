@@ -32,6 +32,12 @@ Python interpreter.
 
 The CSV is written after every instance, so an interrupted run loses at most one instance,
 and --resume picks it up again from the file.
+
+MIPLIB 3 (#761) is a fourth suite with two differences. Only HiGHS runs it here, beside
+SANKHYA's three-seed runs from `miplib.py --set miplib3`, and its CSV is named
+`highs-miplib3-<limit>s-<sha>.csv`. Its references carry `published_tolerance` (one unit in
+the last decimal place the MIPLIB 3 catalogue prints, fetch_miplib3.py), and a match is
+within max(1e-6 * max(1, |reference|), published_tolerance), the rule miplib.py applies.
 """
 from __future__ import annotations
 
@@ -69,7 +75,26 @@ SUITES = {
     "maros-meszaros": {"dir": "maros-meszaros", "suffix": ".qps", "kind": "qp",
                        "reference": "reference_objective", "with_constant": True,
                        "time_limit": 60.0},
+    # The classic MIPLIB 3 set (#761), fetched by fetch_miplib3.py. HiGHS only: SANKHYA's
+    # runs on this set are miplib.py's (`--set miplib3`, three seeds), and the Clp and GLPK
+    # paths here read an LP's basic solution, so on a MIP they would grade a relaxation.
+    # HiGHS reads the INTORG markers from the file and solves the MIP; a MIP has no duals, so
+    # its point is written `feasible` and the verifier checks it primal and integral only.
+    # None of the 65 models has an objective constant, so with_constant changes nothing.
+    "miplib3": {"dir": "miplib3", "suffix": ".mps", "kind": "mip",
+                "reference": "published_optimal", "with_constant": False,
+                "time_limit": 60.0, "manifest": "manifest.json", "solvers": ("highs",)},
 }
+
+
+def default_out_name(suite_name: str, full: bool, time_limit: float, commit: str) -> str:
+    """The CSV a suite run writes when --out is not given. MIPLIB 3's (#761) is
+    `highs-miplib3-<limit>s-<sha>.csv`, the limit in the name because the set is run at two,
+    and a name no other glob in bench/runners or tools takes (test_miplib3.py checks)."""
+    if suite_name == "miplib3":
+        return f"highs-miplib3-{time_limit:g}s-{'' if full else 'partial-'}{commit}.csv"
+    return (f"head-to-head-{suite_name}-{commit}.csv" if full
+            else f"head-to-head-{suite_name}-partial-{commit}.csv")
 
 CSV_COLUMNS = [
     "suite", "instance", "instance_sha256", "rows", "columns", "solver", "solver_version",
@@ -171,8 +196,13 @@ def solve(solver: str, suite: dict, model_path: Path, time_limit: float, sol: Pa
 
 
 def grade(solver: str, suite: dict, model, model_path: Path, sol: Path, out: dict,
-          reference: float, exact: float | None, time_limit: float) -> dict:
-    """The row's verdicts from one solve; see the module docstring for each rule."""
+          reference: float, exact: float | None, time_limit: float,
+          published_tolerance: float = 0.0) -> dict:
+    """The row's verdicts from one solve; see the module docstring for each rule.
+
+    `published_tolerance` is the manifest entry's, when it has one (MIPLIB 3, #761): the
+    reference then matches within max(MATCH_TOLERANCE * max(1, |reference|), it), the rule
+    miplib.py applies to SANKHYA on the same set. 0 leaves the relative rule alone."""
     status = out["status"]
     row = {"status": status, "objective": out.get("objective"), "point_objective": None,
            "verification": "not-run" if status != "unsupported" else "unsupported",
@@ -193,7 +223,8 @@ def grade(solver: str, suite: dict, model, model_path: Path, sol: Path, out: dic
     row["absolute_gap"] = None if ours is None else abs(ours - reference)
     row["relative_gap"] = gap
     row["matches_reference"] = bool(status == "optimal" and gap is not None
-                                    and gap <= MATCH_TOLERANCE)
+                                    and (gap <= MATCH_TOLERANCE
+                                         or row["absolute_gap"] <= published_tolerance))
     row["exact_objective"] = exact
     row["matches_exact"] = (None if exact is None else bool(
         status == "optimal" and ours is not None
@@ -236,23 +267,27 @@ def summarise(rows: list[dict], solvers: list[str], time_limit: float, sgm) -> N
 def run_suite(args) -> int:
     suite = SUITES[args.suite]
     data_dir = REPO_ROOT / "data" / suite["dir"]
-    manifest_path = data_dir / "reference.json"
+    manifest_path = data_dir / suite.get("manifest", "reference.json")
     if not manifest_path.exists():
         raise SystemExit(f"no {manifest_path.relative_to(REPO_ROOT)}; fetch the suite first")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))["instances"]
     exact_path = data_dir / "koch_exact.json"
     exact = (json.loads(exact_path.read_text())["instances"] if exact_path.exists() else {})
     names = sorted(args.instances or manifest)
-    solvers = args.solvers.split(",") if args.solvers else list(ALL_SOLVERS)
+    allowed = suite.get("solvers", ALL_SOLVERS)
+    solvers = args.solvers.split(",") if args.solvers else list(allowed)
     unknown = [s for s in solvers if s not in ALL_SOLVERS]
     if unknown:
         raise SystemExit(f"unknown solver(s): {', '.join(unknown)}")
+    refused = [s for s in solvers if s not in allowed]
+    if refused:
+        raise SystemExit(f"suite {args.suite} runs {', '.join(allowed)} only, not "
+                         f"{', '.join(refused)}; see the comment on SUITES in compare_suite.py")
     time_limit = args.time_limit if args.time_limit_given else suite["time_limit"]
     binary = args.sankhya_binary or netlib.default_binary()
     commit, machine = stamp.stamp(binary), machine_tag(args.machine_kind)
-    full = not args.instances and set(solvers) == set(ALL_SOLVERS)
-    default = (f"head-to-head-{args.suite}-{commit}.csv" if full
-               else f"head-to-head-{args.suite}-partial-{commit}.csv")
+    full = not args.instances and set(solvers) == set(allowed)
+    default = default_out_name(args.suite, full, time_limit, commit)
     out_path = (REPO_ROOT / args.out).resolve() if args.out else RESULTS_DIR / default
 
     rows: list[dict] = []
@@ -284,7 +319,8 @@ def run_suite(args) -> int:
                 sol = Path(tmp) / "solution.sol"
                 out = solve(solver, suite, path, time_limit, sol, binary, commit)
                 verdict = grade(solver, suite, model, path, sol, out, reference, exact_value,
-                                time_limit)
+                                time_limit, float(manifest[name].get("published_tolerance")
+                                                  or 0.0))
             row = {"suite": args.suite, "instance": name, "instance_sha256": digest,
                    "rows": model.num_rows, "columns": model.num_cols, "solver": solver,
                    "solver_version": out.get("version", ""), **verdict,

@@ -148,18 +148,37 @@ def reconcile(sol_path: Path, model, solver: str) -> list[str]:
 # HiGHS and SCIP: pip packages, each run in a child process of this script
 # =========================================================================================
 
+def _mps_path(model: Path, tmp: Path) -> Path:
+    """`model` itself when it already ends `.mps`; otherwise a link (a copy where the system
+    will not make one, as Windows without developer mode will not) named `.mps`, because
+    HiGHS picks its reader by extension and reads nothing from a `.qps` file."""
+    if model.suffix.lower() == ".mps":
+        return model
+    link = tmp / (model.stem + ".mps")
+    try:
+        link.symlink_to(model.resolve())
+    except OSError:
+        import shutil  # noqa: PLC0415
+        shutil.copyfile(model, link)
+    return link
+
+
 def _worker_highs(model: Path, time_limit: float, sol: Path) -> dict:
+    """HiGHS on `model` as the file states it: an LP, a QP, or a MIP when the file has
+    INTORG markers (MIPLIB 3, #761), which readModel reads as integrality, so the MIP is
+    solved and not its relaxation. mip_feasibility_tolerance, the row and integrality
+    tolerance of HiGHS's MIP solver (1e-6 by default), is set to the same 1e-7 as the LP
+    tolerances; it does nothing on a model without integers. A MIP has no duals, so its
+    point is written `feasible` and verified primal and integral only."""
     import highspy  # noqa: PLC0415 - external solver, never a build dependency
     h = highspy.Highs()
     for key, value in (("output_flag", False), ("time_limit", float(time_limit)),
                        ("threads", 1), ("primal_feasibility_tolerance", FEASIBILITY_TOLERANCE),
-                       ("dual_feasibility_tolerance", FEASIBILITY_TOLERANCE)):
+                       ("dual_feasibility_tolerance", FEASIBILITY_TOLERANCE),
+                       ("mip_feasibility_tolerance", FEASIBILITY_TOLERANCE)):
         h.setOptionValue(key, value)
     with tempfile.TemporaryDirectory() as tmp:
-        # HiGHS picks its reader by extension and reads nothing from a `.qps` file.
-        link = Path(tmp) / (model.stem + ".mps")
-        link.symlink_to(model.resolve())
-        h.readModel(str(link))
+        h.readModel(str(_mps_path(model, Path(tmp))))
         h.run()
     status = h.modelStatusToString(h.getModelStatus()).strip().lower()
     info, lp, solution = h.getInfo(), h.getLp(), h.getSolution()
