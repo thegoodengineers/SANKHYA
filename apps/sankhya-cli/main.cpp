@@ -272,6 +272,10 @@ int main(int argc, char** argv) {
   solve_cmd->add_option("--warm-start", warm_start_path,
                         "Start the simplex from the basis in this .sol file, a previous "
                         "solve of this model (presolve is bypassed)");
+  std::string mip_start_path;
+  solve_cmd->add_option("--start", mip_start_path,
+                        "A complete, feasible user-supplied MILP solution to install as "
+                        "the initial incumbent before the root search begins");
   bool compute_iis = false;
   solve_cmd->add_flag("--iis", compute_iis,
                       "On an infeasible model, name the irreducible infeasible subsystem: "
@@ -423,6 +427,13 @@ int main(int argc, char** argv) {
       std::string error;
       if (!sankhya::io::read_solution_basis(warm_start_path, model, &control.start_col_status,
                                             &control.start_row_status, &error)) {
+        fmt::print(stderr, "error: {}\n", error);
+        return 3;
+      }
+    }
+    if (!mip_start_path.empty()) {
+      std::string error;
+      if (!sankhya::io::read_solution_point(mip_start_path, model, &control.start_solution, &error)) {
         fmt::print(stderr, "error: {}\n", error);
         return 3;
       }

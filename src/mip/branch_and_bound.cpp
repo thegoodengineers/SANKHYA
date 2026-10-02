@@ -260,6 +260,18 @@ Solution BranchAndBound::run() {
     solution.message = problem;
     return solution;
   }
+
+  // Phase 1: validate and install a complete user-supplied initial solution.
+  if (control_ && control_->has_start_solution()) {
+    if (offer_incumbent(control_->start_solution)) {
+      logger_.info("Accepted user-supplied starting solution as initial incumbent: objective {:.6g}",
+                   incumbent_internal_);
+    } else {
+      solution.status = SolveStatus::kModelError;
+      solution.message = "The user-supplied starting solution is either infeasible or not an integer assignment.";
+      return solution;
+    }
+  }
   // Formulation symmetry (#413), not for a quadratic objective, whose Hessian the detection
   // does not read. A parallel worker (#222) appends the rows the driver derived once from
   // the same model, in the same order, so every subtree searches the same restricted

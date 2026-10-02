@@ -1142,4 +1142,59 @@ TEST(TreeCuts, CutPoolingPreservesCorrectnessAndCountersSane) {
   }
 }
 
+TEST(BranchAndBound, MipStart_ValidStartIsAccepted) {
+  // maximize x + y
+  // x, y <= 1, integer
+  Model model = make_milp({}, {}, {}, {1.0, 1.0}, {1.0, 1.0}, {true, true});
+  model.sense = ObjSense::kMaximize;
+
+  SolveControl control;
+  control.start_solution = {1.0, 1.0}; // The optimal point
+  Solution sol = solve(model, mip_options(), &control);
+
+  EXPECT_EQ(sol.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(sol.objective, 2.0, 1e-9);
+  // It should be accepted. The root node is evaluated and it terminates.
+  EXPECT_EQ(sol.nodes, 1);
+}
+
+TEST(BranchAndBound, MipStart_InfeasibleStartIsRejected) {
+  // maximize x + y
+  // x, y <= 1, integer
+  // 0 <= x + y <= 1
+  Model model = make_milp({{1.0, 1.0}}, {0.0}, {1.0}, {1.0, 1.0}, {1.0, 1.0}, {true, true});
+  model.sense = ObjSense::kMaximize;
+
+  SolveControl control;
+  control.start_solution = {1.0, 1.0}; // Infeasible (x+y=2 > 1)
+  Solution sol = solve(model, mip_options(), &control);
+
+  // The solve is cleanly rejected before running.
+  EXPECT_EQ(sol.status, SolveStatus::kModelError);
+  EXPECT_NE(sol.message.find("starting solution is either infeasible or not an integer assignment"), std::string::npos) << sol.message;
+}
+
+TEST(BranchAndBound, MipStart_FractionalStartIsRejected) {
+  Model model = make_milp({{1.0, 1.0}}, {0.0}, {1.0}, {1.0, 1.0}, {1.0, 1.0}, {true, true});
+  model.sense = ObjSense::kMaximize;
+
+  SolveControl control;
+  control.start_solution = {0.5, 0.5}; // Feasible but fractional
+  Solution sol = solve(model, mip_options(), &control);
+
+  EXPECT_EQ(sol.status, SolveStatus::kModelError);
+  EXPECT_NE(sol.message.find("starting solution is either infeasible or not an integer assignment"), std::string::npos) << sol.message;
+}
+
+TEST(BranchAndBound, MipStart_NoStartLeavesBehaviorUnchanged) {
+  Model model = make_milp({{1.0, 1.0}}, {0.0}, {1.0}, {1.0, 1.0}, {1.0, 1.0}, {true, true});
+  model.sense = ObjSense::kMaximize;
+
+  SolveControl control;
+  Solution sol = solve(model, mip_options(), &control);
+
+  EXPECT_EQ(sol.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(sol.objective, 1.0, 1e-9);
+}
+
 }  // namespace sankhya

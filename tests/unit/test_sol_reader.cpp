@@ -113,5 +113,35 @@ TEST(SolReader, AFileOfAnotherModelOrWithoutABasisIsRefused) {
   EXPECT_NE(error.find("missing"), std::string::npos) << error;
 }
 
+TEST(SolReader, ReadSolutionPointRecoversValues) {
+  Model model = netlib("afiro");
+  const Solution cold = solve(model, quiet());
+  ASSERT_EQ(cold.status, SolveStatus::kOptimal);
+  const TempFile file("", ".sol");
+  std::string error;
+  ASSERT_TRUE(io::write_solution(file.path(), model, cold, &error)) << error;
+
+  std::vector<double> values;
+  ASSERT_TRUE(io::read_solution_point(file.path(), model, &values, &error)) << error;
+  ASSERT_EQ(values.size(), model.num_cols());
+  for (std::size_t j = 0; j < values.size(); ++j) {
+    EXPECT_NEAR(values[j], cold.col_value[j], 1e-9);
+  }
+}
+
+TEST(SolReader, ReadSolutionPointFailsOnMissingValues) {
+  Model model = netlib("afiro");
+  const Solution cold = solve(model, quiet());
+  ASSERT_EQ(cold.status, SolveStatus::kOptimal);
+  const TempFile file("", ".sol");
+  std::string error;
+  ASSERT_TRUE(io::write_solution(file.path(), model, cold, &error)) << error;
+
+  std::vector<double> values;
+  Model other = netlib("adlittle");
+  EXPECT_FALSE(io::read_solution_point(file.path(), other, &values, &error));
+  EXPECT_NE(error.find("not in the model"), std::string::npos) << error;
+}
+
 }  // namespace
 }  // namespace sankhya
