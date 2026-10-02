@@ -1,0 +1,9 @@
+parameter,objective,status,change,git_commit,machine,instance_sha256
+0.0,-1546.8950399999999,optimal,initial basis,0fe40ba,Windows-AMD64,6b855957da30183be18d8470d0b15581f572cb2e992933fac7dcc9fc351f9a21
+6.999999999999999,-1308.8950400000008,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,6b855957da30183be18d8470d0b15581f572cb2e992933fac7dcc9fc351f9a21
+7.000000699999999,-1308.8950211000006,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,6b855957da30183be18d8470d0b15581f572cb2e992933fac7dcc9fc351f9a21
+8.756646270871984,-1261.4655906864564,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,6b855957da30183be18d8470d0b15581f572cb2e992933fac7dcc9fc351f9a21
+8.756647146536611,-1261.465584471658,optimal,entered: row UNIT_2_0; left: row COMMIT_2_0,0fe40ba,Windows-AMD64,6b855957da30183be18d8470d0b15581f572cb2e992933fac7dcc9fc351f9a21
+9.058111948051947,-1259.3260174025982,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,6b855957da30183be18d8470d0b15581f572cb2e992933fac7dcc9fc351f9a21
+9.058112853863141,-1259.3260109738417,optimal,entered: SELL_2_2; left: row COMMIT_2_2,0fe40ba,Windows-AMD64,6b855957da30183be18d8470d0b15581f572cb2e992933fac7dcc9fc351f9a21
+30.0,-1110.6964798424517,optimal,no basis change (objective still moves linearly),0fe40ba,Windows-AMD64,6b855957da30183be18d8470d0b15581f572cb2e992933fac7dcc9fc351f9a21

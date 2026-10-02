@@ -3243,6 +3243,24 @@ objective and the basis change at every breakpoint. Each reported point is a fre
 re-solved and checked by `tools/test_parametric.py` through the verifier's own MPS reader,
 not a value extrapolated from ranging. It re-solves at each breakpoint rather than pivoting
 once as a dedicated parametric simplex would; the tool's docstring says what that costs.
+At a degenerate vertex, where the ranging interval is empty on the side the walk is moving,
+it steps just past the vertex (1e-7 relative, ten times more while a step makes no progress)
+and re-solves, which is why some breakpoints come in pairs a hair apart; it used to jump to
+the end of the range there and miss every breakpoint after it. `tools/test_parametric.py`
+holds that with a fresh solve at the midpoint of every segment of the refinery curve, which
+must lie on the segment's chord. The change named at a point is the change since the point
+before it, columns and row slacks both.
+
+The refinery curve is the price of crude 1 in period 0 on the small refinery LP of the case
+study (#517), the model the finale walk solves. The slope of the optimal value is the amount
+of that crude the plan buys: 34 units below a price of 7, 27 from 7 to 8.76, and 7.1 above
+8.76, where unit 2's period-0 capacity stops binding and product 2's period-0 delivery
+commitment starts to (a row "entered" is a slack that became basic, a limit no longer binding):
+
+```
+python bench/case_studies/refinery/generator.py --size small --seed 1 --out refinery_small.mps
+python tools/parametric.py refinery_small.mps --cost BUY_1_0 --from 0 --to 30 --out bench/results/parametric-refinery-small-BUY_1_0-<sha>.csv
+```
 
 {parametric_section()}
 ---
