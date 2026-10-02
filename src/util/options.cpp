@@ -1820,6 +1820,27 @@ const std::vector<OptionSpec>& Options::registry() {
                  1e-14,
                  1.0,
                  {}});
+    s.push_back(
+        {"qp_ipm_detect_infeasibility",
+         OptionType::Bool,
+         false,
+         "qp_algorithm=ipm (#893): at every iteration, test six vectors read off the "
+         "proximal iterates as certificates - the row multipliers y, the primal residual "
+         "b - Mv and the step dy as Farkas vectors, the point v, the negated dual residual "
+         "and the step dv as primal rays (Banjac, Goulart, Stellato and Boyd, 'Infeasibility "
+         "detection in the alternating direction method of multipliers for convex "
+         "optimization', J. Optim. Theory Appl. 183 (2019), the paper only, for why the "
+         "steps of a proximal method point along them). A candidate is mapped to the "
+         "model's rows or columns and reported only when this project's own checker "
+         "(farkas_proves_infeasible or ray_proves_unbounded, src/core/certificate.cpp) "
+         "accepts it, either sign: infeasible with the Farkas vector and no point, or "
+         "unbounded with the ray and the current iterate, and unbounded only once that "
+         "iterate is primal feasible at primal_feasibility_tolerance. A candidate that does "
+         "not check out changes nothing, and the iteration and time limit reporting "
+         "stands. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"pdhg_polish",
                  OptionType::Bool,
                  true,

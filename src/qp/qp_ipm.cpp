@@ -40,10 +40,13 @@
 // magnitude means rho and delta are too small for the arithmetic; they are raised and the
 // matrix refactored, the "raised on small pivots" rule of the issue.
 //
-// NOT IN THIS SLICE (#490's "Not done"): infeasibility and unboundedness detection from the
-// proximal iterates (an infeasible model runs to the iteration ceiling and says so), warm
-// starts, and scaling. The answer is judged by the same in-process KKT gate as every QP
-// answer before it may be called optimal.
+// INFEASIBILITY AND UNBOUNDEDNESS (#893, option qp_ipm_detect_infeasibility, off by default):
+// certificates read off the iterates and reported only when the project's own checker accepts
+// them; see the #893 comment above farkas_candidate below. Off, an infeasible model runs to
+// the iteration ceiling or a non-finite iterate and says so, as before.
+//
+// NOT IN THIS SLICE (#490's "Not done"): warm starts and scaling. The answer is judged by the
+// same in-process KKT gate as every QP answer before it may be called optimal.
 
 #include "sankhya/qp.hpp"
 #include "sankhya/solve_control.hpp"
@@ -58,6 +61,7 @@
 
 #include "../core/stop_controller.hpp"
 #include "la/ldl.hpp"
+#include "sankhya/certificate.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -90,6 +94,118 @@ void solve_refined(const SparseLdl& ldl, const SparseMatrix& k, const std::vecto
     ldl.solve(correction.data());
     for (std::size_t i = 0; i < rhs.size(); ++i) (*x)[i] += correction[i];
   }
+}
+
+// ---- infeasibility and unboundedness from the proximal iterates (#893) -------------------
+//
+// References
+//   Banjac, Goulart, Stellato & Boyd, "Infeasibility detection in the alternating direction
+//     method of multipliers for convex optimization", J. Optim. Theory Appl. 183 (2019), the
+//     paper only - for a proximal splitting method on a primal (dual) infeasible convex QP,
+//     the differences of successive dual (primal) iterates converge to a Farkas vector (a
+//     primal ray), so a certificate can be read off the iteration that failed to converge.
+//   Farkas (1902) and Schrijver (1986, sec. 7.3) for the two proofs themselves; see
+//     include/sankhya/certificate.hpp.
+//
+// WHERE THE CANDIDATES COME FROM. This iteration is not the paper's ADMM, so its convergence
+// result is not borrowed as a guarantee; it only says where to look. The proximal terms tie
+// each step to the residual it cannot remove: the second block row of the Newton system is
+// M dv + delta dy = b - M v, so on a primal infeasible model, where b - M v stays away from
+// zero, dy grows like (b - M v) / delta and points along the residual. And the residual
+// itself is a candidate: the smallest b - M v over the box, r = b - M v*, satisfies
+// (M'r)'v <= (M'r)'v* = b'r - |r|^2 < b'r for every v in the box, a Farkas proof. The dual
+// side is the mirror image: the smallest stationarity residual r = H w + g - M'y - z_l + z_u
+// has H r = 0, M r = 0, r on the right side of every finite bound, and g'r = |r|^2 > 0, so
+// -r is a primal ray, and the primal step dv follows it as the iterate runs away. So, per
+// iteration, six candidates: the multipliers y, the primal residual b - M v and the step dy
+// for infeasibility; the point v, minus the dual residual and the step dv for unboundedness.
+//
+// WHAT IS REPORTED. None of the above is trusted. A candidate is mapped to the model's own
+// rows or columns and handed to farkas_proves_infeasible or ray_proves_unbounded
+// (src/core/certificate.cpp), the checker every other engine's proof is held to, against the
+// model this engine was given; both signs are tried, as verify_and_keep_certificate does, and
+// the candidate is offered rounded first (tol::kQpIpmCertificateRounding) and then as it came.
+// A ray is also only half of an unboundedness claim (tools/verify_solution.py checks the point
+// first), so `unbounded` is reported only once the current iterate is primal feasible at
+// primal_feasibility_tolerance, measured the way Solution::recompute_quality measures every
+// answer; a verified ray waiting for such a point does not stop the iteration. Anything that
+// does not check out changes nothing, and the iteration's own reporting stands.
+
+struct Detected {
+  SolveStatus status = SolveStatus::kNotSolved;  // kInfeasible or kUnbounded once found
+  std::vector<double> certificate;               // model rows (Farkas) or model columns (ray)
+  std::string source;
+};
+
+[[nodiscard]] bool all_finite(const std::vector<double>& x) {
+  return std::all_of(x.begin(), x.end(), [](double e) { return std::isfinite(e); });
+}
+
+/// A vector over the iteration's rows, scattered to the model's: a row the standard form
+/// dropped (no finite side) gets zero.
+std::vector<double> on_model_rows(const Standard& s, const std::vector<double>& internal) {
+  std::vector<double> out(s.row_of.size(), 0.0);
+  for (std::size_t i = 0; i < s.row_of.size(); ++i) {
+    if (s.row_of[i] >= 0) out[i] = internal[static_cast<std::size_t>(s.row_of[i])];
+  }
+  return out;
+}
+
+/// A vector over the iteration's columns, on the model's: fixed columns get zero, slack
+/// columns are dropped (the checkers recompute row activities from the columns).
+std::vector<double> on_model_columns(const Standard& s, const std::vector<double>& internal) {
+  std::vector<double> out(static_cast<std::size_t>(s.n), 0.0);
+  for (std::size_t j = 0; j < out.size(); ++j) {
+    if (s.column_of[j] >= 0) out[j] = internal[static_cast<std::size_t>(s.column_of[j])];
+  }
+  return out;
+}
+
+/// Offer `candidate` to `proves`: rounded (tol::kQpIpmCertificateRounding) when that changes
+/// it, then as it came, each with both signs. The first vector accepted lands in `accepted`.
+template <typename Proves>
+bool offer(std::vector<double> candidate, const Proves& proves, std::vector<double>* accepted) {
+  if (!all_finite(candidate)) return false;
+  double largest = 0.0;
+  for (const double e : candidate) largest = std::max(largest, std::fabs(e));
+  if (largest == 0.0) return false;
+  std::vector<double> rounded = candidate;
+  bool changed = false;
+  for (double& e : rounded) {
+    if (e != 0.0 && std::fabs(e) <= tol::kQpIpmCertificateRounding * largest) {
+      e = 0.0;
+      changed = true;
+    }
+  }
+  std::vector<std::vector<double>*> tries;
+  if (changed) tries.push_back(&rounded);
+  tries.push_back(&candidate);
+  for (std::vector<double>* vector : tries) {
+    for (int sign = 0; sign < 2; ++sign) {
+      if (proves(*vector)) {
+        *accepted = std::move(*vector);
+        return true;
+      }
+      for (double& e : *vector) e = -e;
+    }
+  }
+  return false;
+}
+
+/// Is `internal`, on the model's rows, a Farkas proof?
+bool farkas_candidate(const Model& model, const Standard& s,
+                      const std::vector<double>& internal, std::vector<double>* proof) {
+  return offer(
+      on_model_rows(s, internal),
+      [&](const std::vector<double>& y) { return farkas_proves_infeasible(model, y); }, proof);
+}
+
+/// Is `internal`, on the model's columns, an unbounded ray?
+bool ray_candidate(const Model& model, const Standard& s, const std::vector<double>& internal,
+                   std::vector<double>* ray) {
+  return offer(
+      on_model_columns(s, internal),
+      [&](const std::vector<double>& d) { return ray_proves_unbounded(model, d); }, ray);
 }
 
 }  // namespace
@@ -134,6 +250,8 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   const auto nc = static_cast<std::size_t>(s.cols);
   const auto nr = static_cast<std::size_t>(s.rows);
   const double tolerance = options.get_double("qp_ipm_tolerance");
+  const bool detect = options.get_bool("qp_ipm_detect_infeasibility");  // #893
+  const double primal_tolerance = options.get_double("primal_feasibility_tolerance");
   const ResourceLimits limits(options, logger);
   StopController stop(control, timer, limits);
 
@@ -239,6 +357,40 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
     }
     return alpha;
   };
+
+  // ---- #893: candidates from the iterates, reported only when the checker accepts them ----
+  Detected detected;
+  bool ray_awaiting_point = false;
+  const auto model_point = [&]() {
+    std::vector<double> x(static_cast<std::size_t>(s.n));
+    for (std::size_t j = 0; j < x.size(); ++j) {
+      const Index kcol = s.column_of[j];
+      x[j] = kcol < 0 ? s.fixed_value[j] : v[static_cast<std::size_t>(kcol)];
+    }
+    return x;
+  };
+  // A Farkas candidate over the iteration's rows and a ray candidate over its columns; an
+  // empty vector is not examined.
+  const auto examine = [&](const std::vector<double>& on_rows, const char* rows_source,
+                           const std::vector<double>& on_columns, const char* columns_source) {
+    std::vector<double> proof;
+    if (!on_rows.empty() && farkas_candidate(model, s, on_rows, &proof)) {
+      detected = {SolveStatus::kInfeasible, std::move(proof), rows_source};
+      return true;
+    }
+    if (!on_columns.empty() && ray_candidate(model, s, on_columns, &proof)) {
+      Solution probe;
+      probe.col_value = model_point();
+      probe.recompute_quality(model);
+      if (probe.primal_infeasibility_scaled <= primal_tolerance) {
+        detected = {SolveStatus::kUnbounded, std::move(proof), columns_source};
+        return true;
+      }
+      ray_awaiting_point = true;
+    }
+    return false;
+  };
+  std::vector<double> minus_rd(detect ? nc : 0);
 
   // ---- starting point, after Mehrotra (1992, sec. 7), adapted to bounds ------------------
   // v and y from min g'v + v'(H + I)v/2 s.t. M v = b: one factorization of the same pattern
@@ -373,6 +525,14 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
       kept_v = v;
       kept_y = y;
     }
+    if (detect && iterations > 0) {
+      for (std::size_t j = 0; j < nc; ++j) minus_rd[j] = -rd[j];
+      if (examine(y, "multipliers y", v, "point v") ||
+          examine(rp, "primal residual b - M v", minus_rd, "negated dual residual")) {
+        status = detected.status;
+        break;
+      }
+    }
     if (limits.time_exhausted(timer.elapsed_seconds())) {
       status = SolveStatus::kTimeLimit;
       message = limits.describe(LimitReason::kTime, timer.elapsed_seconds(), iterations, 0);
@@ -480,6 +640,13 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
       newton(k);
     }
 
+    // #893: the step itself, before it is taken - on a model that has no optimum this is the
+    // direction the iterate runs away along, and the step after it may not be finite.
+    if (detect && examine(dy, "step dy", dv, "step dv")) {
+      status = detected.status;
+      break;
+    }
+
     const double alpha =
         bound_count > 0 ? std::min(1.0, kFractionToBoundary * longest_step()) : 1.0;
     for (std::size_t j = 0; j < nc; ++j) {
@@ -541,6 +708,33 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   solution.dual_bound = status == SolveStatus::kOptimal
                             ? model.evaluate_objective(solution.col_value.data())
                             : (model.sense == ObjSense::kMaximize ? kInfinity : -kInfinity);
+  if (status == SolveStatus::kInfeasible || status == SolveStatus::kUnbounded) {
+    const bool infeasible = status == SolveStatus::kInfeasible;
+    solution.message = fmt::format(
+        "{} at iteration {}: the {} of the proximal iterates is {} that the certificate "
+        "checker accepts against this model (#893)",
+        infeasible ? "primal infeasible" : "unbounded", iterations, detected.source,
+        infeasible ? "a Farkas certificate" : "a ray, from a primal feasible point,");
+    if (infeasible) {
+      // #191: a verdict with no point does not get a point, and its bound is the worst value
+      // the objective can take, on the model's own sense. Cleared before the measurement
+      // below, which then has no point to measure (#505: no numbers for a point not claimed).
+      solution.farkas_dual = std::move(detected.certificate);
+      solution.col_value.clear();
+      solution.col_dual.clear();
+      solution.row_dual.clear();
+      solution.row_activity.clear();
+      solution.dual_bound = model.sense == ObjSense::kMaximize ? -kInfinity : kInfinity;
+    } else {
+      solution.primal_ray = std::move(detected.certificate);
+    }
+    logger.info("QP interior point: {}", solution.message);
+  } else if (ray_awaiting_point) {
+    solution.message += fmt::format(
+        "{}a ray the certificate checker accepts was found, but no primal feasible iterate to "
+        "go with it, so unboundedness is not claimed (#893)",
+        solution.message.empty() ? "" : "; ");
+  }
   solution.recompute_quality(model);
   logger.verbose(
       "QP interior point: {} iterations, relative residuals {:.2e} primal, {:.2e} "

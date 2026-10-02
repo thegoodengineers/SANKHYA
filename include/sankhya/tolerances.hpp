@@ -515,6 +515,14 @@ inline constexpr double kQpIpmPivotShare = 0.1;
 inline constexpr double kQpIpmRegularizationRaise = 100.0;
 inline constexpr int kQpIpmRegularizationAttempts = 8;
 
+/// #893: a certificate candidate read off the QP interior point's iterates is offered to the
+/// checker first with every entry at or below this share of its largest set to zero, then
+/// as it came. The step that runs away along a ray still carries the part of the iterate
+/// that is converging (a ray (2.9e-07, 1) where the exact one is (0, 1), measured on a
+/// two-column model), and the rounded vector is the cleaner proof when it holds. Either one
+/// is reported only if the checker accepts it.
+inline constexpr double kQpIpmCertificateRounding = 1e-6;
+
 // ---- Proximal regularization of the LP interior point (#473, ipm_proximal_regularization) --
 
 /// rho = delta = max(floor, min(previous, kIpmProximalShare * mu)), starting from

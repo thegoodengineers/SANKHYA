@@ -1387,6 +1387,31 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
                   solution.solve_seconds);
       return solution;
     }
+    // #893: the interior point's infeasible or unbounded verdict (qp_ipm_detect_infeasibility)
+    // carries a certificate it checked against the model IT was handed, which after presolve
+    // is the reduced one. It is checked again against the caller's, as the LP path does, and
+    // when postsolve lost it (a removed row that was part of the proof gets a zero multiplier)
+    // the engine runs once more directly on the original model, and that answer is adopted
+    // only when its certificate verifies. Nothing here runs without such a verdict.
+    if (want_qp_ipm && (!solution.farkas_dual.empty() || !solution.primal_ray.empty())) {
+      verify_and_keep_certificate(&solution, model, logger);
+      if (solution.farkas_dual.empty() && solution.primal_ray.empty()) {
+        Solution retry = qp::solve_convex_qp_ipm(model, with_the_time_that_is_left(options),
+                                                 logger, control);
+        verify_and_keep_certificate(&retry, model, logger);
+        if ((retry.status == SolveStatus::kInfeasible && !retry.farkas_dual.empty()) ||
+            (retry.status == SolveStatus::kUnbounded && !retry.primal_ray.empty())) {
+          retry.message +=
+              "; the certificate did not survive postsolve, so this is the "
+              "interior point run again on the original model (#893)";
+          solution = std::move(retry);
+        } else {
+          logger.info(
+              "QP certificate retry (#893): no verified certificate; the first "
+              "answer stands");
+        }
+      }
+    }
     // check_dual is false: the QP's reduced costs are c + Qx - A'y, which is not the
     // quantity Solution::recompute_quality() tests, and applying the LP dual rule here
     // would reject correct answers. Primal feasibility and the status still have to agree.
