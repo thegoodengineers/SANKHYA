@@ -39,6 +39,12 @@ def section(path: Path | None) -> str:
             cells.append(" / ".join(str(verdicts.count(v)) for v in VERDICTS))
         out.append(f"| {family if family.startswith('*') else '`' + family + '`'} | "
                    f"{len({r['instance'] for r in picked})} | " + " | ".join(cells) + " |")
+    # The headline #750 asks for: answers a solver reported `optimal` that are wrong. A wrong
+    # `infeasible` or `unbounded` is counted in the table above; this is the claim a planner
+    # acts on without checking.
+    out += ["", "**Reported `optimal` and wrong**, the headline count (#750): " + ", ".join(
+        f"{solver} **{sum(1 for r in rows if r['solver'] == solver and r['verdict'] == 'wrong' and r['status'] == 'optimal')}**"
+        for solver in solvers) + "."]
     for solver in solvers:
         for verdict in ("wrong", "failed"):
             named = [r for r in rows if r["solver"] == solver and r["verdict"] == verdict]
