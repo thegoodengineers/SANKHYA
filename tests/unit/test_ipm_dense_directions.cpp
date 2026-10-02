@@ -205,8 +205,11 @@ TEST(DenseColumnDirections, AgreeWithTheDefaultPathOnTheIteratesOfARealSolve) {
     double model_worst = 0.0;
     for (std::size_t s = 0; s < recorded.size(); ++s) {
       const Recorded& r = recorded[s];
-      // An unconverged solve is never used as a direction (the interior point raises its
-      // regularization and solves again), so it has no direction to compare.
+      // An unconverged solve is never used as a direction (the interior point folds the
+      // dense columns back into the whole system, or raises its regularization, and solves
+      // again), so it has no direction to compare. The first one ends the recording on
+      // these models: their whole normal equations fit, and the rest of the run is the
+      // default path's.
       if (!r.converged) {
         ++unconverged;
         continue;
@@ -246,10 +249,89 @@ TEST(DenseColumnDirections, AgreeWithTheDefaultPathOnTheIteratesOfARealSolve) {
             << " unconverged (not used as directions), worst difference / bound " << worst_ratio
             << "\n";
   EXPECT_GT(solves, 0);
-  // Most systems of a run are conditioned well enough for 1e-10 (491 of 508 when this was
+  // Most systems of a run are conditioned well enough for 1e-10 (374 of 385 when this was
   // written); a fall below nine in ten says the dense-column solve lost accuracy that the
   // conditioning does not explain, even if each solve stays inside its own bound.
   EXPECT_GE(10 * held_to_1e10, 9 * solves);
+}
+
+/// min sum x_i + 2 y  s.t.  x_i + y >= 1 for m rows, x, y >= 0: the column y meets every
+/// row, and the optimum is 2 (as in test_ipm_dense_columns.cpp).
+Model one_dense_column(Index m) {
+  Model model;
+  model.sense = ObjSense::kMinimize;
+  model.matrix.reset(m, m + 1);
+  for (Index i = 0; i < m; ++i) {
+    model.matrix.add_entry(i, i, 1.0);
+    model.matrix.add_entry(i, m, 1.0);
+  }
+  model.matrix.finalize();
+  model.col_cost.assign(static_cast<std::size_t>(m + 1), 1.0);
+  model.col_cost[static_cast<std::size_t>(m)] = 2.0;
+  model.col_lower.assign(static_cast<std::size_t>(m + 1), 0.0);
+  model.col_upper.assign(static_cast<std::size_t>(m + 1), kInfinity);
+  model.col_type.assign(static_cast<std::size_t>(m + 1), VarType::kContinuous);
+  model.row_lower.assign(static_cast<std::size_t>(m), 1.0);
+  model.row_upper.assign(static_cast<std::size_t>(m), kInfinity);
+  return model;
+}
+
+Options logged_dense_options() {
+  Options options;
+  options.set_bool("log_to_console", true);
+  options.set_string("log_level", "verbose");
+  options.set_string("algorithm", "ipm");
+  options.set_bool("ipm_dense_columns", true);
+  return options;
+}
+
+// An unconverged dense-column solve folds the dense columns back into the whole normal
+// equations when those fit the factor budget, and the run ends at the default path's
+// optimum. Measured on fit2p before the fold existed: the raises took the regularization
+// from 1e-10 to 1e-2 at iteration 16 and the solve ended numerical_error.
+TEST(DenseColumnFoldBack, AnUnconvergedSolveFoldsTheColumnsBackWhenTheWholeSystemFits) {
+  Model model;
+  const io::ReadResult read = io::read_model(netlib("israel"), &model);
+  ASSERT_TRUE(read.ok) << read.error;
+  Options plain;
+  plain.set_bool("log_to_console", false);
+  plain.set_string("algorithm", "ipm");
+  const Solution reference = solve(model, plain);
+  ASSERT_EQ(reference.status, SolveStatus::kOptimal) << reference.message;
+
+  Options options = logged_dense_options();
+  options.set_double("ipm_dense_column_factor", 2.0);
+  ipm::testing::reject_next_dense_solves = 3;
+  ::testing::internal::CaptureStdout();
+  const Solution folded = solve(model, options);
+  const std::string log = ::testing::internal::GetCapturedStdout();
+  ipm::testing::reject_next_dense_solves = 0;
+  EXPECT_NE(log.find("are folded back and the whole normal equations"), std::string::npos)
+      << log;
+  EXPECT_EQ(log.find("regularization raised"), std::string::npos) << log;
+  ASSERT_EQ(folded.status, SolveStatus::kOptimal) << folded.message;
+  EXPECT_NEAR(folded.objective, reference.objective,
+              1e-8 * std::max(1.0, std::fabs(reference.objective)));
+}
+
+// When the whole normal equations do not fit, the columns stay split and the regularization
+// is raised as before: one 3,000-entry column against a budget of 1e6 nonzeros, whose whole
+// system the count refuses from that column's clique alone.
+TEST(DenseColumnFoldBack, TheColumnsStaySplitWhenTheWholeSystemDoesNotFit) {
+  const Model model = one_dense_column(3000);
+  Options options = logged_dense_options();
+  options.set_bool("presolve", false);
+  options.set_int("ipm_max_factor_nonzeros", 1000000);
+  ipm::testing::reject_next_dense_solves = 1;
+  ::testing::internal::CaptureStdout();
+  const Solution split = solve(model, options);
+  const std::string log = ::testing::internal::GetCapturedStdout();
+  ipm::testing::reject_next_dense_solves = 0;
+  EXPECT_NE(log.find("the dense columns stay split off"), std::string::npos) << log;
+  EXPECT_EQ(log.find("are folded back"), std::string::npos) << log;
+  EXPECT_NE(log.find("regularization raised"), std::string::npos) << log;
+  ASSERT_EQ(split.status, SolveStatus::kOptimal) << split.message;
+  EXPECT_NEAR(split.objective, 2.0, 1e-7);
 }
 
 }  // namespace

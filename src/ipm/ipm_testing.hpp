@@ -30,6 +30,20 @@ using DenseSolveObserver =
                        const std::vector<double>& solution, const PcgReport&)>;
 inline DenseSolveObserver dense_solve_observer;
 
+/// While positive, the next dense-column solve (#467) is reported as not converged whatever
+/// its backward error (and the count drops by one), so a test reaches the handling of an
+/// unconverged solve - the fold back into the whole normal equations, or the raise of the
+/// regularization - on any model.
+inline std::atomic<int> reject_next_dense_solves{0};
+
+inline bool take_rejected_dense_solve() {
+  int left = reject_next_dense_solves.load(std::memory_order_relaxed);
+  while (left > 0 && !reject_next_dense_solves.compare_exchange_weak(
+                         left, left - 1, std::memory_order_relaxed)) {
+  }
+  return left > 0;
+}
+
 /// While positive, the next predictor direction the interior point computes has a NaN
 /// written into it (and the count drops by one), so the step is rejected as non-finite
 /// exactly as an overflowing solve would be.
