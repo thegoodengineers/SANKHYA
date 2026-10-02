@@ -27,6 +27,17 @@ that is not integral is a relaxation, whatever the status says.
     python bench/runners/miplib.py --seeds 3 --time-limit 300      # #504
     python bench/runners/miplib.py --tier 2 --seeds 3              # the 60-instance tier
     python bench/runners/miplib.py --certificate                   # #518: VIPR proofs
+    python bench/runners/miplib.py --set miplib3 --seeds 3 --time-limit 60   # #761
+
+MIPLIB 3 (#761). `--set miplib3` runs the classic set fetched by fetch_miplib3.py from
+data/miplib3 and its manifest.json, with every other flag as for MIPLIB 2017. Its CSV is
+named `miplib3-<limit>s-seeds<N>-<sha>.csv` (summary `summary-miplib3-...`), a name no
+MIPLIB 2017 glob in make_benchmarks_doc.py or latest_result.py matches, so the two sets can
+never be read as one. Its references carry `published_tolerance`, one unit in the last
+decimal place the catalogue prints (fetch_miplib3.py says why: rgn is printed 82.1999 and
+its optimum is 82.19999924); an objective matches when it is within
+max(MATCH_RELATIVE_TOLERANCE * max(1, |published|), published_tolerance) of the published
+value. MIPLIB 2017's manifest has no such field, so its rule is unchanged.
 
 CERTIFICATES (#518). `--certificate` asks the solver for a VIPR proof of every answer
 (option write_certificate, which also turns presolve off and runs the tree on one thread)
@@ -67,6 +78,10 @@ DATA_DIR = REPO_ROOT / "data" / "miplib"
 # fetched by `fetch_miplib.py --tier 2`, into its own directory so the 30-instance tier's
 # manifest is never overwritten.
 TIER_DIRS = {1: DATA_DIR, 2: REPO_ROOT / "data" / "miplib-tier2"}
+# The classic MIPLIB 3 set (#761), fetched by fetch_miplib3.py: plain .mps files, exactly as
+# archived, and a manifest of its own name, so nothing here ever reads it as MIPLIB 2017.
+MIPLIB3_DIR = REPO_ROOT / "data" / "miplib3"
+SETS = ("miplib2017", "miplib3")
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
 CERTIFICATE_CHECKER = REPO_ROOT / "tools" / "verify_certificate.py"
@@ -81,6 +96,40 @@ CERTIFICATE_FEAS_TOL = 1e-7
 # Looser than the LP set's 1e-6 on purpose: MIPLIB objectives run to eight and nine figures,
 # and the published values in the .solu file are themselves given to about ten.
 MATCH_RELATIVE_TOLERANCE = 1e-6
+
+
+def match_tolerance(published: float, entry: dict) -> float:
+    """The absolute distance from `published` that still counts as MATCHED.
+
+    MATCH_RELATIVE_TOLERANCE * max(1, |published|), or the manifest entry's
+    `published_tolerance` when it has one and it is looser (#761: MIPLIB 3's catalogue
+    prints its optima to limited precision, one of them truncated). Never tighter than the
+    relative rule; MIPLIB 2017's entries have no such field."""
+    rule = MATCH_RELATIVE_TOLERANCE * max(1.0, abs(published))
+    extra = entry.get("published_tolerance")
+    return rule if extra in (None, "") else max(rule, float(extra))
+
+
+def matches_published(ours, published: float, entry: dict) -> bool:
+    return (ours is not None and math.isfinite(ours)
+            and abs(ours - published) <= match_tolerance(published, entry))
+
+
+def default_out_name(set_name: str, tier: int, seeds: int, time_limit: float,
+                     commit: str) -> str:
+    """The CSV name a run writes when --out is not given.
+
+    MIPLIB 2017: `miplib-<sha>.csv` for the 30-instance tier's own per-commit run, the only
+    name bench/runners/latest_result.py takes for it; `miplib-tier2-` and `seedsN-` mark the
+    other shapes. MIPLIB 3 (#761): `miplib3-<limit>s-seeds<N>-<sha>.csv`, the limit and the
+    seed count always in the name. `miplib3-` does not begin `miplib-`, so no MIPLIB 2017
+    glob can pick it up (test_miplib3.py checks every one)."""
+    if set_name == "miplib3":
+        return f"miplib3-{time_limit:g}s-seeds{seeds}-{commit}.csv"
+    tier_part = "" if tier == 1 else f"tier{tier}-"
+    seeds_part = "" if seeds == 1 else f"seeds{seeds}-"
+    return f"miplib-{tier_part}{seeds_part}{commit}.csv"
+
 
 CSV_COLUMNS = [
     "instance",
@@ -391,7 +440,8 @@ def run_seed(binary: Path, instance: Path, seed: int, scratch: Path, args,
     metrics."""
     target, digest = instance, ""
     if seed != 0:
-        target = scratch / f"{instance.name.replace('.mps.gz', '')}-seed{seed}.mps"
+        stem = instance.name.removesuffix(".gz").removesuffix(".mps")
+        target = scratch / f"{stem}-seed{seed}.mps"
         try:
             miplib_seeds.permute_mps(instance, target, seed)
         except ValueError as error:
@@ -439,6 +489,9 @@ def main() -> int:
     parser.add_argument("--tier", type=int, choices=sorted(TIER_DIRS), default=1,
                         help="1: the 30 smallest easy instances (data/miplib); 2: the "
                              "60-instance tier of bench/runners/miplib_tier2.json")
+    parser.add_argument("--set", dest="set_name", choices=SETS, default="miplib2017",
+                        help="miplib2017 (default): the tiers above; miplib3: the classic set "
+                             "in data/miplib3, fetched by fetch_miplib3.py (#761)")
     parser.add_argument("--certificate", action="store_true",
                         help="write a VIPR proof of every answer and check it with "
                              "tools/verify_certificate.py (#518)")
@@ -451,16 +504,23 @@ def main() -> int:
     args = parser.parse_args()
     if args.seeds < 1:
         parser.error("--seeds must be at least 1")
+    if args.set_name == "miplib3" and args.tier != 1:
+        parser.error("--tier is a MIPLIB 2017 choice; MIPLIB 3 is one set")
 
     binary = find_binary(args.binary)
     if binary is None:
         print("no solver binary; build first", file=sys.stderr)
         return 1
 
-    data_dir = TIER_DIRS[args.tier]
-    reference_path = data_dir / "reference.json"
-    if not reference_path.exists():
+    if args.set_name == "miplib3":
+        data_dir, suffix = MIPLIB3_DIR, ".mps"
+        reference_path = data_dir / "manifest.json"
+        fetch = "bench/runners/fetch_miplib3.py"
+    else:
+        data_dir, suffix = TIER_DIRS[args.tier], ".mps.gz"
+        reference_path = data_dir / "reference.json"
         fetch = "bench/runners/fetch_miplib.py" + ("" if args.tier == 1 else " --tier 2")
+    if not reference_path.exists():
         print(f"no {shown(reference_path)}; run {fetch} first", file=sys.stderr)
         return 1
     manifest = json.loads(reference_path.read_text())
@@ -497,7 +557,7 @@ def main() -> int:
         scratch = Path(scratch_dir)
         for name in names:
             entry = reference.get(name)
-            instance = data_dir / f"{name}.mps.gz"
+            instance = data_dir / f"{name}{suffix}"
             if entry is None or not instance.exists():
                 print(f"{name:<24}{'':>4} {'MISSING':<14}", flush=True)
                 continue
@@ -553,14 +613,15 @@ def main() -> int:
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     # Default names that bench/runners/latest_result.py will NOT take for the 30-instance
-    # tier's own per-commit run: a tier-2 or multi-seed table has a different shape.
-    tier = "" if args.tier == 1 else f"tier{args.tier}-"
-    seeds = "" if args.seeds == 1 else f"seeds{args.seeds}-"
-    out_path = args.out or (RESULTS_DIR / f"miplib-{tier}{seeds}{commit}.csv")
+    # tier's own per-commit run: a tier-2, multi-seed or MIPLIB 3 table has a different shape.
+    out_path = args.out or (RESULTS_DIR / default_out_name(args.set_name, args.tier,
+                                                            args.seeds, args.time_limit,
+                                                            commit))
     out_path = (REPO_ROOT / out_path).resolve()
     write_csv(out_path, CSV_COLUMNS, rows)
     print(f"wrote {shown(out_path)}")
-    if args.seeds > 1:
+    if args.seeds > 1 or args.set_name == "miplib3":
+        # MIPLIB 3 writes its per-instance summary at any seed count, beside its run.
         # A prefix, not a suffix: `miplib-<sha>-summary.csv` would read as a default run.
         summary_path = out_path.with_name("summary-" + out_path.name)
         write_summary(summary_path, per_seed, args.time_limit, commit, machine)
@@ -572,8 +633,7 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
              stamp) -> dict:
     ours = blob.get("objective")
     status = blob["status"]
-    matched = (ours is not None and math.isfinite(ours)
-               and abs(ours - published) <= MATCH_RELATIVE_TOLERANCE * max(1.0, abs(published)))
+    matched = matches_published(ours, published, entry)
     # PROVED means the solver closed the bound itself - to within the gap target (1e-4
     # relative, 1e-6 absolute; since #188 that is reported optimal) or by exhausting the
     # tree - not that the number happens to be right. Only kOptimal asserts that, and
@@ -583,7 +643,8 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
     closed = root_gap_closed(blob.get("root_bound"), blob.get("root_bound_after_cuts"), ours)
     return {
         "instance": name,
-        "instance_sha256": entry.get("gz_sha256", ""),
+        # MIPLIB 2017's digest is of the .mps.gz it ships; MIPLIB 3's of the plain file solved.
+        "instance_sha256": entry.get("gz_sha256") or entry.get("sha256", ""),
         "rows": blob.get("rows", ""),
         "columns": blob.get("columns", ""),
         "nonzeros": blob.get("nonzeros", ""),

@@ -9,6 +9,11 @@ build-*/
 # instance sha256 and reference.json records the upstream readme hash.
 data/miplib/
 data/miplib-tier2/
+# The classic MIPLIB 3 set (#761) is fetched by bench/runners/fetch_miplib3.py from one pinned
+# archive; the models and the catalogue are not committed, the manifest (every model's
+# sha256, the catalogue optima and their published_tolerance, the excluded models) is.
+data/miplib3/*
+!data/miplib3/manifest.json
 # QPLIB (#492) is fetched by bench/runners/fetch_qplib.py: the pages, .qplib files, published
 # solution points and the converted QPS files are not committed, the manifest
 # (reference.json: every file's URL and sha256, the parsed references, the conversion check)

@@ -1,0 +1,651 @@
+{
+  "archive_bytes": 6315559,
+  "archive_sha256": "f07be4c2b3cad25b23b0c3085ec98412524989dbd24f4d385e5ffa1e3e4c118f",
+  "catalogue": "miplib.cat",
+  "catalogue_sha256": "85989548406f056d18ca29d90aa34aaa15d4cab2530aa4fd6ac2fe374d863246",
+  "citation": "Bixby, Ceria, McZeal and Savelsbergh, \"An updated mixed integer programming library: MIPLIB 3.0\", Optima 58 (1998)",
+  "excluded": {
+    "arki001": {
+      "bytes": 749775,
+      "catalogue_int_soln": "7580813.0459",
+      "file": "arki001.mps",
+      "name": "arki001",
+      "reason": "INT SOLN marked (not opt) in miplib.cat",
+      "sha256": "597eb014a6f34d870f3b2060eb74f16cb7bb0289b2971bc848fcb3809ac42ca7",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/arki001"
+    },
+    "dano3mip": {
+      "bytes": 2610469,
+      "catalogue_int_soln": "728.1111",
+      "file": "dano3mip.mps",
+      "name": "dano3mip",
+      "reason": "INT SOLN marked (not opt) in miplib.cat",
+      "sha256": "0a35b68b11aedd4ed9076aef4564a8661e6ebae81a53e56a480c212badbb7c9e",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/dano3mip"
+    },
+    "markshare1": {
+      "bytes": 12536,
+      "file": "markshare1.mps",
+      "name": "markshare1",
+      "reason": "no row in miplib.cat INDEX PART A",
+      "sha256": "7c3668bde9f1c80f1a4ba10baa99a0bcbaead027325d471c6661d814a2c17fe9",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/markshare1"
+    },
+    "markshare2": {
+      "bytes": 17197,
+      "file": "markshare2.mps",
+      "name": "markshare2",
+      "reason": "no row in miplib.cat INDEX PART A",
+      "sha256": "112c91eaa2c00c8fabe355407ec8ed0264a069ee8d937f855e5a4165fabb13f3",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/markshare2"
+    },
+    "mas74": {
+      "bytes": 64553,
+      "file": "mas74.mps",
+      "name": "mas74",
+      "reason": "no row in miplib.cat INDEX PART A",
+      "sha256": "ff885f2669e7003c5b9e16d477c92476debbb73e547d09eea230043ae52bbea5",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mas74"
+    },
+    "mas76": {
+      "bytes": 62913,
+      "file": "mas76.mps",
+      "name": "mas76",
+      "reason": "no row in miplib.cat INDEX PART A",
+      "sha256": "329d1d2d6b4bbd06a212ccc6f9dd8985036b021c882464f484ba4bcfb1fd2270",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mas76"
+    },
+    "mkc": {
+      "bytes": 895235,
+      "file": "mkc.mps",
+      "name": "mkc",
+      "reason": "no row in miplib.cat INDEX PART A",
+      "sha256": "ca676a5cad5b01d946038e2063a3b79c838b333fa4dcaa6ef3447cc7f9e17873",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mkc"
+    },
+    "seymour": {
+      "bytes": 1355245,
+      "catalogue_int_soln": "423",
+      "file": "seymour.mps",
+      "name": "seymour",
+      "reason": "INT SOLN marked (not opt) in miplib.cat",
+      "sha256": "48bcd17a805be73c68e0af115d7fcbc520a5e52da2fb81dde51beaa4d396aa69",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/seymour"
+    },
+    "swath": {
+      "bytes": 1762355,
+      "file": "swath.mps",
+      "name": "swath",
+      "reason": "no row in miplib.cat INDEX PART A",
+      "sha256": "eb8d979a2e89d9dc7a1d5dea23954f56dab60eb2828127aa8266f391abc1e45d",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/swath"
+    }
+  },
+  "instances": {
+    "10teams": {
+      "bytes": 537124,
+      "file": "10teams.mps",
+      "name": "10teams",
+      "published_optimal": 924.0,
+      "published_text": "924",
+      "published_tolerance": 0.0,
+      "sha256": "d061e23a021877b9779558e4b9996f6c229721c8041b5a408ddf7d7fb7c1902a",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/10teams"
+    },
+    "air03": {
+      "bytes": 3614127,
+      "file": "air03.mps",
+      "name": "air03",
+      "published_optimal": 340160.0,
+      "published_text": "340160",
+      "published_tolerance": 0.0,
+      "sha256": "2346f74b150a39aef68378c9e576346ecfe9e175fa5f7538977e9d8224c393a1",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/air03"
+    },
+    "air04": {
+      "bytes": 2939613,
+      "file": "air04.mps",
+      "name": "air04",
+      "published_optimal": 56137.0,
+      "published_text": "56137",
+      "published_tolerance": 0.0,
+      "sha256": "364f229be10401a476c06c3b42ff91aff3996d4c8c55c5ba2c6d9f8d0b02ad01",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/air04"
+    },
+    "air05": {
+      "bytes": 2151863,
+      "file": "air05.mps",
+      "name": "air05",
+      "published_optimal": 26374.0,
+      "published_text": "26374",
+      "published_tolerance": 0.0,
+      "sha256": "1ca185a7d8d6eaa48d959a8b4c00e3b0d6faf0f9e4ec4411c3228224dca074e3",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/air05"
+    },
+    "bell3a": {
+      "bytes": 20196,
+      "file": "bell3a.mps",
+      "name": "bell3a",
+      "published_optimal": 878430.32,
+      "published_text": "878430.32",
+      "published_tolerance": 0.01,
+      "sha256": "1ada0bcc162defc9d8f17769920d3531d6e9f8c69f466e3eb165939ae845fd43",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/bell3a"
+    },
+    "bell5": {
+      "bytes": 15801,
+      "file": "bell5.mps",
+      "name": "bell5",
+      "published_optimal": 8966406.49,
+      "published_text": "8966406.49",
+      "published_tolerance": 0.01,
+      "sha256": "d4846d7ea889d482e32842832e599ca6d0dc04fd8ea3ea58f49a52b436859dd5",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/bell5"
+    },
+    "blend2": {
+      "bytes": 63421,
+      "file": "blend2.mps",
+      "name": "blend2",
+      "published_optimal": 7.598985,
+      "published_text": "7.598985",
+      "published_tolerance": 1e-06,
+      "sha256": "48c009606d5e949baa8e5e060c8b0cafd3eb96f9d615d98fff0d626d5b6e503f",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/blend2"
+    },
+    "cap6000": {
+      "bytes": 2029355,
+      "file": "cap6000.mps",
+      "name": "cap6000",
+      "published_optimal": -2451377.0,
+      "published_text": "-2451377",
+      "published_tolerance": 0.0,
+      "sha256": "b9fb72f2d0354c1609457f4e1e4c69c83879a1601dfba4c6894c0b6d5357fddc",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/cap6000"
+    },
+    "danoint": {
+      "bytes": 116964,
+      "file": "danoint.mps",
+      "name": "danoint",
+      "published_optimal": 65.67,
+      "published_text": "65.67",
+      "published_tolerance": 0.01,
+      "sha256": "09ed14e0f1b2db4cf0c8a738b17384fa64a0bf73c6ff4667d276356eec2b8e2b",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/danoint"
+    },
+    "dcmulti": {
+      "bytes": 77971,
+      "file": "dcmulti.mps",
+      "name": "dcmulti",
+      "published_optimal": 188182.0,
+      "published_text": "188182",
+      "published_tolerance": 0.0,
+      "sha256": "a9552af8f0fd228851352ba60b62a64639f8ffd4a01f217afc095eaac4c29a75",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/dcmulti"
+    },
+    "dsbmip": {
+      "bytes": 377150,
+      "file": "dsbmip.mps",
+      "name": "dsbmip",
+      "published_optimal": -305.19817501,
+      "published_text": "-305.19817501",
+      "published_tolerance": 1e-08,
+      "sha256": "4fe4e40efcc886c7934aa70a07299b70f372843b88a8dd7ec13c3cd597bf730f",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/dsbmip"
+    },
+    "egout": {
+      "bytes": 17256,
+      "file": "egout.mps",
+      "name": "egout",
+      "published_optimal": 568.101,
+      "published_text": "568.101",
+      "published_tolerance": 0.001,
+      "sha256": "351ed046eb56e07662b3c2dba35800f5d2cee3fac18c1bd7fbc8dea4a0dcd8db",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/egout"
+    },
+    "enigma": {
+      "bytes": 14814,
+      "file": "enigma.mps",
+      "name": "enigma",
+      "published_optimal": 0.0,
+      "published_text": "0.0",
+      "published_tolerance": 0.0,
+      "sha256": "bbc4a1a6e9ab30d2615b5e0391f0df1782d29b0a125eb38ef852e8dda6ebc323",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/enigma"
+    },
+    "fast0507": {
+      "bytes": 17204929,
+      "file": "fast0507.mps",
+      "name": "fast0507",
+      "published_optimal": 174.0,
+      "published_text": "174",
+      "published_tolerance": 0.0,
+      "sha256": "5d27d3474d016e827c360a5c621a802edd5d5c8c163b7f782bb5ecf3083d0275",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/fast0507"
+    },
+    "fiber": {
+      "bytes": 183934,
+      "file": "fiber.mps",
+      "name": "fiber",
+      "published_optimal": 405935.18,
+      "published_text": "405935.18000",
+      "published_tolerance": 0.01,
+      "sha256": "67c87e4a5b19f8a8903b37286e9f38ad206cb8daabfd0399bea41acd93ed04bf",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/fiber"
+    },
+    "fixnet6": {
+      "bytes": 144348,
+      "file": "fixnet6.mps",
+      "name": "fixnet6",
+      "published_optimal": 3983.0,
+      "published_text": "3983",
+      "published_tolerance": 0.0,
+      "sha256": "e090a2103b8f4906095fd9931d8b608f41c35421f1ea267711e0297aeeb3af08",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/fixnet6"
+    },
+    "flugpl": {
+      "bytes": 4161,
+      "file": "flugpl.mps",
+      "name": "flugpl",
+      "published_optimal": 1201500.0,
+      "published_text": "1201500",
+      "published_tolerance": 0.0,
+      "sha256": "ed4b1fcb07d26b513027721d61344c2c4371cb506bf66098df328047c183b0c0",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/flugpl"
+    },
+    "gen": {
+      "bytes": 125423,
+      "file": "gen.mps",
+      "name": "gen",
+      "published_optimal": 112313.0,
+      "published_text": "112313",
+      "published_tolerance": 0.0,
+      "sha256": "f22c4b12ca0182c5c2efe7d777772644ea54fd4fd84720ae74c520132d59bb97",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/gen"
+    },
+    "gesa2": {
+      "bytes": 238477,
+      "file": "gesa2.mps",
+      "name": "gesa2",
+      "published_optimal": 25779856.372,
+      "published_text": "25779856.372",
+      "published_tolerance": 0.001,
+      "sha256": "fe43df9f95b79fbceae3b4c5f8a152e9498facf5adf750f6255fe4c693af02c3",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/gesa2"
+    },
+    "gesa2_o": {
+      "bytes": 185710,
+      "file": "gesa2_o.mps",
+      "name": "gesa2_o",
+      "published_optimal": 25779856.372,
+      "published_text": "25779856.372",
+      "published_tolerance": 0.001,
+      "sha256": "cc3376d5d8b2eff2e8f819a48de7dc40cec0190d3539f654c1db54476ccb2ec2",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/gesa2_o"
+    },
+    "gesa3": {
+      "bytes": 228683,
+      "file": "gesa3.mps",
+      "name": "gesa3",
+      "published_optimal": 27991042.648,
+      "published_text": "27991042.648",
+      "published_tolerance": 0.001,
+      "sha256": "d9eb9e9af06d1d8b4be0e16d927c782035a333517d10e67810945c75f6c61a16",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/gesa3"
+    },
+    "gesa3_o": {
+      "bytes": 178629,
+      "file": "gesa3_o.mps",
+      "name": "gesa3_o",
+      "published_optimal": 27991042.648,
+      "published_text": "27991042.648",
+      "published_tolerance": 0.001,
+      "sha256": "3915238e5bee75478a297019deb7abb147856a5ad3d28e4e33153819a9666037",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/gesa3_o"
+    },
+    "gt2": {
+      "bytes": 23772,
+      "file": "gt2.mps",
+      "name": "gt2",
+      "published_optimal": 21166.0,
+      "published_text": "21166.000",
+      "published_tolerance": 0.0,
+      "sha256": "7dfdce934f95ced966a14e9eaad34023bbe966dc295589a33ac0676d810707dd",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/gt2"
+    },
+    "harp2": {
+      "bytes": 405867,
+      "file": "harp2.mps",
+      "name": "harp2",
+      "published_optimal": -73899798.0,
+      "published_text": "-73899798.00",
+      "published_tolerance": 0.0,
+      "sha256": "c37a4883625984b9c73224bd819bc543a7933bdb8c3594aa7e2706e4e87031b9",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/harp2"
+    },
+    "khb05250": {
+      "bytes": 135500,
+      "file": "khb05250.mps",
+      "name": "khb05250",
+      "published_optimal": 106940226.0,
+      "published_text": "106940226",
+      "published_tolerance": 0.0,
+      "sha256": "951e36f03a1562d4adae3223db2026c3bba4ccd7cf38d59482298e9e7e5d0fc2",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/khb05250"
+    },
+    "l152lav": {
+      "bytes": 453987,
+      "file": "l152lav.mps",
+      "name": "l152lav",
+      "published_optimal": 4722.0,
+      "published_text": "4722",
+      "published_tolerance": 0.0,
+      "sha256": "c797f70b0b84f34653686c9914a7842872a9c39330a9ec127d1db6b367241034",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/l152lav"
+    },
+    "lseu": {
+      "bytes": 17486,
+      "file": "lseu.mps",
+      "name": "lseu",
+      "published_optimal": 1120.0,
+      "published_text": "1120",
+      "published_tolerance": 0.0,
+      "sha256": "00416576ed4adac15b62b1982cb7be9d7dcb2d6505067dd8396183ff1eac3dab",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/lseu"
+    },
+    "misc03": {
+      "bytes": 73967,
+      "file": "misc03.mps",
+      "name": "misc03",
+      "published_optimal": 3360.0,
+      "published_text": "3360",
+      "published_tolerance": 0.0,
+      "sha256": "caba4f42b1827e41cdd62c6548435cc786b9f9092f984f170cab8df939a84acb",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/misc03"
+    },
+    "misc06": {
+      "bytes": 208228,
+      "file": "misc06.mps",
+      "name": "misc06",
+      "published_optimal": 12850.8607,
+      "published_text": "12850.8607",
+      "published_tolerance": 0.0001,
+      "sha256": "4787c15a414b4d07d14400a52be6f1fd3789b87488c645657fa934d8781be454",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/misc06"
+    },
+    "misc07": {
+      "bytes": 286564,
+      "file": "misc07.mps",
+      "name": "misc07",
+      "published_optimal": 2810.0,
+      "published_text": "2810",
+      "published_tolerance": 0.0,
+      "sha256": "1535ed1b59d2f91e17fe340fbebb6dd0b66bb6a837356e4ce9e5acb58be3be1d",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/misc07"
+    },
+    "mitre": {
+      "bytes": 2044309,
+      "file": "mitre.mps",
+      "name": "mitre",
+      "published_optimal": 115155.0,
+      "published_text": "115155",
+      "published_tolerance": 0.0,
+      "sha256": "8fa9e44b18b34e4a91f53c451730fad0a76e713a7f51151f9a506c728978bb30",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mitre"
+    },
+    "mod008": {
+      "bytes": 61979,
+      "file": "mod008.mps",
+      "name": "mod008",
+      "published_optimal": 307.0,
+      "published_text": "307",
+      "published_tolerance": 0.0,
+      "sha256": "5a08fe11b87bfe51f55e5537f5e8d0ad0e5fecbc57710a5b58c48a5f10a8e993",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mod008"
+    },
+    "mod010": {
+      "bytes": 544964,
+      "file": "mod010.mps",
+      "name": "mod010",
+      "published_optimal": 6548.0,
+      "published_text": "6548",
+      "published_tolerance": 0.0,
+      "sha256": "62c3f77a72a8077694aef82644e3d601f435d1bb33acd1984fcd7238c8cf3b4b",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mod010"
+    },
+    "mod011": {
+      "bytes": 1373402,
+      "file": "mod011.mps",
+      "name": "mod011",
+      "published_optimal": -54558535.0,
+      "published_text": "-54558535",
+      "published_tolerance": 0.0,
+      "sha256": "a5954bbaefc46a6398d9979da6b6900d1d9bf9080e7d2108425c81279f217535",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mod011"
+    },
+    "modglob": {
+      "bytes": 53144,
+      "file": "modglob.mps",
+      "name": "modglob",
+      "published_optimal": 20740508.0,
+      "published_text": "20740508",
+      "published_tolerance": 0.0,
+      "sha256": "bca45a46c097cb66d85d8986e33c901c33c5454aa45bf6a66ed6c9559f881b4c",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/modglob"
+    },
+    "noswot": {
+      "bytes": 32320,
+      "caveat": "the catalogue's -43 equals its own LP SOLN, and MIPLIB 2017's noswot, the same model (every row, column, bound and right-hand side in the same order, renamed, with 50 coefficient lines differing by at most 6e-9 relative, compared on 3 Oct 2026), is marked =opt= -41.00000885 in miplib2017-v28.solu; a run that ends at -41 is expected to miss this reference",
+      "file": "noswot.mps",
+      "name": "noswot",
+      "published_optimal": -43.0,
+      "published_text": "-43",
+      "published_tolerance": 0.0,
+      "sha256": "84a417e417b8b3f74f922dccf9eef6cc4b69c0010eb3a49e516d24225b65f8cc",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/noswot"
+    },
+    "nw04": {
+      "bytes": 25948550,
+      "file": "nw04.mps",
+      "name": "nw04",
+      "published_optimal": 16862.0,
+      "published_text": "16862",
+      "published_tolerance": 0.0,
+      "sha256": "d860a0ec0684bdfc131171a16c59d298c1d31da1e02d5f9053762d6970b33a6d",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/nw04"
+    },
+    "p0033": {
+      "bytes": 6555,
+      "file": "p0033.mps",
+      "name": "p0033",
+      "published_optimal": 3089.0,
+      "published_text": "3089",
+      "published_tolerance": 0.0,
+      "sha256": "8ccff819023237c79ef32e238a5da9348725ce9a4425d48888baf3a0b3b42628",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/p0033"
+    },
+    "p0201": {
+      "bytes": 78610,
+      "file": "p0201.mps",
+      "name": "p0201",
+      "published_optimal": 7615.0,
+      "published_text": "7615",
+      "published_tolerance": 0.0,
+      "sha256": "8352d7f121289185f443fdc67080fa9de01e5b9bf11b0bf41087fba4277c07a4",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/p0201"
+    },
+    "p0282": {
+      "bytes": 91571,
+      "file": "p0282.mps",
+      "name": "p0282",
+      "published_optimal": 258411.0,
+      "published_text": "258411",
+      "published_tolerance": 0.0,
+      "sha256": "3bf907c6aa3cbf80de7c48ca8e71dc29f5d70f6e5fffb716502bfc5c513196a1",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/p0282"
+    },
+    "p0548": {
+      "bytes": 94620,
+      "file": "p0548.mps",
+      "name": "p0548",
+      "published_optimal": 8691.0,
+      "published_text": "8691",
+      "published_tolerance": 0.0,
+      "sha256": "81fa3fb1e071cac0b72649c38196c18bca7ff6d7f2f6639776dcb0daf6bcab15",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/p0548"
+    },
+    "p2756": {
+      "bytes": 488938,
+      "file": "p2756.mps",
+      "name": "p2756",
+      "published_optimal": 3124.0,
+      "published_text": "3124",
+      "published_tolerance": 0.0,
+      "sha256": "0ed6b86a8baa033c9a3e46c66eee74dd670585eb3d096ea590c3646f8b4b47c8",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/p2756"
+    },
+    "pk1": {
+      "bytes": 32308,
+      "file": "pk1.mps",
+      "name": "pk1",
+      "published_optimal": 11.0,
+      "published_text": "11.0",
+      "published_tolerance": 0.0,
+      "sha256": "f0a362be150a52baa650130b752e44ed0921d4c8a98af74c4a1f7a9bb3c65983",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/pk1"
+    },
+    "pp08a": {
+      "bytes": 26970,
+      "file": "pp08a.mps",
+      "name": "pp08a",
+      "published_optimal": 7350.0,
+      "published_text": "7350.0",
+      "published_tolerance": 0.0,
+      "sha256": "8f83650434dd18f7d459b2d188cf640aa67bfbab6b02fd052f9796cd311cf1ce",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/pp08a"
+    },
+    "pp08aCUTS": {
+      "bytes": 44047,
+      "file": "pp08aCUTS.mps",
+      "name": "pp08aCUTS",
+      "published_optimal": 7350.0,
+      "published_text": "7350.0",
+      "published_tolerance": 0.0,
+      "sha256": "66176a6da44a032d9040a7c206c87ed88e55eb2069531da3211eb99205f29790",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/pp08aCUTS"
+    },
+    "qiu": {
+      "bytes": 138091,
+      "file": "qiu.mps",
+      "name": "qiu",
+      "published_optimal": -132.873137,
+      "published_text": "-132.873137",
+      "published_tolerance": 1e-06,
+      "sha256": "98277ce24052dbb5a24a8eb0205ef8c479cb4e03458cc51eda03676273de262a",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/qiu"
+    },
+    "qnet1": {
+      "bytes": 198068,
+      "file": "qnet1.mps",
+      "name": "qnet1",
+      "published_optimal": 16029.692681,
+      "published_text": "16029.692681",
+      "published_tolerance": 1e-06,
+      "sha256": "48e837328f57ed61dc6d8f361dda85b63193e09cafd71ccfccdbd7a0d92b3cdf",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/qnet1"
+    },
+    "qnet1_o": {
+      "bytes": 184240,
+      "file": "qnet1_o.mps",
+      "name": "qnet1_o",
+      "published_optimal": 16029.692681,
+      "published_text": "16029.692681",
+      "published_tolerance": 1e-06,
+      "sha256": "0e00a7990c61ef910d81a7e86c6369565df6c3058e6edaf2ec483e46e586daed",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/qnet1_o"
+    },
+    "rentacar": {
+      "bytes": 1470713,
+      "file": "rentacar.mps",
+      "name": "rentacar",
+      "published_optimal": 30356761.0,
+      "published_text": "30356761",
+      "published_tolerance": 0.0,
+      "sha256": "9cb3425254adc4415ab591d526b2c29c3899dffcce15d8ba4da5dcfb1dfdfe81",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/rentacar"
+    },
+    "rgn": {
+      "bytes": 25625,
+      "file": "rgn.mps",
+      "name": "rgn",
+      "published_optimal": 82.1999,
+      "published_text": "82.1999",
+      "published_tolerance": 0.0001,
+      "sha256": "b5dcb0e7587a8c676af20c845c805657202828b344848759caa72d1aa70a50ef",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/rgn"
+    },
+    "rout": {
+      "bytes": 125993,
+      "file": "rout.mps",
+      "name": "rout",
+      "published_optimal": 1077.56,
+      "published_text": "1077.56",
+      "published_tolerance": 0.01,
+      "sha256": "d8f75b5adec2c8547c14ddcedb1812a5105da019062df0fde596d96b0f3e9690",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/rout"
+    },
+    "set1ch": {
+      "bytes": 83650,
+      "file": "set1ch.mps",
+      "name": "set1ch",
+      "published_optimal": 54537.75,
+      "published_text": "54537.75",
+      "published_tolerance": 0.01,
+      "sha256": "d001258f10bf0970215fe857b4bd0a425a736cc018ce763a4ec533f924bf2867",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/set1ch"
+    },
+    "stein27": {
+      "bytes": 19465,
+      "file": "stein27.mps",
+      "name": "stein27",
+      "published_optimal": 18.0,
+      "published_text": "18",
+      "published_tolerance": 0.0,
+      "sha256": "b8889994eda0853d71bad6ba9bf45755d4e59f33a13a3f43008e1ba681738c5b",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/stein27"
+    },
+    "stein45": {
+      "bytes": 50421,
+      "file": "stein45.mps",
+      "name": "stein45",
+      "published_optimal": 30.0,
+      "published_text": "30",
+      "published_tolerance": 0.0,
+      "sha256": "0b119c8a2426cd9701a954127748bf8ae2bbe0fd669577ecb4715d8ffb81c85a",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/stein45"
+    },
+    "vpm1": {
+      "bytes": 50111,
+      "file": "vpm1.mps",
+      "name": "vpm1",
+      "published_optimal": 20.0,
+      "published_text": "20",
+      "published_tolerance": 0.0,
+      "sha256": "838f2b08516a97db20825488d6f10de998c3d4b9853336c75ec5f56d67366885",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/vpm1"
+    },
+    "vpm2": {
+      "bytes": 53949,
+      "file": "vpm2.mps",
+      "name": "vpm2",
+      "published_optimal": 13.75,
+      "published_text": "13.75",
+      "published_tolerance": 0.01,
+      "sha256": "55ca0b6caff042c42c5269045177351db828f066a94876e5885f626d02d5ffbc",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/vpm2"
+    }
+  },
+  "models_in_archive": 65,
+  "selection": "miplib3: every model whose INT SOLN in INDEX PART A is not marked (not opt)",
+  "source": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz",
+  "tolerance_rule": "published_tolerance is one unit in the last decimal place of the catalogue's printed INT SOLN after trailing zeros are stripped (0 for a value that is then an integer); an objective matches when |ours - published| <= max(1e-6 * max(1, |published|), published_tolerance)."
+}

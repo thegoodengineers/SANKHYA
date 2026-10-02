@@ -1508,6 +1508,38 @@ Not yet run on an idle machine.
 
 ---
 
+## 2a. MIPLIB 3, the classic set beside MIPLIB 2017 (#761)
+
+The 1998 set much of the published record and most teaching material still report on, run beside the MIPLIB 2017 tables above and never merged into them: its own fetcher, manifest, CSVs and table. Source: Bixby, Ceria, McZeal and Savelsbergh, *An updated mixed integer programming library: MIPLIB 3.0*, Optima 58 (1998); the archive `https://miplib2010.zib.de/miplib3/miplib3.tar.gz`, pinned by size and sha256 in `bench/runners/fetch_miplib3.py`, whose manifest (`data/miplib3/manifest.json`) records the sha256 of every model as solved.
+
+The archive holds 65 models. **56** have an optimum in the catalogue's INDEX PART A that it does not mark "(not opt)"; they are the instances below. Excluded, with no reference: `arki001`, `dano3mip`, `seymour` (marked "(not opt)"), and `markshare1`, `markshare2`, `mas74`, `mas76`, `mkc`, `swath` (no catalogue row).
+
+**Caveat on `noswot`**, kept as the catalogue prints it (-43): the catalogue's -43 equals its own LP SOLN, and MIPLIB 2017's noswot, the same model (every row, column, bound and right-hand side in the same order, renamed, with 50 coefficient lines differing by at most 6e-9 relative, compared on 3 Oct 2026), is marked =opt= -41.00000885 in miplib2017-v28.solu; a run that ends at -41 is expected to miss this reference.
+
+**Matching rule.** The catalogue prints its optima to limited precision, and one is truncated: `rgn` is printed 82.1999 and its optimum is 82.19999924. A run REACHES the published optimum when its objective is within max(1e-6 x max(1, |published|), one unit in the last printed decimal place after trailing zeros are stripped) of it, so 82.1999 allows 1e-4 and a value printed as an integer (7350.0, 21166.000) gets the 1e-6 rule alone. PROVED means the run also reported optimal, its gap target (1e-4 relative) met; VERIFIED means `tools/verify_solution.py` accepted the point as feasible and integral. HiGHS runs as a separate process on the same file, same machine, same limit, one thread, and its point is converted by `bench/runners/rivals.py`, checked by the same verifier and graded by the same rule; its result counts only an optimal status (its default gap target is also 1e-4 relative).
+
+#### At 60 s
+
+Not yet run. Reproduce with:
+
+```
+python bench/runners/fetch_miplib3.py
+python bench/runners/miplib.py --set miplib3 --seeds 3 --time-limit 60
+python bench/runners/compare.py --suite miplib3 --time-limit 60
+```
+
+#### At 300 s
+
+Not yet run. Reproduce with:
+
+```
+python bench/runners/fetch_miplib3.py
+python bench/runners/miplib.py --set miplib3 --seeds 3 --time-limit 300
+python bench/runners/compare.py --suite miplib3 --time-limit 300
+```
+
+---
+
 ## 2b. Maros-Meszaros, the convex QP set
 
 The 138 convex QPs of Maros and Meszaros, *A repository of convex quadratic programming

@@ -36,6 +36,7 @@ import million_doc  # 1f.5, a million rows (#751), kept in its own file
 import nlp_doc  # the nonlinear section (NLP stages 2-3), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
 import miplib_ab_doc  # #504 tier 2 over seeds, and the #501 and #506 A/Bs
+import miplib3_doc  # section 2a, the classic MIPLIB 3 set beside MIPLIB 2017 (#761)
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
 import qplib_all_doc  # every QPLIB instance through the reader and dispatcher (#835)
 import stress_doc  # the stress set, badly scaled Netlib and adversarial LPs (#762)
@@ -2822,6 +2823,11 @@ def main() -> int:
     fj_ab = (newest_option_run("miplib-506-fj-off-seeds*-*.csv", "mip_heur_fj=off"),
              newest_option_run("miplib-506-fj-on-seeds*-*.csv", "mip_heur_fj=on"))
     milp_long_csv = newest_named("miplib-600s-*.csv")
+    # MIPLIB 3 (#761) at each of its limits, SANKHYA's run and HiGHS's: names of their own
+    # (`miplib3-`, `highs-miplib3-`) that none of the MIPLIB 2017 globs above can match.
+    miplib3_runs = {limit: (newest(miplib3_doc.sankhya_pattern(limit)),
+                            newest(miplib3_doc.highs_pattern(limit)))
+                    for limit in miplib3_doc.LIMITS}
     # prefix: pdhg-threads-*, pdhg-two-matvec-* and pdhg-478-* share the glob, and since #592
     # section 1e had been reading the thread-scaling CSV as its own (0 instances shown).
     pdhg_csv = newest("pdhg-*.csv", prefix="pdhg")
@@ -3196,6 +3202,11 @@ is a harder library: MIPLIB instances are chosen to be difficult for mature solv
 
 {miplib_ab_doc.seeds_ab(*fj_ab, "mip_heur_fj") or "Not yet run on an idle machine."}
 
+---
+
+## 2a. MIPLIB 3, the classic set beside MIPLIB 2017 (#761)
+
+{miplib3_doc.section(miplib3_runs, miplib3_doc.load_manifest())}
 ---
 
 ## 2b. Maros-Meszaros, the convex QP set

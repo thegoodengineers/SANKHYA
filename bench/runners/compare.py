@@ -30,6 +30,7 @@ compare_suite.py; both docstrings say exactly how a run is graded.
 
     python bench/runners/compare.py --suite netlib
     python bench/runners/compare.py --suite maros-meszaros --solvers sankhya,highs --resume
+    python bench/runners/compare.py --suite miplib3 --time-limit 60   # HiGHS on MIPLIB 3 (#761)
 """
 
 from __future__ import annotations
@@ -332,8 +333,9 @@ def main() -> int:
     parser.add_argument("--time-limit", type=float, default=None,
                         help="seconds per solve; 60 by default, or the suite's own limit "
                              "with --suite")
-    parser.add_argument("--suite", choices=("netlib", "kennington", "maros-meszaros"),
-                        help="the head-to-head mode: every solver over this suite (#766)")
+    parser.add_argument("--suite", choices=("netlib", "kennington", "maros-meszaros", "miplib3"),
+                        help="the head-to-head mode: every solver over this suite (#766); "
+                             "miplib3 runs HiGHS alone beside miplib.py --set miplib3 (#761)")
     parser.add_argument("--solvers", default=None,
                         help="with --suite: comma-separated subset of sankhya,highs,scip,"
                              "cbc-clp,glpk (default all; a subset writes a -partial- CSV)")
