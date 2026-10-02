@@ -1464,7 +1464,43 @@ python bench/runners/miplib.py --tier 2 --seeds 3 --time-limit 300
 
 #### A/B: the node LP factor cache (#501)
 
-Not yet run on an idle machine.
+Source CSVs: `bench/results/miplib-501-cache0-bcdfb6d.csv` (`mip_node_factor_cache=8` off) and `bench/results/miplib-501-cache8-bcdfb6d.csv` (on), commit `bcdfb6d`, both deterministic and node-limited, one thread.
+
+**30 of 30** instances end with the same node count, status and objective in both legs; differ: none. Proved verdict changed: none. Geometric mean speedup in nodes per second over the 30 instances with equal, non-zero node counts: **1.018x** (above 1 is faster with the option on).
+
+| instance | status | nodes off | nodes on | nodes/s off | nodes/s on | speedup |
+|---|---|---:|---:|---:|---:|---:|
+| `b-ball` | optimal | 1 | 1 | 20 | 16 | 0.80 |
+| `ej` | node_limit | 2000 | 2000 | 10213 | 8570 | 0.84 |
+| `enlight8` | node_limit | 2000 | 2000 | 883 | 814 | 0.92 |
+| `enlight_hard` | node_limit | 2000 | 2000 | 383 | 403 | 1.05 |
+| `f2gap40400` | optimal | 1 | 1 | 57 | 40 | 0.71 |
+| `flugpl` | optimal | 918 | 918 | 6025 | 5858 | 0.97 |
+| `gen-ip016` | feasible | 2000 | 2000 | 2394 | 2497 | 1.04 |
+| `gen-ip054` | feasible | 2000 | 2000 | 2924 | 2864 | 0.98 |
+| `gr4x6` | optimal | 1 | 1 | 236 | 223 | 0.94 |
+| `gt2` | optimal | 8 | 8 | 57 | 58 | 1.01 |
+| `k16x240b` | feasible | 2000 | 2000 | 99 | 104 | 1.05 |
+| `markshare1` | feasible | 2000 | 2000 | 1522 | 1650 | 1.08 |
+| `markshare_4_0` | feasible | 2000 | 2000 | 3214 | 3324 | 1.03 |
+| `markshare_5_0` | feasible | 2000 | 2000 | 2132 | 2282 | 1.07 |
+| `neos-1425699` | optimal | 1 | 1 | 180 | 409 | 2.27 |
+| `neos-3072252-nete` | feasible | 2000 | 2000 | 72 | 76 | 1.06 |
+| `neos-3611689-kaihu` | optimal | 384 | 384 | 50 | 52 | 1.03 |
+| `neos-5140963-mincio` | feasible | 2000 | 2000 | 458 | 477 | 1.04 |
+| `neos-5192052-neckar` | optimal | 5 | 5 | 391 | 652 | 1.67 |
+| `neos5` | feasible | 2000 | 2000 | 331 | 351 | 1.06 |
+| `noswot` | feasible | 2000 | 2000 | 822 | 910 | 1.11 |
+| `opt1217` | feasible | 2000 | 2000 | 612 | 688 | 1.12 |
+| `p0201` | optimal | 321 | 321 | 85 | 87 | 1.02 |
+| `pk1` | feasible | 2000 | 2000 | 712 | 688 | 0.97 |
+| `ran12x21` | feasible | 2000 | 2000 | 96 | 104 | 1.08 |
+| `ran13x13` | feasible | 2000 | 2000 | 149 | 148 | 1.00 |
+| `rlp1` | feasible | 2000 | 2000 | 1083 | 977 | 0.90 |
+| `supportcase14` | optimal | 9 | 9 | 27 | 28 | 1.04 |
+| `supportcase16` | optimal | 11 | 11 | 32 | 34 | 1.07 |
+| `timtab1` | node_limit | 2000 | 2000 | 273 | 136 | 0.50 |
+
 
 #### A/B: Feasibility Jump on the seed harness (#506)
 

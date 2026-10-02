@@ -2815,8 +2815,12 @@ def main() -> int:
                               for engine in KENNINGTON_ENGINES}
     milp_csv = newest("miplib-*.csv", prefix="miplib")
     milp_tier2_csv = newest("miplib-tier2-seeds*-*.csv")
-    cache_ab = (newest("miplib-501-cache0-*.csv"), newest("miplib-501-cache8-*.csv"))
-    fj_ab = (newest("miplib-506-fj-off-seeds*-*.csv"), newest("miplib-506-fj-on-seeds*-*.csv"))
+    # A/B legs carry their option in solver_options, which latest() skips by design; each leg
+    # is read by the option it measures (#501, #506).
+    cache_ab = (newest_option_run("miplib-501-cache0-*.csv", "mip_node_factor_cache=0"),
+                newest_option_run("miplib-501-cache8-*.csv", "mip_node_factor_cache=8"))
+    fj_ab = (newest_option_run("miplib-506-fj-off-seeds*-*.csv", "mip_heur_fj=off"),
+             newest_option_run("miplib-506-fj-on-seeds*-*.csv", "mip_heur_fj=on"))
     milp_long_csv = newest_named("miplib-600s-*.csv")
     # prefix: pdhg-threads-*, pdhg-two-matvec-* and pdhg-478-* share the glob, and since #592
     # section 1e had been reading the thread-scaling CSV as its own (0 instances shown).
