@@ -84,7 +84,7 @@ def sweep_cost(model_path: Path, column: str, from_value: float, to_value: float
     for _ in range(MAX_BREAKPOINTS):
         result = model.solve(ranging=True, start=previous_result, log_to_console=False,
                              **options)
-        basis = dict(zip(source.col_names, result.col_statuses))
+        basis = _basis(source, result)
         rows.append({
             "parameter": t, "objective": result.objective if result.claims_a_point else "",
             "status": result.status,
@@ -138,7 +138,7 @@ def sweep_row(model_path: Path, row: str, side: str, from_value: float, to_value
     for _ in range(MAX_BREAKPOINTS):
         result = model.solve(ranging=True, start=previous_result, log_to_console=False,
                              **options)
-        basis = dict(zip(source.col_names, result.col_statuses))
+        basis = _basis(source, result)
         rows.append({
             "parameter": t, "objective": result.objective if result.claims_a_point else "",
             "status": result.status,
@@ -157,6 +157,16 @@ def sweep_row(model_path: Path, row: str, side: str, from_value: float, to_value
             t = min(t, to_value) if direction > 0 else max(t, to_value)
         apply(t)
     return rows
+
+
+def _basis(source, result) -> dict[str, str]:
+    """Every column's and every row's status. A breakpoint is often a row's slack entering
+    or leaving the basis with no column changing; comparing the columns alone labelled such
+    a breakpoint "no basis change" although the slope changed there (#522)."""
+    basis = dict(zip(source.col_names, result.col_statuses))
+    basis.update((f"row {name}", status)
+                 for name, status in zip(source.row_names, result.row_statuses))
+    return basis
 
 
 def _finite(value: float) -> bool:
