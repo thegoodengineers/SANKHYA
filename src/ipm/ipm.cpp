@@ -1276,7 +1276,14 @@ void InteriorPoint::solve_normal(std::vector<double>* rhs) {
     return;
   }
   if (dense_.active()) {
+    // Tests only (ipm_testing.hpp): the system and its answer, to be compared with the
+    // default path's solve of the whole M on the iterates the interior point really meets.
+    std::vector<double> observed_rhs;
+    if (testing::dense_solve_observer) observed_rhs = *rhs;
     const PcgReport report = dense_.solve(rhs->data());
+    if (testing::dense_solve_observer) {
+      testing::dense_solve_observer(dense_, observed_rhs, *rhs, report);
+    }
     ++pcg_solves_;
     pcg_iterations_ += report.iterations;
     worst_pcg_residual_ = std::max(worst_pcg_residual_, report.relative_residual);

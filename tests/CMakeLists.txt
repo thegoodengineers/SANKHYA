@@ -54,6 +54,7 @@ add_executable(sankhya_tests
   unit/test_ipm_scaling.cpp
   unit/test_ipm_model_space.cpp
   unit/test_ipm_dense_columns.cpp
+  unit/test_ipm_dense_directions.cpp
   unit/test_ipm_column_side.cpp
   unit/test_ipm_normal_side.cpp
   unit/test_pdhg_parallel_spmv.cpp

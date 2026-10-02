@@ -5,12 +5,30 @@
 // when its factorization happens to overflow in the solve, which a small committed model
 // does not do on every path. This seam lets a test poison the next predictor directions, so
 // the recovery runs on any model the test chooses. It is zero in every real solve and only
-// tests write it; nothing in src/ sets it.
+// tests write it; nothing in src/ sets it. The same holds for the observer of the
+// dense-column solves (#467), through which a test sees every system that path solves.
 #pragma once
 
 #include <atomic>
+#include <functional>
+#include <vector>
+
+namespace sankhya::ipm {
+class DenseColumnCorrection;
+struct PcgReport;
+}  // namespace sankhya::ipm
 
 namespace sankhya::ipm::testing {
+
+/// Called after every Newton-direction solve on the dense-column path (#467) with the
+/// correction (which holds A, Theta, the row shift and delta of the system it solved), the
+/// right-hand side, the answer and the conjugate-gradient report, so that a test can solve
+/// the same system the default way and compare. Empty in every real solve; only tests set
+/// it, and they clear it again before returning.
+using DenseSolveObserver =
+    std::function<void(const DenseColumnCorrection&, const std::vector<double>& rhs,
+                       const std::vector<double>& solution, const PcgReport&)>;
+inline DenseSolveObserver dense_solve_observer;
 
 /// While positive, the next predictor direction the interior point computes has a NaN
 /// written into it (and the count drops by one), so the step is rejected as non-finite
