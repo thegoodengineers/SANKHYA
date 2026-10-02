@@ -937,6 +937,10 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // feasible); `algorithm=simplex` restarts the primal (cost edits keep it primal
     // feasible). A basis the engine cannot seed is reported by it and the solve runs cold.
     const bool warm_requested = control != nullptr && control->has_starting_basis();
+    // True only while the answer in hand came from the warm start, which bypassed presolve.
+    // The retries below that need the presolve pipeline are skipped for such an answer; a
+    // warm request that ran cold after all (#883, or a basis of the wrong shape) gets them.
+    bool warm_answer = false;
     // Whether the CHOSEN engine can start from a basis at all is a capability, not a
     // hand-maintained "every engine except these two" list (#297 full integration, central
     // configuration validation): today this is exactly !want_pdhg && !want_ipm since only
@@ -964,12 +968,49 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         solution = with_presolve(run_lp_engine, &presolve_proved_it);
       } else {
         logger.info("Warm start from the given basis; presolve bypassed");
+        warm_answer = true;
         solution = want_dual ? solve_dual_simplex(model, options, logger, control, &warm)
                              : solve_primal_simplex(model, options, logger,
                                                     build_node_scaling(model, options), control,
                                                     &warm);
-        const std::string note = "warm start from the given basis, presolve bypassed";
-        solution.message = solution.message.empty() ? note : solution.message + "; " + note;
+        // #883: a basis from yesterday's optimum can leave the simplex nowhere good on a model
+        // that is now infeasible. On the medium refinery LP with prices and commitments moved,
+        // 13 of 40 such mornings came back warm as `infeasible` with no Farkas vector that
+        // verifies (reported numerical_error by refuse_an_unproved_infeasibility below) where
+        // the cold solve proves infeasibility in presolve. A warm start is only a faster route
+        // to the cold answer, so a warm answer with no verdict, or with a verdict it cannot
+        // prove, is not reported: the model is solved again cold, through presolve, and the
+        // message says which route produced the answer.
+        // Both signs, as verify_and_keep_certificate (src/core/certificate.cpp) checks them.
+        const auto proves = [&](const std::vector<double>& y) {
+          if (farkas_proves_infeasible(model, y)) return true;
+          std::vector<double> flipped = y;
+          for (double& value : flipped) value = -value;
+          return farkas_proves_infeasible(model, flipped);
+        };
+        const bool proved_infeasible = solution.status == SolveStatus::kInfeasible &&
+                                       !solution.farkas_dual.empty() &&
+                                       proves(solution.farkas_dual);
+        const bool no_usable_verdict =
+            solution.status == SolveStatus::kNumericalError ||
+            (solution.status == SolveStatus::kInfeasible && !proved_infeasible);
+        const bool time_left =
+            !limits.has_time_limit() || limits.remaining_seconds(timer.elapsed_seconds()) > 0.0;
+        if (no_usable_verdict && time_left) {
+          logger.info(
+              "The warm start ended {} with no verdict it can prove; solving cold, "
+              "with presolve (#883)",
+              to_string(solution.status));
+          solution = with_presolve(run_lp_engine, &presolve_proved_it);
+          warm_answer = false;
+          const std::string note =
+              "the warm start from the given basis ended with no verdict it could prove; this "
+              "is the cold solve's answer (#883)";
+          solution.message = solution.message.empty() ? note : solution.message + "; " + note;
+        } else {
+          const std::string note = "warm start from the given basis, presolve bypassed";
+          solution.message = solution.message.empty() ? note : solution.message + "; " + note;
+        }
       }
     } else {
       if (warm_requested) {
@@ -1091,13 +1132,13 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // already allows (run_lp_engine bills the remaining budget, same as every other retry in
     // this file), and it is the one retry that cannot need this same fallback again: it holds
     // no reduced model to postsolve. `race` runs its own presolve/postsolve per engine
-    // already; `warm_requested` already bypasses presolve. Measured on 13 of the 16 instances
-    // #559 names (box1, cplex1, galenet, ex72a, klein3, pang, qual, refinery, vol1, mondou2,
-    // ex73a, bgindy, gosh): a dropped certificate recovered this way, verified.
+    // already; a warm answer (`warm_answer`) already bypassed presolve. Measured on 13 of the
+    // 16 instances #559 names (box1, cplex1, galenet, ex72a, klein3, pang, qual, refinery,
+    // vol1, mondou2, ex73a, bgindy, gosh): a dropped certificate recovered this way, verified.
     // gran regresses to numerical_error without presolve - kept only when the retry is AT
     // LEAST as good, never as a straight replacement.
     if (solution.status == SolveStatus::kInfeasible && solution.farkas_dual.empty() && !race &&
-        !warm_requested && options.get_bool("presolve")) {
+        !warm_answer && options.get_bool("presolve")) {
       certify_by_retry(
           "presolve found no certifiable proof; retried directly against the original model "
           "and this is that retry's result");
@@ -1113,14 +1154,14 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // after the same guard, so the first answer stands whenever the retry is no better.
     if ((solution.status == SolveStatus::kFeasible ||
          solution.status == SolveStatus::kNumericalError) &&
-        !race && !warm_requested && options.get_bool("presolve")) {
+        !race && !warm_answer && options.get_bool("presolve")) {
       retry_on_original(
           "the presolved solve made no optimality claim that survived postsolve; retried "
           "directly against the original model and this is that retry's result",
           [](const Solution& retry) { return retry.status == SolveStatus::kOptimal; },
           "Retry without presolve (#783): not optimal either; the first answer stands");
     }
-    if (!race && !warm_requested) certify_by_elastic();
+    if (!race && !warm_answer) certify_by_elastic();
     refuse_an_unproved_infeasibility(model, &solution, logger);
     // THE PRESCALED RETRY (#792). An LP that came back without a verdict - a numerical
     // error, or an optimality claim the guard withdrew - is solved once more through the
@@ -1135,7 +1176,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // scaled Netlib models the default path left without a verdict at 0e1a0d25 solve.
     const bool no_verdict = solution.status == SolveStatus::kNumericalError ||
                             solution.status == SolveStatus::kFeasible;
-    if (no_verdict && !race && !warm_requested && !model.has_integrality() &&
+    if (no_verdict && !race && !warm_answer && !model.has_integrality() &&
         !model.has_quadratic_objective() && options.get_bool("prescale_retry")) {
       const PrescaledModel prescaled = prescale_by_powers_of_two(model, kPrescalePasses);
       const bool changes_something =
