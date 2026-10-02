@@ -220,7 +220,18 @@ class SparseLdl {
   std::vector<Index> a_rows_;
   std::vector<double> a_values_;
 
-  std::vector<Index> parent_;    ///< elimination tree
+  std::vector<Index> parent_;  ///< elimination tree
+  // THE REACH OF EVERY ROW, PRECOMPUTED (#910). Row k of the up-looking factorization needs
+  // the columns j < k where L(k, j) != 0, sorted ascending - the scalar path's own name for
+  // this is `reach`. It is a pure function of the elimination tree and the matrix's
+  // structural pattern, neither of which factorize_signed() changes, so computing it afresh
+  // (a tree climb per nonzero, then a sort) on EVERY numeric factorization - every Newton
+  // iteration of an interior point solve - repeats exactly the same walk symbolic_pattern()
+  // already performs once below, to build l_rows_. reach_starts_/reach_entries_ cache it:
+  // row k's reach is reach_entries_[reach_starts_[k] .. reach_starts_[k+1]), filled by the
+  // same walk(), sorted once here instead of once per factorization.
+  std::vector<Index> reach_starts_;
+  std::vector<Index> reach_entries_;
   std::vector<Index> l_starts_;  ///< CSC pattern of L (strictly lower), fixed by analyze()
   std::vector<Index> l_rows_;
   std::vector<double> l_values_;
