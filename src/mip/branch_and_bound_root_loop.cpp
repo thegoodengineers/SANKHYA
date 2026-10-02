@@ -148,10 +148,7 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
                    to_string(next.status), round - 1);
       working_ = std::move(pre_round_model);
       scaling_ = std::move(pre_round_scaling);
-      pool_cuts_.resize(pool_before);
-      cut_row_slack_.resize(pool_before);
-      cut_row_free_.resize(pool_before);
-      if (pool_cuts_.empty()) first_cut_row_ = -1;
+      drop_cuts_from(pool_before);
       resize_warm_starts(working_.num_rows());
       why = "a failed re-solve";
       break;

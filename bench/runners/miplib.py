@@ -157,13 +157,25 @@ CSV_COLUMNS = [
     "conflicts_learned_cutoff",
     "conflict_nodes_pruned",
     "conflict_tightenings",
+    # The cut pool (#497), last for the same reason: cut rows aged out and put back in force
+    # (any mode), and of those the rows deleted from the node LP and appended again
+    # (mip_cut_pooling); the node LP's rows at each node's first solve, mean and most.
+    "cut_rows_aged_out",
+    "cuts_reactivated",
+    "cut_rows_removed",
+    "cut_rows_readded",
+    "node_lp_rows_mean",
+    "node_lp_rows_max",
 ]
 
 SAFE_BOUND_COLUMNS = ("safe_bound_nodes", "safe_bound_infinite", "safe_bound_refusals",
                       "safe_bound_max_gap", "safe_bound_max_rel_gap",
                       # The conflict counters (#503) travel the same way; the name is historical.
                       "conflicts_analysed", "conflicts_learned", "conflicts_learned_cutoff",
-                      "conflict_nodes_pruned", "conflict_tightenings")
+                      "conflict_nodes_pruned", "conflict_tightenings",
+                      # So do the cut pool's (#497).
+                      "cut_rows_aged_out", "cuts_reactivated", "cut_rows_removed",
+                      "cut_rows_readded", "node_lp_rows_mean", "node_lp_rows_max")
 
 # The certificate writer's log line (src/mip/certificate_writer.cpp, #756).
 LEAVES_LINE = re.compile(r"leaves: (\d+) from their own LP duals, (\d+) from an ancestor's,.*?"

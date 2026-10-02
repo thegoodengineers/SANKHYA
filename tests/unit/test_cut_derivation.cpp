@@ -189,6 +189,24 @@ TEST(CutDerivation, ASearchWithRootCutsWritesTheirDerivations) {
   // Without an applied cut the check below would pass vacuously.
   ASSERT_GT(solved.cuts_applied, 0);
   EXPECT_NE(text.str().find("\ncut0 L "), std::string::npos) << text.str();
+
+  // The cut pool (#497) removes aged rows from the node LPs, and a certificate states every
+  // node's duals over one fixed list of cut rows; with a proof asked for, the pool frees
+  // aged rows in place instead, nothing is removed, and the proof is still written.
+  const testing::TempFile pooled_file("", ".vipr");
+  options.set_string("write_certificate", pooled_file.path());
+  options.set_bool("mip_cut_pooling", true);
+  options.set_int("mip_cut_age_limit", 1);
+  const Solution pooled = solve(m, options);
+  ASSERT_EQ(pooled.status, SolveStatus::kOptimal);
+  EXPECT_DOUBLE_EQ(pooled.objective, -8.0);
+  EXPECT_EQ(pooled.cut_rows_removed, 0);
+  EXPECT_EQ(pooled.cut_rows_readded, 0);
+  std::ifstream pooled_in(pooled_file.path());
+  std::stringstream pooled_text;
+  pooled_text << pooled_in.rdbuf();
+  EXPECT_NE(pooled_text.str().find("RTP range -8 -8"), std::string::npos)
+      << pooled_text.str().substr(0, 400);
 }
 
 }  // namespace

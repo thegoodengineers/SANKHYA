@@ -1837,6 +1837,10 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.cuts_applied = reduced.cuts_applied;
   solution.cut_rows_aged_out = reduced.cut_rows_aged_out;
   solution.cuts_reactivated = reduced.cuts_reactivated;
+  solution.cut_rows_removed = reduced.cut_rows_removed;
+  solution.cut_rows_readded = reduced.cut_rows_readded;
+  solution.node_lp_rows_mean = reduced.node_lp_rows_mean;
+  solution.node_lp_rows_max = reduced.node_lp_rows_max;
   solution.cut_filter_report = reduced.cut_filter_report;
   solution.kkt_1e4_seconds = reduced.kkt_1e4_seconds;
   solution.kkt_1e6_seconds = reduced.kkt_1e6_seconds;
