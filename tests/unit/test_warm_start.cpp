@@ -9,7 +9,9 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -136,6 +138,66 @@ TEST(WarmStart, AWarmResolveThatTurnsInfeasibleStillCarriesACertificate) {
   const Solution warm = solve(model, quiet("auto"), &control);
   ASSERT_EQ(warm.status, SolveStatus::kInfeasible) << warm.message;
   EXPECT_EQ(static_cast<Index>(warm.farkas_dual.size()), model.num_rows()) << warm.message;
+}
+
+TEST(WarmStart, ManyRandomEditsGiveTheColdAnswer) {
+  // #524: a warm re-solve is only a faster route to the cold answer. Over many random edits
+  // of costs, column bounds and row sides on four Netlib models, each edit applied to the
+  // previous edited model and re-solved from the previous answer's basis, the warm and the
+  // cold solve must agree on the status, and on the objective when both are optimal. A
+  // fixed seed keeps the sequence reproducible; the edits are kept modest so most models
+  // stay feasible, and an edit that makes one infeasible is checked like any other.
+  std::mt19937_64 rng(524);
+  std::uniform_real_distribution<double> unit(0.0, 1.0);
+  int compared = 0;
+  int optimal_pairs = 0;
+  for (const char* name : {"afiro", "adlittle", "sc50a", "share2b"}) {
+    Model model = netlib(name);
+    Solution previous = solve(model, quiet("auto"));
+    ASSERT_EQ(previous.status, SolveStatus::kOptimal) << name << ": " << previous.message;
+    for (int edit = 0; edit < 60; ++edit) {
+      const double kind = unit(rng);
+      if (kind < 0.4) {
+        const auto j = static_cast<std::size_t>(rng() % model.col_cost.size());
+        model.col_cost[j] *= 0.5 + unit(rng);  // a price within a factor of two
+      } else if (kind < 0.7) {
+        const auto j = static_cast<std::size_t>(rng() % model.col_upper.size());
+        const double value = previous.status == SolveStatus::kOptimal
+                                 ? previous.col_value[j]
+                                 : std::max(model.col_lower[j], 0.0);
+        // Cap the column near its current value, loosened again half the time, so the
+        // change binds without forcing the model infeasible.
+        const double cap = value * (0.8 + 0.4 * unit(rng)) + 1.0;
+        model.col_upper[j] =
+            std::isfinite(model.col_upper[j])
+                ? std::max(model.col_lower[j], std::min(model.col_upper[j], cap))
+                : std::max(model.col_lower[j], cap);
+      } else {
+        const auto i = static_cast<std::size_t>(rng() % model.row_lower.size());
+        const double factor = 0.9 + 0.2 * unit(rng);
+        if (std::isfinite(model.row_lower[i])) model.row_lower[i] *= factor;
+        if (std::isfinite(model.row_upper[i])) model.row_upper[i] *= factor;
+        if (model.row_lower[i] > model.row_upper[i])
+          std::swap(model.row_lower[i], model.row_upper[i]);
+      }
+      const Solution cold = solve(model, quiet("auto"));
+      SolveControl control;
+      start_from(previous, &control);
+      const Solution warm = solve(model, quiet("auto"), &control);
+      ++compared;
+      ASSERT_EQ(warm.status, cold.status) << name << " edit " << edit << ": warm "
+                                          << warm.message << " / cold " << cold.message;
+      if (cold.status == SolveStatus::kOptimal) {
+        ++optimal_pairs;
+        EXPECT_NEAR(warm.objective, cold.objective,
+                    1e-7 * std::max(1.0, std::fabs(cold.objective)))
+            << name << " edit " << edit;
+        previous = warm;
+      }
+    }
+  }
+  EXPECT_EQ(compared, 240);
+  EXPECT_GE(optimal_pairs, 120) << "most edits should leave the model feasible";
 }
 
 TEST(WarmStart, ABasisOfTheWrongShapeIsIgnoredAndTheSolveRunsCold) {
