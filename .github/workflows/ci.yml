@@ -115,11 +115,12 @@ jobs:
   build-and-test:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
-    # The suites that start their own threads, or assert on how threads shared work. They run
+    # The suites that start their own threads, or assert on how threads shared work, and
+    # RunOrderDeterminism, which sets a time limit from a solve it just timed (#909). They run
     # after the parallel set, one at a time (see the Test step for why). Named once here
     # because the Test step and the shard coverage check below must agree on it exactly.
     env:
-      SERIAL_TESTS: '^(ParallelTree|PdhgParallelSpmv|EngineConcurrency|EngineRace|EngineDeterminism|Deterministic)\.'
+      SERIAL_TESTS: '^(ParallelTree|PdhgParallelSpmv|EngineConcurrency|EngineRace|EngineDeterminism|Deterministic|RunOrderDeterminism)\.'
     strategy:
       fail-fast: false
       matrix:

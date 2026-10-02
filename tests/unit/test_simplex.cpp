@@ -1012,13 +1012,15 @@ TEST(PrimalSimplex, AMarginalPhaseOneStallIsNotCalledInfeasible) {
 // =========================================================================================
 // The route an answer took is written down (#172)
 //
-// Under a time limit the scaled attempt gets half the budget and an unscaled retry gets the
-// rest, so the clock decides which attempt's iterations the answer carries: fit2p solved in
-// 10,432 scaled iterations on one machine and in 5,290 unscaled ones on a slower one, same
-// objective to 1e-11. That cannot be made clock-independent, so it is made visible: the
-// message names the route. The one route a test can force on every machine is the
-// exhausted one - a limit so small that the scaled attempt is over after its first
-// iteration (the clock is read after a pivot, never before) and nothing is left for a retry.
+// Under a time limit that stops the scaled attempt, or a scaled_share below its default of
+// 1.0, the clock decides which attempt's iterations the answer carries: at 0.5 fit2p solved
+// in 10,432 scaled iterations on one machine and in 5,290 unscaled ones on a slower one, and
+// dfl001 in 85,012 or 57,076 from one binary (#909). Where that cannot be made
+// clock-independent it is made visible: the message names the route. The one route a test
+// can force on every machine is the exhausted one - a limit so small that the scaled
+// attempt is over after its first iteration (the clock is read after a pivot, never before)
+// and nothing is left for a retry. tests/unit/test_run_order_determinism.cpp checks that a
+// limit the solve fits inside changes nothing.
 // =========================================================================================
 
 TEST(PrimalSimplex, TheRouteAnAnswerTookIsRecorded) {

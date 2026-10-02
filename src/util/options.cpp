@@ -1474,12 +1474,14 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back(
         {"scaled_share",
          OptionType::Double,
-         0.5,
+         1.0,
          "Fraction of time_limit the scaled simplex attempt may use before the unscaled "
-         "retry gets the rest. 0.5 guarantees the retry a real share when the first "
-         "attempt fails outright; 1.0 gives the scaled attempt the whole budget, so a "
-         "retry runs only on what an early failure leaves and never after a time limit "
-         "(#244 measures the two).",
+         "retry gets the rest. The default 1.0 gives the scaled attempt the whole budget, "
+         "so a retry runs only on what an early failure leaves and never after a time "
+         "limit, and a solve that finishes inside time_limit takes the same path on every "
+         "run. A smaller share reserves time for the retry, but then the clock decides the "
+         "route whenever the scaled attempt needs more than its share: dfl001 took 85,012 "
+         "or 57,076 iterations from one binary at 120 s and 0.5 (#909, #244).",
          0.05,
          1.0,
          {}});

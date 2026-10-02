@@ -2143,30 +2143,37 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   // on every timed-out instance - and degen3 "passed" only that way: 120 s wasted in a
   // scaled stall of 265,000 iterations, then an unscaled solve that takes 6 seconds.
   //
-  // So the scaled attempt gets half the limit and the retry gets whatever is left. Half is
-  // not tuned; it is the split that guarantees the retry a real share when the first attempt
-  // fails outright. What it costs is any model that scaling solves in more than half the
-  // budget. On the full Netlib set at a 120 s limit the scaled attempt needs up to 55 s on a
-  // cool machine (pilot87 54.4 s, fit2p 50.2 s, bench/results/netlib-full-59ac6e3.csv), so
-  // the half share is the binding constraint on the two largest solvable instances whenever
-  // the machine is slower than that (#172). A caller who knows better sets a larger limit or
-  // turns scaling off.
+  // So the retry gets whatever the scaled attempt leaves, and the scaled attempt gets the
+  // share of the limit the scaled_share option names. That share used to be half, to
+  // guarantee the retry a real share when the first attempt fails outright; the scaled
+  // attempt now keeps the whole limit (scaled_share=1.0) and the retry runs on what an EARLY
+  // failure leaves - a numerical error, a refuted claim, an optimum that does not survive
+  // unscaling - never after the scaled attempt ran out of time.
   //
-  // THE ROUTE IS RECORDED (#172). Under a time limit the clock decides whether the scaled
-  // attempt finishes, and with it which attempt's iterations the answer carries: fit2p took
-  // 10,432 scaled iterations on one machine and, on one 1.5x slower, 5,290 unscaled ones
-  // after the scaled attempt ran out its share - same objective to 1e-11, both verified. A
-  // time limit cannot be made clock-independent, so the choice it made is written into the
-  // message instead of being inferred later from an iteration count that does not match.
-  // Without a time limit the route depends on the numerics alone and is deterministic; a
-  // note is still attached when the scaled attempt fails, minus the time figures.
+  // WHY NOT HALF: A SPLIT MAKES THE ROUTE A FUNCTION OF THE CLOCK (#909). With half, any
+  // model the scaled attempt solves in about half the limit sits on a cliff: a run a little
+  // faster is answered by the scaled attempt, a run a little slower by the unscaled retry
+  // from the slack basis, on a limit the whole solve fits inside. dfl001 at 120 s needed 58
+  // to 60 s of its 60 s share on the A/B machine and took 85,012 iterations on the faster
+  // runs and 57,076 (after 60 s thrown away) on the slower ones, from one binary and one
+  // input; the first run of each A/B pair was the slower one, three times out of three, so
+  // it read as a run-order effect. The split had already shown this on fit2p (10,432 scaled
+  // iterations on one machine, 5,290 unscaled ones on a 1.5x slower one, #172), and #244
+  // measured the full Netlib set at 0.5 and 1.0 to identical statuses. With the whole limit
+  // the clock decides only whether the solve finishes, which no policy can avoid: a solve
+  // that finishes inside the limit is a function of its input again.
+  //
+  // THE ROUTE IS RECORDED (#172). When a limit does stop the scaled attempt, or the caller
+  // sets a smaller share, the choice the clock made is written into the message instead of
+  // being inferred later from an iteration count that does not match. Without a time limit
+  // the route depends on the numerics alone; a note is still attached when the scaled
+  // attempt fails, minus the time figures.
   const double time_limit = options.get_double("time_limit");
   const bool limited = time_limit < 1e300;  // the option's no-limit sentinel is DBL_MAX
   Timer budget;
   Options scaled_options = options;
-  // The share is an option so the policy can be measured rather than argued (#244): at 1.0
-  // the scaled attempt keeps the whole budget and the unscaled retry runs only on what an
-  // early failure leaves, never after a time limit.
+  // The share is an option so the policy can be measured rather than argued (#244); below
+  // 1.0 it brings back the clock-decided route above, and the message then says which.
   const double scaled_share = options.get_double("scaled_share");
   if (limited) scaled_options.set_double("time_limit", scaled_share * time_limit);
   Solution solution = run_engine(scaled, scaled_options, factors);
@@ -2267,8 +2274,9 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
 
   // THE RETRY NEVER GETS A FRESH BUDGET. An iteration limit has no notion of "remaining",
   // so a scaled solve that hit it is reported as it stands. A time limit does: the retry
-  // gets what the scaled attempt left, which is at least half by construction above, and
-  // if the limit was somehow exhausted anyway the scaled result is reported. Measured on
+  // gets what the scaled attempt left (at least 1 - scaled_share of it by construction
+  // above, and nothing at the default when the scaled attempt was the one stopped by the
+  // clock), and if the limit is exhausted the scaled result is reported. Measured on
   // fit2p before this: a 60 s limit produced a 120.76 s run.
   if (solution.status == SolveStatus::kIterationLimit) {
     note_route(solution, "an iteration limit has no remainder, so no unscaled retry was made");

@@ -152,6 +152,7 @@ add_executable(sankhya_tests
   unit/test_global.cpp
   unit/test_fractional_integer_bounds.cpp
   unit/test_deterministic.cpp
+  unit/test_run_order_determinism.cpp
   unit/test_resource_limits.cpp
   unit/test_mip_limit_reporting.cpp
   unit/test_incumbent_trace.cpp
