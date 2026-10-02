@@ -837,4 +837,60 @@ class Solution {
 [[nodiscard]] Solution solve(const Model& model, const Options& options,
                              SolveControl* control = nullptr);
 
+// =========================================================================================
+// A starting basis for a model whose rows and columns changed (#913)
+// =========================================================================================
+
+/// What map_basis_by_name() did: how many of the model's columns and rows it found in the
+/// earlier basis, how many are new (not named there), and how many of the earlier basis's
+/// entries the model no longer has, with how many of those were basic.
+struct BasisMapping {
+  Index matched_cols = 0;
+  Index matched_rows = 0;
+  Index new_cols = 0;
+  Index new_rows = 0;
+  Index removed_cols = 0;
+  Index removed_rows = 0;
+  Index removed_basic = 0;  ///< removed columns and rows that were basic
+
+  /// True when the model is not the one the basis was reported for: something was added
+  /// or removed.
+  [[nodiscard]] bool structural() const noexcept {
+    return new_cols + new_rows + removed_cols + removed_rows > 0;
+  }
+};
+
+/// Map a basis reported for an EARLIER model (`from_*_names[k]` carries status
+/// `from_*_status[k]`) onto `model` BY NAME, for a warm re-solve after rows or columns were
+/// added or removed (#913). A column or row of `model` named in the earlier basis keeps its
+/// status; a new row enters with its slack basic, so the new constraint is free to be
+/// slack; a new column enters nonbasic at a finite bound (lower, else upper, else free at
+/// zero), so the old point is unchanged by it. The result need not have exactly
+/// `num_rows()` basic entries - a removed basic column leaves the basis short, a removed
+/// row whose slack was nonbasic leaves it long - and solve() completes it: a short basis
+/// gets the logicals of the rows no basic column covers, a long one parks its surplus
+/// structurals at a bound, and the rank repair of Maros sec. 9.4 makes it factorize.
+///
+/// `model` columns or rows without names are matched as C<j> / R<i>, the names the .sol
+/// writer gives them. Returns false, leaving the outputs untouched, when the earlier names
+/// and statuses differ in length; `mapping`, when given, receives the counts.
+bool map_basis_by_name(const std::vector<std::string>& from_col_names,
+                       const std::vector<std::string>& from_row_names,
+                       const std::vector<BasisStatus>& from_col_status,
+                       const std::vector<BasisStatus>& from_row_status, const Model& model,
+                       std::vector<BasisStatus>* col_status,
+                       std::vector<BasisStatus>* row_status, BasisMapping* mapping = nullptr);
+
+/// The same from the earlier model itself and the statuses its solve reported, which is
+/// the API path: `map_basis_by_name(yesterday, first.col_status, first.row_status, today,
+/// &control.start_col_status, &control.start_row_status)`. Both models must carry their
+/// column and row names; when either does not, nothing can be matched, the function
+/// returns false and leaves the outputs untouched, and a caller passing the old statuses
+/// as they are gets what it got before #913 - a warm start when the shape still fits, a
+/// cold solve when it does not.
+bool map_basis_by_name(const Model& from_model, const std::vector<BasisStatus>& from_col_status,
+                       const std::vector<BasisStatus>& from_row_status, const Model& model,
+                       std::vector<BasisStatus>* col_status,
+                       std::vector<BasisStatus>* row_status, BasisMapping* mapping = nullptr);
+
 }  // namespace sankhya

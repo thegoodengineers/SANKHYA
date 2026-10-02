@@ -257,6 +257,7 @@ set(SANKHYA_CORE_SOURCES
   src/core/scenarios.cpp
   src/core/iis.cpp
   src/core/model.cpp
+  src/core/basis_map.cpp
   src/core/resource_limits.cpp
   src/core/solve.cpp
   src/core/deterministic_mode.cpp
@@ -382,6 +383,7 @@ set(SANKHYA_CORE_SOURCES
   src/simplex/dual_simplex.cpp
   src/simplex/primal_simplex.cpp
   src/simplex/crossover.cpp
+  src/simplex/warm_basis.cpp
   src/simplex/simplex_push.cpp
   src/simplex/simplex_report.cpp
   src/simplex/ranging.cpp

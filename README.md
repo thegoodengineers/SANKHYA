@@ -470,6 +470,11 @@ refinery LP over ten mornings of moved crude prices and product demands, at `5a3
 reach the same optimum every day and `tools/verify_solution.py` accepts all twenty answers; warm
 takes **353 simplex iterations against cold's 5091 (0.069x)**, and 0.27x the solver time
 (`bench/results/replan-warm-start-medium-5a39fb2.csv`, laptop, no other jobs).
+The file may also come from an earlier version of the model with rows and columns since
+added or removed (#913): entries are matched by name, a new row starts basic on its slack, a
+new column starts nonbasic at a bound, and a basis left short or long by the edit is completed
+by the simplex's rank repair before the solve. From the API, `map_basis_by_name()` (model.hpp)
+does the same with the earlier model and its solution's statuses.
 
 `--iis` names, on an infeasible model, the irreducible infeasible subsystem (#217): the
 rows and bounds that cannot hold together, printed, written to the `.sol` file with one

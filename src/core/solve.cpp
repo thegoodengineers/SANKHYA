@@ -85,6 +85,7 @@
 #include "sankhya/version.hpp"
 #include "simplex/crossover.hpp"
 #include "simplex/ranging.hpp"
+#include "simplex/warm_basis.hpp"
 #include "solver_engine/solver_registry.hpp"
 #include "solver_engine/solver_selector.hpp"
 #include "util/profiler.hpp"
@@ -968,10 +969,25 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       if (!lengths_fit) {
         logger.warning(
             "the starting basis has {} column and {} row statuses for a model with {} "
-            "columns and {} rows; ignored, solving cold",
+            "columns and {} rows; ignored, solving cold (a basis for a model whose rows or "
+            "columns changed is placed on this one by name with map_basis_by_name)",
             warm.col_status.size(), warm.row_status.size(), model.num_cols(), model.num_rows());
         solution = with_presolve(run_lp_engine, &presolve_proved_it);
       } else {
+        // #913: a basis carried across an edit that added or removed rows and columns
+        // (map_basis_by_name) has one status per entry but need not have num_rows() of them
+        // basic. It is completed here, on the model as given, rather than thrown away by
+        // the engine's seed for having the wrong count (simplex/warm_basis.hpp).
+        const WarmBasisCompletion completion = complete_warm_basis(model, &warm);
+        std::string completed;
+        if (completion.changed()) {
+          completed = fmt::format(
+              "the starting basis named {} basic entries for {} rows and was completed with "
+              "{} row logical(s), {} structural(s) parked at a bound{}",
+              completion.given_basic, model.num_rows(), completion.added_logicals,
+              completion.parked, completion.complete ? "" : ", still short of a basis");
+          logger.info("Warm start: {} (#913)", completed);
+        }
         logger.info("Warm start from the given basis; presolve bypassed");
         warm_answer = true;
         solution = want_dual ? solve_dual_simplex(model, options, logger, control, &warm)
@@ -1013,7 +1029,8 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
               "is the cold solve's answer (#883)";
           solution.message = solution.message.empty() ? note : solution.message + "; " + note;
         } else {
-          const std::string note = "warm start from the given basis, presolve bypassed";
+          std::string note = "warm start from the given basis, presolve bypassed";
+          if (!completed.empty()) note += "; " + completed;
           solution.message = solution.message.empty() ? note : solution.message + "; " + note;
         }
       }

@@ -62,12 +62,18 @@ ReadResult read_model(const std::string& path, Model* model);
 
 /// Read the basis a .sol file carries (the basis_status field of its columns and rows
 /// sections) for `model`, matched by name, into `col_status` / `row_status` - what
-/// `sankhya solve --warm-start previous.sol` seeds SolveControl with (#218). Returns false
-/// and fills `error` when the file cannot be read, names a column or row the model lacks,
-/// or carries no complete basis (a verdict with no point, or an engine that produces none).
+/// `sankhya solve --warm-start previous.sol` seeds SolveControl with (#218). The file may be
+/// a solution of an EARLIER version of the model, with rows and columns since added or
+/// removed (#913): the entries both name keep the file's status and the rest are placed by
+/// map_basis_by_name() (model.hpp), whose counts `mapping` receives when given. Returns
+/// false and fills `error` when the file cannot be read, carries no complete basis (a
+/// verdict with no point, or an engine that produces none), or shares too little with the
+/// model to be a solution of it or of an edit of it (fewer than half of the file's entries
+/// in the model, or fewer than half of the model's in the file).
 bool read_solution_basis(const std::string& path, const Model& model,
                          std::vector<BasisStatus>* col_status,
-                         std::vector<BasisStatus>* row_status, std::string* error);
+                         std::vector<BasisStatus>* row_status, std::string* error,
+                         BasisMapping* mapping = nullptr);
 
 // -----------------------------------------------------------------------------------------
 // Writers
