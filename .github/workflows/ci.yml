@@ -462,6 +462,10 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 tools/test_bundle.py
 
+      - name: A warm start on an infeasible morning reaches the cold verdict (#883)
+        if: matrix.name == 'Release'
+        run: SANKHYA_BINARY=build/sankhya python3 bench/runners/test_replan_warm_start.py
+
       - name: The Python-API walkthrough notebook runs end to end (#537)
         # Executed, not just present, so it cannot rot: notebooks/walkthrough.ipynb builds
         # demo/crude_blend.mps, solves it under two engines, verifies both independently,
