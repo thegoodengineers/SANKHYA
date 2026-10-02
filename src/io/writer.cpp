@@ -590,6 +590,7 @@ bool write_stats_json(const std::string& path, const Model& model, const Solutio
       {"conflicts_learned_cutoff", solution.conflicts_learned_cutoff},
       {"conflict_nodes_pruned", solution.conflict_nodes_pruned},
       {"conflict_tightenings", solution.conflict_tightenings},
+      {"clique_cuts_generated", solution.clique_cuts_generated},
       {"root_bound", json_number(solution.root_bound)},
       {"root_bound_after_cuts", json_number(solution.root_bound_after_cuts)},
       {"polish_iterations", solution.polish_iterations},

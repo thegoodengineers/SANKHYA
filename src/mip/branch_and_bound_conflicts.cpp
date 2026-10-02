@@ -247,6 +247,10 @@ void BranchAndBound::record_conflicts(Solution* solution) const {
   solution->conflict_tightenings = conflict_stats_.tightenings;
 }
 
+void BranchAndBound::record_cut_counts(Solution* solution) const {
+  solution->clique_cuts_generated = clique_cuts_generated_;
+}
+
 void BranchAndBound::report_conflicts() {
   if (!conflicts_enabled_) return;
   if (conflict_stats_.detected > 0) {
