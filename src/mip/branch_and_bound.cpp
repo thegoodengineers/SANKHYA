@@ -916,6 +916,7 @@ Solution BranchAndBound::run() {
     solution.objective_branches = objective_branches_;
     solution.symmetry_generators = symmetry_generators_;
     record_safe_bounds(&solution);
+    record_conflicts(&solution);
     solution.solve_seconds = timer_.elapsed_seconds();
     report_root(&solution);
     return solution;
@@ -928,6 +929,7 @@ Solution BranchAndBound::run() {
   solution.objective_branches = objective_branches_;
   solution.symmetry_generators = symmetry_generators_;
   record_safe_bounds(&solution);
+  record_conflicts(&solution);
   solution.solve_seconds = timer_.elapsed_seconds();
   report_root(&solution);
 

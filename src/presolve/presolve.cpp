@@ -1853,6 +1853,11 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.safe_bound_refusals = reduced.safe_bound_refusals;
   solution.safe_bound_max_gap = reduced.safe_bound_max_gap;
   solution.safe_bound_max_rel_gap = reduced.safe_bound_max_rel_gap;
+  solution.conflicts_analysed = reduced.conflicts_analysed;
+  solution.conflicts_learned = reduced.conflicts_learned;
+  solution.conflicts_learned_cutoff = reduced.conflicts_learned_cutoff;
+  solution.conflict_nodes_pruned = reduced.conflict_nodes_pruned;
+  solution.conflict_tightenings = reduced.conflict_tightenings;
   // The root bounds are objective values of the reduced model, whose objective_offset
   // carries the constant the removed columns contributed, so they are already in the
   // original model's units (#221).

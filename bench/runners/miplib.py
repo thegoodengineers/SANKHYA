@@ -151,10 +151,19 @@ CSV_COLUMNS = [
     "safe_bound_refusals",
     "safe_bound_max_gap",
     "safe_bound_max_rel_gap",
+    # Conflict analysis (#503): filled only when conflict_analysis is on, by the serial tree.
+    "conflicts_analysed",
+    "conflicts_learned",
+    "conflicts_learned_cutoff",
+    "conflict_nodes_pruned",
+    "conflict_tightenings",
 ]
 
 SAFE_BOUND_COLUMNS = ("safe_bound_nodes", "safe_bound_infinite", "safe_bound_refusals",
-                      "safe_bound_max_gap", "safe_bound_max_rel_gap")
+                      "safe_bound_max_gap", "safe_bound_max_rel_gap",
+                      # The conflict counters (#503) travel the same way; the name is historical.
+                      "conflicts_analysed", "conflicts_learned", "conflicts_learned_cutoff",
+                      "conflict_nodes_pruned", "conflict_tightenings")
 
 # The certificate writer's log line (src/mip/certificate_writer.cpp, #756).
 LEAVES_LINE = re.compile(r"leaves: (\d+) from their own LP duals, (\d+) from an ancestor's,.*?"
