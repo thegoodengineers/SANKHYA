@@ -373,6 +373,10 @@ bool SparseLdl::symbolic_pattern(const ShouldStop& should_stop) {
   // Both passes are asked by the entries they visit (#468), not every 256 rows: a row of L
   // under catastrophic fill holds most of the matrix's dimension.
   std::vector<std::size_t> count(un, 0);
+  // reach_count[k]: the size of row k's reach (#910) - the same `visited` the deadline
+  // already measures per k, kept per k instead of discarded, so reach_starts_ below can be
+  // sized without a third pass over the matrix.
+  std::vector<std::size_t> reach_count(un, 0);
   std::size_t total = 0;
   DeadlineByWork deadline(should_stop);
   std::size_t visited = 0;
@@ -387,6 +391,7 @@ bool SparseLdl::symbolic_pattern(const ShouldStop& should_stop) {
       ++total;
       ++visited;
     });
+    reach_count[static_cast<std::size_t>(k)] = visited;
     // The caller's budget for the factor, consulted as the count grows so that a factor ten
     // times too large is refused after a tenth of the work, not after all of it.
     if (total > factor_budget_) {
@@ -394,6 +399,8 @@ bool SparseLdl::symbolic_pattern(const ShouldStop& should_stop) {
       l_starts_.clear();
       l_rows_.clear();
       l_values_.clear();
+      reach_starts_.clear();
+      reach_entries_.clear();
       return false;
     }
   }
@@ -406,6 +413,8 @@ bool SparseLdl::symbolic_pattern(const ShouldStop& should_stop) {
     l_starts_.clear();
     l_rows_.clear();
     l_values_.clear();
+    reach_starts_.clear();
+    reach_entries_.clear();
     return false;
   }
 
@@ -416,6 +425,15 @@ bool SparseLdl::symbolic_pattern(const ShouldStop& should_stop) {
         static_cast<Index>(count[static_cast<std::size_t>(j)]);
   }
   l_rows_.assign(total, 0);
+  // reach_starts_ (#910): the same total - row k's reach and column k's place in some
+  // earlier row's reach are the same (k, j) pairs, grouped the other way around.
+  reach_starts_.assign(un + 1, 0);
+  for (Index k = 0; k < n; ++k) {
+    reach_starts_[static_cast<std::size_t>(k) + 1] =
+        reach_starts_[static_cast<std::size_t>(k)] +
+        static_cast<Index>(reach_count[static_cast<std::size_t>(k)]);
+  }
+  reach_entries_.assign(total, 0);
   std::vector<Index> next(l_starts_.begin(), l_starts_.end() - 1);
   std::fill(mark.begin(), mark.end(), -1);
   visited = 0;
@@ -426,14 +444,23 @@ bool SparseLdl::symbolic_pattern(const ShouldStop& should_stop) {
       stopped_early_ = true;
       l_starts_.clear();
       l_rows_.clear();
+      reach_starts_.clear();
+      reach_entries_.clear();
       return false;
     }
     visited = 0;
-    // Rows are visited in increasing k, so every column's row list comes out sorted.
+    const Index reach_begin = reach_starts_[static_cast<std::size_t>(k)];
+    Index reach_cursor = reach_begin;
+    // Rows are visited in increasing k, so every column's row list comes out sorted (l_rows_
+    // below). Row k's OWN reach is not - walk(k, ...) climbs from wherever each of row k's
+    // nonzeros starts, in no particular order of the columns it passes through - so it is
+    // sorted explicitly here, once, rather than by every numeric factorization that reads it.
     walk(k, [&](Index i) {
       l_rows_[static_cast<std::size_t>(next[static_cast<std::size_t>(i)]++)] = k;
+      reach_entries_[static_cast<std::size_t>(reach_cursor++)] = i;
       ++visited;
     });
+    std::sort(reach_entries_.begin() + reach_begin, reach_entries_.begin() + reach_cursor);
   }
   l_values_.assign(total, 0.0);
   d_.assign(un, 0.0);
@@ -539,8 +566,6 @@ bool SparseLdl::factorize_signed(const SparseMatrix& lower, double regularizatio
   if (supernodal_ && signs == nullptr) return factorize_supernodal(regularization, should_stop);
 
   std::vector<double> x(static_cast<std::size_t>(n), 0.0);
-  std::vector<Index> mark(static_cast<std::size_t>(n), -1);
-  std::vector<Index> reach;
   std::vector<Index> fill(static_cast<std::size_t>(n), 0);  // entries stored per column
   regularized_ = 0;
   smallest_pivot_ = std::numeric_limits<double>::infinity();
@@ -554,10 +579,13 @@ bool SparseLdl::factorize_signed(const SparseMatrix& lower, double regularizatio
       stopped_early_ = true;
       return false;
     }
-    // Scatter A(0:k-1, k) and the diagonal; collect the reach.
-    reach.clear();
+    // Scatter A(0:k-1, k) and the diagonal. The reach itself - which columns j < k the
+    // substitution below touches - is NOT recomputed here (#910): it is a pure function of
+    // the elimination tree and the matrix's structural pattern, both fixed by analyze(), so
+    // symbolic_pattern() already walked and sorted it once, into reach_starts_/reach_entries_.
+    // Climbing the tree and sorting again on every Newton iteration repeated exactly that
+    // walk for no reason; on maros-r7 it was 88% of factorize_signed's own time.
     double diagonal = 0.0;
-    mark[static_cast<std::size_t>(k)] = k;
     for (Index p = a_starts_[static_cast<std::size_t>(k)];
          p < a_starts_[static_cast<std::size_t>(k) + 1]; ++p) {
       const Index i = a_rows_[static_cast<std::size_t>(p)];
@@ -567,17 +595,13 @@ bool SparseLdl::factorize_signed(const SparseMatrix& lower, double regularizatio
         continue;
       }
       x[static_cast<std::size_t>(i)] += value;
-      Index j = i;
-      while (j != -1 && j < k && mark[static_cast<std::size_t>(j)] != k) {
-        mark[static_cast<std::size_t>(j)] = k;
-        reach.push_back(j);
-        j = parent_[static_cast<std::size_t>(j)];
-      }
     }
-    std::sort(reach.begin(), reach.end());
 
     // Forward substitution over the reach: y_j = x_j after every earlier column's update.
-    for (const Index j : reach) {
+    const Index reach_begin = reach_starts_[static_cast<std::size_t>(k)];
+    const Index reach_end = reach_starts_[static_cast<std::size_t>(k) + 1];
+    for (Index idx = reach_begin; idx < reach_end; ++idx) {
+      const Index j = reach_entries_[static_cast<std::size_t>(idx)];
       const auto uj = static_cast<std::size_t>(j);
       const double y = x[uj];
       const Index begin = l_starts_[uj];
