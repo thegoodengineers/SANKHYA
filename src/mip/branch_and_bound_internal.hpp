@@ -121,6 +121,10 @@ struct TreeNode {
   /// is then brought onto the rows of the moment when it is entered (remap_warm_start).
   /// Shared by every node stored under the same rows, so it costs a pointer per node.
   std::shared_ptr<const std::vector<std::size_t>> warm_cuts;
+  /// The parent's QP interior point iterate (miqp_node_ipm_warm_start, #494, #893): empty
+  /// unless that option and miqp_node_ipm are both on. Moved out when the node is processed,
+  /// same as `warm`.
+  qp::QpIpmWarmStart qp_warm;
   /// How far the branching moved the column from the parent's relaxation value: v - floor(v)
   /// for the down child, ceil(v) - v for the up child. The pseudocost observation (#69) is
   /// this node's bound gain divided by it.
@@ -236,6 +240,7 @@ class BranchAndBound {
       // factorization, and a node the IPM cannot finish goes to the fallback instead.
       node_ipm_options_ = node_options_;
       node_ipm_options_.set_int("iteration_limit", kMiqpNodeIpmIterationLimit);
+      miqp_node_ipm_warm_start_ = options.get_bool("miqp_node_ipm_warm_start");
     }
 
     for (Index j = 0; j < model.num_cols(); ++j) {
@@ -899,6 +904,8 @@ class BranchAndBound {
   bool quadratic_ = false;  ///< the node relaxation is a QP, not an LP
   /// miqp_node_ipm (#494): the QP IPM as the MIQP node solver (branch_and_bound_miqp.cpp).
   bool miqp_node_ipm_ = false;
+  /// miqp_node_ipm_warm_start (#494, #893): start a child's IPM from its parent's iterate.
+  bool miqp_node_ipm_warm_start_ = false;
   Options node_ipm_options_;            ///< node_options_ with the IPM's iteration cap
   Count miqp_ipm_nodes_ = 0;            ///< node QPs the IPM solved
   Count miqp_ipm_fallbacks_ = 0;        ///< node QPs it did not, handed to the fallback
@@ -938,6 +945,9 @@ class BranchAndBound {
   Count heap_selections_ = 0;           ///< nodes taken from the heap open list
   /// The basis to start the NEXT node LP from; empty means the slack basis (the root).
   WarmStart current_warm_;
+  /// The current node's QP IPM starting point (miqp_node_ipm_warm_start, #494, #893); empty
+  /// when the option is off or no parent iterate was offered.
+  qp::QpIpmWarmStart current_qp_warm_;
   /// mip_node_factor_cache (#501): first factorizations kept for the next node LP that
   /// starts from the same basis. Null when the option is 0.
   std::unique_ptr<NodeFactorCache> factor_cache_;

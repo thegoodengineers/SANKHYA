@@ -218,6 +218,55 @@ TEST(MiqpNodeIpm, ANodeOnlyItsLpProvesInfeasibleIsFathomedNotFatal) {
   EXPECT_NEAR(solved.col_value[0], 1.0, 1e-6);
 }
 
+TEST(MiqpNodeIpm, WarmStartedNodesReachTheSameEnumeratedOptimumAsCold) {
+  // miqp_node_ipm_warm_start (#494, #893): a child's interior point starts from its parent's
+  // iterate instead of cold. The search answers the same way either way - the option changes
+  // where the IPM starts, never what counts as optimal - so this reuses the random convex
+  // MIQPs above with the option on.
+  std::mt19937 rng(4942);
+  int optimal = 0;
+  int infeasible = 0;
+  for (int trial = 0; trial < 60; ++trial) {
+    const bool maximize = trial % 3 == 2;
+    const Instance instance = random_convex_miqp(rng, maximize);
+    const double best = enumerate(instance);
+    Options options = ipm_nodes();
+    options.set_bool("miqp_node_ipm_warm_start", true);
+    const Solution solved = solve(instance.model, options);
+    if (std::isnan(best)) {
+      ++infeasible;
+      EXPECT_EQ(solved.status, SolveStatus::kInfeasible)
+          << "trial " << trial << ": " << solved.message;
+      continue;
+    }
+    ++optimal;
+    ASSERT_EQ(solved.status, SolveStatus::kOptimal)
+        << "trial " << trial << ": " << solved.message;
+    EXPECT_NEAR(solved.objective, best, 1e-6 * std::max(1.0, std::fabs(best)))
+        << "trial " << trial;
+    EXPECT_NEAR(objective(instance, solved.col_value), best,
+                1e-6 * std::max(1.0, std::fabs(best)))
+        << "trial " << trial << ": the reported point does not have the reported objective";
+  }
+  EXPECT_GT(optimal, 30);
+  EXPECT_GT(infeasible, 2);
+}
+
+TEST(MiqpNodeIpm, WarmStartIsIgnoredWithoutMiqpNodeIpmAndChangesNothing) {
+  // miqp_node_ipm_warm_start alone, with miqp_node_ipm off, must not change the answer: the
+  // node solver is still Condat-Vu, which never reads current_qp_warm_.
+  std::mt19937 rng(49421);
+  const Instance instance = random_convex_miqp(rng, false);
+  const double best = enumerate(instance);
+  if (std::isnan(best)) return;
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_bool("miqp_node_ipm_warm_start", true);  // on, but miqp_node_ipm itself is off
+  const Solution solved = solve(instance.model, options);
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+  EXPECT_NEAR(solved.objective, best, 1e-6 * std::max(1.0, std::fabs(best)));
+}
+
 TEST(MiqpNodeIpm, ANodeLimitNeverReportsABoundPastTheOptimum) {
   std::mt19937 rng(4941);
   int limited = 0;

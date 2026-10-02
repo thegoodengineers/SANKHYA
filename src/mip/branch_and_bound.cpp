@@ -504,6 +504,7 @@ Solution BranchAndBound::run() {
     // Moved, not copied: this node will not be solved twice, and the open list must not
     // hold a basis per closed node.
     current_warm_ = std::move(nodes_[static_cast<std::size_t>(node_index)].warm);
+    current_qp_warm_ = std::move(nodes_[static_cast<std::size_t>(node_index)].qp_warm);
     // With cut rows removed and appended since the node was stored (#497), its basis is
     // brought onto the rows of the moment.
     if (auto& cuts = nodes_[static_cast<std::size_t>(node_index)].warm_cuts; cuts) {
@@ -715,6 +716,19 @@ Solution BranchAndBound::run() {
     // strong-branching probes can replace current_warm_ with the bases of their own solves.
     WarmStart children_warm = basis_of(relaxation);
     current_warm_ = children_warm;
+    // miqp_node_ipm_warm_start (#494, #893): the children start their own IPM from this node's
+    // converged point, pulled back inside whichever bound the branch just tightened. Only
+    // relaxation.col_value's size is checked here; a point size-correct but not actually
+    // converged (the IPM's own fallback path) is still a better start than the engine's cold
+    // one, so it is not filtered further.
+    qp::QpIpmWarmStart children_qp_warm;
+    if (miqp_node_ipm_warm_start_ &&
+        relaxation.col_value.size() == static_cast<std::size_t>(working_.num_cols())) {
+      children_qp_warm.col_value = relaxation.col_value;
+      if (relaxation.row_dual.size() == static_cast<std::size_t>(working_.num_rows())) {
+        children_qp_warm.row_dual = relaxation.row_dual;
+      }
+    }
 
     // Diving (#25, #414): at the root, and every mip_dive_frequency nodes when that is set.
     // node_index == 0 identifies the root directly - it is the one node present in open_
@@ -758,7 +772,17 @@ Solution BranchAndBound::run() {
       continue;
     }
     keep_inherited();  // a strong-branch fix (#502) may have re-solved the node LP
-    if (!strong_fixes_.empty()) children_warm = basis_of(relaxation);
+    if (!strong_fixes_.empty()) {
+      children_warm = basis_of(relaxation);
+      if (miqp_node_ipm_warm_start_ &&
+          relaxation.col_value.size() == static_cast<std::size_t>(working_.num_cols())) {
+        children_qp_warm.col_value = relaxation.col_value;
+        children_qp_warm.row_dual =
+            relaxation.row_dual.size() == static_cast<std::size_t>(working_.num_rows())
+                ? relaxation.row_dual
+                : std::vector<double>{};
+      }
+    }
     if (branch_column == kBranchIntegral && !strong_fixes_.empty()) {
       offer_incumbent(relaxation.col_value);
       if (pool_complete_ &&
@@ -823,6 +847,7 @@ Solution BranchAndBound::run() {
     down.parent_lp_bound = node_bound;
     down.depth = child_depth;
     down.warm = children_warm;
+    down.qp_warm = children_qp_warm;
     down.warm_cuts = cut_layout();  // #497: null unless cut rows are removed
     down.fraction = down_fraction;
     down.estimate = child_estimate;
@@ -835,6 +860,7 @@ Solution BranchAndBound::run() {
     up.parent_lp_bound = node_bound;
     up.depth = child_depth;
     up.warm = children_warm;
+    up.qp_warm = children_qp_warm;
     up.warm_cuts = down.warm_cuts;
     up.fraction = up_fraction;
     up.estimate = child_estimate;

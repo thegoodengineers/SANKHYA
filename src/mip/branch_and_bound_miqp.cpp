@@ -25,8 +25,10 @@
 // infeasible LP is an infeasible node, with its Farkas multipliers for conflict analysis;
 // otherwise the node is re-solved by Condat-Vu, as without the option.
 //
-// NOT DONE: #494 also asks for a warm start from the parent's iterate. The IPM has no
-// warm-start entry point yet (#490's "Not done"), so every node starts cold.
+// WARM START (miqp_node_ipm_warm_start, #494, #893): with the option on, a child node's IPM
+// starts from the parent's converged iterate (current_qp_warm_, set alongside current_warm_
+// where the tree assigns a node its basis) instead of cold. Off by default, same as
+// miqp_node_ipm itself, until its own A/B.
 //
 // References:
 //   Friedlander & Orban, "A primal-dual regularized interior-point method for convex
@@ -51,8 +53,11 @@ Solution BranchAndBound::solve_qp_node_ipm(const Options& options) {
   // A strong-branching probe (probe_options_) only scores a column; its status is read for
   // kInfeasible alone, so it is not worth the fallback below.
   const bool node_solve = &options == &node_options_;
+  const bool warm_usable =
+      node_solve && miqp_node_ipm_warm_start_ && !current_qp_warm_.empty();
   Solution ipm = qp::solve_convex_qp_ipm(working_, node_solve ? node_ipm_options_ : options,
-                                         logger_, control_);
+                                         logger_, control_,
+                                         warm_usable ? &current_qp_warm_ : nullptr);
   if (!node_solve) return ipm;
   ++miqp_ipm_nodes_;
   if (ipm.status == SolveStatus::kOptimal || ipm.status == SolveStatus::kTimeLimit ||

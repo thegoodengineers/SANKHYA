@@ -45,8 +45,14 @@
 // them; see the #893 comment above farkas_candidate below. Off, an infeasible model runs to
 // the iteration ceiling or a non-finite iterate and says so, as before.
 //
-// NOT IN THIS SLICE (#490's "Not done"): warm starts and scaling. The answer is judged by the
-// same in-process KKT gate as every QP answer before it may be called optimal.
+// WARM START (#494, #893): when the caller offers a QpIpmWarmStart whose col_value is the
+// model's own size, the usual least-squares start (Mehrotra 1992 sec. 7, "after Mehrotra" below)
+// is skipped; the point is mapped onto the internal columns instead, slacks recovered from it by
+// M v = b, pulled inside this node's (possibly tighter) bounds by the same margin the cold start
+// uses, with the bound multipliers always recomputed fresh from the residual there - never
+// carried over. y seeds from row_dual when given and its size matches, else the usual zero.
+// Not in this slice: continuing the proximal path itself (rho, delta) or the bound multipliers
+// from the parent, and scaling (#490's "Not done" otherwise still applies).
 
 #include "sankhya/qp.hpp"
 #include "sankhya/solve_control.hpp"
@@ -211,7 +217,7 @@ bool ray_candidate(const Model& model, const Standard& s, const std::vector<doub
 }  // namespace
 
 Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger& logger,
-                             SolveControl* control) {
+                             SolveControl* control, const QpIpmWarmStart* warm_start) {
   Timer timer;
   Solution solution;
   solution.allocate_for(model);
@@ -392,25 +398,55 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   };
   std::vector<double> minus_rd(detect ? nc : 0);
 
-  // ---- starting point, after Mehrotra (1992, sec. 7), adapted to bounds ------------------
-  // v and y from min g'v + v'(H + I)v/2 s.t. M v = b: one factorization of the same pattern
-  // with Theta^{-1} = I, so the start already nearly satisfies the rows (from the unit start
-  // the primal residual stayed at 1.0 for thirty iterations on qpcboei2). v is then moved
-  // inside its bounds by a margin that grows with how far outside the least-squares point
-  // was, and the bound multipliers take the sign-split stationarity residual plus a shift
-  // that balances them against the slacks.
+  // ---- starting point ----------------------------------------------------------------------
+  // Warm (#494, #893): the caller's point, mapped onto the internal columns, slacks recovered
+  // from it by M v = b, and the equality duals from row_dual when its size matches. Cold, after
+  // Mehrotra (1992, sec. 7), adapted to bounds: v and y from min g'v + v'(H + I)v/2 s.t. M v = b,
+  // one factorization of the same pattern with Theta^{-1} = I, so the start already nearly
+  // satisfies the rows (from the unit start the primal residual stayed at 1.0 for thirty
+  // iterations on qpcboei2). Either way v is then moved inside its bounds by a margin that grows
+  // with how far outside the point was, and the bound multipliers take the sign-split
+  // stationarity residual plus a shift that balances them against the slacks - never carried
+  // over from the warm point, which is why this is a partial warm start.
   {
-    std::fill(theta_inverse.begin(), theta_inverse.end(), 1.0);
-    const SparseMatrix k0 = kkt.build(theta_inverse, rho, delta);
-    if (ldl.factorize_quasidefinite(k0, signs, tol::kQpIpmPivotShare * std::min(rho, delta),
-                                    should_stop) &&
-        ldl.regularized_pivots() == 0) {
-      for (std::size_t j = 0; j < nc; ++j) rhs[j] = s.g[j];
-      for (std::size_t i = 0; i < nr; ++i) rhs[nc + i] = s.b[i];
-      solve_refined(ldl, k0, rhs, &step);
-      if (std::all_of(step.begin(), step.end(), [](double x) { return std::isfinite(x); })) {
-        std::copy(step.begin(), step.begin() + static_cast<std::ptrdiff_t>(nc), v.begin());
-        std::copy(step.begin() + static_cast<std::ptrdiff_t>(nc), step.end(), y.begin());
+    const bool warm_usable =
+        warm_start != nullptr && !warm_start->empty() &&
+        warm_start->col_value.size() == static_cast<std::size_t>(model.num_cols());
+    if (warm_usable) {
+      std::fill(v.begin(), v.end(), 0.0);
+      for (Index j = 0; j < s.n; ++j) {
+        const auto u = static_cast<std::size_t>(j);
+        const Index kcol = s.column_of[u];
+        if (kcol >= 0) v[static_cast<std::size_t>(kcol)] = warm_start->col_value[u];
+      }
+      std::fill(mv.begin(), mv.end(), 0.0);
+      if (s.rows > 0) s.m.multiply_add(v.data(), mv.data());
+      for (Index k = 0; k < s.slacks; ++k) {
+        const auto slack = static_cast<std::size_t>(s.free_n + k);
+        const auto row = static_cast<std::size_t>(s.slack_row[static_cast<std::size_t>(k)]);
+        v[slack] = mv[row];
+      }
+      if (warm_start->row_dual.size() == static_cast<std::size_t>(model.num_rows())) {
+        const double sense = model.sense_multiplier();
+        for (Index i = 0; i < model.num_rows(); ++i) {
+          const auto u = static_cast<std::size_t>(i);
+          const Index r = s.row_of[u];
+          if (r >= 0) y[static_cast<std::size_t>(r)] = sense * warm_start->row_dual[u];
+        }
+      }
+    } else {
+      std::fill(theta_inverse.begin(), theta_inverse.end(), 1.0);
+      const SparseMatrix k0 = kkt.build(theta_inverse, rho, delta);
+      if (ldl.factorize_quasidefinite(k0, signs, tol::kQpIpmPivotShare * std::min(rho, delta),
+                                      should_stop) &&
+          ldl.regularized_pivots() == 0) {
+        for (std::size_t j = 0; j < nc; ++j) rhs[j] = s.g[j];
+        for (std::size_t i = 0; i < nr; ++i) rhs[nc + i] = s.b[i];
+        solve_refined(ldl, k0, rhs, &step);
+        if (std::all_of(step.begin(), step.end(), [](double x) { return std::isfinite(x); })) {
+          std::copy(step.begin(), step.begin() + static_cast<std::ptrdiff_t>(nc), v.begin());
+          std::copy(step.begin() + static_cast<std::ptrdiff_t>(nc), step.end(), y.begin());
+        }
       }
     }
     double worst = 0.0;

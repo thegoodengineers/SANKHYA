@@ -800,8 +800,21 @@ const std::vector<OptionSpec>& Options::registry() {
                  "instead of the first-order Condat-Vu engine (#494), and prune on the bound "
                  "of the objective linearised at the node's point, priced by its row duals "
                  "(valid for any iterate). A node the IPM does not finish is decided by its LP "
-                 "when infeasible, else re-solved by Condat-Vu. No warm start yet: every node "
-                 "starts cold. Off by default until an A/B on main.",
+                 "when infeasible, else re-solved by Condat-Vu. See miqp_node_ipm_warm_start "
+                 "for starting a child node from its parent's iterate. Off by default until an "
+                 "A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"miqp_node_ipm_warm_start",
+                 OptionType::Bool,
+                 false,
+                 "With miqp_node_ipm: start a child node's interior point from its parent's "
+                 "converged point (#494, #893) instead of the engine's usual cold start - the "
+                 "primal point, mapped onto the child's columns and pulled back inside any "
+                 "bound the branch just tightened, and the parent's row duals, not its "
+                 "regularization or bound multipliers (a partial warm start). Ignored when "
+                 "miqp_node_ipm is off. Off by default until its own A/B on main.",
                  0.0,
                  0.0,
                  {}});

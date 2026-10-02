@@ -180,6 +180,69 @@ TEST(QpIpm, AnUnknownAlgorithmNameIsRefused) {
   EXPECT_FALSE(error.empty());
 }
 
+// ---- the warm start (#494, #893) --------------------------------------------------------
+
+TEST(QpIpm, AWarmStartAtTheExactOptimumConvergesInFewerIterationsThanCold) {
+  const Model model = inequality_qp();
+  Logger logger(nullptr);
+  const Solution cold = qp::solve_convex_qp_ipm(model, quiet(), logger);
+  ASSERT_EQ(cold.status, SolveStatus::kOptimal) << cold.message;
+
+  qp::QpIpmWarmStart warm;
+  warm.col_value = cold.col_value;  // the exact optimum: (0.5, 1.5)
+  warm.row_dual = cold.row_dual;
+  const Solution started = qp::solve_convex_qp_ipm(model, quiet(), logger, nullptr, &warm);
+  ASSERT_EQ(started.status, SolveStatus::kOptimal) << started.message;
+  EXPECT_NEAR(started.objective, -4.5, 1e-8);
+  EXPECT_NEAR(started.col_value[0], 0.5, 1e-7);
+  EXPECT_NEAR(started.col_value[1], 1.5, 1e-7);
+  expect_backed(model, started);
+  EXPECT_LT(started.iterations, cold.iterations)
+      << "a warm start at the optimum should need fewer Newton steps than the cold centring "
+         "start, not merely the same number";
+}
+
+TEST(QpIpm, AWarmStartOutsideTheTightenedBoundsIsPulledInsideAndStillReachesTheOptimum) {
+  // The point the "parent" converged to violates the CHILD's tighter bound on x1 (a branch
+  // that fixed x1 <= 0.2, say); the engine must pull it back inside, not hand it to the
+  // factorization as-is.
+  Model child = inequality_qp();
+  child.col_upper[0] = 0.2;  // optimum moves to x1 = 0.2, x2 = 2 - 0.2 = 1.8
+  qp::QpIpmWarmStart warm;
+  warm.col_value = {0.5, 1.5};  // the parent's optimum, now outside x1's bound
+  warm.row_dual = {-1.0};
+  Logger logger(nullptr);
+  const Solution started = qp::solve_convex_qp_ipm(child, quiet(), logger, nullptr, &warm);
+  ASSERT_EQ(started.status, SolveStatus::kOptimal) << started.message;
+  EXPECT_NEAR(started.col_value[0], 0.2, 1e-7);
+  EXPECT_NEAR(started.col_value[1], 1.8, 1e-7);
+  expect_backed(child, started);
+}
+
+TEST(QpIpm, AWarmStartOfTheWrongSizeIsIgnoredAndTheColdStartRuns) {
+  const Model model = inequality_qp();
+  qp::QpIpmWarmStart warm;
+  warm.col_value = {1.0};  // one entry short of the model's two columns
+  Logger logger(nullptr);
+  const Solution started = qp::solve_convex_qp_ipm(model, quiet(), logger, nullptr, &warm);
+  const Solution cold = qp::solve_convex_qp_ipm(model, quiet(), logger);
+  ASSERT_EQ(started.status, SolveStatus::kOptimal) << started.message;
+  EXPECT_EQ(started.iterations, cold.iterations)
+      << "a mismatched warm start should fall back to the usual cold start exactly";
+  EXPECT_NEAR(started.objective, -4.5, 1e-8);
+}
+
+TEST(QpIpm, AnEmptyWarmStartBehavesExactlyLikeNoWarmStartAtAll) {
+  const Model model = equality_ranged_free_fixed_qp();
+  qp::QpIpmWarmStart empty;
+  Logger logger(nullptr);
+  const Solution with_empty = qp::solve_convex_qp_ipm(model, quiet(), logger, nullptr, &empty);
+  const Solution without = qp::solve_convex_qp_ipm(model, quiet(), logger);
+  EXPECT_EQ(with_empty.status, without.status);
+  EXPECT_EQ(with_empty.iterations, without.iterations);
+  EXPECT_EQ(with_empty.objective, without.objective);
+}
+
 // ---- the signed factorization ----------------------------------------------------------
 
 /// K = [-2 1; 1 3], lower triangle. Quasi-definite: D = (-2, 3.5) in the natural order.
