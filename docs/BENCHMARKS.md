@@ -977,11 +977,44 @@ vendor library and not a solver, judgement call 28 in `docs/PROVENANCE.md`); the
 iteration and the refinement stay on the host. The instances are section 1g.3's: the
 synthetic ladder, the refinery year and the Mittelmann pair.
 
-Not yet run. Needs a build with `-DSANKHYA_ENABLE_CUDSS=ON` and a card:
+Source CSV: `bench/results/ipm-cudss-a100-e904ccd.csv`  
+Commit `e904ccd` · machine `Linux-x86_64-a100` · GPU NVIDIA A100-SXM4-40GB (compute 8.0, 40326 MiB VRAM, CUDA runtime 12.4, driver API 12.4); driver 550.127.08, CUDA runtime 12.4  
+`algorithm=ipm` to the project standard (tolerance column: relative gap 1e-08, feasibility 1e-07), `ipm_linear_solver=cpu` against `=cudss`; `device used` is read from the engine's own log line, so a cudss row that ran the CPU factor says so. The gap is |obj - ref| / max(1, |ref|); `verified` is tools/verify_solution.py on the written solution. A ratio below 1x is a loss and is printed in the same type as a win.
 
-```
-python bench/runners/ipm_cudss.py --binary build/sankhya --card a100
-```
+| instance | rows | nnz | factor | device used | status | verified | rel gap | iterations | solver (s) | wall (s) | reference |
+|---|---:|---:|---|---|---|---|---:|---:|---:|---:|---|
+| `kkt_200x200` | 200 | 1197 | cpu | no | optimal | 1 | 0.000e+00 | 85 | 0.011902 | 0.449076 | 15285.0 (construction) |
+| `kkt_200x200` | 200 | 1197 | cudss | yes | optimal | 1 | 0.000e+00 | 85 | 0.280655 | 0.925021 | 15285.0 (construction) |
+| `kkt_500x500` | 500 | 2992 | cpu | no | optimal | 1 | 1.792e-16 | 167 | 0.090193 | 0.410032 | 40596.0 (construction) |
+| `kkt_500x500` | 500 | 2992 | cudss | yes | optimal | 1 | 1.792e-16 | 167 | 0.468326 | 0.87743 | 40596.0 (construction) |
+| `kkt_1000x1000` | 1000 | 5979 | cpu | no | optimal | 1 | 5.188e-16 | 312 | 0.569267 | 0.895113 | 84140.0 (construction) |
+| `kkt_1000x1000` | 1000 | 5979 | cudss | yes | optimal | 1 | 5.188e-16 | 312 | 0.367866 | 0.779589 | 84140.0 (construction) |
+| `kkt_2000x2000` | 2000 | 11970 | cpu | no | optimal | 1 | 1.105e-15 | 700 | 4.933497 | 5.344845 | 184420.0 (construction) |
+| `kkt_2000x2000` | 2000 | 11970 | cudss | yes | optimal | 1 | 1.105e-15 | 700 | 0.789548 | 1.376942 | 184420.0 (construction) |
+| `kkt_5000x5000` | 5000 | 44988 | cpu | no | optimal | 1 | 3.888e-15 | 1409 | 241.735886 | 242.112527 | 718698.0 (construction) |
+| `kkt_5000x5000` | 5000 | 44988 | cudss | yes | optimal | 1 | 3.888e-15 | 1409 | 15.738123 | 16.285853 | 718698.0 (construction) |
+| `kkt_10000x10000` | 10000 | 89956 | cpu | no | not_solved | - | 1.000e+00 | 0 | 60.063786 | 60.477352 | 1355467.0 (construction) |
+| `kkt_10000x10000` | 10000 | 89956 | cudss | yes | optimal | 1 | 4.123e-15 | 2994 | 158.523043 | 159.111058 | 1355467.0 (construction) |
+| `refinery_year` | 779640 | 11143226 | cpu | no | time_limit | - | 1.193e-01 | 5 | 300.636562 | 314.419654 | -38289180.41914 (construction) |
+| `refinery_year` | 779640 | 11143226 | cudss | yes | optimal | 1 | 2.339e-12 | 19 | 9626.192436 | 9640.885051 | -38289180.41914 (construction) |
+| `chromaticindex1024-7` | 67583 | 270328 | cpu | no | not_solved | - | 1.000e+00 | 0 | 60.376994 | 61.083289 | 3.0 (highs, 133.933 s) |
+| `chromaticindex1024-7` | 67583 | 270328 | cudss | yes | not_solved | - | 1.000e+00 | 0 | 68.42348 | 69.138075 | 3.0 (highs, 133.933 s) |
+| `brazil3` | 14646 | 133185 | cpu | no | optimal | 1 | 3.735e-11 | 15 | 3.59558 | 4.393933 | 2.0000000000012172 (highs, 9.151 s) |
+| `brazil3` | 14646 | 133185 | cudss | yes | optimal | 1 | 3.735e-11 | 15 | 300.012214 | 300.730558 | 2.0000000000012172 (highs, 9.151 s) |
+
+cuDSS against the CPU factor on the solver's own clock:
+
+| instance | CPU factor (s) | cuDSS (s) | speedup | CPU status | cuDSS status |
+|---|---:|---:|---:|---|---|
+| `kkt_200x200` | 0.011902 | 0.280655 | 0.04x | optimal | optimal |
+| `kkt_500x500` | 0.090193 | 0.468326 | 0.19x | optimal | optimal |
+| `kkt_1000x1000` | 0.569267 | 0.367866 | 1.55x | optimal | optimal |
+| `kkt_2000x2000` | 4.933497 | 0.789548 | 6.25x | optimal | optimal |
+| `kkt_5000x5000` | 241.735886 | 15.738123 | 15.36x | optimal | optimal |
+| `kkt_10000x10000` | 60.063786 | 158.523043 | 0.38x | not_solved | optimal |
+| `refinery_year` | 300.636562 | 9626.192436 | 0.03x | time_limit | optimal |
+| `chromaticindex1024-7` | 60.376994 | 68.42348 | 0.88x | not_solved | not_solved |
+| `brazil3` | 3.59558 | 300.012214 | 0.01x | optimal | optimal |
 
 
 #### 1g.8 Feasibility Jump on the device against the CPU (#508)

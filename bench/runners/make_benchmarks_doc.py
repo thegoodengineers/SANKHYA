@@ -2878,9 +2878,13 @@ def main() -> int:
     multi_gpu_csv = newest("multi-gpu-*.csv")
     # The cuDSS runner's own file (#489); the ipm-cudss-ab-* legs of #696 are named A/B runs
     # of netlib.py and mittelmann.py and are not this tier.
+    # ipm_cudss.py records each leg's own options (algorithm=ipm and the linear solver) on
+    # every row, so latest() would skip its file as an option run; it is read the way the
+    # per-engine Mittelmann runs are.
     ipm_cudss_csv = None
     for card in GPU_CARDS:
-        ipm_cudss_csv = ipm_cudss_csv or newest(f"ipm-cudss-{card}-*.csv")
+        ipm_cudss_csv = ipm_cudss_csv or newest_option_run(f"ipm-cudss-{card}-*.csv",
+                                                           "algorithm=ipm")
     # #509 and #520 on the full MIPLIB tier 2: miplib-t2-full-<leg>-<sha>.csv, one CSV per
     # leg; `off` is the baseline, the rest set options and are read by one of them.
     # Seven hex digits in the glob, so `520-both-<sha>` cannot also match `520-both-cpu-<sha>`.
