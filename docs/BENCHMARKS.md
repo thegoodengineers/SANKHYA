@@ -1504,7 +1504,15 @@ Source CSVs: `bench/results/miplib-501-cache0-bcdfb6d.csv` (`mip_node_factor_cac
 
 #### A/B: Feasibility Jump on the seed harness (#506)
 
-Not yet run on an idle machine.
+Source CSVs: `bench/results/miplib-506-fj-off-seeds3-bce539f.csv` and `bench/results/miplib-506-fj-on-seeds3-bce539f.csv`, `mip_heur_fj` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
+
+| leg | runs | matched | proved | sgm time (s, shift 10) | first feasible found | sgm first feasible (s, shift 1) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| off | 90 | 40 | 32 | 26.42 | 83 | 1.333 | 14.61 |
+| on | 90 | 41 | 32 | 26.55 | 83 | 0.756 | 14.00 |
+
+Instances whose matched or proved seed count moved between the legs: `noswot` matched 0->1, proved 0->0.
+
 
 ---
 
