@@ -2,10 +2,10 @@
 // SANKHYA - the cut pool's row removal (#497), watched through its test seam.
 //
 // With mip_cut_pooling an aged cut row is deleted from the node LP and kept in the pool, and
-// appended again when a node's LP point violates it. The fuzz sweeps (test_branch_and_bound,
-// test_debug_solution) check the answers; this file checks the mechanism itself: that a cut
-// only comes back when the point violates it, that it comes back as the row it was, that a
-// cut is only removed while it is in the LP and only re-added while it is out, and that the
+// appended again when a node's LP point violates it. Every instance below is checked against
+// its optimum from the exact rational MILP oracle, and the mechanism itself is checked event
+// by event: a cut only comes back when the point violates it, it comes back as the row it
+// was, a cut is only removed while it is in the LP and only re-added while it is out, and the
 // counters the stats JSON reports are the events that happened.
 
 #include <algorithm>
@@ -23,6 +23,7 @@
 #include "sankhya/tolerances.hpp"
 
 #include "mip/cut_pool_audit.hpp"
+#include "oracles/rational_simplex.hpp"
 
 namespace sankhya::mip {
 namespace {
@@ -42,40 +43,44 @@ class Recorder {
 };
 
 /// A pure-binary instance of 10 to 14 columns: knapsack rows sum a x <= b, which covers and
-/// MIR cuts are separated from, and a covering row, maximising profit.
-Model knapsack_instance(std::mt19937_64& rng) {
+/// MIR cuts are separated from, and a covering row sum x >= 1, maximising profit. In the
+/// oracle's form, A x >= b, so a knapsack row is written negated.
+oracle::GeneratedLp knapsack_instance(std::mt19937_64& rng) {
   std::uniform_int_distribution<Index> width(10, 14);
   std::uniform_int_distribution<Index> height(2, 4);
-  std::uniform_int_distribution<int> weight(1, 9);
-  std::uniform_int_distribution<int> profit(1, 40);
+  std::uniform_int_distribution<std::int64_t> weight(1, 9);
+  std::uniform_int_distribution<std::int64_t> profit(1, 40);
   std::uniform_int_distribution<int> percent(0, 99);
-  const Index n = width(rng);
+  oracle::GeneratedLp lp;
+  lp.num_cols = width(rng);
   const Index knapsacks = height(rng);
-  Model model;
-  model.resize_columns(n);
-  for (Index j = 0; j < n; ++j) {
-    const auto u = static_cast<std::size_t>(j);
-    model.col_type[u] = VarType::kInteger;
-    model.col_upper[u] = 1.0;
-    model.col_cost[u] = -static_cast<double>(profit(rng));
-  }
-  model.resize_rows(knapsacks + 1);
-  model.matrix.reset(knapsacks + 1, n);
+  lp.num_rows = knapsacks + 1;
+  const auto n = static_cast<std::size_t>(lp.num_cols);
+  lp.integral.assign(n, 1);
+  lp.upper.assign(n, 1);
+  lp.c.resize(n);
+  for (std::size_t j = 0; j < n; ++j) lp.c[j] = -profit(rng);
   for (Index i = 0; i < knapsacks; ++i) {
-    int sum = 0;
-    for (Index j = 0; j < n; ++j) {
-      if (percent(rng) >= 70) continue;
-      const int a = weight(rng);
-      sum += a;
-      model.matrix.add_entry(i, j, a);
+    std::vector<std::int64_t> row(n, 0);
+    std::int64_t sum = 0;
+    for (std::size_t j = 0; j < n; ++j) {
+      if (percent(rng) < 70) row[j] = weight(rng);
+      sum += row[j];
     }
-    model.row_upper[static_cast<std::size_t>(i)] = std::max(1, sum / 2);
+    for (std::int64_t& a : row) a = -a;
+    lp.a.push_back(row);
+    lp.b.push_back(-std::max<std::int64_t>(1, sum / 2));
   }
-  for (Index j = 0; j < n; ++j) {
-    if (percent(rng) < 30) model.matrix.add_entry(knapsacks, j, 1.0);
-  }
-  model.row_lower[static_cast<std::size_t>(knapsacks)] = 1.0;
-  model.matrix.finalize();
+  std::vector<std::int64_t> cover(n, 0);
+  for (std::size_t j = 0; j < n; ++j) cover[j] = percent(rng) < 30 ? 1 : 0;
+  lp.a.push_back(cover);
+  lp.b.push_back(1);
+  return lp;
+}
+
+Model integer_model(const oracle::GeneratedLp& lp) {
+  Model model = oracle::to_model(lp);
+  for (auto& type : model.col_type) type = VarType::kInteger;
   return model;
 }
 
@@ -100,19 +105,22 @@ Options pool_options(bool pooling) {
 
 TEST(CutPool, ARemovedCutIsAppendedAgainOnlyWhenViolatedAndAsTheSameRow) {
   std::mt19937_64 rng(20261002);
-  Options reference = pool_options(false);
-  reference.set_bool("enable_root_cuts", false);
   std::int64_t removed = 0;
   std::int64_t readded = 0;
   int instances = 0;
-  for (int attempt = 0; attempt < 200 && readded < 20; ++attempt) {
-    const Model model = knapsack_instance(rng);
-    const Solution plain = solve(model, reference);
-    if (plain.status != SolveStatus::kOptimal) continue;
+  for (int attempt = 0; attempt < 400 && instances < 120; ++attempt) {
+    const oracle::GeneratedLp lp = knapsack_instance(rng);
+    // The optimum in exact arithmetic, which nothing in the solver can reach (#497's
+    // acceptance: no change in any proved optimum, rational oracle clean).
+    const oracle::OracleResult exact = oracle::solve_exact_milp(lp, 20000);
+    if (exact.status != oracle::OracleStatus::kOptimal) continue;
+    const Model model = integer_model(lp);
     Recorder recorder;
     const Solution pooled = solve(model, pool_options(true));
-    ASSERT_EQ(pooled.status, SolveStatus::kOptimal) << "attempt " << attempt;
-    EXPECT_NEAR(pooled.objective, plain.objective, 1e-6) << "attempt " << attempt;
+    ASSERT_EQ(pooled.status, SolveStatus::kOptimal) << lp.to_text();
+    const double expected = exact.objective.to_double();
+    EXPECT_LE(std::fabs(pooled.objective - expected), 1e-6 * std::max(1.0, std::fabs(expected)))
+        << lp.to_text();
     ++instances;
 
     // Which pooled cuts are out of the LP, event by event: a cut is removed only while it is
@@ -153,18 +161,20 @@ TEST(CutPool, ARemovedCutIsAppendedAgainOnlyWhenViolatedAndAsTheSameRow) {
     readded += readded_here;
     if (HasFailure()) return;
   }
-  EXPECT_GT(instances, 10);
+  EXPECT_GE(instances, 100) << "too few instances the exact oracle could solve";
   EXPECT_GT(removed, 0) << "no cut row was ever removed";
   EXPECT_GT(readded, 0) << "no removed cut was ever appended again";
-  std::printf("[  INFO    ] cut pool: %d instances, %lld rows removed, %lld appended again\n",
-              instances, static_cast<long long>(removed), static_cast<long long>(readded));
+  std::printf(
+      "[  INFO    ] cut pool: %d instances, each at the exact oracle's optimum; %lld rows "
+      "removed, %lld appended again\n",
+      instances, static_cast<long long>(removed), static_cast<long long>(readded));
 }
 
 TEST(CutPool, WithTheOptionOffNothingIsRemoved) {
   std::mt19937_64 rng(20261002);
   std::int64_t aged = 0;
   for (int attempt = 0; attempt < 40; ++attempt) {
-    const Model model = knapsack_instance(rng);
+    const Model model = integer_model(knapsack_instance(rng));
     Recorder recorder;
     const Solution s = solve(model, pool_options(false));
     EXPECT_TRUE(recorder.events.empty()) << "attempt " << attempt;
