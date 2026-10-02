@@ -50,6 +50,7 @@ add_executable(sankhya_tests
   unit/test_ipm_cudss.cpp
   unit/test_ipm_time_limit.cpp
   unit/test_pdhg_kkt_crossings.cpp
+  unit/test_pdhg_feasibility_polish.cpp
   unit/test_ipm_scaling.cpp
   unit/test_ipm_model_space.cpp
   unit/test_ipm_dense_columns.cpp

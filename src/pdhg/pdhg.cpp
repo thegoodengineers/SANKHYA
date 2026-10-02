@@ -10,6 +10,9 @@
 //           Section 3.1 adaptive step size, 3.2 primal weight, 4.3 restarts.
 //   [cuPDLP] Lu & Yang, "cuPDLP.jl: A GPU Implementation of Restarted Primal-Dual Hybrid
 //           Gradient for Linear Programming in Julia", arXiv:2311.12180.
+//   [AHLL25] Applegate, Hinder, Lu & Lubin, "PDLP: A Practical First-Order Method for
+//           Large-Scale Linear Programming", arXiv:2501.07018 (2025), feasibility
+//           polishing: option pdhg_feasibility_polish (#483), pdhg_feasibility_polish.cpp.
 //
 // WHY THIS ENGINE EXISTS. The revised simplex is sequential: every pivot depends on the one
 // before it, so it does not parallelise onto a GPU and we will not claim it does. PDHG
@@ -40,6 +43,7 @@
 
 #include "pdhg_certificate.hpp"
 #include "pdhg_evaluate.hpp"
+#include "pdhg_feasibility_polish.hpp"
 #include "pdhg_halpern.hpp"
 #include "pdhg_parallel.hpp"
 #include "pdhg_trace.hpp"
@@ -47,8 +51,11 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 #include "sankhya/solve_control.hpp"
 
@@ -294,6 +301,48 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
 
   StopController stop(control, timer, limits);
   SolveStatus stop_status = SolveStatus::kIterationLimit;
+
+  // FEASIBILITY POLISHING (#483, [AHLL25]), off by default until an A/B on main. Not
+  // pdhg_polish (#229), which finishes with the interior point: this runs PDHG itself on the
+  // zero-objective problem from (x_k, 0) and on the zero-bound problem from (0, y_k), at the
+  // first evaluation at or after iteration 100 and each time the count doubles, while the
+  // relative gap is at or under 1e-2, each phase for iteration / 8 steps. A polished pair
+  // whose x reached kPdhgTight is kept as a candidate; one that passes the stopping test
+  // below ends the run. Nothing here runs, and nothing above changes, when the option is off.
+  const bool feasibility_polish = options.get_bool("pdhg_feasibility_polish");
+  std::optional<FeasibilityPolisher> polisher;
+  if (feasibility_polish) polisher.emplace(problem, scaling, spectral_norm);
+  Count next_polish = tol::kPdhgPolishFirstIteration;
+  Count polish_iterations = 0;
+  Count polishes = 0;
+  bool have_polished = false;
+  bool reported_polished = false;
+  FeasibilityPolisher::Outcome polished;
+  const std::function<bool()> polish_should_stop = [&]() {
+    return (control != nullptr && control->interruption_requested()) ||
+           limits.time_exhausted(timer.elapsed_seconds());
+  };
+  const auto primal_tight = [](const Residuals& r) {
+    return r.primal <= tol::kPdhgTight && r.absolute_primal <= tol::kPrimalFeasibility;
+  };
+  const auto passes_stopping_test = [&](const Residuals& r) {
+    return r.meets_request(tolerance) && (stop_at_request || r.meets_project_standard());
+  };
+  // Keep a polished pair when its x reached the target and it beats the one in hand.
+  const auto keep_polished = [&](FeasibilityPolisher::Outcome&& outcome) {
+    polish_iterations += outcome.iterations;
+    ++polishes;
+    logger.verbose(
+        "feasibility polish {} at iteration {}: primal {}, dual {}; relative primal {:.3e}, "
+        "dual {:.3e}, gap {:.3e}; {} steps",
+        polishes, iteration, outcome.primal_reached ? "reached" : "not reached",
+        outcome.dual_reached ? "reached" : "not reached", outcome.residuals.primal,
+        outcome.residuals.dual, outcome.residuals.gap, outcome.iterations);
+    if (!outcome.primal_reached) return;
+    if (have_polished && outcome.residuals.worst() >= polished.residuals.worst()) return;
+    polished = std::move(outcome);
+    have_polished = true;
+  };
   const IterateTraceHook trace = iterate_trace_for_testing();  // null outside tests (#479)
   std::vector<double> trace_ax(trace.callback != nullptr ? m : 0);
 
@@ -632,6 +681,23 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       break;
     }
 
+    if (feasibility_polish && iteration >= next_polish) {
+      while (next_polish <= iteration) next_polish *= 2;
+      if (better.gap <= tol::kPdhgPolishGap) {
+        keep_polished(polisher->polish(
+            *chosen_x, *chosen_y, std::max<Count>(1, iteration / tol::kPdhgPolishBudgetDivisor),
+            omega, eta, polish_should_stop));
+        if (have_polished && passes_stopping_test(polished.residuals)) {
+          best = polished.residuals;
+          best_x = polished.x;
+          best_y = polished.y;
+          reported_polished = true;
+          converged = true;
+          break;
+        }
+      }
+    }
+
     const bool halpern_artificial =
         use_halpern && last_halpern_res.active &&
         (iteration - last_restart) >=
@@ -746,6 +812,40 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     }
   }
 
+  // ---- Feasibility polish of the reported point (#483) -------------------------------------
+  // The run ended without a polished pair that passed the stopping test. If the point about
+  // to be reported is not primal feasible to kPdhgTight, polish it once more - whatever its
+  // gap, which is then reported as measured - and report the best polished pair instead,
+  // provided its x reached the target. A run that had CONVERGED keeps its own point unless
+  // the polished pair passes the same stopping test, so the switch cannot weaken a claim.
+  //
+  // THIS LAST POLISH GETS AS MANY STEPS PER PHASE AS THE MAIN RUN TOOK, not iteration / 8.
+  // The periodic schedule is [AHLL25]'s and is aimed at ending a long run early; this one is
+  // the promise that the answer handed back is feasible, and on the committed Netlib
+  // instances stopped at 300 to 2,000 iterations the primal phase needed 100 to 6,600 steps
+  // to reach 1e-8 from the point the limit left (share2b the slowest), far beyond k / 8. It
+  // returns the moment it gets there, and the time limit still bounds it.
+  if (feasibility_polish && !reported_polished && !certificate_found &&
+      stop_status != SolveStatus::kInterrupted) {
+    const Residuals at_best = evaluate(problem, best_x, best_y, activity, reduced);
+    if (!primal_tight(at_best)) {
+      if (!polish_should_stop()) {
+        keep_polished(polisher->polish(best_x, best_y, std::max<Count>(1, iteration), omega,
+                                       eta, polish_should_stop));
+      }
+      if (have_polished) {
+        const bool passes = passes_stopping_test(polished.residuals);
+        if (!converged || passes) {
+          best = polished.residuals;
+          best_x = polished.x;
+          best_y = polished.y;
+          reported_polished = true;
+          converged = passes;
+        }
+      }
+    }
+  }
+
   // ---- Report ----------------------------------------------------------------------------
   for (Index j = 0; j < cols; ++j) {
     const auto u = static_cast<std::size_t>(j);
@@ -763,7 +863,9 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     solution.row_dual[u] = sense * (-best_y[u]);
   }
 
-  solution.iterations = iteration;
+  // With feasibility polishing the count is the work done, both kinds of step together; the
+  // message says how it splits (#483).
+  solution.iterations = iteration + polish_iterations;
   solution.solve_seconds = timer.elapsed_seconds();
   solution.kkt_1e4_seconds = kkt_seconds[0];
   solution.kkt_1e6_seconds = kkt_seconds[1];
@@ -841,10 +943,26 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
 
   // Only a verifiable point carries a dual bound. Anything else leaves it unknown, which is
   // the infinity on the unexplored side of the objective.
-  if (verifiable) {
+  //
+  // With feasibility polishing on (#483) the bound is also stated whenever the reported y is
+  // dual feasible to kPdhgTight relative and the project's absolute kDualFeasibility - the
+  // dual standard a kOptimal point is held to - so that a primal feasible polished point
+  // carries its measured gap in absolute_gap and relative_gap instead of an infinite one.
+  const bool polished_dual_bound = feasibility_polish &&
+                                   final_residuals.dual <= tol::kPdhgTight &&
+                                   final_residuals.absolute_dual <= tol::kDualFeasibility;
+  if (verifiable || polished_dual_bound) {
     solution.dual_bound = sense * final_residuals.dual_objective + model.objective_offset;
   } else {
     solution.dual_bound = model.sense == ObjSense::kMaximize ? kInfinity : -kInfinity;
+  }
+  if (feasibility_polish && !certificate_found) {
+    solution.message += fmt::format(
+        "{}feasibility polish (#483): {} polishes, {} of {} iterations; reported point {}, "
+        "relative primal {:.3e}, dual {:.3e}, gap {:.3e}",
+        solution.message.empty() ? "" : ". ", polishes, polish_iterations, solution.iterations,
+        reported_polished ? "polished" : "not polished", final_residuals.primal,
+        final_residuals.dual, final_residuals.gap);
   }
   solution.recompute_quality(model);
 
