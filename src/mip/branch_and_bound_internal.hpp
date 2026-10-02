@@ -754,6 +754,7 @@ class BranchAndBound {
   void analyze_conflict(Index node_index, ConflictSource source,
                         const std::vector<double>* farkas);
   void report_conflicts();
+  void record_conflicts(Solution* solution) const;  ///< the counters into the answer (#503)
 
   // ---- Cut rounds (branch_and_bound_cuts.cpp, #221) ------------------------------------
 

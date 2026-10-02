@@ -687,6 +687,14 @@ class Solution {
   Count safe_bound_refusals = 0;
   double safe_bound_max_gap = std::numeric_limits<double>::quiet_NaN();
   double safe_bound_max_rel_gap = std::numeric_limits<double>::quiet_NaN();
+  /// Conflict analysis (#292, #503), filled by the serial branch and bound when
+  /// conflict_analysis is on: nodes analysed, conflicts stored, of which from a node pruned
+  /// by bound (conflict_cutoff), and the nodes pruned and bounds tightened by them.
+  Count conflicts_analysed = 0;
+  Count conflicts_learned = 0;
+  Count conflicts_learned_cutoff = 0;
+  Count conflict_nodes_pruned = 0;
+  Count conflict_tightenings = 0;
   /// The root LP relaxation's objective before and after the root cut round (#221), in
   /// the model's own sense and units; NaN when no branch-and-cut ran. The share of the
   /// integrality gap the cuts closed is (after - before) / (objective - before), which the
