@@ -188,12 +188,13 @@ class ConflictStore {
 
 /// Running totals, for the log line and conflict_out.
 struct ConflictStats {
-  std::int64_t detected = 0;   ///< infeasible nodes analysed
-  std::int64_t learned = 0;    ///< stored
-  std::int64_t rejected = 0;   ///< the check from the global bounds did not prove it
-  std::int64_t too_long = 0;   ///< proved, but longer than conflict_max_size
-  std::int64_t minimized = 0;  ///< stored with fewer literals than the node had decisions
-  std::int64_t checks = 0;     ///< verification calls, the analysis's unit of work
+  std::int64_t detected = 0;        ///< infeasible nodes analysed
+  std::int64_t learned = 0;         ///< stored
+  std::int64_t learned_cutoff = 0;  ///< of which from a node pruned by bound (#503)
+  std::int64_t rejected = 0;        ///< the check from the global bounds did not prove it
+  std::int64_t too_long = 0;        ///< proved, but longer than conflict_max_size
+  std::int64_t minimized = 0;       ///< stored with fewer literals than the node had decisions
+  std::int64_t checks = 0;          ///< verification calls, the analysis's unit of work
   std::int64_t nodes_pruned = 0;
   std::int64_t tightenings = 0;
   double seconds = 0.0;

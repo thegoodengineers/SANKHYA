@@ -229,10 +229,22 @@ void BranchAndBound::analyze_conflict(Index node_index, ConflictSource source,
   if (conflicts_.add(canonical(std::move(literals)), source,
                      static_cast<std::int64_t>(nodes_explored_), cutoff)) {
     ++conflict_stats_.learned;
-    if (source == ConflictSource::kCutoff) cutoff_conflicts_held_ = true;
+    if (source == ConflictSource::kCutoff) {
+      cutoff_conflicts_held_ = true;
+      ++conflict_stats_.learned_cutoff;
+    }
     if (size < chain.size()) ++conflict_stats_.minimized;
     conflict_stats_.sizes.push_back(static_cast<std::int64_t>(size));
   }
+}
+
+void BranchAndBound::record_conflicts(Solution* solution) const {
+  if (!conflicts_enabled_) return;
+  solution->conflicts_analysed = conflict_stats_.detected;
+  solution->conflicts_learned = conflict_stats_.learned;
+  solution->conflicts_learned_cutoff = conflict_stats_.learned_cutoff;
+  solution->conflict_nodes_pruned = conflict_stats_.nodes_pruned;
+  solution->conflict_tightenings = conflict_stats_.tightenings;
 }
 
 void BranchAndBound::report_conflicts() {

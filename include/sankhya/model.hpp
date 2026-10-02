@@ -676,6 +676,25 @@ class Solution {
   /// Formulation symmetry generators the search found and added ordering rows for (#413);
   /// zero unless mip_symmetry is on.
   Count symmetry_generators = 0;
+  /// Safe dual bounds (#519), filled by the serial branch and bound when safe_bounds is on:
+  /// node bounds recomputed from the row duals, how many had no finite safe bound, how many
+  /// the believed bound (the node LP's objective) would have pruned and the safe one did
+  /// not, and the largest believed - safe over the search, absolute and relative to
+  /// max(1, |believed|), in the search's minimization sense. NaN when no finite safe bound
+  /// was computed.
+  Count safe_bound_nodes = 0;
+  Count safe_bound_infinite = 0;
+  Count safe_bound_refusals = 0;
+  double safe_bound_max_gap = std::numeric_limits<double>::quiet_NaN();
+  double safe_bound_max_rel_gap = std::numeric_limits<double>::quiet_NaN();
+  /// Conflict analysis (#292, #503), filled by the serial branch and bound when
+  /// conflict_analysis is on: nodes analysed, conflicts stored, of which from a node pruned
+  /// by bound (conflict_cutoff), and the nodes pruned and bounds tightened by them.
+  Count conflicts_analysed = 0;
+  Count conflicts_learned = 0;
+  Count conflicts_learned_cutoff = 0;
+  Count conflict_nodes_pruned = 0;
+  Count conflict_tightenings = 0;
   /// The root LP relaxation's objective before and after the root cut round (#221), in
   /// the model's own sense and units; NaN when no branch-and-cut ran. The share of the
   /// integrality gap the cuts closed is (after - before) / (objective - before), which the

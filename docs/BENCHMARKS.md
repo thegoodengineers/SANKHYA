@@ -355,41 +355,37 @@ Operations Research 38(2), 1990), larger and sparser than the core Netlib set. F
 hashed by `bench/runners/fetch_kennington.py`, which parses the published optima from the
 directory's own readme; run by `bench/runners/kennington.py` under the full-set rules.
 
-Source CSV: `bench/results/kennington-full-65eecbc.csv`  
-Commit `65eecbc` · machine `Windows-AMD64` · generated 2026-09-23T22:38:22+00:00
+Source CSV: `bench/results/kennington-full-9463fd7.csv`  
+Commit `9463fd7` · machine `laptop, Intel i7-1355U 10 cores 12 threads, 16 GB, on mains, no other jobs` · generated 2026-10-02T06:14:09+00:00
 
-**15 of 16** matched the readme's published optimum to a relative 1e-6 **and** passed independent verification. The published values are Vanderbei's ALPO results printed to eight significant figures, so rounding moves them by at most 5e-8 relative, well inside the tolerance.
+**16 of 16** matched the readme's published optimum to a relative 1e-6 **and** passed independent verification. The published values are Vanderbei's ALPO results printed to eight significant figures, so rounding moves them by at most 5e-8 relative, well inside the tolerance.
 
-**1 failed**, grouped by the reason the solver itself gave. They are named here because a pass rate without its failures is a claim, not evidence:
-
-| why it failed | count | instances |
-|---|---:|---|
-| optimality claim withdrawn by our own check (#157) | 1 | pds-20 |
+Every instance in this set passed.
 
 | instance | rows | cols | status | our objective | published optimum | rel. error | iters | time (s) | verified |
 |---|---:|---:|---|---:|---:|---:|---:|---:|:--:|
-| `cre-a` | 3516 | 4067 | optimal | 2.3595407061e+07 | 2.3595407e+07 | 2.6e-09 | 2945 | 0.262 | yes |
-| `cre-b` | 9648 | 72447 | optimal | 2.3129639887e+07 | 2.3129640e+07 | 4.9e-09 | 8560 | 19.293 | yes |
-| `cre-c` | 3068 | 3678 | optimal | 2.5275116141e+07 | 2.5275116e+07 | 5.6e-09 | 2937 | 0.314 | yes |
-| `cre-d` | 8926 | 69980 | optimal | 2.4454969765e+07 | 2.4454970e+07 | 9.6e-09 | 7356 | 14.159 | yes |
-| `ken-07` | 2426 | 3602 | optimal | -6.7952044338e+08 | -6.7952044e+08 | 5.0e-09 | 1330 | 0.088 | yes |
-| `ken-11` | 14694 | 21349 | optimal | -6.9723822625e+09 | -6.9723823e+09 | 5.4e-09 | 9051 | 2.514 | yes |
-| `ken-13` | 28632 | 42659 | optimal | -1.0257394789e+10 | -1.0257395e+10 | 2.1e-08 | 6117 | 5.041 | yes |
-| `ken-18` | 105127 | 154699 | optimal | -5.2217025287e+10 | -5.2217025e+10 | 5.5e-09 | 187081 | 423.351 | yes |
-| `osa-07` | 1118 | 23949 | optimal | 5.3572251730e+05 | 5.3572252e+05 | 5.0e-09 | 48 | 0.392 | yes |
-| `osa-14` | 2337 | 52460 | optimal | 1.1064628447e+06 | 1.1064628e+06 | 4.0e-08 | 50 | 0.800 | yes |
-| `osa-30` | 4350 | 100024 | optimal | 2.1421398732e+06 | 2.1421399e+06 | 1.3e-08 | 76 | 1.636 | yes |
-| `osa-60` | 10280 | 232966 | optimal | 4.0440725032e+06 | 4.0440725e+06 | 7.8e-10 | 200 | 4.953 | yes |
-| `pds-02` | 2953 | 7535 | optimal | 2.8857862010e+10 | 2.8857862e+10 | 3.5e-10 | 964 | 0.112 | yes |
-| `pds-06` | 9881 | 28655 | optimal | 2.7761037600e+10 | 2.7761038e+10 | 1.4e-08 | 9478 | 2.608 | yes |
-| `pds-10` | 16558 | 48763 | optimal | 2.6727094976e+10 | 2.6727095e+10 | 9.0e-10 | 6183 | 26.015 | yes |
-| `pds-20` | 33874 | 105728 | feasible | 2.3821658640e+10 | 2.3821659e+10 | 1.5e-08 | 77 | 373.403 | yes |
+| `cre-a` | 3516 | 4067 | optimal | 2.3595407061e+07 | 2.3595407e+07 | 2.6e-09 | 2609 | 0.162 | yes |
+| `cre-b` | 9648 | 72447 | optimal | 2.3129639887e+07 | 2.3129640e+07 | 4.9e-09 | 8560 | 19.272 | yes |
+| `cre-c` | 3068 | 3678 | optimal | 2.5275116141e+07 | 2.5275116e+07 | 5.6e-09 | 2460 | 0.191 | yes |
+| `cre-d` | 8926 | 69980 | optimal | 2.4454969765e+07 | 2.4454970e+07 | 9.6e-09 | 7356 | 14.493 | yes |
+| `ken-07` | 2426 | 3602 | optimal | -6.7952044338e+08 | -6.7952044e+08 | 5.0e-09 | 1308 | 0.082 | yes |
+| `ken-11` | 14694 | 21349 | optimal | -6.9723822625e+09 | -6.9723823e+09 | 5.4e-09 | 8265 | 0.920 | yes |
+| `ken-13` | 28632 | 42659 | optimal | -1.0257394789e+10 | -1.0257395e+10 | 2.1e-08 | 6117 | 4.850 | yes |
+| `ken-18` | 105127 | 154699 | optimal | -5.2217025287e+10 | -5.2217025e+10 | 5.5e-09 | 232861 | 423.610 | yes |
+| `osa-07` | 1118 | 23949 | optimal | 5.3572251730e+05 | 5.3572252e+05 | 5.0e-09 | 50 | 0.469 | yes |
+| `osa-14` | 2337 | 52460 | optimal | 1.1064628447e+06 | 1.1064628e+06 | 4.0e-08 | 55 | 0.980 | yes |
+| `osa-30` | 4350 | 100024 | optimal | 2.1421398732e+06 | 2.1421399e+06 | 1.3e-08 | 76 | 1.728 | yes |
+| `osa-60` | 10280 | 232966 | optimal | 4.0440725032e+06 | 4.0440725e+06 | 7.8e-10 | 200 | 5.659 | yes |
+| `pds-02` | 2953 | 7535 | optimal | 2.8857862010e+10 | 2.8857862e+10 | 3.5e-10 | 1144 | 0.090 | yes |
+| `pds-06` | 9881 | 28655 | optimal | 2.7761037600e+10 | 2.7761038e+10 | 1.4e-08 | 6486 | 0.694 | yes |
+| `pds-10` | 16558 | 48763 | optimal | 2.6727094976e+10 | 2.6727095e+10 | 9.0e-10 | 6183 | 29.348 | yes |
+| `pds-20` | 33874 | 105728 | optimal | 2.3821658640e+10 | 2.3821659e+10 | 1.5e-08 | 18190 | 420.767 | yes |
 
 **Summary**
 
-- shifted geometric mean solve time over the passed instances (shift 1s): **3.881s**
+- shifted geometric mean solve time over the passed instances (shift 1s): **4.997s**
 - worst relative error against a published optimum: **4.04e-08**
-- **failed: `pds-20`**, kept in the table on purpose
+- no failures on this set
 
 No per-engine option run is committed yet (`--solver-option algorithm=dual-simplex`, `simplex`, `pdhg`, `ipm`).
 
@@ -444,27 +440,54 @@ These are the smallest archives in Mittelmann's LP directory; against Netlib's l
 
 **Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `irish-electricity`, `physiciansched3-3`, `qap15`, `rmine15`, `supportcase10`.
 
+Each one attributed to one cause (#417), read from the engine that ran and the solver's own message in the CSV, which is the log line quoted:
+
+| instance | status | engine | cause | the solver's message |
+|---|---|---|---|---|
+| `Linf_520c` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 8.439e-02, dual 2.181e-04, gap 9.999e-01 after 24039 iterations and 13 restarts (target 1.0e-04); no time left for the interior-point polish; the interior point declined (th |
+| `bdry2` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 6.027e-02, dual 4.566e-07, gap 9.911e-01 after 7019 iterations and 10 restarts (target 1.0e-04); the interior-point polish did not improve it (time_limit after 0 iterations: |
+| `irish-electricity` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 6.079e-06, dual 1.151e-04, gap 1.793e-06 after 36902 iterations and 16 restarts (target 1.0e-04); the interior-point polish did not improve it (time_limit after 11 iteration |
+| `physiciansched3-3` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 3.097e-04, dual 5.597e+00, gap 6.016e-02 after 21399 iterations and 14 restarts (target 1.0e-04); the interior-point polish did not improve it (not_solved after 0 iterations |
+| `qap15` | time_limit | simplex-dual+primal | too large for the simplex at this iteration cost | time limit 149.994s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_limit after 150.0 s of its 150 s share; neither attempt produced a usable point |
+| `rmine15` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 1.508e-05, dual 0.000e+00, gap 5.528e-06 after 20597 iterations and 14 restarts (target 1.0e-04); the interior-point polish did not improve it (not_solved after 0 iterations |
+| `supportcase10` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 2.308e-08, dual 0.000e+00, gap 1.843e-05 after 22080 iterations and 13 restarts (target 1.0e-04); the interior-point polish did not improve it (not_solved after 0 iterations |
+
 #### The same eight under each engine
 
-Source CSVs: `bench/results/mittelmann-72123ff.csv` (dual simplex), `bench/results/mittelmann-pdhg-5c7efbc.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
+Source CSVs: `bench/results/mittelmann-72123ff.csv` (dual simplex), `bench/results/mittelmann-pdhg-0fe40ba.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
 Same 300 s limit per instance and engine; HiGHS is not re-run here.
 
 | instance | dual simplex: status · verified · time (s) | PDHG: status · verified · time (s) | interior point: status · verified · time (s) |
 |---|---|---|---|
-| `Linf_520c` | time_limit · - · 300.1 | time_limit · - · 231.4 | not run |
-| `bdry2` | time_limit · - · 253.4 | time_limit · - · 241.1 | not run |
-| `brazil3` | optimal · yes · 5.9 | optimal · yes · 58.0 | optimal · yes · 2.7 |
-| `chromaticindex1024-7` | optimal · yes · 57.9 | optimal · yes · 0.7 | not run |
+| `Linf_520c` | time_limit · - · 300.1 | time_limit · - · 210.2 | not run |
+| `bdry2` | time_limit · - · 253.4 | time_limit · - · 210.5 | not run |
+| `brazil3` | optimal · yes · 5.9 | optimal · yes · 82.7 | optimal · yes · 2.7 |
+| `chromaticindex1024-7` | optimal · yes · 57.9 | optimal · yes · 0.8 | not run |
 | `datt256_lp` | optimal · yes · 153.0 | not run | not run |
 | `ex10` | optimal · yes · 77.6 | not run | not run |
-| `irish-electricity` | time_limit · - · 240.2 | time_limit · - · 240.0 | not run |
+| `irish-electricity` | time_limit · - · 240.2 | time_limit · - · 240.1 | not run |
 | `physiciansched3-3` | time_limit · - · 216.8 | not run | not run |
-| `qap15` | time_limit · - · 300.1 | optimal · yes · 93.4 | not run |
-| `rmine15` | time_limit · - · 216.7 | time_limit · - · 216.2 | not run |
+| `qap15` | time_limit · - · 300.1 | optimal · yes · 93.0 | not run |
+| `rmine15` | time_limit · - · 216.7 | time_limit · - · 216.3 | not run |
 | `s250r10` | optimal · yes · 185.0 | not run | not run |
-| `supportcase10` | time_limit · - · 220.7 | time_limit · - · 220.9 | not run |
+| `supportcase10` | time_limit · - · 220.7 | time_limit · - · 210.3 | not run |
 
 Finished and verified inside the limit: dual simplex **5 of 12**, PDHG **3 of 12**, interior point **1 of 12**.
+
+**PDHG at the feasibility-page standard (#486).** The same PDHG runs, read at the standard Mittelmann's LP feasibility page uses: the relative KKT error at or under 1e-6, no basis, no polish (the crossing is taken in the first-order phase, before any polish). This is a first-order tolerance, **not an optimal basis** and not what `optimal` means elsewhere in this document; the last two columns are what the full run went on to report and the verifier's verdict on that point.
+
+| instance | relative KKT <= 1e-6 at (s) | run status | verified |
+|---|---:|---|---|
+| `Linf_520c` | not reached | time_limit | - |
+| `bdry2` | not reached | time_limit | - |
+| `brazil3` | 41.2 | optimal | yes |
+| `chromaticindex1024-7` | 0.579 | optimal | yes |
+| `irish-electricity` | not reached | time_limit | - |
+| `qap15` | 6.41 | optimal | yes |
+| `rmine15` | not reached | time_limit | - |
+| `supportcase10` | not reached | time_limit | - |
+
+Reached the feasibility-page standard: **3 of 8**.
 
 ### 1e. The first-order engine — PDHG
 
@@ -474,8 +497,8 @@ accuracy asked of it - which is why this section reports two tolerances separate
 than one blended number. It is also the engine the GPU work targets, so its CPU behaviour is
 the baseline every GPU claim will be measured against.
 
-Source CSV: `bench/results/pdhg-4177ae6.csv`  
-Commit `4177ae6` · machine `Windows-AMD64` · 9 instances, the ones committed to the repository
+Source CSV: `bench/results/pdhg-0fe40ba.csv`  
+Commit `0fe40ba` · machine `Windows-AMD64` · 9 instances, the ones committed to the repository
 
 - **9 of 9** reach `optimal` at a requested 0.0001 with restarts on.
 - **9 of 9** reach `optimal` at a requested 1e-08 with restarts on, **9 of 9** with restarts off.
@@ -486,31 +509,45 @@ Commit `4177ae6` · machine `Windows-AMD64` · 9 instances, the ones committed t
 
 | instance | simplex | PDHG 0.0001: objective / iterations | PDHG 1e-08: objective / iterations |
 |---|---:|---:|---:|
-| `adlittle` | 225494.9632 | 225494.9632 / 192080 | 225494.9632 / 192080 |
-| `afiro` | -464.7531429 | -464.7531428 / 1040 | -464.7531428 / 1040 |
-| `blend` | -30.81214985 | -30.81214988 / 44520 | -30.81214988 / 44520 |
-| `israel` | -896644.8219 | -896644.8219 / 368720 | -896644.8219 / 368720 |
-| `sc105` | -52.20206121 | -52.20206122 / 61440 | -52.20206122 / 61440 |
-| `sc50a` | -64.57507706 | -64.57507705 / 7680 | -64.57507705 / 7680 |
-| `sc50b` | -70 | -69.99999999 / 8360 | -69.99999999 / 8360 |
+| `adlittle` | 225494.9632 | 225494.9632 / 194440 | 225494.9632 / 194440 |
+| `afiro` | -464.7531429 | -464.7531429 / 1120 | -464.7531429 / 1120 |
+| `blend` | -30.81214985 | -30.8121499 / 59720 | -30.8121499 / 59720 |
+| `israel` | -896644.8219 | -896644.8219 / 460960 | -896644.8219 / 460960 |
+| `sc105` | -52.20206121 | -52.20206122 / 86640 | -52.20206122 / 86640 |
+| `sc50a` | -64.57507706 | -64.575077 / 8800 | -64.575077 / 8800 |
+| `sc50b` | -70 | -69.99999998 / 7560 | -69.99999998 / 7560 |
 | `share2b` | -415.7322407 | -415.7322407 / 1000009 | -415.7322407 / 1000009 |
-| `stocfor1` | -41131.97622 | -41131.97619 / 321000 | -41131.97619 / 321000 |
+| `stocfor1` | -41131.97622 | -41131.97621 / 352160 | -41131.97621 / 352160 |
 
 **Restarts, measured at 1e-08.** The claim that restarting the averaging helps is checked rather than repeated:
 
 | instance | restarts on | restarts off | ratio |
 |---|---:|---:|---:|
-| `adlittle` | 192080 | 207040 | 1.08x |
-| `afiro` | 1040 | 2800 | 2.69x |
-| `blend` | 44520 | 76400 | 1.72x |
-| `israel` | 368720 | 1000005 | 2.71x |
-| `sc105` | 61440 | 291200 | 4.74x |
-| `sc50a` | 7680 | 28280 | 3.68x |
-| `sc50b` | 8360 | 33200 | 3.97x |
+| `adlittle` | 194440 | 206600 | 1.06x |
+| `afiro` | 1120 | 2960 | 2.64x |
+| `blend` | 59720 | 72720 | 1.22x |
+| `israel` | 460960 | 1000005 | 2.17x |
+| `sc105` | 86640 | 282640 | 3.26x |
+| `sc50a` | 8800 | 27880 | 3.17x |
+| `sc50b` | 7560 | 33880 | 4.48x |
 | `share2b` | 1000009 | 1000009 | 1.00x |
-| `stocfor1` | 321000 | 496320 | 1.55x |
+| `stocfor1` | 352160 | 494680 | 1.40x |
 
 A ratio above 1 means restarts saved iterations on that instance.
+
+**Relative KKT crossings in the 1e-08 run (#486).** Seconds on the solver clock at which the relative KKT error (defined below) first came at or under each level, in the same run, beside what that run reported and whether the independent verifier accepted the point:
+
+| instance | 1e-4 (s) | 1e-6 (s) | 1e-8 (s) | status | verified |
+|---|---:|---:|---:|---|---|
+| `adlittle` | 0.00491 | 0.0611 | 0.256 | optimal | yes |
+| `afiro` | 0.00548 | 0.00589 | 0.00686 | optimal | yes |
+| `blend` | 0.00923 | 0.0472 | 0.138 | optimal | yes |
+| `israel` | 0.0371 | 0.133 | 0.309 | optimal | yes |
+| `sc105` | 0.00822 | 0.0529 | 0.18 | optimal | yes |
+| `sc50a` | 0.00522 | 0.0137 | 0.0169 | optimal | yes |
+| `sc50b` | 0.00392 | 0.012 | 0.0215 | optimal | yes |
+| `share2b` | 0.633 | 2.81 | not reached | optimal | yes |
+| `stocfor1` | 0.0447 | 0.2 | 0.767 | optimal | yes |
 
 
 **The relative KKT error, and the three crossing times (#486).** Every PDHG run records
@@ -1583,12 +1620,75 @@ Bilinear quality terms make every one a non-convex QCQP. A run passes only on `o
 the published optimum with a solution the independent verifier accepts; a model the solver
 refuses is listed as refused, not dropped (`bench/runners/pooling.py`).
 
-Not yet run on `main`. Reproduce with:
+Source CSV: `bench/results/pooling-5a39fb2.csv`  
+Commit `5a39fb2` · machine `Windows-AMD64` · time limit 60 s per run · `nonconvex=global` (set by the runner, #516), otherwise solver defaults
 
-```
-python bench/runners/pooling_models.py --check
-python bench/runners/pooling.py --time-limit 60
-```
+**32 of 39 runs** (13 instances) reached the published global optimum within 1e-4 relative, claimed `optimal`, and were accepted by `tools/verify_solution.py` against the original non-convex model.
+
+| instance | form | status | our objective | global optimum | proven bound | root bound | nodes | time (s) | verified |
+|---|---|---|---:|---:|---:|---:|---:|---:|:--:|
+| `adhya1` | P | optimal | -549.7948331 | -549.8030502 | -549.8487943 | -989.18928 | 3601 | 5.50 | yes |
+| `adhya1` | PQ | optimal | -549.765337 | -549.8030502 | -549.8199626 | -840.27056 | 181 | 0.28 | yes |
+| `adhya1` | Q | optimal | -549.7938835 | -549.8030502 | -549.847225 | -1335 | 5699 | 5.30 | yes |
+| `adhya2` | P | optimal | -549.7707537 | -549.8030502 | -549.8256722 | -847.00386 | 13359 | 24.88 | yes |
+| `adhya2` | PQ | optimal | -549.7936477 | -549.8030502 | -549.8479255 | -574.78261 | 149 | 0.20 | yes |
+| `adhya2` | Q | optimal | -549.7841738 | -549.8030502 | -549.8387989 | -1335 | 5347 | 4.54 | yes |
+| `adhya3` | P | feasible | -558.1999612 | -561.0446875 | -578.0302274 | -876.20685 | 20917 | 60.04 | yes |
+| `adhya3` | PQ | optimal | -561.0446804 | -561.0446875 | -561.0446909 | -574.78261 | 130 | 0.33 | yes |
+| `adhya3` | Q | feasible | -559.2204679 | -561.0446875 | -662.3196974 | -1335 | 21838 | 60.03 | yes |
+| `adhya4` | P | optimal | -877.6417921 | -877.6457399 | -877.6767281 | -992.66728 | 890 | 1.48 | yes |
+| `adhya4` | PQ | optimal | -877.6457443 | -877.6457399 | -877.6462669 | -961.93218 | 40 | 0.12 | yes |
+| `adhya4` | Q | feasible | -857.8808973 | -877.6457399 | -1023.391537 | -1345 | 27903 | 60.04 | yes |
+| `bental4` | P | optimal | -450 | -450 | -450 | -550 | 3 | 0.02 | yes |
+| `bental4` | PQ | optimal | -450 | -450 | -450 | -550 | 3 | 0.03 | yes |
+| `bental4` | Q | optimal | -450.0000003 | -450 | -450.0132749 | -2933.3333 | 197 | 0.11 | yes |
+| `bental5` | P | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.03 | yes |
+| `bental5` | PQ | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.03 | yes |
+| `bental5` | Q | feasible | -3500 | -3500 | -7035.831399 | -9700 | 28251 | 60.04 | yes |
+| `foulds2` | P | optimal | -1100 | -1100 | -1100 | -1100 | 1 | 0.03 | yes |
+| `foulds2` | PQ | optimal | -1100 | -1100 | -1100 | -1100 | 1 | 0.03 | yes |
+| `foulds2` | Q | optimal | -1100.000001 | -1100 | -1100.107363 | -6900 | 15523 | 12.40 | yes |
+| `foulds3` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.04 | yes |
+| `foulds3` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.08 | yes |
+| `foulds3` | Q | feasible | -8 | -8 | -260 | -260 | 9499 | 60.05 | yes |
+| `foulds4` | P | optimal | -8 | -8 | -8 | -8 | 2 | 0.06 | yes |
+| `foulds4` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.09 | yes |
+| `foulds4` | Q | feasible | -8 | -8 | -260 | -260 | 9543 | 60.04 | yes |
+| `foulds5` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.03 | yes |
+| `foulds5` | PQ | optimal | -8 | -8 | -8 | -8 | 2 | 0.12 | yes |
+| `foulds5` | Q | feasible | -8 | -8 | -258.5134801 | -260 | 6580 | 60.04 | yes |
+| `haverly1` | P | optimal | -400 | -400 | -400 | -500 | 3 | 0.02 | yes |
+| `haverly1` | PQ | optimal | -400 | -400 | -400 | -500 | 3 | 0.03 | yes |
+| `haverly1` | Q | optimal | -400.0000011 | -400 | -400.0000011 | -2450 | 41 | 0.05 | yes |
+| `haverly2` | P | optimal | -600 | -600 | -600 | -1000 | 7 | 0.03 | yes |
+| `haverly2` | PQ | optimal | -600 | -600 | -600 | -1000 | 3 | 0.03 | yes |
+| `haverly2` | Q | optimal | -600 | -600 | -600.0000002 | -4700 | 33 | 0.04 | yes |
+| `haverly3` | P | optimal | -750 | -750 | -750 | -800 | 7 | 0.03 | yes |
+| `haverly3` | PQ | optimal | -750 | -750 | -750 | -800 | 3 | 0.03 | yes |
+| `haverly3` | Q | optimal | -750.0000011 | -750 | -750.0000011 | -2450 | 29 | 0.05 | yes |
+
+#### Root relaxation: PQ against P
+
+| instance | P root bound | Q root bound | PQ root bound | global optimum | P root gap closed by PQ |
+|---|---:|---:|---:|---:|---:|
+| `adhya1` | -989.18928 | -1335 | -840.27056 | -549.8030502 | 33.9 % |
+| `adhya2` | -847.00386 | -1335 | -574.78261 | -549.8030502 | 91.6 % |
+| `adhya3` | -876.20685 | -1335 | -574.78261 | -561.0446875 | 95.6 % |
+| `adhya4` | -992.66728 | -1345 | -961.93218 | -877.6457399 | 26.7 % |
+| `bental4` | -550 | -2933.3333 | -550 | -450 | 0.0 % |
+| `bental5` | -3500 | -9700 | -3500 | -3500 | - |
+| `foulds2` | -1100 | -6900 | -1100 | -1100 | - |
+| `foulds3` | -8 | -260 | -8 | -8 | - |
+| `foulds4` | -8 | -260 | -8 | -8 | - |
+| `foulds5` | -8 | -260 | -8 | -8 | - |
+| `haverly1` | -500 | -2450 | -500 | -400 | 0.0 % |
+| `haverly2` | -1000 | -4700 | -1000 | -600 | 0.0 % |
+| `haverly3` | -800 | -2450 | -800 | -750 | 0.0 % |
+
+Every run that did not pass, named:
+
+- **gap not closed** (4): `bental5_q`, `foulds3_q`, `foulds4_q`, `foulds5_q`.
+- **gap not closed, incumbent worse than the optimum** (3): `adhya3_p`, `adhya3_q`, `adhya4_q`.
 
 ---
 
@@ -1605,48 +1705,57 @@ engine and the interior point.
 
 Selection, read from QPLIB's listing: instances.html: Cvx ticked, O in {C, D}, V = C, C in {N, B, L} (doc.html PROBTYPE and CONVEX). **19 instances** of the 453 listed; 17 fetched (12 in the small tier, at most 100,000 stored coefficients), 2 over the size cap and not run: `QPLIB_8547`, `QPLIB_9008`. QPLIB publishes no solution point for `QPLIB_9002`: run, named, and outside the pass count. Convex continuous instances outside the selection, by type: LCD 13 (quadratic constraints: #514's set). Licence, as the site states it: QPLIB is licensed under CC-BY 4.0. (https://creativecommons.org/licenses/by/4.0/)
 
-Source CSV: `bench/results/qplib-small-ad57c03.csv`  
-Commit `ad57c03` · machine `Linux-x86_64` · time limit 1000 s per instance · solver defaults
+Source CSV: `bench/results/qplib-5a39fb2.csv`  
+Commit `5a39fb2` · machine `laptop, Intel i7-1355U 10 cores 12 threads, 16 GB, on mains, overnight with no other jobs` · time limit 1000 s per instance · solver defaults
 
-- `auto`: **passed 6 of 11** with a published reference; `optimal` on 6 of 12, within 1e-6 of QPLIB's value on 6, accepted by the verifier on 6.
-- `ipm` (`qp_algorithm=ipm`): **passed 7 of 11** with a published reference; `optimal` on 7 of 12, within 1e-6 of QPLIB's value on 7, accepted by the verifier on 7.
+- `auto`: **passed 9 of 16** with a published reference; `optimal` on 9 of 17, within 1e-6 of QPLIB's value on 9, accepted by the verifier on 10.
+- `ipm` (`qp_algorithm=ipm`): **passed 9 of 16** with a published reference; `optimal` on 9 of 17, within 1e-6 of QPLIB's value on 9, accepted by the verifier on 10.
 
 A pass is `optimal`, within 1e-6 relative of QPLIB's value (qplib.solu, a best known point, not a proven optimum), all three QP residuals of `qp_residuals.py` within 1e-6 relative, and accepted by the independent verifier, all on the QPS file `qplib_format.py` converted the `.qplib` file to - a conversion checked at QPLIB's own published point for every instance when it was fetched.
 
 | instance | engine | rows | cols | status | our objective | QPLIB value | rel. gap | worst residual | iters | solver time (s) | verified | passed |
 |---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|:--:|:--:|
-| `QPLIB_8495` | auto | 8000 | 27543 | optimal | 42857.49638 | 42857.49639 | 1.8e-10 | 5.9e-10 | 1200 | 0.65 | yes | yes |
-| `QPLIB_8495` | ipm | 8000 | 27543 | optimal | 42857.4964 | 42857.49639 | 3.3e-10 | 7.7e-10 | 14 | 4.34 | yes | yes |
-| `QPLIB_8515` | auto | 8002 | 16002 | model_error | 0 | 319.9999887 | 1.0e+00 | - | 0 | 0.00 | - | **no** |
-| `QPLIB_8515` | ipm | 8002 | 16002 | model_error | 0 | 319.9999887 | 1.0e+00 | - | 0 | 0.00 | - | **no** |
-| `QPLIB_8559` | auto | 5000 | 10000 | iteration_limit | 74222438.31 | 74223239.83 | 1.1e-05 | 5.0e-06 | 1000000 | 357.39 | - | **no** |
-| `QPLIB_8559` | ipm | 5000 | 10000 | numerical_error | - | 74223239.83 | - | - | 34 | 113.76 | - | **no** |
-| `QPLIB_8567` | auto | 7500 | 10000 | iteration_limit | 78962705.39 | 78965987.95 | 4.2e-05 | 9.7e-06 | 1000000 | 424.47 | - | **no** |
-| `QPLIB_8567` | ipm | 7500 | 10000 | numerical_error | - | 78965987.95 | - | - | 71 | 287.27 | - | **no** |
-| `QPLIB_8616` | auto | 10404 | 13870 | optimal | 245.0686414 | 245.0685978 | 1.8e-07 | 1.9e-07 | 19450 | 5.55 | yes | yes |
-| `QPLIB_8616` | ipm | 10404 | 13870 | optimal | 245.0685978 | 245.0685978 | 1.6e-10 | 3.4e-10 | 11 | 0.13 | yes | yes |
-| `QPLIB_8785` | auto | 11362 | 10399 | optimal | 7867.491149 | 7867.491149 | 3.1e-11 | 1.9e-09 | 175750 | 64.90 | yes | yes |
-| `QPLIB_8785` | ipm | 11362 | 10399 | optimal | 7867.491149 | 7867.491149 | 1.8e-11 | 2.9e-08 | 14 | 16.02 | yes | yes |
-| `QPLIB_8792` | auto | 0 | 15129 | optimal | 3593.516294 | 3593.518355 | 5.7e-07 | 1.5e-08 | 50 | 0.05 | yes | yes |
-| `QPLIB_8792` | ipm | 0 | 15129 | optimal | 3593.516294 | 3593.518355 | 5.7e-07 | 1.2e-10 | 10 | 0.40 | yes | yes |
-| `QPLIB_8845` | auto | 777 | 1546 | iteration_limit | 10911434.52 | 10907992.49 | 3.2e-04 | 7.6e-04 | 1000000 | 224.02 | - | **no** |
-| `QPLIB_8845` | ipm | 777 | 1546 | optimal | 10907992.49 | 10907992.49 | 3.7e-10 | 9.0e-13 | 31 | 0.54 | yes | yes |
-| `QPLIB_8906` | auto | 838 | 5223 | optimal | 2699111.513 | 2699111.513 | 1.7e-10 | 5.9e-12 | 211100 | 47.05 | yes | yes |
-| `QPLIB_8906` | ipm | 838 | 5223 | numerical_error | - | 2699111.513 | - | - | 25 | 0.76 | - | **no** |
-| `QPLIB_8938` | auto | 11999 | 4001 | iteration_limit | -36.31075388 | -35.77945295 | 1.5e-02 | 1.5e-02 | 1000000 | 167.04 | - | **no** |
-| `QPLIB_8938` | ipm | 11999 | 4001 | optimal | -35.77945295 | -35.77945295 | 6.5e-11 | 8.3e-12 | 20 | 0.12 | yes | yes |
-| `QPLIB_8991` | auto | 0 | 14400 | optimal | -0.001667867378 | -0.001667867378 | 8.6e-14 | 2.2e-08 | 50 | 0.05 | yes | yes |
-| `QPLIB_8991` | ipm | 0 | 14400 | optimal | -0.001667867378 | -0.001667867378 | 8.6e-14 | 9.5e-12 | 6 | 0.20 | yes | yes |
-| `QPLIB_9002` | auto | 1649 | 2890 | iteration_limit | 1.958722727e+10 | - | - | 1.0e+00 | 1000000 | 55.59 | - | - |
-| `QPLIB_9002` | ipm | 1649 | 2890 | iteration_limit | 1.732126844e+11 | - | - | 1.2e+00 | 200 | 6.55 | - | - |
+| `QPLIB_10034` | auto | 40200 | 40400 | iteration_limit | -0.0665712768 | -0.06601017605 | 5.6e-04 | 1.0e+00 | 1000000 | 618.82 | - | **no** |
+| `QPLIB_10034` | ipm | 40200 | 40400 | iteration_limit | -0.0665712768 | -0.06601017605 | 5.6e-04 | 1.0e+00 | 1000000 | 597.40 | - | **no** |
+| `QPLIB_10038` | auto | 160400 | 160800 | time_limit | -0.06666457598 | 0 | 6.7e-02 | 1.4e-01 | 286160 | 866.77 | - | **no** |
+| `QPLIB_10038` | ipm | 160400 | 160800 | time_limit | -0.06666444289 | 0 | 6.7e-02 | 1.4e-01 | 272740 | 867.90 | - | **no** |
+| `QPLIB_8495` | auto | 8000 | 27543 | optimal | 42857.4964 | 42857.49639 | 3.3e-10 | 7.7e-10 | 14 | 2.16 | yes | yes |
+| `QPLIB_8495` | ipm | 8000 | 27543 | optimal | 42857.4964 | 42857.49639 | 3.3e-10 | 7.7e-10 | 14 | 2.24 | yes | yes |
+| `QPLIB_8500` | auto | 250498 | 250997 | time_limit | -0.08904792676 | 0.01792173763 | 1.1e-01 | 1.0e+00 | 142650 | 700.88 | - | **no** |
+| `QPLIB_8500` | ipm | 250498 | 250997 | time_limit | -0.08775810513 | 0.01792173763 | 1.1e-01 | 1.0e+00 | 140531 | 690.75 | - | **no** |
+| `QPLIB_8515` | auto | 8002 | 16002 | model_error | 0 | 319.9999887 | 1.0e+00 | - | 0 | 0.01 | - | **no** |
+| `QPLIB_8515` | ipm | 8002 | 16002 | model_error | 0 | 319.9999887 | 1.0e+00 | - | 0 | 0.01 | - | **no** |
+| `QPLIB_8559` | auto | 5000 | 10000 | iteration_limit | 74222438.31 | 74223239.83 | 1.1e-05 | 5.0e-06 | 1000000 | 209.41 | - | **no** |
+| `QPLIB_8559` | ipm | 5000 | 10000 | iteration_limit | 74222438.31 | 74223239.83 | 1.1e-05 | 5.0e-06 | 1000000 | 201.23 | - | **no** |
+| `QPLIB_8567` | auto | 7500 | 10000 | iteration_limit | 78962705.39 | 78965987.95 | 4.2e-05 | 9.7e-06 | 1000000 | 240.67 | - | **no** |
+| `QPLIB_8567` | ipm | 7500 | 10000 | iteration_limit | 78962705.39 | 78965987.95 | 4.2e-05 | 9.7e-06 | 1000000 | 242.82 | - | **no** |
+| `QPLIB_8602` | auto | 52983 | 34552 | optimal | 27353.3872 | 27353.3872 | 3.4e-12 | 4.8e-09 | 16 | 566.45 | yes | yes |
+| `QPLIB_8602` | ipm | 52983 | 34552 | optimal | 27353.3872 | 27353.3872 | 3.4e-12 | 4.8e-09 | 16 | 547.67 | yes | yes |
+| `QPLIB_8616` | auto | 10404 | 13870 | optimal | 245.0685978 | 245.0685978 | 1.6e-10 | 3.4e-10 | 11 | 0.10 | yes | yes |
+| `QPLIB_8616` | ipm | 10404 | 13870 | optimal | 245.0685978 | 245.0685978 | 1.6e-10 | 3.4e-10 | 11 | 0.10 | yes | yes |
+| `QPLIB_8785` | auto | 11362 | 10399 | optimal | 7867.491149 | 7867.491149 | 1.8e-11 | 2.9e-08 | 14 | 12.31 | yes | yes |
+| `QPLIB_8785` | ipm | 11362 | 10399 | optimal | 7867.491149 | 7867.491149 | 1.8e-11 | 2.9e-08 | 14 | 11.99 | yes | yes |
+| `QPLIB_8790` | auto | 0 | 39204 | optimal | -0.0001562421091 | -0.0001562421091 | 5.0e-14 | 1.8e-12 | 6 | 0.63 | yes | yes |
+| `QPLIB_8790` | ipm | 0 | 39204 | optimal | -0.0001562421091 | -0.0001562421091 | 5.0e-14 | 1.8e-12 | 6 | 0.63 | yes | yes |
+| `QPLIB_8792` | auto | 0 | 15129 | optimal | 3593.516294 | 3593.518355 | 5.7e-07 | 1.2e-10 | 10 | 0.30 | yes | yes |
+| `QPLIB_8792` | ipm | 0 | 15129 | optimal | 3593.516294 | 3593.518355 | 5.7e-07 | 1.2e-10 | 10 | 0.30 | yes | yes |
+| `QPLIB_8845` | auto | 777 | 1546 | optimal | 10907992.49 | 10907992.49 | 3.7e-10 | 8.4e-15 | 32 | 0.41 | yes | yes |
+| `QPLIB_8845` | ipm | 777 | 1546 | optimal | 10907992.49 | 10907992.49 | 3.7e-10 | 8.4e-15 | 32 | 0.41 | yes | yes |
+| `QPLIB_8906` | auto | 838 | 5223 | feasible | 2699111.515 | 2699111.513 | 7.9e-10 | 6.2e-10 | 25 | 0.52 | yes | **no** |
+| `QPLIB_8906` | ipm | 838 | 5223 | feasible | 2699111.515 | 2699111.513 | 7.9e-10 | 6.2e-10 | 25 | 0.51 | yes | **no** |
+| `QPLIB_8938` | auto | 11999 | 4001 | optimal | -35.77945295 | -35.77945295 | 6.5e-11 | 8.3e-12 | 20 | 0.10 | yes | yes |
+| `QPLIB_8938` | ipm | 11999 | 4001 | optimal | -35.77945295 | -35.77945295 | 6.5e-11 | 8.3e-12 | 20 | 0.10 | yes | yes |
+| `QPLIB_8991` | auto | 0 | 14400 | optimal | -0.001667867378 | -0.001667867378 | 8.6e-14 | 9.5e-12 | 6 | 0.15 | yes | yes |
+| `QPLIB_8991` | ipm | 0 | 14400 | optimal | -0.001667867378 | -0.001667867378 | 8.6e-14 | 9.5e-12 | 6 | 0.15 | yes | yes |
+| `QPLIB_9002` | auto | 1649 | 2890 | iteration_limit | 1.729346531e+11 | - | - | 1.2e+00 | 200 | 3.56 | - | - |
+| `QPLIB_9002` | ipm | 1649 | 2890 | iteration_limit | 1.729346531e+11 | - | - | 1.2e+00 | 200 | 3.56 | - | - |
 
 Every failure, named:
 
-- `auto`, **did not reach `optimal`** (6): `QPLIB_8515` (model_error), `QPLIB_8559` (iteration_limit), `QPLIB_8567` (iteration_limit), `QPLIB_8845` (iteration_limit), `QPLIB_8938` (iteration_limit), `QPLIB_9002` (iteration_limit).
+- `auto`, **did not reach `optimal`** (8): `QPLIB_10034` (iteration_limit), `QPLIB_10038` (time_limit), `QPLIB_8500` (time_limit), `QPLIB_8515` (model_error), `QPLIB_8559` (iteration_limit), `QPLIB_8567` (iteration_limit), `QPLIB_8906` (feasible), `QPLIB_9002` (iteration_limit).
 - `auto`, **no published reference** (1): `QPLIB_9002`.
-- `ipm`, **did not reach `optimal`** (5): `QPLIB_8515` (model_error), `QPLIB_8559` (numerical_error), `QPLIB_8567` (numerical_error), `QPLIB_8906` (numerical_error), `QPLIB_9002` (iteration_limit).
+- `ipm`, **did not reach `optimal`** (8): `QPLIB_10034` (iteration_limit), `QPLIB_10038` (time_limit), `QPLIB_8500` (time_limit), `QPLIB_8515` (model_error), `QPLIB_8559` (iteration_limit), `QPLIB_8567` (iteration_limit), `QPLIB_8906` (feasible), `QPLIB_9002` (iteration_limit).
 - `ipm`, **no published reference** (1): `QPLIB_9002`.
-- **fetched and selected, not run in this CSV** (5): `QPLIB_10034`, `QPLIB_10038`, `QPLIB_8500`, `QPLIB_8602`, `QPLIB_8790` - `qplib.py` without `--tier` runs them.
 
 ### Every QPLIB instance through the reader and the dispatcher
 
@@ -1821,10 +1930,12 @@ Chinneck's collection of infeasible LPs (`netlib.org/lp/infeas`, fetched and has
 alone proves nothing; a pass needs the Farkas certificate the solver wrote to survive
 `tools/verify_solution.py` (`bench/runners/netlib_infeasible.py`).
 
-Source CSV: `bench/results/netlib-infeasible-60455ce.csv`  
-Commit `60455ce` · machine `laptop, Intel i7-1355U 10 cores 12 threads, 16 GB, on mains, desktop apps open (30-40% background CPU)` · time limit 60 s per instance
+Source CSV: `bench/results/netlib-infeasible-5a39fb2.csv`  
+Commit `5a39fb2` · machine `laptop, Intel i7-1355U 10 cores 12 threads, 16 GB, on mains, overnight with no other jobs` · time limit 60 s per instance
 
 **28 of 29** reported `infeasible` **and** wrote a Farkas certificate that `tools/verify_solution.py` accepted. A status of `infeasible` without a certificate is not counted: the verifier has nothing to check, so the verdict is unproven.
+
+**12 of 29** also named an irreducible infeasible subsystem (#217, the Chinneck-Dravnieks deletion filter) that the verifier proved on its own arithmetic: infeasible using nothing outside the set, and irreducible by one witness per element, a point that satisfies every other element and violates that one. 18 named one; not proved on klein1, klein2, klein3, qual, refinery, vol1.
 
 **1 not passed**, every one named with its cause:
 
@@ -1832,37 +1943,37 @@ Commit `60455ce` · machine `laptop, Intel i7-1355U 10 cores 12 threads, 16 GB, 
 |---|---:|---|
 | no verdict: numerical_error | 1 | cplex2 |
 
-| instance | rows | cols | status | engine | certificate | multipliers | time (s) | verified | the solver's message |
-|---|---:|---:|---|---|---|---:|---:|:--:|---|
-| `bgdbg1` | 348 | 407 | infeasible | presolve | farkas | 2 | 0.022 | yes | row 163 allows activity of at most 24 but the column bounds force at least 54; proved by presolve; proof: the rows aggre |
-| `bgetam` | 400 | 688 | infeasible | simplex-dual | farkas | 7 | 0.041 | yes | dual simplex: basic variable 833 is outside its bounds by 5.949e+02, far above the 1.0e-07 feasibility tolerance, and no |
-| `bgindy` | 2671 | 10116 | infeasible | simplex-dual | farkas | 3 | 1.301 | yes | dual simplex: basic variable 12627 is outside its bounds by 7.134e+03, far above the 1.0e-07 feasibility tolerance, and  |
-| `bgprtr` | 20 | 34 | infeasible | simplex-dual+primal | farkas | 6 | 0.040 | yes | phase 1 terminated with max bound violation 2.343e+01, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
-| `box1` | 231 | 261 | infeasible | simplex-dual | farkas | 8 | 0.038 | yes | dual simplex: basic variable 271 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
-| `ceria3d` | 3576 | 824 | infeasible | presolve | farkas | 236 | 0.289 | yes | row 292 needs activity of at least 0.75 but the column bounds cap it at 0.5; proved by presolve; certificate from the el |
-| `chemcom` | 288 | 720 | infeasible | simplex-dual | farkas | 7 | 0.066 | yes | dual simplex: basic variable 724 is outside its bounds by 2.849e+03, far above the 1.0e-07 feasibility tolerance, and no |
-| `cplex1` | 3005 | 3221 | infeasible | simplex-dual+primal | farkas | 5 | 0.496 | yes | phase 1 terminated with max bound violation 6.834e+06, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
-| `cplex2` | 224 | 221 | numerical_error | simplex-dual+primal | none | 0 | 0.045 | - | phase 1 stalled at max bound violation 4.100e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as |
-| `ex72a` | 197 | 215 | infeasible | simplex-dual | farkas | 58 | 0.060 | yes | dual simplex: basic variable 300 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
-| `ex73a` | 193 | 211 | infeasible | simplex-dual | farkas | 24 | 0.051 | yes | dual simplex: basic variable 288 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
-| `forest6` | 66 | 95 | infeasible | simplex-dual | farkas | 66 | 0.097 | yes | dual simplex: basic variable 0 is outside its bounds by 3.221e+05, far above the 1.0e-07 feasibility tolerance, and no n |
-| `galenet` | 8 | 8 | infeasible | simplex-dual | farkas | 2 | 0.040 | yes | dual simplex: basic variable 12 is outside its bounds by 1.500e+01, far above the 1.0e-07 feasibility tolerance, and no  |
-| `gosh` | 3792 | 10733 | infeasible | simplex-dual+primal | farkas | 9 | 13.931 | yes | phase 1 terminated with max bound violation 1.263e+01, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
-| `gran` | 2658 | 2520 | infeasible | simplex-dual+primal | farkas | 731 | 0.256 | yes | phase 1 terminated with max bound violation 5.249e+06, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
-| `greenbea` | 2393 | 5405 | infeasible | presolve | farkas | 1 | 0.076 | yes | row 1491 allows activity of at most 0 but the column bounds force at least 320; proved by presolve; proof: the rows aggr |
-| `itest2` | 9 | 4 | infeasible | presolve | farkas | 3 | 0.036 | yes | row 4 allows activity of at most 2 but the column bounds force at least 13; proved by presolve; proof: the rows aggregat |
-| `itest6` | 11 | 8 | infeasible | presolve | farkas | 3 | 0.054 | yes | row 3 needs activity of at least 50000 but the column bounds cap it at -30000; proved by presolve; proof: the rows aggre |
-| `klein1` | 54 | 54 | infeasible | simplex-dual | farkas | 51 | 0.086 | yes | dual simplex: basic variable 89 is outside its bounds by 7.734e+04, far above the 1.0e-07 feasibility tolerance, and no  |
-| `klein2` | 477 | 54 | infeasible | simplex-dual | farkas | 54 | 0.237 | yes | dual simplex: basic variable 282 is outside its bounds by 5.350e+04, far above the 1.0e-07 feasibility tolerance, and no |
-| `klein3` | 994 | 88 | infeasible | simplex-dual | farkas | 87 | 1.201 | yes | dual simplex: basic variable 414 is outside its bounds by 6.342e+04, far above the 1.0e-07 feasibility tolerance, and no |
-| `mondou2` | 312 | 604 | infeasible | simplex-dual | farkas | 36 | 0.090 | yes | dual simplex: basic variable 474 is outside its bounds by 9.130e+03, far above the 1.0e-07 feasibility tolerance, and no |
-| `pang` | 361 | 459 | infeasible | simplex-dual+primal | farkas | 13 | 0.090 | yes | phase 1 terminated with max bound violation 7.814e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
-| `pilot4i` | 410 | 1000 | infeasible | presolve | farkas | 1 | 0.046 | yes | row 390 needs activity of at least 15.17 but the column bounds cap it at 0; proved by presolve; proof: the rows aggregat |
-| `qual` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 120 | 1.140 | yes | phase 1 terminated with max bound violation 3.971e+04, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
-| `reactor` | 318 | 637 | infeasible | presolve | farkas | 1 | 0.042 | yes | row 116 needs activity of at least 0 but the column bounds cap it at -1; proved by presolve; proof: the rows aggregate t |
-| `refinery` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 85 | 0.688 | yes | phase 1 terminated with max bound violation 9.715e+04, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
-| `vol1` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 209 | 3.368 | yes | phase 1 terminated with max bound violation 9.546e+05, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
-| `woodinfe` | 35 | 89 | infeasible | presolve | farkas | 1 | 0.026 | yes | row 17 needs activity of at least 0 but the column bounds cap it at -5; proved by presolve; proof: the rows aggregate to |
+| instance | rows | cols | status | engine | certificate | multipliers | time (s) | verified | IIS | the solver's message |
+|---|---:|---:|---|---|---|---:|---:|:--:|---|---|
+| `bgdbg1` | 348 | 407 | infeasible | presolve | farkas | 2 | 0.026 | yes | - | row 163 allows activity of at most 24 but the column bounds force at least 54; proved by presolve; proof: the rows aggre |
+| `bgetam` | 400 | 688 | infeasible | simplex-dual | farkas | 7 | 0.062 | yes | 23 proved | dual simplex: basic variable 833 is outside its bounds by 5.949e+02, far above the 1.0e-07 feasibility tolerance, and no |
+| `bgindy` | 2671 | 10116 | infeasible | simplex-dual | farkas | 3 | 1.068 | yes | 154 proved | dual simplex: basic variable 12627 is outside its bounds by 7.134e+03, far above the 1.0e-07 feasibility tolerance, and  |
+| `bgprtr` | 20 | 34 | infeasible | simplex-dual+primal | farkas | 6 | 0.022 | yes | 12 proved | phase 1 terminated with max bound violation 2.343e+01, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
+| `box1` | 231 | 261 | infeasible | simplex-dual | farkas | 8 | 0.030 | yes | 9 proved | dual simplex: basic variable 271 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
+| `ceria3d` | 3576 | 824 | infeasible | presolve | farkas | 236 | 0.228 | yes | - | row 292 needs activity of at least 0.75 but the column bounds cap it at 0.5; proved by presolve; certificate from the el |
+| `chemcom` | 288 | 720 | infeasible | simplex-dual | farkas | 7 | 0.039 | yes | 42 proved | dual simplex: basic variable 724 is outside its bounds by 2.849e+03, far above the 1.0e-07 feasibility tolerance, and no |
+| `cplex1` | 3005 | 3221 | infeasible | simplex-dual+primal | farkas | 5 | 0.350 | yes | 6 proved | phase 1 terminated with max bound violation 6.834e+06, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
+| `cplex2` | 224 | 221 | numerical_error | simplex-dual+primal | none | 0 | 0.035 | - | - | phase 1 stalled at max bound violation 4.100e-06, only just above the 1.0e-07 feasibility tolerance; no column prices as |
+| `ex72a` | 197 | 215 | infeasible | simplex-dual | farkas | 58 | 0.039 | yes | 59 proved | dual simplex: basic variable 300 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
+| `ex73a` | 193 | 211 | infeasible | simplex-dual | farkas | 24 | 0.045 | yes | 25 proved | dual simplex: basic variable 288 is outside its bounds by 7.071e-01, far above the 1.0e-07 feasibility tolerance, and no |
+| `forest6` | 66 | 95 | infeasible | simplex-dual | farkas | 66 | 0.072 | yes | 94 proved | dual simplex: basic variable 0 is outside its bounds by 3.221e+05, far above the 1.0e-07 feasibility tolerance, and no n |
+| `galenet` | 8 | 8 | infeasible | simplex-dual | farkas | 2 | 0.023 | yes | - | dual simplex: basic variable 12 is outside its bounds by 1.500e+01, far above the 1.0e-07 feasibility tolerance, and no  |
+| `gosh` | 3792 | 10733 | infeasible | simplex-dual+primal | farkas | 9 | 5.633 | yes | 9 proved | phase 1 terminated with max bound violation 1.263e+01, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
+| `gran` | 2658 | 2520 | infeasible | simplex-dual+primal | farkas | 731 | 0.219 | yes | - | phase 1 terminated with max bound violation 5.249e+06, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
+| `greenbea` | 2393 | 5405 | infeasible | presolve | farkas | 1 | 0.048 | yes | - | row 1491 allows activity of at most 0 but the column bounds force at least 320; proved by presolve; proof: the rows aggr |
+| `itest2` | 9 | 4 | infeasible | presolve | farkas | 3 | 0.027 | yes | - | row 4 allows activity of at most 2 but the column bounds force at least 13; proved by presolve; proof: the rows aggregat |
+| `itest6` | 11 | 8 | infeasible | presolve | farkas | 3 | 0.025 | yes | - | row 3 needs activity of at least 50000 but the column bounds cap it at -30000; proved by presolve; proof: the rows aggre |
+| `klein1` | 54 | 54 | infeasible | simplex-dual | farkas | 51 | 0.069 | yes | 55 **not proved** | dual simplex: basic variable 89 is outside its bounds by 7.734e+04, far above the 1.0e-07 feasibility tolerance, and no  |
+| `klein2` | 477 | 54 | infeasible | simplex-dual | farkas | 54 | 0.226 | yes | 55 **not proved** | dual simplex: basic variable 282 is outside its bounds by 5.350e+04, far above the 1.0e-07 feasibility tolerance, and no |
+| `klein3` | 994 | 88 | infeasible | simplex-dual | farkas | 87 | 1.235 | yes | 89 **not proved** | dual simplex: basic variable 414 is outside its bounds by 6.342e+04, far above the 1.0e-07 feasibility tolerance, and no |
+| `mondou2` | 312 | 604 | infeasible | simplex-dual | farkas | 36 | 0.060 | yes | 65 proved | dual simplex: basic variable 474 is outside its bounds by 9.130e+03, far above the 1.0e-07 feasibility tolerance, and no |
+| `pang` | 361 | 459 | infeasible | simplex-dual+primal | farkas | 13 | 0.075 | yes | 35 proved | phase 1 terminated with max bound violation 7.814e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `pilot4i` | 410 | 1000 | infeasible | presolve | farkas | 1 | 0.022 | yes | - | row 390 needs activity of at least 15.17 but the column bounds cap it at 0; proved by presolve; proof: the rows aggregat |
+| `qual` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 120 | 3.531 | yes | 229 **not proved** | phase 1 terminated with max bound violation 3.971e+04, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
+| `reactor` | 318 | 637 | infeasible | presolve | farkas | 1 | 0.020 | yes | - | row 116 needs activity of at least 0 but the column bounds cap it at -1; proved by presolve; proof: the rows aggregate t |
+| `refinery` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 85 | 1.716 | yes | 167 **not proved** | phase 1 terminated with max bound violation 9.715e+04, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
+| `vol1` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 209 | 32.433 | yes | 394 **not proved** | phase 1 terminated with max bound violation 9.546e+05, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
+| `woodinfe` | 35 | 89 | infeasible | presolve | farkas | 1 | 0.022 | yes | - | row 17 needs activity of at least 0 but the column bounds cap it at -5; proved by presolve; proof: the rows aggregate to |
 
 No per-engine option run is committed yet (`--solver-option algorithm=simplex`, `dual-simplex`, `pdhg`).
 
@@ -1875,22 +1986,64 @@ objective and the basis change at every breakpoint. Each reported point is a fre
 re-solved and checked by `tools/test_parametric.py` through the verifier's own MPS reader,
 not a value extrapolated from ranging. It re-solves at each breakpoint rather than pivoting
 once as a dedicated parametric simplex would; the tool's docstring says what that costs.
+At a degenerate vertex, where the ranging interval is empty on the side the walk is moving,
+it steps just past the vertex (1e-7 relative, ten times more while a step makes no progress)
+and re-solves, which is why some breakpoints come in pairs a hair apart; it used to jump to
+the end of the range there and miss every breakpoint after it. `tools/test_parametric.py`
+holds that with a fresh solve at the midpoint of every segment of the refinery curve, which
+must lie on the segment's chord. The change named at a point is the change since the point
+before it, columns and row slacks both.
 
-**`crude-blend-AL`** - `bench/results/parametric-crude-blend-AL-887b173.csv`, solver at `887b173`, Windows-AMD64, 3 breakpoint(s):
+The refinery curve is the price of crude 1 in period 0 on the small refinery LP of the case
+study (#517), the model the finale walk solves. The slope of the optimal value is the amount
+of that crude the plan buys: 34 units below a price of 7, 27 from 7 to 8.76, and 7.1 above
+8.76, where unit 2's period-0 capacity stops binding and product 2's period-0 delivery
+commitment starts to (a row "entered" is a slack that became basic, a limit no longer binding):
+
+```
+python bench/case_studies/refinery/generator.py --size small --seed 1 --out refinery_small.mps
+python tools/parametric.py refinery_small.mps --cost BUY_1_0 --from 0 --to 30 --out bench/results/parametric-refinery-small-BUY_1_0-<sha>.csv
+```
+
+**`crude-blend-AL`** - `bench/results/parametric-crude-blend-AL-0fe40ba.csv`, solver at `0fe40ba`, Windows-AMD64, 8 breakpoint(s):
 
 | parameter | objective | status | what changed at this point |
 |---:|---:|---|---|
 | 0.0 | 148.88888888888894 | optimal | initial basis |
 | 1.0666666666666669 | 159.5555555555556 | optimal | no basis change (objective still moves linearly) |
-| 5.0 | 348.017837837838 | optimal | entered: AL, MU; left: BN |
+| 1.0666667733333335 | 159.5555566222223 | optimal | no basis change (objective still moves linearly) |
+| 1.0666678400001068 | 159.5555949172852 | optimal | entered: AL; left: row SULPHUR |
+| 1.850395083406497 | 185.8472344161546 | optimal | no basis change (objective still moves linearly) |
+| 1.8503952684460054 | 185.8472406236612 | optimal | no basis change (objective still moves linearly) |
+| 1.8503971188412738 | 185.84733921904092 | optimal | entered: MU; left: BN |
+| 5.0 | 348.017837837838 | optimal | no basis change (objective still moves linearly) |
 
-**`crude-blend-THRUPUT`** - `bench/results/parametric-crude-blend-THRUPUT-887b173.csv`, solver at `887b173`, Windows-AMD64, 3 breakpoint(s):
+**`crude-blend-THRUPUT`** - `bench/results/parametric-crude-blend-THRUPUT-0fe40ba.csv`, solver at `0fe40ba`, Windows-AMD64, 9 breakpoint(s):
 
 | parameter | objective | status | what changed at this point |
 |---:|---:|---|---|
 | 100.0 | 173.12499999999983 | optimal | initial basis |
 | 107.81351351351357 | 214.14594594594607 | optimal | no basis change (objective still moves linearly) |
+| 107.81352429486492 | 214.14594594594604 | optimal | entered: row THRUPUT; left: row SULPHUR |
+| 125.62703780837849 | 214.14594594594604 | optimal | no basis change (objective still moves linearly) |
+| 143.44055132189206 | 214.14594594594604 | optimal | no basis change (objective still moves linearly) |
+| 161.25406483540564 | 214.14594594594604 | optimal | no basis change (objective still moves linearly) |
+| 179.0675783489192 | 214.14594594594604 | optimal | no basis change (objective still moves linearly) |
+| 196.88109186243275 | 214.14594594594604 | optimal | no basis change (objective still moves linearly) |
 | 200.0 | 214.14594594594604 | optimal | no basis change (objective still moves linearly) |
+
+**`refinery-small-BUY_1_0`** - `bench/results/parametric-refinery-small-BUY_1_0-0fe40ba.csv`, solver at `0fe40ba`, Windows-AMD64, 8 breakpoint(s):
+
+| parameter | objective | status | what changed at this point |
+|---:|---:|---|---|
+| 0.0 | -1546.8950399999999 | optimal | initial basis |
+| 6.999999999999999 | -1308.8950400000008 | optimal | no basis change (objective still moves linearly) |
+| 7.000000699999999 | -1308.8950211000006 | optimal | no basis change (objective still moves linearly) |
+| 8.756646270871984 | -1261.4655906864564 | optimal | no basis change (objective still moves linearly) |
+| 8.756647146536611 | -1261.465584471658 | optimal | entered: row UNIT_2_0; left: row COMMIT_2_0 |
+| 9.058111948051947 | -1259.3260174025982 | optimal | no basis change (objective still moves linearly) |
+| 9.058112853863141 | -1259.3260109738417 | optimal | entered: SELL_2_2; left: row COMMIT_2_2 |
+| 30.0 | -1110.6964798424517 | optimal | no basis change (objective still moves linearly) |
 
 
 ---

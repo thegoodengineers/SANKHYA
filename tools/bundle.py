@@ -6,10 +6,13 @@ one zip (#526).
 
     python tools/bundle.py model.mps --bundle run.zip
     python tools/bundle.py model.mps --option time_limit=60 --ranging --bundle run.zip
+    python tools/bundle.py model.mps --certificate --bundle run.zip   # MILP: the VIPR proof too
 
 Companion: `tools/replay_bundle.py run.zip` checks the manifest (every file's sha256 against
 the hash recorded when the bundle was made - a tampered bundle fails here, not silently),
-then re-runs `verify_solution.py` on the bundled model and solution. Neither script links
+then re-runs `verify_solution.py` on the bundled model and solution, and, when the bundle
+carries a MILP proof (`--certificate`, #518), `verify_certificate.py` on it in exact rational
+arithmetic. Neither script links
 SANKHYA's C++: the bundle is built by driving `sankhya-cli` as a subprocess (the same way a
 planner would run it by hand) and read back by parsing files, the same discipline
 `verify_solution.py` itself keeps.
@@ -72,9 +75,12 @@ def default_binary() -> Path:
         "no sankhya-cli binary found under build/ or build-release/; pass --binary")
 
 
+CERTIFICATE_NAME = "certificate.vipr"
+
+
 def build_bundle(model_path: Path, options: list[str], bundle_path: Path, *,
                  binary: Path | None = None, ranging: bool = False,
-                 time_limit: float | None = None) -> None:
+                 time_limit: float | None = None, certificate: bool = False) -> None:
     binary = binary or default_binary()
     model_path = model_path.resolve()
 
@@ -91,6 +97,13 @@ def build_bundle(model_path: Path, options: list[str], bundle_path: Path, *,
             cmd += ["--time-limit", str(time_limit)]
         if ranging:
             cmd.append("--ranging")
+        # The proof goes into the staging directory under a fixed name, so it is hashed and
+        # zipped like every other file. It is not added to `options`: a --resolve replay
+        # re-solves with the planner's own options, and the certificate's settings (no
+        # presolve, one thread) are the proof's business, not the plan's.
+        cert_path = staging / CERTIFICATE_NAME
+        if certificate:
+            cmd += ["--option", f"write_certificate={cert_path}"]
 
         env = _subprocess_env()
         run = subprocess.run(cmd, capture_output=True, text=True, env=env)
@@ -124,6 +137,9 @@ def build_bundle(model_path: Path, options: list[str], bundle_path: Path, *,
             "time_limit": time_limit,
             "ranging": ranging,
             "command": cmd,
+            # None when no proof was asked for, or when the solve wrote none (an LP, or a
+            # MILP that did not finish): replay then says there is no proof to check.
+            "certificate_file": CERTIFICATE_NAME if cert_path.is_file() else None,
             "exit_code": run.returncode,
             "sbom_sha256": sha256(DEFAULT_SBOM) if DEFAULT_SBOM.is_file() else None,
         }
@@ -152,12 +168,15 @@ def main() -> int:
                         metavar="NAME=VALUE")
     parser.add_argument("--time-limit", type=float, default=None)
     parser.add_argument("--ranging", action="store_true")
+    parser.add_argument("--certificate", action="store_true",
+                        help="MILP: also write and bundle the VIPR proof (write_certificate)")
     parser.add_argument("--binary", type=Path, default=None)
     parser.add_argument("--bundle", type=Path, required=True)
     args = parser.parse_args()
 
     build_bundle(args.model, args.options, args.bundle, binary=args.binary,
-                ranging=args.ranging, time_limit=args.time_limit)
+                ranging=args.ranging, time_limit=args.time_limit,
+                certificate=args.certificate)
     return 0
 
 

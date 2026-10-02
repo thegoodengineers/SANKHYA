@@ -643,6 +643,7 @@ class BranchAndBound {
   /// minimise space without the offset, with its gap to `believed` recorded; -inf when none.
   [[nodiscard]] double safe_node_bound(const Solution& relaxation, double believed);
   void report_safe_bounds() const;
+  void record_safe_bounds(Solution* solution) const;  ///< the counters into the answer (#519)
 
   // ---- MIQP nodes by the QP interior point (#494), in branch_and_bound_miqp.cpp ---------
   /// The entered node's QP by the IPM; a node it cannot finish is decided by the node LP
@@ -753,6 +754,7 @@ class BranchAndBound {
   void analyze_conflict(Index node_index, ConflictSource source,
                         const std::vector<double>* farkas);
   void report_conflicts();
+  void record_conflicts(Solution* solution) const;  ///< the counters into the answer (#503)
 
   // ---- Cut rounds (branch_and_bound_cuts.cpp, #221) ------------------------------------
 
