@@ -941,6 +941,7 @@ Solution BranchAndBound::run() {
     solution.symmetry_generators = symmetry_generators_;
     record_safe_bounds(&solution);
     record_conflicts(&solution);
+    record_cut_counts(&solution);
     solution.solve_seconds = timer_.elapsed_seconds();
     report_root(&solution);
     return solution;
@@ -954,6 +955,7 @@ Solution BranchAndBound::run() {
   solution.symmetry_generators = symmetry_generators_;
   record_safe_bounds(&solution);
   record_conflicts(&solution);
+  record_cut_counts(&solution);
   solution.solve_seconds = timer_.elapsed_seconds();
   report_root(&solution);
 

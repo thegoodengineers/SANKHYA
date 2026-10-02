@@ -166,7 +166,17 @@ CSV_COLUMNS = [
     "cut_rows_readded",
     "node_lp_rows_mean",
     "node_lp_rows_max",
+    # Probing (#512): presolve's own counts from the stats JSON, and the clique cuts the
+    # separator found over the search; last, for the same reason.
+    "probing_fixings",
+    "probing_tightenings",
+    "probing_implications",
+    "probing_cliques",
+    "clique_cuts_generated",
 ]
+
+PROBING_COLUMNS = ("probing_fixings", "probing_tightenings", "probing_implications",
+                   "probing_cliques")
 
 SAFE_BOUND_COLUMNS = ("safe_bound_nodes", "safe_bound_infinite", "safe_bound_refusals",
                       "safe_bound_max_gap", "safe_bound_max_rel_gap",
@@ -296,6 +306,9 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             "restarts": effort.get("restarts", ""),
             "reduced_cost_fixings": effort.get("reduced_cost_fixings", ""),
             **{key: effort.get(key, "") for key in SAFE_BOUND_COLUMNS},
+            "clique_cuts_generated": effort.get("clique_cuts_generated", ""),
+            **{key: blob.get("presolve", {}).get("reductions", {}).get(key, "")
+               for key in PROBING_COLUMNS},
             "root_bound": as_number(effort.get("root_bound")),
             "root_bound_after_cuts": as_number(effort.get("root_bound_after_cuts")),
             "solver_seconds": effort.get("solve_seconds", ""),
@@ -600,6 +613,8 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
         "restarts": blob.get("restarts", ""),
         "reduced_cost_fixings": blob.get("reduced_cost_fixings", ""),
         **{key: ("" if blob.get(key) is None else blob[key]) for key in SAFE_BOUND_COLUMNS},
+        **{key: ("" if blob.get(key) is None else blob[key])
+           for key in PROBING_COLUMNS + ("clique_cuts_generated",)},
         "machine": machine,
         "timestamp_utc": stamp,
         "certificate": blob.get("certificate") or "",

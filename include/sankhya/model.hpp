@@ -706,6 +706,9 @@ class Solution {
   Count conflicts_learned_cutoff = 0;
   Count conflict_nodes_pruned = 0;
   Count conflict_tightenings = 0;
+  /// Violated cliques the clique separator found over the search, before the cut filter
+  /// (#358, #512); zero when enable_clique_cuts is off or no cut round ran.
+  Count clique_cuts_generated = 0;
   /// The root LP relaxation's objective before and after the root cut round (#221), in
   /// the model's own sense and units; NaN when no branch-and-cut ran. The share of the
   /// integrality gap the cuts closed is (after - before) / (objective - before), which the
