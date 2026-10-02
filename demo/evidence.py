@@ -47,7 +47,7 @@ def gpu_ratios(name, tolerance):
 def main():
     out = {}
 
-    name = "kennington-full-65eecbc.csv"
+    name = "kennington-full-9463fd7.csv"
     r = rows(name)
     out["KENN"] = (f"{count(r, 'passed')} of {len(r)} match the published optimum and verify, "
                    f"{count(r, 'independently_verified')} of {len(r)} verified")
