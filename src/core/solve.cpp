@@ -825,6 +825,11 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         if (use_gpu_pdhg) {
           // GPU path: auto-routed by size:pdhg-gpu, or explicit --gpu flag (both gated by the
           // VRAM check above). Multi-GPU when gpu_devices names more than one device (#295).
+          if (options.get_bool("pdhg_feasibility_polish")) {
+            logger.warning(
+                "pdhg_feasibility_polish (#483) is implemented on the CPU PDHG engine only; "
+                "the CUDA engine runs without it");
+          }
           const std::vector<int> gpu_dev_ids =
               gpu::parse_device_ids(options.get_string("gpu_devices"));
           Solution first;

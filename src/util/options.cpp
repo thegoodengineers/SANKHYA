@@ -1757,6 +1757,32 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"pdhg_feasibility_polish",
+         OptionType::Bool,
+         false,
+         "Feasibility polishing of the CPU PDHG engine (#483), after Applegate, Hinder, Lu and "
+         "Lubin, 'PDLP: A Practical First-Order Method for Large-Scale Linear Programming', "
+         "arXiv:2501.07018, the feasibility polishing section. Not pdhg_polish, which "
+         "finishes with the interior point. At the first convergence check at or after "
+         "iteration 100 and each time the count doubles, while the relative gap is at or "
+         "under 1e-2, PDHG is run for iterations/8 steps on the primal feasibility problem "
+         "(objective zero) from (x_k, 0) and as long on the dual feasibility problem (finite "
+         "bounds zero) from (0, y_k); a polished x is kept only when its relative primal "
+         "residual is at or under 1e-8 and its absolute one at or under the project's primal "
+         "tolerance, a polished y only on the same terms for the dual. A polished pair that "
+         "passes PDHG's stopping test ends the run. When the run ends otherwise and its point "
+         "misses that primal target, it is polished once more, each phase allowed as many "
+         "steps as the main run took, and the best polished pair is reported in its place, "
+         "its gap measured, not assumed: dual_bound (and so absolute_gap and relative_gap) is "
+         "stated whenever the reported y is dual feasible to 1e-8 relative and the dual "
+         "tolerance. The iteration count includes the polishing steps, so it can exceed "
+         "iteration_limit (iteration_limit bounds the main run, each polishing phase has the "
+         "budget above); the time limit still bounds the whole. CPU engine only: the CUDA "
+         "engine ignores it and says so. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"qp_tolerance",
                  OptionType::Double,
                  1e-8,

@@ -368,6 +368,7 @@ set(SANKHYA_CORE_SOURCES
   src/pdhg/pdhg.cpp
   src/pdhg/pdhg_evaluate.cpp
   src/pdhg/pdhg_certificate.cpp
+  src/pdhg/pdhg_feasibility_polish.cpp
   src/pdhg/pdhg_halpern.cpp
   src/pdhg/batch_pdhg.cpp
   src/pdhg/batch_pdhg_cpu.cpp

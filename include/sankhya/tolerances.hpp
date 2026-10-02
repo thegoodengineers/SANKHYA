@@ -349,6 +349,17 @@ inline constexpr double kPdhgLoose = 1e-4;
 inline constexpr double kCrossoverStartInfeasibility = 1e-4;
 inline constexpr double kPdhgTight = 1e-8;
 
+/// PDHG feasibility polishing (#483, option pdhg_feasibility_polish; Applegate, Hinder, Lu &
+/// Lubin, arXiv:2501.07018, the feasibility polishing section). Tried at the first
+/// convergence evaluation at or after kPdhgPolishFirstIteration and again each time the
+/// iteration count doubles, only while the main run's relative gap is at or under
+/// kPdhgPolishGap; each of the primal and the dual phase is given iterations /
+/// kPdhgPolishBudgetDivisor steps. Its target is kPdhgTight relative, together with the
+/// absolute kPrimalFeasibility / kDualFeasibility. The three numbers are the issue's.
+inline constexpr Count kPdhgPolishFirstIteration = 100;
+inline constexpr double kPdhgPolishGap = 1e-2;
+inline constexpr Count kPdhgPolishBudgetDivisor = 8;
+
 // ---------------------------------------------------------------------------------------
 // Cuts
 // ---------------------------------------------------------------------------------------
