@@ -1848,6 +1848,11 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.reduced_cost_fixings = reduced.reduced_cost_fixings;
   solution.objective_branches = reduced.objective_branches;
   solution.symmetry_generators = reduced.symmetry_generators;
+  solution.safe_bound_nodes = reduced.safe_bound_nodes;
+  solution.safe_bound_infinite = reduced.safe_bound_infinite;
+  solution.safe_bound_refusals = reduced.safe_bound_refusals;
+  solution.safe_bound_max_gap = reduced.safe_bound_max_gap;
+  solution.safe_bound_max_rel_gap = reduced.safe_bound_max_rel_gap;
   // The root bounds are objective values of the reduced model, whose objective_offset
   // carries the constant the removed columns contributed, so they are already in the
   // original model's units (#221).

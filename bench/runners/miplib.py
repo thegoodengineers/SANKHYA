@@ -144,7 +144,17 @@ CSV_COLUMNS = [
     "branching_seconds",
     "batch_strong_branching_seconds",
     "batch_node_bounds_seconds",
+    # Safe dual bounds (#519): filled only when safe_bounds is on, by the serial tree; last,
+    # for the same reason as the columns above.
+    "safe_bound_nodes",
+    "safe_bound_infinite",
+    "safe_bound_refusals",
+    "safe_bound_max_gap",
+    "safe_bound_max_rel_gap",
 ]
+
+SAFE_BOUND_COLUMNS = ("safe_bound_nodes", "safe_bound_infinite", "safe_bound_refusals",
+                      "safe_bound_max_gap", "safe_bound_max_rel_gap")
 
 # The certificate writer's log line (src/mip/certificate_writer.cpp, #756).
 LEAVES_LINE = re.compile(r"leaves: (\d+) from their own LP duals, (\d+) from an ancestor's,.*?"
@@ -264,6 +274,7 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             "cut_filter": effort.get("cut_filter", ""),
             "restarts": effort.get("restarts", ""),
             "reduced_cost_fixings": effort.get("reduced_cost_fixings", ""),
+            **{key: effort.get(key, "") for key in SAFE_BOUND_COLUMNS},
             "root_bound": as_number(effort.get("root_bound")),
             "root_bound_after_cuts": as_number(effort.get("root_bound_after_cuts")),
             "solver_seconds": effort.get("solve_seconds", ""),
@@ -567,6 +578,7 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
         "threads": threads,
         "restarts": blob.get("restarts", ""),
         "reduced_cost_fixings": blob.get("reduced_cost_fixings", ""),
+        **{key: ("" if blob.get(key) is None else blob[key]) for key in SAFE_BOUND_COLUMNS},
         "machine": machine,
         "timestamp_utc": stamp,
         "certificate": blob.get("certificate") or "",
