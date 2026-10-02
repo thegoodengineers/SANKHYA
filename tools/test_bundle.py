@@ -10,6 +10,8 @@ does not become a spurious failure on a checkout with no build tree.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
 import tempfile
 import zipfile
@@ -22,6 +24,7 @@ from replay_bundle import ReplayError, replay  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEMO_MODEL = REPO_ROOT / "demo" / "crude_blend.mps"
+DEMO_MILP = REPO_ROOT / "demo" / "blend_milp.mps"
 
 FAILURES = 0
 
@@ -133,6 +136,64 @@ def test_a_bundle_missing_its_checksums_file_fails_replay() -> None:
             raised = True
         check(raised, "a bundle with no checksums.sha256.json fails replay rather than "
               "silently skipping the integrity check")
+
+
+def test_a_milp_bundle_carries_its_proof_and_replay_checks_it() -> None:
+    """--certificate puts the VIPR proof (#518) in the bundle and replay checks it exactly."""
+    with tempfile.TemporaryDirectory() as tmp:
+        bundle_path = Path(tmp) / "milp.zip"
+        build_bundle(DEMO_MILP, [], bundle_path, certificate=True)
+        with zipfile.ZipFile(bundle_path) as source:
+            names = source.namelist()
+            manifest = json.loads(source.read("manifest.json"))
+        check("certificate.vipr" in names, "the MILP bundle holds certificate.vipr")
+        check(manifest.get("certificate_file") == "certificate.vipr",
+              "the manifest names the proof")
+
+        raised = False
+        try:
+            replay(bundle_path, resolve_binary=None)
+        except ReplayError as error:
+            raised = True
+            print(f"    (unexpected: {error})")
+        check(not raised, "a clean MILP bundle replays, proof included")
+
+
+def test_a_wrong_proof_fails_replay_even_with_matching_checksums() -> None:
+    """The proof is CHECKED, not only hashed: edit the claimed bound and re-record every
+    sha256, so the integrity step passes, and the exact checker must still refuse it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        directory = Path(tmp)
+        bundle_path = directory / "milp.zip"
+        build_bundle(DEMO_MILP, [], bundle_path, certificate=True)
+        with zipfile.ZipFile(bundle_path) as source:
+            names = source.namelist()
+            contents = {name: source.read(name) for name in names}
+        lines = contents["certificate.vipr"].decode().splitlines()
+        rtp = [i for i, line in enumerate(lines) if line.startswith("RTP range ")]
+        check(len(rtp) == 1, "the fixture's proof has one RTP range line")
+        if len(rtp) != 1:
+            return
+        # blend_milp maximizes: claim the optimum is at most 100, far below the plan's value.
+        low = lines[rtp[0]].split()[2]
+        lines[rtp[0]] = f"RTP range {low} 100"
+        contents["certificate.vipr"] = ("\n".join(lines) + "\n").encode()
+        contents["checksums.sha256.json"] = json.dumps(
+            {name: hashlib.sha256(data).hexdigest() for name, data in contents.items()
+             if name != "checksums.sha256.json"}, indent=2).encode()
+        forged = directory / "milp_forged.zip"
+        with zipfile.ZipFile(forged, "w", zipfile.ZIP_DEFLATED) as out:
+            for name in names:
+                out.writestr(name, contents[name])
+
+        message = ""
+        try:
+            replay(forged, resolve_binary=None)
+        except ReplayError as error:
+            message = str(error)
+        check("verify_certificate.py rejected" in message,
+              "a forged proof with re-recorded checksums fails replay at the exact checker",
+              message[:120])
 
 
 def main() -> int:
