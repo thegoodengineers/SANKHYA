@@ -647,6 +647,17 @@ class Solution {
   /// that is the root search only, as for cuts_applied.
   Count cut_rows_aged_out = 0;
   Count cuts_reactivated = 0;
+  /// With `mip_cut_pooling` (#497), of those: the aged rows deleted from the node LP rather
+  /// than freed in place, and the deleted rows appended again because a node LP point
+  /// violated them. Zero with the option off, and under `write_certificate`, where aged
+  /// rows are freed in place. Counted by the search that owns the rows.
+  Count cut_rows_removed = 0;
+  Count cut_rows_readded = 0;
+  /// Rows of the node LP at each node's first solve, the mean and the most over the search
+  /// (#497): what removal is meant to bring down. NaN and 0 when no node LP was solved, and
+  /// for a parallel search, whose workers own their rows.
+  double node_lp_rows_mean = std::numeric_limits<double>::quiet_NaN();
+  Count node_lp_rows_max = 0;
   /// The root cut filter's verdicts per family and reason, one line (#496):
   /// `gomory 12: 3 accepted, 9 insufficient_violation; mir 4: 4 too_dense`. Empty for an
   /// LP, or when no root round ran.

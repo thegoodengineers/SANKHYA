@@ -436,11 +436,15 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"mip_cut_pooling",
                  OptionType::Bool,
                  false,
-                 "The cut pool (#497; Achterberg 2007, ch. 8): a cut row freed by age "
-                 "(mip_cut_age_limit) is re-imposed, and the node LP re-solved, when a "
-                 "node's LP point violates it. Freed rows stay in the LP, so every stored "
-                 "basis stays valid; nothing is deleted. Only read when enable_root_cuts "
-                 "is set. OFF until the MIPLIB A/B on main says what it changes.",
+                 "The cut pool (#497; Achterberg 2007, ch. 8): a cut row slack for "
+                 "mip_cut_age_limit node solves is deleted from the node LP and kept in a "
+                 "pool, and appended again (its logical basic, the node LP re-solved) when a "
+                 "node's LP point violates it. Stored bases are remapped onto the rows of "
+                 "the moment when their node is entered. With write_certificate set, rows "
+                 "are not removed: an aged row is freed in place and its right-hand side "
+                 "restored when violated, because the certificate states every node's "
+                 "duals over one fixed list of cut rows. Only read when enable_root_cuts is "
+                 "set. OFF until the MIPLIB A/B on main says what it changes.",
                  0.0,
                  0.0,
                  {}});
@@ -448,7 +452,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Int,
                  std::int64_t{tol::kCutRowAgeLimit},
                  "Consecutive node solves a cut row may sit slack (its logical basic) "
-                 "before it is freed (#221, #497). Only read when enable_root_cuts is set.",
+                 "before it is freed, or with mip_cut_pooling removed (#221, #497). Only read "
+                 "when enable_root_cuts is set.",
                  1.0,
                  1000000.0,
                  {}});

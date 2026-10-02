@@ -231,6 +231,7 @@ void BranchAndBound::plant_seed() {
       static_cast<Index>(seed_->warm.row_status.size()) == working_.num_rows()) {
     leaf.warm.col_status.assign(seed_->warm.col_status.begin(), seed_->warm.col_status.end());
     leaf.warm.row_status.assign(seed_->warm.row_status.begin(), seed_->warm.row_status.end());
+    leaf.warm_cuts = cut_layout();  // #497: no cut row yet, which is what it is over
   }
   push_open(parent);
 
@@ -332,7 +333,12 @@ void BranchAndBound::donate_open_nodes() {
     spec.fraction = node.fraction;
     spec.depth = node.depth;
     // Cut rows are this worker's own; a basis that counts them is no basis elsewhere. The
-    // symmetry rows (#413) are every worker's, so a basis over them alone travels.
+    // symmetry rows (#413) are every worker's, so a basis over them alone travels. A basis
+    // stored over cut rows since removed (#497) is first brought onto the rows of now.
+    if (node.warm_cuts) {
+      remap_warm_start(&node.warm, *node.warm_cuts);
+      node.warm_cuts.reset();
+    }
     if (working_.num_rows() == original_.num_rows() + symmetry_rows_) {
       spec.warm = std::move(node.warm);
     }

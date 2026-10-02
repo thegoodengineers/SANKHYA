@@ -213,6 +213,23 @@ def end_to_end() -> None:
             counts.append(len(cut_indices(cert.read_text())) if cert.exists() else -1)
         base.check(counts[1] > counts[0] >= 0, "gomory: the dense admission writes more cut "
                    "rows, and they verified above", f"cut rows without/with: {counts}")
+        # The cut pool (#497): under a certificate aged rows are freed in place rather than
+        # removed from the node LPs, so the proof is written over the same cut rows and still
+        # verifies, at an age limit of 1 where nearly every slack row ages out.
+        for name, text_of_model in models:
+            mps.write_text(text_of_model)
+            cert = Path(tmp) / "pooled.vipr"
+            if cert.exists():
+                cert.unlink()
+            log = base.solve(binary, mps, cert, "enable_root_cuts=true", "mip_cut_pooling=true",
+                             "mip_cut_age_limit=1")
+            base.check(cert.exists(), f"{name}: written with the cut pool on",
+                       "" if cert.exists() else log[-300:])
+            if not cert.exists():
+                continue
+            code, out = base.run_checker_on(cert, "--mps", str(mps), "--feas-tol", "1e-9")
+            base.check(code == 0 and "VERIFIED" in out,
+                       f"{name}: it verifies with the cut pool on", out.strip()[-160:])
 
 
 def main() -> int:

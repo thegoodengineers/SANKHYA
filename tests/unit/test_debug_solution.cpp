@@ -308,6 +308,8 @@ struct FuzzTally {
   std::int64_t nodes = 0;
   std::int64_t aged_out = 0;     ///< cut rows freed by age (#497)
   std::int64_t reactivated = 0;  ///< freed cut rows re-imposed by the cut pool (#497)
+  std::int64_t removed = 0;      ///< of the freed, rows deleted from the node LP (#497)
+  std::int64_t readded = 0;      ///< of the re-imposed, rows appended again (#497)
   /// Root candidates per family, read off the filter's report: every one of them was checked
   /// against the optimum BEFORE the filter, so this is how much the check saw.
   std::map<std::string, std::int64_t> candidates;
@@ -356,6 +358,8 @@ void check_instance(const oracle::GeneratedLp& lp, int attempt, FuzzTally* tally
   tally->nodes += s.nodes;
   tally->aged_out += s.cut_rows_aged_out;
   tally->reactivated += s.cuts_reactivated;
+  tally->removed += s.cut_rows_removed;
+  tally->readded += s.cut_rows_readded;
   static const std::regex family_count("([a-z_]+) ([0-9]+):");
   for (auto it = std::sregex_iterator(s.cut_filter_report.begin(), s.cut_filter_report.end(),
                                       family_count);
@@ -489,11 +493,13 @@ TEST(DebugSolution, FuzzBinaryKnapsackAndCoveringRowsAgainstTheUniqueExactOptimu
 
 // The cut pool (#497) inside the same check: with an age limit of 1 a cut row is freed at
 // almost every node where it is slack, and re-imposed wherever a later node's point violates
-// it. Every node LP whose box holds the unique optimum is checked against it after the rows
-// come back, so a row re-imposed wrongly - the wrong right-hand side, the wrong row, a node
-// re-solve that goes astray - aborts naming the node, and the answer is compared with the
-// enumerated optimum. The tally must show the pool worked; the same sweep with the option
-// off frees the same kind of rows and must take none back.
+// it. With the option on, a freed row is deleted from the node LP and appended again when
+// violated, so every stored basis is remapped onto changed rows. Every node LP whose box
+// holds the unique optimum is checked against it after the rows come back, so a row put
+// back wrongly - the wrong right-hand side, the wrong row, a node re-solve that goes astray -
+// aborts naming the node, and the answer is compared with the enumerated optimum. The tally
+// must show the pool worked; the same sweep with the option off frees the same kind of rows
+// in place and must take none back and delete none.
 TEST(DebugSolution, FuzzTheCutPoolAgainstTheUniqueExactOptimum) {
   Options options = every_family_on();
   options.set_int("mip_cut_age_limit", 1);
@@ -517,14 +523,20 @@ TEST(DebugSolution, FuzzTheCutPoolAgainstTheUniqueExactOptimum) {
     EXPECT_GT(tally.aged_out, 0) << "no cut row was ever freed";
     if (pooling) {
       EXPECT_GT(tally.reactivated, 0) << "no freed cut row was ever re-imposed";
+      // Every aged row is deleted, and every one put back is appended.
+      EXPECT_EQ(tally.removed, tally.aged_out);
+      EXPECT_EQ(tally.readded, tally.reactivated);
     } else {
       EXPECT_EQ(tally.reactivated, 0) << "mip_cut_pooling=false re-imposed a row";
+      EXPECT_EQ(tally.removed, 0) << "mip_cut_pooling=false deleted a row";
     }
     std::printf(
         "[  INFO    ] debug solution, cut pool %s: %d instances, %lld cut rows appended, %lld "
-        "freed by age, %lld re-imposed, %lld nodes; the unique optimum never cut off\n",
+        "freed by age (%lld removed), %lld re-imposed (%lld appended again), %lld nodes; the "
+        "unique optimum never cut off\n",
         pooling ? "on" : "off", tally.checked, static_cast<long long>(tally.cuts),
-        static_cast<long long>(tally.aged_out), static_cast<long long>(tally.reactivated),
+        static_cast<long long>(tally.aged_out), static_cast<long long>(tally.removed),
+        static_cast<long long>(tally.reactivated), static_cast<long long>(tally.readded),
         static_cast<long long>(tally.nodes));
   }
 }

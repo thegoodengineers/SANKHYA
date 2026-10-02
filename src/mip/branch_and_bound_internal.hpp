@@ -116,6 +116,11 @@ struct TreeNode {
   /// child's optimum in a few pivots. Moved out when the node is processed, so an open
   /// node costs n + m bytes and a closed one nothing.
   WarmStart warm;
+  /// The cut rows `warm` was taken over, as pool indices in row order (#497). Set only when
+  /// mip_cut_pooling removes rows, where the rows can change while the node waits; the node
+  /// is then brought onto the rows of the moment when it is entered (remap_warm_start).
+  /// Shared by every node stored under the same rows, so it costs a pointer per node.
+  std::shared_ptr<const std::vector<std::size_t>> warm_cuts;
   /// How far the branching moved the column from the parent's relaxation value: v - floor(v)
   /// for the down child, ceil(v) - v for the up child. The pseudocost observation (#69) is
   /// this node's bound gain divided by it.
@@ -784,11 +789,31 @@ class BranchAndBound {
   /// `root`: the root round, the only place probing may run (#623 review).
   void add_combinatorial_cuts(const Solution& relaxation, std::vector<Cut>* candidates,
                               bool root);
-  /// Count node solves in which each cut row was slack; free a row slack for too long.
-  void age_cut_rows(const Solution& relaxation);
+  /// Count node solves in which each cut row was slack; free a row slack for too long, or,
+  /// with cut_removal_, delete it from working_ (and compact `relaxation` to match).
+  void age_cut_rows(Solution* relaxation);
   /// #497: re-impose every freed cut row the node LP point violates and re-solve the node;
   /// true when rows were re-imposed and the re-solve was optimal (the caller repeats).
   bool reactivate_pooled_cuts(Solution* relaxation);
+  /// #497 with cut_removal_: append every removed pooled cut the node LP point violates as
+  /// a row again, its logical basic, and re-solve; true as for reactivate_pooled_cuts.
+  bool readd_pooled_cuts(Solution* relaxation);
+  /// Append rows for pool_cuts_[k], k in `pool`, at the end of working_, in that order.
+  void append_pool_rows(const std::vector<std::size_t>& pool);
+  /// Delete the cut rows at `positions` (ascending indices into cut_lp_rows_) from
+  /// working_. Their logicals are basic in `relaxation`, which is compacted to the new rows
+  /// and stays an optimal solution of the smaller LP; current_warm_ is remapped.
+  void remove_cut_rows(const std::vector<std::size_t>& positions, Solution* relaxation);
+  /// Rewrite `warm`, a basis over the cut rows `from` (pool indices in row order), onto
+  /// working_'s cut rows now: a row added since has its logical basic, a row removed since
+  /// takes its logical out of the basis, or, when that logical was nonbasic, a basic column
+  /// of the removed cut with it. An empty start when that cannot be done.
+  void remap_warm_start(WarmStart* warm, const std::vector<std::size_t>& from);
+  /// The cut rows now, shared, for a node that stores a basis; null without cut_removal_.
+  [[nodiscard]] std::shared_ptr<const std::vector<std::size_t>> cut_layout();
+  /// Undo the cuts appended from pool index `pool_before` on: the pool and the row map lose
+  /// them (the caller restores working_ itself).
+  void drop_cuts_from(std::size_t pool_before);
 
   /// How MIR separates (#498): c-MIR when `mir_cmir` is set.
   [[nodiscard]] MirOptions mir_options() const {
@@ -833,6 +858,12 @@ class BranchAndBound {
     solution->cuts_applied = root_cuts_applied_ + tree_cuts_applied_;
     solution->cut_rows_aged_out = cut_rows_aged_out_;  // #497
     solution->cuts_reactivated = cuts_reactivated_;
+    solution->cut_rows_removed = cut_rows_removed_;
+    solution->cut_rows_readded = cut_rows_readded_;
+    solution->node_lp_rows_max = node_lp_rows_max_;
+    if (node_lp_solves_ > 0) {
+      solution->node_lp_rows_mean = node_lp_rows_sum_ / static_cast<double>(node_lp_solves_);
+    }
     solution->cut_filter_report = cut_filter_report_;
     solution->incumbent_trace = incumbent_trace_;  // #504, not a root quantity but same exits
     if (std::isnan(root_bound_internal_)) return;
@@ -1007,13 +1038,31 @@ class BranchAndBound {
   std::vector<double> global_lower_;
   std::vector<double> global_upper_;
   Index first_cut_row_ = -1;
+  /// Every cut appended so far, in the order appended; never shrinks except by a rollback.
   std::vector<Cut> pool_cuts_;
+  /// Per pool entry: node solves slack in a row, and whether the cut is out of force (freed
+  /// in place, or with cut_removal_ removed from working_ and held in the pool alone).
   std::vector<Count> cut_row_slack_;
   std::vector<bool> cut_row_free_;
+  /// Row first_cut_row_ + p of working_ is the cut pool_cuts_[cut_lp_rows_[p]]. Without
+  /// cut_removal_ it is 0, 1, 2, ... for the whole search.
+  std::vector<std::size_t> cut_lp_rows_;
+  /// mip_cut_pooling's row removal (#497): off without the option and under a certificate.
+  bool cut_removal_ = false;
+  /// cut_layout()'s shared copy of cut_lp_rows_; reset whenever the rows change.
+  std::shared_ptr<const std::vector<std::size_t>> cut_layout_;
   Count tree_cuts_applied_ = 0;
   Count tree_cut_rounds_ = 0;
   Count cut_rows_aged_out_ = 0;
   Count cuts_reactivated_ = 0;
+  Count cut_rows_removed_ = 0;      ///< #497: rows deleted from working_ by age
+  Count cut_rows_readded_ = 0;      ///< #497: removed rows appended again when violated
+  Count warm_columns_demoted_ = 0;  ///< remap_warm_start: a basic column made nonbasic
+  Count warm_starts_dropped_ = 0;   ///< remap_warm_start: a basis it could not remap
+  /// Rows of working_ at each node's first LP solve (#497's measure): sum, count and most.
+  double node_lp_rows_sum_ = 0.0;
+  Count node_lp_solves_ = 0;
+  Count node_lp_rows_max_ = 0;
   /// Node solves a cut row may sit slack before it is freed (`mip_cut_age_limit`, default
   /// tol::kCutRowAgeLimit), and whether a freed row is re-imposed when a node LP point
   /// violates it (#497, `mip_cut_pooling`).
