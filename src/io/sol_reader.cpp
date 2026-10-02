@@ -8,6 +8,14 @@
 // engine recomputes both from the basis and the model it is given. Names are matched, not
 // positions, so a file written for a differently ordered model of the same rows and columns
 // still seeds the right basis, and a file for a different model is refused by name.
+//
+// AN EDITED MODEL (#913). Yesterday's file may describe a model that has since gained or lost
+// rows and columns. The entries both name keep the file's status; the rest are placed by
+// map_basis_by_name() (core/basis_map.cpp) - a new row basic on its slack, a new column
+// nonbasic at a bound - and solve() completes the count. What is refused is a file that
+// shares too little with the model to be a solution of it or of an edit of it: fewer than
+// half of the file's entries found in the model, or fewer than half of the model's found in
+// the file.
 
 #include <fmt/format.h>
 
@@ -17,6 +25,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "io/line_reader.hpp"
@@ -63,34 +72,23 @@ bool parse_status(std::string_view text, BasisStatus* out) {
   return true;
 }
 
-std::unordered_map<std::string, Index> index_by_name(const std::vector<std::string>& names,
-                                                     Index count, char fallback_prefix) {
-  std::unordered_map<std::string, Index> index;
-  for (Index k = 0; k < count; ++k) {
-    const auto u = static_cast<std::size_t>(k);
-    const std::string name = u < names.size() && !names[u].empty()
-                                 ? names[u]
-                                 : fmt::format("{}{}", fallback_prefix, k);
-    index.emplace(name, k);
-  }
-  return index;
-}
-
 }  // namespace
 
 bool read_solution_basis(const std::string& path, const Model& model,
                          std::vector<BasisStatus>* col_status,
-                         std::vector<BasisStatus>* row_status, std::string* error) {
+                         std::vector<BasisStatus>* row_status, std::string* error,
+                         BasisMapping* mapping) {
   LineReader reader;
   if (!reader.open(path, error)) return false;
-  const auto cols = index_by_name(model.col_names, model.num_cols(), 'C');
-  const auto rows = index_by_name(model.row_names, model.num_rows(), 'R');
-  col_status->assign(static_cast<std::size_t>(model.num_cols()), BasisStatus::kUnknown);
-  row_status->assign(static_cast<std::size_t>(model.num_rows()), BasisStatus::kUnknown);
+  std::vector<std::string> col_names;
+  std::vector<std::string> row_names;
+  std::vector<BasisStatus> file_cols;
+  std::vector<BasisStatus> file_rows;
 
   enum class Section { kNone, kColumns, kRows, kOther } section = Section::kNone;
   bool saw_columns = false;
   bool saw_rows = false;
+  std::size_t unknown = 0;
   std::string line;
   std::vector<std::string_view> tokens;
   while (reader.next(&line)) {
@@ -124,17 +122,9 @@ bool read_solution_basis(const std::string& path, const Model& model,
       *error = reader.error_at(fmt::format("no basis status on the record for '{}'", name));
       return false;
     }
-    const auto& index = section == Section::kColumns ? cols : rows;
-    const auto it = index.find(name);
-    if (it == index.end()) {
-      *error =
-          reader.error_at(fmt::format("{} '{}' is not in the model, so this file is not "
-                                      "a solution of it",
-                                      section == Section::kColumns ? "column" : "row", name));
-      return false;
-    }
-    (section == Section::kColumns ? *col_status
-                                  : *row_status)[static_cast<std::size_t>(it->second)] = status;
+    if (status == BasisStatus::kUnknown) ++unknown;
+    (section == Section::kColumns ? col_names : row_names).push_back(std::move(name));
+    (section == Section::kColumns ? file_cols : file_rows).push_back(status);
   }
   if (!saw_columns || !saw_rows) {
     *error = fmt::format(
@@ -143,19 +133,39 @@ bool read_solution_basis(const std::string& path, const Model& model,
         path);
     return false;
   }
-  // A status the file never gave, or gave as `unknown`, is a hole the simplex cannot seed.
-  std::size_t unknown = 0;
-  for (const auto* v : {col_status, row_status}) {
-    for (const BasisStatus s : *v) unknown += s == BasisStatus::kUnknown ? 1 : 0;
-  }
+  // A status the file gave as `unknown` is a hole the simplex cannot seed.
   if (unknown > 0) {
     *error = fmt::format(
-        "{}: {} column or row status(es) are missing or `unknown`: the file "
-        "carries no complete basis (the interior point without crossover and "
-        "PDHG produce none)",
+        "{}: {} column or row status(es) are `unknown`: the file carries no complete basis "
+        "(the interior point without crossover and PDHG produce none)",
         path, unknown);
     return false;
   }
+
+  BasisMapping counts;
+  std::vector<BasisStatus> cols;
+  std::vector<BasisStatus> rows;
+  if (!map_basis_by_name(col_names, row_names, file_cols, file_rows, model, &cols, &rows,
+                         &counts)) {
+    *error = fmt::format("{}: the basis could not be read", path);
+    return false;
+  }
+  // An edit adds or drops some rows and columns; a file of another model shares few names
+  // with this one (or, listing only a few entries, is not a basis of anything).
+  const Index matched = counts.matched_cols + counts.matched_rows;
+  const Index in_file = matched + counts.removed_cols + counts.removed_rows;
+  const Index in_model = model.num_cols() + model.num_rows();
+  if (2 * matched < in_file || 2 * matched < in_model) {
+    *error = fmt::format(
+        "{}: {} of the file's {} columns and rows are not in the model and {} of the "
+        "model's {} are missing from the file, so this file is not a solution of it or of "
+        "an edit of it",
+        path, in_file - matched, in_file, in_model - matched, in_model);
+    return false;
+  }
+  *col_status = std::move(cols);
+  *row_status = std::move(rows);
+  if (mapping != nullptr) *mapping = counts;
   return true;
 }
 

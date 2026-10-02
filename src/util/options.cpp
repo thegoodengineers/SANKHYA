@@ -436,11 +436,15 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"mip_cut_pooling",
                  OptionType::Bool,
                  false,
-                 "The cut pool (#497; Achterberg 2007, ch. 8): a cut row freed by age "
-                 "(mip_cut_age_limit) is re-imposed, and the node LP re-solved, when a "
-                 "node's LP point violates it. Freed rows stay in the LP, so every stored "
-                 "basis stays valid; nothing is deleted. Only read when enable_root_cuts "
-                 "is set. OFF until the MIPLIB A/B on main says what it changes.",
+                 "The cut pool (#497; Achterberg 2007, ch. 8): a cut row slack for "
+                 "mip_cut_age_limit node solves is deleted from the node LP and kept in a "
+                 "pool, and appended again (its logical basic, the node LP re-solved) when a "
+                 "node's LP point violates it. Stored bases are remapped onto the rows of "
+                 "the moment when their node is entered. With write_certificate set, rows "
+                 "are not removed: an aged row is freed in place and its right-hand side "
+                 "restored when violated, because the certificate states every node's "
+                 "duals over one fixed list of cut rows. Only read when enable_root_cuts is "
+                 "set. OFF until the MIPLIB A/B on main says what it changes.",
                  0.0,
                  0.0,
                  {}});
@@ -448,7 +452,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Int,
                  std::int64_t{tol::kCutRowAgeLimit},
                  "Consecutive node solves a cut row may sit slack (its logical basic) "
-                 "before it is freed (#221, #497). Only read when enable_root_cuts is set.",
+                 "before it is freed, or with mip_cut_pooling removed (#221, #497). Only read "
+                 "when enable_root_cuts is set.",
                  1.0,
                  1000000.0,
                  {}});
@@ -1757,6 +1762,32 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"pdhg_feasibility_polish",
+         OptionType::Bool,
+         false,
+         "Feasibility polishing of the CPU PDHG engine (#483), after Applegate, Hinder, Lu and "
+         "Lubin, 'PDLP: A Practical First-Order Method for Large-Scale Linear Programming', "
+         "arXiv:2501.07018, the feasibility polishing section. Not pdhg_polish, which "
+         "finishes with the interior point. At the first convergence check at or after "
+         "iteration 100 and each time the count doubles, while the relative gap is at or "
+         "under 1e-2, PDHG is run for iterations/8 steps on the primal feasibility problem "
+         "(objective zero) from (x_k, 0) and as long on the dual feasibility problem (finite "
+         "bounds zero) from (0, y_k); a polished x is kept only when its relative primal "
+         "residual is at or under 1e-8 and its absolute one at or under the project's primal "
+         "tolerance, a polished y only on the same terms for the dual. A polished pair that "
+         "passes PDHG's stopping test ends the run. When the run ends otherwise and its point "
+         "misses that primal target, it is polished once more, each phase allowed as many "
+         "steps as the main run took, and the best polished pair is reported in its place, "
+         "its gap measured, not assumed: dual_bound (and so absolute_gap and relative_gap) is "
+         "stated whenever the reported y is dual feasible to 1e-8 relative and the dual "
+         "tolerance. The iteration count includes the polishing steps, so it can exceed "
+         "iteration_limit (iteration_limit bounds the main run, each polishing phase has the "
+         "budget above); the time limit still bounds the whole. CPU engine only: the CUDA "
+         "engine ignores it and says so. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"qp_tolerance",
                  OptionType::Double,
                  1e-8,
@@ -1794,6 +1825,27 @@ const std::vector<OptionSpec>& Options::registry() {
                  1e-14,
                  1.0,
                  {}});
+    s.push_back(
+        {"qp_ipm_detect_infeasibility",
+         OptionType::Bool,
+         false,
+         "qp_algorithm=ipm (#893): at every iteration, test six vectors read off the "
+         "proximal iterates as certificates - the row multipliers y, the primal residual "
+         "b - Mv and the step dy as Farkas vectors, the point v, the negated dual residual "
+         "and the step dv as primal rays (Banjac, Goulart, Stellato and Boyd, 'Infeasibility "
+         "detection in the alternating direction method of multipliers for convex "
+         "optimization', J. Optim. Theory Appl. 183 (2019), the paper only, for why the "
+         "steps of a proximal method point along them). A candidate is mapped to the "
+         "model's rows or columns and reported only when this project's own checker "
+         "(farkas_proves_infeasible or ray_proves_unbounded, src/core/certificate.cpp) "
+         "accepts it, either sign: infeasible with the Farkas vector and no point, or "
+         "unbounded with the ray and the current iterate, and unbounded only once that "
+         "iterate is primal feasible at primal_feasibility_tolerance. A candidate that does "
+         "not check out changes nothing, and the iteration and time limit reporting "
+         "stands. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"pdhg_polish",
                  OptionType::Bool,
                  true,

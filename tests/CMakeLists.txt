@@ -50,6 +50,7 @@ add_executable(sankhya_tests
   unit/test_ipm_cudss.cpp
   unit/test_ipm_time_limit.cpp
   unit/test_pdhg_kkt_crossings.cpp
+  unit/test_pdhg_feasibility_polish.cpp
   unit/test_ipm_scaling.cpp
   unit/test_ipm_model_space.cpp
   unit/test_ipm_dense_columns.cpp
@@ -69,6 +70,7 @@ add_executable(sankhya_tests
   unit/test_kkt_check_qp.cpp
   unit/test_qp_590.cpp
   unit/test_qp_ipm.cpp
+  unit/test_qp_ipm_infeasibility.cpp
   unit/test_qp_halpern.cpp
   unit/test_solver_engine.cpp
   unit/test_solver_engine_conformance.cpp
@@ -114,6 +116,7 @@ add_executable(sankhya_tests
   unit/test_cut_selection.cpp
   unit/test_cut_filter_report.cpp
   unit/test_debug_solution.cpp
+  unit/test_cut_pool.cpp
   unit/test_cmir_cuts.cpp
   unit/test_root_cut_loop.cpp
   unit/test_root_node_engine.cpp

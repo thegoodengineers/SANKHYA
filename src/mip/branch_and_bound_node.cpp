@@ -641,6 +641,7 @@ bool BranchAndBound::split_integral_node(Index node_index, const Solution& relax
   const Index depth = nodes_[static_cast<std::size_t>(node_index)].depth + 1;
   const double bound = internal_objective(relaxation.col_value);
   const WarmStart warm = basis_of(relaxation);
+  const auto warm_cuts = cut_layout();  // #497: the rows `warm` is over, when rows move
   leave();
 
   const auto add = [&](Index from, DomainChange change, bool open) {
@@ -650,7 +651,10 @@ bool BranchAndBound::split_integral_node(Index node_index, const Solution& relax
     child.change = change;
     child.bound = bound;
     child.depth = depth;
-    if (open) child.warm = warm;  // a link is never solved and needs no basis
+    if (open) {  // a link is never solved and needs no basis
+      child.warm = warm;
+      child.warm_cuts = warm_cuts;
+    }
     nodes_.push_back(std::move(child));
     const auto index = static_cast<Index>(nodes_.size() - 1);
     if (open) push_open(index);

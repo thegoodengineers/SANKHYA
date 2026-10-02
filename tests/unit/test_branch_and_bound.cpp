@@ -627,6 +627,10 @@ struct FuzzTally {
   /// Cut rows the search reported applying, summed over the sweep: a cuts sweep in which
   /// this stays zero exercised no cut, whatever the options said.
   long long cuts_applied = 0;
+  /// The cut pool's rows (#497), summed the same way: with mip_cut_pooling on, a sweep in
+  /// which these stay zero never removed or re-added a row.
+  long long cut_rows_removed = 0;
+  long long cut_rows_readded = 0;
   std::vector<std::string> failures;
 };
 
@@ -679,6 +683,8 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
     }
     const Solution s = solve(model, options);
     tally.cuts_applied += s.cuts_applied;
+    tally.cut_rows_removed += s.cut_rows_removed;
+    tally.cut_rows_readded += s.cut_rows_readded;
 
     const auto disagree = [&](const std::string& why) {
       ++mismatched;
@@ -753,7 +759,9 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
             << "  agreed infeasible   " << agreed_infeasible << "\n"
             << "  oracle abstained    " << oracle_abstained << "\n"
             << "  MISMATCHED          " << mismatched << "\n"
-            << "  cut rows applied    " << tally.cuts_applied << "\n";
+            << "  cut rows applied    " << tally.cuts_applied << "\n"
+            << "  pool rows removed   " << tally.cut_rows_removed << "\n"
+            << "  pool rows re-added  " << tally.cut_rows_readded << "\n";
   for (const std::string& failure : failures) {
     std::cout << "\n--- failing instance ---\n" << failure << "\n";
   }
@@ -838,6 +846,29 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheNodeFactorCache) {
   options.set_bool("presolve", false);
   expect_clean_sweep(run_milp_fuzz(options, "node factor cache, tree cuts, wide", true, 600),
                      200, 100);
+}
+
+// The cut pool (#497) under the exact rational oracle: aged cut rows DELETED from the node
+// LP and appended again when violated. An age limit of 1 removes a row at nearly every node
+// where it is slack, so stored bases are remapped onto changed rows all the time; a row put
+// back wrong, a basis remapped into a wrong answer, or a bound proved on a node LP that lost
+// a row it needed shows up as a mismatch. The wide sweep is the one whose cuts pass the
+// density filter, so it is the one that must have removed and re-added rows.
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheCutPool) {
+  Options options = mip_options();
+  options.set_bool("enable_root_cuts", true);
+  options.set_int("tree_cut_depth", 4);
+  options.set_bool("mip_cut_pooling", true);
+  options.set_int("mip_cut_age_limit", 1);
+  expect_clean_sweep(run_milp_fuzz(options, "cut pool, age limit 1"));
+  options.set_bool("presolve", false);
+  const FuzzTally wide = run_milp_fuzz(options, "cut pool, age limit 1, wide", true, 600);
+  expect_clean_sweep(wide, 200, 100);
+  EXPECT_GT(wide.cuts_applied, 0) << "no cut row was ever applied: the sweep proved nothing";
+  EXPECT_GT(wide.cut_rows_removed, 0) << "no cut row was ever removed";
+  EXPECT_GT(wide.cut_rows_readded, 0) << "no removed cut row was ever appended again";
+  // These shapes close in a few nodes, so rows come back rarely here; the sweep in
+  // test_cut_pool.cpp puts deeper knapsack trees through the same oracle.
 }
 
 TEST(TreeCuts, RowsAddedBelowTheRootKeepTheAnswerAndAreCounted) {

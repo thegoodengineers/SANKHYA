@@ -5,7 +5,9 @@
 // seeded with it must reach the cold solve's optimum in fewer pivots - the pivot count is
 // the proof that the file, not the slack basis, started the simplex.
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -16,6 +18,7 @@
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 #include "sankhya/solve_control.hpp"
+#include "support/model_edit.hpp"
 #include "support/temp_file.hpp"
 
 namespace sankhya {
@@ -104,13 +107,64 @@ TEST(SolReader, AFileOfAnotherModelOrWithoutABasisIsRefused) {
   EXPECT_FALSE(io::read_solution_basis(bare.path(), afiro, &cols, &rows, &error));
   EXPECT_NE(error.find("no basis"), std::string::npos) << error;
 
-  // A partial listing leaves holes the simplex cannot seed.
+  // A partial listing shares too little with the model to be a basis of it.
   const TempFile partial("begin columns 1\n" + afiro.col_names[0] +
                              " 0 0 basic\nend columns\n" + "begin rows 1\n" +
                              afiro.row_names[0] + " 0 0 at_lower\nend rows\n",
                          ".sol");
   EXPECT_FALSE(io::read_solution_basis(partial.path(), afiro, &cols, &rows, &error));
   EXPECT_NE(error.find("missing"), std::string::npos) << error;
+
+  // A file that carries a point but no basis (statuses `unknown`) has nothing to seed.
+  const TempFile unknown("begin columns 1\n" + afiro.col_names[0] +
+                             " 0 0 unknown\nend columns\n" + "begin rows 1\n" +
+                             afiro.row_names[0] + " 0 0 at_lower\nend rows\n",
+                         ".sol");
+  EXPECT_FALSE(io::read_solution_basis(unknown.path(), afiro, &cols, &rows, &error));
+  EXPECT_NE(error.find("no complete basis"), std::string::npos) << error;
+}
+
+TEST(SolReader, AFileOfTheModelBeforeRowsAndColumnsWereAddedOrRemovedSeedsTheResolve) {
+  // #913, the CLI path: `sankhya solve today.mps --warm-start yesterday.sol` where today's
+  // model gained and lost rows and columns since yesterday's file was written.
+  for (const char* name : {"afiro", "adlittle", "sc50a", "share2b"}) {
+    const Model before = netlib(name);
+    const Solution first = solve(before, quiet());
+    ASSERT_EQ(first.status, SolveStatus::kOptimal) << name << ": " << first.message;
+    const TempFile file("", ".sol");
+    std::string error;
+    ASSERT_TRUE(io::write_solution(file.path(), before, first, &error)) << error;
+
+    // Drop the first basic column and the last row, add a column and a row.
+    Model after = before;
+    Index basic = 0;
+    while (first.col_status[static_cast<std::size_t>(basic)] != BasisStatus::kBasic) ++basic;
+    testing::remove_column(&after, basic);
+    testing::remove_row(&after, after.num_rows() - 1);
+    testing::add_column(&after, "NEW_COL", 1.0, 0.0, 5.0, {{0, 0, 1.0}, {1, 0, 2.0}});
+    testing::add_row(&after, "NEW_ROW", -kInfinity, 1e4, {{0, 0, 1.0}, {0, 2, 1.0}});
+    ASSERT_EQ(after.validate(), "") << name;
+
+    SolveControl control;
+    BasisMapping mapping;
+    ASSERT_TRUE(io::read_solution_basis(file.path(), after, &control.start_col_status,
+                                        &control.start_row_status, &error, &mapping))
+        << name << ": " << error;
+    EXPECT_EQ(mapping.new_cols, 1) << name;
+    EXPECT_EQ(mapping.new_rows, 1) << name;
+    EXPECT_EQ(mapping.removed_cols, 1) << name;
+    EXPECT_EQ(mapping.removed_rows, 1) << name;
+    EXPECT_EQ(control.start_row_status.back(), BasisStatus::kBasic) << name;
+    EXPECT_EQ(control.start_col_status.back(), BasisStatus::kAtLower) << name;
+
+    const Solution cold = solve(after, quiet());
+    const Solution warm = solve(after, quiet(), &control);
+    ASSERT_EQ(warm.status, cold.status) << name << ": " << warm.message;
+    if (cold.status != SolveStatus::kOptimal) continue;
+    EXPECT_NEAR(warm.objective, cold.objective, 1e-7 * std::max(1.0, std::abs(cold.objective)))
+        << name;
+    EXPECT_NE(warm.message.find("warm start"), std::string::npos) << warm.message;
+  }
 }
 
 TEST(SolReader, ReadSolutionPointRecoversValues) {

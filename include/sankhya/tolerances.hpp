@@ -349,6 +349,17 @@ inline constexpr double kPdhgLoose = 1e-4;
 inline constexpr double kCrossoverStartInfeasibility = 1e-4;
 inline constexpr double kPdhgTight = 1e-8;
 
+/// PDHG feasibility polishing (#483, option pdhg_feasibility_polish; Applegate, Hinder, Lu &
+/// Lubin, arXiv:2501.07018, the feasibility polishing section). Tried at the first
+/// convergence evaluation at or after kPdhgPolishFirstIteration and again each time the
+/// iteration count doubles, only while the main run's relative gap is at or under
+/// kPdhgPolishGap; each of the primal and the dual phase is given iterations /
+/// kPdhgPolishBudgetDivisor steps. Its target is kPdhgTight relative, together with the
+/// absolute kPrimalFeasibility / kDualFeasibility. The three numbers are the issue's.
+inline constexpr Count kPdhgPolishFirstIteration = 100;
+inline constexpr double kPdhgPolishGap = 1e-2;
+inline constexpr Count kPdhgPolishBudgetDivisor = 8;
+
 // ---------------------------------------------------------------------------------------
 // Cuts
 // ---------------------------------------------------------------------------------------
@@ -503,6 +514,14 @@ inline constexpr double kQpIpmPivotShare = 0.1;
 /// matrix refactorized, at most kQpIpmRegularizationAttempts times.
 inline constexpr double kQpIpmRegularizationRaise = 100.0;
 inline constexpr int kQpIpmRegularizationAttempts = 8;
+
+/// #893: a certificate candidate read off the QP interior point's iterates is offered to the
+/// checker first with every entry at or below this share of its largest set to zero, then
+/// as it came. The step that runs away along a ray still carries the part of the iterate
+/// that is converging (a ray (2.9e-07, 1) where the exact one is (0, 1), measured on a
+/// two-column model), and the rounded vector is the cleaner proof when it holds. Either one
+/// is reported only if the checker accepts it.
+inline constexpr double kQpIpmCertificateRounding = 1e-6;
 
 // ---- Proximal regularization of the LP interior point (#473, ipm_proximal_regularization) --
 

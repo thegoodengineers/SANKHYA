@@ -85,6 +85,7 @@
 #include "sankhya/version.hpp"
 #include "simplex/crossover.hpp"
 #include "simplex/ranging.hpp"
+#include "simplex/warm_basis.hpp"
 #include "solver_engine/solver_registry.hpp"
 #include "solver_engine/solver_selector.hpp"
 #include "util/profiler.hpp"
@@ -825,6 +826,11 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         if (use_gpu_pdhg) {
           // GPU path: auto-routed by size:pdhg-gpu, or explicit --gpu flag (both gated by the
           // VRAM check above). Multi-GPU when gpu_devices names more than one device (#295).
+          if (options.get_bool("pdhg_feasibility_polish")) {
+            logger.warning(
+                "pdhg_feasibility_polish (#483) is implemented on the CPU PDHG engine only; "
+                "the CUDA engine runs without it");
+          }
           const std::vector<int> gpu_dev_ids =
               gpu::parse_device_ids(options.get_string("gpu_devices"));
           Solution first;
@@ -963,10 +969,25 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       if (!lengths_fit) {
         logger.warning(
             "the starting basis has {} column and {} row statuses for a model with {} "
-            "columns and {} rows; ignored, solving cold",
+            "columns and {} rows; ignored, solving cold (a basis for a model whose rows or "
+            "columns changed is placed on this one by name with map_basis_by_name)",
             warm.col_status.size(), warm.row_status.size(), model.num_cols(), model.num_rows());
         solution = with_presolve(run_lp_engine, &presolve_proved_it);
       } else {
+        // #913: a basis carried across an edit that added or removed rows and columns
+        // (map_basis_by_name) has one status per entry but need not have num_rows() of them
+        // basic. It is completed here, on the model as given, rather than thrown away by
+        // the engine's seed for having the wrong count (simplex/warm_basis.hpp).
+        const WarmBasisCompletion completion = complete_warm_basis(model, &warm);
+        std::string completed;
+        if (completion.changed()) {
+          completed = fmt::format(
+              "the starting basis named {} basic entries for {} rows and was completed with "
+              "{} row logical(s), {} structural(s) parked at a bound{}",
+              completion.given_basic, model.num_rows(), completion.added_logicals,
+              completion.parked, completion.complete ? "" : ", still short of a basis");
+          logger.info("Warm start: {} (#913)", completed);
+        }
         logger.info("Warm start from the given basis; presolve bypassed");
         warm_answer = true;
         solution = want_dual ? solve_dual_simplex(model, options, logger, control, &warm)
@@ -1008,7 +1029,8 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
               "is the cold solve's answer (#883)";
           solution.message = solution.message.empty() ? note : solution.message + "; " + note;
         } else {
-          const std::string note = "warm start from the given basis, presolve bypassed";
+          std::string note = "warm start from the given basis, presolve bypassed";
+          if (!completed.empty()) note += "; " + completed;
           solution.message = solution.message.empty() ? note : solution.message + "; " + note;
         }
       }
@@ -1381,6 +1403,31 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       logger.info("Result: {} (proved during presolve)  {:.3f}s", to_string(solution.status),
                   solution.solve_seconds);
       return solution;
+    }
+    // #893: the interior point's infeasible or unbounded verdict (qp_ipm_detect_infeasibility)
+    // carries a certificate it checked against the model IT was handed, which after presolve
+    // is the reduced one. It is checked again against the caller's, as the LP path does, and
+    // when postsolve lost it (a removed row that was part of the proof gets a zero multiplier)
+    // the engine runs once more directly on the original model, and that answer is adopted
+    // only when its certificate verifies. Nothing here runs without such a verdict.
+    if (want_qp_ipm && (!solution.farkas_dual.empty() || !solution.primal_ray.empty())) {
+      verify_and_keep_certificate(&solution, model, logger);
+      if (solution.farkas_dual.empty() && solution.primal_ray.empty()) {
+        Solution retry = qp::solve_convex_qp_ipm(model, with_the_time_that_is_left(options),
+                                                 logger, control);
+        verify_and_keep_certificate(&retry, model, logger);
+        if ((retry.status == SolveStatus::kInfeasible && !retry.farkas_dual.empty()) ||
+            (retry.status == SolveStatus::kUnbounded && !retry.primal_ray.empty())) {
+          retry.message +=
+              "; the certificate did not survive postsolve, so this is the "
+              "interior point run again on the original model (#893)";
+          solution = std::move(retry);
+        } else {
+          logger.info(
+              "QP certificate retry (#893): no verified certificate; the first "
+              "answer stands");
+        }
+      }
     }
     // check_dual is false: the QP's reduced costs are c + Qx - A'y, which is not the
     // quantity Solution::recompute_quality() tests, and applying the LP dual rule here

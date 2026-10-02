@@ -239,6 +239,15 @@ Solution BranchAndBound::run() {
   if (options_.get_bool("enable_root_cuts")) {
     cut_pooling_ = options_.get_bool("mip_cut_pooling");
     cut_age_limit_ = static_cast<Count>(options_.get_int("mip_cut_age_limit"));
+    // A certificate (#518) states every node's duals over one fixed list of cut rows, and a
+    // removed row would leave a node's duals over a different one; there the pool frees aged
+    // rows in place instead, as it did before rows were removed (#497).
+    cut_removal_ = cut_pooling_ && !certificate_mode();
+    if (cut_pooling_ && certificate_mode()) {
+      logger_.info(
+          "Certificate (#518): mip_cut_pooling frees aged cut rows in place in this mode; "
+          "none is removed from the node LPs");
+    }
     tree_cut_depth_ = static_cast<Index>(options_.get_int("tree_cut_depth"));
     if (certificate_mode() && tree_cut_depth_ > 0) {
       // A tree round separates with the objective row free and may add rows mid-tree; the
@@ -510,6 +519,12 @@ Solution BranchAndBound::run() {
     // Moved, not copied: this node will not be solved twice, and the open list must not
     // hold a basis per closed node.
     current_warm_ = std::move(nodes_[static_cast<std::size_t>(node_index)].warm);
+    // With cut rows removed and appended since the node was stored (#497), its basis is
+    // brought onto the rows of the moment.
+    if (auto& cuts = nodes_[static_cast<std::size_t>(node_index)].warm_cuts; cuts) {
+      remap_warm_start(&current_warm_, *cuts);
+      cuts.reset();
+    }
     debug_node_ = node_index;
     const bool debug_inside = debug_node_contains();  // #500: false with no debug solution
 
@@ -527,17 +542,24 @@ Solution BranchAndBound::run() {
       continue;
     }
 
+    // The node LP's size, before the pool or a cut round changes it (#497's measure).
+    const Count lp_rows = working_.num_rows();
+    node_lp_rows_sum_ += static_cast<double>(lp_rows);
+    ++node_lp_solves_;
+    node_lp_rows_max_ = std::max(node_lp_rows_max_, lp_rows);
     Solution relaxation = [&] {
       ProfileScope timed(logger_.profiler(), "node LP", ProfileMode::kDetailed);
       return solve_node();
     }();
     if (debug_inside) debug_after_node_lp(relaxation);
 
-    // The cut pool (#497): a freed cut row the node's point violates is re-imposed and the
-    // node re-solved, until no freed row is violated. Each pass re-imposes at least one row
-    // and none is freed again inside the loop, so it ends within the pool's size.
+    // The cut pool (#497): a pooled cut the node's point violates is put back in force (its
+    // row appended again, or under a certificate its right-hand side restored) and the node
+    // re-solved, until no pooled cut is violated. Each pass brings back at least one cut and
+    // none is aged out again inside the loop, so it ends within the pool's size.
     if (cut_pooling_ && relaxation.status == SolveStatus::kOptimal) {
-      while (reactivate_pooled_cuts(&relaxation)) {
+      while (cut_removal_ ? readd_pooled_cuts(&relaxation)
+                          : reactivate_pooled_cuts(&relaxation)) {
         if (debug_inside) debug_after_node_lp(relaxation);
       }
     }
@@ -633,7 +655,7 @@ Solution BranchAndBound::run() {
     if (node_index != 0 && node.depth <= tree_cut_depth_ && !quadratic_) {
       tree_cut_round(node.depth, &relaxation);
     }
-    age_cut_rows(relaxation);
+    age_cut_rows(&relaxation);
 
     // Node bound in minimise space, excluding the offset (added back on report). Stored and
     // ordered raw; can_prune() and the gap test round it up to the next value an integer
@@ -816,6 +838,7 @@ Solution BranchAndBound::run() {
     down.parent_lp_bound = node_bound;
     down.depth = child_depth;
     down.warm = children_warm;
+    down.warm_cuts = cut_layout();  // #497: null unless cut rows are removed
     down.fraction = down_fraction;
     down.estimate = child_estimate;
 
@@ -827,6 +850,7 @@ Solution BranchAndBound::run() {
     up.parent_lp_bound = node_bound;
     up.depth = child_depth;
     up.warm = children_warm;
+    up.warm_cuts = down.warm_cuts;
     up.fraction = up_fraction;
     up.estimate = child_estimate;
 
@@ -932,6 +956,7 @@ Solution BranchAndBound::run() {
     solution.symmetry_generators = symmetry_generators_;
     record_safe_bounds(&solution);
     record_conflicts(&solution);
+    record_cut_counts(&solution);
     solution.solve_seconds = timer_.elapsed_seconds();
     report_root(&solution);
     return solution;
@@ -945,6 +970,7 @@ Solution BranchAndBound::run() {
   solution.symmetry_generators = symmetry_generators_;
   record_safe_bounds(&solution);
   record_conflicts(&solution);
+  record_cut_counts(&solution);
   solution.solve_seconds = timer_.elapsed_seconds();
   report_root(&solution);
 
@@ -971,7 +997,15 @@ Solution BranchAndBound::run() {
     logger_.info("Tree cuts: {} rounds below the root, {} rows added, {} aged out",
                  tree_cut_rounds_, tree_cuts_applied_, cut_rows_aged_out_);
   }
-  if (cut_pooling_) {
+  if (cut_removal_) {
+    logger_.info(
+        "Cut pool (#497): {} rows removed by age, {} appended again when violated; node LPs "
+        "of {:.1f} rows on average, {} at most; remapping stored bases demoted {} basic "
+        "column(s) and dropped {} basis(es)",
+        cut_rows_removed_, cut_rows_readded_,
+        node_lp_solves_ > 0 ? node_lp_rows_sum_ / static_cast<double>(node_lp_solves_) : 0.0,
+        node_lp_rows_max_, warm_columns_demoted_, warm_starts_dropped_);
+  } else if (cut_pooling_) {
     logger_.info("Cut pool (#497): {} rows freed by age, {} re-imposed when violated",
                  cut_rows_aged_out_, cuts_reactivated_);
   }

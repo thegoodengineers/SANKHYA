@@ -257,6 +257,7 @@ set(SANKHYA_CORE_SOURCES
   src/core/scenarios.cpp
   src/core/iis.cpp
   src/core/model.cpp
+  src/core/basis_map.cpp
   src/core/resource_limits.cpp
   src/core/solve.cpp
   src/core/deterministic_mode.cpp
@@ -305,6 +306,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/mir_cmir.cpp
   src/mip/branch_and_bound_checkpoint.cpp
   src/mip/branch_and_bound_cuts.cpp
+  src/mip/branch_and_bound_cut_pool.cpp
   src/mip/branch_and_bound_debug.cpp
   src/mip/debug_solution.cpp
   src/mip/branch_and_bound_root_loop.cpp
@@ -368,6 +370,7 @@ set(SANKHYA_CORE_SOURCES
   src/pdhg/pdhg.cpp
   src/pdhg/pdhg_evaluate.cpp
   src/pdhg/pdhg_certificate.cpp
+  src/pdhg/pdhg_feasibility_polish.cpp
   src/pdhg/pdhg_halpern.cpp
   src/pdhg/batch_pdhg.cpp
   src/pdhg/batch_pdhg_cpu.cpp
@@ -380,6 +383,7 @@ set(SANKHYA_CORE_SOURCES
   src/simplex/dual_simplex.cpp
   src/simplex/primal_simplex.cpp
   src/simplex/crossover.cpp
+  src/simplex/warm_basis.cpp
   src/simplex/simplex_push.cpp
   src/simplex/simplex_report.cpp
   src/simplex/ranging.cpp

@@ -1702,7 +1702,13 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   // two columns are still alive here and the remap is total.
   reduced.hessian.reset(reduced_cols, reduced_cols);
   bool hessian_column_lost = false;
-  for (Index j = 0; j < model.hessian.num_cols() && !hessian_column_lost; ++j) {
+  // An LP's Hessian has no entries, and nothing makes its stored dimensions follow the
+  // columns: a caller that adds or removes columns can leave an empty Hessian of the old
+  // width, which Model::validate() accepts because it checks the shape only when there are
+  // entries. Walking that stale width read past new_col_index (#913's random-edit test under
+  // ASan), so an entry-free Hessian is not walked at all.
+  const Index hessian_cols = model.has_quadratic_objective() ? model.hessian.num_cols() : 0;
+  for (Index j = 0; j < hessian_cols && !hessian_column_lost; ++j) {
     const ColumnView column = model.hessian.column(j);
     const Index mapped_col = new_col_index[static_cast<std::size_t>(j)];
     for (Index k = 0; k < column.size; ++k) {
@@ -1837,6 +1843,10 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.cuts_applied = reduced.cuts_applied;
   solution.cut_rows_aged_out = reduced.cut_rows_aged_out;
   solution.cuts_reactivated = reduced.cuts_reactivated;
+  solution.cut_rows_removed = reduced.cut_rows_removed;
+  solution.cut_rows_readded = reduced.cut_rows_readded;
+  solution.node_lp_rows_mean = reduced.node_lp_rows_mean;
+  solution.node_lp_rows_max = reduced.node_lp_rows_max;
   solution.cut_filter_report = reduced.cut_filter_report;
   solution.kkt_1e4_seconds = reduced.kkt_1e4_seconds;
   solution.kkt_1e6_seconds = reduced.kkt_1e6_seconds;
@@ -1858,6 +1868,7 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.conflicts_learned_cutoff = reduced.conflicts_learned_cutoff;
   solution.conflict_nodes_pruned = reduced.conflict_nodes_pruned;
   solution.conflict_tightenings = reduced.conflict_tightenings;
+  solution.clique_cuts_generated = reduced.clique_cuts_generated;
   // The root bounds are objective values of the reduced model, whose objective_offset
   // carries the constant the removed columns contributed, so they are already in the
   // original model's units (#221).
