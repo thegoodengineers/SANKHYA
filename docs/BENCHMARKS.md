@@ -2593,6 +2593,8 @@ Measured on SANKHYA commit `348d60ff` against HiGHS 1.15.1 (highspy, separate pr
 | `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 |
 | **all** | 126 | 105 / 0 / 21 | 29 / 90 / 7 |
 
+**Reported `optimal` and wrong**, the headline count (#750): sankhya **0**, highs **31**.
+
 **sankhya, failed** (21):
 
 - `scaled_80bau3b`: no verdict: time_limit (stopped at the time limit of 29.9981s after 30.00s, 61479 iterations, 0 nodes; route: the scaled attempt returned time_l)

@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import csv
 import json
 import sys
 import tempfile
@@ -88,6 +89,24 @@ def main() -> int:
     check(g("infeasible", None, "infeasible_or_unbounded", None, 1, "")[0] == "failed",
           "infeasible_or_unbounded is not a verdict")
     check("_No `stress-*.csv`" in stress_doc.section(None), "the doc section without a CSV")
+    # #750's headline: a wrong `infeasible` is not a wrong `optimal`.
+    with tempfile.TemporaryDirectory() as tmp:
+        sample = Path(tmp) / "stress-0000000.csv"
+        columns = ["instance", "family", "solver", "solver_version", "status", "verdict",
+                   "reason", "git_commit", "machine"]
+        with sample.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=columns)
+            writer.writeheader()
+            for solver, status, verdict in (("sankhya", "optimal", "correct"),
+                                            ("highs", "optimal", "wrong"),
+                                            ("highs", "infeasible", "wrong")):
+                writer.writerow({"instance": f"m-{solver}-{status}", "family": "f",
+                                 "solver": solver, "solver_version": "1", "status": status,
+                                 "verdict": verdict, "reason": "r", "git_commit": "0000000",
+                                 "machine": "m"})
+        text = stress_doc.section(sample)
+        check("sankhya **0**, highs **1**" in text,
+              "the wrong-optimal headline counts only answers reported optimal", text[-200:])
     print("ALL TESTS PASSED" if FAILURES == 0 else f"{FAILURES} check(s) FAILED")
     return 1 if FAILURES else 0
 
