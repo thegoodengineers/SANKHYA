@@ -1013,6 +1013,18 @@ bool InteriorPoint::factorize() {
                                            "normal equations",
                                            system.num_nonzeros()));
     }
+    // #907: cuDSS's own analyze() does not consult the deadline once it is called - a single
+    // call on a system the size of refinery_year's (11.1M nonzeros) can run for thousands of
+    // seconds with no way to interrupt it from the host, so the only lever here is not
+    // STARTING it once the set-up's own share of the time limit (ordering_deadline_, #357) is
+    // already spent - the same share the CPU ordering below is already held to. Declining
+    // drops to the CPU path immediately rather than paying for an analysis whose result would
+    // be thrown away by setup_stop() failing it anyway.
+    if (device_ != nullptr && setup_stop()) {
+      drop_device(
+          "the set-up's share of the time limit was spent before cuDSS analysis could "
+          "start (#907)");
+    }
     if (device_ != nullptr) {
       ProfileScope timed(profiler, "cudss analysis", ProfileMode::kDetailed);
       std::string reason;
@@ -1239,9 +1251,16 @@ bool InteriorPoint::factor_normal(const SparseLdl::ShouldStop& stop) {
 
 void InteriorPoint::normal_solve(double* v) {
   if (device_factored_) {
-    std::string reason;
-    if (device_->solve(v, &reason)) return;
-    drop_device(reason);
+    // #907: the same reasoning as the analyze() guard above - a solve already running late
+    // cannot be interrupted, so skip it rather than start one, and fall to the CPU path below
+    // exactly as a cuDSS failure already does.
+    if (should_stop_ && should_stop_()) {
+      drop_device("the deadline was already passed before a cuDSS solve could start (#907)");
+    } else {
+      std::string reason;
+      if (device_->solve(v, &reason)) return;
+      drop_device(reason);
+    }
     // The same matrix on the CPU. A factorization stopped by the deadline leaves no factor
     // to solve with, and a non-finite direction is what the loop already recovers from.
     ++factorizations_;
