@@ -242,9 +242,11 @@ a 8.6e-15 gap and reported `numerical_error`, a status defect filed in the same 
 this set the interior point is bound by its ordering budget, not by memory.
 
 **Three more sets, run overnight on `main` at `65eecbc`, alone on the machine on mains (#596).**
-Kennington: **15 of 16** matched and verified at 600 s (`bench/results/kennington-full-65eecbc.csv`;
-`pds-20` ends `feasible` at 418 s, the interior point's answer standing without crossover with
-its complementarity 1.5e-6 above the verifier's 1e-6). Netlib's infeasible set: **13 of 29**
+Kennington: **16 of 16** matched and verified at 600 s on `main` at `9463fd7`
+(`bench/results/kennington-full-9463fd7.csv`, #749): `pds-20` now ends `optimal` and verified in
+421 s, where at `65eecbc` it ended `feasible` at 418 s, its interior point's answer standing
+without crossover at a complementarity of 1.5e-6 against the verifier's 1e-6 (the crossover's
+time budget was discounted twice until #607). Netlib's infeasible set: **13 of 29**
 infeasible with a Farkas certificate the verifier accepts, the other 16 correct `infeasible`
 verdicts without one (12 from the dual simplex and phase 1, 3 from presolve) and `cplex2` a
 `numerical_error`; no wrong verdict (`bench/results/netlib-infeasible-65eecbc.csv`). On `main`
