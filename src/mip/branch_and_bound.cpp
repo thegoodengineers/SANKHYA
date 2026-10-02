@@ -264,11 +264,14 @@ Solution BranchAndBound::run() {
   // Phase 1: validate and install a complete user-supplied initial solution.
   if (control_ && control_->has_start_solution()) {
     if (offer_incumbent(control_->start_solution)) {
-      logger_.info("Accepted user-supplied starting solution as initial incumbent: objective {:.6g}",
-                   incumbent_internal_);
+      logger_.info(
+          "Accepted user-supplied starting solution as initial incumbent: objective {:.6g}",
+          incumbent_internal_);
     } else {
       solution.status = SolveStatus::kModelError;
-      solution.message = "The user-supplied starting solution is either infeasible or not an integer assignment.";
+      solution.message =
+          "The user-supplied starting solution is either infeasible or not an integer "
+          "assignment.";
       return solution;
     }
   }

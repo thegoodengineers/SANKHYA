@@ -72,9 +72,7 @@ class SolveControl {
   /// feasible for the original model. If supplied, it will be validated by the engine and
   /// rejected with a diagnostic if invalid.
   std::vector<double> start_solution;
-  [[nodiscard]] bool has_start_solution() const noexcept {
-    return !start_solution.empty();
-  }
+  [[nodiscard]] bool has_start_solution() const noexcept { return !start_solution.empty(); }
 
   /// How often the progress callback is invoked, at most: the first check of a solve
   /// always calls it, and after that one call per interval.

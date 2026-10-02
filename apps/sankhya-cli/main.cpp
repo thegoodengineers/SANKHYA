@@ -433,7 +433,8 @@ int main(int argc, char** argv) {
     }
     if (!mip_start_path.empty()) {
       std::string error;
-      if (!sankhya::io::read_solution_point(mip_start_path, model, &control.start_solution, &error)) {
+      if (!sankhya::io::read_solution_point(mip_start_path, model, &control.start_solution,
+                                            &error)) {
         fmt::print(stderr, "error: {}\n", error);
         return 3;
       }

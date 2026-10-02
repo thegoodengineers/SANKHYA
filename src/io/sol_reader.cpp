@@ -208,7 +208,8 @@ bool read_solution_point(const std::string& path, const Model& model,
         throw std::invalid_argument("not a full number");
       }
     } catch (...) {
-      *error = reader.error_at(fmt::format("invalid value '{}' for column '{}'", tokens[0], name));
+      *error =
+          reader.error_at(fmt::format("invalid value '{}' for column '{}'", tokens[0], name));
       return false;
     }
 
@@ -232,8 +233,8 @@ bool read_solution_point(const std::string& path, const Model& model,
   }
   if (unknown > 0) {
     *error = fmt::format(
-        "{}: {} column(s) are missing values: the file carries no complete assignment",
-        path, unknown);
+        "{}: {} column(s) are missing values: the file carries no complete assignment", path,
+        unknown);
     return false;
   }
   return true;
