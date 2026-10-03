@@ -48,6 +48,7 @@ add_executable(sankhya_tests
   unit/test_ldl_supernodal.cpp
   unit/test_ipm.cpp
   unit/test_ipm_proximal.cpp
+  unit/test_ipm_hsd.cpp
   unit/test_ipm_centrality.cpp
   unit/test_ipm_cudss.cpp
   unit/test_ipm_time_limit.cpp

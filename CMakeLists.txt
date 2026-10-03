@@ -372,6 +372,9 @@ set(SANKHYA_CORE_SOURCES
   src/ipm/dense_columns.cpp
   src/ipm/column_side.cpp
   src/ipm/centrality.cpp
+  src/ipm/hsd.cpp
+  src/ipm/hsd_certificate.cpp
+  src/ipm/hsd_run.cpp
   src/ipm/ipm.cpp
   src/ipm/model_space.cpp
   src/ipm/proximal_system.cpp
