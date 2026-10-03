@@ -15,8 +15,18 @@
 // A D A^T. It is the test the interior point itself applies (find_dense_columns in
 // src/ipm/dense_columns.cpp, at the default ipm_dense_column_factor), so the feature counts
 // the columns the solver would treat as dense.
+//
+// The symbolic Cholesky fill (#477) is the size of the factor the interior point would build,
+// from the elimination tree of the normal equations under the approximate minimum degree
+// ordering (Davis, "Direct Methods for Sparse Linear Systems", SIAM 2006, ch. 4; Amestoy,
+// Davis and Duff, SIAM J. Matrix Anal. Appl. 17, 1996), computed by the same SparseLdl
+// analyze() the interior point calls, on A A^T without the dense columns it removes. It is
+// NOT part of the one-pass features: it is computed only when asked for (the learned
+// selection and `sankhya info --features`), and only under the fixed budgets below, so its
+// cost is bounded by work, never by a clock, and the same model always gives the same value.
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include "sankhya/model.hpp"
@@ -38,16 +48,36 @@ struct EngineFeatures {
   double fixed_column_share = 0.0;  ///< finite lower == upper
   /// Pattern-only upper bound on the nonzeros of the normal-equations matrix A A^T: each
   /// column j contributes an outer product of c_j^2 entries, overlaps counted twice. An
-  /// upper bound, not the exact count and not the Cholesky fill, both of which need a
-  /// symbolic pass this function deliberately does not make.
+  /// upper bound, not the exact count and not the Cholesky fill; the fill is
+  /// cholesky_nonzeros below, from a symbolic pass made only on request.
   double normal_equations_nnz_bound = 0.0;
   /// normal_equations_nnz_bound / nnz: how much larger than A itself the normal equations
   /// can be. Large on models with dense columns, near 1 on network-like models.
   double normal_equations_ratio = 0.0;
+  /// Nonzeros of the Cholesky factor L of A A^T (diagonal included), the dense columns left
+  /// out as the interior point leaves them out, from a symbolic pass; -1 when not computed.
+  /// When the normal equations or the factor pass their budget the count stops there and
+  /// `cholesky_capped` is set: the value is then a LOWER bound, the budget itself.
+  double cholesky_nonzeros = -1.0;
+  /// cholesky_nonzeros / nnz(A): the factor's size against the matrix's. Near 1 on a
+  /// network or staircase, hundreds on an expander. -1 when not computed.
+  double cholesky_fill_ratio = -1.0;
+  bool cholesky_capped = false;
 };
 
-/// Compute the features of `model`. The matrix must be finalized.
-[[nodiscard]] EngineFeatures compute_engine_features(const Model& model);
+/// Budgets of the symbolic pass, in nonzeros. The normal equations are counted first
+/// (predict_normal_nonzeros, which stops counting at the cap) and assembled only under
+/// kFeatureNormalBudget; the ordering and the factor pattern are stopped by SparseLdl's own
+/// budgets. 2e6 normal entries and 1e7 factor entries hold every Netlib model's factor
+/// (dfl001, the largest fill there, is under both) at a few tens of MB; past them the
+/// feature says "at least this", which is all a choice between engines needs.
+inline constexpr std::int64_t kFeatureNormalBudget = 2000000;
+inline constexpr std::int64_t kFeatureFactorBudget = 10000000;
+
+/// Compute the features of `model`. The matrix must be finalized. With `symbolic` the
+/// Cholesky fill is computed too (the pass described above); without it, the O(m + n + nnz)
+/// features only, and the two cholesky_* fields stay -1.
+[[nodiscard]] EngineFeatures compute_engine_features(const Model& model, bool symbolic = false);
 
 /// One-line JSON object with every field above, keys equal to the field names. Doubles are
 /// printed with 17 significant digits so a reader gets the exact value back.

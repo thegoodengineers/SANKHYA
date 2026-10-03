@@ -2,15 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 """Training data for the learned engine selection (#477): generated instances, every engine.
 
-    python bench/runners/engine_selection_data.py --time-limit 60
+    python bench/runners/engine_selection_data.py --time-limit 30
     python bench/runners/engine_selection_data.py --list          # the split, nothing solved
 
 WHY GENERATED INSTANCES. Every public set we report (Netlib, Kennington, Mittelmann, MIPLIB,
 Maros-Meszaros) must stay out of training, or the accuracy the tree reports on them would be
-an accuracy on its own training data. The instances here come from our three generators -
-generate_large_lp.py (random and staircase sparsity), generate_refinery_lp.py and
-make_scaling_instance.py - over a grid of shapes and seeds that is fixed in this file, so the
-split is committed as code. The split is by SHAPE, not by seed: every seed of a shape in
+an accuracy on its own training data. The instances here come from our four generators -
+generate_large_lp.py (random and staircase sparsity), generate_refinery_lp.py,
+make_scaling_instance.py and generate_transport_lp.py - over a grid of shapes and seeds that
+is fixed in this file, so the split is committed as code; engine_selection_cart.py also
+refuses to train when a training instance has the sha256 of an instance a reported benchmark
+CSV ran, and writes the split out as instance lists (bench/engine_selection/). The split is by SHAPE, not by seed: every seed of a shape in
 HELD_OUT_SHAPES is held out and no seed of it is trained on. A seed changes the numbers, not
 the shape, so for most generators it leaves every feature the tree reads (rows, columns,
 nonzeros, the bound shares) unchanged; holding out seeds would put an exact feature twin of
@@ -47,27 +49,41 @@ RUNNERS = REPO_ROOT / "bench" / "runners"
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
 ENGINES = ["dual-simplex", "ipm", "pdhg"]
-SEEDS = range(1, 9)
+SEEDS = range(1, 6)
 
-# (family, generator, arguments) with {seed} and {out} filled in per instance.
+# (family, generator, arguments) with {seed} and {out} filled in per instance. The grid spans
+# the regimes the probe runs for #477 found each engine winning on this machine: sparse
+# models of a few thousand rows (the dual simplex), dense ones with tens of entries per
+# column (PDHG, then the interior point on the staircase), multi-period refineries from
+# about 4,000 rows (the interior point) and large transportation models (PDHG).
 SHAPES = []
-for rows, cols, per_col in ((300, 600, 4), (1000, 1000, 5), (2000, 4000, 3), (4000, 2000, 6)):
+for rows, cols, per_col in ((300, 600, 4), (1000, 1000, 5), (2000, 4000, 3), (4000, 2000, 6),
+                            (8000, 4000, 4), (1000, 4000, 40), (2000, 2000, 60)):
     for structure in ("random", "staircase"):
         SHAPES.append((f"{structure}-{rows}x{cols}k{per_col}", "generate_large_lp.py",
                        ["--rows", str(rows), "--cols", str(cols), "--nnz-per-col",
                         str(per_col), "--structure", structure, "--periods", "10"]))
-for periods, crudes in ((4, 10), (12, 20), (26, 30)):
+SHAPES.append(("random-1500x3000k50", "generate_large_lp.py",
+               ["--rows", "1500", "--cols", "3000", "--nnz-per-col", "50", "--structure",
+                "random", "--periods", "10"]))
+for periods, crudes in ((4, 10), (12, 20), (26, 30), (52, 30), (100, 30)):
     SHAPES.append((f"refinery-t{periods}c{crudes}", "generate_refinery_lp.py",
                    ["--periods", str(periods), "--crudes", str(crudes)]))
-for periods, goods in ((50, 2), (200, 3)):
+for periods, goods in ((50, 2), (200, 3), (500, 3)):
     SHAPES.append((f"scaling-t{periods}g{goods}", "make_scaling_instance.py",
                    ["--periods", str(periods), "--goods", str(goods)]))
+for sources, sinks, arcs, window in ((300, 600, 4, 10), (1000, 2000, 5, 20),
+                                     (3000, 6000, 6, 30)):
+    SHAPES.append((f"transport-s{sources}d{sinks}a{arcs}w{window}", "generate_transport_lp.py",
+                   ["--sources", str(sources), "--sinks", str(sinks), "--arcs", str(arcs),
+                    "--window", str(window)]))
 
-# One shape per generator (both sparsity structures of generate_large_lp.py), each between
-# trained shapes of its generator in size, so the held-out set asks the tree to interpolate
-# to shapes it has not seen rather than to recall the ones it has.
-HELD_OUT_SHAPES = frozenset({"random-1000x1000k5", "staircase-2000x4000k3", "refinery-t12c20",
-                             "scaling-t200g3"})
+# One shape per generator, and one dense one, each between trained shapes of its generator
+# in size, so the held-out set asks the tree to interpolate to shapes it has not seen rather
+# than to recall the ones it has.
+HELD_OUT_SHAPES = frozenset({"random-1000x1000k5", "random-1500x3000k50",
+                             "staircase-2000x4000k3", "refinery-t52c30", "scaling-t200g3",
+                             "transport-s1000d2000a5w20"})
 
 
 def instances():
@@ -83,7 +99,8 @@ COLUMNS = (["instance", "sha256", "split", "family", "seed", "features_json", "r
            + ["rows", "columns", "nonzeros", "density", "max_column_count", "dense_columns",
               "rows_per_column", "equality_row_share", "integer_share", "boxed_column_share",
               "free_column_share", "fixed_column_share", "normal_equations_nnz_bound",
-              "normal_equations_ratio"]
+              "normal_equations_ratio", "cholesky_nonzeros", "cholesky_fill_ratio",
+              "cholesky_capped"]
            + [f"{e}_{k}" for e in ENGINES
               for k in ("status", "seconds", "verified", "objective", "iterations")]
            + ["time_limit", "git_commit", "machine", "timestamp_utc"])
@@ -124,7 +141,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--binary", type=Path, default=REPO_ROOT / "build" / "sankhya")
-    parser.add_argument("--time-limit", type=float, default=60.0)
+    parser.add_argument("--time-limit", type=float, default=30.0)
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--list", action="store_true", help="print the split and stop")
     args = parser.parse_args()
@@ -159,6 +176,10 @@ def main() -> int:
                    "rule_table": features.pop("rule_table"), "rule": features.pop("rule"),
                    "time_limit": f"{args.time_limit:g}", "git_commit": commit,
                    "machine": machine, "timestamp_utc": when}
+            # The tree compiled into this binary is not what is being trained.
+            for key in ("learned_tree", "learned_path", "learned_in_domain"):
+                features.pop(key, None)
+            features["cholesky_capped"] = int(bool(features["cholesky_capped"]))
             row.update(features)
             for engine in ENGINES:
                 result = solve(args.binary, model, engine, args.time_limit, scratch)

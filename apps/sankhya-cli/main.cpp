@@ -23,6 +23,7 @@
 
 #include "core/engine_features.hpp"
 #include "core/engine_selection.hpp"
+#include "core/engine_selection_tree.hpp"
 #include "diagnose/diagnose.hpp"
 #include "solver_engine/engine_listing.hpp"
 #include "solver_engine/solver_registry.hpp"
@@ -286,8 +287,9 @@ int main(int argc, char** argv) {
   info_cmd->add_option("--option", option_assignments, "Set a solver option (name=value)");
   bool info_features = false;
   info_cmd->add_flag("--features", info_features,
-                     "Print the engine-selection features (#477) and the rule table's "
-                     "choice as one JSON line instead of the summary");
+                     "Print the engine-selection features (#477), the rule table's choice "
+                     "and the learned tree's choice and path as one JSON line instead of "
+                     "the summary");
 
   CLI::App* diagnose_cmd = app.add_subcommand(
       "diagnose", "Analyse a model before solving: structure, numerics, presolve, guidance");
@@ -363,12 +365,25 @@ int main(int argc, char** argv) {
       // The rule table's answer beside the features, from the same select_engine() that
       // algorithm=auto calls (no warm start, no GPU), so the trainer compares against the
       // rule the solver really runs rather than a copy of its thresholds.
-      const sankhya::EngineSelection rule = sankhya::select_engine(model, options, false);
-      std::string json =
-          sankhya::format_engine_features_json(sankhya::compute_engine_features(model));
+      // The table itself, whatever algorithm_selection says.
+      sankhya::Options rules_only = options;
+      rules_only.set_string("algorithm_selection", "rules");
+      const sankhya::EngineSelection rule = sankhya::select_engine(model, rules_only, false);
+      // With the symbolic Cholesky pass the learned tree reads, and the tree's own answer
+      // and path, whether or not the model is inside the range it would be consulted on.
+      const sankhya::EngineFeatures features =
+          sankhya::compute_engine_features(model, /*symbolic=*/true);
+      const sankhya::LearnedTreeChoice learned = sankhya::learned_engine_tree(features);
+      const sankhya::LearnedTreeDomain domain = sankhya::learned_tree_domain();
+      const bool in_domain =
+          features.rows <= domain.max_rows && features.nonzeros <= domain.max_nonzeros;
+      std::string json = sankhya::format_engine_features_json(features);
       json.pop_back();
-      fmt::print("{}, \"rule_table\": \"{}\", \"rule\": \"{}\"}}\n", json, rule.algorithm,
-                 rule.rule);
+      fmt::print(
+          "{}, \"rule_table\": \"{}\", \"rule\": \"{}\", \"learned_tree\": \"{}\", "
+          "\"learned_path\": \"{}\", \"learned_in_domain\": {}}}\n",
+          json, rule.algorithm, rule.rule, learned.algorithm, learned.path,
+          in_domain ? "true" : "false");
       return 0;
     }
     print_model_info(model);

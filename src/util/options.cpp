@@ -143,6 +143,19 @@ const std::vector<OptionSpec>& Options::registry() {
                  // OptionsAndRegistry.AlgorithmChoicesAreAutoPlusTheRegistrysAlgorithmNames
                  // fails the moment the two disagree (#297).
                  {"auto", "simplex", "dual-simplex", "pdhg", "ipm"}});
+    s.push_back({"algorithm_selection",
+                 OptionType::String,
+                 std::string("rules"),
+                 "How algorithm=auto chooses the LP engine when no starting basis is given: "
+                 "rules (default; the hand-written rule table, #284) or learned (#477: a "
+                 "depth-4 decision tree trained on generated instances disjoint from every "
+                 "reported set, src/core/engine_selection_tree.cpp, consulted only inside "
+                 "the row range it was trained on and only without a GPU; outside it the "
+                 "rule table decides and says why). The answer's engine_reason prints the "
+                 "path the tree took. Off until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {"rules", "learned"}});
     s.push_back({"nonconvex",
                  OptionType::String,
                  std::string("refuse"),
