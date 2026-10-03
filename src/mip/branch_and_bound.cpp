@@ -553,7 +553,10 @@ Solution BranchAndBound::run() {
       // sit below the incumbent once every OTHER branch has been explored) would fire this
       // check before the loop ever reaches it to prune it honestly.
       if (gap > 0.0) {
-        const double relative = gap / std::max(1.0, std::fabs(incumbent_internal_));
+        // Relative to the objective the user sees, offset included: the internal value
+        // leaves the constant out, and on mcsched that made a 1.23e-4 gap read 9.9e-5 and
+        // stop as optimal under a 1e-4 target the verifier then rejected (#504).
+        const double relative = gap / std::max(1.0, std::fabs(reported(incumbent_internal_)));
         if (gap <= absolute_gap_target_ || relative <= relative_gap_target_) {
           // Meeting the gap target is what every MIP solver means by "optimal": the
           // incumbent is within the requested tolerance of the best any open node can
@@ -999,9 +1002,10 @@ Solution BranchAndBound::run() {
     if (nodes_explored_ % 20 == 1 || nodes_explored_ < 5) {
       const double incumbent_report =
           have_incumbent_ ? reported(incumbent_internal_) : kInfinity;
-      const double gap = have_incumbent_ ? std::fabs(incumbent_internal_ - best_open_bound) /
-                                               std::max(1.0, std::fabs(incumbent_internal_))
-                                         : kInfinity;
+      const double gap = have_incumbent_
+                             ? std::fabs(incumbent_internal_ - best_open_bound) /
+                                   std::max(1.0, std::fabs(reported(incumbent_internal_)))
+                             : kInfinity;
       logger_.node(nodes_explored_, static_cast<Count>(open_.size()), incumbent_report,
                    reported(best_open_bound), gap, timer_.elapsed_seconds());
     }
