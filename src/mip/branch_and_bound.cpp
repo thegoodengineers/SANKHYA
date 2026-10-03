@@ -1002,9 +1002,10 @@ Solution BranchAndBound::run() {
     if (nodes_explored_ % 20 == 1 || nodes_explored_ < 5) {
       const double incumbent_report =
           have_incumbent_ ? reported(incumbent_internal_) : kInfinity;
-      const double gap = have_incumbent_ ? std::fabs(incumbent_internal_ - best_open_bound) /
-                                               std::max(1.0, std::fabs(reported(incumbent_internal_)))
-                                         : kInfinity;
+      const double gap = have_incumbent_
+                             ? std::fabs(incumbent_internal_ - best_open_bound) /
+                                   std::max(1.0, std::fabs(reported(incumbent_internal_)))
+                             : kInfinity;
       logger_.node(nodes_explored_, static_cast<Count>(open_.size()), incumbent_report,
                    reported(best_open_bound), gap, timer_.elapsed_seconds());
     }
