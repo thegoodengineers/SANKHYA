@@ -56,6 +56,15 @@ def main() -> int:
 
         text = miplib_ab_doc.tier2_section(d / "on.csv")
         assert "`b` seed 1 (feasible)" in text and "`b` seed 2 (feasible)" in text, text
+        assert "verifier rejected" not in text, text
+        claimed = [dict(run("a", 0, True, True, 0.1), independently_verified=1, relative_gap=""),
+                   dict(run("c", 1, True, True, 0.1), independently_verified=0,
+                        relative_gap=1.2269e-4)]
+        write(d / "t2.csv", claimed)
+        write(d / "summary-t2.csv", [{"time_limit": 300}])
+        text = miplib_ab_doc.tier2_section(d / "t2.csv")
+        assert "verifier rejected" in text and "`c` seed 1 (relative gap 0.000123)" in text, text
+        assert "`a` seed 0 (relative" not in text, text
     print("test_miplib_ab_doc: ok")
     return 0
 
