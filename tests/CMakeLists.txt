@@ -98,6 +98,7 @@ add_executable(sankhya_tests
   unit/test_qp.cpp
   unit/test_qp_device.cpp
   unit/test_convexity_sparse.cpp
+  unit/test_convexity_tolerance.cpp
   unit/test_branch_and_bound.cpp
   unit/test_mip_components.cpp
   unit/test_node_selection.cpp
