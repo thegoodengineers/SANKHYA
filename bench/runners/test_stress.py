@@ -8,11 +8,14 @@
 2. Each adversarial answer is what the generator says: the known optimum is feasible and
    attains the stated objective, checked with the independent verifier's own MPS reader.
 3. grade() calls a verdict wrong, correct or failed by the rule stress.py documents.
+4. The runner grades SANKHYA's objective as reported, objective-row constant included, as
+   the reference includes it (#792, scaled_e226).
 """
 from __future__ import annotations
 
 import csv
 import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -44,6 +47,41 @@ def feasible(model, x: list[float]) -> bool:
             activity[i] += v * x[j]
     return all(model.row_lower[i] - 1e-9 <= a <= model.row_upper[i] + 1e-9
                for i, a in enumerate(activity))
+
+
+def objective_row_constant(committed: dict) -> None:
+    """#792: e226's objective row carries RHS -7.113, a constant of +7.113. The reference adds
+    it to Koch's optimum and the CLI's stats JSON reports the objective with it, so the
+    runner must grade the reported objective as it is. Subtracting the constant again made
+    a correct -11.6389 read as -18.7519 and graded wrong. The CLI is replaced by a stand-in
+    that writes the stats JSON the real one wrote for scaled_e226 at 348d60ff."""
+    reference = float(committed["scaled_e226"]["expected_objective"])
+    reported, constant = -11.638929066370544, 7.113
+
+    def cli(command, **_):
+        stats = Path(command[command.index("--stats") + 1])
+        stats.write_text(json.dumps({"model": {"objective_offset": constant},
+                                     "result": {"status": "optimal", "objective": reported}}))
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    real = stress.subprocess.run
+    stress.subprocess.run = cli
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            got = stress.run_sankhya(Path("sankhya"), Path(tmp) / "scaled_e226.mps",
+                                     Path(tmp) / "scaled_e226.sol", 60.0)
+    finally:
+        stress.subprocess.run = real
+    check(got["objective"] == reported,
+          "the runner grades the objective as reported, constant included", repr(got))
+    check(stress.grade("optimal", reference, got["status"], got["objective"], 1, "")[0]
+          == "correct", "scaled_e226 at -11.6389 is graded correct against its reference")
+    if (gen.NETLIB / "e226.mps").exists():
+        koch = json.loads((gen.NETLIB / "koch_exact.json").read_text())["instances"]
+        offset = parse_mps(gen.NETLIB / "e226.mps").objective_offset
+        check(offset == constant and abs(float(koch["e226"]["exact_objective"]) + offset
+                                         - reference) <= 1e-12 * abs(reference),
+              "scaled_e226's reference is Koch's optimum plus the objective-row constant")
 
 
 def main() -> int:
@@ -88,6 +126,7 @@ def main() -> int:
     check(g("optimal", -5.0, "numerical_error", None, "", "")[0] == "failed", "no verdict fails")
     check(g("infeasible", None, "infeasible_or_unbounded", None, 1, "")[0] == "failed",
           "infeasible_or_unbounded is not a verdict")
+    objective_row_constant(committed)
     check("_No `stress-*.csv`" in stress_doc.section(None), "the doc section without a CSV")
     # #750's headline: a wrong `infeasible` is not a wrong `optimal`.
     with tempfile.TemporaryDirectory() as tmp:

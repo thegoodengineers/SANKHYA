@@ -2,6 +2,7 @@
 // SANKHYA - equilibration of the model by powers of two, and its exact inverse (#792).
 
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <vector>
 
@@ -9,6 +10,7 @@
 
 #include "core/prescale.hpp"
 #include "sankhya/model.hpp"
+#include "sankhya/options.hpp"
 
 namespace sankhya {
 namespace {
@@ -89,6 +91,43 @@ TEST(Prescale, AnEquilibratedModelIsLeftAlone) {
   const PrescaledModel p = prescale_by_powers_of_two(model, 20);
   for (const double r : p.row) EXPECT_EQ(r, 1.0);
   for (const double c : p.column) EXPECT_EQ(c, 1.0);
+}
+
+// #792, scaled_e226: Netlib e226 has RHS -7.113 on its objective row, a constant of +7.113.
+// The prescaled retry solved it to -11.6389 = Koch's -18.7519 + 7.113; the stress runner then
+// subtracted the constant a second time and graded it wrong. The solver side is pinned here:
+// the equilibrated model keeps the constant, and the answer measured back on the original
+// model reports c'x plus it, as every other LP route does.
+TEST(Prescale, TheObjectiveConstantSurvivesEveryLpRoute) {
+  Model model = badly_scaled();
+  model.objective_offset = 7.113;
+  const PrescaledModel p = prescale_by_powers_of_two(model, 20);
+  EXPECT_EQ(p.model.objective_offset, model.objective_offset);
+
+  Options options;
+  options.set_bool("log_to_console", false);
+  Solution retry = solve(p.model, options);
+  ASSERT_EQ(retry.status, SolveStatus::kOptimal);
+  unscale_solution(p, &retry);
+  retry.recompute_quality(model);
+  EXPECT_NEAR(retry.objective, -2.8 + 7.113, 1e-9);
+
+  for (const char* algorithm : {"auto", "simplex", "dual-simplex", "ipm"}) {
+    for (const bool presolve : {true, false}) {
+      Options route;
+      route.set_bool("log_to_console", false);
+      route.set_string("algorithm", algorithm);
+      route.set_bool("presolve", presolve);
+      const Solution s = solve(model, route);
+      ASSERT_EQ(s.status, SolveStatus::kOptimal) << algorithm << " presolve " << presolve;
+      double linear = 0.0;
+      for (std::size_t j = 0; j < s.col_value.size(); ++j) {
+        linear += model.col_cost[j] * s.col_value[j];
+      }
+      EXPECT_NEAR(s.objective, linear + 7.113, 1e-9) << algorithm << " presolve " << presolve;
+      EXPECT_NEAR(s.objective, -2.8 + 7.113, 1e-6) << algorithm << " presolve " << presolve;
+    }
+  }
 }
 
 }  // namespace

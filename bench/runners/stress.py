@@ -18,7 +18,8 @@ and both .sol files are checked by tools/verify_solution.py with the same tolera
 The grade:
 
   correct  the known verdict, and the verifier accepts the file; for an optimal instance
-           also the objective within 1e-6 relative of the known optimum (netlib.py's bar).
+           also the objective within 1e-6 relative of the known optimum (netlib.py's bar),
+           both with the objective row's constant included.
            On a thin-infeasible instance a point the verifier accepts - every row within
            its 1e-7 - is also correct, since at the stated tolerance it IS feasible; the
            reason column says so.
@@ -150,13 +151,11 @@ def run_sankhya(binary: Path, mps: Path, sol: Path, time_limit: float) -> dict:
                 "reason": completed.stderr.strip()[:160]}
     blob = json.loads(stats.read_text())
     result = blob.get("result", {})
-    # Koch's optima exclude the objective-row constant (e226: 7.113), so the objective is
-    # graded without it, as netlib.py grades matches_exact (#783: scaled_e226 was never
-    # optimal before, so the units never met).
+    # The objective is graded as reported, objective-row constant included (e226: 7.113).
+    # reference.json already adds that constant to Koch's optimum (stress_instances.py,
+    # #885), and HiGHS's objective carries it too, so subtracting it here counted the
+    # constant twice: scaled_e226 solved to -11.6389 was graded at -18.7519 and wrong (#792).
     objective = result.get("objective")
-    offset = blob.get("model", {}).get("objective_offset") or 0.0
-    if isinstance(objective, (int, float)) and offset:
-        objective -= offset
     return {"status": result.get("status", "unknown"), "objective": objective,
             "iterations": blob.get("effort", {}).get("iterations", ""),
             "reason": result.get("message", "")}
