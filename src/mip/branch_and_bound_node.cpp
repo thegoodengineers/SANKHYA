@@ -575,7 +575,7 @@ Index BranchAndBound::choose_branching_column(const std::vector<double>& x, doub
         out << u << ","
             << candidate.fraction << ","
             << working_.col_cost[u] << ","
-            << working_.matrix.column(u).size << ","
+            << working_.matrix.column(candidate.column).size << ","
             << pc_down << ","
             << pc_up << ","
             << measured_down[i] << ","

@@ -1174,8 +1174,8 @@ TEST(TreeCuts, CutPoolingPreservesCorrectnessAndCountersSane) {
 }
 
 TEST(StrongBranching, RecordsCsvWhenOptionEnabled) {
-  const Model model = make_fractional_gmi_model();
-  testing::TempFile temp_csv;
+  const Model model = make_cover_model();
+  testing::TempFile temp_csv("", ".csv");
   Options opts = mip_options();
   opts.set_bool("presolve", false);
   opts.set_bool("mip_heuristics", false);
