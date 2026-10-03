@@ -34,10 +34,15 @@ struct LearnedTreeDomain {
   Count max_nonzeros = 0;
 };
 
-/// The tree. Reads the symbolic Cholesky fields, so `f` should come from
-/// compute_engine_features(model, /*symbolic=*/true).
+/// The tree. When learned_tree_reads_symbolic() is true it tests the symbolic Cholesky
+/// fields, and `f` must come from compute_engine_features(model, /*symbolic=*/true).
 [[nodiscard]] LearnedTreeChoice learned_engine_tree(const EngineFeatures& f);
 
 [[nodiscard]] LearnedTreeDomain learned_tree_domain();
+
+/// Whether any test of the tree reads cholesky_nonzeros or cholesky_fill_ratio. When none
+/// does, the selection skips the symbolic pass (0.2 s on dfl001, against 0.1 ms for the
+/// one-pass features).
+[[nodiscard]] bool learned_tree_reads_symbolic();
 
 }  // namespace sankhya

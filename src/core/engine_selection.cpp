@@ -167,7 +167,7 @@ EngineSelection select_engine(const Model& model, const Options& options, bool w
     return rules;
   }
   const LearnedTreeChoice choice =
-      learned_engine_tree(compute_engine_features(model, /*symbolic=*/true));
+      learned_engine_tree(compute_engine_features(model, learned_tree_reads_symbolic()));
   EngineSelection s = rules;
   s.algorithm = choice.algorithm;
   s.use_gpu = false;

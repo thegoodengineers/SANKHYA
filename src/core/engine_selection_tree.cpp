@@ -35,6 +35,11 @@ LearnedTreeDomain learned_tree_domain() {
   return LearnedTreeDomain{9000, 160000};
 }
 
+bool learned_tree_reads_symbolic() {
+  // No test below reads the symbolic Cholesky fields.
+  return false;
+}
+
 LearnedTreeChoice learned_engine_tree(const EngineFeatures& f) {
   LearnedTreeChoice c;
   // 120 training rows reach this test: dual-simplex 80, ipm 15, pdhg 25.

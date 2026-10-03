@@ -117,6 +117,9 @@ def main() -> int:
     check("take(&c, \"rows <= " in cpp and "take(&c, \"rows > " in cpp,
           "each branch records its test in the path the log prints")
     check("LearnedTreeDomain{" in cpp, "the emitted file states the range it was trained on")
+    check("bool learned_tree_reads_symbolic() {\n  // No test below reads" in cpp
+          and "return false;" in cpp,
+          "a tree that splits on rows alone says it needs no symbolic pass")
     check(".5)" not in cpp, "thresholds are short decimals, not raw midpoints")
 
     print("thresholds")
