@@ -1603,20 +1603,20 @@ the off leg the defaults with `mip_restarts=0`; both off by default until this r
 favour. A restart is triggered only by columns reduced-cost fixing fixed, so the per-run
 restart column below says whether the option did anything at all.
 
-Not yet run on an idle machine at a commit on `main`. Reproduce with:
+Not yet run on an idle machine at a commit on `main`. Reproduce with (`<sha>` the commit `sankhya version` reports):
 
 ```
-python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_restarts=0 --out bench/results/restarts-ab-miplib-seeds3-off-$(git rev-parse --short HEAD).csv
-python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_reduced_cost_fixing=true --solver-option mip_restarts=2 --out bench/results/restarts-ab-miplib-seeds3-on-$(git rev-parse --short HEAD).csv
+python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_restarts=0 --out bench/results/restarts-ab-miplib-seeds3-off-<sha>.csv
+python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_reduced_cost_fixing=true --solver-option mip_restarts=2 --out bench/results/restarts-ab-miplib-seeds3-on-<sha>.csv
 ```
 
 #### A/B: objective branching on the plateau instances (#418)
 
-Not yet run on an idle machine at a commit on `main`. Reproduce with:
+Not yet run on an idle machine at a commit on `main`. Reproduce with (`<sha>` the commit `sankhya version` reports):
 
 ```
-python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_objective_branching=false --out bench/results/objbranch-ab-miplib-seeds3-off-$(git rev-parse --short HEAD).csv
-python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_objective_branching=true --out bench/results/objbranch-ab-miplib-seeds3-on-$(git rev-parse --short HEAD).csv
+python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_objective_branching=false --out bench/results/objbranch-ab-miplib-seeds3-off-<sha>.csv
+python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_objective_branching=true --out bench/results/objbranch-ab-miplib-seeds3-on-<sha>.csv
 ```
 
 ---
