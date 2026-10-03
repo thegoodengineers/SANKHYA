@@ -1455,12 +1455,77 @@ At 600 s: **15 of 30** reach the published optimum, **9 of 30** prove it.
 
 #### The 60-instance tier over three seeds (#504)
 
-Not yet run. Reproduce with:
+Source CSV: `bench/results/miplib-tier2-seeds3-e7c0c60.csv`  
+Commit `e7c0c60` · machine `E2E TIR C3 container, 16 vCPU 32 GB plan (C3.32GB; corrected after the run, the label first read the host), AMD EPYC 9555 64-Core Processor host, nothing else running; AMD EPYC 9555 64-Core Processor; 256 cores; 1512 GiB RAM; Linux-x86_64` · 3 seeds · 300 s per run · one thread
 
-```
-python bench/runners/fetch_miplib.py --tier 2
-python bench/runners/miplib.py --tier 2 --seeds 3 --time-limit 300
-```
+The tier is chosen by the rule in `bench/runners/miplib_tier2.json`, written before it was run: the first 60 MIPLIB 2017 benchmark instances with a proven optimum, by file size. Over all 180 runs: **32** reached the published optimum and **18** proved it; shifted geometric mean time **264.13 s** (shift 10 s, every run that did not prove charged the limit).
+
+| instance | seeds matched | seeds proved | sgm time (s) | sgm first feasible (s) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|
+| `50v-10` | 0/3 | 0/3 | 300.00 | 1.636 | 110.43 |
+| `assign1-5-8` | 3/3 | 0/3 | 300.00 | 0.537 | 0.84 |
+| `b1c1s1` | 0/3 | 0/3 | 300.00 | 19.999 | 177.11 |
+| `beasleyC3` | 0/3 | 0/3 | 300.00 | 12.881 | 27.82 |
+| `binkar10_1` | 0/3 | 0/3 | 300.00 | 7.480 | 15.53 |
+| `bppc4-08` | 0/3 | 0/3 | 300.00 | 0.562 | 31.18 |
+| `cost266-UUE` | 0/3 | 0/3 | 300.00 | 12.317 | 84.35 |
+| `csched007` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `csched008` | 0/3 | 0/3 | 300.00 | 174.467 | 206.88 |
+| `cvs16r128-89` | 0/3 | 0/3 | 300.00 | 31.035 | 121.32 |
+| `enlight_hard` | 0/3 | 0/3 | 300.00 | 300.000 | 300.01 |
+| `exp-1-500-5-5` | 0/3 | 0/3 | 300.00 | 4.317 | 86.34 |
+| `fastxgemm-n2r6s0t2` | 0/3 | 0/3 | 300.00 | 10.500 | 206.52 |
+| `fhnw-binpack4-48` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `gen-ip002` | 3/3 | 0/3 | 300.00 | 0.006 | 0.05 |
+| `gen-ip054` | 3/3 | 0/3 | 300.00 | 0.028 | 0.15 |
+| `glass4` | 0/3 | 0/3 | 300.00 | 7.086 | 195.29 |
+| `gmu-35-40` | 0/3 | 0/3 | 300.00 | 276.212 | 278.29 |
+| `gmu-35-50` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `graphdraw-domain` | 0/3 | 0/3 | 300.00 | 5.855 | 55.09 |
+| `ic97_potential` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `icir97_tension` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `lotsize` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `mad` | 0/3 | 0/3 | 300.00 | 0.076 | 288.16 |
+| `markshare2` | 0/3 | 0/3 | 300.00 | 0.049 | 294.09 |
+| `markshare_4_0` | 3/3 | 3/3 | 155.28 | 0.005 | 60.12 |
+| `mas74` | 0/3 | 0/3 | 300.00 | 0.032 | 30.45 |
+| `mas76` | 3/3 | 3/3 | 92.41 | 0.023 | 0.96 |
+| `mc11` | 0/3 | 0/3 | 300.00 | 23.412 | 35.32 |
+| `mcsched` | 3/3 | 3/3 | 271.73 | 2.534 | 4.47 |
+| `mik-250-20-75-4` | 0/3 | 0/3 | 300.00 | 0.648 | 2.06 |
+| `milo-v12-6-r2-40-1` | 0/3 | 0/3 | 300.00 | 19.766 | 30.50 |
+| `n5-3` | 0/3 | 0/3 | 300.00 | 4.145 | 32.86 |
+| `neos-2657525-crna` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `neos-3024952-loue` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `neos-3046615-murg` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `neos-3381206-awhea` | 0/3 | 0/3 | 300.00 | 104.868 | 208.48 |
+| `neos-3627168-kasai` | 0/3 | 0/3 | 300.00 | 7.936 | 8.48 |
+| `neos-3754480-nidda` | 0/3 | 0/3 | 300.00 | 0.384 | 26.34 |
+| `neos-4338804-snowy` | 0/3 | 0/3 | 300.00 | 144.588 | 272.91 |
+| `neos-4738912-atrato` | 0/3 | 0/3 | 300.00 | 102.601 | 203.98 |
+| `neos-4954672-berkel` | 0/3 | 0/3 | 300.00 | 12.781 | 126.08 |
+| `neos-911970` | 0/3 | 0/3 | 300.00 | 0.682 | 125.05 |
+| `neos17` | 0/3 | 0/3 | 300.00 | 5.875 | 32.52 |
+| `neos5` | 3/3 | 0/3 | 300.00 | 0.138 | 2.68 |
+| `p200x1188c` | 2/3 | 0/3 | 300.00 | 4.819 | 11.84 |
+| `pg` | 0/3 | 0/3 | 300.00 | 1.427 | 15.63 |
+| `pg5_34` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `pk1` | 3/3 | 3/3 | 220.94 | 0.108 | 69.44 |
+| `qap10` | 3/3 | 3/3 | 36.15 | 21.600 | 21.84 |
+| `ran14x18-disj-8` | 0/3 | 0/3 | 300.00 | 1.498 | 14.44 |
+| `reblock115` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `rococoB10-011000` | 0/3 | 0/3 | 300.00 | 160.628 | 182.78 |
+| `rococoC10-001000` | 0/3 | 0/3 | 300.00 | 36.002 | 134.14 |
+| `roll3000` | 0/3 | 0/3 | 300.00 | 278.711 | 283.07 |
+| `sp150x300d` | 3/3 | 3/3 | 0.90 | 0.632 | 0.64 |
+| `supportcase26` | 0/3 | 0/3 | 300.00 | 5.038 | 10.33 |
+| `timtab1` | 0/3 | 0/3 | 300.00 | 14.761 | 124.70 |
+| `tr12-30` | 0/3 | 0/3 | 300.00 | 13.684 | 69.48 |
+| `uct-subprob` | 0/3 | 0/3 | 300.00 | 8.778 | 32.62 |
+
+Runs that did not reach the published optimum, named: `50v-10` seed 0 (feasible), `50v-10` seed 1 (feasible), `50v-10` seed 2 (feasible), `b1c1s1` seed 0 (feasible), `b1c1s1` seed 1 (feasible), `b1c1s1` seed 2 (feasible), `beasleyC3` seed 0 (feasible), `beasleyC3` seed 1 (feasible), `beasleyC3` seed 2 (feasible), `binkar10_1` seed 0 (feasible), `binkar10_1` seed 1 (feasible), `binkar10_1` seed 2 (feasible), `bppc4-08` seed 0 (feasible), `bppc4-08` seed 1 (feasible), `bppc4-08` seed 2 (feasible), `cost266-UUE` seed 0 (feasible), `cost266-UUE` seed 1 (feasible), `cost266-UUE` seed 2 (feasible), `csched007` seed 0 (time_limit), `csched007` seed 1 (time_limit), `csched007` seed 2 (time_limit), `csched008` seed 0 (feasible), `csched008` seed 1 (time_limit), `csched008` seed 2 (feasible), `cvs16r128-89` seed 0 (feasible), `cvs16r128-89` seed 1 (feasible), `cvs16r128-89` seed 2 (time_limit), `enlight_hard` seed 0 (time_limit), `enlight_hard` seed 1 (time_limit), `enlight_hard` seed 2 (time_limit), `exp-1-500-5-5` seed 0 (feasible), `exp-1-500-5-5` seed 1 (feasible), `exp-1-500-5-5` seed 2 (feasible), `fastxgemm-n2r6s0t2` seed 0 (feasible), `fastxgemm-n2r6s0t2` seed 1 (feasible), `fastxgemm-n2r6s0t2` seed 2 (feasible), `fhnw-binpack4-48` seed 0 (time_limit), `fhnw-binpack4-48` seed 1 (time_limit), `fhnw-binpack4-48` seed 2 (time_limit), `glass4` seed 0 (feasible), `glass4` seed 1 (feasible), `glass4` seed 2 (feasible), `gmu-35-40` seed 0 (feasible), `gmu-35-40` seed 1 (time_limit), `gmu-35-40` seed 2 (time_limit), `gmu-35-50` seed 0 (time_limit), `gmu-35-50` seed 1 (time_limit), `gmu-35-50` seed 2 (time_limit), `graphdraw-domain` seed 0 (feasible), `graphdraw-domain` seed 1 (feasible), `graphdraw-domain` seed 2 (feasible), `ic97_potential` seed 0 (time_limit), `ic97_potential` seed 1 (time_limit), `ic97_potential` seed 2 (time_limit), `icir97_tension` seed 0 (time_limit), `icir97_tension` seed 1 (time_limit), `icir97_tension` seed 2 (time_limit), `lotsize` seed 0 (time_limit), `lotsize` seed 1 (time_limit), `lotsize` seed 2 (time_limit), `mad` seed 0 (feasible), `mad` seed 1 (feasible), `mad` seed 2 (feasible), `markshare2` seed 0 (feasible), `markshare2` seed 1 (feasible), `markshare2` seed 2 (feasible), `mas74` seed 0 (feasible), `mas74` seed 1 (feasible), `mas74` seed 2 (feasible), `mc11` seed 0 (feasible), `mc11` seed 1 (feasible), `mc11` seed 2 (feasible), `mik-250-20-75-4` seed 0 (feasible), `mik-250-20-75-4` seed 1 (feasible), `mik-250-20-75-4` seed 2 (feasible), `milo-v12-6-r2-40-1` seed 0 (feasible), `milo-v12-6-r2-40-1` seed 1 (feasible), `milo-v12-6-r2-40-1` seed 2 (feasible), `n5-3` seed 0 (feasible), `n5-3` seed 1 (feasible), `n5-3` seed 2 (feasible), `neos-2657525-crna` seed 0 (time_limit), `neos-2657525-crna` seed 1 (time_limit), `neos-2657525-crna` seed 2 (time_limit), `neos-3024952-loue` seed 0 (time_limit), `neos-3024952-loue` seed 1 (time_limit), `neos-3024952-loue` seed 2 (time_limit), `neos-3046615-murg` seed 0 (time_limit), `neos-3046615-murg` seed 1 (time_limit), `neos-3046615-murg` seed 2 (time_limit), `neos-3381206-awhea` seed 0 (time_limit), `neos-3381206-awhea` seed 1 (time_limit), `neos-3381206-awhea` seed 2 (feasible), `neos-3627168-kasai` seed 0 (feasible), `neos-3627168-kasai` seed 1 (feasible), `neos-3627168-kasai` seed 2 (feasible), `neos-3754480-nidda` seed 0 (feasible), `neos-3754480-nidda` seed 1 (feasible), `neos-3754480-nidda` seed 2 (feasible), `neos-4338804-snowy` seed 0 (feasible), `neos-4338804-snowy` seed 1 (time_limit), `neos-4338804-snowy` seed 2 (time_limit), `neos-4738912-atrato` seed 0 (feasible), `neos-4738912-atrato` seed 1 (feasible), `neos-4738912-atrato` seed 2 (feasible), `neos-4954672-berkel` seed 0 (feasible), `neos-4954672-berkel` seed 1 (feasible), `neos-4954672-berkel` seed 2 (feasible), `neos-911970` seed 0 (feasible), `neos-911970` seed 1 (feasible), `neos-911970` seed 2 (feasible), `neos17` seed 0 (feasible), `neos17` seed 1 (feasible), `neos17` seed 2 (feasible), `p200x1188c` seed 2 (feasible), `pg` seed 0 (feasible), `pg` seed 1 (feasible), `pg` seed 2 (feasible), `pg5_34` seed 0 (time_limit), `pg5_34` seed 1 (time_limit), `pg5_34` seed 2 (time_limit), `ran14x18-disj-8` seed 0 (feasible), `ran14x18-disj-8` seed 1 (feasible), `ran14x18-disj-8` seed 2 (feasible), `reblock115` seed 0 (time_limit), `reblock115` seed 1 (time_limit), `reblock115` seed 2 (time_limit), `rococoB10-011000` seed 0 (feasible), `rococoB10-011000` seed 1 (feasible), `rococoB10-011000` seed 2 (feasible), `rococoC10-001000` seed 0 (feasible), `rococoC10-001000` seed 1 (feasible), `rococoC10-001000` seed 2 (feasible), `roll3000` seed 0 (time_limit), `roll3000` seed 1 (time_limit), `roll3000` seed 2 (feasible), `supportcase26` seed 0 (feasible), `supportcase26` seed 1 (feasible), `supportcase26` seed 2 (feasible), `timtab1` seed 0 (feasible), `timtab1` seed 1 (feasible), `timtab1` seed 2 (feasible), `tr12-30` seed 0 (feasible), `tr12-30` seed 1 (feasible), `tr12-30` seed 2 (feasible), `uct-subprob` seed 0 (feasible), `uct-subprob` seed 1 (feasible), `uct-subprob` seed 2 (feasible).
+
+Runs reported optimal whose proof the independent verifier rejected, named (counted as proved above, as the solver reported them): `mcsched` seed 0 (relative gap 0.000123), `mcsched` seed 1 (relative gap 0.000123), `mcsched` seed 2 (relative gap 0.000123).
 
 #### A/B: the node LP factor cache (#501)
 

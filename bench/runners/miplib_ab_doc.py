@@ -190,4 +190,14 @@ def tier2_section(path: Path | None) -> str:
               if r.get("matched_published") != "1"]
     out += ["", "Runs that did not reach the published optimum, named: "
             + (", ".join(failed) if failed else "none") + ".", ""]
+    # A proof claim the independent verifier refused is counted above as the solver
+    # reported it, and named here so the count is never read as checked.
+    rejected = [r for r in rows if r["status"] == "optimal"
+                and str(r.get("independently_verified", "")) == "0"]
+    if rejected:
+        out += ["Runs reported optimal whose proof the independent verifier rejected, named "
+                "(counted as proved above, as the solver reported them): " + ", ".join(
+                    f"`{r['instance']}` seed {r.get('seed', 0)} (relative gap "
+                    f"{float(r['relative_gap']):.3g})" if r.get("relative_gap") else
+                    f"`{r['instance']}` seed {r.get('seed', 0)}" for r in rejected) + ".", ""]
     return "\n".join(out)
