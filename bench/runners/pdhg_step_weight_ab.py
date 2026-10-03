@@ -34,9 +34,14 @@ of `--seeds` (0 1 2 by default), the ratio to the default leg is taken at the sa
 the summary is the geometric mean over instances and seeds.
 
     python bench/runners/pdhg_step_weight_ab.py --binary build/sankhya
-    python bench/runners/pdhg_step_weight_ab.py --binary build/sankhya --engine cuda
     python bench/runners/pdhg_step_weight_ab.py --binary build/sankhya --engine cuda \\
-        --solver-option gpu_on_device_loop=true
+        --scheme averaged
+    python bench/runners/pdhg_step_weight_ab.py --binary build/sankhya --engine cuda \\
+        --scheme averaged --solver-option gpu_on_device_loop=true
+
+The CUDA engine has no Halpern iteration (pdhg_halpern is read by the CPU engine only), so
+`--engine cuda` takes `--scheme averaged` and refuses the others rather than label an
+averaged run "halpern".
 
 Writes bench/results/pdhg-step-weight-ab-<engine>-<sha>.csv (the sha from the binary,
 #433), a name no glob of make_benchmarks_doc.py or latest_result.py reads, or --out.
@@ -162,6 +167,9 @@ def main() -> int:
     parser.add_argument("--no-verify", action="store_true")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()
+    if args.engine == "cuda" and args.scheme != "averaged":
+        parser.error("the CUDA engine has no Halpern iteration (pdhg_halpern is read by the "
+                     "CPU engine only): use --scheme averaged with --engine cuda")
 
     binary = args.binary or netlib.default_binary()
     commit = netlib.git_commit(binary)
