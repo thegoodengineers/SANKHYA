@@ -554,7 +554,17 @@ Solution solve(const Model& model, const Options& requested_options, SolveContro
   Logger logger(requested_options.get_bool("log_to_console") ? stdout : nullptr);
   // Rewritten once, here, so no engine below has to know about the mode - and so the log
   // says what was changed before anything runs (#288).
-  const Options options = apply_deterministic_mode(requested_options, logger);
+  Options options = apply_deterministic_mode(requested_options, logger);
+  // A starting solution (#753) is given in the model's own columns, and presolve removes and
+  // renumbers columns, so for a solve that carries one presolve is skipped and the start
+  // applies as written. Branch and bound still validates it against the model it searches.
+  if (control != nullptr && control->has_start_solution() && model.has_integrality() &&
+      options.get_bool("presolve")) {
+    options.set_bool("presolve", false);
+    logger.info(
+        "Starting solution given: presolve skipped so it applies to the model's own "
+        "columns (#753)");
+  }
   if (options.get_bool("deterministic")) {
     logger.info("Deterministic mode: no decision depends on the clock");
     // The reproducibility fingerprint (#288): what a second run has to match for the same

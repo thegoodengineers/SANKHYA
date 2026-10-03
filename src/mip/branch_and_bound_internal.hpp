@@ -181,6 +181,8 @@ constexpr std::int64_t kMiqpNodeIpmIterationLimit = 200;
 inline double fractionality(double value) {
   return std::fabs(value - std::round(value));
 }
+Options sub_mip_options(const Options& base, Count node_limit, double time_limit);
+double sub_mip_seconds(const ResourceLimits& limits, double elapsed, bool seconds_budgets);
 
 class BranchAndBound {
  public:

@@ -276,6 +276,84 @@ Solution BranchAndBound::run() {
     solution.message = problem;
     return solution;
   }
+
+  // Phase 1 and 2: validate, repair, and install a user-supplied initial solution.
+  // A start with one value per column of a different model (an edited model, or a caller
+  // that kept the previous answer) is not indexed: it is ignored, and the log says why.
+  const bool start_fits =
+      control_ && control_->has_start_solution() &&
+      control_->start_solution.size() == static_cast<std::size_t>(original_.num_cols());
+  if (control_ && control_->has_start_solution() && !start_fits) {
+    logger_.warning(
+        "The starting solution has {} values for a model of {} columns; it is ignored (#753)",
+        control_->start_solution.size(), original_.num_cols());
+  }
+  if (start_fits) {
+    bool accepted = false;
+    bool has_nans = false;
+    for (const double v : control_->start_solution) {
+      if (std::isnan(v)) {
+        has_nans = true;
+        break;
+      }
+    }
+    if (!has_nans) {
+      accepted = offer_incumbent(control_->start_solution);
+    }
+    if (accepted) {
+      logger_.info(
+          "Accepted user-supplied starting solution as initial incumbent: objective {:.6g}",
+          incumbent_internal_);
+    } else {
+      Model box = original_;
+      bool missing_integer = false;
+      for (const Index j : integer_columns_) {
+        const auto u = static_cast<std::size_t>(j);
+        const double v = control_->start_solution[u];
+        if (!std::isnan(v)) {
+          const double nearest = std::round(v);
+          box.col_lower[u] = nearest;
+          box.col_upper[u] = nearest;
+        } else {
+          missing_integer = true;
+        }
+      }
+      Logger quiet(nullptr);
+      const Count node_limit = missing_integer ? 100 : 0;
+
+      struct StartSolutionGuard {
+        SolveControl* control;
+        std::vector<double> saved;
+        explicit StartSolutionGuard(SolveControl* c) : control(c) {
+          if (control) saved.swap(control->start_solution);
+        }
+        ~StartSolutionGuard() {
+          if (control) control->start_solution.swap(saved);
+        }
+      } guard(control_);
+
+      const Solution found = solve_branch_and_bound(
+          box,
+          sub_mip_options(
+              options_, node_limit,
+              sub_mip_seconds(limits_, timer_.elapsed_seconds(), schedule_.seconds_budgets)),
+          quiet, control_);
+      if (claims_a_point(found.status) && !found.col_value.empty()) {
+        if (offer_incumbent(found.col_value)) {
+          logger_.info(
+              "Repaired partial or infeasible starting solution as initial incumbent: "
+              "objective {:.6g}",
+              incumbent_internal_);
+          accepted = true;
+        }
+      }
+      if (!accepted) {
+        logger_.warning(
+            "The user-supplied starting solution is either infeasible or not an integer "
+            "assignment, and a repair attempt failed.");
+      }
+    }
+  }
   // Formulation symmetry (#413), not for a quadratic objective, whose Hessian the detection
   // does not read. A parallel worker (#222) appends the rows the driver derived once from
   // the same model, in the same order, so every subtree searches the same restricted

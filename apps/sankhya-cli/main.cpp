@@ -275,6 +275,10 @@ int main(int argc, char** argv) {
                         "solve of this model or of an earlier version of it with rows and "
                         "columns since added or removed, matched by name (presolve is "
                         "bypassed)");
+  std::string mip_start_path;
+  solve_cmd->add_option("--start", mip_start_path,
+                        "A complete, feasible user-supplied MILP solution to install as "
+                        "the initial incumbent before the root search begins");
   bool compute_iis = false;
   solve_cmd->add_flag("--iis", compute_iis,
                       "On an infeasible model, name the irreducible infeasible subsystem: "
@@ -455,6 +459,14 @@ int main(int argc, char** argv) {
             "{} row(s) of the file are gone, {} of them basic\n",
             mapping.matched_cols, mapping.matched_rows, mapping.new_cols, mapping.new_rows,
             mapping.removed_cols, mapping.removed_rows, mapping.removed_basic);
+      }
+    }
+    if (!mip_start_path.empty()) {
+      std::string error;
+      if (!sankhya::io::read_solution_point(mip_start_path, model, &control.start_solution,
+                                            &error)) {
+        fmt::print(stderr, "error: {}\n", error);
+        return 3;
       }
     }
 

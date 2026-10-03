@@ -75,6 +75,13 @@ bool read_solution_basis(const std::string& path, const Model& model,
                          std::vector<BasisStatus>* row_status, std::string* error,
                          BasisMapping* mapping = nullptr);
 
+/// Read the primal point a .sol file carries (the value field of its columns section)
+/// for `model`, matched by name, into `col_values` - what `sankhya solve --start` seeds
+/// as the initial incumbent. Returns false and fills `error` when the file cannot be read,
+/// names a column the model lacks, or provides an incomplete assignment.
+bool read_solution_point(const std::string& path, const Model& model,
+                         std::vector<double>* col_values, std::string* error);
+
 // -----------------------------------------------------------------------------------------
 // Writers
 // -----------------------------------------------------------------------------------------
