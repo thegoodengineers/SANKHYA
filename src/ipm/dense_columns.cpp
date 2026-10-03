@@ -313,7 +313,15 @@ PcgReport DenseColumnCorrection::conjugate_gradients(const std::vector<double>& 
   multiply_full(*x, &q);
   for (std::size_t i = 0; i < m; ++i) r[i] = b[i] - q[i];
   report.relative_residual = inf_norm(r) / (inf_norm(b) + terms_of_product(*x));
-  if (!std::isfinite(report.relative_residual)) {
+  // A NON-FINITE ANSWER IS NEVER CONVERGED. std::max passes over a NaN, so the norms above
+  // skip the rows where an overflowed entry of x met a zero theta: on capri (dense-column
+  // factor 1, 27 dense columns, kappa(M) near 1e18) a solve returned x with infinite
+  // entries and a backward error of 1e-17 over the rest, and was reported converged. The
+  // interior point's own non-finite check caught the direction, but the report must not
+  // say otherwise (tests/unit/test_ipm_dense_directions.cpp).
+  const bool finite =
+      std::all_of(x->begin(), x->end(), [](double v) { return std::isfinite(v); });
+  if (!finite || !std::isfinite(report.relative_residual)) {
     report.relative_residual = std::numeric_limits<double>::infinity();
   }
   report.converged = !report.broke_down && report.relative_residual <= kPcgAccepted;

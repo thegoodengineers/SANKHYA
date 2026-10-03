@@ -2017,7 +2017,10 @@ const std::vector<OptionSpec>& Options::registry() {
                  "100 of them, densest first) is left out of A Theta A^T and corrected for by "
                  "Sherman-Morrison-Woodbury, used as the preconditioner of conjugate gradients "
                  "on the whole system (Andersen, Gondzio, Meszaros & Xu 1996). One column of "
-                 "bdry2 would otherwise make the normal equations 7.9e9 nonzeros. Default OFF.",
+                 "bdry2 would otherwise make the normal equations 7.9e9 nonzeros. When those "
+                 "gradients do not converge and the whole normal equations fit "
+                 "ipm_max_factor_nonzeros, the dense columns are folded back and the whole "
+                 "system is factored from that iteration on. Default OFF.",
                  0.0,
                  0.0,
                  {}});

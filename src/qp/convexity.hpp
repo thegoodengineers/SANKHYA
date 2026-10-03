@@ -8,19 +8,36 @@
 // provably positive semidefinite is REFUSED rather than solved to whatever the iteration lands
 // on.
 //
-// The test is an LDL^T factorization with symmetric pivoting on the DIAGONAL only. Q is
-// positive semidefinite exactly when such a factorization exists with every d_i >= 0, and
-// the factorization fails (or produces a negative d_i) otherwise. That is a decision
-// procedure rather than a heuristic, which matters: guessing "convex" on a non-convex model
-// is precisely the wrong error to make.
+// The test is an LDL^T factorization of Q + shift * I, shift = 1e-12 * max(1, largest |Q_ii|),
+// with symmetric pivoting on the DIAGONAL only, and every pivot required to be positive
+// (#835). 1e-12 is the threshold QPLIB counts a negative eigenvalue by; convexity.cpp records
+// the instances on either side of it. A positive semidefinite Q makes Q + shift * I positive
+// definite with its smallest eigenvalue at least shift, which a Cholesky-type factorization
+// completes on without pivoting as long as its rounding stays below that eigenvalue; so a
+// semidefinite Q passes whether it is singular, rank deficient or merely ill conditioned. A
+// pivot that is not positive exhibits a direction x with x^T Q x <= -shift * x^T x < 0, which
+// is returned and checked against Q itself, in arithmetic accurate enough for its sign to be
+// trusted, before the model is called non-convex. That is a decision procedure with a stated
+// tolerance - an eigenvalue above -shift is accepted as rounding - rather than a heuristic,
+// which matters: guessing "convex" on a non-convex model is precisely the wrong error to make.
 //
-// Reference: Golub & Van Loan, "Matrix Computations" (4th ed.), section 4.1, for LDL^T and
+// The previous rule factorized Q itself and took a pivot within a slack of zero as exactly
+// zero, requiring the entries beside it to vanish too. In floating point that refused three
+// QPLIB instances QPLIB lists as convex (QPLIB_10056, rank 31 of 175; QPLIB_10069, positive
+// definite with condition 1e11; QPLIB_8515, an eigenvalue of -3e-17 from a 7.8e-9 entry beside
+// a zero diagonal); src/la/ldl.cpp records how each one failed.
+//
+// References: Golub & Van Loan, "Matrix Computations" (4th ed.), section 4.1, for LDL^T and
 // its relationship to definiteness; Higham, "Analysis of the Cholesky decomposition of a
-// semi-definite matrix" (1990), for the semidefinite case and why a small negative pivot
-// must be treated as rounding rather than as evidence of indefiniteness.
+// semi-definite matrix" (1990), and "Accuracy and Stability of Numerical Algorithms" (2nd
+// ed., 2002), ch. 10, for the semidefinite case and the backward error of Cholesky; Rump,
+// "Verification of positive definiteness", BIT 46 (2006), for deciding definiteness by a
+// Cholesky factorization of a shifted matrix; Ogita, Rump & Oishi, "Accurate sum and dot
+// product", SIAM J. Sci. Comput. 26 (2005), for evaluating the witness.
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "sankhya/model.hpp"
 
@@ -37,6 +54,12 @@ struct ConvexityResult {
   Convexity verdict = Convexity::kUnverified;
   /// Human-readable detail naming the column and the pivot that decided it.
   std::string detail;
+  /// For kIndefinite, the certificate: a direction x over the model's columns with
+  /// x^T Q x < 0 in minimization sense, checked against Q itself by more than its rounding
+  /// error. Empty otherwise.
+  std::vector<double> witness;
+  /// x^T Q x / x^T x along `witness`: an upper bound on Q's smallest eigenvalue.
+  double witness_curvature = 0.0;
 };
 
 /// Decide whether `model.hessian` is positive semidefinite.

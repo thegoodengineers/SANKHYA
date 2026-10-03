@@ -56,6 +56,7 @@ add_executable(sankhya_tests
   unit/test_ipm_scaling.cpp
   unit/test_ipm_model_space.cpp
   unit/test_ipm_dense_columns.cpp
+  unit/test_ipm_dense_directions.cpp
   unit/test_ipm_column_side.cpp
   unit/test_ipm_normal_side.cpp
   unit/test_pdhg_parallel_spmv.cpp
@@ -98,6 +99,7 @@ add_executable(sankhya_tests
   unit/test_qp.cpp
   unit/test_qp_device.cpp
   unit/test_convexity_sparse.cpp
+  unit/test_convexity_tolerance.cpp
   unit/test_branch_and_bound.cpp
   unit/test_mip_components.cpp
   unit/test_node_selection.cpp

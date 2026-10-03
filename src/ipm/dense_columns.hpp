@@ -105,6 +105,13 @@ class DenseColumnCorrection {
   /// The Woodbury inverse alone, without the refinement (tests compare the two).
   void apply_preconditioner(const std::vector<double>& r, std::vector<double>* out) const;
 
+  /// The system the last prepare() set up, M = A Theta A^T + diag(row_shift) + delta I, so
+  /// that a test can rebuild the whole of M and solve it the default way to compare.
+  [[nodiscard]] const SparseMatrix* matrix() const noexcept { return a_; }
+  [[nodiscard]] const std::vector<double>& theta() const noexcept { return theta_; }
+  [[nodiscard]] const std::vector<double>& row_shift() const noexcept { return row_shift_; }
+  [[nodiscard]] double delta() const noexcept { return delta_; }
+
  private:
   void multiply_full(const std::vector<double>& v, std::vector<double>* out) const;
   [[nodiscard]] double terms_of_product(const std::vector<double>& v) const;

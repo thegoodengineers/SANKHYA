@@ -221,6 +221,15 @@ class InteriorPoint {
   /// gradients. Inactive (no columns) by default, and then nothing below changes.
   DenseColumnCorrection dense_;
   bool dense_schur_failed_ = false;
+  /// The iteration at which the dense columns were folded back into the normal equations
+  /// (fold_dense_columns_back()), -1 while they are split off or were never split.
+  Count dense_folded_at_ = -1;
+  std::size_t dense_folded_columns_ = 0;
+  /// After a dense-column solve that did not converge: when the WHOLE normal equations fit
+  /// the factor budget, order them and keep that analysis in ldl_, so that every later
+  /// factorization is of the whole system and the dense-column path is off. Returns false,
+  /// changing nothing, when they do not fit or cannot be ordered.
+  [[nodiscard]] bool fold_dense_columns_back(Count iteration);
   Count pcg_iterations_ = 0;
   Count pcg_solves_ = 0;
   double worst_pcg_residual_ = 0.0;
@@ -1276,7 +1285,16 @@ void InteriorPoint::solve_normal(std::vector<double>* rhs) {
     return;
   }
   if (dense_.active()) {
-    const PcgReport report = dense_.solve(rhs->data());
+    // Tests only (ipm_testing.hpp): the system and its answer, to be compared with the
+    // default path's solve of the whole M on the iterates the interior point really meets.
+    std::vector<double> observed_rhs;
+    if (testing::dense_solve_observer) observed_rhs = *rhs;
+    PcgReport report = dense_.solve(rhs->data());
+    // Tests only (ipm_testing.hpp): report this solve as unconverged.
+    if (testing::take_rejected_dense_solve()) report.converged = false;
+    if (testing::dense_solve_observer) {
+      testing::dense_solve_observer(dense_, observed_rhs, *rhs, report);
+    }
     ++pcg_solves_;
     pcg_iterations_ += report.iterations;
     worst_pcg_residual_ = std::max(worst_pcg_residual_, report.relative_residual);
@@ -1325,6 +1343,71 @@ void InteriorPoint::solve_normal(std::vector<double>* rhs) {
     for (Index i = 0; i < m_; ++i)
       (*rhs)[static_cast<std::size_t>(i)] += residual[static_cast<std::size_t>(i)];
   }
+}
+
+// THE DENSE COLUMNS GO BACK IN WHEN THE CORRECTION FAILS AND THE WHOLE SYSTEM FITS (#467).
+// The Woodbury product form is unstable when the Schur complement S = I + V^T M_s^-1 V is
+// ill conditioned, which is what the end of an interior point does to it: the theta of a
+// dense column at a basic variable grows without bound. Conjugate gradients repair most of
+// that, and when they cannot, the loop's only other remedy is to raise the regularization,
+// which on fit2p (23 columns of up to 3,000 entries, 3,000 rows) went 1e-10 -> 1e-6 -> 1e-2
+// at iteration 16 and ended in numerical_error where the default path reaches the optimum.
+// But a model whose WHOLE normal equations fit the factor budget does not need the split
+// for memory, only for speed, and the exact factorization of the whole M has no product
+// form to lose digits in. So once, at the first unconverged solve, the whole system is
+// counted from the pattern of A (#467's count) and ordered into a fresh analysis; only
+// when both succeed does that analysis replace the split one, and every later
+// factorization is the default path's. When the whole system does not fit (bdry2,
+// Linf_520c) nothing changes and the regularization is raised as before.
+bool InteriorPoint::fold_dense_columns_back(Count iteration) {
+  if (!dense_.active() || proximal_ != nullptr || column_side_active_) return false;
+  std::vector<char> skip(static_cast<std::size_t>(n_), 0);
+  for (Index j = 0; j < n_; ++j) {
+    skip[static_cast<std::size_t>(j)] = fixed_[static_cast<std::size_t>(j)] ? 1 : 0;
+  }
+  const NormalPrediction whole =
+      predict_normal_nonzeros(model_.matrix, skip, max_factor_nonzeros_, should_stop_);
+  if (whole.stopped) return false;
+  if (whole.over_cap) {
+    logger_.verbose(
+        "interior point: the whole normal equations would hold at least {} nonzeros, over "
+        "the factor budget of {}; the dense columns stay split off",
+        whole.nonzeros, max_factor_nonzeros_);
+    return false;
+  }
+  // theta_ holds this factorization's Theta over the structurals and then the logicals.
+  const std::vector<double> theta_x(theta_.begin(), theta_.begin() + n_);
+  const std::vector<double> row_shift(theta_.begin() + n_, theta_.end());
+  SparseMatrix lower;
+  if (!normal_equations_lower(model_.matrix, theta_x, row_shift, dual_regularization_, &lower,
+                              should_stop_)) {
+    return false;
+  }
+  SparseLdl analysis;
+  analysis.set_ordering_budget(ldl_.ordering_budget());
+  analysis.set_supernodal(ldl_.supernodal());
+  analysis.set_factor_budget(max_factor_nonzeros_);
+  if (!analysis.analyze(lower, should_stop_)) {
+    logger_.verbose(
+        "interior point: the whole normal equations ({} nonzeros) could not be ordered "
+        "within the budgets; the dense columns stay split off",
+        lower.num_nonzeros());
+    return false;
+  }
+  ldl_ = std::move(analysis);
+  normal_lower_ = std::move(lower);
+  analyzed_ = true;
+  cpu_analyzed_ = true;
+  factor_size_ = static_cast<std::int64_t>(ldl_.factor_nonzeros()) + ldl_.dimension();
+  dense_folded_columns_ = dense_.columns().size();
+  dense_folded_at_ = iteration;
+  dense_.set_columns(model_.matrix, {});
+  logger_.info(
+      "Interior point: the dense-column conjugate gradients did not converge at iteration {}; "
+      "the {} dense column(s) are folded back and the whole normal equations ({} nonzeros, "
+      "factor {}) are factored from here on (#467)",
+      iteration, dense_folded_columns_, normal_lower_.num_nonzeros(), factor_size_);
+  return true;
 }
 
 /// One Newton direction for the current r_mu terms: solves the normal equations for dy,
@@ -1585,12 +1668,16 @@ Solution InteriorPoint::finish(SolveStatus status, const std::string& message, C
         t.factorizations, t.factorization, t.solves, t.solve, t.analysis, device_declined_,
         device_ != nullptr ? "on the device to the end" : "dropped mid-solve");
   }
-  if (dense_.active()) {
+  if (dense_.active() || dense_folded_at_ >= 0) {
     logger_.info(
         "IPM: dense-column correction over {} column(s): {} conjugate-gradient step(s) in {} "
-        "solve(s), worst relative residual {:.1e}, {} solve(s) not converged",
-        dense_.columns().size(), pcg_iterations_, pcg_solves_, worst_pcg_residual_,
-        pcg_unconverged_);
+        "solve(s), worst relative residual {:.1e}, {} solve(s) not converged{}",
+        dense_folded_at_ >= 0 ? dense_folded_columns_ : dense_.columns().size(),
+        pcg_iterations_, pcg_solves_, worst_pcg_residual_, pcg_unconverged_,
+        dense_folded_at_ >= 0
+            ? fmt::format("; folded back into the whole normal equations at iteration {}",
+                          dense_folded_at_)
+            : std::string());
   }
   if (column_side_active_) {
     logger_.info(
@@ -2466,6 +2553,13 @@ Solution InteriorPoint::run() {
     // measures absorb that; up to kMaxRegularizationRaises raises, after which the current
     // iterate is the answer, judged as the barrier-exhausted stop judges one.
     if (!step_is_finite) {
+      // On the dense-column path an unconverged solve first folds the dense columns back
+      // into the whole normal equations when they fit (#467), at the regularization the
+      // step was computed with; the raises below follow only if that is not possible or
+      // does not help.
+      if (direction_inaccurate_ && fold_dense_columns_back(iterations) && factorize()) {
+        step_is_finite = predictor_corrector();
+      }
       while (!step_is_finite && regularization_raises_ < kMaxRegularizationRaises) {
         dual_regularization_ *= kRegularizationRaise;
         ++regularization_raises_;

@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <random>
 #include <string>
 #include <vector>
@@ -113,6 +114,43 @@ TEST(InteriorPointColumnSide, TheDirectionIsTheRowSidesOnNetlib) {
   for (const char* name : {"afiro", "adlittle", "sc50a", "sc50b", "blend", "share2b", "scagr7",
                            "stocfor1", "bandm", "brandy", "scsd1", "ship04s"}) {
     expect_same_direction(name, 1e-10);
+  }
+}
+
+// A non-finite right-hand side is never reported converged. The norm the PCG judges by
+// used std::max, which skips NaN, so a NaN in an otherwise zero vector read as the zero
+// vector and solve() returned converged at once (the dense-column PCG had the same flaw,
+// #936). An infinity, and a NaN beside finite entries, are refused the same way.
+TEST(InteriorPointColumnSide, ANonFiniteRightHandSideIsNeverConverged) {
+  Model model;
+  const io::ReadResult read = io::read_model(netlib("afiro"), &model);
+  ASSERT_TRUE(read.ok) << read.error;
+  const SparseMatrix& a = model.matrix;
+  const auto m = static_cast<std::size_t>(a.num_rows());
+  const auto n = static_cast<std::size_t>(a.num_cols());
+  std::vector<double> theta(n, 1.0);
+  std::vector<double> shift(m, 1.0);
+  const double delta = 1e-10;
+  ipm::ColumnSide side;
+  side.set_matrix(a, std::vector<bool>(n, false));
+  SparseMatrix lower_n;
+  ASSERT_TRUE(side.assemble(theta, shift, delta, &lower_n, {}));
+  SparseLdl columns;
+  ASSERT_TRUE(columns.analyze(lower_n));
+  ASSERT_TRUE(columns.factorize(lower_n, delta));
+
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  std::vector<std::vector<double>> cases(3, std::vector<double>(m, 0.0));
+  cases[0][m / 2] = nan;  // NaN in an otherwise zero vector
+  cases[1][0] = inf;
+  for (std::size_t i = 0; i < m; ++i) cases[2][i] = 1.0 + static_cast<double>(i);
+  cases[2][m - 1] = nan;  // NaN beside finite entries
+  for (std::size_t k = 0; k < cases.size(); ++k) {
+    std::vector<double> x = cases[k];
+    const ipm::ColumnSideReport report = side.solve(columns, x.data());
+    EXPECT_FALSE(report.converged) << "case " << k;
+    EXPECT_FALSE(report.backward_error <= 1e-6) << "case " << k;
   }
 }
 
