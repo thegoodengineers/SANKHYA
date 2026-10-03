@@ -192,11 +192,14 @@ TEST(QpTimeLimit, AnMiqpNodeQpRunsOnTheTimeThatIsLeft) {
     SCOPED_TRACE(ipm ? "miqp_node_ipm=true" : "Condat-Vu nodes");
     bool slept = false;
     bool qp_before_sleep = false;
+    double awake = 0.0;  // seconds into the solve when the callback returns
+    Clock::time_point start;
     SolveControl control;
     control.progress_callback = [&](const Progress& progress) {
       if (progress.phase == Progress::Phase::kTree && !slept) {
         slept = true;
         std::this_thread::sleep_for(kSpent);
+        awake = seconds_since(start);
       } else if (!slept && progress.phase == Progress::Phase::kLp) {
         qp_before_sleep = true;
       }
@@ -209,13 +212,16 @@ TEST(QpTimeLimit, AnMiqpNodeQpRunsOnTheTimeThatIsLeft) {
     options.set_bool("miqp_node_ipm", ipm);
     options.set_double("time_limit", kLimit);
     Logger logger(nullptr);
-    const auto start = Clock::now();
+    start = Clock::now();
     const Solution solution = mip::solve_branch_and_bound(model, options, logger, &control);
     const double elapsed = seconds_since(start);
     if (!slept || qp_before_sleep) {
       GTEST_SKIP() << "the tree's first clock check did not come before the root QP here";
     }
-    EXPECT_LT(elapsed, kLimit + kMargin) << solution.message;
+    // A slow build (a sanitizer, a loaded runner) can spend so long before the tree that the
+    // callback returns after the limit; the search then owes one more step, not a whole limit.
+    EXPECT_LT(elapsed, std::max(kLimit, awake) + kMargin)
+        << "callback returned at " << awake << " s: " << solution.message;
     EXPECT_TRUE(solution.status == SolveStatus::kTimeLimit ||
                 solution.status == SolveStatus::kFeasible)
         << to_string(solution.status) << ": " << solution.message;
