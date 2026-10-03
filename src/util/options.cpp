@@ -231,15 +231,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  {"devex", "dantzig", "dual-steepest-edge"}});
     s.push_back({"mip_node_pricing",
                  OptionType::String,
-                 std::string("inherit"),
+                 std::string("devex"),
                  "Pricing for the node LPs after the root and for strong-branching probes: "
-                 "inherit (default) uses `pricing`; devex, dantzig or dual-steepest-edge "
+                 "inherit uses `pricing`; devex (default), dantzig or dual-steepest-edge "
                  "override it there only, so the root LP keeps the rule `pricing` names. A "
                  "node LP is a warm re-solve a few pivots from its parent's basis, and dual "
                  "steepest edge's extra FTRAN per pivot and its norm start cost more there "
                  "than they save: the node-rate bisect over 90f5d35..d0f20dc put the 30 "
                  "percent slower nodes on markshare_4_0 and neos-3611689-kaihu at #860, "
-                 "which made it the default (#792). Off until its A/B on main.",
+                 "which made it the default (#792). Devex by default since the A/B on main "
+                 "fef0192 (MIPLIB tier 1, 3 seeds at 60 s: "
+                 "inherit 50 of 90 matched and 31 proved, devex 52 and 33; #971).",
                  0.0,
                  0.0,
                  {"inherit", "devex", "dantzig", "dual-steepest-edge"}});
