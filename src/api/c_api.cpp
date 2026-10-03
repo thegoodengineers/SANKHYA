@@ -536,6 +536,9 @@ sankhya_status sankhya_solve_from(sankhya_model* model, const sankhya_options* o
       control->start_col_status = start->solution.col_status;
       control->start_row_status = start->solution.row_status;
     }
+    if (start != nullptr && !start->solution.col_value.empty()) {
+      control->start_solution = start->solution.col_value;
+    }
 
     struct ControlClearer {
       sankhya_model* m;

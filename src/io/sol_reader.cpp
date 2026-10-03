@@ -250,16 +250,6 @@ bool read_solution_point(const std::string& path, const Model& model,
     return false;
   }
 
-  std::size_t unknown = 0;
-  for (const double v : *col_values) {
-    if (std::isnan(v)) ++unknown;
-  }
-  if (unknown > 0) {
-    *error = fmt::format(
-        "{}: {} column(s) are missing values: the file carries no complete assignment", path,
-        unknown);
-    return false;
-  }
   return true;
 }
 

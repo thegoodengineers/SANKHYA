@@ -183,18 +183,20 @@ TEST(SolReader, ReadSolutionPointRecoversValues) {
   }
 }
 
-TEST(SolReader, ReadSolutionPointFailsOnMissingValues) {
+TEST(SolReader, ReadSolutionPointAllowsPartialStarts) {
   Model model = netlib("afiro");
-  const Solution cold = solve(model, quiet());
-  ASSERT_EQ(cold.status, SolveStatus::kOptimal);
-  const TempFile file("", ".sol");
-  std::string error;
-  ASSERT_TRUE(io::write_solution(file.path(), model, cold, &error)) << error;
-
+  const TempFile partial("begin columns 1\n" + model.col_names[0] +
+                             " 3.14 0 basic\nend columns\n" + "begin rows 1\n" +
+                             model.row_names[0] + " 0 0 at_lower\nend rows\n",
+                         ".sol");
   std::vector<double> values;
-  Model other = netlib("adlittle");
-  EXPECT_FALSE(io::read_solution_point(file.path(), other, &values, &error));
-  EXPECT_NE(error.find("not in the model"), std::string::npos) << error;
+  std::string error;
+  ASSERT_TRUE(io::read_solution_point(partial.path(), model, &values, &error)) << error;
+  ASSERT_EQ(values.size(), model.num_cols());
+  EXPECT_DOUBLE_EQ(values[0], 3.14);
+  for (std::size_t j = 1; j < values.size(); ++j) {
+    EXPECT_TRUE(std::isnan(values[j]));
+  }
 }
 
 }  // namespace
