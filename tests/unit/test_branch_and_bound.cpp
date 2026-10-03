@@ -1200,12 +1200,9 @@ TEST(BranchAndBound, MipStart_InfeasibleStartIsRejected) {
   control.start_solution = {1.0, 1.0};  // Infeasible (x+y=2 > 1)
   Solution sol = solve(model, mip_options(), &control);
 
-  // The solve is cleanly rejected before running.
-  EXPECT_EQ(sol.status, SolveStatus::kModelError);
-  EXPECT_NE(
-      sol.message.find("starting solution is either infeasible or not an integer assignment"),
-      std::string::npos)
-      << sol.message;
+  // The start is rejected, repair fails, and the solve continues normally.
+  EXPECT_EQ(sol.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(sol.objective, 1.0, 1e-9);
 }
 
 TEST(BranchAndBound, MipStart_FractionalStartIsRejected) {
@@ -1216,11 +1213,9 @@ TEST(BranchAndBound, MipStart_FractionalStartIsRejected) {
   control.start_solution = {0.5, 0.5};  // Feasible but fractional
   Solution sol = solve(model, mip_options(), &control);
 
-  EXPECT_EQ(sol.status, SolveStatus::kModelError);
-  EXPECT_NE(
-      sol.message.find("starting solution is either infeasible or not an integer assignment"),
-      std::string::npos)
-      << sol.message;
+  // The fractional start is rounded/rejected, repair fails, and the solve continues normally.
+  EXPECT_EQ(sol.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(sol.objective, 1.0, 1e-9);
 }
 
 TEST(BranchAndBound, MipStart_NoStartLeavesBehaviorUnchanged) {
