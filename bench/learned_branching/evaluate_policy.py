@@ -6,8 +6,51 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import assemble_dataset
 from learned_branching_models import CART, spearmanr
 
+import csv
+def get_candidate_groups(instance):
+    groups = {}
+    files = assemble_dataset.find_csvs(instance)
+    for fpath in files:
+        seed_str = fpath.split('_seed')[-1].replace('.csv', '')
+        try: seed = int(seed_str)
+        except: seed = 0
+        with open(fpath, 'r', newline='') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row) < 12: continue
+                try:
+                    frac = float(row[1])
+                    obj = float(row[2])
+                    deg = float(row[3])
+                    pcd = float(row[4])
+                    pcu = float(row[5])
+                    md = float(row[6])
+                    mu = float(row[7])
+                    existing_score = float(row[10])
+                    selected = int(row[11])
+                    branch_decision_id = int(row[12]) if len(row) >= 13 else -1
+                    
+                    if math.isnan(md) or math.isnan(mu) or md < 0 or mu < 0:
+                        continue
+                        
+                    if not math.isinf(md) and not math.isinf(mu):
+                        t_raw = max(md, 1e-6) * max(mu, 1e-6)
+                        features = [frac, obj, deg, pcd, pcu]
+                        key = (instance, seed, branch_decision_id)
+                        if key not in groups:
+                            groups[key] = []
+                        groups[key].append({
+                            'features': features,
+                            'target_raw': t_raw,
+                            'existing_score': existing_score,
+                            'selected': selected
+                        })
+                except ValueError:
+                    pass
+    return groups
+
 def main():
-    print("Candidate-level ranking can be evaluated, but node-level policy selection cannot be reconstructed from the current provenance schema.\n")
+    print("Candidate-level ranking can be evaluated. Candidate sets are now grouped by branch_decision_id.\n")
     
     train_manifest = assemble_dataset.load_manifest("bench/learned_branching/train_instances.txt")
     test_manifest = assemble_dataset.load_manifest("bench/learned_branching/test_instances.txt")
@@ -49,40 +92,16 @@ def main():
         inst_learned = []
         inst_existing = []
         
-        # We need the existing score. It was discarded by assemble_dataset, so we need to read it ourselves.
-        # But wait, assemble_dataset only returns what we put in it.
-        # Let's read the raw CSVs directly for the TEST instances to get the existing score.
-        files = assemble_dataset.find_csvs(inst)
-        for fpath in files:
-            import csv
-            with open(fpath, 'r', newline='') as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    if len(row) < 12: continue
-                    try:
-                        frac = float(row[1])
-                        obj = float(row[2])
-                        deg = float(row[3])
-                        pcd = float(row[4])
-                        pcu = float(row[5])
-                        md = float(row[6])
-                        mu = float(row[7])
-                        existing_score = float(row[10])
-                        
-                        if math.isnan(md) or math.isnan(mu) or md < 0 or mu < 0:
-                            continue
-                            
-                        if not math.isinf(md) and not math.isinf(mu):
-                            features = [frac, obj, deg, pcd, pcu]
-                            t_raw = max(md, 1e-6) * max(mu, 1e-6)
-                            pred_log1p = regressor.predict([features])[0]
-                            pred_raw = math.expm1(pred_log1p)
-                            
-                            inst_true.append(t_raw)
-                            inst_learned.append(pred_raw) # or pred_log1p, ranking is invariant to monotonic transform
-                            inst_existing.append(existing_score)
-                    except ValueError:
-                        pass
+        groups = get_candidate_groups(inst)
+        for key, candidates in groups.items():
+            for c in candidates:
+                inst_true.append(c['target_raw'])
+                
+                pred_log1p = regressor.predict([c['features']])[0]
+                pred_raw = math.expm1(pred_log1p)
+                
+                inst_learned.append(pred_raw)
+                inst_existing.append(c['existing_score'])
         
         if len(inst_true) > 1:
             sp_learned = spearmanr(inst_true, inst_learned)

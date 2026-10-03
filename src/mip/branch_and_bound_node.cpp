@@ -358,6 +358,7 @@ void BranchAndBound::record_pseudocost(Index column, bool downward, double gain,
 // branch_and_bound_fixpoint.cpp.
 Index BranchAndBound::choose_branching_column(const std::vector<double>& x, double node_bound,
                                               std::vector<DomainChange>* fixes) {
+  ++branching_decisions_;
   constexpr double kEpsilon = 1e-6;
   struct Candidate {
     Index column;
@@ -583,7 +584,8 @@ Index BranchAndBound::choose_branching_column(const std::vector<double>& x, doub
             << down << ","
             << up << ","
             << score << ","
-            << (candidate.column == best ? 1 : 0) << "\n";
+            << (candidate.column == best ? 1 : 0) << ","
+            << branching_decisions_ << "\n";
       }
     }
   }

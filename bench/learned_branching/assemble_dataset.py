@@ -131,6 +131,7 @@ def assemble(manifest_name, instances):
                     dataset.append({
                         'instance': inst,
                         'seed': seed,
+                        'branch_decision_id': int(row[12]) if len(row) >= 13 else -1,
                         'category': category,
                         'features': [frac, obj, deg, pcd, pcu],
                         'target_raw': t_raw
