@@ -9,12 +9,20 @@
 // programs", ORSA J. Computing 3(2) (1991).
 
 #include <algorithm>
+#include <cmath>
+#include <filesystem>
+#include <random>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
 
+#include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+
+#include "oracles/lp_generator.hpp"
+#include "oracles/rational_simplex.hpp"
 
 namespace sankhya {
 namespace {
@@ -305,6 +313,102 @@ TEST(IIS, ConflictBuriedAmongManyRows) {
     EXPECT_EQ(std::find(sol.iis_rows.begin(), sol.iis_rows.end(), i), sol.iis_rows.end())
         << "Irrelevant row " << i << " should not be in the IIS";
   }
+}
+
+// =========================================================================================
+// The witnesses, held to tools/verify_solution.py's own measure (#475)
+//
+// The verifier judges a witness row by row, its violation over max(1, |activity|, |bounds|),
+// against the primal tolerance; the status guard that accepts a trial point measures a row
+// over the largest term of its sum. Where terms cancel the second is the looser, and on
+// Netlib klein2, from the interior point's certificate under ipm_hsd, four witnesses missed
+// the verifier's measure by up to 2.2e-7 and the file was rejected. A claimed IIS now carries
+// only witnesses that pass the verifier's rule, or claims nothing.
+// =========================================================================================
+
+double verifier_violation(double value, double lower, double upper) {
+  const double below = std::isfinite(lower) ? lower - value : 0.0;
+  const double above = std::isfinite(upper) ? value - upper : 0.0;
+  double scale = std::max(1.0, std::fabs(value));
+  if (std::isfinite(lower)) scale = std::max(scale, std::fabs(lower));
+  if (std::isfinite(upper)) scale = std::max(scale, std::fabs(upper));
+  return std::max({below, above, 0.0}) / scale;
+}
+
+/// The failures of the claimed witnesses under the verifier's rule; empty when every one
+/// satisfies the other elements and violates its own.
+std::vector<std::string> witness_failures(const Model& model, const Solution& sol) {
+  std::vector<std::string> failures;
+  if (sol.iis_inconclusive) return failures;
+  struct Element {
+    int kind;
+    Index index;
+  };
+  std::vector<Element> iis;
+  for (const Index i : sol.iis_rows) iis.push_back({0, i});
+  for (const Index j : sol.iis_col_lo) iis.push_back({1, j});
+  for (const Index j : sol.iis_col_hi) iis.push_back({2, j});
+  if (sol.iis_witnesses.size() != iis.size()) {
+    failures.push_back("witness count");
+    return failures;
+  }
+  for (std::size_t w = 0; w < iis.size(); ++w) {
+    const std::vector<double>& x = sol.iis_witnesses[w];
+    std::vector<double> activity(static_cast<std::size_t>(model.num_rows()), 0.0);
+    model.matrix.multiply_add(x.data(), activity.data());
+    for (std::size_t e = 0; e < iis.size(); ++e) {
+      const auto u = static_cast<std::size_t>(iis[e].index);
+      const double v =
+          iis[e].kind == 0
+              ? verifier_violation(activity[u], model.row_lower[u], model.row_upper[u])
+          : iis[e].kind == 1 ? verifier_violation(x[u], model.col_lower[u], kInfinity)
+                             : verifier_violation(x[u], -kInfinity, model.col_upper[u]);
+      if (e == w ? v <= 1e-7 : v > 1e-7) {
+        failures.push_back("witness " + std::to_string(w) + " on element " + std::to_string(e) +
+                           ": " + std::to_string(v));
+      }
+    }
+  }
+  return failures;
+}
+
+TEST(IIS, Klein2WitnessesUnderTheEmbeddingHoldInTheVerifiersMeasure) {
+  const std::filesystem::path path =
+      std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+      "data/netlib-infeasible/klein2.mps";
+  if (!std::filesystem::exists(path)) {
+    GTEST_SKIP() << "data/netlib-infeasible/klein2.mps is not fetched "
+                    "(python bench/runners/fetch_netlib_infeasible.py klein2)";
+  }
+  Model model;
+  const io::ReadResult read = io::read_model(path.string(), &model);
+  ASSERT_TRUE(read.ok) << read.error;
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_string("algorithm", "ipm");
+  options.set_bool("ipm_hsd", true);
+  const Solution sol = solve(model, options);
+  ASSERT_EQ(sol.status, SolveStatus::kInfeasible) << sol.message;
+  ASSERT_FALSE(sol.iis_rows.empty());
+  const std::vector<std::string> failures = witness_failures(model, sol);
+  EXPECT_TRUE(failures.empty()) << failures.size() << " failure(s), first: " << failures[0];
+}
+
+TEST(IIS, EveryClaimedWitnessHoldsInTheVerifiersMeasureOnRandomInfeasibleLps) {
+  std::mt19937_64 rng(475217);
+  oracle::GeneratorConfig config;
+  int claimed = 0;
+  for (int trial = 0; trial < 300; ++trial) {
+    const oracle::GeneratedLp lp = oracle::random_lp(rng, config);
+    const Model model = oracle::to_model(lp);
+    const Solution sol = solve(model, silent_options());
+    if (sol.status != SolveStatus::kInfeasible || sol.iis_rows.empty()) continue;
+    if (!sol.iis_inconclusive) ++claimed;
+    const std::vector<std::string> failures = witness_failures(model, sol);
+    EXPECT_TRUE(failures.empty()) << "trial " << trial << ": " << failures[0] << "\n"
+                                  << lp.to_text();
+  }
+  EXPECT_GT(claimed, 20);
 }
 
 }  // namespace
