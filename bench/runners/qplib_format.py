@@ -52,12 +52,20 @@ src/io/mps_quadratic.cpp) lists the FULL symmetric matrix with no 1/2, so a diag
 becomes 0.5 v and an off-diagonal one becomes the two entries (h, k) and (k, h) of 0.25 v
 each. fetch_qplib.py checks this at QPLIB's published point too, quadratic rows included.
 
+THE PUBLISHED POINT names its variables as QPLIB's GAMS model does, not as the .qplib file
+does (#835): `x<k>`, `b<k>` or `i<k>` by type, k counting every GAMS variable, `objvar` for
+the objective variable wherever the model declares it, and objvar either an extra variable
+(a quadratic objective) or one of the model's own (a linear one). solution_columns() maps
+them through the GAMS model's Variables statement; fetch_qplib_all.py reads that statement
+from the head of each instance's .gms file.
+
     python bench/runners/qplib_format.py QPLIB_8845.qplib QPLIB_8845.qps
 """
 from __future__ import annotations
 
 import argparse
 import math
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -368,16 +376,63 @@ def to_qps(model: QplibModel) -> str:
     return "\n".join(out) + "\n"
 
 
-def read_solution(text: str, model: QplibModel) -> tuple[list[float], float | None]:
+def parse_gams_variables(text: str) -> list[str]:
+    """The variable names of QPLIB's GAMS model (`gms/QPLIB_xxxx.gms`), in declaration order:
+    the first `Variables a, b, ...;` statement, which GAMS's convert tool writes before any
+    `Positive`, `Binary` or `Integer Variables` statement. Only the head of the file is
+    needed, up to that statement's semicolon."""
+    found = re.search(r"^\s*Variables\s+(.*?);", text, re.S | re.M | re.I)
+    if not found:
+        raise ValueError("the GAMS model has no Variables statement in the text given")
+    names = [token.strip() for token in found.group(1).split(",") if token.strip()]
+    if len(set(names)) != len(names):
+        raise ValueError("the GAMS model declares a variable twice")
+    return names
+
+
+def solution_columns(model: QplibModel, gams_variables: list[str]) -> dict[str, int]:
+    """Each .sol name -> the .qplib variable it is, from the GAMS model's declaration order.
+
+    QPLIB's `sol/` files name variables as the site's GAMS model does, and that model was
+    written by GAMS's convert tool: a continuous variable is `x<k>`, a binary one `b<k>`, an
+    integer one `i<k>`, with k its position among ALL the model's variables, and the objective
+    variable is `objvar`. Where objvar sits differs by instance (first in QPLIB_0018 and
+    QPLIB_10056, last in QPLIB_10069), and so does whether it is one of the .qplib file's
+    variables at all:
+
+    *   with a quadratic objective, convert introduced objvar for the objective equation and
+        the .qplib file has no such variable: n + 1 GAMS names for n variables, and the
+        .qplib variables are the other n in their declared order;
+    *   with a linear objective (O = L), objvar can be a variable of the model itself, with the
+        objective "minimize objvar": n GAMS names for n variables, objvar among them in its
+        place (QPLIB_10035, where it is the file's variable 1 with cost 1).
+
+    Reading only `x<k>` as variable k - 1 (the old rule) fits the first case with objvar first
+    and every variable continuous, and nothing else."""
+    if len(gams_variables) == model.n + 1 and "objvar" in gams_variables:
+        order = [name for name in gams_variables if name != "objvar"]
+    elif len(gams_variables) == model.n:
+        order = list(gams_variables)
+    else:
+        raise ValueError(f"the GAMS model declares {len(gams_variables)} variables for "
+                         f"{model.n} in the .qplib file")
+    return {name: j for j, name in enumerate(order)}
+
+
+def read_solution(text: str, model: QplibModel,
+                  gams_variables: list[str] | None = None) -> tuple[list[float], float | None]:
     """QPLIB's published point from its `sol/` file: `name value` lines, one per nonzero.
 
-    The names are the site's GAMS model's: `objvar` is the objective variable, which the GAMS
-    model puts where x1 would be, and `x<k>` is the file's variable k - 1. A name the
-    .qplib file itself assigns (its non-default names) is also accepted. Absent means zero,
-    `objvar` included: QPLIB_10038's published point is the origin with objective 0, and its
-    .sol file is empty. Returns (x, objvar)."""
+    With the GAMS model's variable names (`parse_gams_variables`), every name is mapped by
+    `solution_columns`, whatever its prefix and wherever objvar sits. Without them the names
+    are read by the convert tool's rule with objvar assumed first: `x<k>`, `b<k>` or `i<k>` is
+    variable k - 2. A name the .qplib file itself assigns (its non-default names) is accepted
+    either way. Absent means zero, objvar included: QPLIB_10038's published point is the
+    origin with objective 0, and its .sol file is empty. Returns (x, objvar), objvar being the
+    published objective whether or not it is also a variable of the model."""
     x = [0.0] * model.n
     by_name = {name: j for j, name in model.var_names.items()}
+    columns = solution_columns(model, gams_variables) if gams_variables is not None else None
     objvar = 0.0
     for raw in text.splitlines():
         tokens = raw.split()
@@ -386,13 +441,23 @@ def read_solution(text: str, model: QplibModel) -> tuple[list[float], float | No
         name, value = tokens[0], _number(tokens[1])
         if name == "objvar":
             objvar = value
+        if columns is not None:
+            if name in columns:
+                x[columns[name]] = value
+            elif name != "objvar":
+                raise ValueError(f"solution names '{name}', which the GAMS model does not "
+                                 "declare")
+            continue
+        if name == "objvar":
             continue
         if name in by_name:
             x[by_name[name]] = value
-        elif name[:1] == "x" and name[1:].isdigit() and 2 <= int(name[1:]) <= model.n + 1:
+        elif (name[:1] in ("x", "b", "i") and name[1:].isdigit()
+              and 2 <= int(name[1:]) <= model.n + 1):
             x[int(name[1:]) - 2] = value
         else:
-            raise ValueError(f"solution names '{name}', which maps to no variable")
+            raise ValueError(f"solution names '{name}', which maps to no variable without the "
+                             "GAMS model's variable order")
     return x, objvar
 
 

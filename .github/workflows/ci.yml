@@ -505,6 +505,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_qplib_all.py
 
+      - name: Every QPLIB conversion is checked at QPLIB's published point by its test classes (#835)
+        # Hermetic: no download and no solve. Inline .qplib, .sol and GAMS-head fixtures for
+        # each failure class the whole-library check met: b<k> and i<k> names, objvar not
+        # first, objvar a variable of the model, and rows judged on their exact value.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_qplib_point.py
+
       - name: The pooling instances match their published data and generator (#516)
         # Hermetic: no download and no solve. The GAMS data parser, the committed models
         # against pooling_models.py, sizes against MINLPLib, Haverly's optima as feasible
