@@ -12,10 +12,15 @@
 
 #include <chrono>
 #include <cstddef>
+#include <memory>
+#include <string>
+#include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
 
+#include "gpu/cudss_factor.hpp"
+#include "ipm/ipm_testing.hpp"
 #include "la/ldl.hpp"
 #include "sankhya/ipm.hpp"
 #include "sankhya/logging.hpp"
@@ -83,6 +88,104 @@ TEST(InteriorPointTimeLimit, TheAssemblyAsksTheDeadlineInProportionToItsWork) {
   EXPECT_EQ(plain.row_indices(), normal.row_indices());
   EXPECT_EQ(plain.values(), normal.values());
   EXPECT_EQ(plain.column_starts(), normal.column_starts());
+}
+
+// #907: cuDSS does not consult the deadline once a call has started, so the device path can
+// only ever decline to START a late factorize() or solve() - and real hardware (an A100 on
+// refinery_year) showed the solve running 19 iterations and 9,700s past its limit, which is
+// far more than one overrun factorization costs. This fakes a slow device entirely on the
+// CPU (the real backend never builds or runs here) to prove, without cuDSS or a GPU, that the
+// deadline stops the loop after the first factorization or solve that is already running
+// late, not 19 of them.
+// Call counts live on the test's stack, not on the device: InteriorPoint owns and destroys
+// the device inside solve_ipm(), so anything the test wants to read afterwards must outlive it.
+class FakeSlowDevice : public gpu::LinearSolverDevice {
+ public:
+  FakeSlowDevice(std::chrono::duration<double> per_call_delay, int* factorize_calls,
+                 int* solve_calls)
+      : per_call_delay_(per_call_delay),
+        factorize_calls_(factorize_calls),
+        solve_calls_(solve_calls) {}
+
+  bool initialize(std::string* /*reason*/) override { return true; }
+
+  bool analyze(const SparseMatrix& lower, std::string* /*reason*/) override {
+    return ldl_.analyze(lower);
+  }
+
+  gpu::CudssOutcome factorize(const SparseMatrix& lower, double regularization,
+                              std::string* /*reason*/) override {
+    std::this_thread::sleep_for(per_call_delay_);
+    ++timing_.factorizations;
+    ++*factorize_calls_;
+    if (!ldl_.factorize(lower, regularization)) return gpu::CudssOutcome::kFailed;
+    return gpu::CudssOutcome::kFactored;
+  }
+
+  bool solve(double* b, std::string* /*reason*/) override {
+    std::this_thread::sleep_for(per_call_delay_);
+    ++timing_.solves;
+    ++*solve_calls_;
+    ldl_.solve(b);
+    return true;
+  }
+
+  Count regularized_pivots() const noexcept override { return ldl_.regularized_pivots(); }
+  std::int64_t factor_nonzeros() const noexcept override {
+    return static_cast<std::int64_t>(ldl_.factor_nonzeros()) + ldl_.dimension();
+  }
+  const gpu::CudssTiming& timing() const noexcept override { return timing_; }
+
+ private:
+  std::chrono::duration<double> per_call_delay_;
+  int* factorize_calls_;
+  int* solve_calls_;
+  SparseLdl ldl_;
+  gpu::CudssTiming timing_;
+};
+
+TEST(InteriorPointTimeLimit, TheDeviceDeadlineStopsAfterOneLateCallNotNineteen) {
+  // Each factorize() or solve() the fake device is asked for takes 60ms - a handful of them
+  // already exceed the limit below, exactly as one cuDSS call on a huge system would. Before
+  // the fix this fake reproduced the real failure on an A100 (refinery_year: 19 iterations,
+  // 9,700s past the limit, #907) and WORSE: normal_solve()'s own mid-solve CPU fallback (the
+  // device was factored but a solve of it was declined because the deadline had already
+  // passed) could itself be too late to even analyse, and the NEXT solve of that same
+  // factorization - the refinement loop calls normal_solve() more than once per
+  // factorization - fell through to SparseLdl::solve() with no factors of the right
+  // dimension, which segfaulted (stl_vector.h, out of bounds) rather than returning a status
+  // at all. The fix is that once a factorization proves unusable every later solve of it
+  // says so too (ipm.cpp, normal_factor_unusable_) instead of calling solve() blind.
+  constexpr double kLimit = 0.03;
+  constexpr double kPerCallDelay = 0.06;
+  constexpr double kMargin = 2.0;  // generous: this asserts "not 19 iterations", not a bound
+  int factorize_calls = 0;
+  int solve_calls = 0;
+  ipm::testing::fake_device_factory = [&] {
+    return std::unique_ptr<gpu::LinearSolverDevice>(new FakeSlowDevice(
+        std::chrono::duration<double>(kPerCallDelay), &factorize_calls, &solve_calls));
+  };
+  const Model model = l_infinity_shape(60);
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_string("ipm_linear_solver", "cudss");
+  options.set_double("time_limit", kLimit);
+  options.set_double("ipm_setup_share", 1.0);
+  Logger quiet(nullptr);
+  const auto started = std::chrono::steady_clock::now();
+  const Solution solved = ipm::solve_ipm(model, options, quiet);
+  const double wall =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+  ipm::testing::fake_device_factory = nullptr;
+  // Not a crash, not a hang, and not nineteen iterations run to a convergence the budget
+  // never allowed: the solve stops - with time_limit, or with whatever status the loop's own
+  // non-finite-direction recovery (#209) reports for the NaN a declined fallback hands
+  // back - soon after the first factorization or solve that started late, never at optimal.
+  EXPECT_NE(solved.status, SolveStatus::kOptimal) << solved.message;
+  // A handful of calls - the one that started late, plus whatever the predictor and corrector
+  // of the single iteration before it needed - never nineteen iterations' worth.
+  EXPECT_LE(factorize_calls, 3) << solved.message;
+  EXPECT_LE(wall, kLimit + kMargin) << solved.message;
 }
 
 TEST(InteriorPointTimeLimit, ADenseColumnDoesNotCarryTheSolvePastItsTimeLimit) {
