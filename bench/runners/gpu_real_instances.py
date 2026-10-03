@@ -45,6 +45,7 @@ import stamp  # noqa: E402  (#433, #589: the CSV names the commit the BINARY was
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 MITTELMANN_DIR = REPO_ROOT / "data" / "mittelmann"
+VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
 
 CSV_COLUMNS = [
     "instance", "instance_sha256", "rows", "cols", "nnz", "algorithm", "arm", "cpu_threads",
@@ -53,6 +54,7 @@ CSV_COLUMNS = [
     "seconds_min", "seconds_max", "repeats", "wall_seconds",
     "reached_tolerance", "primal_residual", "dual_residual",
     "kkt_1e4_seconds", "kkt_1e6_seconds", "kkt_1e8_seconds",
+    "independently_verified", "verifier_message",
     "git_commit", "machine", "gpu", "driver_version", "cuda_runtime", "timestamp_utc",
     "solver_options",
 ]
@@ -83,8 +85,9 @@ def run_solve(binary: Path, mps: Path, algorithm: str, tolerance: float,
               time_limit: float, extra_options: list[str] | None = None) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         stats = Path(tmp) / "s.json"
-        command = [str(binary), "solve", str(mps), "--stats", str(stats),
-                   "--time-limit", str(time_limit)]
+        sol = Path(tmp) / "solution.sol"
+        command = [str(binary), "solve", str(mps), "--stats", str(stats), "--write-sol",
+                   str(sol), "--time-limit", str(time_limit)]
         for option in COMMON_OPTIONS + [f"pdhg_tolerance={tolerance:g}"] + (extra_options or []):
             command += ["--option", option]
         if algorithm == "pdhg-cuda":
@@ -94,12 +97,13 @@ def run_solve(binary: Path, mps: Path, algorithm: str, tolerance: float,
         seconds = time.perf_counter() - started
         if not stats.exists():
             return {"status": "no_output", "objective": None, "iterations": "",
-                    "seconds": seconds, "wall": seconds}
+                    "seconds": seconds, "wall": seconds, "verified": "",
+                    "verifier_message": ""}
         blob = json.loads(stats.read_text())
         solver = as_number(blob.get("effort", {}).get("solve_seconds"))
         result = blob.get("result", {})
         primal, dual = gpu_arms.residuals(blob)
-        return {
+        out = {
             "status": result.get("status", "unknown"),
             "objective": as_number(result.get("objective")),
             "iterations": blob.get("effort", {}).get("iterations", ""),
@@ -110,7 +114,18 @@ def run_solve(binary: Path, mps: Path, algorithm: str, tolerance: float,
             "kkt_1e4_seconds": blob.get("effort", {}).get("kkt_1e4_seconds", ""),
             "kkt_1e6_seconds": blob.get("effort", {}).get("kkt_1e6_seconds", ""),
             "kkt_1e8_seconds": blob.get("effort", {}).get("kkt_1e8_seconds", ""),
+            "verified": "", "verifier_message": "",
         }
+        # #888's acceptance asks for the verifier's verdict on the GPU arm's written
+        # solution, the same pattern ipm_cudss.py already uses (run_solve there).
+        if sol.exists() and out["status"] in ("optimal", "feasible"):
+            check = subprocess.run([sys.executable, str(VERIFIER), str(mps), str(sol)],
+                                   capture_output=True, text=True, check=False)
+            out["verified"] = 1 if check.returncode == 0 else 0
+            if check.returncode != 0:
+                failing = [ln.strip() for ln in check.stdout.splitlines() if "[FAIL]" in ln]
+                out["verifier_message"] = "; ".join(failing)[:300]
+        return out
 
 
 def mps_dimensions(mps: Path) -> tuple[int, int, int]:
@@ -191,6 +206,8 @@ def build_row(name: str, dims: tuple[int, int, int], digest: str, arm: tuple, to
         "kkt_1e4_seconds": result.get("kkt_1e4_seconds", ""),
         "kkt_1e6_seconds": result.get("kkt_1e6_seconds", ""),
         "kkt_1e8_seconds": result.get("kkt_1e8_seconds", ""),
+        "independently_verified": result.get("verified", ""),
+        "verifier_message": result.get("verifier_message", ""),
     }
     row.update(gpu_arms.fairness_cells(arm, digest, result["objective"], reference,
                                        reference_source, reference_seconds))
