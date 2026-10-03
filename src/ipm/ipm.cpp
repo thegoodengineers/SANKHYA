@@ -353,9 +353,16 @@ class InteriorPoint {
   // equations are analysed, factored and solved by cuDSS, and ldl_ is analysed and used only
   // for a matrix the device declines or after a device failure. Null by default, and then
   // nothing below changes.
-  std::unique_ptr<gpu::CudssFactor> device_;
+  std::unique_ptr<gpu::LinearSolverDevice> device_;
   /// The current factors of normal_lower_ are the device's, not ldl_'s.
   bool device_factored_ = false;
+  /// #907: set when normal_solve()'s own mid-solve CPU fallback (the device was factored but
+  /// a solve of it failed or was declined) itself fails - the deadline was already past when
+  /// its analyze or factorize was tried. Neither device_ nor ldl_ then holds usable factors
+  /// of normal_lower_, and every later normal_solve() of this same factor_normal() must say
+  /// so too rather than solve with whatever ldl_ last held. Cleared only where a fresh
+  /// factorization starts, in factor_normal().
+  bool normal_factor_unusable_ = false;
   /// Factorizations the device left with a negative pivot, redone on the CPU.
   Count device_declined_ = 0;
   /// The device's phase times, kept when a failure drops it mid-solve.
@@ -1134,7 +1141,11 @@ void InteriorPoint::choose_linear_solver() {
 }
 
 bool InteriorPoint::start_device(bool automatic, const std::string& why) {
-  auto device = std::make_unique<gpu::CudssFactor>();
+  // #907: a test's fake device (ipm_testing.hpp) stands in for the real one so the deadline
+  // handling below the device path can be exercised on the CPU, with no cuDSS build or GPU.
+  std::unique_ptr<gpu::LinearSolverDevice> device = testing::fake_device_factory
+                                                        ? testing::fake_device_factory()
+                                                        : std::make_unique<gpu::CudssFactor>();
   std::string reason;
   if (!device->initialize(&reason)) {
     if (automatic) {
@@ -1233,6 +1244,17 @@ bool InteriorPoint::analyze_on_cpu(const SparseMatrix& system,
 
 bool InteriorPoint::factor_normal(const SparseLdl::ShouldStop& stop) {
   device_factored_ = false;
+  // #907: THE CRASH THIS GUARDS. Once normal_solve()'s own CPU fallback (below) has to run
+  // mid-solve - the device was factored but a solve of it is declined or fails - it can fail
+  // too (the deadline was already past when the fallback's own analyze or factorize was
+  // tried): device_factored_ is false by then, exactly as it is after an ordinary CPU
+  // factorization, and normal_solve() cannot tell "ldl_ holds this iteration's factors" from
+  // "it does not" by that bit alone. Without this flag the NEXT solve of the same
+  // factorization (the predictor-corrector's refinement loop calls normal_solve() several
+  // times on one factor_normal()) fell through to ldl_.solve() on whatever ldl_ last held -
+  // uninitialised, or another system's, of another dimension - and indexed past the end of
+  // its own storage. Reset here, at the one place a fresh factorization starts.
+  normal_factor_unusable_ = false;
   // cuDSS does not consult the deadline, so a deadline already past goes to ldl_, which
   // reports it through stopped_early() as it always has.
   if (device_ != nullptr && !(stop && stop())) {
@@ -1259,6 +1281,13 @@ bool InteriorPoint::factor_normal(const SparseLdl::ShouldStop& stop) {
 }
 
 void InteriorPoint::normal_solve(double* v) {
+  if (normal_factor_unusable_) {
+    // #907: a previous solve of this same factorization already fell to the CPU fallback
+    // and found it, too, past the deadline; there are no factors here to solve with, on the
+    // device or off it, and no later call in this factorization gets any either.
+    std::fill(v, v + m_, std::numeric_limits<double>::quiet_NaN());
+    return;
+  }
   if (device_factored_) {
     // #907: the same reasoning as the analyze() guard above - a solve already running late
     // cannot be interrupted, so skip it rather than start one, and fall to the CPU path below
@@ -1275,6 +1304,7 @@ void InteriorPoint::normal_solve(double* v) {
     ++factorizations_;
     if ((!cpu_analyzed_ && !analyze_on_cpu(normal_lower_, should_stop_)) ||
         !ldl_.factorize(normal_lower_, dual_regularization_, should_stop_)) {
+      normal_factor_unusable_ = true;
       std::fill(v, v + m_, std::numeric_limits<double>::quiet_NaN());
       return;
     }

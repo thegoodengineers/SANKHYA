@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <vector>
 
 namespace sankhya::ipm {
@@ -18,7 +19,18 @@ class DenseColumnCorrection;
 struct PcgReport;
 }  // namespace sankhya::ipm
 
+namespace sankhya::gpu {
+class LinearSolverDevice;
+}  // namespace sankhya::gpu
+
 namespace sankhya::ipm::testing {
+
+/// Stands in for start_device()'s std::make_unique<gpu::CudssFactor>() when set (#907): a
+/// CPU-only test can hand InteriorPoint a fake LinearSolverDevice that takes as long as the
+/// test likes, with no cuDSS build and no GPU, to reach the device path's deadline handling.
+/// Empty in every real solve; only tests set it, and they clear it again before returning.
+using FakeDeviceFactory = std::function<std::unique_ptr<gpu::LinearSolverDevice>()>;
+inline FakeDeviceFactory fake_device_factory;
 
 /// Called after every Newton-direction solve on the dense-column path (#467) with the
 /// correction (which holds A, Theta, the row shift and delta of the system it solved), the
