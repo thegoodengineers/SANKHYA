@@ -23,3 +23,5 @@ ebafccf 0bbcb68 miplib-419-aggregation-baseline.csv and miplib-419-aggregation-o
 8358f75 0bbcb68 miplib-419-localsearch-baseline.csv and miplib-419-localsearch-on.csv, run on the #430 branch; carried to main by the squash merge of #454
 462fa39e bb4854da lu-ws-ab-netlib-new-462fa39e-r{1,2,3}.csv and lu-ws-ab-netlib-462fa39e-summary.csv (#809), and lu-ft-ab-netlib-*-462fa39e and lu-hs-*-462fa39e (both sides built at 462fa39e), run on the #809 branch; carried to main by the squash merge of #809
 bc54839 1adbf77 ipm-dense-ab-{mittelmann,netlib-full}-{off,on}-bc54839.csv, run on the #467 branch (#936); 1adbf77 is its squash merge
+bcf2e42 37f4c56 engine-selection-bcf2e42.csv, the #477 training grid, run on the branch (#941); 37f4c56 is its squash merge
+ab04612 37f4c56 engine-tree-ab-netlib-full-{rules,learned}-ab04612.csv, run on the #477 branch (#941); 37f4c56 is its squash merge
