@@ -13,11 +13,9 @@ The repository currently reports performance on the following sets:
 
 *Why train/test are disjoint*: The goal is to prove the branching rule generalizes across heterogeneous models. Testing on instances it trained on would compromise this claim.
 
-*Missing Information*: The explicit `train_instances.txt` and `test_instances.txt` lists are NOT included in this folder yet. 
-- The exact training/test instance lists must be established before data collection.
-- They must exclude every reported instance.
-- The split must be deterministic and instance-level.
-- Instance selection should be justified by the available repository benchmark sets rather than arbitrary file size alone.
+*Pilot Instance Acquisition (2026-10-03)*: A disjoint pilot set was constructed from the official ZIB list (`https://miplib.zib.de/downloads/benchmark-v2.test`). The repository's reported instances (Tier 1, Tier 2, MIPLIB3, Case Studies) were explicitly subtracted by exact string matching against the benchmark names. From the resulting disjoint candidate pool (177 instances), the first 4 instances alphabetically were deterministically selected as `train_instances.txt`, and the next 4 as `test_instances.txt`.
+
+*Note*: This constitutes a small pilot collection set for toolchain validation only. It is not the final Issue #801 training/test split, which must be scaled and validated later.
 
 ## 2. Phase 1 CSV Data Collection
 We will use the existing benchmark runner to collect data. The `mip_strong_branch_record_csv` option can be passed via:
