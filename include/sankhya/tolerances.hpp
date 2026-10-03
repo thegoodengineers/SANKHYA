@@ -559,6 +559,23 @@ inline constexpr double kIpmProximalRefinementShrink = 0.1;
 inline constexpr double kIpmProximalRecoveryRaise = 100.0;
 inline constexpr double kIpmProximalRecoveryCap = 1e-4;
 
+// ---- The homogeneous self-dual embedding of the LP interior point (#475, ipm_hsd) ----------
+
+/// Convergence to an optimum, measured on the point x/tau, y/tau, z/tau: relative primal and
+/// dual residuals, relative gap and the worst relative complementarity product, each at or
+/// below this. The default path's kIpmTolerance, kIpmGap and kIpmComplementarity (1e-8, set in
+/// ipm.cpp for the reasons written there), so the two paths converge to the same standard.
+inline constexpr double kIpmHsdTolerance = 1e-8;
+/// A certificate candidate (the dual ray y for infeasibility, the primal ray x for
+/// unboundedness) is offered to the checker first with every entry at or below this share of
+/// its largest set to zero, then as it came: the QP interior point's kQpIpmCertificateRounding
+/// and for the same reason, the part of the iterate that converges to zero along the ray.
+inline constexpr double kIpmHsdCertificateRounding = 1e-6;
+/// The iteration stops without a verdict once mu has fallen this far below its starting
+/// value while tau and kappa still have not decided: every residual has fallen as far with
+/// it (they shrink at one rate in the embedding), so nothing is left for another step to show.
+inline constexpr double kIpmHsdMuFloor = 1e-15;
+
 // ---- Gondzio's centrality correctors in the LP interior point (#472) ----------------------
 
 /// The products a corrector aims for: [kIpmCentralityBetaMin, kIpmCentralityBetaMax] times

@@ -23,7 +23,9 @@
 // WHAT THIS METHOD DOES NOT DO. It produces no basis, so it cannot warm-start branch and
 // bound and the simplex remains the node engine. It does not certify infeasibility or
 // unboundedness: when it fails to converge it says so and hands back a numerical error,
-// never a claim it cannot prove. Both are stated in the option's description.
+// never a claim it cannot prove. Both are stated in the option's description. The option
+// ipm_hsd (#475, off by default) solves the homogeneous self-dual embedding instead
+// (ipm/hsd.cpp), which does end an infeasible or unbounded LP with a checked certificate.
 
 #include "sankhya/ipm.hpp"
 #include "util/memory.hpp"
@@ -44,6 +46,7 @@
 #include "ipm/centrality.hpp"
 #include "ipm/column_side.hpp"
 #include "ipm/dense_columns.hpp"
+#include "ipm/hsd.hpp"
 #include "ipm/ipm_testing.hpp"
 #include "ipm/model_space.hpp"
 #include "ipm/proximal_system.hpp"
@@ -2677,6 +2680,46 @@ Solution InteriorPoint::run() {
   }
 }
 
+/// #475: THE EMBEDDING'S ANSWER, OR THE DEFAULT LOOP'S. The embedding (ipm_hsd) is the path
+/// that can end infeasible or unbounded with a certificate; on a model with an optimum it has
+/// none of the default loop's recovery machinery (dual purification, the barrier-exhausted
+/// step, the model-space stall rule's purification), and on Netlib it stalled short of the
+/// tolerances on models the default loop solves. So when it ends with no verdict of its own
+/// (a numerical error, a feasible point that is not a proof, the iteration limit), the default
+/// loop runs on the same model and the time that is left, and its answer is kept when it is
+/// optimal or when the embedding had no point to offer. A certificate, an optimum, and a time
+/// limit or interruption from the embedding stand as they are.
+Solution default_loop_after_the_embedding(Solution embedded, const Model& model,
+                                          const Options& options, Logger& logger,
+                                          SolveControl* control, const Timer& clock,
+                                          const Scaling* scaling) {
+  const bool no_verdict = embedded.status == SolveStatus::kNumericalError ||
+                          embedded.status == SolveStatus::kFeasible ||
+                          embedded.status == SolveStatus::kIterationLimit;
+  if (!no_verdict) return embedded;
+  logger.info(
+      "Interior point: the homogeneous self-dual embedding ended {} ({}); the default loop "
+      "runs on the time that is left (#475)",
+      to_string(embedded.status), embedded.message);
+  InteriorPoint engine(model, options, logger, control, nullptr, &clock);
+  if (scaling != nullptr) engine.set_scaling(scaling);
+  Solution fallback = engine.run();
+  const bool adopt =
+      fallback.status == SolveStatus::kOptimal || embedded.status != SolveStatus::kFeasible;
+  if (!adopt) {
+    embedded.message += fmt::format("; the default loop then ended {} and was not adopted",
+                                    to_string(fallback.status));
+    return embedded;
+  }
+  const std::string note = fmt::format(
+      "the homogeneous self-dual embedding ended {} ({}), and this is the default loop's "
+      "answer (#475)",
+      to_string(embedded.status), embedded.message);
+  fallback.message = fallback.message.empty() ? note : fallback.message + "; " + note;
+  fallback.iterations += embedded.iterations;
+  return fallback;
+}
+
 /// Scaled solve: Ruiz + Pock-Chambolle equilibration, exactly as the simplex entry point
 /// applies it, then the point, the row duals and the reduced costs are mapped back:
 /// x = Dc xhat, y = Dr yhat, d = Dc^-1 dhat (la/scaling.hpp).
@@ -2685,7 +2728,18 @@ Solution solve_scaled(const Model& model, const Options& options, Logger& logger
   // The clock the time limit runs on starts HERE. Scaling a 500,000-row model and copying
   // it are tens of seconds, and a polish's budget of 30 used to begin only after them.
   Timer clock;
+  // THE HOMOGENEOUS SELF-DUAL EMBEDDING (#475, ipm_hsd, off by default) replaces the loop
+  // below for a cold solve; a warm start (the polish of a first-order answer) keeps it.
+  const bool homogeneous = warm == nullptr && options.get_bool("ipm_hsd");
+  if (homogeneous) announce_homogeneous(options, logger);
   if (!options.get_bool("scaling")) {
+    if (homogeneous) {
+      Solution solution = default_loop_after_the_embedding(
+          solve_homogeneous(model, options, logger, control, clock, nullptr), model, options,
+          logger, control, clock, nullptr);
+      keep_only_a_proved_certificate(model, &solution, logger);
+      return solution;
+    }
     InteriorPoint engine(model, options, logger, control, warm, &clock);
     return engine.run();
   }
@@ -2732,23 +2786,34 @@ Solution solve_scaled(const Model& model, const Options& options, Logger& logger
   }
   logger.verbose("interior point: scaled model and warm start ready at {:.2f}s",
                  clock.elapsed_seconds());
-  InteriorPoint engine(scaled, options, logger, control, warm, &clock);
-  engine.set_scaling(&scaling);
-  Solution solution = engine.run();
+  Solution solution;
+  if (homogeneous) {
+    solution = default_loop_after_the_embedding(
+        solve_homogeneous(scaled, options, logger, control, clock, &scaling, &model), scaled,
+        options, logger, control, clock, &scaling);
+  } else {
+    InteriorPoint engine(scaled, options, logger, control, warm, &clock);
+    engine.set_scaling(&scaling);
+    solution = engine.run();
+  }
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
     const double dc = scaling.column[u];
     if (u < solution.col_value.size()) solution.col_value[u] *= dc;
     if (u < solution.col_dual.size()) solution.col_dual[u] /= dc;
+    // A ray maps as a point does (x = Dc xhat), a Farkas vector as the row duals (y = Dr yhat).
+    if (u < solution.primal_ray.size()) solution.primal_ray[u] *= dc;
   }
   for (Index i = 0; i < m; ++i) {
     const auto u = static_cast<std::size_t>(i);
     if (u < solution.row_dual.size()) solution.row_dual[u] *= scaling.row[u];
+    if (u < solution.farkas_dual.size()) solution.farkas_dual[u] *= scaling.row[u];
   }
   if (solution.status == SolveStatus::kOptimal) {
     solution.dual_bound = model.evaluate_objective(solution.col_value.data());
   }
   solution.recompute_quality(model);
+  if (homogeneous) keep_only_a_proved_certificate(model, &solution, logger);
   return solution;
 }
 

@@ -2089,6 +2089,26 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          10.0,
          {}});
+    s.push_back(
+        {"ipm_hsd",
+         OptionType::Bool,
+         false,
+         "Solve the LP interior point's cold solves through the simplified homogeneous "
+         "self-dual embedding (#475; Ye, Todd and Mizuno 1994, Xu, Hung and Ye 1996, Andersen "
+         "and Andersen 2000) in place of the default Mehrotra loop: the same normal equations "
+         "and the same LDL^T, with the one extra unknown tau eliminated by a second solve per "
+         "factorization. At the limit tau > 0 gives the optimum and kappa > 0 a ray: the "
+         "dual ray y is reported as a Farkas certificate (infeasible) or the primal ray x as "
+         "a ray of unboundedness, the latter with a feasible point from a second, zero-cost "
+         "solve of the embedding; either only when farkas_proves_infeasible or "
+         "ray_proves_unbounded (src/core/certificate.cpp) accepts it, on the scaled model and "
+         "again in the model's units. A warm start (the PDHG polish) keeps the default loop, "
+         "and ipm_proximal_regularization, ipm_dense_columns, ipm_normal_side, "
+         "ipm_linear_solver=cudss and ipm_centrality_correctors do not apply. Default OFF "
+         "until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
                  tol::kPdhgLoose,
