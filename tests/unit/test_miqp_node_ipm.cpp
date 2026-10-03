@@ -154,33 +154,91 @@ Options ipm_nodes() {
   return options;
 }
 
-TEST(MiqpNodeIpm, RandomConvexMiqpsReachTheEnumeratedOptimumOrAreInfeasible) {
-  std::mt19937 rng(494);
+/// What one pass over `trials` random convex MIQPs found.
+struct Sweep {
   int optimal = 0;
   int infeasible = 0;
-  for (int trial = 0; trial < 80; ++trial) {
+  Count warm_starts = 0;     ///< node QPs started from a parent's iterate, over every trial
+  Count warm_fallbacks = 0;  ///< of those, abandoned for the cold start
+  Count node_qps = 0;
+  Count qp_iterations = 0;
+  std::vector<SolveStatus> statuses;
+  std::vector<double> objectives;
+};
+
+/// Solve `trials` random convex MIQPs from `seed` with the node IPM, warm-started or not,
+/// and hold every answer to enumeration.
+Sweep enumeration_sweep(unsigned seed, int trials, bool warm) {
+  std::mt19937 rng(seed);
+  Sweep sweep;
+  for (int trial = 0; trial < trials; ++trial) {
     const bool maximize = trial % 3 == 2;
     const Instance instance = random_convex_miqp(rng, maximize);
     const double best = enumerate(instance);
-    const Solution solved = solve(instance.model, ipm_nodes());
+    Options options = ipm_nodes();
+    options.set_bool("miqp_node_ipm_warm_start", warm);
+    const Solution solved = solve(instance.model, options);
+    sweep.statuses.push_back(solved.status);
+    sweep.objectives.push_back(solved.objective);
+    sweep.warm_starts += solved.qp_node_warm_starts;
+    sweep.warm_fallbacks += solved.qp_node_warm_fallbacks;
+    sweep.node_qps += solved.qp_node_solves;
+    sweep.qp_iterations += solved.qp_node_iterations;
     if (std::isnan(best)) {
-      ++infeasible;
+      ++sweep.infeasible;
       EXPECT_EQ(solved.status, SolveStatus::kInfeasible)
-          << "trial " << trial << ": " << solved.message;
+          << "trial " << trial << (warm ? " (warm)" : " (cold)") << ": " << solved.message;
       continue;
     }
-    ++optimal;
-    ASSERT_EQ(solved.status, SolveStatus::kOptimal)
-        << "trial " << trial << ": " << solved.message;
+    ++sweep.optimal;
+    EXPECT_EQ(solved.status, SolveStatus::kOptimal)
+        << "trial " << trial << (warm ? " (warm)" : " (cold)") << ": " << solved.message;
+    if (solved.status != SolveStatus::kOptimal) continue;
     EXPECT_NEAR(solved.objective, best, 1e-6 * std::max(1.0, std::fabs(best)))
-        << "trial " << trial;
+        << "trial " << trial << (warm ? " (warm)" : " (cold)");
     EXPECT_NEAR(objective(instance, solved.col_value), best,
                 1e-6 * std::max(1.0, std::fabs(best)))
-        << "trial " << trial << ": the reported point does not have the reported objective";
+        << "trial " << trial << (warm ? " (warm)" : " (cold)")
+        << ": the reported point does not have the reported objective";
   }
+  return sweep;
+}
+
+TEST(MiqpNodeIpm, RandomConvexMiqpsReachTheEnumeratedOptimumOrAreInfeasible) {
+  const Sweep cold = enumeration_sweep(494, 80, false);
   // Neither half may pass vacuously.
-  EXPECT_GT(optimal, 40);
-  EXPECT_GT(infeasible, 3);
+  EXPECT_GT(cold.optimal, 40);
+  EXPECT_GT(cold.infeasible, 3);
+  EXPECT_EQ(cold.warm_starts, 0) << "no warm start without miqp_node_ipm_warm_start";
+  EXPECT_GT(cold.node_qps, 0);
+}
+
+TEST(MiqpNodeIpm, TheSameEightyMiqpsWarmStartedGiveTheSameAnswers) {
+  // miqp_node_ipm_warm_start (#494, #893): every child's interior point starts from its
+  // parent's save point. The same 80 models as the test above, each held to enumeration, and
+  // each with the cold run's status and objective: the option changes where the IPM starts,
+  // never what counts as optimal.
+  const Sweep cold = enumeration_sweep(494, 80, false);
+  const Sweep warm = enumeration_sweep(494, 80, true);
+  EXPECT_GT(warm.optimal, 40);
+  EXPECT_GT(warm.infeasible, 3);
+  ASSERT_EQ(warm.statuses.size(), cold.statuses.size());
+  for (std::size_t trial = 0; trial < warm.statuses.size(); ++trial) {
+    EXPECT_EQ(warm.statuses[trial], cold.statuses[trial]) << "trial " << trial;
+    if (cold.statuses[trial] == SolveStatus::kOptimal) {
+      EXPECT_NEAR(warm.objectives[trial], cold.objectives[trial],
+                  1e-6 * std::max(1.0, std::fabs(cold.objectives[trial])))
+          << "trial " << trial;
+    }
+  }
+  // Not vacuous: children were in fact started warm.
+  EXPECT_GT(warm.warm_starts, 50);
+  // And they took fewer interior point iterations over the search, none abandoned: 2,088
+  // against 2,617 when #494 was finished (deterministic counts, not times).
+  EXPECT_LT(warm.qp_iterations, cold.qp_iterations)
+      << "warm " << warm.qp_iterations << " over " << warm.node_qps << " node QPs, cold "
+      << cold.qp_iterations << " over " << cold.node_qps;
+  EXPECT_EQ(warm.warm_fallbacks, 0);
 }
 
 TEST(MiqpNodeIpm, ANodeOnlyItsLpProvesInfeasibleIsFathomedNotFatal) {
@@ -219,37 +277,11 @@ TEST(MiqpNodeIpm, ANodeOnlyItsLpProvesInfeasibleIsFathomedNotFatal) {
 }
 
 TEST(MiqpNodeIpm, WarmStartedNodesReachTheSameEnumeratedOptimumAsCold) {
-  // miqp_node_ipm_warm_start (#494, #893): a child's interior point starts from its parent's
-  // iterate instead of cold. The search answers the same way either way - the option changes
-  // where the IPM starts, never what counts as optimal - so this reuses the random convex
-  // MIQPs above with the option on.
-  std::mt19937 rng(4942);
-  int optimal = 0;
-  int infeasible = 0;
-  for (int trial = 0; trial < 60; ++trial) {
-    const bool maximize = trial % 3 == 2;
-    const Instance instance = random_convex_miqp(rng, maximize);
-    const double best = enumerate(instance);
-    Options options = ipm_nodes();
-    options.set_bool("miqp_node_ipm_warm_start", true);
-    const Solution solved = solve(instance.model, options);
-    if (std::isnan(best)) {
-      ++infeasible;
-      EXPECT_EQ(solved.status, SolveStatus::kInfeasible)
-          << "trial " << trial << ": " << solved.message;
-      continue;
-    }
-    ++optimal;
-    ASSERT_EQ(solved.status, SolveStatus::kOptimal)
-        << "trial " << trial << ": " << solved.message;
-    EXPECT_NEAR(solved.objective, best, 1e-6 * std::max(1.0, std::fabs(best)))
-        << "trial " << trial;
-    EXPECT_NEAR(objective(instance, solved.col_value), best,
-                1e-6 * std::max(1.0, std::fabs(best)))
-        << "trial " << trial << ": the reported point does not have the reported objective";
-  }
-  EXPECT_GT(optimal, 30);
-  EXPECT_GT(infeasible, 2);
+  // #924's second seed, kept: 60 more models with the warm start on.
+  const Sweep warm = enumeration_sweep(4942, 60, true);
+  EXPECT_GT(warm.optimal, 30);
+  EXPECT_GT(warm.infeasible, 2);
+  EXPECT_GT(warm.warm_starts, 0);
 }
 
 TEST(MiqpNodeIpm, WarmStartIsIgnoredWithoutMiqpNodeIpmAndChangesNothing) {

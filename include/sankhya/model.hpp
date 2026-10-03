@@ -752,6 +752,14 @@ class Solution {
   /// Violated cliques the clique separator found over the search, before the cut filter
   /// (#358, #512); zero when enable_clique_cuts is off or no cut round ran.
   Count clique_cuts_generated = 0;
+  /// MIQP with miqp_node_ipm (#494): node QPs the QP interior point solved, its iterations
+  /// over all of them (a warm run abandoned for a cold one included), how many of them started
+  /// from the parent's iterate (miqp_node_ipm_warm_start, #893) and how many of those were
+  /// abandoned for the cold start. Zero otherwise.
+  Count qp_node_solves = 0;
+  Count qp_node_iterations = 0;
+  Count qp_node_warm_starts = 0;
+  Count qp_node_warm_fallbacks = 0;
   /// The root LP relaxation's objective before and after the root cut round (#221), in
   /// the model's own sense and units; NaN when no branch-and-cut ran. The share of the
   /// integrality gap the cuts closed is (after - before) / (objective - before), which the

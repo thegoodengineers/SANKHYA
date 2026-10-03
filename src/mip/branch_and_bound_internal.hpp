@@ -122,9 +122,9 @@ struct TreeNode {
   /// is then brought onto the rows of the moment when it is entered (remap_warm_start).
   /// Shared by every node stored under the same rows, so it costs a pointer per node.
   std::shared_ptr<const std::vector<std::size_t>> warm_cuts;
-  /// The parent's QP interior point iterate (miqp_node_ipm_warm_start, #494, #893): empty
-  /// unless that option and miqp_node_ipm are both on. Moved out when the node is processed,
-  /// same as `warm`.
+  /// The parent's QP interior point save point (miqp_node_ipm_warm_start, #494, #893): empty
+  /// unless that option and miqp_node_ipm are both on and the parent's IPM produced one.
+  /// Moved out when the node is processed, same as `warm`.
   qp::QpIpmWarmStart qp_warm;
   /// How far the branching moved the column from the parent's relaxation value: v - floor(v)
   /// for the down child, ceil(v) - v for the up child. The pseudocost observation (#69) is
@@ -711,6 +711,8 @@ class BranchAndBound {
   /// objective linearised at the point, then the Neumaier-Shcherbina bound; -inf when none.
   [[nodiscard]] double safe_qp_node_bound(const Solution& relaxation);
   void report_miqp_ipm() const;
+  /// The node QP counts (#494) into the Solution, for the stats JSON.
+  void record_miqp_ipm(Solution* solution) const;
   /// What the entered node is pruned on and its children inherit: the believed bound, or
   /// with safe_bounds the safe LP bound (#519); with miqp_node_ipm the linearised QP bound
   /// (#494), the larger of the two when both are on - each is a lower bound, so both are.
@@ -959,6 +961,12 @@ class BranchAndBound {
   Count miqp_ipm_fallbacks_ = 0;        ///< node QPs it did not, handed to the fallback
   Count miqp_ipm_lp_infeasible_ = 0;    ///< of those, proved infeasible by the node LP
   Count miqp_safe_bound_infinite_ = 0;  ///< IPM nodes with no finite safe bound
+  Count miqp_ipm_iterations_ = 0;       ///< IPM iterations over every node QP, warm and cold
+  Count miqp_ipm_warm_starts_ = 0;      ///< node QPs the IPM started from a parent's iterate
+  Count miqp_ipm_warm_fallbacks_ = 0;   ///< of those, abandoned and solved again cold
+  /// The save point of the last node QP the IPM solved (QpIpmWarmResult::next), what the
+  /// node's children and its dives start from; empty after any other node solve.
+  qp::QpIpmWarmStart last_qp_warm_;
 
   NodeScaling scaling_;
 

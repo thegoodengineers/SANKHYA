@@ -364,6 +364,7 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
     x = probe.col_value;
     // The next probe fixes one more column of THIS point, so this basis is its warm start.
     current_warm_ = basis_of(probe);
+    if (miqp_node_ipm_warm_start_) current_qp_warm_ = last_qp_warm_;  // #494, likewise
   }
   s.work += lp_resolves;
   unwind_to(mark);

@@ -523,6 +523,35 @@ inline constexpr int kQpIpmRegularizationAttempts = 8;
 /// is reported only if the checker accepts it.
 inline constexpr double kQpIpmCertificateRounding = 1e-6;
 
+/// #494, #893 (miqp_node_ipm_warm_start): the iterate a QP interior point hands on as a warm
+/// start is the first one whose relative primal residual, dual residual and gap are all at or
+/// below this, not the optimum: an advanced point that is still well inside the bounds
+/// (Gondzio 1998, see src/qp/qp_ipm_warm.cpp). Our choice, not the paper's number: on the 80
+/// random MIQPs of tests/unit/test_miqp_node_ipm.cpp, 1e-2 took 2,088 node IPM iterations
+/// against 2,102 at 1e-1 and 2,100 at 3e-1, and the cold start 2,617.
+inline constexpr double kQpIpmWarmSaveLevel = 1e-2;
+
+/// The shift of a warm start into the interior: every column at least this far from each of
+/// its finite bounds (half its width when narrower). 1e-3 left 9 of 242 warm starts on the
+/// 80 random MIQPs to fail or stall, 1e-1 none.
+inline constexpr double kQpIpmWarmShiftDistance = 0.1;
+
+/// The least centring target of the shift, so the centrality box below is never empty.
+inline constexpr double kQpIpmWarmCentringFloor = 1e-6;
+
+/// ...and every complementarity product s z then moved into [low mu, high mu] by its
+/// multiplier, mu the average product at the shifted point, the centrality box of Gondzio's
+/// multiple centrality correctors (Gondzio 1996, beta_min = 0.1 and beta_max = 10).
+inline constexpr double kQpIpmWarmCentringLow = 0.1;
+inline constexpr double kQpIpmWarmCentringHigh = 10.0;
+
+/// A warm run is abandoned for the cold start when its worst relative measure (primal
+/// residual, dual residual, gap) has not fallen by kQpIpmWarmStallFactor over the last
+/// kQpIpmWarmStallWindow iterations. Mehrotra's method gains an order of magnitude every two
+/// or three iterations when it is converging, so ten iterations without one is a stall.
+inline constexpr int kQpIpmWarmStallWindow = 10;
+inline constexpr double kQpIpmWarmStallFactor = 0.1;
+
 // ---- Proximal regularization of the LP interior point (#473, ipm_proximal_regularization) --
 
 /// rho = delta = max(floor, min(previous, kIpmProximalShare * mu)), starting from
