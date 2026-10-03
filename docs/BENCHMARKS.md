@@ -1579,6 +1579,18 @@ Source CSVs: `bench/results/miplib-506-fj-off-seeds3-bce539f.csv` and `bench/res
 Instances whose matched or proved seed count moved between the legs: `noswot` matched 0->1, proved 0->0.
 
 
+#### A/B: Devex for the node LPs on the seed harness (#792)
+
+Source CSVs: `bench/results/nodepricing-ab-miplib-seeds3-inherit-fef0192.csv` and `bench/results/nodepricing-ab-miplib-seeds3-devex-fef0192.csv`, `mip_node_pricing` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
+
+| leg | runs | matched | proved | sgm time (s, shift 10) | first feasible found | sgm first feasible (s, shift 1) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| off | 90 | 50 | 31 | 27.87 | 87 | 0.586 | 10.77 |
+| on | 90 | 52 | 33 | 27.36 | 86 | 0.522 | 10.10 |
+
+Instances whose matched or proved seed count moved between the legs: `enlight8` matched 3->2, proved 2->2; `markshare_4_0` matched 1->2, proved 0->0; `neos-3611689-kaihu` matched 3->3, proved 1->3; `noswot` matched 1->2, proved 0->0; `pk1` matched 0->1, proved 0->0.
+
+
 #### A/B: the root cut loop on the seed harness (#862)
 
 Source CSVs: `bench/results/rootloop-ab-miplib-seeds3-false-f7cfd57.csv` and `bench/results/rootloop-ab-miplib-seeds3-true-f7cfd57.csv`, `root_cut_loop` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
