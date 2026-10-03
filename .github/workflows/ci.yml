@@ -423,6 +423,12 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_gpu_runners.py
 
+      - name: The PDHG step and primal-weight A/B runner's legs and rows (#482)
+        # Pure Python, no solve: each leg passes exactly its two switches, after any
+        # --solver-option; each scheme its two; PDHG alone; one row per scheme and leg.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_pdhg_step_weight_ab.py
+
       - name: The head-to-head's rival parsers, grading, profile and doc section (#766)
         # Pure Python, no solver runs: Clp's and GLPK's output layouts, the .sol conversion
         # and name reconciliation, GLPK's objective-constant restatement, the grading rules,

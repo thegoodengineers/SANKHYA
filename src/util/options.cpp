@@ -2209,6 +2209,67 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"pdhg_constant_step",
+         OptionType::Bool,
+         false,
+         "Run the LP PDHG at the constant step eta = 0.998 / U instead of the adaptive rule "
+         "of PDLP section 3.1 (#482), U a PROVED upper bound on ||A||_2 of the scaled matrix: "
+         "the smallest of ||A||_F, sqrt(||A||_1 ||A||_inf) and a Collatz-Wielandt bound on "
+         "|A|^T |A| from 30 power steps (src/la/operator_norm.hpp; Horn & Johnson, Matrix "
+         "Analysis, Theorem 8.1.18 and Corollary 8.1.29). tau sigma ||A||^2 < 1 then holds "
+         "(Chambolle & Pock 2011), so every step is accepted and no step is retried. The "
+         "share 0.998 is that of Lu, Peng & Yang, cuPDLPx, arXiv:2507.14051, which pairs it "
+         "with the reflected Halpern iteration (pdhg_halpern). The log states the bound, the "
+         "power-iteration lower bound and their ratio. CPU engine and the single-card CUDA "
+         "engine (both its paths); the multi-GPU engine ignores it and says so. Off by "
+         "default until an A/B on main (bench/runners/pdhg_step_weight_ab.py).",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
+        {"pdhg_primal_weight_pid",
+         OptionType::Bool,
+         false,
+         "Move the LP PDHG primal weight omega at each restart by a PID controller on "
+         "e = log(omega ||dx|| / ||dy||), the period's primal and dual movement (#482): "
+         "log omega -= kp e + ki sum(e) + kd de, the integral clamped to +-5, omega kept in "
+         "[1e-6, 1e6] - the controller of the first-order QP engine (#493, "
+         "src/qp/qp_first_order_accel.cpp), called as is. With kp = 0.5 and ki = kd = 0 it is "
+         "the default smoothed update of PDLP section 3.2 (theta = 0.5). Applies to the PDLP "
+         "restarts and to the pdhg_halpern restarts, on the CPU engine and the single-card "
+         "CUDA engine; the multi-GPU engine ignores it and says so. Reference: Lu, Peng & "
+         "Yang, cuPDLPx, arXiv:2507.14051. Off by default until an A/B on main "
+         "(bench/runners/pdhg_step_weight_ab.py); the gains and how they were chosen are in "
+         "src/pdhg/pdhg.cpp and the #482 rows of docs/PROVENANCE.md.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back({"pdhg_pid_kp",
+                 OptionType::Double,
+                 0.5,
+                 "pdhg_primal_weight_pid: proportional gain. 0.5 with ki = kd = 0 is PDLP's "
+                 "smoothed primal-weight update (theta = 0.5). The defaults (0.5, 0.1, 0.2) "
+                 "are the best of an 18-point grid on a tuning set disjoint from the A/B's "
+                 "(#482; src/pdhg/pdhg.cpp says how).",
+                 0.0,
+                 2.0,
+                 {}});
+    s.push_back({"pdhg_pid_ki",
+                 OptionType::Double,
+                 0.1,
+                 "pdhg_primal_weight_pid: integral gain, on the clamped sum of log-errors.",
+                 0.0,
+                 2.0,
+                 {}});
+    s.push_back({"pdhg_pid_kd",
+                 OptionType::Double,
+                 0.2,
+                 "pdhg_primal_weight_pid: derivative gain, on the change of the log-error "
+                 "between restarts.",
+                 0.0,
+                 2.0,
+                 {}});
 
     // ---- Reporting ---------------------------------------------------------------------
     s.push_back({"log_level",
