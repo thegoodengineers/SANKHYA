@@ -37,6 +37,8 @@ struct DeviceLoopBuffers {
   long long* accepted{};  ///< accepted iterations so far
   int* accept_flag{};     ///< the last step's verdict, read by the commit kernel
   double eta_ceil = 0.0;  ///< the host path's clamp, 1e3 / ||A||
+  /// pdhg_constant_step (#482): every step accepted and eta never moved, as on the host.
+  bool constant_step = false;
   int n = 0, m = 0, nnz = 0;
   bool two_matvec = false;
   cusparseHandle_t cusparse{};

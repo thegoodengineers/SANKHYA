@@ -360,6 +360,16 @@ inline constexpr Count kPdhgPolishFirstIteration = 100;
 inline constexpr double kPdhgPolishGap = 1e-2;
 inline constexpr Count kPdhgPolishBudgetDivisor = 8;
 
+/// PDHG constant step (#482, option pdhg_constant_step): eta = kPdhgConstantStepShare / U,
+/// U the certified upper bound on ||A||_2 of src/la/operator_norm.hpp, so tau sigma ||A||^2 =
+/// eta^2 ||A||^2 <= 0.996 < 1 holds strictly (Chambolle & Pock 2011, Theorem 1) even where U
+/// is exact. 0.998 is the share Lu, Peng & Yang use (cuPDLPx, arXiv:2507.14051), there on an
+/// estimate of the norm. The bound is built from kPdhgConstantStepPowerIterations power
+/// steps on A^T A (its lower side, for the log) and as many on |A|^T |A| (the
+/// Collatz-Wielandt part of its upper side).
+inline constexpr double kPdhgConstantStepShare = 0.998;
+inline constexpr int kPdhgConstantStepPowerIterations = 30;
+
 // ---------------------------------------------------------------------------------------
 // Cuts
 // ---------------------------------------------------------------------------------------

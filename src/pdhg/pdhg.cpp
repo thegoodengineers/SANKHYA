@@ -13,6 +13,12 @@
 //   [AHLL25] Applegate, Hinder, Lu & Lubin, "PDLP: A Practical First-Order Method for
 //           Large-Scale Linear Programming", arXiv:2501.07018 (2025), feasibility
 //           polishing: option pdhg_feasibility_polish (#483), pdhg_feasibility_polish.cpp.
+//   [LPY25] Lu, Peng & Yang, "cuPDLPx: a further enhanced GPU-based first-order solver for
+//           linear programming", arXiv:2507.14051 (2025): the constant step of 0.998 / ||A||_2
+//           (option pdhg_constant_step, #482, on a PROVED upper bound on the norm from
+//           src/la/operator_norm.hpp rather than an estimate) and the primal weight driven by
+//           a PID controller (option pdhg_primal_weight_pid, #482, the QP engine's controller
+//           of #493 called as is). Both off by default.
 //
 // WHY THIS ENGINE EXISTS. The revised simplex is sequential: every pivot depends on the one
 // before it, so it does not parallelise onto a GPU and we will not claim it does. PDHG
@@ -66,7 +72,9 @@
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
+#include "../la/operator_norm.hpp"
 #include "../la/scaling.hpp"
+#include "../qp/qp_first_order_accel.hpp"
 #include "../util/profiler.hpp"
 
 namespace sankhya::pdhg {
@@ -138,6 +146,55 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       estimate_spectral_norm(scaling.matrix, kPowerIterations,
                              static_cast<unsigned>(options.get_int("random_seed")) + 1u);
 
+  // ---- #482: a constant step on a certified bound, and the PID primal weight ------------
+  // CONSTANT STEP (pdhg_constant_step). eta = kPdhgConstantStepShare / U with U >= ||Ahat||_2
+  // PROVED (operator_norm.hpp says why each piece is a bound), so tau sigma ||Ahat||^2 =
+  // eta^2 ||Ahat||^2 < 1, the condition of [CP11] Theorem 1, holds for every step and the
+  // [PDLP] acceptance test below is passed by construction: movement >= ||dx|| ||dy|| (the
+  // weighted AM-GM inequality) >= |dy' Ahat dx| / ||Ahat|| = interaction / ||Ahat||, so the
+  // limit movement / interaction is at least 1 / ||Ahat|| > eta. The step is therefore taken
+  // unconditionally and eta never moves; the movement and interaction sums are still formed
+  // because the evaluation schedule reads `no_information` from them. [LPY25] runs the same
+  // share on a power-iteration ESTIMATE, which is a lower bound and can oversize the step.
+  //
+  // PID PRIMAL WEIGHT (pdhg_primal_weight_pid). At each restart, PDLP's or Halpern's,
+  //     e = log(omega ||dx|| / ||dy||),   log omega -= kp e + ki sum(e) + kd (e - e_prev),
+  // [LPY25]'s controller, by the function the QP engine uses (qp::pid_primal_weight, #493):
+  // the integral clamped to +-kQpPidIntegralLimit, omega to [1e-6, 1e6] and left alone when
+  // either movement is at or under 1e-12, the same clamp and threshold as the update below.
+  // With kp = 0.5, ki = kd = 0 it is [PDLP] section 3.2's theta = 0.5 smoothing exactly:
+  // log omega - 0.5 log(omega dx / dy) = 0.5 log(dy / dx) + 0.5 log omega.
+  //
+  // THE GAINS AND HOW THEY WERE CHOSEN. [LPY25] does not publish its gains, so they were
+  // tuned here, on a tuning set DISJOINT from the nine Netlib instances the A/B reports
+  // (bench/runners/pdhg_step_weight_ab.py): the eight of 23 other small committed Netlib LPs
+  // screened that this engine solves within 300,000 iterations at its default tolerance at
+  // main d0f20dc - recipe, beaconfd, scsd1, degen2, standata, scsd6, grow7 and sctap1 - run
+  // with presolve on, pdhg_polish=false, pdhg_tolerance=1e-8, random_seed 0 and 1, both
+  // iteration schemes. The grid was kp in {0.3, 0.5, 0.8}, ki in {0, 0.1, 0.3}, kd in {0, 0.2},
+  // starting from the issue's Kp-only point (0.5, 0, 0); the score, solved first and then the
+  // geometric mean of iterations with a miss counted at the 300,000 limit. Chosen: (kp, ki, kd)
+  // = (0.5, 0.1, 0.2), the best on the PDLP-averaged scheme: 16 of 16 runs solved, geometric
+  // mean 17,767 iterations, against 14 of 16 and 19,559 for the default rule (grow7 reaches the
+  // limit at both seeds on the default rule and solves at 183,640 and 157,840). On the Halpern
+  // scheme no grid point beat the default rule (16 of 16, 3,450); the chosen gains score 3,863
+  // there, 12% more. Seed to seed the default rule alone moves by up to 25% on one instance, so
+  // a difference of that size on one run is not a signal; the A/B runs three seeds per leg for
+  // that reason.
+  const bool constant_step = options.get_bool("pdhg_constant_step");
+  OperatorNormBound norm_bound;
+  if (constant_step) {
+    norm_bound =
+        bound_spectral_norm(scaling.matrix, tol::kPdhgConstantStepPowerIterations,
+                            tol::kPdhgConstantStepPowerIterations,
+                            static_cast<unsigned>(options.get_int("random_seed")) + 1u);
+  }
+  const bool use_pid = options.get_bool("pdhg_primal_weight_pid");
+  const qp::PidGains pid_gains{options.get_double("pdhg_pid_kp"),
+                               options.get_double("pdhg_pid_ki"),
+                               options.get_double("pdhg_pid_kd")};
+  qp::PidState pid_state;
+
   const double tolerance = options.get_double("pdhg_tolerance");
   // One interpretation of every limit, shared with every other engine (#289). A first-order
   // method with no iteration limit still needs a stopping point, so an absent limit becomes
@@ -192,6 +249,19 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   logger.info("Target relative tolerance {:.1e}, restarts {}, A x {}", tolerance,
               use_halpern ? "halpern-fp" : (use_restarts ? "on" : "off"),
               parallel_spmv ? "row-parallel over the thread pool (#487)" : "serial");
+  if (constant_step) {
+    logger.info(
+        "Constant step (#482): ||A||_2 in [{:.6e}, {:.6e}] proved (Frobenius {:.6e}, "
+        "Holder {:.6e}, Collatz-Wielandt {:.6e}; upper / lower {:.4f}), eta = {} / upper",
+        norm_bound.lower, norm_bound.upper, norm_bound.frobenius, norm_bound.holder,
+        norm_bound.collatz_wielandt,
+        norm_bound.lower > 0.0 ? norm_bound.upper / norm_bound.lower : 1.0,
+        tol::kPdhgConstantStepShare);
+  }
+  if (use_pid) {
+    logger.info("Primal weight by PID at restarts (#482): kp {}, ki {}, kd {}", pid_gains.kp,
+                pid_gains.ki, pid_gains.kd);
+  }
   if (parallel_updates) {
     logger.info(
         "Vector updates and the step rule's sums over the thread pool, in fixed "
@@ -289,12 +359,26 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   if (use_halpern && two_matvec) a_x_anchor = a_x_cached;
 
   double eta = spectral_norm > 0.0 ? 1.0 / spectral_norm : 1.0;
+  if (constant_step) {
+    eta = norm_bound.upper > 0.0 ? tol::kPdhgConstantStepShare / norm_bound.upper : 1.0;
+  }
   // #913 part 2: the caller's primal weight carried over, when offered and positive and
   // finite; the usual unit start otherwise (every restart below still re-derives omega from
   // the iterates, so a bad carried value only costs the first step, never the answer).
   double omega = (warm_usable && std::isfinite(warm_start->omega) && warm_start->omega > 0.0)
                      ? warm_start->omega
                      : 1.0;  // primal weight
+  // The primal weight at a restart, from the period's movement: [PDLP] section 3.2 with
+  // theta = 0.5 by default, the PID controller under pdhg_primal_weight_pid (#482).
+  const auto update_primal_weight = [&](double dx_norm, double dy_norm) {
+    if (use_pid) {
+      omega = qp::pid_primal_weight(omega, dx_norm, dy_norm, pid_gains, &pid_state);
+    } else if (dx_norm > 1e-12 && dy_norm > 1e-12) {
+      const double theta = 0.5;
+      omega = std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
+      omega = std::clamp(omega, 1e-6, 1e6);
+    }
+  };
   Count iteration = 0;
   Count consecutive_no_information = 0;
   Count restarts = 0;
@@ -546,7 +630,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     const double grow = 1.0 + std::pow(exponent, -0.6);
     const double proposed = std::min(shrink * limit, grow * eta);
 
-    if (eta <= limit) {
+    if (constant_step || eta <= limit) {
       // Accept.  Apply Halpern blend to (x_next, y_next) before swapping (#481).
       if (use_halpern) {
         last_halpern_res = pdhg_halpern_step(x, y, x_next, y_next, halpern, omega, options);
@@ -587,7 +671,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     // eta <= 1/||A||_2, and the adaptive rule may exceed that safely, but never by orders
     // of magnitude.
     const double eta_ceiling = 1.0e3 / std::max(spectral_norm, 1e-12);
-    if (!no_information) eta = std::clamp(proposed, 1e-12, eta_ceiling);
+    if (!no_information && !constant_step) eta = std::clamp(proposed, 1e-12, eta_ceiling);
 
     // ---- Convergence and restart -----------------------------------------------------------
     // Evaluate on the periodic tick, and ALSO the moment the iterates stop moving: a small
@@ -747,11 +831,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       }
       const double dx_norm = euclidean_norm(dx);
       const double dy_norm = euclidean_norm(dy);
-      if (dx_norm > 1e-12 && dy_norm > 1e-12) {
-        const double theta = 0.5;
-        omega = std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
-        omega = std::clamp(omega, 1e-6, 1e6);
-      }
+      update_primal_weight(dx_norm, dy_norm);
       if (detect_infeasibility && restarts + 1 >= tol::kPdhgDetectionMinRestarts &&
           detect_certificate_from_restart(model, scaling, dx, dx_norm, dy, dy_norm,
                                           &certificate_status, &certificate_vector,
@@ -807,12 +887,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         }
         const double dx_norm = euclidean_norm(dx);
         const double dy_norm = euclidean_norm(dy);
-        if (dx_norm > 1e-12 && dy_norm > 1e-12) {
-          const double theta = 0.5;
-          omega =
-              std::exp(theta * std::log(dy_norm / dx_norm) + (1.0 - theta) * std::log(omega));
-          omega = std::clamp(omega, 1e-6, 1e6);
-        }
+        update_primal_weight(dx_norm, dy_norm);
         if (detect_infeasibility && restarts + 1 >= tol::kPdhgDetectionMinRestarts &&
             detect_certificate_from_restart(model, scaling, dx, dx_norm, dy, dy_norm,
                                             &certificate_status, &certificate_vector,
