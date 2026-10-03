@@ -29,6 +29,8 @@ add_executable(sankhya_tests
   unit/test_logging.cpp
   unit/test_mps_reader.cpp
   unit/test_lp_reader.cpp
+  unit/test_sc_sos_io.cpp
+  unit/test_sc_sos_branching.cpp
   unit/test_presolve.cpp
   unit/test_diagnose.cpp
   unit/test_presolve_all_classes.cpp

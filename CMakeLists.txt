@@ -257,6 +257,7 @@ set(SANKHYA_CORE_SOURCES
   src/core/scenarios.cpp
   src/core/iis.cpp
   src/core/model.cpp
+  src/core/sc_sos.cpp
   src/core/basis_map.cpp
   src/core/resource_limits.cpp
   src/core/solve.cpp
@@ -278,7 +279,10 @@ set(SANKHYA_CORE_SOURCES
   src/io/mps_bounds.cpp
   src/io/mps_quadratic.cpp
   src/io/mps_reader.cpp
+  src/io/mps_sos.cpp
+  src/io/lp_sos.cpp
   src/io/model_writer.cpp
+  src/io/model_writer_sos.cpp
   src/io/sol_reader.cpp
   src/io/writer.cpp
   src/diagnose/diagnose.cpp
@@ -313,6 +317,8 @@ set(SANKHYA_CORE_SOURCES
   src/mip/branch_and_bound_heuristics.cpp
   src/mip/branch_and_bound_restart.cpp
   src/mip/branch_and_bound_safe.cpp
+  src/mip/branch_and_bound_sos.cpp
+  src/mip/sos_reformulate.cpp
   src/mip/branch_and_bound_miqp.cpp
   src/mip/branch_and_bound_batch.cpp
   src/mip/branch_and_bound_certificate.cpp

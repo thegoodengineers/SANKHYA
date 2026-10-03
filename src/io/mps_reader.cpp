@@ -55,6 +55,7 @@ enum class Section {
   kBounds,
   kQuadratic,  ///< QUADOBJ / QMATRIX / QSECTION - the QPS quadratic objective
   kQcMatrix,   ///< QCMATRIX <row> - a quadratic row, read only when a sink is set (#514)
+  kSos,        ///< SOS / SETS - special ordered sets (#754), read in mps_sos.cpp
   kEnd
 };
 
@@ -103,6 +104,12 @@ constexpr FixedField kFixedFields[6] = {{1, 2}, {4, 8}, {14, 8}, {24, 12}, {39, 
   // program. They were then recognised so the file could be REFUSED; now they are read.
   if (k == "QUADOBJ" || k == "QMATRIX" || k == "QSECTION" || k == "QUADS") {
     *out = Section::kQuadratic;
+    return true;
+  }
+  // Special ordered sets (#754): CPLEX writes the section as SOS, the older OSL and Xpress
+  // files as SETS. The layout under either header is the same.
+  if (k == "SOS" || k == "SETS") {
+    *out = Section::kSos;
     return true;
   }
   if (k == "ENDATA") {
@@ -264,6 +271,10 @@ bool MpsParser::do_columns(std::string* error) {
     if (t == "INTEND") intend = true;
   }
   if (is_marker || intorg || intend) {
+    // A set in the marker form (#754): 'SOSORG' opens it, 'SOSEND' closes it.
+    bool sos_marker = false;
+    if (!do_sos_marker(&sos_marker, error)) return false;
+    if (sos_marker) return true;
     if (intorg) {
       integer_marker_active_ = true;
     } else if (intend) {
@@ -300,6 +311,7 @@ bool MpsParser::do_columns(std::string* error) {
       col_upper_.back() = kInfinity;
     }
   }
+  if (sos_marker_active_) note_sos_marker_member(col);
 
   for (std::size_t k = 1; k + 1 < tok_.size(); k += 2) {
     const Index row = find_row(tok_[k]);
@@ -582,6 +594,9 @@ ReadResult MpsParser::parse(const std::string& path) {
       case Section::kQcMatrix:
         if (!do_qcmatrix(&error)) return ReadResult::failure(error);
         break;
+      case Section::kSos:
+        if (!do_sos(&error)) return ReadResult::failure(error);
+        break;
       case Section::kNone:
       case Section::kName:
       case Section::kObjsense:
@@ -604,6 +619,7 @@ ReadResult MpsParser::parse(const std::string& path) {
 
   if (!finish_rows(&error)) return ReadResult::failure(fmt::format("{}: {}", path, error));
   finish_model();
+  finish_sc_sos();  // #754, mps_sos.cpp
   if (qc_sink_ != nullptr) finish_quadratic_rows();
 
   const std::string problem = model_->validate();

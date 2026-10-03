@@ -59,6 +59,21 @@ PresolveOutcome run_with_presolve(const Model& model, const Options& options, Lo
     outcome.solution.presolve_report.skipped_because = why;
     return outcome;
   }
+  // SEMI-CONTINUOUS COLUMNS AND SPECIAL ORDERED SETS (#754) are conditions presolve's
+  // reductions do not read: it would take a semi-continuous column's [l, u] for its whole
+  // domain, fix it inside a set, or remove a set's column, and hand the search a different
+  // problem. The model goes to the engine as given; sos_reformulate=true is the route that
+  // keeps presolve, on the binary reformulation.
+  if (mixed_integer && options.get_bool("presolve") && model.has_semicontinuous_or_sos()) {
+    const char* why =
+        "the model has semi-continuous columns or special ordered sets, which presolve's "
+        "reductions do not read (#754)";
+    logger.info("Presolve skipped: {}", why);
+    ProfileScope timed(logger.profiler(), "engine");
+    outcome.solution = run_engine(model);
+    outcome.solution.presolve_report.skipped_because = why;
+    return outcome;
+  }
   if (!options.get_bool("presolve")) {
     if (!options.get_string("write_presolved").empty()) {
       logger.warning(

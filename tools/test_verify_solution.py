@@ -25,6 +25,7 @@ import test_verify_solution_nlp  # noqa: E402
 import test_verify_solution_qcqp  # noqa: E402
 import test_verify_solution_safe_bound  # noqa: E402
 import test_verify_solution_sensitivity  # noqa: E402
+import test_verify_solution_sos  # noqa: E402
 
 FAILURES = 0
 
@@ -974,6 +975,8 @@ def main() -> int:
     test_verify_solution_limits.run(check)
     print("a vector name that is also a row or column name (#590)")
     test_verify_solution_names.run(check)
+    print("semi-continuous columns and special ordered sets (#754)")
+    test_verify_solution_sos.run(check)
     print("quadratic rows, QCMATRIX (#514)")
     test_verify_solution_qcqp.run(check)
     print("nonlinear models, .nl (NLP stage 2)")

@@ -72,6 +72,7 @@
 #include "exact/exact_sensitivity.hpp"
 #include "exact/exact_verify.hpp"
 #include "mip/components.hpp"
+#include "mip/sos_reformulate.hpp"
 #include "sankhya/certificate.hpp"
 #include "sankhya/ipm.hpp"
 #include "sankhya/logging.hpp"
@@ -658,6 +659,27 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
               model.name.empty() ? std::string("(unnamed)") : model.name, model.num_rows(),
               model.num_cols(), model.num_nonzeros(), model.num_integer_columns());
   logger.info("Problem class: {}", engine::to_string(problem_class));
+
+  // SEMI-CONTINUOUS COLUMNS AND SPECIAL ORDERED SETS (#754): branched on natively by the
+  // branch and bound below unless sos_reformulate asks for the binary reformulation, which
+  // is then solved as the ordinary MILP it is - presolve and all - and its answer cut back
+  // to this model's columns and rows and measured against it.
+  if (model.has_semicontinuous_or_sos() && options.get_bool("sos_reformulate")) {
+    const mip::ScSosReformulation reformulated = mip::reformulate_sc_sos(model);
+    if (reformulated.changed()) {
+      logger.info(
+          "sos_reformulate: {} semi-continuous column(s) and {} set(s) written with {} "
+          "binaries and {} rows; {} dropped as always satisfied, {} left to native branching",
+          reformulated.semicontinuous_written, reformulated.sets_written, reformulated.binaries,
+          reformulated.rows, reformulated.dropped, reformulated.kept);
+      Solution answer =
+          solve_unguarded(reformulated.model, options, control, logger, timer, engine_ran);
+      return mip::restrict_to_original(model, reformulated, std::move(answer));
+    }
+    logger.info(
+        "sos_reformulate: every condition has an infinite bound and no big-M; branching on "
+        "them natively");
+  }
 
   // AN LP ENGINE ASKED FOR ON ANOTHER CLASS IS SAID, NOT DROPPED (#297). The MILP, QP and
   // MIQP branches have never read `algorithm`: the class has one engine, so there is nothing

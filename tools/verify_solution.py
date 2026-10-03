@@ -35,6 +35,7 @@ from verify_solution_io import INF
 from verify_solution_mps import Model, parse_mps
 from verify_solution_safe_bound import verify_safe_bound
 from verify_solution_sol import Solution, parse_sol
+import verify_solution_sos
 from verify_solution_exact_farkas import check_exact_repair_farkas
 from verify_solution_sensitivity import check_certified as check_certified_sensitivity
 
@@ -195,7 +196,9 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
     # Scaled by the variable's own magnitude, for the same reason as the rows above.
     worst, where, worst_abs = 0.0, "", 0.0
     for j, name in enumerate(model.col_names):
-        violation = max(model.col_lower[j] - x[j], x[j] - model.col_upper[j], 0.0)
+        # A semi-continuous column (#754) may also be 0; the gap (0, l) is checked below.
+        lower = min(0.0, model.col_lower[j]) if j in model.semicontinuous else model.col_lower[j]
+        violation = max(lower - x[j], x[j] - model.col_upper[j], 0.0)
         scaled = violation / max(1.0, abs(x[j]))
         if scaled > worst:
             worst, where, worst_abs = scaled, name, violation
@@ -218,6 +221,9 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
                      + (f" on {where}" if where else ""))
     else:
         report.note("integrality", "no integer columns")
+
+    # ---- Semi-continuous columns and special ordered sets (#754) -------------------------
+    verify_solution_sos.check(model, x, report, integer_tol)
 
     # ---- Row activity, recomputed from the matrix ----------------------------------------
     # The row's numerical SCALE is accumulated alongside its activity: the largest term the
@@ -303,13 +309,16 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         report.note("duality", f"skipped: status is {solution.status}, not an optimality claim")
         return report
 
-    if integer_columns or model.qc_entries:
+    combinatorial = bool(model.semicontinuous or model.sos)
+    if integer_columns or combinatorial or model.qc_entries:
         # LP duality does not apply to a MILP: any reported duals belong to some node
         # relaxation, not to the integer problem. Nor to a model with quadratic rows, whose
         # optimality the global method proves by a bound (#514). What CAN be checked is the
         # claim the search makes about itself.
         report.note("duality", "skipped: LP duality does not apply to a "
-                    + ("MILP" if integer_columns else "model with quadratic rows"))
+                    + ("MILP" if integer_columns
+                       else "model with semi-continuous columns or special ordered sets"
+                       if combinatorial else "model with quadratic rows"))
 
         bound = solution.header_float("dual_bound")
         if bound is None or not math.isfinite(bound):

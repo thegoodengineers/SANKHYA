@@ -499,13 +499,15 @@ demo/finale.sh --dry         # the finale walk's machine check: binary, GPU, Pyt
 demo/finale.sh               # one refinery MILP solved, proved, re-planned (Windows: demo\finale.cmd)
 ```
 
-`demo/finale.sh` (#758, [`docs/FINALE.md`](docs/FINALE.md)) is seven steps on the small refinery
+`demo/finale.sh` (#758, [`docs/FINALE.md`](docs/FINALE.md)) is eight steps on the small refinery
 MILP, each one line and its time: the solve with a VIPR certificate (on the GPU when the binary
 reports one), the certificate checked in exact arithmetic and the plan by the independent
 verifier, the binding limits and their shadow prices on the LP, a delivery commitment raised
 until the plant cannot meet it with the Farkas proof checked and the smallest repair, an
 evidence bundle made and replayed, twenty price sets through `sankhya scenarios`, and the plan
-re-solved with today's prices and demands cold and from yesterday's basis (`--warm-start`). On the
+re-solved with today's prices and demands cold and from yesterday's basis (`--warm-start`), and the
+same plant with a minimum run rate on its crude unit as semi-continuous columns (#754), branched
+on natively and through the binary reformulation, the two answers verified and equal. On the
 laptop CPU at `04c372c` the whole walk took 34.5 s and 40.7 s in two runs on a busy machine, and 0.4 s in the CI Release leg; it has not been timed on a card.
 
 The nine Netlib instances are committed, so the demo needs no network. Every number it prints
@@ -530,7 +532,8 @@ include/sankhya/  public headers — Model, Solution, Options, tolerances, spars
 src/api           C API — an FFI-safe surface over the core, no C++ types crossing
 src/core          Model/Solution implementation, the solve() dispatcher, certificates (#192)
 src/util          logging, timers, arena allocator, option registry
-src/io            MPS + LP readers (including QPS QUADOBJ), solution and JSON writers
+src/io            MPS + LP readers (including QPS QUADOBJ, semi-continuous columns and SOS1/SOS2
+                  sets, #754), solution and JSON writers
 src/presolve      reductions + postsolve               (on by default)
 src/simplex       primal and dual revised simplex (the dual is the branch-and-bound node engine)
 src/la            sparse containers, sparse Markowitz LU (hyper-sparse FTRAN), sparse LDL^T, dense LU (test oracle only)

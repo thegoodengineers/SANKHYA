@@ -5,7 +5,7 @@
     demo/finale.sh            (Linux, macOS, Git Bash)      demo\\finale.cmd   (Windows)
     python demo/finale.py [--dry] [--binary PATH] [--keep DIR]
 
-Seven steps, each printing one line of result and the seconds it took. Every number printed
+Eight steps, each printing one line of result and the seconds it took. Every number printed
 comes from a command this script runs in front of the audience; nothing is typed in.
 
   1. solve   the small refinery MILP (bench/case_studies/refinery, #517; the medium one does
@@ -24,6 +24,10 @@ comes from a command this script runs in front of the audience; nothing is typed
   7. replan  today's prices and demands moved, the plan re-solved cold and from
              yesterday's basis (`--warm-start`, #218): the same verified optimum, the
              pivot counts side by side
+  8. units   the same plant with a minimum run rate on its crude unit (#754): a crude it runs
+             in a period runs at least 1/6 of the unit's capacity or not at all, a
+             semi-continuous column per run, branched on natively and solved again through
+             the binary reformulation (`sos_reformulate`); both answers verified, and equal
 
 Runs from a checkout or an unpacked release archive (#748): it needs the `sankhya` binary in
 build/ (or --binary), the Python standard library, and nothing from the network. `--dry`
@@ -151,6 +155,7 @@ def main() -> int:
     if proc.returncode != 0 or status != "optimal":
         fail(1, "solve", f"status {status}", proc)
     effort = json.loads(stats.read_text())["effort"]
+    milp_objective = float(field(proc.stdout, "objective"))
     step(1, "solve", t, f"MILP {status}, objective {field(proc.stdout, 'objective')}, "
          f"{effort['nodes']} nodes, root bound {effort['root_bound']:.6g}, "
          f"on the {'GPU' if gpu else 'CPU'}")
@@ -314,6 +319,35 @@ def main() -> int:
          f"{f' ({skipped} infeasible morning(s) skipped)' if skipped else ''}: cold {pivots['cold']} "
          f"pivots, from yesterday's basis {pivots['warm']}; same optimum "
          f"{objectives['warm']:,.2f}, both verified")
+
+    # 8. the crude unit's minimum run rate, a semi-continuous condition (#754)
+    t = time.perf_counter()
+    minrun = work / "refinery_min_run.mps"
+    proc = run([PY, gen, "--size", "small", "--seed", "1", "--milp", "--crude-min-run", "1/6",
+                "--out", minrun])
+    if proc.returncode != 0:
+        fail(8, "units", "the generator failed", proc)
+    answers = {}
+    for arm, extra in (("native", []), ("binary", ["--option", "sos_reformulate=true"])):
+        sol, stats = work / f"min_run_{arm}.sol", work / f"min_run_{arm}.json"
+        proc = run([binary, "solve", minrun, "--write-sol", sol, "--stats", stats, *extra])
+        if field(proc.stdout, "status") != "optimal":
+            fail(8, "units", f"the {arm} solve did not reach optimal", proc)
+        check = run([PY, "tools/verify_solution.py", minrun, sol, "--quiet"])
+        if check.returncode != 0:
+            fail(8, "units", f"the verifier rejected the {arm} plan", check)
+        blob = json.loads(stats.read_text())
+        answers[arm] = (blob["result"]["objective"], blob["effort"]["nodes"], sol)
+    native, reformulated = answers["native"], answers["binary"]
+    if abs(native[0] - reformulated[0]) > 1e-6 * max(1.0, abs(native[0])):
+        fail(8, "units", f"native {native[0]} and reformulated {reformulated[0]} disagree", proc)
+    runs = [line.split() for line in native[2].read_text().splitlines()
+            if line.startswith("RUN_")]
+    idle = sum(1 for fields in runs if abs(float(fields[1])) <= 1e-9)
+    step(8, "units", t, f"each crude runs 0 or at least 1/6 of the crude unit: optimum "
+         f"{native[0]:,.2f} against {milp_objective:,.2f} without the minimum, {idle} of "
+         f"{len(runs)} runs idle; {native[1]} nodes branching on it natively, the binary "
+         f"reformulation agrees; both verified")
 
     print(f"\nthe whole walk: {time.perf_counter() - total:.1f} s")
     if args.keep:

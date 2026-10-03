@@ -30,91 +30,11 @@
 #include "sankhya/model.hpp"
 
 #include "line_reader.hpp"
+#include "lp_parser.hpp"
 #include "token.hpp"
 
 namespace sankhya::io {
-namespace {
-
-enum class TokKind { kIdent, kNumber, kOp, kEof };
-
-struct Tok {
-  TokKind kind = TokKind::kEof;
-  std::string text;    ///< identifier spelling, or the operator
-  double value = 0.0;  ///< numeric value when kind == kNumber
-  Count line = 0;
-  bool first_on_line = false;
-};
-
-/// Relational operators, normalised so that "=<" and "<" both arrive as "<=".
-[[nodiscard]] bool is_relop(const Tok& t) {
-  return t.kind == TokKind::kOp && (t.text == "<=" || t.text == ">=" || t.text == "=");
-}
-
-[[nodiscard]] bool ident_start(char c) {
-  return std::isalpha(static_cast<unsigned char>(c)) != 0 || c == '_' || c == '!' || c == '"' ||
-         c == '#' || c == '$' || c == '%' || c == '&' || c == '(' || c == ')' || c == ',' ||
-         c == ';' || c == '?' || c == '@' || c == '\'' || c == '`' || c == '|' || c == '~';
-}
-
-[[nodiscard]] bool ident_body(char c) {
-  return ident_start(c) || std::isdigit(static_cast<unsigned char>(c)) != 0 || c == '.';
-}
-
-/// Section kinds, in the order they may appear.
-enum class LpSection { kObjective, kConstraints, kBounds, kGeneral, kBinary, kEnd };
-
-struct SectionSpan {
-  LpSection kind;
-  std::size_t begin;  ///< first token of the section body
-  std::size_t end;    ///< one past the last
-  bool maximize = false;
-};
-
-class LpParser {
- public:
-  explicit LpParser(Model* model) : model_(model) {}
-  ReadResult parse(const std::string& path);
-
- private:
-  [[nodiscard]] bool lex(const std::string& path, std::string* error);
-  [[nodiscard]] bool split_sections(std::string* error);
-
-  [[nodiscard]] bool parse_objective(const SectionSpan& span, std::string* error);
-  [[nodiscard]] bool parse_constraints(const SectionSpan& span, std::string* error);
-  [[nodiscard]] bool parse_bounds(const SectionSpan& span, std::string* error);
-  [[nodiscard]] bool parse_integrality(const SectionSpan& span, bool binary,
-                                       std::string* error);
-
-  /// Parse a signed linear expression starting at `i`, stopping before the first token that
-  /// cannot continue it. Coefficients accumulate into `terms` keyed by column, and any bare
-  /// number accumulates into `constant`.
-  [[nodiscard]] bool parse_expression(std::size_t* i, std::size_t end,
-                                      std::unordered_map<Index, double>* terms,
-                                      double* constant, std::string* error);
-
-  [[nodiscard]] Index intern_column(const std::string& name);
-  [[nodiscard]] std::string at(std::size_t i, const std::string& message) const;
-
-  Model* model_;
-  std::string path_;
-  std::vector<Tok> tokens_;
-  std::vector<SectionSpan> sections_;
-
-  std::unordered_map<std::string, Index> col_index_;
-  std::vector<std::string> col_names_;
-  std::vector<double> col_cost_;
-  std::vector<double> col_lower_;
-  std::vector<double> col_upper_;
-  std::vector<VarType> col_type_;
-
-  std::vector<std::string> row_names_;
-  std::vector<double> row_lower_;
-  std::vector<double> row_upper_;
-  std::vector<Index> tri_row_;
-  std::vector<Index> tri_col_;
-  std::vector<double> tri_value_;
-  Count unnamed_rows_ = 0;
-};
+namespace lp {
 
 std::string LpParser::at(std::size_t i, const std::string& message) const {
   const Count line =
@@ -255,9 +175,16 @@ bool LpParser::split_sections(std::string* error) {
       kind = LpSection::kBinary;
     } else if (k == "END") {
       kind = LpSection::kEnd;
-    } else if (k == "SOS" || k == "SEMI" || k == "SEMIS" || k == "SEMI-CONTINUOUS") {
-      *error = at(i, fmt::format("the {} section is not supported", t.text));
-      return false;
+    } else if (k == "SEMI" || k == "SEMIS" || k == "SEMICONTINUOUS") {
+      // #754. "semi-continuous" lexes as SEMI, '-', CONTINUOUS: an identifier cannot hold a
+      // hyphen, which is an operator everywhere else in the format.
+      kind = LpSection::kSemicontinuous;
+      if (k == "SEMI" && i + 2 < tokens_.size() && tokens_[i + 1].kind == TokKind::kOp &&
+          tokens_[i + 1].text == "-" && to_upper(tokens_[i + 2].text) == "CONTINUOUS") {
+        keyword_tokens = 3;
+      }
+    } else if (k == "SOS") {
+      kind = LpSection::kSos;  // #754
     } else {
       continue;
     }
@@ -608,6 +535,8 @@ ReadResult LpParser::parse(const std::string& path) {
       case LpSection::kBounds: ok = parse_bounds(span, &error); break;
       case LpSection::kGeneral: ok = parse_integrality(span, false, &error); break;
       case LpSection::kBinary: ok = parse_integrality(span, true, &error); break;
+      case LpSection::kSemicontinuous: ok = parse_semicontinuous(span, &error); break;
+      case LpSection::kSos: ok = parse_sos(span, &error); break;
       case LpSection::kEnd: break;
     }
     if (!ok) return ReadResult::failure(error);
@@ -632,6 +561,7 @@ ReadResult LpParser::parse(const std::string& path) {
   model_->matrix.finalize();
   model_->hessian.reset(n, n);
   model_->hessian.finalize();
+  finish_sc_sos();  // #754, lp_sos.cpp
 
   const std::string problem = model_->validate();
   if (!problem.empty()) {
@@ -640,10 +570,10 @@ ReadResult LpParser::parse(const std::string& path) {
   return ReadResult::success();
 }
 
-}  // namespace
+}  // namespace lp
 
 ReadResult read_lp(const std::string& path, Model* model) {
-  LpParser parser(model);
+  lp::LpParser parser(model);
   return parser.parse(path);
 }
 

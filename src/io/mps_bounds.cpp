@@ -79,8 +79,8 @@ bool MpsParser::do_bounds(std::string* error) {
                             type == "UI" || type == "SC");
   const bool valueless = (type == "FR" || type == "MI" || type == "PL" || type == "BV");
   if (!takes_value && !valueless) {
-    *error = reader_.error_at(
-        fmt::format("unknown bound type '{}'; expected UP LO FX FR MI PL BV LI UI", tok_[0]));
+    *error = reader_.error_at(fmt::format(
+        "unknown bound type '{}'; expected UP LO FX FR MI PL BV LI UI SC", tok_[0]));
     return false;
   }
 
@@ -201,10 +201,12 @@ bool MpsParser::do_bounds(std::string* error) {
           value, col_names_[u]);
     }
   } else if (type == "SC") {
-    *error = reader_.error_at(
-        "semi-continuous bounds (SC) are not supported; the model would be misread as a "
-        "plain integer problem");
-    return false;
+    // Semi-continuous (#754): the value is the upper end of the run range, and the column
+    // takes 0 or a value in [lower, value]. The lower end is the column's lower bound as the
+    // other entries set it (LO, or the default 0). An infinite value leaves the run range
+    // unbounded above, which the branch and bound handles and the reformulation declines.
+    col_upper_[u] = value;
+    mark_semicontinuous(col);
   }
   return true;
 }

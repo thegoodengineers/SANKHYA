@@ -51,6 +51,16 @@ class MpsParser {
   [[nodiscard]] bool do_quadratic(std::string* error);  // mps_quadratic.cpp
   [[nodiscard]] bool begin_qcmatrix(std::string* error);
   [[nodiscard]] bool do_qcmatrix(std::string* error);
+  // Special ordered sets and semi-continuous columns (#754), in mps_sos.cpp.
+  [[nodiscard]] bool do_sos(std::string* error);
+  /// A COLUMNS MARKER record that opens ('SOSORG') or closes ('SOSEND') a set in the marker
+  /// form. Sets *handled when the record was one of those two.
+  [[nodiscard]] bool do_sos_marker(bool* handled, std::string* error);
+  /// Inside a marker-form set, column `col` is a member (once, in order of appearance).
+  void note_sos_marker_member(Index col);
+  void mark_semicontinuous(Index col);
+  /// Sort each set by weight and move the sets and the semi-continuous list into the model.
+  void finish_sc_sos();
 
   // ---- completion ---------------------------------------------------------------------
   [[nodiscard]] bool finish_rows(std::string* error);
@@ -107,6 +117,13 @@ class MpsParser {
   std::vector<QuadraticTerm> qc_entries_;
   std::set<std::tuple<Index, Index, Index>> qc_seen_entries_;
   std::unordered_set<Index> qc_rows_seen_;
+
+  // Semi-continuous columns (the SC bound) and special ordered sets (#754). sos_open_ is the
+  // set the SOS / SETS section is filling, or the marker form's open set; -1 when none.
+  std::vector<char> col_semicontinuous_;
+  std::vector<SosSet> sos_;
+  Index sos_open_ = -1;
+  bool sos_marker_active_ = false;
 
   // Only the first named RHS / RANGES / BOUNDS vector is honoured, which is what every
   // established reader does with a multi-vector file.

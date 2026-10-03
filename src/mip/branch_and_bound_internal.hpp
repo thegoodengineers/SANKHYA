@@ -32,6 +32,7 @@
 #include "flow_cover_cuts.hpp"
 #include "heuristics.hpp"
 #include "mir_cuts.hpp"
+#include "sc_sos_spec.hpp"
 #include "solution_pool.hpp"
 
 #include <algorithm>
@@ -136,6 +137,14 @@ struct TreeNode {
   /// gpu_batch_nodes (#520): the node has been through one batched bound (whether or not it
   /// raised `bound`), so it is not put through another.
   bool batch_bounded = false;
+  /// A child of a semi-continuous or SOS branching (#754): the item it settled (an index
+  /// into ScSosSpec, semi-continuous columns first, then the sets), which side (`sc_sos_up`:
+  /// the semi-continuous column's x >= l, or the set's right half), and how much of the
+  /// parent's point the side removed, the denominator of that item's pseudocost. -1 for
+  /// every other node.
+  Index sc_sos_item = -1;
+  bool sc_sos_up = false;
+  double sc_sos_amount = 0.0;
 };
 
 /// Convergence tolerance for a QP node relaxation in an MIQP search.
@@ -270,7 +279,35 @@ class BranchAndBound {
     seed_ = seed;
   }
 
+  /// Enforce semi-continuous columns and special ordered sets (#754) on a model that
+  /// ScSosSpec::take_from() relaxed. Before run(); `spec` outlives the search. Turns off,
+  /// with a line in the log each, what reasons about integer columns only or about the
+  /// model's symmetry: branch_and_bound_sos.cpp says why for each.
+  void attach_sc_sos(const ScSosSpec* spec);
+
  private:
+  // ---- Semi-continuous and SOS branching (#754), in branch_and_bound_sos.cpp ------------
+  /// Branch the entered node on the violated semi-continuous column or set with the best
+  /// pseudocost score: x = 0 or x >= l, or Beale and Tomlin's split of the set at the
+  /// weighted centre of its members. Leaves the node and returns true when it branched;
+  /// false, with nothing changed, when the point breaks no condition.
+  bool branch_sc_sos(Index node_index, const Solution& relaxation, double node_bound,
+                     double prune_bound, const WarmStart& warm,
+                     const qp::QpIpmWarmStart& qp_warm);
+  /// The point breaks a semi-continuous or SOS condition by more than the tolerance.
+  [[nodiscard]] bool sc_sos_violated(const std::vector<double>& x) const {
+    return sc_sos_ != nullptr && sc_sos_->violation(x) > integrality_tolerance_;
+  }
+  /// A child of an SC or SOS branching was solved: fold its gain into the item's pseudocost.
+  void record_sc_sos_pseudocost(const TreeNode& node, double node_bound);
+  void report_sc_sos() const;
+  const ScSosSpec* sc_sos_ = nullptr;
+  std::vector<double> sc_sos_down_sum_;
+  std::vector<double> sc_sos_up_sum_;
+  std::vector<Count> sc_sos_down_count_;
+  std::vector<Count> sc_sos_up_count_;
+  Count sc_branches_ = 0;   ///< nodes branched on a semi-continuous column
+  Count sos_branches_ = 0;  ///< nodes branched on a special ordered set
   // ---- Parallel tree search (branch_and_bound_parallel.cpp, #222) ----------------------
 
   /// Put the seed's chain into nodes_ and its last node into open_.

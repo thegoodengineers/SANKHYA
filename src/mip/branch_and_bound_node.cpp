@@ -553,6 +553,9 @@ bool BranchAndBound::offer_incumbent(const std::vector<double>& x) {
   for (const Index j : integer_columns_) {
     if (fractionality(x[static_cast<std::size_t>(j)]) > integrality_tolerance_) return false;
   }
+  // Semi-continuous columns and special ordered sets (#754), which original_ has relaxed:
+  // every heuristic's candidate passes through here, so none of them needs to know.
+  if (sc_sos_violated(x)) return false;
   for (Index j = 0; j < original_.num_cols(); ++j) {
     const auto u = static_cast<std::size_t>(j);
     if (is_finite_bound(original_.col_lower[u]) &&
