@@ -631,6 +631,14 @@ Solution BranchAndBound::run() {
       continue;
     }
 
+    // mip_node_pricing (#792): every node LP after the root, and the strong-branching
+    // probes from here on, take the node rule; the root LP and its cut rounds kept `pricing`.
+    if (node_index != 0 && !node_pricing_applied_ && node_pricing_ != "inherit") {
+      node_options_.set_string("pricing", node_pricing_);
+      probe_options_.set_string("pricing", node_pricing_);
+      node_pricing_applied_ = true;
+    }
+
     // The node LP's size, before the pool or a cut round changes it (#497's measure).
     const Count lp_rows = working_.num_rows();
     node_lp_rows_sum_ += static_cast<double>(lp_rows);

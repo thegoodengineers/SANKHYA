@@ -880,6 +880,25 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheNodeFactorCache) {
                      200, 100);
 }
 
+// mip_node_pricing (#792) under the exact oracle: the node LPs after the root switch from
+// dual steepest edge to Devex (or Dantzig) mid-search, with tree cuts and the factor cache
+// on so the switch meets rebuilt rows and kept factorizations. A pricing rule only changes
+// the path to a node's optimum, never the optimum, so every answer must still agree.
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithNodePricing) {
+  for (const std::string rule : {"devex", "dantzig"}) {
+    Options options = mip_options();
+    options.set_string("mip_node_pricing", rule);
+    const std::string small = "node pricing " + rule;
+    expect_clean_sweep(run_milp_fuzz(options, small.c_str()));
+    options.set_bool("enable_root_cuts", true);
+    options.set_int("tree_cut_depth", 4);
+    options.set_int("mip_node_factor_cache", 8);
+    options.set_bool("presolve", false);
+    const std::string wide = small + ", tree cuts, wide";
+    expect_clean_sweep(run_milp_fuzz(options, wide.c_str(), true, 600), 200, 100);
+  }
+}
+
 // The cut pool (#497) under the exact rational oracle: aged cut rows DELETED from the node
 // LP and appended again when violated. An age limit of 1 removes a row at nearly every node
 // where it is slack, so stored bases are remapped onto changed rows all the time; a row put

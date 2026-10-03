@@ -225,6 +225,9 @@ class BranchAndBound {
     // hundred simplex iteration tables.
     node_options_ = options;
     node_options_.set_bool("log_to_console", false);
+    // mip_node_pricing (#792): applied after the root, in run(), so the root LP keeps
+    // `pricing`.
+    node_pricing_ = options.get_string("mip_node_pricing");
 
     // MIQP: the node relaxation is a QP rather than an LP (#58 names MIQP as the class this
     // dispatcher refused). The Hessian is a property of the model, not of a node - branching
@@ -954,6 +957,9 @@ class BranchAndBound {
   bool quadratic_ = false;  ///< the node relaxation is a QP, not an LP
   /// miqp_node_ipm (#494): the QP IPM as the MIQP node solver (branch_and_bound_miqp.cpp).
   bool miqp_node_ipm_ = false;
+  /// mip_node_pricing (#792): "inherit", or the rule node LPs after the root switch to.
+  std::string node_pricing_ = "inherit";
+  bool node_pricing_applied_ = false;
   /// miqp_node_ipm_warm_start (#494, #893): start a child's IPM from its parent's iterate.
   bool miqp_node_ipm_warm_start_ = false;
   Options node_ipm_options_;            ///< node_options_ with the IPM's iteration cap
