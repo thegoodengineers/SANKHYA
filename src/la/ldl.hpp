@@ -43,7 +43,7 @@ namespace sankhya {
 /// about its own matrix and the AMD ordering is an implementation detail.
 struct SemidefiniteReport {
   enum class Verdict {
-    kPositiveSemidefinite,  ///< every pivot non-negative; x^T A x >= 0 for all x
+    kPositiveSemidefinite,  ///< every pivot of A + shift I positive: x^T A x > -shift x^T x
     kIndefinite,            ///< a direction with x^T A x < 0 was exhibited
     kUndecided,             ///< the probe was abandoned (deadline, or a factor that cannot fit)
   };
@@ -51,8 +51,13 @@ struct SemidefiniteReport {
   Verdict verdict = Verdict::kUndecided;
   /// The original column that decided an kIndefinite verdict, or -1.
   Index column = -1;
-  /// The pivot at that column, or the residual that contradicted a zero pivot.
+  /// The pivot of A + shift * I at that column: zero or negative.
   double pivot = 0.0;
+  /// The diagonal shift the test factorized with (#835).
+  double shift = 0.0;
+  /// For kIndefinite, a direction z in the ORIGINAL column order with
+  /// z^T (A + shift I) z = pivot <= 0 in exact arithmetic, so z^T A z < 0. Empty otherwise.
+  std::vector<double> witness;
 };
 
 class SparseLdl {
@@ -147,21 +152,22 @@ class SparseLdl {
   /// that matters - a direction of negative curvature - into a clean factorization, and the
   /// caller would solve a non-convex model and report a local point as optimal.
   ///
-  /// Three outcomes, on a pivot measured against `slack_factor * max(1, largest |diagonal|)`:
-  ///   pivot < -slack        indefinite, and the column is the certificate
-  ///   |pivot| <= slack      a legitimately singular direction of a semidefinite matrix. The
-  ///                         column is skipped rather than divided through - but only after
-  ///                         checking that the entries that would have been divided are
-  ///                         themselves negligible. For a semidefinite matrix they must be
-  ///                         (Higham 1990); when they are not, the zero pivot sits beside a
-  ///                         nonzero off-diagonal and the matrix is indefinite. Skipping
-  ///                         without that check is how [[0, 1], [1, 0]] passed for convex.
-  ///   otherwise             an ordinary positive pivot.
+  /// The rule (#835): factorize A + shift * I with shift = `shift_factor` * max(1, largest
+  /// |diagonal|), and require every pivot to be strictly positive. Completing proves A's
+  /// smallest eigenvalue is above -shift, up to the factorization's backward error, which for
+  /// a semidefinite A - singular, rank deficient, or positive definite with condition 1e11 -
+  /// lies far below the shift, so such an A always completes. The first pivot that is not
+  /// positive is the certificate: its column, its value, and the direction z = P^T L^{-T} e_k
+  /// along which z^T (A + shift I) z = pivot, so z^T A z < 0. The old rule (a pivot within a
+  /// slack of zero taken as exactly zero, the entries beside it then required to be within
+  /// the same slack) refused all three of QPLIB_10056, QPLIB_10069 and QPLIB_8515, which are
+  /// convex; ldl.cpp records why. [[0, 1], [1, 0]] is still refused: its second pivot is
+  /// shift - 1 / shift.
   ///
   /// Calls analyze() itself. Leaves no usable factors behind: this is a decision procedure,
-  /// not a factorization, and the D it computes has deliberate zeros in it.
+  /// not a factorization, and the factors it computes are of the shifted matrix.
   [[nodiscard]] SemidefiniteReport check_semidefinite(const SparseMatrix& lower,
-                                                      double slack_factor,
+                                                      double shift_factor,
                                                       const ShouldStop& should_stop = {});
 
   /// Solve (P^T L D L^T P) x = b in place.
