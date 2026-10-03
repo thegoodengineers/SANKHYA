@@ -159,6 +159,13 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
     sos = SosReader()  # #754
     qc_row = -1
     lower_set: list[bool] = []
+    # THE FIRST VECTOR OF EACH KIND IS THE MODEL (#475). An MPS file may carry several RHS,
+    # RANGES or BOUNDS vectors, and the convention, which src/io/mps_reader.cpp and
+    # mps_bounds.cpp follow, is that the first one named is used and the others ignored.
+    # Applying all of them let the last one win: Netlib greenbea carries 80BOUND and 85BOUND,
+    # and 316 column bounds here differed from the solver's, so a certificate proved on one
+    # box was checked on another.
+    first_vector: dict[str, str] = {}
 
     with open_text(path) as handle:
         for lineno, raw in enumerate(handle, 1):
@@ -270,6 +277,8 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 if len(fields) < 2:
                     raise ValueError(f"{path}:{lineno}: {section} entry has no row/value pair")
                 start = 1 if len(fields) % 2 == 1 else 0
+                if start == 1 and first_vector.setdefault(section, fields[0]) != fields[0]:
+                    continue
                 for k in range(start, len(fields) - 1, 2):
                     row_name, value = fields[k], float(fields[k + 1])
                     if row_name == objective_row:
@@ -338,6 +347,8 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                     name_pos = 2 if len(fields) == 4 else 1
                 else:
                     name_pos = 2 if len(fields) >= 3 else 1
+                if name_pos == 2 and first_vector.setdefault("BOUNDS", fields[1]) != fields[1]:
+                    continue
                 col_name = fields[name_pos]
                 if col_name not in model.col_index:
                     raise ValueError(f"{path}:{lineno}: unknown column {col_name}")

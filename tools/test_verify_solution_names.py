@@ -96,3 +96,52 @@ def run(check) -> None:
         failed = [name for ok, name, _ in report.lines if not ok]
         check(report.failures == 0, "the true optimum of the reduced dpklo1 verifies",
               str(failed))
+
+# Several vectors of one kind (#475). The convention, and src/io/mps_reader.cpp, use the first
+# vector named and ignore the rest; this reader used to apply them all, so the last won. Netlib
+# greenbea carries bound vectors 80BOUND and 85BOUND, and 316 of its column bounds read
+# differently here from the solver. The second RHS, RANGES and BOUNDS vectors below would
+# each change the model if they were applied.
+TWO_VECTORS = """NAME          TWO-VECTORS
+ROWS
+ N  COST
+ L  R1
+ G  R2
+COLUMNS
+    X         COST           1.0   R1             1.0
+    X         R2             1.0
+    Y         COST           1.0   R1             1.0
+RHS
+    RHS1      R1            10.0   R2             1.0
+    RHS2      R1            99.0   R2            50.0
+RANGES
+    RNG1      R1             4.0
+    RNG2      R1            40.0
+BOUNDS
+ UP BND1      X              3.0
+ FX BND1      Y              2.0
+ UP BND2      X             30.0
+ LO BND2      Y              7.0
+ FR BND2      X
+ENDATA
+"""
+
+
+def run_first_vector(check) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "two_vectors.mps"
+        path.write_text(TWO_VECTORS)
+        model = vs.parse_mps(path)
+        r1, r2 = model.row_index["R1"], model.row_index["R2"]
+        x, y = model.col_index["X"], model.col_index["Y"]
+        check((model.row_lower[r1], model.row_upper[r1]) == (6.0, 10.0),
+              "only the first RHS and RANGES vectors set a row",
+              f"R1 in [{model.row_lower[r1]}, {model.row_upper[r1]}], expected [6, 10]")
+        check(model.row_lower[r2] == 1.0, "the second RHS vector is ignored",
+              f"R2 lower bound {model.row_lower[r2]}, expected 1")
+        check((model.col_lower[x], model.col_upper[x]) == (0.0, 3.0),
+              "only the first BOUNDS vector bounds a column, valueless types included",
+              f"X in [{model.col_lower[x]}, {model.col_upper[x]}], expected [0, 3]")
+        check((model.col_lower[y], model.col_upper[y]) == (2.0, 2.0),
+              "a second-vector LO does not move a first-vector FX",
+              f"Y in [{model.col_lower[y]}, {model.col_upper[y]}], expected [2, 2]")
