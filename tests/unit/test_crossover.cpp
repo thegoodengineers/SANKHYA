@@ -10,6 +10,7 @@
 // keep, so that is the first model.
 
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -22,6 +23,7 @@
 #include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 #include "simplex/crossover.hpp"
 #include "simplex/simplex_core.hpp"
@@ -191,6 +193,87 @@ TEST(Crossover, ThePushStopsAtTheTimeLimit) {
   const Solution stopped = timed.run_push(warm, interior.col_value, interior.row_activity);
   EXPECT_EQ(stopped.status, SolveStatus::kTimeLimit) << stopped.message;
   EXPECT_EQ(stopped.iterations, 0) << stopped.message;
+}
+
+/// A dense m x m equality system with every column in [0, 1], and the interior point's
+/// answer at x = 1/2: every column strictly inside its bounds and every row an equality, so
+/// the guess is all m columns and its rank repair is one factorization of a dense m x m
+/// matrix, with partial pivoting. The entries are a fixed congruential sequence in [-1, 1],
+/// so the matrix and the work are the same on every run (#951).
+struct DenseCentre {
+  Model model;
+  Solution interior;
+};
+
+DenseCentre dense_centre(Index m) {
+  DenseCentre made;
+  Model& model = made.model;
+  const auto size = static_cast<std::size_t>(m);
+  model.col_cost.assign(size, 1.0);
+  model.col_lower.assign(size, 0.0);
+  model.col_upper.assign(size, 1.0);
+  model.col_type.assign(size, VarType::kContinuous);
+  model.matrix.reset(m, m);
+  std::vector<double> activity(size, 0.0);
+  std::uint64_t state = 951;
+  for (Index i = 0; i < m; ++i) {
+    for (Index j = 0; j < m; ++j) {
+      state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+      const double v = static_cast<double>(state >> 11) / 9007199254740992.0 * 2.0 - 1.0;
+      model.matrix.add_entry(i, j, v);
+      activity[static_cast<std::size_t>(i)] += 0.5 * v;
+    }
+  }
+  model.matrix.finalize();
+  model.row_lower = activity;
+  model.row_upper = activity;
+  model.hessian.reset(m, m);
+  model.hessian.finalize();
+
+  Solution& interior = made.interior;
+  interior.allocate_for(model);
+  interior.status = SolveStatus::kOptimal;
+  interior.algorithm = "ipm";
+  interior.col_value.assign(size, 0.5);
+  interior.row_activity = activity;
+  return made;
+}
+
+TEST(Crossover, TheBasisGuessStopsAtTheTimeLimit) {
+  // #951: crossover_to_vertex() read the time limit only after crossover_guess() had built
+  // its guess, and the guess's rank repair factorizes it with partial pivoting, with no
+  // deadline. On the refinery year at T = 365 under a 20 s limit the interior point
+  // converged at 18.6 s and the result reported 26.3 s, "no time left for crossover". Here
+  // the guess is one dense 1,500 x 1,500 factorization, seconds of work, under a limit of
+  // 0.2 s: the crossover must give up near the limit and hand back the interior point's
+  // answer as it came. Without the fix the whole factorization ran first.
+  const DenseCentre centre = dense_centre(1500);
+  Options options = ipm_options(true);
+  constexpr double kLimit = 0.2;
+  options.set_double("time_limit", kLimit);
+  Logger quiet(nullptr);
+  const Timer timer;
+  const Solution answer =
+      crossover_to_vertex(centre.model, centre.interior, options, quiet, nullptr, timer);
+  const double spent = timer.elapsed_seconds();
+  EXPECT_LT(spent, kLimit + 0.5) << "the crossover ran past its time limit: " << answer.message;
+  EXPECT_EQ(answer.status, SolveStatus::kOptimal) << answer.message;
+  EXPECT_EQ(answer.algorithm, "ipm") << "no vertex was claimed";
+  EXPECT_NE(answer.message.find("the interior point's answer stands"), std::string::npos)
+      << answer.message;
+  for (const double x : answer.col_value) ASSERT_EQ(x, 0.5) << "the point is not touched";
+}
+
+TEST(Crossover, TheBasisGuessReadsItsDeadline) {
+  // The contract under the test above: a deadline that has already fired stops the rank
+  // repair before its first factorization, and the guess says it was stopped.
+  const DenseCentre centre = dense_centre(200);
+  const CrossoverGuess stopped =
+      crossover_guess(centre.model, centre.interior, [] { return true; });
+  EXPECT_TRUE(stopped.stopped);
+  const CrossoverGuess whole = crossover_guess(centre.model, centre.interior);
+  EXPECT_FALSE(whole.stopped);
+  EXPECT_EQ(whole.basic, centre.model.num_rows());
 }
 
 TEST(Crossover, OffLeavesTheInteriorPointsAnswerAlone) {
