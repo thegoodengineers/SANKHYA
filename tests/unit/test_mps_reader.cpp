@@ -692,6 +692,37 @@ TEST(MpsReader, AutoDetectionPrefersTheFreeDialect) {
   EXPECT_EQ(model.num_cols(), 1);
 }
 
+TEST(MpsReader, ANameThatBeginsWithADollarIsANameNotAComment) {
+  // Netlib pang has a column $0AICCB. Read as a free-format comment marker it dropped the
+  // column, and the model came back with 459 of its 460 columns while the independent
+  // verifier read all 460 (found in #475). A '$' later on the line still opens a comment.
+  const TempFile file(
+      "NAME          DOLLAR\n"
+      "ROWS\n"
+      " N COST\n"
+      " L R1\n"
+      "COLUMNS\n"
+      " X COST 1.0 R1 1.0\n"
+      " $Y COST 2.0 R1 3.0\n"
+      " Z COST 4.0 $ a trailing comment\n"
+      "RHS\n"
+      " RHS R1 10.0\n"
+      "ENDATA\n");
+  Model model;
+  io::MpsFormat used = io::MpsFormat::kFixed;
+  const io::ReadResult result = io::read_mps(file.path(), &model, io::MpsFormat::kAuto, &used);
+  ASSERT_TRUE(result.ok) << result.error;
+  EXPECT_EQ(used, io::MpsFormat::kFree);
+  ASSERT_EQ(model.num_cols(), 3);
+  const Index y = col_of(model, "$Y");
+  ASSERT_GE(y, 0);
+  EXPECT_DOUBLE_EQ(model.col_cost[static_cast<std::size_t>(y)], 2.0);
+  EXPECT_DOUBLE_EQ(model.matrix.at(0, y), 3.0);
+  const Index z = col_of(model, "Z");
+  ASSERT_GE(z, 0);
+  EXPECT_DOUBLE_EQ(model.col_cost[static_cast<std::size_t>(z)], 4.0);
+}
+
 TEST(MpsReader, CarriageReturnsAreStripped) {
   // A Windows-authored file read as binary leaves \r glued to the last token on the line,
   // which turns a bound type "UP" into "UP\r" and an unknown-type rejection.
