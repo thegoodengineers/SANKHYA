@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -23,10 +24,20 @@ double dot(const std::vector<double>& a, const std::vector<double>& b) {
   return sum;
 }
 
+// The largest magnitude, and +inf when any entry is not finite: std::max(largest, NaN)
+// returns largest, so a plain max would let a NaN residual read as a small one (the dense
+// column PCG had the same flaw, fixed in #936).
 double inf_norm(const std::vector<double>& a) {
   double largest = 0.0;
-  for (const double v : a) largest = std::max(largest, std::fabs(v));
+  for (const double v : a) {
+    if (!std::isfinite(v)) return std::numeric_limits<double>::infinity();
+    largest = std::max(largest, std::fabs(v));
+  }
   return largest;
+}
+
+bool all_finite(const std::vector<double>& a) {
+  return std::all_of(a.begin(), a.end(), [](double v) { return std::isfinite(v); });
 }
 
 }  // namespace
@@ -275,7 +286,9 @@ double ColumnSide::terms_of_m(const std::vector<double>& v) const {
   }
   double largest = 0.0;
   for (std::size_t i = 0; i < v.size(); ++i) {
-    largest = std::max(largest, out[i] + d_[i] * std::fabs(v[i]));
+    const double term = out[i] + d_[i] * std::fabs(v[i]);
+    if (!std::isfinite(term)) return std::numeric_limits<double>::infinity();
+    largest = std::max(largest, term);
   }
   return largest;
 }
@@ -306,6 +319,10 @@ ColumnSideReport ColumnSide::solve(const SparseLdl& ldl, double* rhs) const {
   ColumnSideReport report;
   const auto m = static_cast<std::size_t>(a_->num_rows());
   const std::vector<double> b(rhs, rhs + m);
+  if (!all_finite(b)) {  // nothing to solve: say so rather than iterate on NaN
+    report.backward_error = std::numeric_limits<double>::infinity();
+    return report;
+  }
   if (inf_norm(b) == 0.0) {
     report.converged = true;
     return report;
@@ -353,7 +370,8 @@ ColumnSideReport ColumnSide::solve(const SparseLdl& ldl, double* rhs) const {
   multiply_m(x, &q);
   for (std::size_t i = 0; i < m; ++i) r[i] = b[i] - q[i];
   report.backward_error = inf_norm(r) / (inf_norm(b) + terms_of_m(x));
-  report.converged = !broke_down && report.backward_error <= tol::kIpmPcgAcceptedBackwardError;
+  report.converged = !broke_down && all_finite(x) &&
+                     report.backward_error <= tol::kIpmPcgAcceptedBackwardError;
   std::copy(x.begin(), x.end(), rhs);
   return report;
 }
