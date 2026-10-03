@@ -742,6 +742,10 @@ Solution BranchAndBound::run() {
       tree_cut_round(node.depth, &relaxation);
     }
     age_cut_rows(&relaxation);
+    // miqp_node_ipm_warm_start (#494, #893): the save point of the solve that produced the
+    // relaxation as it now stands, taken before the heuristics below can solve other QPs.
+    qp::QpIpmWarmStart node_qp_warm;
+    if (miqp_node_ipm_warm_start_) node_qp_warm = last_qp_warm_;
 
     // Node bound in minimise space, excluding the offset (added back on report). Stored and
     // ordered raw; can_prune() and the gap test round it up to the next value an integer
@@ -820,19 +824,11 @@ Solution BranchAndBound::run() {
     // strong-branching probes can replace current_warm_ with the bases of their own solves.
     WarmStart children_warm = basis_of(relaxation);
     current_warm_ = children_warm;
-    // miqp_node_ipm_warm_start (#494, #893): the children start their own IPM from this node's
-    // converged point, pulled back inside whichever bound the branch just tightened. Only
-    // relaxation.col_value's size is checked here; a point size-correct but not actually
-    // converged (the IPM's own fallback path) is still a better start than the engine's cold
-    // one, so it is not filtered further.
-    qp::QpIpmWarmStart children_qp_warm;
-    if (miqp_node_ipm_warm_start_ &&
-        relaxation.col_value.size() == static_cast<std::size_t>(working_.num_cols())) {
-      children_qp_warm.col_value = relaxation.col_value;
-      if (relaxation.row_dual.size() == static_cast<std::size_t>(working_.num_rows())) {
-        children_qp_warm.row_dual = relaxation.row_dual;
-      }
-    }
+    // miqp_node_ipm_warm_start (#494, #893): the children, and the dives below, start their
+    // own IPM from this node's save point (empty when the node's IPM did not end optimal, and
+    // they then start cold).
+    qp::QpIpmWarmStart children_qp_warm = std::move(node_qp_warm);
+    current_qp_warm_ = children_qp_warm;
 
     // Diving (#25, #414): at the root, and every mip_dive_frequency nodes when that is set.
     // node_index == 0 identifies the root directly - it is the one node present in open_
@@ -846,6 +842,7 @@ Solution BranchAndBound::run() {
       ProfileScope timed(logger_.profiler(), "heuristics", ProfileMode::kDetailed);
       run_dives(node_index, relaxation.col_value);
       current_warm_ = children_warm;
+      current_qp_warm_ = children_qp_warm;
       // The feasibility pump only at the root, and only when rounding, repair and the dives
       // all came back empty: its value is an incumbent where there is none, and it costs
       // LP solves.
@@ -888,14 +885,9 @@ Solution BranchAndBound::run() {
     keep_inherited();  // a strong-branch fix (#502) may have re-solved the node LP
     if (!strong_fixes_.empty()) {
       children_warm = basis_of(relaxation);
-      if (miqp_node_ipm_warm_start_ &&
-          relaxation.col_value.size() == static_cast<std::size_t>(working_.num_cols())) {
-        children_qp_warm.col_value = relaxation.col_value;
-        children_qp_warm.row_dual =
-            relaxation.row_dual.size() == static_cast<std::size_t>(working_.num_rows())
-                ? relaxation.row_dual
-                : std::vector<double>{};
-      }
+      // The re-solve after the fixes is the last node QP solve, so its save point is the
+      // node's now.
+      if (miqp_node_ipm_warm_start_) children_qp_warm = last_qp_warm_;
     }
     if (branch_column == kBranchIntegral && !strong_fixes_.empty()) {
       offer_incumbent(relaxation.col_value);
@@ -1083,6 +1075,7 @@ Solution BranchAndBound::run() {
     record_safe_bounds(&solution);
     record_conflicts(&solution);
     record_cut_counts(&solution);
+    record_miqp_ipm(&solution);
     solution.solve_seconds = timer_.elapsed_seconds();
     report_root(&solution);
     return solution;
@@ -1097,6 +1090,7 @@ Solution BranchAndBound::run() {
   record_safe_bounds(&solution);
   record_conflicts(&solution);
   record_cut_counts(&solution);
+  record_miqp_ipm(&solution);
   solution.solve_seconds = timer_.elapsed_seconds();
   report_root(&solution);
 

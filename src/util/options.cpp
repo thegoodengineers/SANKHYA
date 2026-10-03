@@ -823,11 +823,15 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Bool,
                  false,
                  "With miqp_node_ipm: start a child node's interior point from its parent's "
-                 "converged point (#494, #893) instead of the engine's usual cold start - the "
-                 "primal point, mapped onto the child's columns and pulled back inside any "
-                 "bound the branch just tightened, and the parent's row duals, not its "
-                 "regularization or bound multipliers (a partial warm start). Ignored when "
-                 "miqp_node_ipm is off. Off by default until its own A/B on main.",
+                 "save point (#494, #893) instead of the engine's cold start - the parent's "
+                 "first iterate within 1e-2 relative residuals and gap, not its optimum, with "
+                 "its row and bound multipliers and proximal parameters, shifted into the "
+                 "child's interior and recentred (Gondzio, 'Warm start of the primal-dual "
+                 "method applied in the cutting-plane scheme', Math. Programming 83 (1998)). "
+                 "A node the warm run cannot finish is decided by its LP, then solved cold. "
+                 "Ignored when "
+                 "miqp_node_ipm is off. Off by default until its own A/B on main "
+                 "(bench/runners/qplib_miqp.py).",
                  0.0,
                  0.0,
                  {}});

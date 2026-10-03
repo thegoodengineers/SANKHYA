@@ -510,6 +510,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_qplib_all.py
 
+      - name: The QPLIB MIQP warm-start A/B runner's selection, arms and verdicts pass their tests (#494)
+        # Hermetic: no download and no solve. QPLIB's letters for the convex MIQP subset, the
+        # one option that differs between the arms, iterations per node from the stats JSON,
+        # warm-against-cold agreement within kMipRelativeGap and the summary totals.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_qplib_miqp.py
+
       - name: Every QPLIB conversion is checked at QPLIB's published point by its test classes (#835)
         # Hermetic: no download and no solve. Inline .qplib, .sol and GAMS-head fixtures for
         # each failure class the whole-library check met: b<k> and i<k> names, objvar not

@@ -293,6 +293,7 @@ set(SANKHYA_CORE_SOURCES
   src/qp/qp_first_order_accel.cpp
   src/qp/qp_ipm.cpp
   src/qp/qp_ipm_system.cpp
+  src/qp/qp_ipm_warm.cpp
   src/la/ldl.cpp
   src/la/ldl_supernodal.cpp
   src/la/lu.cpp
