@@ -638,7 +638,7 @@ class BranchAndBound {
     double cutoff = pool_.cutoff();
     if (have_incumbent_ && pool_gap_ < kNoPoolGap) {
       cutoff = std::min(cutoff, incumbent_internal_ +
-                                    pool_gap_ * std::max(1.0, std::fabs(incumbent_internal_)));
+                                    pool_gap_ * std::max(1.0, std::fabs(reported(incumbent_internal_))));
     }
     return cutoff;
   }

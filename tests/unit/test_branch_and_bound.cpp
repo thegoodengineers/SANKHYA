@@ -481,6 +481,26 @@ TEST(BranchAndBound, StopsOnALooseRelativeGapAndReportsOptimalWithinIt) {
   EXPECT_LE(relative, 0.5 + 1e-9);
 }
 
+TEST(BranchAndBound, TheRelativeGapIsMeasuredOnTheObjectiveWithItsConstant) {
+  // #504: the gap stop divided by the incumbent without the objective constant, so on
+  // mcsched a 1.23e-4 gap read 9.9e-5 and was reported optimal under the 1e-4 target, and
+  // the verifier, which measures on the objective the user sees, rejected the claim. Same
+  // knapsack as above (optimum -17), with a constant of +16 so the user's optimum is -1:
+  // a 0.5 relative target then allows a gap of at most 0.5, not 8.5.
+  Model model =
+      make_milp({{5.0, 4.0, 3.0, 2.0}}, {-kInfinity}, {10.0}, {-10.0, -7.0, -4.0, -3.0},
+                {1.0, 1.0, 1.0, 1.0}, {true, true, true, true});
+  model.objective_offset = 16.0;
+  Options options = mip_options();
+  options.set_double("mip_relative_gap", 0.5);
+  const Solution s = solve(model, options);
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_NEAR(s.objective, -1.0, 1e-9) << s.message;
+  const double relative =
+      std::fabs(s.objective - s.dual_bound) / std::max(1.0, std::fabs(s.objective));
+  EXPECT_LE(relative, 0.5 + 1e-9) << s.message;
+}
+
 TEST(BranchAndBound, AnAlreadyProvenTreeReportsOptimalNotFeasible) {
   // Found via data/casestudies/power_dispatch.mps (4-unit single-period unit commitment,
   // #37's own reference implementation in generate.py). The termination check added for
