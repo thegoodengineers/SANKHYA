@@ -1173,4 +1173,22 @@ TEST(TreeCuts, CutPoolingPreservesCorrectnessAndCountersSane) {
   }
 }
 
+TEST(StrongBranching, RecordsCsvWhenOptionEnabled) {
+  const Model model = make_fractional_gmi_model();
+  testing::TempFile temp_csv;
+  Options opts = mip_options();
+  opts.set_bool("presolve", false);
+  opts.set_bool("mip_heuristics", false);
+  opts.set_bool("enable_root_cuts", false);
+  opts.set_string("mip_strong_branch_record_csv", temp_csv.path());
+  Solution sol = solve(model, opts);
+  EXPECT_EQ(sol.status, SolveStatus::kOptimal);
+
+  std::ifstream in(temp_csv.path());
+  std::string content((std::istreambuf_iterator<char>(in)),
+                       std::istreambuf_iterator<char>());
+  EXPECT_FALSE(content.empty());
+  EXPECT_NE(content.find(','), std::string::npos);
+}
+
 }  // namespace sankhya

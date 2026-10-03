@@ -10,7 +10,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
 #include <limits>
+#include <locale>
 #include <string>
 #include <vector>
 
@@ -544,6 +546,48 @@ Index BranchAndBound::choose_branching_column(const std::vector<double>& x, doub
       best = candidate.column;
     }
   }
+
+  const std::string csv_path = options_.get_string("mip_strong_branch_record_csv");
+  if (!csv_path.empty()) {
+    std::ofstream out(csv_path, std::ios_base::app);
+    if (out.is_open()) {
+      out.imbue(std::locale::classic());
+      for (std::size_t i = 0; i < candidates.size(); ++i) {
+        const Candidate& candidate = candidates[i];
+        const auto u = static_cast<std::size_t>(candidate.column);
+        double down, up, pc_down, pc_up;
+        if (infeasible_side[i]) {
+          down = std::numeric_limits<double>::infinity();
+          up = down;
+          pc_down = 0.0;
+          pc_up = 0.0;
+        } else {
+          pc_down = pseudo_down_count_[u] > 0
+                        ? pseudo_down_sum_[u] / static_cast<double>(pseudo_down_count_[u])
+                        : average_down;
+          pc_up = pseudo_up_count_[u] > 0
+                      ? pseudo_up_sum_[u] / static_cast<double>(pseudo_up_count_[u])
+                      : average_up;
+          down = measured_down[i] >= 0.0 ? measured_down[i] : pc_down * candidate.fraction;
+          up = measured_up[i] >= 0.0 ? measured_up[i] : pc_up * (1.0 - candidate.fraction);
+        }
+        const double score = std::max(down, kEpsilon) * std::max(up, kEpsilon);
+        out << u << ","
+            << candidate.fraction << ","
+            << working_.col_cost[u] << ","
+            << working_.matrix.column(u).size << ","
+            << pc_down << ","
+            << pc_up << ","
+            << measured_down[i] << ","
+            << measured_up[i] << ","
+            << down << ","
+            << up << ","
+            << score << ","
+            << (candidate.column == best ? 1 : 0) << "\n";
+      }
+    }
+  }
+
   return best;
 }
 
