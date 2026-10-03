@@ -9,8 +9,11 @@ constraints included, because the point of #835 is to see what the reader and th
 dispatcher do with each of them, refusals and all.
 
 The site's pages, the listing, qplib.solu and the conversion check at QPLIB's published
-point are fetch_qplib.py's, reused unchanged; the manifest is data/qplib/all.json (ignored by
-git, like the instance files; the run's CSV records the sha256 of every instance it read).
+point are fetch_qplib.py's; the manifest is data/qplib/all.json (ignored by git, like the
+instance files; the run's CSV records the sha256 of every instance it read). For the check,
+the head of each instance's GAMS model is read too (fetch_gams_head), because the published
+point names variables as that model does: binary and integer columns as b<k> and i<k>, and
+objvar first, last or as a variable of its own (qplib_format.solution_columns).
 
 A row per instance, never a silently shorter list: an instance whose .qplib file does not
 parse, or whose conversion is refused (a constraint with no finite side, say), is recorded
@@ -21,8 +24,13 @@ with the reason as `conversion_error` and the runner reports it as not read.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -30,6 +38,45 @@ import fetch_qplib as fq  # noqa: E402
 import qplib_format  # noqa: E402
 
 MANIFEST = fq.DATA_DIR / "all.json"
+GAMS_HEAD_CHUNK = 1 << 18
+
+
+def fetch_gams_head(name: str, force: bool) -> tuple[list[str], dict]:
+    """The GAMS model's variable names, from the head of `gms/<name>.gms`.
+
+    The published point's file names variables as that model does (qplib_format.
+    solution_columns says how), so its Variables statement is what maps a .sol file onto the
+    .qplib file. Only the head is read, by HTTP range requests that double in size until the
+    first `Equations` statement has arrived (the declarations all come before it), because
+    some of the models run to hundreds of megabytes. Kept as data/qplib/gms/<name>.head."""
+    target = fq.DATA_DIR / "gms" / f"{name}.head"
+    url = f"{fq.BASE_URL}gms/{name}.gms"
+    if force or not target.exists():
+        print(f"fetching the head of {url}")
+        data, chunk = b"", GAMS_HEAD_CHUNK
+        while True:
+            request = urllib.request.Request(
+                url, headers={"Range": f"bytes={len(data)}-{len(data) + chunk - 1}"})
+            for attempt in range(4):
+                try:
+                    with urllib.request.urlopen(request, timeout=120) as response:
+                        part = response.read()
+                    break
+                except (urllib.error.URLError, OSError):
+                    if attempt == 3:
+                        raise
+                    time.sleep(2 ** attempt)
+            data += part
+            text = data.decode("latin-1")
+            if re.search(r"^\s*Equations\b", text, re.M | re.I) or len(part) < chunk:
+                break
+            chunk *= 2
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    data = target.read_bytes()
+    record = {"url": url, "bytes_read": len(data),
+              "sha256_of_head": hashlib.sha256(data).hexdigest()}
+    return qplib_format.parse_gams_variables(data.decode("latin-1")), record
 
 
 def entry_for(row: dict, fields: dict, solu: dict) -> dict:
@@ -46,7 +93,7 @@ def entry_for(row: dict, fields: dict, solu: dict) -> dict:
     }
 
 
-def convert(entry: dict, qplib_path: Path, sol_path: Path | None) -> None:
+def convert(entry: dict, qplib_path: Path, sol_path: Path | None, force: bool = False) -> None:
     """Write data/qplib/<name>.qps and check it at the published point, into `entry`."""
     try:
         model = qplib_format.read(qplib_path)
@@ -65,8 +112,10 @@ def convert(entry: dict, qplib_path: Path, sol_path: Path | None) -> None:
         entry["converter_check"] = {"passed": None, "note": "no published point to check at"}
         return
     try:
+        gams_variables, entry["gms_head"] = fetch_gams_head(entry["name"], force)
         entry["converter_check"] = fq.converter_check(
-            qps_path, model, sol_path.read_text(encoding="latin-1"), entry["solinfeasibility"])
+            qps_path, model, sol_path.read_text(encoding="latin-1"), entry["solinfeasibility"],
+            gams_variables)
     except ValueError as error:
         entry["converter_check"] = {"passed": False, "note": str(error)[:300]}
 
@@ -103,7 +152,7 @@ def main() -> int:
         sol_path = None
         if fields.get("sol_path"):
             sol_path, entry["sol"] = fq.fetch(fields["sol_path"], args.force)
-        convert(entry, qplib_path, sol_path)
+        convert(entry, qplib_path, sol_path, args.force)
         instances[row["name"]] = entry
         check = entry.get("converter_check", {})
         print(f"  {row['name']} {entry['problem_type']}  "

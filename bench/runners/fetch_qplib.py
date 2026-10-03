@@ -56,6 +56,7 @@ import json
 import math
 import re
 import sys
+from fractions import Fraction
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -195,36 +196,128 @@ def references_agree(page_text: str | None, solu_value: float | None) -> bool:
 
 # ---- the conversion check ----------------------------------------------------------------
 
+def _exact_row_activities(reread, rows: set[int], point: list[float]) -> dict[int, Fraction]:
+    """b_i'x + x'Q_i x of the given rows of the re-read QPS, in exact rational arithmetic."""
+    exact = {i: Fraction(0) for i in rows}
+    for j, column in enumerate(reread.entries):
+        if point[j] == 0.0:
+            continue
+        for i, value in column:
+            if i in exact:
+                exact[i] += Fraction(value) * Fraction(point[j])
+    for (i, a, b), value in reread.qc_entries.items():
+        if i in exact and point[a] != 0.0 and point[b] != 0.0:
+            exact[i] += Fraction(value) * Fraction(point[a]) * Fraction(point[b])
+    return exact
+
+
+def _exact_objective(reread, point: list[float]) -> Fraction:
+    total = Fraction(reread.objective_offset)
+    for c, v in zip(reread.col_cost, point):
+        if c != 0.0 and v != 0.0:
+            total += Fraction(c) * Fraction(v)
+    for (r, c), value in reread.hessian.items():
+        if point[r] != 0.0 and point[c] != 0.0:
+            weight = 1 if r == c else 2  # a stored off-diagonal stands for both halves
+            total += Fraction(value) * Fraction(point[r]) * Fraction(point[c]) * weight / 2
+    return total
+
+
 def converter_check(qps: Path, model: qplib_format.QplibModel, sol_text: str,
-                    solinfeasibility: float | None) -> dict:
-    """QPLIB's own point, evaluated on the converted QPS by the verifier's reader."""
-    x, objvar = qplib_format.read_solution(sol_text, model)
+                    solinfeasibility: float | None,
+                    gams_variables: list[str] | None = None) -> dict:
+    """QPLIB's own point, evaluated on the converted QPS by the verifier's reader.
+
+    `gams_variables` is the GAMS model's declaration order (qplib_format.parse_gams_variables),
+    which is what maps the .sol file's names to the model's variables; without it the names
+    are read with objvar assumed first.
+
+    The comparison is against QPLIB's own numbers: the objective to 1e-9 relative, and the
+    worst violation (rows, bounds, integrality: doc.html SOLINFEASIBILITY, an ABSOLUTE
+    maximum) to the page's solinfeasibility plus 1e-7. Floating point can lose that much in a
+    row whose terms are large and cancel: QPLIB_10022's row 9157 (a purely quadratic row,
+    <= 0, its terms summing in magnitude to 6.7e9) comes out at +4.8e-7 in double precision,
+    a violation, while its exact activity at the point is -1.9e-8, inside the side. So a row, or
+    the objective, that fails in floating point is evaluated again exactly, in rationals, on
+    the same re-read QPS and the same point, and that value is the one judged and reported.
+    The point's decimals are taken as the doubles they parse to; nothing else is rounded."""
+    x, objvar = qplib_format.read_solution(sol_text, model, gams_variables)
     reread = parse_mps(qps)
     point = [0.0] * reread.num_cols
     for j in range(model.n):
         point[reread.col_index[qplib_format.column_name(j)]] = x[j]
     objective = (reread.objective_offset + sum(c * v for c, v in zip(reread.col_cost, point))
                  + reread.quadratic_objective(point))
+    allowed = (solinfeasibility or 0.0) + VIOLATION_SLACK
     activity = [0.0] * reread.num_rows
+    magnitude = [0.0] * reread.num_rows  # sum of |terms| per row, for the report
     for j, column in enumerate(reread.entries):
         for i, value in column:
             activity[i] += value * point[j]
+            magnitude[i] += abs(value * point[j])
     reread.add_quadratic_rows(point, activity, [0.0] * reread.num_rows)  # QCMATRIX (#835)
-    violation = 0.0
-    for i in range(reread.num_rows):
-        violation = max(violation, reread.row_lower[i] - activity[i],
-                        activity[i] - reread.row_upper[i])
+    for (i, a, b), value in reread.qc_entries.items():
+        magnitude[i] += abs(value * point[a] * point[b])
+
+    def row_violation(i: int, value) -> float:
+        return float(max(reread.row_lower[i] - value, value - reread.row_upper[i]))
+
+    rows = [row_violation(i, activity[i]) for i in range(reread.num_rows)]
+    suspects = {i for i, v in enumerate(rows) if v > allowed}
+    exact_rows = 0
+    if suspects:
+        for i, value in _exact_row_activities(reread, suspects, point).items():
+            lower, upper = reread.row_lower[i], reread.row_upper[i]
+            rows[i] = float(max((Fraction(lower) - value) if math.isfinite(lower) else -math.inf,
+                                (value - Fraction(upper)) if math.isfinite(upper) else -math.inf))
+        exact_rows = len(suspects)
+    violation = max([0.0] + rows)
     for j in range(reread.num_cols):
         violation = max(violation, reread.col_lower[j] - point[j], point[j] - reread.col_upper[j])
         if reread.col_integer[j] != model.integer[j]:
             violation = math.inf  # the conversion lost or invented an integer marker
         elif model.integer[j]:
             violation = max(violation, abs(point[j] - round(point[j])))
-    objective_ok = objvar is not None and math.isfinite(objective) and (
-        abs(objective - objvar) <= OBJECTIVE_CHECK * max(1.0, abs(objvar)))
-    violation_ok = violation <= (solinfeasibility or 0.0) + VIOLATION_SLACK
-    return {"published_point_objective": objvar, "objective_at_point_via_qps": objective,
-            "violation_at_point_via_qps": violation, "passed": bool(objective_ok and violation_ok)}
+
+    def objective_close(value: float) -> bool:
+        return objvar is not None and math.isfinite(value) and (
+            abs(value - objvar) <= OBJECTIVE_CHECK * max(1.0, abs(objvar)))
+
+    exact_objective = False
+    if not objective_close(objective) and math.isfinite(objective):
+        objective = float(_exact_objective(reread, point))
+        exact_objective = True
+    out = {"published_point_objective": objvar, "objective_at_point_via_qps": objective,
+           "violation_at_point_via_qps": violation,
+           "passed": bool(objective_close(objective) and violation <= allowed)}
+    # Why, in words, when it fails: a real discrepancy is reported with its numbers.
+    reasons = []
+    if not objective_close(objective):
+        reason = f"objective {objective!r} at the point via the QPS, published {objvar!r}"
+        if not model.q0 and not any(model.b0) and model.constant == 0.0:
+            # QPLIB_10035, 10036, 10037, 10039: the GAMS model minimizes objvar, which is
+            # variable 1 of the .qplib file, but the file gives it no objective coefficient.
+            reason += ("; the .qplib file's objective is identically zero (no Q^0 entry, no "
+                       "b^0 coefficient, no constant), so no point can reproduce it")
+        reasons.append(reason)
+    if not violation <= allowed:
+        reason = (f"violation {violation!r} exceeds the page's solinfeasibility "
+                  f"{solinfeasibility!r} + {VIOLATION_SLACK}")
+        worst = max(range(reread.num_rows), key=lambda i: rows[i], default=None)
+        if worst is not None and rows[worst] == violation and magnitude[worst] > 0.0:
+            # QPLIB_4805: row 6875's terms sum to 3.2e12 in magnitude and the point, as the
+            # .sol file prints it, misses the row by 1.1e-4 exactly, 3.4e-17 of that scale.
+            reason += (f"; worst at row {reread.row_names[worst]}, exactly, whose terms sum "
+                       f"to {magnitude[worst]:.3g} in magnitude ({violation / magnitude[worst]:.2g}"
+                       " of it)")
+        reasons.append(reason)
+    if reasons:
+        out["reasons"] = reasons
+    if exact_rows:
+        out["rows_evaluated_exactly"] = exact_rows
+    if exact_objective:
+        out["objective_evaluated_exactly"] = True
+    return out
 
 
 # ---- the fetch ---------------------------------------------------------------------------
