@@ -1603,21 +1603,65 @@ the off leg the defaults with `mip_restarts=0`; both off by default until this r
 favour. A restart is triggered only by columns reduced-cost fixing fixed, so the per-run
 restart column below says whether the option did anything at all.
 
-Not yet run on an idle machine at a commit on `main`. Reproduce with (`<sha>` the commit `sankhya version` reports):
+Source CSVs: `bench/results/restarts-ab-miplib-seeds3-off-3e4acc9.csv` and `bench/results/restarts-ab-miplib-seeds3-on-3e4acc9.csv`, `mip_restarts` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
 
-```
-python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_restarts=0 --out bench/results/restarts-ab-miplib-seeds3-off-<sha>.csv
-python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_reduced_cost_fixing=true --solver-option mip_restarts=2 --out bench/results/restarts-ab-miplib-seeds3-on-<sha>.csv
-```
+| leg | runs | matched | proved | sgm time (s, shift 10) | first feasible found | sgm first feasible (s, shift 1) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| off | 90 | 50 | 31 | 27.87 | 87 | 0.583 | 10.76 |
+| on | 90 | 50 | 31 | 27.80 | 87 | 0.583 | 10.74 |
+
+Instances whose matched or proved seed count moved between the legs: none.
+
+Runs in the on leg that restarted at least once: **6 of 90**; that split a node on the objective row: **0 of 90**.
+
+| instance | seed | status off | status on | bound off | bound on | bound moved | nodes off | nodes on | restarts on | objective branches on |
+|---|---:|---|---|---:|---:|---|---:|---:|---:|---:|
+| `b-ball` | 0 | optimal | optimal | -1.5 | -1.5 | no | 331 | 331 | 0 | 0 |
+| `b-ball` | 1 | feasible | feasible | -1.76923 | -1.76923 | no | 451020 | 459187 | 0 | 0 |
+| `b-ball` | 2 | feasible | feasible | -1.71429 | -1.71429 | no | 458388 | 463828 | 0 | 0 |
+| `opt1217` | 0 | feasible | feasible | -19 | -19 | no | 258826 | 255456 | 0 | 0 |
+| `opt1217` | 1 | feasible | feasible | -19 | -19 | no | 243501 | 244815 | 0 | 0 |
+| `opt1217` | 2 | feasible | feasible | -19 | -19 | no | 258600 | 252578 | 0 | 0 |
+| `rlp1` | 0 | feasible | feasible | 14 | 14 | no | 318992 | 306487 | 0 | 0 |
+| `rlp1` | 1 | feasible | feasible | 14 | 14 | no | 307477 | 310071 | 0 | 0 |
+| `rlp1` | 2 | feasible | feasible | 14 | 14 | no | 295697 | 300159 | 0 | 0 |
+| `noswot` | 0 | feasible | feasible | -43 | -43 | no | 238941 | 239464 | 0 | 0 |
+| `noswot` | 1 | feasible | feasible | -43 | -43 | no | 253150 | 248705 | 0 | 0 |
+| `noswot` | 2 | feasible | feasible | -43 | -43 | no | 226496 | 225303 | 0 | 0 |
+
+Bound moved towards the published optimum: none. Moved away: none. #418's acceptance, bound movement on at least one of `b-ball`, `opt1217`, `rlp1`, `noswot`, is **not met** by this run.
+
 
 #### A/B: objective branching on the plateau instances (#418)
 
-Not yet run on an idle machine at a commit on `main`. Reproduce with (`<sha>` the commit `sankhya version` reports):
+Source CSVs: `bench/results/objbranch-ab-miplib-seeds3-off-3e4acc9.csv` and `bench/results/objbranch-ab-miplib-seeds3-on-3e4acc9.csv`, `mip_objective_branching` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
 
-```
-python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_objective_branching=false --out bench/results/objbranch-ab-miplib-seeds3-off-<sha>.csv
-python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_objective_branching=true --out bench/results/objbranch-ab-miplib-seeds3-on-<sha>.csv
-```
+| leg | runs | matched | proved | sgm time (s, shift 10) | first feasible found | sgm first feasible (s, shift 1) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| off | 90 | 47 | 30 | 27.96 | 85 | 0.594 | 11.00 |
+| on | 90 | 45 | 28 | 28.83 | 82 | 0.811 | 11.25 |
+
+Instances whose matched or proved seed count moved between the legs: `enlight8` matched 1->1, proved 1->0; `neos-3611689-kaihu` matched 3->0, proved 1->0; `noswot` matched 0->1, proved 0->0.
+
+Runs in the on leg that restarted at least once: **0 of 90**; that split a node on the objective row: **36 of 90**.
+
+| instance | seed | status off | status on | bound off | bound on | bound moved | nodes off | nodes on | restarts on | objective branches on |
+|---|---:|---|---|---:|---:|---|---:|---:|---:|---:|
+| `b-ball` | 0 | optimal | optimal | -1.5 | -1.5 | no | 331 | 331 | 0 | 0 |
+| `b-ball` | 1 | feasible | feasible | -1.76923 | -1.76923 | no | 358515 | 376046 | 0 | 0 |
+| `b-ball` | 2 | feasible | feasible | -1.71429 | -1.71429 | no | 371536 | 387128 | 0 | 0 |
+| `opt1217` | 0 | feasible | feasible | -19 | -19 | no | 209082 | 194720 | 0 | 15358 |
+| `opt1217` | 1 | feasible | feasible | -19 | -19 | no | 199319 | 159079 | 0 | 13393 |
+| `opt1217` | 2 | feasible | feasible | -19 | -19 | no | 212211 | 140353 | 0 | 11388 |
+| `rlp1` | 0 | feasible | feasible | 14 | 14 | no | 256673 | 240348 | 0 | 10516 |
+| `rlp1` | 1 | feasible | feasible | 14 | 14 | no | 252164 | 207315 | 0 | 33 |
+| `rlp1` | 2 | feasible | feasible | 14 | 14 | no | 244814 | 202446 | 0 | 285 |
+| `noswot` | 0 | feasible | feasible | -43 | -43 | no | 172723 | 163661 | 0 | 21528 |
+| `noswot` | 1 | feasible | feasible | -43 | -43 | no | 178972 | 163023 | 0 | 32059 |
+| `noswot` | 2 | feasible | feasible | -43 | -43 | no | 157978 | 153573 | 0 | 34864 |
+
+Bound moved towards the published optimum: none. Moved away: none. #418's acceptance, bound movement on at least one of `b-ball`, `opt1217`, `rlp1`, `noswot`, is **not met** by this run.
+
 
 ---
 
