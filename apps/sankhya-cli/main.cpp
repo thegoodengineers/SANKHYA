@@ -229,9 +229,18 @@ int main(int argc, char** argv) {
   app.require_subcommand(1);
   // The banner stays one line with the commit first in parentheses, because
   // bench/runners/stamp.py parses it; the repository goes on a line of its own (#538).
-  app.set_version_flag(
-      "--version", fmt::format("{}\nrepository {} {}", sankhya::banner(), sankhya::repository(),
-                               sankhya::repository_url()));
+  //
+  // LAZY, not a precomputed string (#758): sankhya::banner() probes the CUDA device, and an
+  // eagerly-built std::string here calls it while main() is still setting up the parser -
+  // before CLI11 has even looked at argv, so every invocation of every subcommand paid for a
+  // CUDA driver init whether or not that run ever touched the GPU. A finale walk on an A100
+  // measured 8.47s of its 10.1s total as system time from exactly this, repeated once per
+  // subprocess. The callback form defers banner() to the one invocation that actually asks
+  // for --version.
+  app.set_version_flag("--version", [] {
+    return fmt::format("{}\nrepository {} {}", sankhya::banner(), sankhya::repository(),
+                       sankhya::repository_url());
+  });
 
   std::vector<std::string> option_assignments;
 
