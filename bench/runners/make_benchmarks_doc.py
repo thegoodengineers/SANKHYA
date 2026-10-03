@@ -2844,6 +2844,10 @@ def main() -> int:
                 newest_option_run("miplib-501-cache8-*.csv", "mip_node_factor_cache=8"))
     fj_ab = (newest_option_run("miplib-506-fj-off-seeds*-*.csv", "mip_heur_fj=off"),
              newest_option_run("miplib-506-fj-on-seeds*-*.csv", "mip_heur_fj=on"))
+    nodepricing_ab = (newest_option_run("nodepricing-ab-miplib-seeds*-inherit-*.csv",
+                                        "mip_node_pricing=inherit"),
+                      newest_option_run("nodepricing-ab-miplib-seeds*-devex-*.csv",
+                                        "mip_node_pricing=devex"))
     rootloop_ab = (newest_option_run("rootloop-ab-miplib-seeds*-false-*.csv",
                                      "root_cut_loop=false"),
                    newest_option_run("rootloop-ab-miplib-seeds*-true-*.csv",
@@ -3234,6 +3238,10 @@ is a harder library: MIPLIB instances are chosen to be difficult for mature solv
 #### A/B: Feasibility Jump on the seed harness (#506)
 
 {miplib_ab_doc.seeds_ab(*fj_ab, "mip_heur_fj") or "Not yet run on an idle machine."}
+
+#### A/B: Devex for the node LPs on the seed harness (#792)
+
+{miplib_ab_doc.seeds_ab(*nodepricing_ab, "mip_node_pricing") or "Not yet run on an idle machine."}
 
 #### A/B: the root cut loop on the seed harness (#862)
 
