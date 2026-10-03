@@ -185,19 +185,36 @@ const std::vector<std::string> kNetlibNine = {
     "afiro", "sc50a", "sc50b", "adlittle", "blend", "share2b", "sc105", "stocfor1", "israel",
 };
 
+// Every run here stops at the REQUESTED tolerance (pdhg_stop_at_request), which is what "the
+// stopping tolerance" in the test's name and the file header mean. Without it a run goes on
+// until the project's absolute 1e-7 standard as well, and on stocfor1 and israel that point
+// sits right at the 400,000-iteration budget. On two A100s at e7c0c60 one card stopped at the
+// budget (relative residuals near 1e-9, still short of the absolute standard) while two cards
+// finished, and a single A100 showed the same with the convergence test on the host as on the
+// device. Which side of the budget a run lands on is then decided by the order of
+// floating-point sums, not by the number of cards. The budget is also raised so the slower of
+// those instances can reach the request at all.
+Options requested_tolerance_options() {
+  Options o = solve_options();
+  o.set_bool("pdhg_stop_at_request", true);
+  o.set_int("iteration_limit", 1000000);
+  return o;
+}
+
 TEST(MultiGpuTwoCards, NineNetlibInstancesMatchOneCardAtTheStoppingTolerance) {
   REQUIRE_TWO_CARDS();
   Logger silent(nullptr);
-  Options partitioned = solve_options();
+  const Options options = requested_tolerance_options();
+  Options partitioned = options;
   partitioned.set_bool("gpu_partitioned", true);
   int agreed = 0;
   for (const std::string& name : kNetlibNine) {
     const Model model = read_netlib(name);
-    const Solution two = gpu::solve_pdhg_multi_gpu(model, solve_options(), {0, 1}, silent);
+    const Solution two = gpu::solve_pdhg_multi_gpu(model, options, {0, 1}, silent);
     ASSERT_EQ(two.algorithm, "pdhg-cuda-multi") << name << ": the two-card path did not run";
     const Solution one_partitioned = gpu::solve_pdhg_multi_gpu(model, partitioned, {0}, silent);
     ASSERT_EQ(one_partitioned.algorithm, "pdhg-cuda-multi") << name;
-    const Solution one_engine = gpu::solve_pdhg_gpu(model, solve_options(), silent);
+    const Solution one_engine = gpu::solve_pdhg_gpu(model, options, silent);
     const bool a = agrees(one_partitioned, two, name + " (partitioned engine, one card)");
     const bool b = agrees(one_engine, two, name + " (single-GPU engine)");
     agreed += (a && b) ? 1 : 0;
