@@ -36,10 +36,17 @@
 // product", SIAM J. Sci. Comput. 26 (2005), for evaluating the witness.
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
 #include "sankhya/model.hpp"
+
+namespace sankhya {
+class ResourceLimits;
+class SolveControl;
+class Timer;
+}  // namespace sankhya
 
 namespace sankhya::qp {
 
@@ -60,6 +67,10 @@ struct ConvexityResult {
   std::vector<double> witness;
   /// x^T Q x / x^T x along `witness`: an upper bound on Q's smallest eigenvalue.
   double witness_curvature = 0.0;
+  /// The caller's `should_stop` ended the factorization before it decided anything. The
+  /// verdict is then kUnverified, never kConvex: running out of time proves nothing about
+  /// Q, so the engine stops with the time limit rather than either solving or refusing.
+  bool stopped = false;
 };
 
 /// Decide whether `model.hessian` is positive semidefinite.
@@ -71,7 +82,14 @@ struct ConvexityResult {
 /// n x n working set - 20 GB at 50,000 columns - which is not a test a solver for sparse
 /// models can afford to run, and refusing every QP above a few thousand columns to avoid it
 /// meant a large sparse convex QP could not be solved at all.
-[[nodiscard]] ConvexityResult check_convexity(const Model& model);
+///
+/// `should_stop` is the caller's deadline (#835), asked inside the ordering, the symbolic
+/// analysis and between the columns of the factorization, as SparseLdl asks it for the
+/// interior point. The test is an engine's costliest step before its first iteration when
+/// the factor is large, and an MIQP runs it before every node QP, so without the deadline it
+/// is work no time limit reaches. A stop is reported as `stopped`, the verdict kUnverified.
+[[nodiscard]] ConvexityResult check_convexity(const Model& model,
+                                              const std::function<bool()>& should_stop = {});
 
 /// The same decision, computed densely.
 ///
@@ -82,5 +100,18 @@ struct ConvexityResult {
 /// role `DenseLu` plays for the sparse LU. `tests/unit/test_convexity_sparse.cpp` runs them
 /// against each other on random matrices.
 [[nodiscard]] ConvexityResult check_convexity_dense(const Model& model);
+
+/// The deadline a QP engine hands check_convexity(): its time limit on its own clock, or the
+/// user's interrupt. `limits`, `timer` and `control` must outlive the returned predicate.
+[[nodiscard]] std::function<bool()> convexity_deadline(const ResourceLimits& limits,
+                                                       const Timer& timer,
+                                                       const SolveControl* control);
+
+/// What a QP engine returns when that deadline stopped the test (`convexity.stopped`): the
+/// time limit, or the interrupt if that is what fired, with the test's detail. Neither a
+/// refusal nor a solve, since nothing about Q was decided.
+void stopped_before_convexity(const ResourceLimits& limits, const Timer& timer,
+                              const SolveControl* control, const ConvexityResult& convexity,
+                              Solution* solution);
 
 }  // namespace sankhya::qp

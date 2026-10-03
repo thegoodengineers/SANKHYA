@@ -223,8 +223,16 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   solution.allocate_for(model);
   solution.algorithm = "qp-ipm";
 
+  // Read before the convexity test, which answers to the same clock (#835).
+  const ResourceLimits limits(options, logger);
+
   // ---- convexity, before any arithmetic: the refusal is the Condat-Vu engine's, unchanged --
-  const ConvexityResult convexity = check_convexity(model);
+  const ConvexityResult convexity =
+      check_convexity(model, convexity_deadline(limits, timer, control));
+  if (convexity.stopped) {
+    stopped_before_convexity(limits, timer, control, convexity, &solution);
+    return solution;
+  }
   if (convexity.verdict != Convexity::kConvex) {
     solution.status = SolveStatus::kModelError;
     solution.message =
@@ -258,7 +266,6 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   const double tolerance = options.get_double("qp_ipm_tolerance");
   const bool detect = options.get_bool("qp_ipm_detect_infeasibility");  // #893
   const double primal_tolerance = options.get_double("primal_feasibility_tolerance");
-  const ResourceLimits limits(options, logger);
   StopController stop(control, timer, limits);
 
   // ---- starting point: strictly inside every finite bound, unit bound multipliers ---------

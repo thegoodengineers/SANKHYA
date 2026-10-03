@@ -181,8 +181,17 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
   solution.allocate_for(model);
   solution.algorithm = "qp-condat-vu";
 
+  // One interpretation of every limit, shared with every other engine (#289). Read before
+  // the convexity test, which answers to the same clock (#835).
+  const ResourceLimits limits(options, logger);
+
   // ---- convexity, before any arithmetic ---------------------------------------------------
-  const ConvexityResult convexity = check_convexity(model);
+  const ConvexityResult convexity =
+      check_convexity(model, convexity_deadline(limits, timer, control));
+  if (convexity.stopped) {
+    stopped_before_convexity(limits, timer, control, convexity, &solution);
+    return solution;
+  }
   if (convexity.verdict != Convexity::kConvex) {
     solution.status = SolveStatus::kModelError;
     solution.message =
@@ -228,10 +237,8 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
   std::vector<double> qx(un, 0.0), at_y(un, 0.0), ax(um, 0.0);
 
   const double tolerance = options.get_double("qp_tolerance");
-  // One interpretation of every limit, shared with every other engine (#289). A first-order
-  // method with no iteration limit still needs a stopping point, so an absent limit becomes
-  // this engine's own ceiling rather than an unbounded loop.
-  const ResourceLimits limits(options, logger);
+  // A first-order method with no iteration limit still needs a stopping point, so an absent
+  // limit becomes this engine's own ceiling rather than an unbounded loop.
   constexpr Count kIterationCeiling = 1000000;
 
   Count iterations = 0;

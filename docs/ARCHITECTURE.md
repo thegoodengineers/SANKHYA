@@ -379,7 +379,8 @@ one.
 **What the clock covers.** It starts at the top of `solve()`, so it covers presolve, the
 engine and postsolve. It does not cover reading the model or writing the answer, which happen
 in the CLI around the call. An engine reached after presolve is given what is LEFT of the
-budget, not the whole of it.
+budget, not the whole of it, and so is every node relaxation of a branch and bound, an LP
+(#803) or an MIQP's QP (#835).
 
 **Precedence**, when more than one limit is exhausted at the same check:
 
@@ -390,7 +391,9 @@ because it is the limit protecting a caller's own deadline.
 
 **Safe points.** A limit is observed at a boundary the engine chooses: between simplex
 iterations, between PDHG iterations, between branch-and-bound nodes, and inside the interior
-point's ordering and factorization through the same predicate (#197). A factorization or a
+point's ordering and factorization through the same predicate (#197), and inside the QP
+engines' convexity test (#835), where a test the clock stops decides nothing: the solve
+reports the time limit, never a solve and never a refusal. A factorization or a
 kernel already running finishes first, so overrunning a deadline by one such step is expected
 and is not a violated limit.
 

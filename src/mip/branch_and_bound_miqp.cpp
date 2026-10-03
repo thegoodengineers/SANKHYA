@@ -49,11 +49,16 @@
 
 namespace sankhya::mip {
 
-Solution BranchAndBound::solve_qp_node_ipm(const Options& options) {
+Solution BranchAndBound::solve_qp_node_ipm(Options& options) {
   // A strong-branching probe (probe_options_) only scores a column; its status is read for
   // kInfeasible alone, so it is not worth the fallback below.
   const bool node_solve = &options == &node_options_;
   const bool warm_usable = node_solve && miqp_node_ipm_warm_start_ && !current_qp_warm_.empty();
+  // The time that is left, which solve_node_with() has just written into `options`, and not
+  // the whole time_limit node_ipm_options_ was copied with (#835).
+  if (node_solve && limits_.has_time_limit()) {
+    node_ipm_options_.set_double("time_limit", options.get_double("time_limit"));
+  }
   Solution ipm =
       qp::solve_convex_qp_ipm(working_, node_solve ? node_ipm_options_ : options, logger_,
                               control_, warm_usable ? &current_qp_warm_ : nullptr);
@@ -72,12 +77,20 @@ Solution BranchAndBound::solve_qp_node_ipm(const Options& options) {
   feasibility.hessian.reset(n, n);
   feasibility.hessian.finalize();
   std::fill(feasibility.col_cost.begin(), feasibility.col_cost.end(), 0.0);
+  // Each fallback solve on what the ones before it left, not on what was left at the top.
+  const auto time_left = [&] {
+    if (limits_.has_time_limit()) {
+      options.set_double("time_limit", limits_.remaining_seconds(timer_.elapsed_seconds()));
+    }
+  };
+  time_left();
   Solution lp = solve_primal_simplex(feasibility, options, logger_, control_);
   if (lp.status == SolveStatus::kInfeasible || lp.status == SolveStatus::kTimeLimit ||
       lp.status == SolveStatus::kInterrupted) {
     if (lp.status == SolveStatus::kInfeasible) ++miqp_ipm_lp_infeasible_;
     return lp;
   }
+  time_left();
   return qp::solve_convex_qp(working_, options, logger_, control_);
 }
 
