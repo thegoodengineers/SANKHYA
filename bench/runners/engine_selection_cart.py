@@ -10,9 +10,14 @@ The CSV is the one bench/runners/engine_selection_data.py writes: per instance, 
 features `sankhya info --features` prints (computed by src/core/engine_features.cpp, so the
 tree reads exactly the numbers the solver would), the split the instance belongs to, and each
 engine's status and solve time. An engine that did not return a verified optimum is charged
-the time limit, as the MIPLIB summary charges an unproved run (miplib_seeds.py). The label of
-an instance is its fastest engine; its REGRET under a choice is the chosen engine's time minus
-the fastest engine's.
+the time limit, as the MIPLIB summary charges an unproved run (miplib_seeds.py). The REGRET
+of a choice is the chosen engine's time minus the fastest engine's. The LABEL of an instance
+is the first engine, in the order dual simplex, interior point, PDHG, whose time is within
+the tie margin of the fastest (TIE_RATIO times it, or TIE_SECONDS more, whichever is
+larger): on the small models every engine takes 0.05 to 0.1 s and the strict fastest is
+process start-up noise, which a tree would otherwise learn as structure; between engines
+that are practically tied, the dual simplex is preferred because it returns a basis. A choice
+is a HIT when its time is within the same margin; the regret uses the raw times.
 
 The tree is CART (Breiman, Friedman, Olshen and Stone, Classification and Regression Trees,
 1984): binary splits `feature <= threshold`, chosen to minimise the weighted Gini impurity of
@@ -66,6 +71,13 @@ FEATURES = [
     "cholesky_nonzeros", "cholesky_fill_ratio",
 ]
 MAX_DEPTH = 4
+# Two engines are practically tied when the slower takes at most TIE_RATIO times the faster's
+# time or at most TIE_SECONDS more, whichever allows more. In engine-selection-bcf2e42.csv the
+# dual simplex's and the interior point's wall times on the five seeds of a shape solved in
+# under 0.1 s differ by 0.006 to 0.033 s, which TIE_SECONDS covers; the margin is not meant
+# to cover PDHG's 0.05 to 0.24 s on random-300x600k4, a difference of iterations, not noise.
+TIE_RATIO = 1.10
+TIE_SECONDS = 0.05
 MIN_LEAF = 3
 MIN_TRAINING = 60
 MIN_HELD_OUT = 20
@@ -89,7 +101,9 @@ def load(path: Path) -> list[dict]:
         for raw in csv.DictReader(handle):
             limit = float(raw["time_limit"])
             times = engine_seconds(raw, limit)
-            best = min(ENGINES, key=lambda e: (times[e], ENGINES.index(e)))
+            fastest = min(times.values())
+            bound = max(fastest * TIE_RATIO, fastest + TIE_SECONDS)
+            label = next(e for e in ENGINES if times[e] <= bound)
             rows.append({
                 "instance": raw["instance"],
                 "sha256": raw.get("sha256", ""),
@@ -97,7 +111,10 @@ def load(path: Path) -> list[dict]:
                 "split": raw["split"],
                 "x": [float(raw.get(f) or "nan") for f in FEATURES],
                 "times": times,
-                "label": best,
+                "label": label,
+                "fastest": fastest,
+                "tie_bound": bound,
+                "strict": min(ENGINES, key=lambda e: (times[e], ENGINES.index(e))),
                 "rule_table": raw.get("rule_table", ""),
                 "any_solved": min(times.values()) < limit,
                 "limit": limit,
@@ -179,12 +196,12 @@ def predict(node: dict, x: list[float]) -> str:
 
 
 def evaluate(rows: list[dict], choose) -> dict:
-    """Accuracy and regret of a chooser over rows; rows no engine solved are left out. A
-    choice that was not measured (an engine outside ENGINES) is charged the time limit."""
+    """Hits (a choice within the tie margin of the fastest) and regret (its time minus the
+    fastest's) of a chooser over rows; rows no engine solved are left out. A choice that was
+    not measured (an engine outside ENGINES) is charged the time limit."""
     judged = [r for r in rows if r["any_solved"]]
-    hits = sum(choose(r) == r["label"] for r in judged)
-    regret = sum(r["times"].get(choose(r), r["limit"]) - r["times"][r["label"]]
-                 for r in judged)
+    hits = sum(r["times"].get(choose(r), r["limit"]) <= r["tie_bound"] for r in judged)
+    regret = sum(r["times"].get(choose(r), r["limit"]) - r["fastest"] for r in judged)
     total = sum(r["times"].get(choose(r), r["limit"]) for r in judged)
     return {"rows": len(judged), "hits": hits, "regret": regret, "total": total}
 
@@ -349,7 +366,7 @@ def main(argv=None) -> int:
     choosers = {"tree": lambda r: predict(tree, r["x"]), "rule table": lambda r: r["rule_table"]}
     for engine in ENGINES:
         choosers[f"always {engine}"] = lambda r, e=engine: e
-    choosers["fastest (oracle)"] = lambda r: r["label"]
+    choosers["fastest (oracle)"] = lambda r: r["strict"]
     scores = {}
     for split_name, part in (("training", train), ("held out", held)):
         for name, choose in choosers.items():
@@ -357,7 +374,7 @@ def main(argv=None) -> int:
             if split_name == "held out":
                 scores[name] = result
             rate = result["hits"] / result["rows"] if result["rows"] else float("nan")
-            print(f"{split_name}, {name}: {result['hits']}/{result['rows']} fastest engine "
+            print(f"{split_name}, {name}: {result['hits']}/{result['rows']} within the tie margin "
                   f"({rate:.1%}), regret {result['regret']:.3f} s, total {result['total']:.3f} s")
     print("held-out instances: instance, fastest, tree, rule table, seconds per engine")
     for r in held:

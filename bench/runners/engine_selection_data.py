@@ -63,6 +63,15 @@ for rows, cols, per_col in ((300, 600, 4), (1000, 1000, 5), (2000, 4000, 3), (40
         SHAPES.append((f"{structure}-{rows}x{cols}k{per_col}", "generate_large_lp.py",
                        ["--rows", str(rows), "--cols", str(cols), "--nnz-per-col",
                         str(per_col), "--structure", structure, "--periods", "10"]))
+# SPARSE AND LARGE (#477, second pass). Without these the grid had no sparse model above
+# 20,000 nonzeros: every model past that was dense (tens of entries per column), a refinery or
+# a transportation model, and the first tree split on `nonzeros <= 20000` alone, a boundary
+# the grid drew rather than the engines. Here the dual simplex wins at 24,000 to 30,000.
+for rows, cols, per_col in ((6000, 6000, 4), (5000, 10000, 3)):
+    for structure in ("random", "staircase"):
+        SHAPES.append((f"{structure}-{rows}x{cols}k{per_col}", "generate_large_lp.py",
+                       ["--rows", str(rows), "--cols", str(cols), "--nnz-per-col",
+                        str(per_col), "--structure", structure, "--periods", "10"]))
 SHAPES.append(("random-1500x3000k50", "generate_large_lp.py",
                ["--rows", "1500", "--cols", "3000", "--nnz-per-col", "50", "--structure",
                 "random", "--periods", "10"]))
@@ -144,9 +153,17 @@ def main() -> int:
     parser.add_argument("--time-limit", type=float, default=30.0)
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--list", action="store_true", help="print the split and stop")
+    parser.add_argument("--only", nargs="+", default=None, metavar="SHAPE",
+                        help="run only these shapes (the family names of SHAPES)")
     args = parser.parse_args()
 
     grid = list(instances())
+    if args.only:
+        unknown = set(args.only) - {family for family, _, _ in SHAPES}
+        if unknown:
+            print(f"unknown shape(s): {' '.join(sorted(unknown))}", file=sys.stderr)
+            return 2
+        grid = [g for g in grid if g[0].rpartition("-s")[0] in args.only]
     if args.list:
         for split in ("train", "test"):
             names = [name for name, s, _, _ in grid if s == split]
