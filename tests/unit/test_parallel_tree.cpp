@@ -557,5 +557,70 @@ TEST(ParallelTree, RepeatedSolvesUnderHeavyCpuOversubscriptionNeverEndInNumerica
   }
 }
 
+/// Continuously allocates, touches and frees buffers of varying size, so the solve's workers
+/// contend for the allocator and the memory bus rather than only for CPU cycles - the
+/// "memory pressure rather than CPU load" the #733 hunt (2 Oct 2026) named as not yet tried.
+/// Touching every page (not just allocating) matters: an untouched allocation can be satisfied
+/// without ever moving data, which contends for nothing.
+class MemoryPressure {
+ public:
+  explicit MemoryPressure(unsigned workers) {
+    threads_.reserve(workers);
+    for (unsigned k = 0; k < workers; ++k) {
+      threads_.emplace_back([this, k] {
+        std::mt19937 rng(9000u + k);
+        std::uniform_int_distribution<std::size_t> size_dist(1u << 16, 1u << 22);  // 64K-4M
+        while (!stop_.load(std::memory_order_relaxed)) {
+          std::vector<char> buffer(size_dist(rng));
+          for (std::size_t i = 0; i < buffer.size(); i += 4096)
+            buffer[i] = static_cast<char>(i);
+          volatile char sink = buffer.empty() ? 0 : buffer[buffer.size() / 2];
+          static_cast<void>(sink);
+        }
+      });
+    }
+  }
+  ~MemoryPressure() {
+    stop_.store(true, std::memory_order_relaxed);
+    for (std::thread& t : threads_) t.join();
+  }
+  MemoryPressure(const MemoryPressure&) = delete;
+  MemoryPressure& operator=(const MemoryPressure&) = delete;
+
+ private:
+  std::atomic<bool> stop_{false};
+  std::vector<std::thread> threads_;
+};
+
+TEST(ParallelTree,
+     RepeatedSolvesUnderOversubscribedThreadsAndMemoryPressureNeverEndInNumericalError) {
+  // The rest of the #733 hunt's "not tried yet" list (2 Oct 2026 comment): mip_threads
+  // higher than the hardware thread count (so every worker is starved, not merely four on a
+  // four-core box) together with memory pressure instead of pure CPU spinning. Still opt-in:
+  // this is as slow as the sibling test above for the same reason.
+  if (std::getenv("SANKHYA_STRESS") == nullptr) {
+    GTEST_SKIP() << "set SANKHYA_STRESS=1 to run the #733 load reproducer";
+  }
+  const unsigned cores = std::max(1u, std::thread::hardware_concurrency());
+  const BackgroundLoad cpu_load(cores * 2);
+  const MemoryPressure memory_load(cores);
+
+  const int kThreads = 8;
+  const int kTrials = 25;
+  for (int trial = 0; trial < kTrials; ++trial) {
+    const std::uint32_t seed = 733900u + static_cast<std::uint32_t>(trial);
+    const Model model = market_split(3, 24, seed);
+    Options options = on_threads(kThreads);
+    options.set_double("time_limit", 2.0);
+    const Solution solved = solve(model, options);
+    ASSERT_NE(solved.status, SolveStatus::kNumericalError)
+        << "#733 reproduced: mip_threads=" << kThreads << " seed=" << seed << " under "
+        << (cores * 2) << " CPU spinners and " << cores << " memory-pressure worker(s) on "
+        << cores << " hardware thread(s): " << solved.message;
+    ASSERT_NE(solved.status, SolveStatus::kModelError)
+        << "mip_threads=" << kThreads << " seed=" << seed << ": " << solved.message;
+  }
+}
+
 }  // namespace
 }  // namespace sankhya
