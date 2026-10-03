@@ -25,6 +25,14 @@ black box through the highspy wheel exactly as bench/runners/rivals.py runs it (
 binary, never its source), so the gap between the two reductions is measured rather than
 guessed.
 
+`--smallest N` keeps the N Netlib instances with the smallest MPS files, and `--refinery T`
+(repeatable) adds the refinery planning LP of bench/runners/generate_refinery_lp.py at T
+periods, generated into a temporary directory with `--refinery-seed` (7, the generator's
+documented example) and graded against the analytic optimum the generator writes into the
+file. The bound propagation A/B of #485 is one command:
+
+    python bench/runners/presolve_shrink.py --binary build/sankhya.exe --time-limit 20         --smallest 30 --refinery 12 --refinery 365         --arm off:presolve_bound_propagation=false --arm on:presolve_bound_propagation=true         --out bench/results/bound-propagation-ab-netlib30-refinery-<commit>.csv
+
 Writes bench/results/presolve-shrink-<commit>.csv (or --out).
 """
 from __future__ import annotations
@@ -33,6 +41,7 @@ import argparse
 import csv
 import datetime
 import json
+import re
 import statistics
 import subprocess
 import sys
@@ -57,12 +66,39 @@ COLUMNS = [
     *(f"phase_{p}_seconds" for p in PHASES),
     "solver_seconds", "overhead_seconds", "wall_seconds", "process_seconds", "iterations",
     "algorithm", "git_commit", "machine", "timestamp_utc", "solver_options",
+    # Appended (#485), so a reader of an older CSV by name is unaffected: the two counts the
+    # bound propagation A/B is about, out of the `reductions` text, and why presolve stopped.
+    "propagated_bounds", "implied_free_column_singletons", "presolve_termination",
 ]
+REFINERY = REPO_ROOT / "bench" / "runners" / "generate_refinery_lp.py"
 
 
 def parse_arm(text: str) -> tuple[str, list[str]]:
     name, _, rest = text.partition(":")
     return name, [o for o in rest.split(",") if o]
+
+
+def smallest_by_size(names, size_of, count: int) -> list[str]:
+    """The `count` names with the smallest files, ties broken by name, so the set is the
+    same on every machine that has the same files."""
+    return sorted(sorted(names, key=lambda n: (size_of(n), n))[:count])
+
+
+def analytic_optimum(text: str) -> float | None:
+    """The `* analytic optimum:` comment generate_refinery_lp.py writes into the MPS header
+    (#211): c^T x* of the plan it built optimal, from exact rationals."""
+    for line in text.splitlines()[:20]:
+        match = re.match(r"\*\s*analytic optimum:\s*(\S+)", line)
+        if match:
+            return float(match.group(1))
+    return None
+
+
+def generate_refinery(periods: int, seed: int, directory: Path) -> Path:
+    out = directory / f"refinery-{periods}.mps"
+    subprocess.run([sys.executable, str(REFINERY), "--periods", str(periods), "--seed",
+                    str(seed), "--out", str(out)], check=True, capture_output=True, text=True)
+    return out
 
 
 def phase_seconds(profile: dict) -> dict:
@@ -141,6 +177,11 @@ def main() -> int:
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--time-limit", type=float, default=120.0)
     parser.add_argument("--instances", nargs="*")
+    parser.add_argument("--smallest", type=int, default=None, metavar="N",
+                        help="only the N Netlib instances with the smallest MPS files")
+    parser.add_argument("--refinery", type=int, action="append", default=[], metavar="T",
+                        help="add the generated refinery LP at T periods; repeatable")
+    parser.add_argument("--refinery-seed", type=int, default=7)
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--highs", action="store_true",
                         help="add the size HiGHS's presolve reaches (needs highspy)")
@@ -163,14 +204,23 @@ def main() -> int:
     print(f"solver {binary}  commit {commit}  process start median "
           f"{statistics.median(starts) * 1e3:.1f} ms")
 
+    names = [n for n in sorted(args.instances or reference)
+             if (DATA_DIR / f"{n}.mps").exists()]
+    if args.smallest is not None:
+        names = smallest_by_size(names, lambda n: (DATA_DIR / f"{n}.mps").stat().st_size,
+                                 args.smallest)
+    # (name, file, published objective, exact objective text or None)
+    instances = [(n, DATA_DIR / f"{n}.mps", reference[n]["published_optimal"],
+                  exact.get(n, {}).get("exact_objective")) for n in names]
+    scratch = tempfile.TemporaryDirectory()
+    for periods in args.refinery:
+        mps = generate_refinery(periods, args.refinery_seed, Path(scratch.name))
+        instances.append((f"refinery-{periods}", mps,
+                          analytic_optimum(mps.read_text(errors="replace")[:4096]), None))
+
     rows = []
-    for name in sorted(args.instances or reference):
-        mps = DATA_DIR / f"{name}.mps"
-        if not mps.exists():
-            continue
+    for name, mps, published, exact_text in instances:
         sha = netlib.sha256_file(mps)
-        published = reference[name]["published_optimal"]
-        exact_text = exact.get(name, {}).get("exact_objective")
         yardstick = highs_presolved(mps) if args.highs else {}
         # Interleave arms inside each repeat so drift in machine load hits every arm alike.
         for rep in range(1, args.repeats + 1):
@@ -191,7 +241,7 @@ def main() -> int:
                     "instance": name, "instance_sha256": sha, "arm": arm, "rep": rep,
                     "status": r["status"],
                     "our_objective": "" if ours is None else repr(ours),
-                    "published_objective": repr(published),
+                    "published_objective": "" if published is None else repr(published),
                     "relative_gap": "" if g is None else
                     repr(min(x for x in (g, g_off) if x is not None)),
                     "matches_published": int(matches),
@@ -219,6 +269,10 @@ def main() -> int:
                     "algorithm": r.get("algorithm", ""),
                     "git_commit": commit, "machine": machine, "timestamp_utc": stamp,
                     "solver_options": " ".join(options),
+                    "propagated_bounds": pre.get("reductions", {}).get("propagated_bounds", ""),
+                    "implied_free_column_singletons":
+                    pre.get("reductions", {}).get("implied_free_column_singletons", ""),
+                    "presolve_termination": pre.get("termination", ""),
                 })
                 row = rows[-1]
                 print(f"{name:<10} {arm:<14} r{rep} {row['status']:<9} "
@@ -236,6 +290,7 @@ def main() -> int:
         writer = csv.DictWriter(handle, fieldnames=COLUMNS, restval="")
         writer.writeheader()
         writer.writerows(rows)
+    scratch.cleanup()
     print(f"wrote {netlib.display_path(out)}")
     rejected = sorted({r["instance"] for r in rows if r["independently_verified"] == 0})
     if rejected:
