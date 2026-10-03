@@ -3,12 +3,15 @@
 """PDHG step and primal weight: the adaptive rule against a constant step on a proved norm
 bound, and PDLP's primal weight against a PID controller (#482).
 
-One command runs the four legs on every instance, each on the same binary:
+One command runs the five legs on every instance, each on the same binary:
 
     default    the adaptive step of PDLP section 3.1 and the theta = 0.5 primal weight
     constant   pdhg_constant_step=true: eta = 0.998 / U, U a proved bound on ||A||_2
     pid        pdhg_primal_weight_pid=true: the PID controller at the option's gains
     both       both of the above
+    norms      #482 item 3: pdhg_bound_objective_rescaling=true (b and c divided by their
+               norms + 1) and pdhg_initial_weight_from_norms=true (omega_0 = ||c|| / ||b||);
+               CPU engine only, so a --engine cuda run should leave it out with --legs
 
 under each iteration scheme asked for (`--scheme`): `averaged`, the PDLP restarts on the
 running average (the engine's default), and `halpern`, the restarted Halpern iteration
@@ -69,11 +72,14 @@ RESULTS_DIR = netlib.RESULTS_DIR
 NETLIB_NINE = ["afiro", "sc50a", "sc50b", "adlittle", "blend", "share2b", "sc105", "stocfor1",
                "israel"]
 
+_NORMS_OFF = ("pdhg_bound_objective_rescaling=false", "pdhg_initial_weight_from_norms=false")
 LEGS = {
-    "default": ("pdhg_constant_step=false", "pdhg_primal_weight_pid=false"),
-    "constant": ("pdhg_constant_step=true", "pdhg_primal_weight_pid=false"),
-    "pid": ("pdhg_constant_step=false", "pdhg_primal_weight_pid=true"),
-    "both": ("pdhg_constant_step=true", "pdhg_primal_weight_pid=true"),
+    "default": ("pdhg_constant_step=false", "pdhg_primal_weight_pid=false", *_NORMS_OFF),
+    "constant": ("pdhg_constant_step=true", "pdhg_primal_weight_pid=false", *_NORMS_OFF),
+    "pid": ("pdhg_constant_step=false", "pdhg_primal_weight_pid=true", *_NORMS_OFF),
+    "both": ("pdhg_constant_step=true", "pdhg_primal_weight_pid=true", *_NORMS_OFF),
+    "norms": ("pdhg_constant_step=false", "pdhg_primal_weight_pid=false",
+              "pdhg_bound_objective_rescaling=true", "pdhg_initial_weight_from_norms=true"),
 }
 SCHEMES = {
     "averaged": ("pdhg_halpern=false", "pdhg_restart=true"),
@@ -92,7 +98,7 @@ COLUMNS = [
 
 def leg_options(engine: str, scheme: str, leg: str, iteration_limit: int,
                 extra: list[str], seed: int = 0) -> list[str]:
-    """The --option list of one solve. The leg's two switches and the seed come after
+    """The --option list of one solve. The leg's switches and the seed come after
     `extra`, so a --solver-option cannot quietly turn one leg into another; the gains can be
     set there."""
     return ["algorithm=pdhg", "pdhg_polish=false", "pdhg_tolerance=1e-8",

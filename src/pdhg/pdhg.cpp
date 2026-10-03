@@ -51,6 +51,7 @@
 #include "pdhg_evaluate.hpp"
 #include "pdhg_feasibility_polish.hpp"
 #include "pdhg_halpern.hpp"
+#include "pdhg_norm_rescale.hpp"
 #include "pdhg_parallel.hpp"
 #include "pdhg_trace.hpp"
 
@@ -141,7 +142,14 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   problem.bound_norm = std::sqrt(bound_square);
 
   // ---- Preconditioning -------------------------------------------------------------------
-  const Scaling scaling = build_scaling(model, problem.cost, kRuizIterations);
+  // #482 item 3, off by default: b and c rescaled by their norms, folded into the Scaling so
+  // that every x = column * z, y = row * w mapping stays right (pdhg_norm_rescale.hpp). The
+  // matrix is untouched, so the norm estimate below is the same either way.
+  const bool bound_objective_rescaling = options.get_bool("pdhg_bound_objective_rescaling");
+  const bool initial_weight_from_norms = options.get_bool("pdhg_initial_weight_from_norms");
+  Scaling scaling = build_scaling(model, problem.cost, kRuizIterations);
+  BoundObjectiveRescale rescale;
+  if (bound_objective_rescaling) rescale = rescale_bounds_and_objective(&scaling);
   const double spectral_norm =
       estimate_spectral_norm(scaling.matrix, kPowerIterations,
                              static_cast<unsigned>(options.get_int("random_seed")) + 1u);
@@ -258,6 +266,11 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         norm_bound.lower > 0.0 ? norm_bound.upper / norm_bound.lower : 1.0,
         tol::kPdhgConstantStepShare);
   }
+  if (bound_objective_rescaling) {
+    logger.info(
+        "Bounds divided by ||b||_2 + 1 = {:.6e}, objective by ||c||_2 + 1 = {:.6e} (#482)",
+        rescale.bound_divisor, rescale.objective_divisor);
+  }
   if (use_pid) {
     logger.info("Primal weight by PID at restarts (#482): kp {}, ki {}, kd {}", pid_gains.kp,
                 pid_gains.ki, pid_gains.kd);
@@ -367,7 +380,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   // the iterates, so a bad carried value only costs the first step, never the answer).
   double omega = (warm_usable && std::isfinite(warm_start->omega) && warm_start->omega > 0.0)
                      ? warm_start->omega
-                     : 1.0;  // primal weight
+                     : (initial_weight_from_norms ? initial_primal_weight_from_norms(scaling)
+                                                  : 1.0);  // primal weight
+  if (initial_weight_from_norms) {
+    logger.info("Initial primal weight ||c||_2 / ||b||_2 = {:.6e} (#482, [PDLP] section 3.2){}",
+                initial_primal_weight_from_norms(scaling),
+                warm_usable ? ", unless the warm start carries one" : "");
+  }
   // The primal weight at a restart, from the period's movement: [PDLP] section 3.2 with
   // theta = 0.5 by default, the PID controller under pdhg_primal_weight_pid (#482).
   const auto update_primal_weight = [&](double dx_norm, double dy_norm) {

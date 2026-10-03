@@ -65,6 +65,7 @@ add_executable(sankhya_tests
   unit/test_pdhg_halpern.cpp
   unit/test_pdhg_step_weight.cpp
   unit/test_operator_norm.cpp
+  unit/test_pdhg_norm_rescale.cpp
   unit/test_crossover.cpp
   unit/test_crossover_nonoptimal.cpp
   unit/test_dual_refuted_feasibility.cpp
