@@ -470,6 +470,15 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
                                options.get_double("pdhg_pid_ki"),
                                options.get_double("pdhg_pid_kd")};
   qp::PidState pid_state;
+  // #482 item 3 is CPU only: the device evaluation unscales A x through the row and column
+  // multipliers (A x = Dr^-1 Ahat xhat), which the rescaling's fold into the Scaling would
+  // break, so this engine does not take it and says so.
+  if (options.get_bool("pdhg_bound_objective_rescaling") ||
+      options.get_bool("pdhg_initial_weight_from_norms")) {
+    logger.warning(
+        "pdhg_bound_objective_rescaling and pdhg_initial_weight_from_norms are CPU-engine "
+        "options (#482); the CUDA engine runs without them");
+  }
 
   // ---- GPU resource allocation -------------------------------------------
   GpuState g;

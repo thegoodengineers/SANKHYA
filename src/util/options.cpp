@@ -2284,6 +2284,34 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  2.0,
                  {}});
+    s.push_back(
+        {"pdhg_bound_objective_rescaling",
+         OptionType::Bool,
+         false,
+         "After the Ruiz and Pock-Chambolle scaling, divide the LP PDHG's scaled objective by "
+         "||c||_2 + 1 and every scaled row and column bound by ||b||_2 + 1, b the row "
+         "right-hand sides (#482 item 3). The matrix is untouched; the rescaling is folded "
+         "into the scaling, so the answer is reported on the original model as before. The "
+         "issue cites Lu, Peng & Yang, cuPDLPx, arXiv:2507.14051 for b and c rescaled by "
+         "their norms; the + 1 is this project's guard against a zero or tiny norm. CPU "
+         "engine only: the CUDA engines warn and run without it. Off by default until an A/B "
+         "on main (bench/runners/pdhg_step_weight_ab.py, leg norms).",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
+        {"pdhg_initial_weight_from_norms",
+         OptionType::Bool,
+         false,
+         "Start the LP PDHG primal weight at ||c||_2 / ||b||_2 of the scaled problem (after "
+         "pdhg_bound_objective_rescaling when that is on), clamped to [1e-6, 1e6], instead "
+         "of 1; 1 when either norm is zero, and a warm start's own weight still wins (#482 "
+         "item 3; Applegate et al., PDLP, NeurIPS 2021, section 3.2). CPU engine only: the "
+         "CUDA engines warn and start at 1. Off by default until an A/B on main "
+         "(bench/runners/pdhg_step_weight_ab.py, leg norms).",
+         0.0,
+         0.0,
+         {}});
 
     // ---- Reporting ---------------------------------------------------------------------
     s.push_back({"log_level",
