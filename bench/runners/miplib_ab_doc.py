@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """MIPLIB A/B and multi-seed sections of docs/BENCHMARKS.md, rendered from their CSVs.
 
-Kept out of make_benchmarks_doc.py, which calls the three functions below. Every number is
+Kept out of make_benchmarks_doc.py, which calls the functions below. Every number is
 counted from the rows of a CSV in bench/results/; every instance that fails a check is NAMED.
 
   node_rate_ab   #501: the node LP factor cache, deterministic node-limited legs, where the
@@ -10,6 +10,9 @@ counted from the rows of a CSV in bench/results/; every instance that fails a ch
   seeds_ab       #506 (and any on/off A/B on the #504 harness): per-seed CSVs of two legs,
                  matched and proved over seeds, shifted geometric means, time to first
                  feasible and the primal integral (miplib_seeds.py).
+  plateau_ab     #418: seeds_ab, then the dual bound of the four plateau instances seed by
+                 seed in both legs, and whether it moved, which is #418's (and #221's)
+                 acceptance criterion.
   tier2_section  #504: the 60-instance tier over three seeds.
 """
 from __future__ import annotations
@@ -151,6 +154,90 @@ def seeds_ab(off: Path | None, on: Path | None, option: str) -> str:
                          f"proved {a[n]['seeds_proved']}->{b[n]['seeds_proved']}")
     out += ["", "Instances whose matched or proved seed count moved between the legs: "
             + ("; ".join(moved) if moved else "none") + ".", ""]
+    return "\n".join(out)
+
+
+# The four MIPLIB instances that hold the published optimum without proving it, with every
+# open node on one bound (#221, #418): more nodes did not move that bound, nor did cuts or
+# objective integrality, so a bound that moves here is the evidence #418 asks for.
+PLATEAU_INSTANCES = ("b-ball", "opt1217", "rlp1", "noswot")
+
+
+def _bound_distance(row: dict) -> float | None:
+    """How far the reported dual bound sits from the published optimum, relative.
+
+    The bound is on the optimum's far side from every incumbent, whatever the sense, so a
+    bound that moved towards the optimum is one whose distance shrank; no sense is needed."""
+    bound = _float(row.get("dual_bound"))
+    published = _float(row.get("published_objective"))
+    if bound is None or published is None:
+        return None
+    return abs(published - bound) / max(1.0, abs(published))
+
+
+def plateau_ab(off: Path | None, on: Path | None, option: str,
+               instances: tuple[str, ...] = PLATEAU_INSTANCES) -> str:
+    """Two multi-seed legs that differ in `option` (#418), read for bound movement.
+
+    The whole-set comparison is seeds_ab's. Below it, every seed of each plateau instance
+    in both legs: the dual bound, the nodes, and in the on leg the restarts and the objective
+    branches it took, so a leg in which the option never fired is visible as such rather than
+    read as a measurement. The legs must carry one commit, clean, or nothing is compared."""
+    if off is None or on is None:
+        return ""
+    rows_off, rows_on = _read(off), _read(on)
+    commits = {r.get("git_commit", "") for r in rows_off + rows_on}
+    if len(commits) != 1 or any(c.endswith("-dirty") or not c for c in commits):
+        return (f"Not compared: `bench/results/{off.name}` and `bench/results/{on.name}` must "
+                f"carry one clean commit, and they carry "
+                f"{', '.join(f'`{c}`' for c in sorted(commits)) or 'none'}.")
+    out = [seeds_ab(off, on, option)]
+    a = {(r["instance"], int(r.get("seed") or 0)): r for r in rows_off}
+    b = {(r["instance"], int(r.get("seed") or 0)): r for r in rows_on}
+
+    def count(rows: list[dict], column: str) -> int:
+        return sum(1 for r in rows if (_float(r.get(column)) or 0) > 0)
+
+    fired = count(rows_on, "restarts")
+    branched = count(rows_on, "objective_branches")
+    out += [f"Runs in the on leg that restarted at least once: **{fired} of {len(rows_on)}**; "
+            f"that split a node on the objective row: **{branched} of {len(rows_on)}**.", "",
+            "| instance | seed | status off | status on | bound off | bound on | bound moved "
+            "| nodes off | nodes on | restarts on | objective branches on |",
+            "|---|---:|---|---|---:|---:|---|---:|---:|---:|---:|"]
+    moved, worse, missing = [], [], []
+    for name in instances:
+        seeds = sorted(s for (n, s) in set(a) & set(b) if n == name)
+        if not seeds:
+            missing.append(name)
+            continue
+        for seed in seeds:
+            x, y = a[(name, seed)], b[(name, seed)]
+            d0, d1 = _bound_distance(x), _bound_distance(y)
+            scale = 1e-9
+            if d0 is None or d1 is None:
+                verdict = "-"
+            elif d1 < d0 - scale:
+                verdict = "**closer**"
+                moved.append(f"`{name}` seed {seed}")
+            elif d1 > d0 + scale:
+                verdict = "further"
+                worse.append(f"`{name}` seed {seed}")
+            else:
+                verdict = "no"
+            out.append(f"| `{name}` | {seed} | {x['status']} | {y['status']} | "
+                       f"{_fmt(_float(x.get('dual_bound')), '.6g')} | "
+                       f"{_fmt(_float(y.get('dual_bound')), '.6g')} | {verdict} | "
+                       f"{x.get('nodes') or '-'} | {y.get('nodes') or '-'} | "
+                       f"{y.get('restarts') or '-'} | {y.get('objective_branches') or '-'} |")
+    met = bool(moved)
+    out += ["", f"Bound moved towards the published optimum: "
+            f"{', '.join(moved) if moved else 'none'}. Moved away: "
+            f"{', '.join(worse) if worse else 'none'}."
+            + (f" Not in both legs: {', '.join(f'`{n}`' for n in missing)}." if missing else "")
+            + f" #418's acceptance, bound movement on at least one of "
+            f"{', '.join(f'`{n}`' for n in instances)}, is "
+            + ("**met** by this run." if met else "**not met** by this run."), ""]
     return "\n".join(out)
 
 

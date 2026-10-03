@@ -7,11 +7,18 @@
 // could tell. So every model here is also solved by enumeration, and the search must report
 // exactly what enumeration says - status and optimum - with fixing on, with restarts on, in
 // deterministic mode twice, and in the one place restarts are declined (a parallel tree).
+// Past enumeration, a restarted search is held to the same search without restarts, and
+// deterministic mode to its own earlier runs, bit for bit. The exact rational oracle sweeps
+// with restarts on are in test_branch_and_bound.cpp beside the other MILP sweeps.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <iostream>
 #include <limits>
 #include <random>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -187,6 +194,172 @@ TEST(Restarts, DeterministicRunsRepeatWithRestartsOn) {
   EXPECT_EQ(second.restarts, first.restarts);
   EXPECT_EQ(second.reduced_cost_fixings, first.reduced_cost_fixings);
   EXPECT_EQ(second.col_value, first.col_value);
+}
+
+// ---- Larger models: past enumeration, so the reference is the search without restarts ----
+
+/// A mixed-integer model too large to enumerate: general-integer columns with small boxes,
+/// a few continuous columns, covering and packing rows. The integer columns outnumber the
+/// continuous ones so the root has plenty to fix by reduced cost.
+Model larger_model(std::mt19937& rng, int trial) {
+  std::uniform_int_distribution<int> coefficient(0, 5);
+  std::uniform_int_distribution<int> cost_value(1, 40);
+  std::uniform_int_distribution<int> box(1, 3);
+  const std::size_t n = 22 + static_cast<std::size_t>(trial % 7);
+  const std::size_t continuous = 3;
+  const std::size_t rows = 6;
+  Model m;
+  m.sense = trial % 2 == 1 ? ObjSense::kMaximize : ObjSense::kMinimize;
+  m.col_cost.resize(n);
+  m.col_lower.assign(n, 0.0);
+  m.col_upper.resize(n);
+  m.col_type.resize(n);
+  for (std::size_t j = 0; j < n; ++j) {
+    m.col_cost[j] = cost_value(rng);
+    const bool integer = j >= continuous;
+    m.col_type[j] = integer ? VarType::kInteger : VarType::kContinuous;
+    m.col_upper[j] = integer ? box(rng) : 2.5;
+  }
+  m.matrix.reset(static_cast<Index>(rows), static_cast<Index>(n));
+  m.row_lower.assign(rows, -kInf);
+  m.row_upper.assign(rows, kInf);
+  for (std::size_t i = 0; i < rows; ++i) {
+    double reach = 0.0;
+    for (std::size_t j = 0; j < n; ++j) {
+      const int a = coefficient(rng);
+      if (a == 0) continue;
+      m.matrix.add_entry(static_cast<Index>(i), static_cast<Index>(j), a);
+      reach += a * m.col_upper[j];
+    }
+    if (i % 2 == 0) {
+      m.row_upper[i] = std::floor(reach / 2.0);
+    } else {
+      m.row_lower[i] = std::floor(reach / 4.0);
+    }
+  }
+  m.matrix.finalize();
+  m.hessian.reset(static_cast<Index>(n), static_cast<Index>(n));
+  m.hessian.finalize();
+  return m;
+}
+
+/// Independent of everything under test: integer columns integral, every column in its box,
+/// every row satisfied.
+bool feasible_mixed(const Model& m, const std::vector<double>& x) {
+  if (x.size() != static_cast<std::size_t>(m.num_cols())) return false;
+  for (std::size_t j = 0; j < x.size(); ++j) {
+    if (m.col_type[j] == VarType::kInteger && std::fabs(x[j] - std::round(x[j])) > 1e-9) {
+      return false;
+    }
+    if (x[j] < m.col_lower[j] - 1e-9 || x[j] > m.col_upper[j] + 1e-9) return false;
+  }
+  for (Index i = 0; i < m.num_rows(); ++i) {
+    double activity = 0.0;
+    for (Index j = 0; j < m.num_cols(); ++j) {
+      activity += m.matrix.at(i, j) * x[static_cast<std::size_t>(j)];
+    }
+    const auto u = static_cast<std::size_t>(i);
+    if (activity < m.row_lower[u] - 1e-7 || activity > m.row_upper[u] + 1e-7) return false;
+  }
+  return true;
+}
+
+/// Closed gap targets: the search must exhaust its tree, so "optimal" means the optimum and
+/// two runs that both say so must agree on the number.
+Options exact_search() {
+  Options options = quiet();
+  options.set_bool("mip_heuristics", true);  // an incumbent early, so fixing has material
+  options.set_double("mip_relative_gap", 0.0);
+  options.set_double("mip_absolute_gap", 1e-9);
+  options.set_int("node_limit", 200000);
+  return options;
+}
+
+Options with_restarts(Options options) {
+  options.set_bool("mip_reduced_cost_fixing", true);
+  options.set_int("mip_restarts", 2);
+  options.set_double("mip_restart_fraction", 0.05);
+  return options;
+}
+
+TEST(Restarts, ARestartedSearchReachesTheSameOptimumAsOneWithout) {
+  // #418's acceptance, literally: the same model solved with restarts off and on, both to a
+  // closed gap. The models are past enumeration, so the reference is the search without
+  // restarts (itself held to the exact oracle by the MILP sweeps in test_branch_and_bound.cpp);
+  // the claim here is only that throwing the tree away and re-solving the root never moves
+  // the answer. Only a model that actually restarted counts towards the evidence.
+  std::mt19937 rng(41804);
+  int restarted_models = 0;
+  for (int trial = 0; trial < 30; ++trial) {
+    const Model m = larger_model(rng, trial);
+    const Solution plain = solve(m, exact_search());
+    const Solution restarted = solve(m, with_restarts(exact_search()));
+    EXPECT_EQ(plain.restarts, 0) << "trial " << trial;
+    ASSERT_EQ(restarted.status, plain.status)
+        << "trial " << trial << ": " << plain.message << " | " << restarted.message;
+    if (plain.status != SolveStatus::kOptimal) continue;
+    const double scale = std::max(1.0, std::fabs(plain.objective));
+    EXPECT_NEAR(restarted.objective, plain.objective, 1e-9 * scale)
+        << "trial " << trial << ", " << restarted.restarts << " restart(s)";
+    EXPECT_NEAR(restarted.dual_bound, restarted.objective, 1e-6 * scale) << "trial " << trial;
+    EXPECT_TRUE(feasible_mixed(m, plain.col_value)) << "trial " << trial;
+    EXPECT_TRUE(feasible_mixed(m, restarted.col_value)) << "trial " << trial;
+    EXPECT_LE(restarted.restarts, 2) << "trial " << trial;
+    if (restarted.restarts > 0) ++restarted_models;
+  }
+  std::cout << "restarted " << restarted_models << " of 30 models, same optimum both ways"
+            << std::endl;
+  EXPECT_GE(restarted_models, 10)
+      << "too few models restarted for the comparison to say anything about restarts";
+}
+
+/// The bits of a double: == says 0.0 equals -0.0 and NaN differs from itself, and neither is
+/// what "bit for bit" means.
+std::vector<std::uint64_t> bits(const std::vector<double>& values) {
+  std::vector<std::uint64_t> out(values.size());
+  for (std::size_t k = 0; k < values.size(); ++k) {
+    std::memcpy(&out[k], &values[k], sizeof(double));
+  }
+  return out;
+}
+
+std::uint64_t bits(double value) {
+  return bits(std::vector<double>{value}).front();
+}
+
+TEST(Restarts, DeterministicModeRepeatsBitForBitAcrossRunsThatRestart) {
+  // deterministic (#288) promises the same numbers from the same model, options and build.
+  // A restart is a decision taken between nodes on counts alone (columns fixed, nodes
+  // explored), never on the clock, so it must keep that promise: three runs of each model,
+  // every number compared by its bits, and only models whose runs actually restarted count.
+  std::mt19937 rng(418418);
+  int restarted_models = 0;
+  for (int trial = 0; trial < 15; ++trial) {
+    const Model m = larger_model(rng, trial);
+    Options options = with_restarts(exact_search());
+    options.set_bool("deterministic", true);
+    const Solution first = solve(m, options);
+    if (first.restarts == 0) continue;
+    ++restarted_models;
+    for (int run = 1; run < 3; ++run) {
+      const Solution again = solve(m, options);
+      const std::string what = "trial " + std::to_string(trial) + " run " + std::to_string(run);
+      EXPECT_EQ(again.status, first.status) << what;
+      EXPECT_EQ(bits(again.objective), bits(first.objective)) << what;
+      EXPECT_EQ(bits(again.dual_bound), bits(first.dual_bound)) << what;
+      EXPECT_EQ(bits(again.root_bound), bits(first.root_bound)) << what;
+      EXPECT_EQ(bits(again.col_value), bits(first.col_value)) << what << ": the points differ";
+      EXPECT_EQ(again.nodes, first.nodes) << what;
+      EXPECT_EQ(again.iterations, first.iterations) << what;
+      EXPECT_EQ(again.restarts, first.restarts) << what;
+      EXPECT_EQ(again.reduced_cost_fixings, first.reduced_cost_fixings) << what;
+      EXPECT_EQ(again.cuts_applied, first.cuts_applied) << what;
+    }
+  }
+  std::cout << "restarted " << restarted_models << " of 15 models, three runs each, same bits"
+            << std::endl;
+  EXPECT_GE(restarted_models, 5)
+      << "too few deterministic runs restarted for the repeat to say anything about restarts";
 }
 
 TEST(Restarts, AParallelTreeDoesNotRestart) {

@@ -1591,6 +1591,34 @@ Source CSVs: `bench/results/rootloop-ab-miplib-seeds3-false-f7cfd57.csv` and `be
 Instances whose matched or proved seed count moved between the legs: `b-ball` matched 3->3, proved 1->2; `ej` matched 3->1, proved 0->0; `enlight8` matched 3->0, proved 2->0; `markshare_4_0` matched 1->0, proved 0->0; `neos-3611689-kaihu` matched 3->3, proved 1->3; `neos5` matched 3->0, proved 0->0; `noswot` matched 1->2, proved 0->0.
 
 
+#### A/B: root restarts on the plateau instances (#418)
+
+Issue #221 measured b-ball, opt1217, rlp1 and noswot holding the published optimum without
+proving it, every open node on one bound: more nodes, cuts and objective integrality did not
+move it.
+(b-ball closed at the root while the root separation loop, #495, was on by default; that
+default is off again since #957, and b-ball stays in the table either way.) The on leg sets `mip_reduced_cost_fixing=true
+mip_restarts=2` (a restart re-solves the root on the bounds reduced-cost fixing tightened),
+the off leg the defaults with `mip_restarts=0`; both off by default until this reads in their
+favour. A restart is triggered only by columns reduced-cost fixing fixed, so the per-run
+restart column below says whether the option did anything at all.
+
+Not yet run on an idle machine at a commit on `main`. Reproduce with (`<sha>` the commit `sankhya version` reports):
+
+```
+python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_restarts=0 --out bench/results/restarts-ab-miplib-seeds3-off-<sha>.csv
+python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_reduced_cost_fixing=true --solver-option mip_restarts=2 --out bench/results/restarts-ab-miplib-seeds3-on-<sha>.csv
+```
+
+#### A/B: objective branching on the plateau instances (#418)
+
+Not yet run on an idle machine at a commit on `main`. Reproduce with (`<sha>` the commit `sankhya version` reports):
+
+```
+python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_objective_branching=false --out bench/results/objbranch-ab-miplib-seeds3-off-<sha>.csv
+python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_objective_branching=true --out bench/results/objbranch-ab-miplib-seeds3-on-<sha>.csv
+```
+
 ---
 
 ## 2a. MIPLIB 3, the classic set beside MIPLIB 2017 (#761)

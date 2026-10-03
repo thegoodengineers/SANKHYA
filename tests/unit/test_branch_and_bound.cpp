@@ -651,6 +651,11 @@ struct FuzzTally {
   /// which these stay zero never removed or re-added a row.
   long long cut_rows_removed = 0;
   long long cut_rows_readded = 0;
+  /// Restarts, reduced-cost fixings and objective-row branches (#418), summed the same way:
+  /// a sweep with those options on in which these stay zero exercised none of them.
+  long long restarts = 0;
+  long long reduced_cost_fixings = 0;
+  long long objective_branches = 0;
   std::vector<std::string> failures;
 };
 
@@ -658,7 +663,7 @@ struct FuzzTally {
 /// density filter (kCutMaxDensity = 0.2) and sparse rows so single-row MIR cuts have that
 /// support; the small shape rejects every cut and so cannot exercise a cut round at all.
 FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = false,
-                        int trials = 600) {
+                        int trials = 600, const oracle::GeneratorConfig* shape = nullptr) {
   std::mt19937_64 rng(20260906);
   oracle::GeneratorConfig config;
   // Small: the oracle explores the tree in exact arithmetic and copies both bound vectors
@@ -669,6 +674,7 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
   config.max_cols = wide ? 20 : 5;
   config.magnitude = 4;
   if (wide) config.density = 0.15;
+  if (shape != nullptr) config = *shape;
 
   FuzzTally tally;
   int& agreed_optimal = tally.agreed_optimal;
@@ -705,6 +711,9 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
     tally.cuts_applied += s.cuts_applied;
     tally.cut_rows_removed += s.cut_rows_removed;
     tally.cut_rows_readded += s.cut_rows_readded;
+    tally.restarts += s.restarts;
+    tally.reduced_cost_fixings += s.reduced_cost_fixings;
+    tally.objective_branches += s.objective_branches;
 
     const auto disagree = [&](const std::string& why) {
       ++mismatched;
@@ -781,7 +790,10 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
             << "  MISMATCHED          " << mismatched << "\n"
             << "  cut rows applied    " << tally.cuts_applied << "\n"
             << "  pool rows removed   " << tally.cut_rows_removed << "\n"
-            << "  pool rows re-added  " << tally.cut_rows_readded << "\n";
+            << "  pool rows re-added  " << tally.cut_rows_readded << "\n"
+            << "  restarts            " << tally.restarts << "\n"
+            << "  reduced-cost fixes  " << tally.reduced_cost_fixings << "\n"
+            << "  objective branches  " << tally.objective_branches << "\n";
   for (const std::string& failure : failures) {
     std::cout << "\n--- failing instance ---\n" << failure << "\n";
   }
@@ -889,6 +901,91 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheCutPool) {
   EXPECT_GT(wide.cut_rows_readded, 0) << "no removed cut row was ever appended again";
   // These shapes close in a few nodes, so rows come back rarely here; the sweep in
   // test_cut_pool.cpp puts deeper knapsack trees through the same oracle.
+}
+
+// ROOT RESTARTS AND REDUCED-COST FIXING (#418) under the exact rational oracle. A bound
+// fixed for the whole tree by a reduced cost the root did not prove, or a restart that
+// dropped an open node it still needed, makes the search prove the second-best answer
+// optimal; the oracle knows the true optimum, so either shows up as a mismatch. The restart
+// fraction is 0 so that a single fixed column is enough to restart, which puts as many
+// restarts through the sweep as the cap allows.
+//
+// The small and wide shapes above close in a handful of nodes, so they restart rarely; the
+// DEEP shape (ten to twelve general-integer columns, four to six denser rows) builds trees
+// of a few hundred nodes the exact oracle still finishes, and is where restarts and
+// objective-row branches actually happen. Presolve is off on it so the tree sees the model.
+oracle::GeneratorConfig deep_shape() {
+  oracle::GeneratorConfig config;
+  config.min_rows = 4;
+  config.max_rows = 6;
+  config.min_cols = 10;
+  config.max_cols = 12;
+  config.magnitude = 8;
+  config.density = 0.5;
+  return config;
+}
+
+Options restart_options() {
+  Options options = mip_options();
+  options.set_bool("mip_reduced_cost_fixing", true);
+  options.set_int("mip_restarts", 2);
+  options.set_double("mip_restart_fraction", 0.0);
+  return options;
+}
+
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithRestarts) {
+  Options options = restart_options();
+  expect_clean_sweep(run_milp_fuzz(options, "restarts"));
+  options.set_bool("presolve", false);
+  expect_clean_sweep(run_milp_fuzz(options, "restarts, wide", true, 600), 200, 100);
+  const oracle::GeneratorConfig deep = deep_shape();
+  const FuzzTally tree = run_milp_fuzz(options, "restarts, deep", false, 600, &deep);
+  expect_clean_sweep(tree, 300, 100);
+  EXPECT_GT(tree.reduced_cost_fixings, 0) << "no bound was ever fixed by reduced cost";
+  EXPECT_GE(tree.restarts, 20) << "too few searches restarted for the sweep to mean much";
+  // With the heuristics on (off by default, and in the MIPLIB A/B) the incumbent arrives
+  // before the tree finds one, so fixing starts earlier; fewer trials, the heuristics cost
+  // more per solve than these trees do.
+  options.set_bool("mip_heuristics", true);
+  const FuzzTally heuristics =
+      run_milp_fuzz(options, "restarts, heuristics on, deep", false, 60, &deep);
+  expect_clean_sweep(heuristics, 30, 20);
+  EXPECT_GT(heuristics.restarts, 0) << "no search restarted with the heuristics on";
+}
+
+// OBJECTIVE BRANCHING (#418), the plateau half: a node whose relaxation value sits between
+// two multiples of the objective's step is split on the objective row. A row bound applied
+// to the wrong side, or left behind when the search moved on, cuts off the optimum.
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithObjectiveBranching) {
+  Options options = mip_options();
+  options.set_bool("mip_objective_branching", true);
+  expect_clean_sweep(run_milp_fuzz(options, "objective branching"));
+  options.set_bool("presolve", false);
+  expect_clean_sweep(run_milp_fuzz(options, "objective branching, wide", true, 600), 200, 100);
+  const oracle::GeneratorConfig deep = deep_shape();
+  const FuzzTally tree = run_milp_fuzz(options, "objective branching, deep", false, 600, &deep);
+  expect_clean_sweep(tree, 300, 100);
+  EXPECT_GE(tree.objective_branches, 20)
+      << "too few nodes were split on the objective row for the sweep to mean much";
+}
+
+// Everything #418 adds at once, beside the cut rounds and conflict analysis it has to share
+// the tree with: a restart carries the objective row's bounds and the cut rows across the
+// new root, and the oracle checks the combination rather than each part alone.
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithRestartsObjectiveBranchingAndCuts) {
+  Options options = restart_options();
+  options.set_bool("mip_objective_branching", true);
+  options.set_bool("enable_root_cuts", true);
+  options.set_int("tree_cut_depth", 4);
+  options.set_bool("conflict_analysis", true);
+  options.set_bool("presolve", false);
+  const oracle::GeneratorConfig deep = deep_shape();
+  const FuzzTally tree =
+      run_milp_fuzz(options, "#418 switches, cuts, conflicts, deep", false, 600, &deep);
+  expect_clean_sweep(tree, 300, 100);
+  EXPECT_GT(tree.restarts, 0) << "no search ever restarted";
+  EXPECT_GT(tree.objective_branches, 0) << "no node was ever split on the objective row";
+  EXPECT_GT(tree.cuts_applied, 0) << "no cut row was ever applied";
 }
 
 TEST(TreeCuts, RowsAddedBelowTheRootKeepTheAnswerAndAreCounted) {
