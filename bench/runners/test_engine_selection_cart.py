@@ -112,8 +112,25 @@ def main() -> int:
     check(code == 0 and target.exists(), "a large enough set that beats the rule table emits",
           text.strip().splitlines()[-1])
     cpp = target.read_text() if target.exists() else ""
-    check("f.rows" in cpp and "return \"pdhg\";" in cpp and "training rows" in cpp,
+    check("f.rows" in cpp and "c.algorithm = \"pdhg\";" in cpp and "training rows" in cpp,
           "the emitted rules name the feature, the engines and each branch's rows")
+    check("take(&c, \"rows <= " in cpp and "take(&c, \"rows > " in cpp,
+          "each branch records its test in the path the log prints")
+    check("LearnedTreeDomain{" in cpp, "the emitted file states the range it was trained on")
+    check("bool learned_tree_reads_symbolic() {\n  // No test below reads" in cpp
+          and "return false;" in cpp,
+          "a tree that splits on rows alone says it needs no symbolic pass")
+    check(".5)" not in cpp, "thresholds are short decimals, not raw midpoints")
+
+    print("thresholds")
+    check(cart.nice_threshold(1000.0, 2000.0) == 1500.0, "1000 | 2000 reads 1500",
+          repr(cart.nice_threshold(1000.0, 2000.0)))
+    check(cart.nice_threshold(0.00123, 0.00456) == 0.003, "0.00123 | 0.00456 reads 0.003",
+          repr(cart.nice_threshold(0.00123, 0.00456)))
+    t = cart.nice_threshold(3001.0, 3002.0)
+    check(3001.0 <= t < 3002.0, "a narrow gap still splits between its ends", repr(t))
+    check(cart.literal(1500.0) == "1500.0" and cart.literal(0.003) == "0.003",
+          "C++ literals are doubles")
 
     print("data grid")
     grid = list(data.instances())

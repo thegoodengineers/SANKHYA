@@ -236,6 +236,24 @@ TEST(FuzzAgainstOracle, DualHarrisAndStartPerturbationAgainstOracle) {
   EXPECT_GT(tally.compared(), 2400) << "the oracle abstained too often to prove anything";
 }
 
+TEST(FuzzAgainstOracle, LearnedEngineSelectionAgainstOracle) {
+  // #477: algorithm_selection=learned hands the choice to the generated tree, and whatever
+  // engine it names, the answer must still be the exact one. Same generators as above.
+  std::mt19937_64 rng(477477477);
+  GeneratorConfig config;
+  Tally tally;
+  const OptionList learned = {{"algorithm_selection", "learned"}};
+  for (int trial = 0; trial < 1000; ++trial) {
+    compare(random_lp(rng, config), &tally, learned);
+  }
+  for (int trial = 0; trial < 1000; ++trial) {
+    compare(degenerate_lp(rng, config), &tally, learned);
+  }
+  report("2000 instances (random + degenerate) under algorithm_selection=learned", tally);
+  EXPECT_EQ(tally.mismatched, 0);
+  EXPECT_GT(tally.compared(), 1600) << "the oracle abstained too often to prove anything";
+}
+
 TEST(FuzzAgainstOracle, HyperSparseSolvesAgainstOracle) {
   // #464: the hyper-sparse FTRAN and BTRAN are opt-in; the exact oracle judges them with the
   // option on, under product-form updates and under Forrest-Tomlin, whose first factorization

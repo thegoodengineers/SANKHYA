@@ -6,12 +6,19 @@
 
 #include <fmt/format.h>
 
+#include <utility>
+
 #include "engine_features.hpp"
+#include "engine_selection_tree.hpp"
 
 namespace sankhya {
+namespace {
 
-EngineSelection select_engine(const Model& model, const Options& options, bool warm_start,
-                              bool gpu_available, std::string gpu_device, bool device_factor) {
+/// The hand-written rule table (#284, #417), with the explicit request and the warm start
+/// in front of it.
+EngineSelection rule_table_selection(const Model& model, const Options& options,
+                                     bool warm_start, bool gpu_available,
+                                     std::string gpu_device, bool device_factor) {
   EngineSelection s;
   s.rows = model.num_rows();
   s.columns = model.num_cols();
@@ -124,6 +131,52 @@ EngineSelection select_engine(const Model& model, const Options& options, bool w
       "measured default, 80 of 89 on the Netlib full set (netlib-full-b3f1660.csv); it "
       "produces the basis the rest of the pipeline uses",
       shape, kDualSimplexRowLimit, kIpmNonzeroFloor, kIpmDensityRowFloor);
+  return s;
+}
+
+}  // namespace
+
+EngineSelection select_engine(const Model& model, const Options& options, bool warm_start,
+                              bool gpu_available, std::string gpu_device, bool device_factor) {
+  EngineSelection rules = rule_table_selection(model, options, warm_start, gpu_available,
+                                               std::move(gpu_device), device_factor);
+  // An explicit engine and a starting basis are decided before any table, learned or not.
+  if (options.get_string("algorithm_selection") != "learned" || rules.rule == "requested" ||
+      rules.rule == "warm-start") {
+    return rules;
+  }
+  // THE LEARNED TREE (#477), within the range it was trained on. Its training runs were on
+  // the CPU, so with a device the rule table's measured GPU rules (#417) decide; past the
+  // largest training model, the rule table's thresholds, measured up to the 779,640-row
+  // refinery, decide. Either way the reason says the tree was not consulted and why.
+  const LearnedTreeDomain domain = learned_tree_domain();
+  std::string not_consulted;
+  if (gpu_available || device_factor) {
+    not_consulted = "it was trained on CPU timings and this run has a GPU";
+  } else if (rules.rows > domain.max_rows) {
+    not_consulted = fmt::format("{} rows, over the {} of the largest model it was trained on",
+                                rules.rows, domain.max_rows);
+  } else if (rules.nonzeros > domain.max_nonzeros) {
+    not_consulted =
+        fmt::format("{} nonzeros, over the {} of the largest model it was trained on",
+                    rules.nonzeros, domain.max_nonzeros);
+  }
+  if (!not_consulted.empty()) {
+    rules.reason = fmt::format("learned tree not consulted ({}); rule table: {}", not_consulted,
+                               rules.reason);
+    return rules;
+  }
+  const LearnedTreeChoice choice =
+      learned_engine_tree(compute_engine_features(model, learned_tree_reads_symbolic()));
+  EngineSelection s = rules;
+  s.algorithm = choice.algorithm;
+  s.use_gpu = false;
+  s.rule = "learned:" + choice.algorithm;
+  s.reason = fmt::format(
+      "learned tree: {} -> {} ({} rows, {} columns, {} nonzeros; src/core/"
+      "engine_selection_tree.cpp, #477; the rule table would choose {})",
+      choice.path.empty() ? "a single leaf" : choice.path, choice.algorithm, s.rows, s.columns,
+      s.nonzeros, rules.algorithm);
   return s;
 }
 

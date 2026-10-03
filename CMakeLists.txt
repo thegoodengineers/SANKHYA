@@ -265,6 +265,7 @@ set(SANKHYA_CORE_SOURCES
   src/core/presolve_pipeline.cpp
   src/core/engine_selection.cpp
   src/core/engine_features.cpp
+  src/core/engine_selection_tree.cpp
   src/core/engine_race.cpp
   src/core/kkt_check.cpp
   src/core/prescale.cpp

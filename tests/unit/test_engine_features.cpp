@@ -91,6 +91,37 @@ TEST(EngineFeatures, DenseColumnsAreTheInteriorPointsDenseColumns) {
   EXPECT_EQ(compute_engine_features(m).dense_columns, 0);
 }
 
+TEST(EngineFeatures, TheSymbolicFillIsTheFactorOfTheKeptColumns) {
+  // The hand model's A A^T over the columns the interior point keeps: x2 is fixed and left
+  // out, and x3 couples all three rows, so the lower triangle is full and L is too:
+  // 3 strictly-lower entries plus the 3 pivots.
+  const EngineFeatures cheap = compute_engine_features(hand_model());
+  EXPECT_EQ(cheap.cholesky_nonzeros, -1.0);
+  EXPECT_EQ(cheap.cholesky_fill_ratio, -1.0);
+  const EngineFeatures f = compute_engine_features(hand_model(), /*symbolic=*/true);
+  EXPECT_DOUBLE_EQ(f.cholesky_nonzeros, 6.0);
+  EXPECT_DOUBLE_EQ(f.cholesky_fill_ratio, 6.0 / 7.0);
+  EXPECT_FALSE(f.cholesky_capped);
+}
+
+TEST(EngineFeatures, TheSymbolicFillLeavesTheDenseColumnsOut) {
+  // 200 singleton columns and one column over every row, which is dense: without it the
+  // normal equations are diagonal and so is L, 200 pivots and nothing below them. With it
+  // they would be full, 20,100 entries.
+  const Index rows = 200;
+  Model m;
+  m.resize_columns(rows + 1);
+  m.resize_rows(rows);
+  m.matrix.reset(rows, rows + 1);
+  for (Index i = 0; i < rows; ++i) m.matrix.add_entry(i, i, 1.0);
+  for (Index i = 0; i < rows; ++i) m.matrix.add_entry(i, rows, 1.0);
+  m.matrix.finalize();
+  const EngineFeatures f = compute_engine_features(m, /*symbolic=*/true);
+  EXPECT_EQ(f.dense_columns, 1);
+  EXPECT_DOUBLE_EQ(f.cholesky_nonzeros, static_cast<double>(rows));
+  EXPECT_FALSE(f.cholesky_capped);
+}
+
 TEST(EngineFeatures, EmptyModelHasNoDivisionByZero) {
   Model m;
   m.matrix.reset(0, 0);
@@ -99,6 +130,7 @@ TEST(EngineFeatures, EmptyModelHasNoDivisionByZero) {
   EXPECT_EQ(f.rows, 0);
   EXPECT_EQ(f.density, 0.0);
   EXPECT_EQ(f.normal_equations_ratio, 0.0);
+  EXPECT_EQ(compute_engine_features(m, /*symbolic=*/true).cholesky_nonzeros, -1.0);
 }
 
 TEST(EngineFeatures, JsonCarriesEveryField) {

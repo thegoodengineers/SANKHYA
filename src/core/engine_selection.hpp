@@ -5,8 +5,9 @@
 // in the dispatcher.
 //
 // The rules encode MEASUREMENTS, not intuition, and every threshold below names the CSV it
-// comes from. Where the evidence does not reach, the rule says so in its reason. No machine
-// learning; the first version is deliberately a short table anyone can read.
+// comes from. Where the evidence does not reach, the rule says so in its reason. The table
+// is the default. algorithm_selection=learned (#477) asks a decision tree trained on our own
+// runs instead (engine_selection_tree.hpp), itself committed as readable rules.
 #pragma once
 
 #include <string>
@@ -93,6 +94,11 @@ inline constexpr double kSimplexWorkCeiling = 3e8;
 /// Decide the LP engine for `model` under `options`. An explicit `algorithm` other than
 /// "auto" is honoured as given (rule "requested"); a starting basis forces a simplex
 /// (rule "warm-start"), because only a simplex can use one.
+///
+/// With algorithm_selection=learned and neither of those, the learned tree decides (rule
+/// "learned:<engine>", the reason "learned tree: <the tests it passed> -> <engine> (...)"),
+/// unless the model is larger than every training model or the run has a GPU; the rule
+/// table then decides and its reason says the tree was not consulted and why.
 ///
 /// `gpu_available` and `gpu_device` carry the result of a device probe at the call site.
 /// When `gpu_available` is true and the model is at or above `kPdhgRowFloor`, the selection

@@ -3,27 +3,38 @@
 """Learn the engine choice from our own runs as a shallow decision tree (#477).
 
     python bench/runners/engine_selection_cart.py bench/results/engine-selection-<sha>.csv
-    python bench/runners/engine_selection_cart.py <csv> --emit src/core/engine_selection_learned.inc
+    python bench/runners/engine_selection_cart.py <csv> --emit src/core/engine_selection_tree.cpp \\
+        --emit-cases tests/unit/engine_selection_tree_cases.inc --lists bench/engine_selection
 
 The CSV is the one bench/runners/engine_selection_data.py writes: per instance, the model
 features `sankhya info --features` prints (computed by src/core/engine_features.cpp, so the
 tree reads exactly the numbers the solver would), the split the instance belongs to, and each
 engine's status and solve time. An engine that did not return a verified optimum is charged
-the time limit, as the MIPLIB summary charges an unproved run (miplib_seeds.py). The label of
-an instance is its fastest engine.
+the time limit, as the MIPLIB summary charges an unproved run (miplib_seeds.py). The REGRET
+of a choice is the chosen engine's time minus the fastest engine's. The LABEL of an instance
+is the first engine, in the order dual simplex, interior point, PDHG, whose time is within
+the tie margin of the fastest (TIE_RATIO times it, or TIE_SECONDS more, whichever is
+larger): on the small models every engine takes 0.05 to 0.1 s and the strict fastest is
+process start-up noise, which a tree would otherwise learn as structure; between engines
+that are practically tied, the dual simplex is preferred because it returns a basis. A choice
+is a HIT when its time is within the same margin; the regret uses the raw times.
 
 The tree is CART (Breiman, Friedman, Olshen and Stone, Classification and Regression Trees,
-1984): binary splits `feature <= threshold` at midpoints between observed values, chosen to
-minimise the weighted Gini impurity of the two children, grown to MAX_DEPTH with at least
-MIN_LEAF instances per leaf. Ties are broken by feature order and then by threshold, so the
-same CSV always gives the same tree. Algorithm selection from instance features: Rice, The
-algorithm selection problem, Advances in Computers 15 (1976); Kotthoff, Algorithm selection
-for combinatorial search problems: a survey, AI Magazine 35(3) (2014).
+1984): binary splits `feature <= threshold`, chosen to minimise the weighted Gini impurity of
+the two children, grown to MAX_DEPTH with at least MIN_LEAF instances per leaf. Ties are
+broken by feature order and then by threshold, so the same CSV always gives the same tree.
+A threshold is any number between the two neighbouring training values (every one gives the
+same partition of the training rows); the one written is the shortest decimal in the middle
+half of that gap, nearest its midpoint, so a reviewer reads `rows <= 1500`, not
+`rows <= 1499.5`. Algorithm selection from instance features: Rice, The algorithm selection
+problem, Advances in Computers 15 (1976); Kotthoff, Algorithm selection for combinatorial
+search problems: a survey, AI Magazine 35(3) (2014).
 
 WHAT IS REPORTED. On the held-out rows: the tree's accuracy (it picked the fastest engine),
 its regret (time lost against the fastest engine, summed), and the same two numbers for the
 rule table `algorithm=auto` runs today (the `rule_table` column), so the tree is judged
-against what it would replace, not against nothing.
+against what it would replace, not against nothing; beside them, always choosing each one
+engine, and the per-instance choices.
 
 THE TRAINING-SIZE GATE. With fewer than MIN_TRAINING training rows or MIN_HELD_OUT held-out
 rows, or with fewer than MIN_TRAINING_SHAPES / MIN_HELD_OUT_SHAPES distinct shapes (the
@@ -31,8 +42,11 @@ rows, or with fewer than MIN_TRAINING_SHAPES / MIN_HELD_OUT_SHAPES distinct shap
 depth-4 tree fitted to a dozen instances describes those instances, not the next model a
 user brings, and eight seeds of one shape are closer to one instance than to eight. --emit
 also refuses a CSV where a shape appears on both sides of the split, which would let the
-held-out score reward recall of a shape the tree was trained on.
---emit also refuses when the tree does not beat the rule table's regret on the held-out rows.
+held-out score reward recall of a shape the tree was trained on; a CSV where a TRAINING
+instance has the sha256 of an instance any reported benchmark CSV in bench/results/ ran
+(the `instance_sha256` column of the Netlib, Kennington, Mittelmann, MIPLIB and scale
+tables), or the name of a file in a reported data set; and a tree that does not lose less
+time than the rule table on the held-out rows.
 """
 from __future__ import annotations
 
@@ -42,15 +56,28 @@ import math
 import sys
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RESULTS_DIR = REPO_ROOT / "bench" / "results"
+# The data sets docs/BENCHMARKS.md reports, by directory under data/.
+REPORTED_DATA = ("netlib", "netlib-infeasible", "kennington", "mittelmann", "miplib3",
+                 "maros-meszaros", "qplib", "scale", "stress", "pooling", "casestudies")
 ENGINES = ["dual-simplex", "ipm", "pdhg"]
 # The features the tree may split on: every field of EngineFeatures (engine_features.hpp)
-# except the raw bound it derives a ratio from.
+# except the raw bound it derives a ratio from and the cap flag.
 FEATURES = [
     "rows", "columns", "nonzeros", "density", "max_column_count", "dense_columns",
     "rows_per_column", "equality_row_share", "integer_share", "boxed_column_share",
     "free_column_share", "fixed_column_share", "normal_equations_ratio",
+    "cholesky_nonzeros", "cholesky_fill_ratio",
 ]
 MAX_DEPTH = 4
+# Two engines are practically tied when the slower takes at most TIE_RATIO times the faster's
+# time or at most TIE_SECONDS more, whichever allows more. In engine-selection-bcf2e42.csv the
+# dual simplex's and the interior point's wall times on the five seeds of a shape solved in
+# under 0.1 s differ by 0.006 to 0.033 s, which TIE_SECONDS covers; the margin is not meant
+# to cover PDHG's 0.05 to 0.24 s on random-300x600k4, a difference of iterations, not noise.
+TIE_RATIO = 1.10
+TIE_SECONDS = 0.05
 MIN_LEAF = 3
 MIN_TRAINING = 60
 MIN_HELD_OUT = 20
@@ -64,7 +91,7 @@ def engine_seconds(row: dict, time_limit: float) -> dict:
     for engine in ENGINES:
         ok = row.get(f"{engine}_status") == "optimal" and row.get(f"{engine}_verified") == "1"
         seconds = float(row.get(f"{engine}_seconds") or "nan")
-        out[engine] = seconds if ok and math.isfinite(seconds) else time_limit
+        out[engine] = min(seconds, time_limit) if ok and math.isfinite(seconds) else time_limit
     return out
 
 
@@ -74,14 +101,20 @@ def load(path: Path) -> list[dict]:
         for raw in csv.DictReader(handle):
             limit = float(raw["time_limit"])
             times = engine_seconds(raw, limit)
-            best = min(ENGINES, key=lambda e: (times[e], ENGINES.index(e)))
+            fastest = min(times.values())
+            bound = max(fastest * TIE_RATIO, fastest + TIE_SECONDS)
+            label = next(e for e in ENGINES if times[e] <= bound)
             rows.append({
                 "instance": raw["instance"],
+                "sha256": raw.get("sha256", ""),
                 "shape": raw.get("family") or raw["instance"],
                 "split": raw["split"],
-                "x": [float(raw[f]) for f in FEATURES],
+                "x": [float(raw.get(f) or "nan") for f in FEATURES],
                 "times": times,
-                "label": best,
+                "label": label,
+                "fastest": fastest,
+                "tie_bound": bound,
+                "strict": min(ENGINES, key=lambda e: (times[e], ENGINES.index(e))),
                 "rule_table": raw.get("rule_table", ""),
                 "any_solved": min(times.values()) < limit,
                 "limit": limit,
@@ -100,6 +133,21 @@ def majority(labels: list[str]) -> str:
     return max(ENGINES, key=lambda e: (labels.count(e), -ENGINES.index(e)))
 
 
+def nice_threshold(lo: float, hi: float) -> float:
+    """The shortest decimal in the middle half of [lo, hi], nearest the midpoint. Every
+    threshold in [lo, hi) splits the training rows alike; this one reads well and keeps a
+    margin from both neighbours. The nearest d-digit decimal to the midpoint is the only
+    d-digit candidate that can lie in the middle half, so the first d whose rounding lands
+    there gives the answer."""
+    mid = (lo + hi) / 2.0
+    a, b = lo + (hi - lo) / 4.0, hi - (hi - lo) / 4.0
+    for digits in range(1, 18):
+        candidate = float(f"{mid:.{digits}g}")
+        if a <= candidate <= b:
+            return candidate
+    return mid
+
+
 def best_split(rows: list[dict]):
     """(feature index, threshold) minimising the children's weighted Gini, or None."""
     labels = [r["label"] for r in rows]
@@ -107,16 +155,15 @@ def best_split(rows: list[dict]):
     best = None
     best_score = parent - 1e-12  # a split must reduce impurity
     for f in range(len(FEATURES)):
-        values = sorted({r["x"][f] for r in rows})
+        values = sorted({r["x"][f] for r in rows if math.isfinite(r["x"][f])})
         for lo, hi in zip(values, values[1:]):
-            t = (lo + hi) / 2.0
-            left = [r["label"] for r in rows if r["x"][f] <= t]
-            right = [r["label"] for r in rows if r["x"][f] > t]
+            left = [r["label"] for r in rows if r["x"][f] <= lo]
+            right = [r["label"] for r in rows if r["x"][f] > lo]
             if len(left) < MIN_LEAF or len(right) < MIN_LEAF:
                 continue
             score = (len(left) * gini(left) + len(right) * gini(right)) / len(rows)
             if score < best_score:
-                best, best_score = (f, t), score
+                best, best_score = (f, nice_threshold(lo, hi)), score
     return best
 
 
@@ -133,6 +180,12 @@ def grow(rows: list[dict], depth: int = 0) -> dict:
     node["feature"], node["threshold"] = f, t
     node["left"] = grow([r for r in rows if r["x"][f] <= t], depth + 1)
     node["right"] = grow([r for r in rows if r["x"][f] > t], depth + 1)
+    if "feature" not in node["left"] and "feature" not in node["right"] \
+            and node["left"]["engine"] == node["right"]["engine"]:
+        # Two leaves naming the same engine are one rule; a reviewer should not have to
+        # read a test that changes nothing.
+        for key in ("feature", "threshold", "left", "right"):
+            del node[key]
     return node
 
 
@@ -143,44 +196,179 @@ def predict(node: dict, x: list[float]) -> str:
 
 
 def evaluate(rows: list[dict], choose) -> dict:
-    """Accuracy and regret of a chooser over rows; rows no engine solved are left out. A
-    choice that was not measured (an engine outside ENGINES) is charged the time limit."""
+    """Hits (a choice within the tie margin of the fastest) and regret (its time minus the
+    fastest's) of a chooser over rows; rows no engine solved are left out. A choice that was
+    not measured (an engine outside ENGINES) is charged the time limit."""
     judged = [r for r in rows if r["any_solved"]]
-    hits = sum(choose(r) == r["label"] for r in judged)
-    regret = sum(r["times"].get(choose(r), r["limit"]) - r["times"][r["label"]]
-                 for r in judged)
-    return {"rows": len(judged), "hits": hits, "regret": regret}
+    hits = sum(r["times"].get(choose(r), r["limit"]) <= r["tie_bound"] for r in judged)
+    regret = sum(r["times"].get(choose(r), r["limit"]) - r["fastest"] for r in judged)
+    total = sum(r["times"].get(choose(r), r["limit"]) for r in judged)
+    return {"rows": len(judged), "hits": hits, "regret": regret, "total": total}
+
+
+def number(value: float) -> str:
+    """A threshold as a reviewer reads it: an integer without a fraction, else shortest."""
+    if value == int(value) and abs(value) < 1e15:
+        return str(int(value))
+    return repr(value)
+
+
+def literal(value: float) -> str:
+    """The same number as a C++ double literal."""
+    text = number(value)
+    return text + ".0" if text.lstrip("-").isdigit() else text
+
+
+def counts_text(node: dict) -> str:
+    return ", ".join(f"{e} {node['counts'][e]}" for e in ENGINES)
 
 
 def describe(node: dict, indent: str = "") -> list[str]:
-    counts = ", ".join(f"{e} {node['counts'][e]}" for e in ENGINES)
     if "feature" not in node:
-        return [f"{indent}-> {node['engine']}   ({node['samples']} rows: {counts})"]
+        return [f"{indent}-> {node['engine']}   ({node['samples']} rows: {counts_text(node)})"]
     name = FEATURES[node["feature"]]
-    return ([f"{indent}if {name} <= {node['threshold']:.17g}:   ({node['samples']} rows: "
-             f"{counts})"] + describe(node["left"], indent + "    ")
+    return ([f"{indent}if {name} <= {number(node['threshold'])}:   ({node['samples']} rows: "
+             f"{counts_text(node)})"] + describe(node["left"], indent + "    ")
             + [f"{indent}else:"] + describe(node["right"], indent + "    "))
 
 
-def emit_cpp(node: dict, indent: str = "  ") -> list[str]:
-    """The tree as C++ statements over an EngineFeatures `f`, one comment per branch."""
-    counts = ", ".join(f"{e} {node['counts'][e]}" for e in ENGINES)
+def emit_body(node: dict, indent: str = "  ") -> list[str]:
+    """The tree as C++ statements over an EngineFeatures `f`, one comment per branch, each
+    test recorded in the choice's path."""
     if "feature" not in node:
-        return [f"{indent}// {node['samples']} training rows: {counts}",
-                f"{indent}return \"{node['engine']}\";"]
+        return [f"{indent}// {node['samples']} training rows end here: {counts_text(node)}.",
+                f"{indent}c.algorithm = \"{node['engine']}\";", f"{indent}return c;"]
     name = FEATURES[node["feature"]]
-    value = f"static_cast<double>(f.{name})"
-    return ([f"{indent}// {node['samples']} training rows: {counts}",
-             f"{indent}if ({value} <= {node['threshold']!r}) {{"]
-            + emit_cpp(node["left"], indent + "  ") + [f"{indent}}}"]
-            + emit_cpp(node["right"], indent))
+    shown = number(node["threshold"])
+    return ([f"{indent}// {node['samples']} training rows reach this test: "
+             f"{counts_text(node)}.",
+             f"{indent}if (static_cast<double>(f.{name}) <= {literal(node['threshold'])}) {{",
+             f"{indent}  take(&c, \"{name} <= {shown}\");"]
+            + emit_body(node["left"], indent + "  ") + [f"{indent}}}",
+                                                         f"{indent}take(&c, \"{name} > {shown}\");"]
+            + emit_body(node["right"], indent))
+
+
+def tested_features(node: dict) -> set[str]:
+    """The names of the features the tree's tests read."""
+    if "feature" not in node:
+        return set()
+    return ({FEATURES[node["feature"]]} | tested_features(node["left"])
+            | tested_features(node["right"]))
+
+
+def emit_cpp(tree: dict, source: str, train: list[dict], scores: dict) -> str:
+    max_rows = int(max(r["x"][FEATURES.index("rows")] for r in train))
+    max_nonzeros = int(max(r["x"][FEATURES.index("nonzeros")] for r in train))
+    learned, table = scores["tree"], scores["rule table"]
+    symbolic = bool(tested_features(tree) & {"cholesky_nonzeros", "cholesky_fill_ratio"})
+    head = f"""// SPDX-License-Identifier: Apache-2.0
+// SANKHYA - the learned engine selection's decision tree (#477), behind
+// algorithm_selection=learned. GENERATED by bench/runners/engine_selection_cart.py from
+// bench/results/{source}; regenerate it rather than edit it (the command is in that
+// script's docstring), then run scripts/format.sh.
+//
+// CART (Breiman, Friedman, Olshen and Stone, Classification and Regression Trees, 1984):
+// Gini impurity, depth at most {MAX_DEPTH}, at least {MIN_LEAF} training rows per leaf. Algorithm
+// selection from instance features: Rice, "The algorithm selection problem", Advances in
+// Computers 15 (1976); Kotthoff, "Algorithm selection for combinatorial search problems: a
+// survey", AI Magazine 35(3) (2014).
+//
+// Trained on {len(train)} generated instances from {len({r['shape'] for r in train})} shapes, none of them an instance any
+// reported benchmark runs (bench/engine_selection/train.txt). On the {learned['rows']} held-out instances
+// of the other shapes (test.txt) it picks the fastest engine, or one within the tie margin of
+// it, on {learned['hits']} and loses {learned['regret']:.1f} s in all against the fastest; the rule table does
+// so on {table['hits']} and loses {table['regret']:.1f} s. Each comment below says how many training rows
+// reached that point and which engine was fastest on them (the label, tie margin included).
+
+#include "core/engine_selection_tree.hpp"
+
+namespace sankhya {{
+namespace {{
+
+/// Append one test to the path the log prints.
+void take(LearnedTreeChoice* c, const char* test) {{
+  if (!c->path.empty()) c->path += " and ";
+  c->path += test;
+}}
+
+}}  // namespace
+
+LearnedTreeDomain learned_tree_domain() {{
+  // The largest training instance: past either, the tree has seen nothing like the model.
+  return LearnedTreeDomain{{{max_rows}, {max_nonzeros}}};
+}}
+
+bool learned_tree_reads_symbolic() {{
+  // {"Some test below reads" if symbolic else "No test below reads"} the symbolic Cholesky fields.
+  return {"true" if symbolic else "false"};
+}}
+
+LearnedTreeChoice learned_engine_tree(const EngineFeatures& f) {{
+  LearnedTreeChoice c;
+"""
+    unused = "" if "feature" in tree else "  (void)f;\n  (void)&take;\n"
+    return head + unused + "\n".join(emit_body(tree)) + "\n}\n\n}  // namespace sankhya\n"
+
+
+def emit_cases(rows: list[dict], tree: dict, source: str) -> str:
+    """Every row's features and the engine the Python tree picks, for the C++ test that the
+    generated rules are the same tree (tests/unit/test_engine_selection_tree.cpp)."""
+    lines = [f"// Generated by bench/runners/engine_selection_cart.py from {source} (#477):",
+             "// each instance's features, in kTreeCaseFeatures order, and the engine the trained",
+             "// tree picks for it. tests/unit/test_engine_selection_tree.cpp checks the generated",
+             "// C++ picks the same.",
+             "inline constexpr const char* kTreeCaseFeatures[] = {"
+             + ", ".join(f'"{f}"' for f in FEATURES) + "};"
+             , "inline constexpr TreeCase kTreeCases[] = {"]
+    for r in rows:
+        values = ", ".join(repr(v) for v in r["x"])
+        lines.append(f'    {{"{r["instance"]}", "{predict(tree, r["x"])}", {{{values}}}}},')
+    lines.append("};")
+    return "\n".join(lines) + "\n"
+
+
+def reported_instances() -> tuple[set[str], set[str]]:
+    """(sha256s, names) of every instance a reported benchmark ran: the instance_sha256
+    column of every CSV in bench/results/, and the file names in the reported data sets."""
+    hashes: set[str] = set()
+    for path in RESULTS_DIR.glob("*.csv"):
+        if path.name.startswith(("engine-selection-", "engine-tree-ab-")):
+            continue
+        with path.open(newline="", errors="replace") as handle:
+            reader = csv.DictReader(handle)
+            if not reader.fieldnames or "instance_sha256" not in reader.fieldnames:
+                continue
+            hashes.update(r["instance_sha256"] for r in reader if r.get("instance_sha256"))
+    names = {p.stem.split(".")[0] for d in REPORTED_DATA
+             for p in (REPO_ROOT / "data" / d).glob("**/*") if p.is_file()}
+    return hashes, names
+
+
+def write_lists(directory: Path, rows: list[dict], source: str) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    for split, name in (("train", "train.txt"), ("test", "test.txt")):
+        chosen = [r for r in rows if r["split"] == split]
+        lines = [f"# {split} split of the learned engine selection (#477), {len(chosen)} instances "
+                 f"from {len({r['shape'] for r in chosen})} shapes.",
+                 f"# Written by bench/runners/engine_selection_cart.py from {source}; each "
+                 "line is the instance, its shape and",
+                 "# the sha256 of the generated MPS file. The generator and arguments of each "
+                 "shape are in",
+                 "# bench/runners/engine_selection_data.py (SHAPES); the seed is the -sN suffix."]
+        lines += [f"{r['instance']} {r['shape']} {r['sha256']}" for r in chosen]
+        (directory / name).write_text("\n".join(lines) + "\n", newline="\n")
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("csv", type=Path)
     parser.add_argument("--emit", type=Path, default=None,
-                        help="write the tree as C++ statements here, if the gates pass")
+                        help="write the tree as a C++ source file here, if the gates pass")
+    parser.add_argument("--emit-cases", type=Path, default=None,
+                        help="with --emit: every row and the tree's choice, for the C++ test")
+    parser.add_argument("--lists", type=Path, default=None,
+                        help="with --emit: write the split as train.txt and test.txt here")
     args = parser.parse_args(argv)
 
     rows = load(args.csv)
@@ -190,12 +378,24 @@ def main(argv=None) -> int:
     print(f"{len(train)} training rows ({len({r['shape'] for r in train})} shapes), "
           f"{len(held)} held-out rows ({len({r['shape'] for r in held})} shapes)")
     print("\n".join(describe(tree)))
-    learned = evaluate(held, lambda r: predict(tree, r["x"]))
-    table = evaluate(held, lambda r: r["rule_table"])
-    for name, result in (("tree", learned), ("rule table", table)):
-        rate = result["hits"] / result["rows"] if result["rows"] else float("nan")
-        print(f"held out, {name}: {result['hits']}/{result['rows']} fastest engine "
-              f"({rate:.1%}), regret {result['regret']:.3f} s")
+    choosers = {"tree": lambda r: predict(tree, r["x"]), "rule table": lambda r: r["rule_table"]}
+    for engine in ENGINES:
+        choosers[f"always {engine}"] = lambda r, e=engine: e
+    choosers["fastest (oracle)"] = lambda r: r["strict"]
+    scores = {}
+    for split_name, part in (("training", train), ("held out", held)):
+        for name, choose in choosers.items():
+            result = evaluate(part, choose)
+            if split_name == "held out":
+                scores[name] = result
+            rate = result["hits"] / result["rows"] if result["rows"] else float("nan")
+            print(f"{split_name}, {name}: {result['hits']}/{result['rows']} within the tie margin "
+                  f"({rate:.1%}), regret {result['regret']:.3f} s, total {result['total']:.3f} s")
+    print("held-out instances: instance, fastest, tree, rule table, seconds per engine")
+    for r in held:
+        seconds = " ".join(f"{e}={r['times'][e]:.2f}" for e in ENGINES)
+        print(f"  {r['instance']:<34} {r['label']:<13} {predict(tree, r['x']):<13} "
+              f"{r['rule_table']:<13} {seconds}")
 
     if args.emit is None:
         return 0
@@ -214,14 +414,30 @@ def main(argv=None) -> int:
               f"shapes, below the {MIN_TRAINING_SHAPES} and {MIN_HELD_OUT_SHAPES} the gate "
               f"asks for", file=sys.stderr)
         return 2
-    if learned["regret"] >= table["regret"]:
+    hashes, names = reported_instances()
+    leaked = [r["instance"] for r in train if r["sha256"] in hashes or r["instance"] in names]
+    if leaked:
+        print(f"not emitted: training instance(s) a reported benchmark also runs: "
+              f"{' '.join(leaked)}", file=sys.stderr)
+        return 2
+    print(f"no training instance is among the {len(hashes)} instance hashes of the reported "
+          f"benchmark CSVs or the {len(names)} files of the reported data sets")
+    reported_held = [r["instance"] for r in held if r["sha256"] in hashes]
+    if reported_held:
+        print(f"held-out instances a reported benchmark also ran (allowed; only training must "
+              f"be disjoint): {' '.join(reported_held)}")
+    if scores["tree"]["regret"] >= scores["rule table"]["regret"]:
         print("not emitted: the tree does not lose less time than the rule table on the "
               "held-out rows", file=sys.stderr)
         return 2
-    lines = ["// Generated by bench/runners/engine_selection_cart.py from "
-             f"{args.csv.name} (#477). Review before committing."] + emit_cpp(tree)
-    args.emit.write_text("\n".join(lines) + "\n")
+    args.emit.write_text(emit_cpp(tree, args.csv.name, train, scores), newline="\n")
     print(f"wrote {args.emit}")
+    if args.emit_cases is not None:
+        args.emit_cases.write_text(emit_cases(rows, tree, args.csv.name), newline="\n")
+        print(f"wrote {args.emit_cases}")
+    if args.lists is not None:
+        write_lists(args.lists, rows, args.csv.name)
+        print(f"wrote {args.lists / 'train.txt'} and {args.lists / 'test.txt'}")
     return 0
 
 
