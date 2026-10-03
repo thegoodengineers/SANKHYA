@@ -145,7 +145,13 @@ void MpsParser::split(const std::string& line) {
   // past column 61 is the comment - so this must not run on a fixed-format header line that
   // reached the whitespace tokenizer above.
   if (format_ == MpsFormat::kFixed) return;
-  for (std::size_t i = 0; i < tok_.size(); ++i) {
+  // NOT THE FIRST TOKEN OF A DATA LINE. The comment marker is the first character of a field
+  // after the record's name (fields 3 and 5 of the fixed layout); a whole-line comment begins
+  // with '*'. A name that begins with '$' is a name: Netlib pang has a column $0AICCB, and
+  // reading it as a comment dropped the column (459 of the 460 Netlib publishes) while
+  // tools/verify_solution.py kept it, so a certificate proved on one model was checked on
+  // another (found in #475). Section headers keep the old rule.
+  for (std::size_t i = is_header_line ? 0 : 1; i < tok_.size(); ++i) {
     if (tok_[i].front() == '$') {
       tok_.resize(i);
       break;
