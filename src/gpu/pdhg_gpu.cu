@@ -9,6 +9,11 @@
 //           Sections 3.1 (adaptive step size), 3.2 (primal weight), 4.3 (restarts).
 //   [cuPDLP] Lu & Yang, "cuPDLP.jl: A GPU Implementation of Restarted PDHG for LP",
 //           arXiv:2311.12180. GPU design reference.
+//   [LPY25] Lu, Peng & Yang, "cuPDLPx", arXiv:2507.14051: the constant step 0.998 / ||A||_2
+//           (pdhg_constant_step, #482, here on the proved upper bound of
+//           src/la/operator_norm.hpp) and the PID primal weight (pdhg_primal_weight_pid,
+//           #482, the QP engine's controller). Both host-side decisions, as in
+//           src/pdhg/pdhg.cpp, and both off by default; see that file for the argument.
 //
 // CPU/GPU split:
 //   GPU  SpMVs (cuSPARSE), primal/dual coordinate updates, running-sum accumulation,
@@ -56,7 +61,9 @@
 
 #include "../core/resource_limits.hpp"
 #include "../core/stop_controller.hpp"
+#include "../la/operator_norm.hpp"
 #include "../la/scaling.hpp"
+#include "../qp/qp_first_order_accel.hpp"
 #include "device.hpp"
 #include "pdhg_device_eval.cuh"
 #include "pdhg_graph.hpp"
@@ -447,6 +454,22 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
               scaling.min_abs, scaling.max_abs, spectral_norm);
   logger.info("Target relative tolerance {:.1e}, restarts {}", tolerance,
               use_restarts ? "on" : "off");
+  // #482: the constant step on a proved bound and the PID primal weight, both off by default
+  // and both decided on the host (src/pdhg/pdhg.cpp has the argument for each).
+  const bool constant_step = options.get_bool("pdhg_constant_step");
+  OperatorNormBound norm_bound;
+  if (constant_step) {
+    norm_bound = bound_spectral_norm(scaling.matrix, tol::kPdhgConstantStepPowerIterations,
+                                     tol::kPdhgConstantStepPowerIterations,
+                                     static_cast<unsigned>(options.get_int("random_seed")) + 1u);
+    logger.info("Constant step (#482): ||A||_2 in [{:.6e}, {:.6e}] proved, eta = {} / upper",
+                norm_bound.lower, norm_bound.upper, tol::kPdhgConstantStepShare);
+  }
+  const bool use_pid = options.get_bool("pdhg_primal_weight_pid");
+  const qp::PidGains pid_gains{options.get_double("pdhg_pid_kp"),
+                               options.get_double("pdhg_pid_ki"),
+                               options.get_double("pdhg_pid_kd")};
+  qp::PidState pid_state;
 
   // ---- GPU resource allocation -------------------------------------------
   GpuState g;
@@ -648,6 +671,9 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   };
 
   double eta = spectral_norm > 0.0 ? 1.0 / spectral_norm : 1.0;
+  if (constant_step) {
+    eta = norm_bound.upper > 0.0 ? tol::kPdhgConstantStepShare / norm_bound.upper : 1.0;
+  }
   double omega = 1.0;
   Count iteration = 0, restarts = 0, last_restart = 0, averaged = 0;
   double restart_kkt = std::numeric_limits<double>::infinity();
@@ -706,7 +732,8 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       b.cost = g.d_cost; b.col_lo = g.d_clo; b.col_hi = g.d_chi; b.row_lo = g.d_rlo;
       b.row_hi = g.d_rhi; b.partials = g.d_partials; b.eta = g.d_eta; b.omega = g.d_omega;
       b.accepted = g.d_accepted; b.accept_flag = g.d_accept_flag;
-      b.eta_ceil = eta_ceil_device; b.n = ni; b.m = mi; b.nnz = nnz;
+      b.eta_ceil = eta_ceil_device; b.constant_step = constant_step;
+      b.n = ni; b.m = mi; b.nnz = nnz;
       b.two_matvec = two_matvec; b.cusparse = g.cs; b.matrix = g.mat; b.vec_n = g.vn;
       b.vec_m = g.vm; b.spmv_buffer = g.d_spmv; b.spmv_buffer_t = g.d_spmv_t;
       b.matrix_t = g.mat_t; b.spmv_alg = g.alg;
@@ -889,7 +916,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     const double grow = 1.0 + std::pow(exp, -0.6);
     const double proposed = std::min(shrink * limit, grow * eta);
 
-    if (eta <= limit) {
+    if (constant_step || eta <= limit) {  // #482: a constant step is admissible by proof
       // Accept: swap iterates via pointer swap
       std::swap(g.d_x, g.d_xn);
       std::swap(g.d_y, g.d_yn);
@@ -918,7 +945,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       }
     }
     const double eta_ceil = 1.0e3 / std::max(spectral_norm, 1e-12);
-    if (!no_info) eta = std::clamp(proposed, 1e-12, eta_ceil);
+    if (!no_info && !constant_step) eta = std::clamp(proposed, 1e-12, eta_ceil);
 
     // 8. Convergence and restart check (CPU, every kEvaluationInterval accepted steps)
     if (iteration == 0) continue;
@@ -1025,7 +1052,9 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
           dxn = euclidean_norm(dx_rs);
           dyn = euclidean_norm(dy_rs);
         }
-        if (dxn > 1e-12 && dyn > 1e-12) {
+        if (use_pid) {
+          omega = qp::pid_primal_weight(omega, dxn, dyn, pid_gains, &pid_state);  // #482
+        } else if (dxn > 1e-12 && dyn > 1e-12) {
           constexpr double theta = 0.5;
           omega = std::exp(theta * std::log(dyn / dxn) + (1.0 - theta) * std::log(omega));
           omega = std::clamp(omega, 1e-6, 1e6);

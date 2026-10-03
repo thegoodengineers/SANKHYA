@@ -96,9 +96,11 @@ __global__ void k_interaction_dev(const double* __restrict__ dy, const double* _
 // the observed limit movement / interaction; the next eta is min(shrink * limit, grow * eta)
 // with the exponents of the accepted count, clamped to [1e-12, eta_ceil]; a step with no
 // interaction carries no information and leaves eta alone. One block of kThreads: the block
-// sums the partials in a fixed order (#478), thread 0 applies the rule.
+// sums the partials in a fixed order (#478), thread 0 applies the rule. With constant_step
+// (#482) the step is admissible by proof (src/pdhg/pdhg.cpp): always accepted, eta unchanged.
 __global__ void k_step_dev(const double* __restrict__ partials, int bn, int bm, double* eta,
-                           long long* accepted, int* accept_flag, double eta_ceil) {
+                           long long* accepted, int* accept_flag, double eta_ceil,
+                           int constant_step) {
   double scalars[3] = {0.0, 0.0, 0.0};
   detail::sum_step_partials<kThreads>(partials, bn, bm, scalars);
   if (threadIdx.x != 0) return;
@@ -111,10 +113,10 @@ __global__ void k_step_dev(const double* __restrict__ partials, int bn, int bm, 
   const double shrink = 1.0 - pow(expo, -0.3);
   const double grow = 1.0 + pow(expo, -0.6);
   const double proposed = fmin(shrink * limit, grow * e);
-  const int accept = e <= limit ? 1 : 0;
+  const int accept = (constant_step != 0 || e <= limit) ? 1 : 0;
   *accept_flag = accept;
   if (accept) *accepted += 1;
-  if (!no_info) *eta = fmin(fmax(proposed, 1e-12), eta_ceil);
+  if (!no_info && constant_step == 0) *eta = fmin(fmax(proposed, 1e-12), eta_ceil);
 }
 
 // An accepted step, committed by copy: the graph's addresses are fixed, so the host path's
@@ -194,7 +196,8 @@ bool DeviceLoop::record_iteration() {
                                                      b_.m);
   }
   k_step_dev<<<1, kThreads, 0, stream_>>>(b_.partials, bn, bm, b_.eta, b_.accepted,
-                                           b_.accept_flag, b_.eta_ceil);
+                                           b_.accept_flag, b_.eta_ceil,
+                                           b_.constant_step ? 1 : 0);
   if (bk > 0) {
     k_commit_dev<<<bk, kThreads, 0, stream_>>>(b_.accept_flag, b_.x, b_.xn, b_.xsum, b_.y, b_.yn,
                                                 b_.ysum, b_.two_matvec ? b_.axc : nullptr, b_.axn,
