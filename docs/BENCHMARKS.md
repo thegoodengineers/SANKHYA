@@ -1579,6 +1579,18 @@ Source CSVs: `bench/results/miplib-506-fj-off-seeds3-bce539f.csv` and `bench/res
 Instances whose matched or proved seed count moved between the legs: `noswot` matched 0->1, proved 0->0.
 
 
+#### A/B: the root cut loop on the seed harness (#862)
+
+Source CSVs: `bench/results/rootloop-ab-miplib-seeds3-false-f7cfd57.csv` and `bench/results/rootloop-ab-miplib-seeds3-true-f7cfd57.csv`, `root_cut_loop` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
+
+| leg | runs | matched | proved | sgm time (s, shift 10) | first feasible found | sgm first feasible (s, shift 1) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| off | 90 | 50 | 31 | 27.87 | 87 | 0.583 | 10.76 |
+| on | 90 | 42 | 32 | 25.70 | 84 | 0.859 | 12.91 |
+
+Instances whose matched or proved seed count moved between the legs: `b-ball` matched 3->3, proved 1->2; `ej` matched 3->1, proved 0->0; `enlight8` matched 3->0, proved 2->0; `markshare_4_0` matched 1->0, proved 0->0; `neos-3611689-kaihu` matched 3->3, proved 1->3; `neos5` matched 3->0, proved 0->0; `noswot` matched 1->2, proved 0->0.
+
+
 ---
 
 ## 2a. MIPLIB 3, the classic set beside MIPLIB 2017 (#761)

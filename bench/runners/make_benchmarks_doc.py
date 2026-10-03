@@ -2822,6 +2822,10 @@ def main() -> int:
                 newest_option_run("miplib-501-cache8-*.csv", "mip_node_factor_cache=8"))
     fj_ab = (newest_option_run("miplib-506-fj-off-seeds*-*.csv", "mip_heur_fj=off"),
              newest_option_run("miplib-506-fj-on-seeds*-*.csv", "mip_heur_fj=on"))
+    rootloop_ab = (newest_option_run("rootloop-ab-miplib-seeds*-false-*.csv",
+                                     "root_cut_loop=false"),
+                   newest_option_run("rootloop-ab-miplib-seeds*-true-*.csv",
+                                     "root_cut_loop=true"))
     milp_long_csv = newest_named("miplib-600s-*.csv")
     # MIPLIB 3 (#761) at each of its limits, SANKHYA's run and HiGHS's: names of their own
     # (`miplib3-`, `highs-miplib3-`) that none of the MIPLIB 2017 globs above can match.
@@ -3201,6 +3205,10 @@ is a harder library: MIPLIB instances are chosen to be difficult for mature solv
 #### A/B: Feasibility Jump on the seed harness (#506)
 
 {miplib_ab_doc.seeds_ab(*fj_ab, "mip_heur_fj") or "Not yet run on an idle machine."}
+
+#### A/B: the root cut loop on the seed harness (#862)
+
+{miplib_ab_doc.seeds_ab(*rootloop_ab, "root_cut_loop") or "Not yet run on an idle machine."}
 
 ---
 
