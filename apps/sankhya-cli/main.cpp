@@ -359,6 +359,9 @@ int main(int argc, char** argv) {
 
   if (info_cmd->parsed()) {
     if (sankhya::nlp::looks_like_nl(info_path)) return sankhya::cli::nonlinear_info(info_path);
+    // With --features stdout carries the one JSON line and nothing else: the reader's notes
+    // (a fixed-format MPS file, for one) go to stderr.
+    if (info_features) sankhya::default_logger().set_stream(stderr);
     sankhya::Model model;
     if (!load_model(info_path, options, &model)) return 3;
     if (info_features) {
