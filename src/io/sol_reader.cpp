@@ -72,6 +72,19 @@ bool parse_status(std::string_view text, BasisStatus* out) {
   return true;
 }
 
+std::unordered_map<std::string, Index> index_by_name(const std::vector<std::string>& names,
+                                                     Index count, char fallback_prefix) {
+  std::unordered_map<std::string, Index> index;
+  for (Index k = 0; k < count; ++k) {
+    const auto u = static_cast<std::size_t>(k);
+    const std::string name = u < names.size() && !names[u].empty()
+                                 ? names[u]
+                                 : fmt::format("{}{}", fallback_prefix, k);
+    index.emplace(name, k);
+  }
+  return index;
+}
+
 }  // namespace
 
 bool read_solution_basis(const std::string& path, const Model& model,
