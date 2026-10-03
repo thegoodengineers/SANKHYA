@@ -529,8 +529,18 @@ class BranchAndBound {
   [[nodiscard]] Solution solve_node() { return solve_node_with(node_options_); }
 
   /// `options` is one of the tree's own (node_options_, probe_options_): its time_limit is
-  /// overwritten with what is left before a simplex solve, see below.
+  /// overwritten with what is left before every node solve, LP or QP, see below.
   [[nodiscard]] Solution solve_node_with(Options& options) {
+    // A NODE RELAXATION RUNS ON THE TIME THAT IS LEFT (#803 for the LPs, #835 for the QPs),
+    // not on the whole time_limit, which node_options_ carries from the caller. The QP
+    // branch used to return before this was set, so every node QP of an MIQP got the full
+    // budget afresh: on QPLIB_9030 (10,000 integer columns) under a 60 s limit the root QP
+    // took 48 s, the re-solve after the root cut round was given another 60 s, the solve
+    // after that another 60 s, and the run ended at 170.8 s, between two node QPs that each
+    // honoured the clock they were handed. Written in place, as the LP comment says.
+    if (limits_.has_time_limit()) {
+      options.set_double("time_limit", limits_.remaining_seconds(timer_.elapsed_seconds()));
+    }
     if (quadratic_) {
       if (miqp_node_ipm_) return solve_qp_node_ipm(options);  // #494
       return qp::solve_convex_qp(working_, options, logger_, control_);
@@ -553,17 +563,15 @@ class BranchAndBound {
     // repairs; the dual simplex solves both relaxations (-128 in 25 s, 3444.42 in 2 s).
     // Only a dual that returns no verdict hands over to the primal, as a warm one does.
     //
-    // A NODE LP RUNS ON THE TIME THAT IS LEFT (#803), not on the whole time_limit, which
-    // node_options_ carries from the caller. Each node LP used to get the full budget
+    // A NODE LP RUNS ON THE TIME THAT IS LEFT (#803, set above), not on the whole time_limit,
+    // which node_options_ carries from the caller. Each node LP used to get the full budget
     // afresh: once the root LP of cvs16r128-89 took 25 s, the cold re-solve after its cut
     // round was given another 60, and a 60 s run ended at 88.6 s. For the same reason a
     // dual stopped by the clock is reported as it stands - the node stays open, the caller
     // decides - rather than handed to a primal solve on a budget that is already spent.
-    // Written in place: a copy of the options per node LP measured 4.8 us, the set 0.3 us,
-    // against node LPs of tens of microseconds on the small instances.
-    if (limits_.has_time_limit()) {
-      options.set_double("time_limit", limits_.remaining_seconds(timer_.elapsed_seconds()));
-    }
+    // Written in place, at the top of this function: a copy of the options per node LP
+    // measured 4.8 us, the set 0.3 us, against node LPs of tens of microseconds on the small
+    // instances.
     if (node_engine_dual_) {
       const bool warm_start = !current_warm_.empty();
       Solution dual =
@@ -695,7 +703,7 @@ class BranchAndBound {
   // ---- MIQP nodes by the QP interior point (#494), in branch_and_bound_miqp.cpp ---------
   /// The entered node's QP by the IPM; a node it cannot finish is decided by the node LP
   /// (same feasible set) when that is infeasible, else re-solved by Condat-Vu.
-  [[nodiscard]] Solution solve_qp_node_ipm(const Options& options);
+  [[nodiscard]] Solution solve_qp_node_ipm(Options& options);
   /// A lower bound on the entered node's QP from ANY primal point and row duals: the
   /// objective linearised at the point, then the Neumaier-Shcherbina bound; -inf when none.
   [[nodiscard]] double safe_qp_node_bound(const Solution& relaxation);

@@ -125,6 +125,7 @@ add_executable(sankhya_tests
   unit/test_cmir_cuts.cpp
   unit/test_root_cut_loop.cpp
   unit/test_root_node_engine.cpp
+  unit/test_qp_time_limit.cpp
   unit/test_gmi_safety.cpp
   unit/test_knapsack_cover_separation.cpp
   unit/test_cut_filter_policy.cpp

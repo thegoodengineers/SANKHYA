@@ -13,7 +13,10 @@
 
 #include <fmt/format.h>
 
+#include "../core/resource_limits.hpp"
 #include "la/ldl.hpp"
+#include "sankhya/solve_control.hpp"
+#include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
 namespace sankhya::qp {
@@ -337,7 +340,7 @@ ConvexityResult check_convexity_dense(const Model& model) {
   return result;
 }
 
-ConvexityResult check_convexity(const Model& model) {
+ConvexityResult check_convexity(const Model& model, const std::function<bool()>& should_stop) {
   ConvexityResult result;
 
   if (model.hessian.num_nonzeros() == 0) {
@@ -348,7 +351,8 @@ ConvexityResult check_convexity(const Model& model) {
 
   const SparseMatrix lower = minimization_lower_triangle(model);
   SparseLdl ldl;
-  const SemidefiniteReport report = ldl.check_semidefinite(lower, kCurvatureTolerance);
+  const SemidefiniteReport report =
+      ldl.check_semidefinite(lower, kCurvatureTolerance, should_stop);
   switch (report.verdict) {
     case SemidefiniteReport::Verdict::kPositiveSemidefinite:
       result.verdict = Convexity::kConvex;
@@ -362,8 +366,40 @@ ConvexityResult check_convexity(const Model& model) {
     case SemidefiniteReport::Verdict::kUndecided: break;
   }
 
+  // Stopped, as opposed to a pattern that could not be factorized: the factorization says it
+  // gave up on the deadline, and the deadline says it has passed. Undecided either way.
+  if (ldl.stopped_early() && should_stop && should_stop()) {
+    result.stopped = true;
+    result.detail = fmt::format(
+        "the sparse LDL^T of Q + shift I over {} nonzeros was stopped before it finished",
+        lower.num_nonzeros());
+    return result;  // kUnverified
+  }
+
   result.detail = "the Hessian could not be ordered and factorized, so convexity is unproven";
   return result;  // kUnverified
+}
+
+std::function<bool()> convexity_deadline(const ResourceLimits& limits, const Timer& timer,
+                                         const SolveControl* control) {
+  return [&limits, &timer, control]() {
+    return (control != nullptr && control->interruption_requested()) ||
+           limits.time_exhausted(timer.elapsed_seconds());
+  };
+}
+
+void stopped_before_convexity(const ResourceLimits& limits, const Timer& timer,
+                              const SolveControl* control, const ConvexityResult& convexity,
+                              Solution* solution) {
+  const bool interrupted = control != nullptr && control->interruption_requested();
+  const LimitReason reason = interrupted ? LimitReason::kInterrupt : LimitReason::kTime;
+  solution->status = status_for(reason);
+  solution->stopped_by = reason;
+  solution->message =
+      fmt::format("convexity not established {}: {}; {}",
+                  interrupted ? "before the interrupt" : "within the time limit",
+                  convexity.detail, limits.describe(reason, timer.elapsed_seconds(), 0, 0));
+  solution->solve_seconds = timer.elapsed_seconds();
 }
 
 }  // namespace sankhya::qp
