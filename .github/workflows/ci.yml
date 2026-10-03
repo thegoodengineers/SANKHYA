@@ -448,6 +448,11 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_presolve_shrink.py
 
+      - name: The feasibility polish A/B runner reads the engine's message and the verifier
+        # Pure Python, no solve.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_pdhg_polish_ab.py
+
       - name: The independent verifier passes its own self-test (#542)
         if: matrix.name == 'Release'
         run: python3 tools/test_verify_solution.py
