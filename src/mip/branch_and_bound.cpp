@@ -271,7 +271,17 @@ Solution BranchAndBound::run() {
   }
 
   // Phase 1 and 2: validate, repair, and install a user-supplied initial solution.
-  if (control_ && control_->has_start_solution()) {
+  // A start with one value per column of a different model (an edited model, or a caller
+  // that kept the previous answer) is not indexed: it is ignored, and the log says why.
+  const bool start_fits =
+      control_ && control_->has_start_solution() &&
+      control_->start_solution.size() == static_cast<std::size_t>(original_.num_cols());
+  if (control_ && control_->has_start_solution() && !start_fits) {
+    logger_.warning(
+        "The starting solution has {} values for a model of {} columns; it is ignored (#753)",
+        control_->start_solution.size(), original_.num_cols());
+  }
+  if (start_fits) {
     bool accepted = false;
     bool has_nans = false;
     for (const double v : control_->start_solution) {

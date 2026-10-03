@@ -1229,4 +1229,42 @@ TEST(BranchAndBound, MipStart_NoStartLeavesBehaviorUnchanged) {
   EXPECT_NEAR(sol.objective, 1.0, 1e-9);
 }
 
+TEST(BranchAndBound, MipStart_WrongSizeStartIsIgnored) {
+  // A start with too many or too few values is ignored, never indexed (#753): the solve ends
+  // as it would with no start.
+  Model model = make_milp({{1.0, 1.0}}, {0.0}, {1.0}, {1.0, 1.0}, {1.0, 1.0}, {true, true});
+  model.sense = ObjSense::kMaximize;
+  for (const std::vector<double>& start :
+       {std::vector<double>{1.0}, std::vector<double>{1.0, 0.0, 1.0, 1.0}}) {
+    SolveControl control;
+    control.start_solution = start;
+    const Solution sol = solve(model, mip_options(), &control);
+    EXPECT_EQ(sol.status, SolveStatus::kOptimal) << start.size() << " values";
+    EXPECT_NEAR(sol.objective, 1.0, 1e-9) << start.size() << " values";
+  }
+}
+
+TEST(BranchAndBound, MipStart_PresolveIsSkippedSoTheStartKeepsItsColumns) {
+  // Column 0 is fixed at 1, which presolve would remove and so renumber the rest; with a
+  // start supplied presolve is skipped and the start's values stay on their columns (#753).
+  Model model = make_milp({{1.0, 1.0, 1.0}}, {0.0}, {2.0}, {1.0, 1.0, 1.0}, {1.0, 1.0, 1.0},
+                          {true, true, true});
+  model.col_lower[0] = 1.0;
+  model.sense = ObjSense::kMaximize;
+  Options options = mip_options();
+  options.set_bool("presolve", true);
+  {
+    const Solution cold = solve(model, options);
+    ASSERT_EQ(cold.status, SolveStatus::kOptimal);
+    EXPECT_LT(cold.presolve_report.reduced_cols, cold.presolve_report.original_cols)
+        << "the fixed column should be presolved away without a start";
+  }
+  SolveControl control;
+  control.start_solution = {1.0, 1.0, 0.0};
+  const Solution started = solve(model, options, &control);
+  EXPECT_EQ(started.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(started.objective, 2.0, 1e-9);
+  EXPECT_FALSE(started.presolve_report.ran) << "presolve should be skipped with a start";
+}
+
 }  // namespace sankhya
