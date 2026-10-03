@@ -69,6 +69,7 @@ constexpr const char* kNames[kSlots] = {"rounding",
                                         "PDHG feasibility pump",
                                         "fix-and-propagate"};
 static_assert(kDiveGuided - kDiveFractional + 1 == kDiveRules);
+}  // namespace
 
 /// The options a sub-MIP (RINS, RENS) is solved with: the search's own, quiet, capped at
 /// `node_limit` nodes, no pool, none of the search's files, one thread, and no sub-MIP
@@ -116,7 +117,6 @@ double sub_mip_seconds(const ResourceLimits& limits, double elapsed, bool second
   if (!seconds_budgets || !limits.has_time_limit()) return -1.0;
   return std::max(0.0, tol::kSubMipBudgetShare * limits.remaining_seconds(elapsed));
 }
-}  // namespace
 
 void BranchAndBound::init_heuristics() {
   heuristic_stats_.assign(kSlots, HeuristicStats{});
