@@ -256,7 +256,10 @@ TEST(Crossover, TheBasisGuessStopsAtTheTimeLimit) {
   const Solution answer =
       crossover_to_vertex(centre.model, centre.interior, options, quiet, nullptr, timer);
   const double spent = timer.elapsed_seconds();
-  EXPECT_LT(spent, kLimit + 0.5) << "the crossover ran past its time limit: " << answer.message;
+  // 3 s, not the limit plus a little: building the dense guess before the first deadline
+  // check is itself a second under the sanitizer build (1.08 s there), and the old code
+  // took 10.2 s in Release, so the bound still separates the two.
+  EXPECT_LT(spent, 3.0) << "the crossover ran past its time limit: " << answer.message;
   EXPECT_EQ(answer.status, SolveStatus::kOptimal) << answer.message;
   EXPECT_EQ(answer.algorithm, "ipm") << "no vertex was claimed";
   EXPECT_NE(answer.message.find("the interior point's answer stands"), std::string::npos)
