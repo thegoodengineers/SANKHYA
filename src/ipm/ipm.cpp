@@ -1854,6 +1854,7 @@ bool InteriorPoint::model_space_holds_as_reported(bool throttled) {
 }
 
 bool InteriorPoint::purify_duals() {
+  const ProfileScope timed(logger_.profiler(), "dual purification", ProfileMode::kDetailed);
   // On the proximal path ldl_ holds the augmented system's factors; the normal equations
   // the purification needs are ordered once, on first use, into their own object (#473).
   if (m_ == 0 || total_ == 0 || (!analyzed_ && proximal_ == nullptr)) return false;
