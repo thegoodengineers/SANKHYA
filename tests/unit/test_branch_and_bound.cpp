@@ -1233,9 +1233,23 @@ TEST(StrongBranching, RecordsCsvWhenOptionEnabled) {
   if (last_id != -1) {
     EXPECT_GT(current_id_group_count, 0);
     EXPECT_LE(current_id_selected_count, 1);
-  }
+}
   EXPECT_GT(lines, 0) << "At least one branching candidate should be recorded";
   EXPECT_GE(last_id, 1) << "At least one branching decision should be recorded";
+}
+
+TEST(BranchAndBound, LearnedBranchingZeroOneKnapsack) {
+  const Model model =
+      make_milp({{5.0, 4.0, 3.0, 2.0}}, {-kInfinity}, {10.0}, {-10.0, -7.0, -4.0, -3.0},
+                {1.0, 1.0, 1.0, 1.0}, {true, true, true, true});
+  Options opt = mip_options();
+  opt.set_bool("mip_learned_branching", true);
+  const Solution s = solve(model, opt);
+  EXPECT_EQ(s.status, SolveStatus::kOptimal);
+  // Max value: items 0, 1, 2 = 12 weight, cost -21, wait capacity is 10.
+  // 5+4=9 (cost -17), 5+3+2=10 (cost -17), 4+3+2=9 (cost -14)
+  // Optimal objective is -17.
+  EXPECT_NEAR(s.objective, -17.0, 1e-9);
 }
 
 }  // namespace sankhya
