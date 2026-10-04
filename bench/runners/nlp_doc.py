@@ -27,6 +27,8 @@ REPRODUCE = [
     "python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4  # convex MINLPLib",
     "python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4 \\",
     "    --solver-option minlp_method=oa                                                # the same, by outer approximation",
+    "python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4 \\",
+    "    --solver-option minlp_method=bnb                                               # the tree as an option run, for the comparison",
     "```",
 ]
 
@@ -151,7 +153,7 @@ def comparison(default_path: Path | None, oa_path: Path) -> str:
 
 
 def section(hs_path: Path | None, minlp_path: Path | None,
-            minlp_oa_path: Path | None = None) -> str:
+            minlp_oa_path: Path | None = None, minlp_bnb_path: Path | None = None) -> str:
     oa_part = [
         set_section("MINLPLib, convex, outer approximation", minlp_oa_path,
                     "the same instances and tolerance, solved with `--option minlp_method=oa`: "
@@ -161,7 +163,7 @@ def section(hs_path: Path | None, minlp_path: Path | None,
         "",
     ]
     if minlp_oa_path is not None:
-        oa_part += [comparison(minlp_path, minlp_oa_path), ""]
+        oa_part += [comparison(minlp_bnb_path or minlp_path, minlp_oa_path), ""]
     out = [
         set_section("Hock-Schittkowski", hs_path,
                     "the 70 problems of Hock and Schittkowski, *Test Examples for Nonlinear "
