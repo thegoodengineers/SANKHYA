@@ -1,0 +1,11 @@
+# Learned Branching Pilot Test Set
+# Source: https://miplib.zib.de/downloads/benchmark-v2.test
+# Retrieval Date: 2026-10-03
+# Selection method: Disjoint observation-producing instances from the official benchmark-v2.test
+# list that are strictly disjoint from all repository-reported sets (MIPLIB 2017 Tier 1 & 2,
+# MIPLIB3, and case studies).
+# Note: This is a small pilot collection set for toolchain validation, not the final Issue #801 dataset.
+
+blp-ar98
+blp-ic98
+cod105

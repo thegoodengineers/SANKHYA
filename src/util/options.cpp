@@ -178,6 +178,16 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"reliability", "most-fractional"}});
+    s.push_back(
+        {"mip_learned_branching",
+         OptionType::Bool,
+         false,
+         "When true, evaluates the V3 offline-trained linear ranking model (Issue #801) "
+         "to score the candidates instead of the standard product score. "
+         "Default is false (baseline).",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"mip_node_selection",
                  OptionType::String,
                  std::string("hybrid"),
@@ -909,6 +919,15 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back({"mip_strong_branch_record_csv",
+                 OptionType::String,
+                 std::string(""),
+                 "MILP (#801): If set to a file path, record strong branching scores and "
+                 "features into a CSV file for offline learning-to-branch training. Off "
+                 "by default (empty string).",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_strong_branch_fix",
                  OptionType::Bool,
                  false,

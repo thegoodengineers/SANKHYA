@@ -442,9 +442,9 @@ def run_seed(binary: Path, instance: Path, seed: int, scratch: Path, args,
     """One run of one seed: the published file for seed 0, a permuted copy otherwise.
     Returns the solve blob, the permuted file's sha256 (blank for seed 0) and the incumbent
     metrics."""
+    stem = instance.name.removesuffix(".gz").removesuffix(".mps")
     target, digest = instance, ""
     if seed != 0:
-        stem = instance.name.removesuffix(".gz").removesuffix(".mps")
         target = scratch / f"{stem}-seed{seed}.mps"
         try:
             miplib_seeds.permute_mps(instance, target, seed)
@@ -453,7 +453,15 @@ def run_seed(binary: Path, instance: Path, seed: int, scratch: Path, args,
             # or the stats parse below is a real failure and must not be relabelled (#627).
             raise PermutationError(str(error)) from error
         digest = hashlib.sha256(target.read_bytes()).hexdigest()
-    blob = solve(binary, target, args.time_limit, not args.no_verify, args.solver_option,
+
+    run_options = []
+    for opt in (args.solver_option or []):
+        if "{instance}" in opt or "{seed}" in opt:
+            run_options.append(opt.format(instance=stem, seed=seed))
+        else:
+            run_options.append(opt)
+
+    blob = solve(binary, target, args.time_limit, not args.no_verify, run_options,
                  verify_against=instance, certificate=args.certificate,
                  profile=args.profile)
     if seed != 0:

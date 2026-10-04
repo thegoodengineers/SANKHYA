@@ -1309,6 +1309,86 @@ TEST(TreeCuts, CutPoolingPreservesCorrectnessAndCountersSane) {
   }
 }
 
+TEST(StrongBranching, RecordsCsvWhenOptionEnabled) {
+  const Model model = make_cover_model();
+  testing::TempFile temp_csv("", ".csv");
+  Options opts = mip_options();
+  opts.set_bool("presolve", false);
+  opts.set_bool("mip_heuristics", false);
+  opts.set_bool("enable_root_cuts", false);
+  opts.set_string("mip_strong_branch_record_csv", temp_csv.path());
+  Solution sol = solve(model, opts);
+  EXPECT_EQ(sol.status, SolveStatus::kOptimal);
+
+  std::ifstream in(temp_csv.path());
+  std::string line;
+  int lines = 0;
+  std::int64_t last_id = -1;
+  std::int64_t current_id_group_count = 0;
+  int current_id_selected_count = 0;
+
+  while (std::getline(in, line)) {
+    if (line.empty()) continue;
+    ++lines;
+
+    std::vector<std::string> tokens;
+    std::size_t pos = 0;
+    while (pos < line.length()) {
+      std::size_t next = line.find(',', pos);
+      if (next == std::string::npos) {
+        tokens.push_back(line.substr(pos));
+        break;
+      }
+      tokens.push_back(line.substr(pos, next - pos));
+      pos = next + 1;
+    }
+
+    EXPECT_EQ(tokens.size(), 13) << "Expected exactly 13 columns in CSV row";
+    if (tokens.size() == 13) {
+      int selected = std::stoi(tokens[11]);
+      std::int64_t branch_decision_id = std::stoll(tokens[12]);
+
+      EXPECT_GE(branch_decision_id, 0);
+      EXPECT_GE(branch_decision_id, last_id) << "branch_decision_id must be nondecreasing";
+
+      if (branch_decision_id != last_id) {
+        if (last_id != -1) {
+          EXPECT_GT(current_id_group_count, 0) << "Empty group";
+          EXPECT_LE(current_id_selected_count, 1)
+              << "More than one selected candidate in group";
+        }
+        last_id = branch_decision_id;
+        current_id_group_count = 0;
+        current_id_selected_count = 0;
+      }
+      ++current_id_group_count;
+      if (selected == 1) {
+        ++current_id_selected_count;
+      }
+    }
+  }
+  if (last_id != -1) {
+    EXPECT_GT(current_id_group_count, 0);
+    EXPECT_LE(current_id_selected_count, 1);
+  }
+  EXPECT_GT(lines, 0) << "At least one branching candidate should be recorded";
+  EXPECT_GE(last_id, 1) << "At least one branching decision should be recorded";
+}
+
+TEST(BranchAndBound, LearnedBranchingZeroOneKnapsack) {
+  const Model model =
+      make_milp({{5.0, 4.0, 3.0, 2.0}}, {-kInfinity}, {10.0}, {-10.0, -7.0, -4.0, -3.0},
+                {1.0, 1.0, 1.0, 1.0}, {true, true, true, true});
+  Options opt = mip_options();
+  opt.set_bool("mip_learned_branching", true);
+  const Solution s = solve(model, opt);
+  EXPECT_EQ(s.status, SolveStatus::kOptimal);
+  // Max value: items 0, 1, 2 = 12 weight, cost -21, wait capacity is 10.
+  // 5+4=9 (cost -17), 5+3+2=10 (cost -17), 4+3+2=9 (cost -14)
+  // Optimal objective is -17.
+  EXPECT_NEAR(s.objective, -17.0, 1e-9);
+}
+
 TEST(BranchAndBound, MipStart_ValidStartIsAccepted) {
   // maximize x + y
   // x, y <= 1, integer
