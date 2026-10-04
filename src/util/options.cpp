@@ -2035,6 +2035,18 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          {}});
     s.push_back(
+        {"ipm_amd_supervariables",
+         OptionType::Bool,
+         false,
+         "Order the interior point's matrix by approximate minimum degree with supervariables "
+         "and mass elimination (#471; Amestoy, Davis & Duff 1996): variables with identical "
+         "neighbourhoods are merged and eliminated together. Any ordering is a permutation, so "
+         "the answer is the same; only the fill and the time differ. Default OFF; the "
+         "unweighted ordering is the oracle it is compared with.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
         {"ipm_proximal_regularization",
          OptionType::Bool,
          false,

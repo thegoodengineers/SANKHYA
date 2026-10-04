@@ -75,6 +75,7 @@ Outcome Homogeneous::run() {
                                ? auto_ordering_budget(physical_memory_bytes())
                                : static_cast<std::size_t>(ordering_entries));
   ldl_.set_supernodal(options_.get_bool("ipm_supernodal"));
+  ldl_.set_supervariables(options_.get_bool("ipm_amd_supervariables"));
   build();
   Count iterations = 0;
   int model_stalled = 0, tiny_steps = 0;
