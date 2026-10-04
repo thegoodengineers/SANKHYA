@@ -25,6 +25,7 @@
 
 #include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
+#include "sankhya/options.hpp"
 
 #include "mip/cuts.hpp"
 
@@ -360,6 +361,72 @@ TEST(Cuts, DoesNotMoveABoundThatIsAlreadyIntegral) {
   EXPECT_EQ(effect.bounds_moved, 0) << "a bound already on an integer was pushed a whole unit";
   EXPECT_NEAR(model.row_lower[0], 3.0, 1e-9);
   EXPECT_NEAR(model.row_upper[0], 8.0, 1e-9);
+}
+
+/// x - y = rhs over two integer columns: the integral row an outer-approximation cut (#528)
+/// becomes when the row it linearizes is affine and its exact right-hand side is 0.
+Model integral_equality(double rhs) {
+  Model model;
+  model.col_cost = {1.0, 1.0};
+  model.col_lower = {0.0, 0.0};
+  model.col_upper = {5.0, 5.0};
+  model.col_type = {VarType::kInteger, VarType::kInteger};
+  model.row_lower = {rhs};
+  model.row_upper = {rhs};
+  model.matrix.reset(1, 2);
+  model.matrix.add_entry(0, 0, 1.0);
+  model.matrix.add_entry(0, 1, -1.0);
+  model.matrix.finalize();
+  return model;
+}
+
+TEST(Cuts, AnEqualityOnDustAroundAnIntegerIsNotCrossedByTheRounding) {
+  // Both bounds are within the integrality tolerance of 0, one a hair below it and one a hair
+  // above. Rounding with that tolerance moved only one of them, which used to leave the row
+  // with lower 0 above upper -2.8e-17 - a model validate() rejects, for a row every integer
+  // activity of 0 satisfies. Either sign of the dust, the row must still be valid and still
+  // be the equality at 0.
+  for (const double rhs : {-2.7755575615628914e-17, 2.7755575615628914e-17}) {
+    Model model = integral_equality(rhs);
+    ASSERT_TRUE(model.validate().empty());
+    mip::tighten_integral_rows(&model, quiet());
+    EXPECT_TRUE(model.validate().empty()) << "rhs " << rhs << ": " << model.validate();
+    EXPECT_LE(model.row_lower[0], model.row_upper[0]);
+    EXPECT_NEAR(model.row_lower[0], 0.0, 1e-9);
+    EXPECT_NEAR(model.row_upper[0], 0.0, 1e-9);
+  }
+}
+
+TEST(Cuts, ARowWithNoIntegralActivityStaysVisiblyCrossed) {
+  // The negative control for the dust rule: 0.2 <= x - y <= 0.8 contains no integer, so the
+  // rounding crosses it by a whole unit - far more than the tolerance - and that must stay
+  // visible, not be snapped away into a feasible-looking row.
+  Model model = integral_equality(0.5);
+  model.row_lower[0] = 0.2;
+  model.row_upper[0] = 0.8;
+  mip::tighten_integral_rows(&model, quiet());
+  EXPECT_DOUBLE_EQ(model.row_lower[0], 1.0);
+  EXPECT_DOUBLE_EQ(model.row_upper[0], 0.0);
+}
+
+TEST(Cuts, ASolveWithADustEqualityIsOptimalNotAModelError) {
+  // min x + y s.t. x - y = -2.8e-17 (an equality at 0 up to rounding), x + y >= 1, x and y
+  // integer in [0, 5]: the optimum is x = y = 1, objective 2. The solve used to end in
+  // model_error from the crossed row above.
+  Model model = integral_equality(-2.7755575615628914e-17);
+  model.row_lower.push_back(1.0);
+  model.row_upper.push_back(kInfinity);
+  model.matrix.reset(2, 2);
+  model.matrix.add_entry(0, 0, 1.0);
+  model.matrix.add_entry(0, 1, -1.0);
+  model.matrix.add_entry(1, 0, 1.0);
+  model.matrix.add_entry(1, 1, 1.0);
+  model.matrix.finalize();
+  Options options;
+  options.set_bool("log_to_console", false);
+  const Solution solution = solve(model, options);
+  ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
+  EXPECT_NEAR(solution.objective, 2.0, 1e-9);
 }
 
 TEST(Cuts, DoesNothingToAPureLp) {
