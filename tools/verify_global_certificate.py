@@ -4,6 +4,7 @@
 
 Usage:
     python tools/verify_global_certificate.py model.mps certificate.json [--feas-tol T]
+        [--abs-gap A] [--rel-gap R]
 
 The model is a QCQP in MPS (QCMATRIX rows, QUADOBJ objective); the certificate is what
 `sankhya solve model.mps --option nonconvex=global --option write_certificate=cert.json` writes.
@@ -32,7 +33,9 @@ is a claim the checker accepts:
   * THE CLAIM. The global lower bound is the least proven bound over the leaves. The certificate's
     claimed bound may not exceed it (to rounding), and for an `optimal` claim the incumbent -
     checked here against the original model, products evaluated exactly - must be within the
-    claimed gap of it.
+    gap of it. The gap accepted is the checker's own (--abs-gap and --rel-gap, by default the
+    solver's default mip_absolute_gap and mip_relative_gap), as in verify_certificate.py; the gap
+    the certificate states is printed but not used, since it is part of the file being checked.
 
 The relaxation's row layout is the one stated in the certificate's own "layout" field. That, the
 products' numbering, and nothing else is shared with the solver; the products themselves are
@@ -40,8 +43,8 @@ re-derived from the model, and a product the model has that the certificate does
 rejected (it would let a relaxation drop a term).
 
 Exit status: 0 the bound is proved and the claim holds; 1 the certificate is rejected; 2 every
-step checks but the claim of optimality is not shown (the gap is wider than claimed, or an
-`optimal` claim has no incumbent).
+step checks but the claim of optimality is not shown (the gap is wider than --abs-gap and
+--rel-gap accept, or an `optimal` claim has no incumbent).
 """
 from __future__ import annotations
 
@@ -361,6 +364,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--feas-tol", type=float, default=1e-6,
                         help="the largest relative violation of the model the incumbent may "
                              "have (default 1e-6); the bound side is always exact")
+    parser.add_argument("--abs-gap", type=float, default=1e-6,
+                        help="absolute gap accepted as optimal (default: mip_absolute_gap)")
+    parser.add_argument("--rel-gap", type=float, default=1e-4,
+                        help="relative gap accepted as optimal (default: mip_relative_gap)")
     args = parser.parse_args(argv)
     started = time.perf_counter()
     try:
@@ -386,14 +393,16 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         gap = float(objective - bound)
         relative = gap / max(1.0, abs(float(objective)))
-        print(f"gap {gap:.3e} absolute, {relative:.3e} relative (claimed within "
-              f"{number(cert['absolute_gap']):.1e} / {number(cert['relative_gap']):.1e})")
+        # The gap accepted is the checker's own: the one the certificate states is part of the
+        # file being checked, so a certificate could otherwise call any gap optimal.
+        print(f"gap {gap:.3e} absolute, {relative:.3e} relative (accepted {args.abs_gap:.1e} / "
+              f"{args.rel_gap:.1e}; the certificate states {number(cert['absolute_gap']):.1e} / "
+              f"{number(cert['relative_gap']):.1e})")
         slack = 1e-9
-        if gap <= number(cert["absolute_gap"]) + slack or \
-                relative <= number(cert["relative_gap"]) + slack:
-            print(f"VERIFIED: global optimum within the claimed gap ({time.perf_counter() - started:.2f} s)")
+        if gap <= args.abs_gap + slack or relative <= args.rel_gap + slack:
+            print(f"VERIFIED: global optimum within the gap ({time.perf_counter() - started:.2f} s)")
             return 0
-        print("NOT SHOWN: the proved gap is wider than the certificate claims")
+        print("NOT SHOWN: the proved gap is wider than --abs-gap and --rel-gap accept")
         return 2
     if status == "infeasible":
         if bound == INF and objective is None:

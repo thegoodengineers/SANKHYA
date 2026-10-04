@@ -238,6 +238,32 @@ def layer_two() -> None:
             else:
                 print("  [skip] no Farkas node in this certificate")
 
+        if model.name == "haverly1_q.mps":
+            # A search stopped after three nodes has a wide gap. Calling it optimal, with a gap
+            # tolerance in the file wide enough to cover it, must not verify: the gap accepted
+            # is the checker's own, not the certificate's.
+            with tempfile.TemporaryDirectory() as tmp:
+                cert_path = Path(tmp) / "cert.json"
+                subprocess.run([str(binary), "solve", str(model), "--option", "nonconvex=global",
+                                "--option", f"write_certificate={cert_path}",
+                                "--option", "node_limit=3", "--option", "log_to_console=false"],
+                               capture_output=True, text=True)
+                if not cert_path.exists():
+                    check(False, "the solver wrote a certificate at the node limit")
+                    continue
+                code, out = run_checker(model, cert_path)
+                check(code == 0 and "no optimality is claimed" in out,
+                      "a node-limited certificate proves its bound", out.strip()[-80:])
+                cert = json.loads(cert_path.read_text())
+                cert["status"] = "optimal"
+                cert["absolute_gap"] = 1e30
+                cert["relative_gap"] = 1e30
+                cert_path.write_text(json.dumps(cert))
+                code, out = run_checker(model, cert_path)
+                check(code == 2 and "NOT SHOWN" in out,
+                      "an open gap called optimal with a wide stated tolerance is not shown",
+                      f"exit {code}: {out.strip().splitlines()[-1][:90]}")
+
 
 def main() -> int:
     layer_one()
