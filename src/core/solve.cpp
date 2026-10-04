@@ -40,6 +40,7 @@
 #include <functional>
 #include <limits>
 #include <new>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -68,6 +69,7 @@
 #include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
 #include "core/status_guard.hpp"
+#include "decomp/decomposition.hpp"
 #include "exact/exact_repair.hpp"
 #include "exact/exact_sensitivity.hpp"
 #include "exact/exact_verify.hpp"
@@ -600,7 +602,33 @@ Solution solve(const Model& model, const Options& requested_options, SolveContro
   const std::string engine = options.get_string("algorithm");
   std::string engine_ran = engine == "auto" ? "solver" : engine;
   Solution solved;
-  {
+  // DECOMPOSITION (#525), off by default. An LP with blocks joined by few linking columns may
+  // be solved by Benders over those blocks. Its answer is held to the same measurement as any
+  // engine's - primal and dual infeasibility, complementarity, the gap - and one that does not
+  // pass is discarded, as is one the method declined to give, and the model goes to the
+  // ordinary engines below with the time already spent counted against its limit.
+  bool decomposed = false;
+  if (options.get_string("decomposition") != "off") {
+    std::optional<Solution> candidate =
+        decomp::solve_by_decomposition(model, options, control, logger);
+    if (candidate.has_value()) {
+      if (candidate->status == SolveStatus::kOptimal) {
+        reconcile_status_with_measurement(model, &*candidate, options, logger,
+                                          /*check_dual=*/true);
+      }
+      if (candidate->status == SolveStatus::kOptimal ||
+          candidate->stopped_by != LimitReason::kNone) {
+        solved = std::move(*candidate);
+        decomposed = true;
+      } else {
+        logger.warning(
+            "Decomposition: its answer did not pass the solver's measurement ({}); solving "
+            "monolithically",
+            candidate->message);
+      }
+    }
+  }
+  if (!decomposed) {
     ProfileScope whole(logger.profiler(), "solve");
     solved = run_engine_guarded(
         [&] { return solve_unguarded(model, options, control, logger, timer, &engine_ran); },

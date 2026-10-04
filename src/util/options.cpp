@@ -1499,6 +1499,65 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"decomposition",
+         OptionType::String,
+         std::string("off"),
+         "LP: decompose a model with block-angular structure (#525). off (default): never. "
+         "auto: "
+         "look for blocks joined by a few LINKING COLUMNS (stocks carried between periods, "
+         "first-stage decisions) and decompose by Benders (1962) only when the structure is "
+         "strong - two or more blocks, a linking part under decomposition_max_linking, and no "
+         "block holding most of the rows. benders: try any split into two blocks, however "
+         "weak. "
+         "The master and the block LPs are the ordinary LP engines. Only a minimisation LP is "
+         "decomposed; an integer or quadratic model, a maximisation, linking ROWS (the form "
+         "for "
+         "Dantzig-Wolfe, detected but not built), weak structure, a method that declines or an "
+         "answer that fails the solver's own measurement all fall back to the monolithic "
+         "solve, "
+         "and the log says which. Off until measured against the monolithic solve on main.",
+         0.0,
+         0.0,
+         {"off", "auto", "benders"}});
+    s.push_back(
+        {"decomposition_blocks",
+         OptionType::Int,
+         std::int64_t{0},
+         "Decomposition (#525): the number of blocks to split the rows into. 0 (default) "
+         "tries four, then two.",
+         0.0,
+         1024.0,
+         {}});
+    s.push_back(
+        {"decomposition_max_linking",
+         OptionType::Double,
+         0.15,
+         "Decomposition (#525): under `auto`, the largest share of the columns that are in "
+         "some row that may be linking columns for the structure to count as strong. The "
+         "master LP grows with the linking part, and Benders needs more rounds the more "
+         "linking columns there are, so a structure above this is not worth decomposing.",
+         0.0,
+         1.0,
+         {}});
+    s.push_back(
+        {"decomposition_max_iterations",
+         OptionType::Int,
+         std::int64_t{1000},
+         "Decomposition (#525): the most master/block rounds before Benders gives up and "
+         "the LP is solved monolithically.",
+         1.0,
+         1e7,
+         {}});
+    s.push_back({"decomposition_threads",
+                 OptionType::Int,
+                 std::int64_t{0},
+                 "Decomposition (#525): threads solving the blocks of one round in parallel. 0 "
+                 "(default) is one per hardware core, at most one per block. The cuts are "
+                 "assembled in block order, so the answer is identical at any thread count.",
+                 0.0,
+                 1024.0,
+                 {}});
     s.push_back({"threads",
                  OptionType::Int,
                  std::int64_t{1},

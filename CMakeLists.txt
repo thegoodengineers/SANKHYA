@@ -269,6 +269,9 @@ set(SANKHYA_CORE_SOURCES
   src/core/engine_race.cpp
   src/core/kkt_check.cpp
   src/core/prescale.cpp
+  src/decomp/benders.cpp
+  src/decomp/decomposition.cpp
+  src/decomp/structure.cpp
   src/solver_engine/solver_engine.cpp
   src/solver_engine/solver_registry.cpp
   src/solver_engine/builtin_engines.cpp
