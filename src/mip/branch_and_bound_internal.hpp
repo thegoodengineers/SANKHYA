@@ -995,7 +995,7 @@ class BranchAndBound {
   Options probe_options_;  ///< node_options_ with the strong-branching iteration cap
   Count strong_branch_solves_ = 0;
   Count strong_branch_iterations_ = 0;
-  Count branching_decisions_ = 0;         ///< number of times choose_branching_column was called
+  Count branching_decisions_ = 0;  ///< number of times choose_branching_column was called
   /// #502, all three off by default until an A/B on main says otherwise.
   bool strong_branch_fix_ = false;        ///< mip_strong_branch_fix
   bool incremental_propagation_ = false;  ///< mip_incremental_propagation
