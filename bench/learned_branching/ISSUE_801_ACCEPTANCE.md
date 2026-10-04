@@ -73,14 +73,20 @@ The benchmark evaluates three instances (`blp-ar98`, `blp-ic98`, `cod105`) over 
 | Learned V3 | 0/9 | 34.5 | 300.00 |
 
 ## 6. Verification Results
-All optimally solved runs successfully produced a valid VIPR certificate (`tools/verify_certificate.py` returned PASS). No failures encountered.
+Certificate Verification: NOT VERIFIED
+
+No learned-rule test run reached optimality within the 300-second benchmark, so there was no learned optimum certificate available to pass through tools/verify_certificate.py. The certificate criterion therefore remains unverified rather than PASS.
 
 ## 7. Acceptance Criteria
-- **Rule Default OFF**: PASS (verified in `options.cpp`)
-- **V3 ML Weights Intact**: PASS (used identical pairwise values)
-- **Rule Isolated Runtime**: PASS (`ScoreBranchingCandidateV3` uniquely controlled via options)
-- **Disjoint Datasets**: PASS (training sets correctly excluded from evaluation test)
-- **A/B Benchmark Executed**: PASS (matrix compiled and SGM processed)
-- **Certificates Verified**: PASS
+- **Rule Default OFF**: PASS
+- **V3 weights intact**: PASS
+- **Runtime isolation**: PASS
+- **Disjoint datasets**: PASS
+- **A/B benchmark executed**: PASS
+- **Certificate verification**: NOT VERIFIED
+
+Overall Issue #801 status: NOT COMPLETE
+
+The implementation and controlled A/B benchmark are complete, but the certificate-verification acceptance criterion has not yet been exercised because none of the learned-rule benchmark runs reached optimality.
 
 Known Limitations: As expected with learning models, the V3 rule biases variable selection dynamically, which can result in more or less tree search effort depending on the specific instance. Differences reported are factual representations of search divergence, demonstrating active runtime capability.
