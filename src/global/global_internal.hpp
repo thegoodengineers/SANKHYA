@@ -143,4 +143,33 @@ struct LocalSearchResult {
 /// progress file or a presolved-model dump must not be written once per node).
 [[nodiscard]] Options inner_lp_options(const Options& options, double seconds_left);
 
+// ---- global_certificate.cpp -------------------------------------------------------------
+
+/// One node of the tree as the certificate records it.
+struct CertificateNode {
+  Count id = 0;
+  Count parent = -1;
+  int side =
+      0;  ///< 0 the root, 1 the child with the column's upper bound at the point, 2 lower
+  Index column = -1;  ///< the column it was split on, when it was
+  double point = 0.0;
+  enum class Proof : unsigned char { kNone, kDual, kFarkas } proof = Proof::kNone;
+  /// The relaxation's row multipliers (LP row, value), nonzeros only.
+  std::vector<std::pair<Index, double>> multipliers;
+};
+
+struct CertificateInput {
+  const Problem& problem;
+  const std::vector<CertificateNode>& nodes;
+  const std::vector<double>& incumbent;  ///< empty when the search found none
+  double lower_min_form = 0.0;           ///< the bound the search claims, minimization form
+  const char* status = "";
+  double absolute_gap = 0.0;
+  double relative_gap = 0.0;
+  double tolerance = 0.0;
+};
+
+/// The certificate as JSON text; see the file for what is in it and why that is enough.
+[[nodiscard]] std::string certificate_text(const CertificateInput& input);
+
 }  // namespace sankhya::global

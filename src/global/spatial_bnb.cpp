@@ -26,7 +26,9 @@
 //
 // SCOPE OF THIS FIRST SLICE: continuous columns, products in the rows and in the objective,
 // every column of a product bounded after FBBT at the root. OBBT (#515), cuts beyond the
-// McCormick envelope, integer columns and a written bound certificate are not here.
+// McCormick envelope and integer columns are not here. A bound certificate is written under
+// `write_certificate` (global_certificate.cpp), checked by tools/verify_global_certificate.py;
+// the search then uses no FBBT, since the checker does not re-derive a tightening.
 
 #include <algorithm>
 #include <cmath>
@@ -37,6 +39,8 @@
 #include <vector>
 
 #include <fmt/format.h>
+
+#include <cstdio>
 
 #include "global/global_internal.hpp"
 #include "sankhya/logging.hpp"
@@ -53,7 +57,9 @@ struct Node {
   Box box;
   double bound = -kInfinity;  ///< valid lower bound for every feasible point of the box
   int depth = 0;
-  Count id = 0;
+  Count id = -1;      ///< assigned when first pushed
+  Count parent = -1;  ///< the node it was split from, for the certificate
+  int side = 0;       ///< 1 the child below the split point, 2 the child above it
   /// The parent's optimal basis of the relaxation, to start this node's LP from. Only the
   /// box moved, so it is usually a few dual pivots from this node's optimum.
   std::vector<BasisStatus> col_status;
@@ -84,6 +90,8 @@ class Search {
     relative_gap_ = options.get_double("mip_relative_gap");
     absolute_gap_ = options.get_double("mip_absolute_gap");
     tolerance_ = options.get_double("primal_feasibility_tolerance");
+    certificate_path_ = options.get_string("write_certificate");
+    certify_ = !certificate_path_.empty();
   }
 
   Solution run();
@@ -113,7 +121,18 @@ class Search {
     }
   }
   void push(std::unique_ptr<Node> node) {
-    node->id = next_id_++;
+    // A node pushed back (the time ran out inside it) keeps the id it was born with, so the
+    // certificate's tree has one record of it.
+    if (node->id < 0) {
+      node->id = next_id_++;
+      if (certify_) {
+        CertificateNode record;
+        record.id = node->id;
+        record.parent = node->parent;
+        record.side = node->side;
+        cert_.push_back(std::move(record));
+      }
+    }
     open_.push_back(std::move(node));
     std::push_heap(open_.begin(), open_.end(), later);
   }
@@ -127,6 +146,7 @@ class Search {
   [[nodiscard]] bool branchable(const Box& box, Index column) const;
   void process(std::unique_ptr<Node> node);
   Solution finish(LimitReason stopped_by);
+  void write_certificate(const Solution& solution);
 
   const QcqpModel& model_;
   const Options& options_;
@@ -158,6 +178,11 @@ class Search {
   Count tightened_ = 0;
   Count heuristic_calls_ = 0;
   bool out_of_time_ = false;
+  /// `write_certificate` (#514): the tree is recorded and, since the checker does not re-derive
+  /// bound tightening, no FBBT is used.
+  std::string certificate_path_;
+  bool certify_ = false;
+  std::vector<CertificateNode> cert_;  ///< indexed by node id
 };
 
 bool Search::branchable(const Box& box, Index column) const {
@@ -230,18 +255,31 @@ BranchChoice Search::choose_branch(const Box& box, const std::vector<double>& lp
 
 void Search::process(std::unique_ptr<Node> node) {
   ++nodes_;
-  const FbbtOutcome tightening = fbbt(problem_, upper_, tolerance_, &node->box);
-  tightened_ += tightening.tightened;
-  if (tightening.infeasible) return;  // an empty box: closed, with bound +infinity
+  if (!certify_) {
+    const FbbtOutcome tightening = fbbt(problem_, upper_, tolerance_, &node->box);
+    tightened_ += tightening.tightened;
+    if (tightening.infeasible) return;  // an empty box: closed, with bound +infinity
+  }
 
   const Model lp = build_relaxation(problem_, node->box);
   const Solution relaxed = solve_lp(lp, inner_lp_options(options_, seconds_left()),
                                     &node->col_status, &node->row_status);
   lp_iterations_ += relaxed.iterations;
 
+  const auto record = [&](CertificateNode::Proof proof, const std::vector<double>& y) {
+    if (!certify_) return;
+    CertificateNode& entry = cert_[static_cast<std::size_t>(node->id)];
+    entry.proof = proof;
+    for (std::size_t i = 0; i < y.size(); ++i) {
+      if (y[i] != 0.0) entry.multipliers.emplace_back(static_cast<Index>(i), y[i]);
+    }
+  };
   double bound = node->bound;
   std::vector<double> point;
-  if (relaxed.status == SolveStatus::kInfeasible) return;
+  if (relaxed.status == SolveStatus::kInfeasible) {
+    record(CertificateNode::Proof::kFarkas, relaxed.farkas_dual);
+    return;
+  }
   if (relaxed.status == SolveStatus::kOptimal &&
       static_cast<Index>(relaxed.col_value.size()) == lp.num_cols()) {
     // Only a bound the multipliers prove is used. When they prove none (a column with no
@@ -252,6 +290,7 @@ void Search::process(std::unique_ptr<Node> node) {
     const double proved = dual_bound_from_multipliers(lp, relaxed.row_dual);
     if (std::isfinite(proved)) {
       bound = std::max(bound, proved);
+      record(CertificateNode::Proof::kDual, relaxed.row_dual);
     } else {
       ++unsafe_bounds_;  // counted and reported; the parent's bound stands
     }
@@ -299,11 +338,18 @@ void Search::process(std::unique_ptr<Node> node) {
     return;
   }
   const auto u = static_cast<std::size_t>(choice.column);
+  if (certify_) {
+    CertificateNode& entry = cert_[static_cast<std::size_t>(node->id)];
+    entry.column = choice.column;
+    entry.point = choice.point;
+  }
   auto left = std::make_unique<Node>();
   left->box = node->box;
   left->box.upper[u] = choice.point;
   left->bound = bound;
   left->depth = node->depth + 1;
+  left->parent = node->id;
+  left->side = 1;
   left->col_status = relaxed.col_status;
   left->row_status = relaxed.row_status;
   auto right = std::make_unique<Node>();
@@ -311,6 +357,8 @@ void Search::process(std::unique_ptr<Node> node) {
   right->box.lower[u] = choice.point;
   right->bound = bound;
   right->depth = node->depth + 1;
+  right->parent = node->id;
+  right->side = 2;
   right->col_status = relaxed.col_status;
   right->row_status = relaxed.row_status;
   push(std::move(left));
@@ -322,7 +370,8 @@ Solution Search::run() {
   solution.algorithm = "spatial-branch-and-bound";
   root_.lower = problem_.col_lower;
   root_.upper = problem_.col_upper;
-  const FbbtOutcome root_tightening = fbbt(problem_, kInfinity, tolerance_, &root_);
+  FbbtOutcome root_tightening;
+  if (!certify_) root_tightening = fbbt(problem_, kInfinity, tolerance_, &root_);
   tightened_ += root_tightening.tightened;
   if (root_tightening.infeasible) {
     solution.status = SolveStatus::kInfeasible;
@@ -338,10 +387,13 @@ Solution Search::run() {
       const Model& lin = model_.linear;
       solution.status = SolveStatus::kNotSolved;
       solution.message = fmt::format(
-          "column '{}' appears in a product and has no finite {} bound, even after bound "
-          "tightening; the McCormick relaxation needs a bounded box",
+          "column '{}' appears in a product and has no finite {} bound{}; the McCormick "
+          "relaxation needs a bounded box",
           lin.col_names.empty() ? fmt::format("x{}", j) : lin.col_names[u],
-          std::isfinite(root_.lower[u]) ? "upper" : "lower");
+          std::isfinite(root_.lower[u]) ? "upper" : "lower",
+          certify_ ? " as given (a certified search uses no bound tightening, so the bounds "
+                     "must be in the model)"
+                   : ", even after bound tightening");
       solution.solve_seconds = timer_.elapsed_seconds();
       return solution;
     }
@@ -382,7 +434,31 @@ Solution Search::run() {
     }
   }
   if (out_of_time_ && stopped_by == LimitReason::kNone) stopped_by = LimitReason::kTime;
-  return finish(stopped_by);
+  Solution answer = finish(stopped_by);
+  if (certify_) write_certificate(answer);
+  return answer;
+}
+
+void Search::write_certificate(const Solution& solution) {
+  double lower = closed_bound_;
+  for (const std::unique_ptr<Node>& node : open_) lower = std::min(lower, node->bound);
+  if (!incumbent_.empty()) lower = std::min(lower, upper_);
+  const CertificateInput input{
+      problem_,      cert_,         incumbent_, lower, to_string(solution.status),
+      absolute_gap_, relative_gap_, tolerance_};
+  const std::string text = certificate_text(input);
+  std::FILE* out = std::fopen(certificate_path_.c_str(), "wb");
+  if (out == nullptr) {
+    logger_.warning("write_certificate: cannot open {} for writing", certificate_path_);
+    return;
+  }
+  const bool written = std::fwrite(text.data(), 1, text.size(), out) == text.size();
+  if (std::fclose(out) != 0 || !written) {
+    logger_.warning("write_certificate: writing {} failed", certificate_path_);
+    return;
+  }
+  logger_.info("global: bound certificate of {} nodes written to {}", cert_.size(),
+               certificate_path_);
 }
 
 Solution Search::finish(LimitReason stopped_by) {

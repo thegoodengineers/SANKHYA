@@ -469,6 +469,13 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 tools/test_verify_certificate.py
 
+      - name: Global-bound certificates verify in exact arithmetic, and tampered ones do not (#514)
+        # The checker's own relaxation and bound are property-tested without a solver, then the
+        # certificates the built CLI writes for Haverly's pooling models are checked and
+        # tampered with.
+        if: matrix.name == 'Release'
+        run: python3 tools/test_verify_global_certificate.py
+
       - name: The solution report prints only numbers the .sol file holds (#527)
         if: matrix.name == 'Release'
         run: python3 tools/test_report.py
