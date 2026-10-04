@@ -914,7 +914,7 @@ const std::vector<OptionSpec>& Options::registry() {
          "whose columns have finite bounds as binaries and big-M rows and solve that "
          "MILP, instead of branching on the conditions natively. The answer is reported "
          "on the original model. Off by default; kept so the two routes can be A/B'd on "
-        "the same model.",
+         "the same model.",
          0.0,
          0.0,
          {}});

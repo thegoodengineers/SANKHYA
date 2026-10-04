@@ -1326,11 +1326,11 @@ TEST(StrongBranching, RecordsCsvWhenOptionEnabled) {
   std::int64_t last_id = -1;
   std::int64_t current_id_group_count = 0;
   int current_id_selected_count = 0;
-  
+
   while (std::getline(in, line)) {
     if (line.empty()) continue;
     ++lines;
-    
+
     std::vector<std::string> tokens;
     std::size_t pos = 0;
     while (pos < line.length()) {
@@ -1342,19 +1342,20 @@ TEST(StrongBranching, RecordsCsvWhenOptionEnabled) {
       tokens.push_back(line.substr(pos, next - pos));
       pos = next + 1;
     }
-    
+
     EXPECT_EQ(tokens.size(), 13) << "Expected exactly 13 columns in CSV row";
     if (tokens.size() == 13) {
       int selected = std::stoi(tokens[11]);
       std::int64_t branch_decision_id = std::stoll(tokens[12]);
-      
+
       EXPECT_GE(branch_decision_id, 0);
       EXPECT_GE(branch_decision_id, last_id) << "branch_decision_id must be nondecreasing";
-      
+
       if (branch_decision_id != last_id) {
         if (last_id != -1) {
           EXPECT_GT(current_id_group_count, 0) << "Empty group";
-          EXPECT_LE(current_id_selected_count, 1) << "More than one selected candidate in group";
+          EXPECT_LE(current_id_selected_count, 1)
+              << "More than one selected candidate in group";
         }
         last_id = branch_decision_id;
         current_id_group_count = 0;
@@ -1369,7 +1370,7 @@ TEST(StrongBranching, RecordsCsvWhenOptionEnabled) {
   if (last_id != -1) {
     EXPECT_GT(current_id_group_count, 0);
     EXPECT_LE(current_id_selected_count, 1);
-}
+  }
   EXPECT_GT(lines, 0) << "At least one branching candidate should be recorded";
   EXPECT_GE(last_id, 1) << "At least one branching decision should be recorded";
 }
