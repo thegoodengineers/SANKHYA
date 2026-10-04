@@ -163,6 +163,23 @@ TEST(SupervariableAmd, IsOffByDefault) {
   EXPECT_EQ(ldl.variables_absorbed(), 0) << "the unweighted ordering absorbs nothing";
 }
 
+// variables_absorbed() describes the last analyze(): an unweighted ordering after a weighted
+// one, or a weighted one stopped by the deadline, must not report the earlier count.
+TEST(SupervariableAmd, TheAbsorbedCountIsTheLastAnalysisOnly) {
+  const SparseMatrix lower = laplacian_plus_identity(40, clique_ring(1, 40));
+  SparseLdl ldl;
+  ldl.set_supervariables(true);
+  ASSERT_TRUE(ldl.analyze(lower));
+  ASSERT_EQ(ldl.variables_absorbed(), 39);
+  ASSERT_FALSE(ldl.analyze(lower, [] { return true; }));
+  EXPECT_EQ(ldl.variables_absorbed(), 0) << "a stopped ordering absorbed nothing";
+  ASSERT_TRUE(ldl.analyze(lower));
+  ASSERT_EQ(ldl.variables_absorbed(), 39);
+  ldl.set_supervariables(false);
+  ASSERT_TRUE(ldl.analyze(lower));
+  EXPECT_EQ(ldl.variables_absorbed(), 0) << "the unweighted ordering absorbs nothing";
+}
+
 TEST(SupervariableAmd, TheOrderingIsAPermutationAndTheSolveMatchesTheOracleOnManyShapes) {
   std::mt19937_64 rng(471);
   expect_same_solve(laplacian_plus_identity(1, {}), "one node");

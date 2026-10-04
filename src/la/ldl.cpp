@@ -447,6 +447,7 @@ bool SparseLdl::analyze(const SparseMatrix& lower, const ShouldStop& should_stop
   pattern_too_large_ = false;
   ordering_too_large_ = false;
   factor_too_large_ = false;
+  absorbed_ = 0;  // set again only by a supervariable ordering that finishes
   if (lower.num_rows() != lower.num_cols() || lower.num_rows() <= 0) return false;
   n_ = lower.num_rows();
   // The ordering is where the time goes: measured on generated instances, analyze() costs
