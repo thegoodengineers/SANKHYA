@@ -1308,6 +1308,17 @@ Every arm that did not finish, and the numbers that say why. `attribution` is re
 | `million-supernodal-b561fba.csv` | staircase | `ipm` | `algorithm=ipm crossover=true ipm_max_factor_nonzeros=600000000 ipm_supernodal=true` | numerical error | - | no | 86 | 2,106 | 6,550 MB | the interior-point iteration stalled after 86 iterations (steps 4.1e-19 / 4.8e-17); the best iterate is reported as a feasible point; engine reported feasible but the returned point violates primal feasibility by 9.318e-06 (2.588e-07 relative to the scale it was measured on), above the 1.0e-07 tolerance; it is not a feasible point |
 | `million-supernodal-b561fba.csv` | refinery | `ipm` | `algorithm=ipm crossover=true ipm_max_factor_nonzeros=600000000 ipm_supernodal=true` | killed | - | no | - | 6,000 | 11,806 MB | exit -9;  |
 
+#### 1f.6 Decomposition - a block-angular LP by Benders (#525)
+
+A multi-period planning model is independent periods joined by what each carries to the next. Where the joining part is a few LINKING COLUMNS - here the crude and product stocks - Benders decomposition (`decomposition=benders`, issue #525) fixes them and solves each group of periods as a small LP of its own, the groups in parallel, with a master LP over the stocks collecting a cut from each. The refinery ladder of #517 (`bench/case_studies/refinery/generator.py`) is that model at three sizes, and its exact analytic optimum, verified in rational arithmetic by the generator, is the reference.
+
+**Not yet run at this commit.** The run is made from `main` after the decomposition merges, so that its stamp is a commit on `main`; the command is:
+
+```
+python bench/runners/decomposition.py --blocks 2 4 8
+```
+
+
 ---
 
 ## 2. MIPLIB — the mixed-integer side

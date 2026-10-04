@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kkt_crossings  # the relative-KKT crossing tables (#486)
 import latest_result
 import maros_meszaros_doc  # the QP section (#491), kept in its own file
+import decomposition_doc  # 1f.6, decomposed against monolithic (#525), kept in its own file
 import million_doc  # 1f.5, a million rows (#751), kept in its own file
 import nlp_doc  # the nonlinear section (NLP stages 2-3), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
@@ -2919,6 +2920,7 @@ def main() -> int:
     # The nonlinear sets (NLP stages 2-3): nlp_bench.py names its CSV after the data
     # directory, nlp-<set>-<sha>[-<host>].csv, so each set has its own pattern.
     nlp_hs_csv = newest("nlp-hs-*.csv")
+    decomposition_csv = newest("decomposition-*.csv")
     nlp_minlp_csv = newest("nlp-minlplib-*.csv")
     commercial_csv = newest("commercial-agreement-*.csv")
     gpu_domain_prop_csv = newest("gpu-domain-prop-*.csv", prefix="gpu-domain-prop")
@@ -3217,6 +3219,10 @@ most have a few hundred, so none of them speaks to the size PS26119 asks about.
 #### 1f.5 A million rows on the CPU
 
 {million_doc.million_section(million_csv)}{million_doc.experiments_section(RESULTS_DIR)}
+#### 1f.6 Decomposition - a block-angular LP by Benders (#525)
+
+{decomposition_doc.section(decomposition_csv)}
+
 ---
 
 ## 2. MIPLIB — the mixed-integer side
