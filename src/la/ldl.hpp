@@ -179,6 +179,16 @@ class SparseLdl {
   /// is the oracle it is tested against.
   void set_supernodal(bool on) noexcept { supernodal_ = on; }
   [[nodiscard]] bool supernodal() const noexcept { return supernodal_; }
+  /// Supervariables and mass elimination in the ordering (#471, ldl_amd.cpp): variables whose
+  /// quotient-graph neighbourhoods are identical are merged and eliminated as one, and a
+  /// variable left with no neighbour but the pivot's clique leaves with it. Off by default;
+  /// the ordering of ldl.cpp is the oracle it is compared with. Either way the result is a
+  /// permutation, so the factorization it feeds is exact; only the fill and the time differ.
+  void set_supervariables(bool on) noexcept { supervariables_ = on; }
+  [[nodiscard]] bool supervariables() const noexcept { return supervariables_; }
+  /// Variables the last supervariable ordering did not have to order on their own: merged
+  /// into another or eliminated with a pivot. 0 when the ordering was the unweighted one.
+  [[nodiscard]] Index variables_absorbed() const noexcept { return absorbed_; }
   /// Supernodes found by the last supernodal factorization since analyze() (0 before one).
   [[nodiscard]] Index supernode_count() const noexcept {
     return supernodes_built_ ? static_cast<Index>(super_start_.size()) - 1 : 0;
@@ -199,6 +209,10 @@ class SparseLdl {
 
  private:
   [[nodiscard]] bool minimum_degree(const SparseMatrix& lower, const ShouldStop& should_stop);
+  [[nodiscard]] bool minimum_degree_supervariable(const SparseMatrix& lower,
+                                                  const ShouldStop& should_stop);
+  bool supervariables_ = false;
+  Index absorbed_ = 0;
   [[nodiscard]] bool factorize_signed(const SparseMatrix& lower, double regularization,
                                       const signed char* signs, const ShouldStop& should_stop);
   bool pattern_too_large_ = false;

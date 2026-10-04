@@ -296,6 +296,7 @@ set(SANKHYA_CORE_SOURCES
   src/qp/qp_ipm_warm.cpp
   src/la/ldl.cpp
   src/la/ldl_supernodal.cpp
+  src/la/ldl_amd.cpp
   src/la/lu.cpp
   src/la/lu_eliminate.cpp
   src/la/lu_hyper.cpp

@@ -453,7 +453,8 @@ bool SparseLdl::analyze(const SparseMatrix& lower, const ShouldStop& should_stop
   // three to four times a numeric factorization, and at 20,000 rows it is most of an
   // 813-second first iteration (#193). It is therefore the one phase that has to be
   // interruptible for a time limit to mean anything.
-  if (!minimum_degree(lower, should_stop)) {
+  if (!(supervariables_ ? minimum_degree_supervariable(lower, should_stop)
+                        : minimum_degree(lower, should_stop))) {
     // Two reasons to give up, told apart for the caller: a deadline is a time limit, a
     // budget is a refusal with the number in it (#246).
     stopped_early_ = !ordering_too_large_;
