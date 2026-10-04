@@ -9,40 +9,12 @@
 #include <limits>
 #include <utility>
 
+#include "la/ldl_internal.hpp"
 #include "sankhya/tolerances.hpp"
 
 namespace sankhya {
-namespace {
 
-/// A deadline asked in proportion to the work done rather than once per row or column
-/// (#468). Every O(nnz) pass over a matrix - the assembly of the normal equations, the
-/// set-up of the ordering's graph, the permuted pattern, the elimination tree, the refresh of
-/// the values before a factorization - costs what its rows or columns hold, and one dense
-/// row or column makes a fixed count of them an unbounded amount of work. The caller adds
-/// what each step did; the predicate is asked once the total passes kWorkPerCheck, about
-/// sixty-five thousand operations, which is tens of microseconds and so far below any time
-/// limit a caller can set, and far above the cost of reading a clock. The first call always
-/// asks, so a deadline that has already passed is seen before any work is done. Without a
-/// predicate it never stops and changes nothing.
-class DeadlineByWork {
- public:
-  explicit DeadlineByWork(const SparseLdl::ShouldStop& should_stop)
-      : should_stop_(should_stop) {}
-
-  [[nodiscard]] bool expired(std::size_t done) {
-    work_ += done;
-    if (work_ < kWorkPerCheck || !should_stop_) return false;
-    work_ = 0;
-    return should_stop_();
-  }
-
- private:
-  static constexpr std::size_t kWorkPerCheck = std::size_t{1} << 16;
-  const SparseLdl::ShouldStop& should_stop_;
-  std::size_t work_ = kWorkPerCheck;
-};
-
-}  // namespace
+using ldl_detail::DeadlineByWork;
 
 // -----------------------------------------------------------------------------------------
 // Ordering: approximate minimum degree on the quotient graph (Amestoy, Davis & Duff 1996)
@@ -73,10 +45,11 @@ class DeadlineByWork {
 // wait in degree buckets, so choosing the next pivot is a scan from the current minimum
 // upward rather than over every vertex.
 //
-// Not implemented, deliberately: supervariable detection (indistinguishable nodes merged
-// and eliminated together) and dense-row postponement. Both matter on graphs with many
-// identical rows and neither is what the two scale families exercise; they are the next
-// step if a structured industrial model (#211) shows the need.
+// Not implemented here, deliberately: supervariable detection (indistinguishable nodes merged
+// and eliminated together) and dense-row postponement. Supervariables and mass elimination
+// are in ldl_amd.cpp (#471), behind set_supervariables(), so this version stays the oracle
+// it is tested against; dense-row postponement is not built (dense columns are removed
+// before the ordering, dense_columns.cpp).
 //
 // Ties go to the most recently inserted vertex of the minimum degree, and every list is
 // built in index order, so the ordering is deterministic: the same matrix gives the same
