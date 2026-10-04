@@ -214,6 +214,12 @@ is section 13; the steps for adding one are `docs/ADDING_AN_ENGINE.md`.
   refuses a nonconvex MINLP with the reason. It certifies an infeasible node by solving the
   convex minimum-violation problem, reuses the MIP tree's gap test and limits, and reports
   `optimal` only when every node was resolved with a certificate.
+  `--option minlp_method=oa` (#528, off by default) solves the same models by outer
+  approximation instead (`src/nlp/minlp_oa.cpp`, Duran & Grossmann 1986): the MILP engine
+  solves a master over linearizations of the nonlinear rows and objective, the NLP engine
+  solves the continuous problem at the master's integers, and the two meet when the master's
+  bound reaches the best NLP value. It sits behind the same convexity gate, so it never
+  claims a bound on a model whose relaxation is not proved convex.
 
 A minimisation LP whose constraint matrix is block-angular - independent groups of rows joined by a
 few linking columns, such as the stocks that join the periods of a planning model - can be solved by

@@ -1067,6 +1067,18 @@ inline constexpr double kBendersCutViolation = 1e-9;
 /// A block that the LP engine reports infeasible must also show a violation in its elastic LP
 /// above this; below it the verdicts disagree, which is a numerical failure and not a cut.
 inline constexpr double kBendersFeasibilityCut = 1e-9;
+/// Outer approximation (#528): a point of the master is cut off by the linearization of a
+/// nonlinear row only when the row is violated there by more than this, relative to
+/// max(1, |bound|). Ten times kPrimalFeasibility, the MILP master's own feasibility tolerance,
+/// so that a cut generated at the master's point always separates it by more than the master
+/// can mistake for rounding; below it the point is feasible for the nonlinear row as far as
+/// any engine here can tell.
+inline constexpr double kMinlpOaViolation = 1e-6;
+/// Outer approximation (#528): the master's bound on the objective's epigraph variable is the
+/// continuous relaxation's value less this fraction of max(1, |value|) - the relaxation is
+/// solved to nlp_tolerance (1e-6, relative), so its value is a lower bound only to that
+/// accuracy, and the bound must never cut off the true optimum.
+inline constexpr double kMinlpOaEpigraphSlack = 1e-6;
 
 /// Scenario runs (#752): a scenario's objective and that of a separate single solve of the
 /// same edited model must agree to this relative difference, measured against max(1, |obj|).

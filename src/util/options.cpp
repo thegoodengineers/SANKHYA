@@ -1050,6 +1050,32 @@ const std::vector<OptionSpec>& Options::registry() {
                  1e-12,
                  1e-2,
                  {}});
+    s.push_back(
+        {"minlp_method",
+         OptionType::String,
+         std::string("bnb"),
+         "How a convex MINLP is solved (#528). bnb (default): NLP-based branch and bound, one "
+         "NLP per node (Gupta and Ravindran 1985). oa: outer approximation - alternate a MILP "
+         "master over linearizations of the nonlinear rows and objective with the convex NLP "
+         "at the master's integer assignment, until the master's bound meets the best NLP "
+         "value (Duran and Grossmann 1986, with the feasibility cuts of Fletcher and Leyffer "
+         "1994 and the cut at the master's own point of Westerlund and Pettersson 1995). Both "
+         "run only on a relaxation proved convex and report `optimal` only on a proof; oa "
+         "uses the MILP engine for the master, so every MILP option applies to it. Off by "
+         "default until measured against bnb on main.",
+         0.0,
+         0.0,
+         {"bnb", "oa"}});
+    s.push_back({"minlp_oa_max_iterations",
+                 OptionType::Int,
+                 std::int64_t{500},
+                 "Outer approximation (#528): the most master/NLP rounds before it stops and "
+                 "reports its best integer point, as `feasible`, with the open gap. Each round "
+                 "adds at least one cut or the search stops, so it is a bound on work, not on "
+                 "correctness.",
+                 1.0,
+                 1e7,
+                 {}});
     s.push_back({"nlp_assume_convex",
                  OptionType::Bool,
                  false,
