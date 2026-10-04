@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cmath>
 #include <exception>
+#include <limits>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -254,10 +255,14 @@ BlockAnswer solve_block(const Block& block, const std::vector<double>& y,
       return answer;
     }
     if (stopped(s, &answer)) return answer;
-    if (s.status != SolveStatus::kInfeasible) {
-      answer.failure = fmt::format("a block LP ended {}", to_string(s.status));
+    if (s.status == SolveStatus::kUnbounded) {
+      answer.failure = "a block LP is unbounded";
       return answer;
     }
+    // Infeasible, or an engine that could not say so with a proof (numerical_error): either
+    // way the elastic LP is the test. It is always feasible, and its optimum being positive is
+    // itself the proof that the block is empty at y; being zero means the block LP was
+    // feasible and the engine failed, which is a failure of this method and no cut.
     const Solution e = solve(block_model(block, y, true), options, control);
     if (stopped(e, &answer)) return answer;
     if (e.status != SolveStatus::kOptimal || static_cast<Index>(e.row_dual.size()) != rows) {
@@ -266,7 +271,8 @@ BlockAnswer solve_block(const Block& block, const std::vector<double>& y,
       return answer;
     }
     if (e.objective <= tol::kBendersFeasibilityCut) {
-      answer.failure = "a block LP reported infeasible but its elastic LP has no violation";
+      answer.failure = fmt::format("a block LP ended {} but its elastic LP has no violation",
+                                   to_string(s.status));
       return answer;
     }
     answer.kind = BlockAnswer::Kind::kInfeasible;
@@ -291,7 +297,8 @@ void slopes_of(const Block& block, const std::vector<double>& dual, std::vector<
 }
 
 Model build_master(const Model& model, const Setup& setup, const std::vector<char>& has_cut,
-                   const std::vector<double>& theta_lower, const std::vector<Cut>& cuts) {
+                   const std::vector<double>& theta_lower, const std::vector<Cut>& cuts,
+                   bool free_theta) {
   const Index slots = static_cast<Index>(setup.slot_column.size());
   const Index blocks = static_cast<Index>(setup.blocks.size());
   const Index master_rows = static_cast<Index>(setup.master_rows.size());
@@ -310,9 +317,13 @@ Model build_master(const Model& model, const Setup& setup, const std::vector<cha
   for (Index b = 0; b < blocks; ++b) {
     const auto t = at(slots + b);
     master.col_cost[t] = 1.0;
-    // The start bound only until the block has an optimality cut: a free epigraph column is
-    // what makes the multipliers on the block's cuts sum to one at a master optimum.
-    master.col_lower[t] = has_cut[at(b)] != 0 ? -kInfinity : theta_lower[at(b)];
+    // The start bound is a valid lower bound on the block's value for every y, so keeping it is
+    // always a relaxation - and it keeps the master bounded while a linking column is unbounded
+    // and no cut yet says which way the block's value turns. It is dropped only in the last
+    // rounds, for blocks that have an optimality cut: a free epigraph column is what makes the
+    // multipliers on the block's cuts sum to one at a master optimum, which the dual vector
+    // read from them needs.
+    master.col_lower[t] = (free_theta && has_cut[at(b)] != 0) ? -kInfinity : theta_lower[at(b)];
     master.col_upper[t] = kInfinity;
   }
   for (Index k = 0; k < master_rows; ++k) {
@@ -351,9 +362,10 @@ Options sub_options(const Options& options, double seconds_left) {
   sub.set_string("decomposition", "off");
   sub.set_bool("log_to_console", false);
   sub.set_int("threads", 1);
-  // The exact simplex gives the multipliers a cut is built from; the first-order engines
-  // `auto` may pick for a large block give approximate ones. A user's own choice stands.
-  if (sub.get_string("algorithm") == "auto") sub.set_string("algorithm", "dual-simplex");
+  // The algorithm is the user's (`auto` by default), exactly as for the monolithic solve: a
+  // forced dual simplex skips the robust default pipeline and was an order of magnitude slower
+  // on the refinery ladder's blocks. A first-order engine's inexact multipliers give inexact
+  // cuts, and the measurement of the answer is what catches that.
   sub.set_double("time_limit", seconds_left);
   return sub;
 }
@@ -389,17 +401,33 @@ BendersOutcome solve_benders(const Model& model, const BlockStructure& structure
   const Index blocks = static_cast<Index>(setup.blocks.size());
   const Index slots = static_cast<Index>(setup.slot_column.size());
   const double time_limit = options.get_double("time_limit");
+  // Half of a finite limit is all the decomposition may spend. A method that has not converged
+  // by then declines, and the monolithic engines get the rest; one that used every second and
+  // then declined would leave them none (measured on the refinery ladder's largest model).
+  const bool limited = time_limit < std::numeric_limits<double>::max();
+  const double budget = limited ? 0.5 * time_limit : time_limit;
   const Count max_rounds = options.get_int("decomposition_max_iterations");
   const double gap_target = tol::kBendersGap;
   Index threads = static_cast<Index>(options.get_int("decomposition_threads"));
   if (threads <= 0)
     threads = std::max<Index>(1, static_cast<Index>(std::thread::hardware_concurrency()));
   threads = std::min(threads, blocks);
-  const auto left = [&] { return std::max(0.0, time_limit - timer.elapsed_seconds()); };
+  const auto left = [&] { return std::max(0.0, budget - timer.elapsed_seconds()); };
   const auto stop_reason = [&]() {
     if (control != nullptr && control->interruption_requested()) return LimitReason::kInterrupt;
-    if (timer.elapsed_seconds() > time_limit) return LimitReason::kTime;
+    if (timer.elapsed_seconds() > budget) return LimitReason::kTime;
     return LimitReason::kNone;
+  };
+  // An interrupt is final; the budget running out is a decline.
+  const auto stopped_outcome = [&](LimitReason reason, Count rounds) {
+    if (reason == LimitReason::kInterrupt) {
+      outcome.solution = limit_solution(reason, rounds, timer.elapsed_seconds());
+      return outcome;
+    }
+    return decline(fmt::format(
+        "not converged after {} round(s) in the {:.1f} s it is given (half of the {:.1f} s "
+        "limit), so the monolithic engines get the rest",
+        rounds, budget, time_limit));
   };
 
   // The start: each block's value over every y within the linking columns' own bounds.
@@ -410,10 +438,9 @@ BendersOutcome solve_benders(const Model& model, const BlockStructure& structure
     relaxed.row_upper = setup.blocks[at(b)].relaxed_upper;
     const Solution s = solve(relaxed, sub_options(options, left()), control);
     if (s.status == SolveStatus::kTimeLimit || s.status == SolveStatus::kInterrupted) {
-      outcome.solution = limit_solution(
-          s.status == SolveStatus::kTimeLimit ? LimitReason::kTime : LimitReason::kInterrupt, 0,
-          timer.elapsed_seconds());
-      return outcome;
+      return stopped_outcome(
+          s.status == SolveStatus::kTimeLimit ? LimitReason::kTime : LimitReason::kInterrupt,
+          0);
     }
     if (s.status != SolveStatus::kOptimal) {
       return decline(
@@ -425,26 +452,27 @@ BendersOutcome solve_benders(const Model& model, const BlockStructure& structure
 
   std::vector<Cut> cuts;
   std::vector<char> has_cut(at(blocks), 0);
+  bool free_theta = false;
   Count rounds = 0;
   while (true) {
     if (const LimitReason reason = stop_reason(); reason != LimitReason::kNone) {
-      outcome.solution = limit_solution(reason, rounds, timer.elapsed_seconds());
-      return outcome;
+      return stopped_outcome(reason, rounds);
     }
     if (rounds >= max_rounds)
       return decline(fmt::format("no convergence in {} rounds", rounds));
     ++rounds;
 
-    const Model master = build_master(model, setup, has_cut, theta_lower, cuts);
+    const Model master = build_master(model, setup, has_cut, theta_lower, cuts, free_theta);
     const Solution ms = solve(master, sub_options(options, left()), control);
     if (ms.status == SolveStatus::kTimeLimit || ms.status == SolveStatus::kInterrupted) {
-      outcome.solution = limit_solution(
+      return stopped_outcome(
           ms.status == SolveStatus::kTimeLimit ? LimitReason::kTime : LimitReason::kInterrupt,
-          rounds, timer.elapsed_seconds());
-      return outcome;
+          rounds);
     }
     if (ms.status != SolveStatus::kOptimal) {
-      return decline(fmt::format("the master ended {}", to_string(ms.status)));
+      return decline(fmt::format("the master{} ended {}",
+                                 free_theta ? " with free epigraph columns" : "",
+                                 to_string(ms.status)));
     }
     const Index master_rows = static_cast<Index>(setup.master_rows.size());
     if (static_cast<Index>(ms.row_dual.size()) !=
@@ -480,10 +508,7 @@ BendersOutcome solve_benders(const Model& model, const BlockStructure& structure
       upper += model.col_cost[at(setup.slot_column[at(s)])] * y[at(s)];
     for (Index b = 0; b < blocks; ++b) {
       const BlockAnswer& a = answers[at(b)];
-      if (a.limit != LimitReason::kNone) {
-        outcome.solution = limit_solution(a.limit, rounds, timer.elapsed_seconds());
-        return outcome;
-      }
+      if (a.limit != LimitReason::kNone) return stopped_outcome(a.limit, rounds);
       if (a.kind == BlockAnswer::Kind::kFailed) return decline(a.failure);
       if (a.kind == BlockAnswer::Kind::kInfeasible) {
         all_optimal = false;
@@ -528,6 +553,13 @@ BendersOutcome solve_benders(const Model& model, const BlockStructure& structure
           completed = true;
         }
         if (completed) continue;
+        // Converged with the bounded epigraph columns, which prove the bound but do not give
+        // multipliers that sum to one. One more round with them free, and the pair read from
+        // that round - blocks and master at the same y - is the answer.
+        if (!free_theta) {
+          free_theta = true;
+          continue;
+        }
         // Converged: primal from this round's blocks, duals from this round's master.
         const Index n = model.num_cols();
         const Index m = model.num_rows();

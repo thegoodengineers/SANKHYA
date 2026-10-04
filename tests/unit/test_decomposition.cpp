@@ -460,6 +460,23 @@ TEST(Decomposition, ModelsItDoesNotTakeAreSolvedAsIfTheOptionWereOff) {
   EXPECT_EQ(mixed.status, solve(integer, quiet("off")).status);
 }
 
+TEST(Decomposition, AMethodThatGivesUpHandsTheLpToTheOrdinaryEnginesWithTheRightAnswer) {
+  // A one-round cap cannot converge on a staircase that needs cuts, so Benders declines. What
+  // the user gets must be the monolithic answer, not a limit status and not a half-decomposed
+  // point - the same path the time budget takes when the decomposition has not converged in
+  // its share of the limit.
+  const Model model = staircase(12);
+  const Solution reference = solve(model, quiet("off"));
+  ASSERT_EQ(reference.status, SolveStatus::kOptimal);
+  Options o = forced(3);
+  o.set_int("decomposition_max_iterations", 1);
+  const Solution s = solve(model, o);
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_NE(s.algorithm, "benders");
+  EXPECT_NEAR(s.objective, reference.objective,
+              1e-9 * std::max(1.0, std::fabs(reference.objective)));
+}
+
 TEST(Decomposition, TheThreadCountDoesNotChangeABit) {
   std::mt19937 rng(99);
   for (int trial = 0; trial < 8; ++trial) {
