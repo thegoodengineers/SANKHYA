@@ -2833,72 +2833,11 @@ Commit `ad57c03` · machine `Linux-x86_64` · 60.0 s per problem
 **No point to check** (a limit or an infeasibility verdict): `jit1`.
 
 
-**MINLPLib, convex, outer approximation** - the same instances and tolerance, solved with `--option minlp_method=oa`: a MILP master over linearizations of the nonlinear rows (Duran and Grossmann 1986) alternated with the convex NLP at the master's integers, off by default (#528).
-
-Source CSV: `bench/results/nlp-minlplib-ae95dcf-AnjankumarLN-minlp_method-oa.csv`  
-Commit `ae95dcf` · machine `Windows-AMD64` · 60.0 s per problem
-
-**14 of 17** reached the published objective, and **15 of 17** answers were accepted by the independent checker (`tools/verify_solution.py`, its own `.nl` reader and its own derivatives). Statuses: `feasible` 1, `numerical_error` 1, `optimal` 14, `time_limit` 1.
-
-| problem | status | our objective | published | rel. gap | iters | time (s) | match | verified |
-|---|---|---:|---:|---:|---:|---:|:--:|:--:|
-| `ball_mk2_10` | time_limit | - | 0 | - | 1692 | 60.42 | **NO** | no point |
-| `batchdes` | optimal | 167427.6571 | 167427.6571 | 8.96e-11 | 39 | 0.33 | yes | yes |
-| `clay0203m` | optimal | 41573.26252 | 41573.26252 | 5.53e-11 | 7025 | 7.38 | yes | yes |
-| `cvxnonsep_pcon20` | feasible | -21.51230115 | -21.5123012 | 2.22e-09 | 1366 | 60.23 | **NO** | yes |
-| `ex1223` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 44 | 0.50 | yes | yes |
-| `ex1223a` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 19 | 0.29 | yes | yes |
-| `ex1223b` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 39 | 0.24 | yes | yes |
-| `fac1` | optimal | 160912612.3 | 160912612.4 | 3.11e-10 | 73 | 0.31 | yes | yes |
-| `flay02m` | optimal | 37.94733201 | 37.94733192 | 2.42e-09 | 31 | 0.30 | yes | yes |
-| `gbd` | optimal | 2.20000001 | 2.2 | 4.55e-09 | 17 | 0.29 | yes | yes |
-| `jit1` | numerical_error | - | 173983.33 | - | 3000 | 0.56 | **NO** | no point |
-| `m3` | optimal | 37.80000029 | 37.8 | 7.68e-09 | 25 | 0.48 | yes | yes |
-| `nvs03` | optimal | 16 | 16 | 0.00e+00 | 17 | 0.24 | yes | yes |
-| `st_e14` | optimal | 4.579582452 | 4.579582402 | 1.10e-08 | 44 | 0.39 | yes | yes |
-| `syn05m` | optimal | 837.7324008 | 837.7324009 | 6.92e-11 | 64 | 0.28 | yes | yes |
-| `synthes2` | optimal | 73.03531256 | 73.03531253 | 3.44e-10 | 74 | 0.39 | yes | yes |
-| `synthes3` | optimal | 68.00974056 | 68.00974052 | 6.50e-10 | 124 | 0.81 | yes | yes |
-
-**Not at the published objective**, named rather than dropped: `ball_mk2_10`, `cvxnonsep_pcon20`, `jit1`.
-
-**No point to check** (a limit or an infeasibility verdict): `ball_mk2_10`, `jit1`.
-
-
-Outer approximation against NLP-based branch and bound, instance by instance (`nlp-minlplib-ae95dcf-AnjankumarLN-minlp_method-oa.csv` against `nlp-minlplib-ae95dcf-AnjankumarLN-minlp_method-bnb.csv`):
-
-| problem | branch and bound | s | outer approximation | s | published | both optimal and equal |
-|---|---|---:|---|---:|---:|:--:|
-| `ball_mk2_10` | optimal 0 | 0.81 | time_limit | 60.42 | 0 | - |
-| `batchdes` | optimal 167427.6571 | 0.16 | optimal 167427.6571 | 0.33 | 167427.6571 | yes |
-| `clay0203m` | time_limit | 60.16 | optimal 41573.26252 | 7.38 | 41573.26252 | - |
-| `cvxnonsep_pcon20` | optimal -21.51230115 | 0.27 | feasible -21.51230115 | 60.23 | -21.5123012 | - |
-| `ex1223` | optimal 4.579582452 | 0.29 | optimal 4.579582452 | 0.50 | 4.579582402 | yes |
-| `ex1223a` | optimal 4.579582452 | 0.20 | optimal 4.579582452 | 0.29 | 4.579582402 | yes |
-| `ex1223b` | optimal 4.579582452 | 0.18 | optimal 4.579582452 | 0.24 | 4.579582402 | yes |
-| `fac1` | optimal 160912612.3 | 0.21 | optimal 160912612.3 | 0.31 | 160912612.4 | yes |
-| `flay02m` | optimal 37.94733201 | 0.17 | optimal 37.94733201 | 0.30 | 37.94733192 | yes |
-| `gbd` | optimal 2.20000001 | 0.34 | optimal 2.20000001 | 0.29 | 2.2 | yes |
-| `jit1` | numerical_error | 0.39 | numerical_error | 0.56 | 173983.33 | - |
-| `m3` | feasible 37.80000029 | 2.00 | optimal 37.80000029 | 0.48 | 37.8 | - |
-| `nvs03` | optimal 16 | 0.34 | optimal 16 | 0.24 | 16 | yes |
-| `st_e14` | optimal 4.579582452 | 0.17 | optimal 4.579582452 | 0.39 | 4.579582402 | yes |
-| `syn05m` | optimal 837.7324008 | 0.20 | optimal 837.7324008 | 0.28 | 837.7324009 | yes |
-| `synthes2` | optimal 73.03531256 | 0.45 | optimal 73.03531256 | 0.39 | 73.03531253 | yes |
-| `synthes3` | optimal 68.00974056 | 0.22 | optimal 68.00974056 | 0.81 | 68.00974052 | yes |
-
-Both methods proved the same optimum on **12 of 17** instances.
-
-
 Reproduce:
 
 ```
 python bench/runners/nlp_bench.py --data data/nlp/hs                              # 70 Hock-Schittkowski
 python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4  # convex MINLPLib
-python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4 \
-    --solver-option minlp_method=oa                                                # the same, by outer approximation
-python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4 \
-    --solver-option minlp_method=bnb                                               # the tree as an option run, for the comparison
 ```
 ---
 
