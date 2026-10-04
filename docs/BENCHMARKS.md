@@ -2833,11 +2833,17 @@ Commit `ad57c03` · machine `Linux-x86_64` · 60.0 s per problem
 **No point to check** (a limit or an infeasibility verdict): `jit1`.
 
 
+**MINLPLib, convex, outer approximation**: not yet run at this commit.
+
 Reproduce:
 
 ```
 python bench/runners/nlp_bench.py --data data/nlp/hs                              # 70 Hock-Schittkowski
 python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4  # convex MINLPLib
+python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4 \
+    --solver-option minlp_method=oa                                                # the same, by outer approximation
+python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4 \
+    --solver-option minlp_method=bnb                                               # the tree as an option run, for the comparison
 ```
 ---
 
