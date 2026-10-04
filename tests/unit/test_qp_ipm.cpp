@@ -5,6 +5,7 @@
 // through the in-process KKT check, so a test passes on the conditions and not only on a
 // number that happens to match.
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -13,9 +14,12 @@
 
 #include "core/kkt_check.hpp"
 #include "la/ldl.hpp"
+#include "qp/qp_ipm_system.hpp"
+#include "qp/qp_ipm_warm.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 #include "sankhya/qp.hpp"
+#include "sankhya/tolerances.hpp"
 
 namespace sankhya {
 namespace {
@@ -241,6 +245,137 @@ TEST(QpIpm, AnEmptyWarmStartBehavesExactlyLikeNoWarmStartAtAll) {
   EXPECT_EQ(with_empty.status, without.status);
   EXPECT_EQ(with_empty.iterations, without.iterations);
   EXPECT_EQ(with_empty.objective, without.objective);
+}
+
+// ---- the warm start from a save point (#494, #893) ---------------------------------------
+
+TEST(QpIpm, ASolveHandsOnASavePointShortOfItsOptimum) {
+  const Model model = inequality_qp();
+  Logger logger(nullptr);
+  qp::QpIpmWarmResult result;
+  const Solution cold =
+      qp::solve_convex_qp_ipm(model, quiet(), logger, nullptr, nullptr, &result);
+  ASSERT_EQ(cold.status, SolveStatus::kOptimal) << cold.message;
+  EXPECT_FALSE(result.warm_used);
+  EXPECT_FALSE(result.fell_back);
+  const qp::QpIpmWarmStart& save = result.next;
+  ASSERT_FALSE(save.empty());
+  ASSERT_EQ(save.col_value.size(), 2u);
+  ASSERT_EQ(save.row_dual.size(), 1u);
+  ASSERT_EQ(save.col_z_lower.size(), 2u);
+  ASSERT_EQ(save.row_z_upper.size(), 1u);
+  // An iterate on the way, not the optimum: a positive mu, every multiplier positive where
+  // its bound is finite, taken before the last iteration.
+  EXPECT_GT(save.mu, 0.0);
+  EXPECT_LT(save.iterations, cold.iterations);
+  EXPECT_GT(save.col_z_lower[0], 0.0);
+  EXPECT_GT(save.col_z_lower[1], 0.0);
+  EXPECT_EQ(save.col_z_upper[0], 0.0);  // no upper bound on x
+  EXPECT_GT(save.row_z_upper[0], 0.0);  // the row's upper side, x1 + x2 <= 2
+  EXPECT_GE(save.rho, quiet().get_double("qp_ipm_regularization"));
+}
+
+TEST(QpIpm, AChildStartedFromItsParentsSavePointReachesItsOwnOptimum) {
+  // The parent is inequality_qp (optimum (0.5, 1.5)); the child tightens x1 <= 0.2, which the
+  // parent's point violates, as a branch would. The child's optimum is (0.2, 1.8), objective
+  // 0.04 + 3.24 - 0.4 - 7.2 = -4.32.
+  const Model parent = inequality_qp();
+  Model child = parent;
+  child.col_upper[0] = 0.2;
+  Logger logger(nullptr);
+  qp::QpIpmWarmResult from_parent;
+  ASSERT_EQ(
+      qp::solve_convex_qp_ipm(parent, quiet(), logger, nullptr, nullptr, &from_parent).status,
+      SolveStatus::kOptimal);
+  const Solution cold = qp::solve_convex_qp_ipm(child, quiet(), logger);
+  qp::QpIpmWarmResult result;
+  const Solution warm =
+      qp::solve_convex_qp_ipm(child, quiet(), logger, nullptr, &from_parent.next, &result);
+  ASSERT_EQ(cold.status, SolveStatus::kOptimal) << cold.message;
+  ASSERT_EQ(warm.status, SolveStatus::kOptimal) << warm.message;
+  EXPECT_TRUE(result.warm_used);
+  EXPECT_FALSE(result.fell_back);
+  EXPECT_NEAR(warm.col_value[0], 0.2, 1e-7);
+  EXPECT_NEAR(warm.col_value[1], 1.8, 1e-7);
+  EXPECT_NEAR(warm.objective, -4.32, 1e-8);
+  expect_backed(child, warm);
+  // No iteration claim here: on two columns the cold start is already six iterations, and
+  // this start takes seven. What the warm start buys is measured over a search, in
+  // MiqpNodeIpm.TheSameEightyMiqpsWarmStartedGiveTheSameAnswers.
+}
+
+TEST(QpIpm, AWarmStartThatStallsIsSolvedAgainColdAndAnswersAsColdDoes) {
+  // x1 + x2 <= 2 and x1 + x2 >= 3: infeasible, which this engine (detection off) cannot
+  // finish from any start. The warm run makes no progress, is abandoned after the stall
+  // window, and the cold run takes the rest of the iteration ceiling: the same verdict as the
+  // cold solve alone, on the same total.
+  Model model = inequality_qp();
+  model.matrix.reset(2, 2);
+  model.matrix.add_entry(0, 0, 1.0);
+  model.matrix.add_entry(0, 1, 1.0);
+  model.matrix.add_entry(1, 0, 1.0);
+  model.matrix.add_entry(1, 1, 1.0);
+  model.matrix.finalize();
+  model.row_lower = {-kInfinity, 3.0};
+  model.row_upper = {2.0, kInfinity};
+  Logger logger(nullptr);
+  const Solution cold = qp::solve_convex_qp_ipm(model, quiet(), logger);
+  qp::QpIpmWarmStart warm;
+  warm.col_value = {1.0, 1.0};
+  warm.row_dual = {0.0, 0.0};
+  qp::QpIpmWarmResult result;
+  const Solution started =
+      qp::solve_convex_qp_ipm(model, quiet(), logger, nullptr, &warm, &result);
+  EXPECT_NE(cold.status, SolveStatus::kOptimal);
+  EXPECT_EQ(started.status, cold.status) << started.message;
+  EXPECT_TRUE(result.warm_used);
+  EXPECT_TRUE(result.fell_back);
+  EXPECT_GE(result.abandoned_iterations, tol::kQpIpmWarmStallWindow);
+  EXPECT_EQ(started.iterations, result.abandoned_iterations + cold.iterations)
+      << "after the stall, the cold run is the cold solve itself, iteration for iteration";
+}
+
+TEST(QpIpm, AWarmStartRecoversEachSlackAsItsRowActivityFixedColumnsIncluded) {
+  // x0 fixed at 1 drops out of the standard form and its share of the ranged row x0 + x1 in
+  // [-inf, 5] moves into b. The slack of that row at the point (1, 2) is the activity 3; #924
+  // took (M v)_r alone, 2, which leaves a primal residual of 1 at a point that has none.
+  Model model;
+  model.sense = ObjSense::kMinimize;
+  model.col_cost = {0.0, -1.0};
+  model.col_lower = {1.0, 0.0};
+  model.col_upper = {1.0, 10.0};
+  model.col_type = {VarType::kContinuous, VarType::kContinuous};
+  model.row_lower = {-kInfinity};
+  model.row_upper = {5.0};
+  model.matrix.reset(1, 2);
+  model.matrix.add_entry(0, 0, 1.0);
+  model.matrix.add_entry(0, 1, 1.0);
+  model.matrix.finalize();
+  model.hessian.reset(2, 2);
+  model.hessian.add_entry(1, 1, 1.0);
+  model.hessian.finalize();
+  const qp::ipm_detail::Standard s = qp::ipm_detail::standardize(model);
+  ASSERT_EQ(s.free_n, 1);
+  ASSERT_EQ(s.slacks, 1);
+  qp::QpIpmWarmStart warm;
+  warm.col_value = {1.0, 2.0};
+  std::vector<double> v, y, zl, zu;
+  (void)qp::ipm_detail::warm_start_iterate(model, s, warm, 1e-8, &v, &y, &zl, &zu);
+  ASSERT_EQ(v.size(), 2u);
+  EXPECT_DOUBLE_EQ(v[0], 2.0);
+  EXPECT_DOUBLE_EQ(v[1], 3.0) << "the slack is the row activity x0 + x1, not x1 alone";
+  std::vector<double> mv(1, 0.0);
+  s.m.multiply_add(v.data(), mv.data());
+  EXPECT_DOUBLE_EQ(s.b[0] - mv[0], 0.0);
+  // Every multiplier on a finite bound positive, every product inside the centrality box.
+  for (std::size_t j = 0; j < v.size(); ++j) {
+    if (std::isfinite(s.lower[j])) {
+      EXPECT_GT(zl[j], 0.0) << j;
+    }
+    if (std::isfinite(s.upper[j])) {
+      EXPECT_GT(zu[j], 0.0) << j;
+    }
+  }
 }
 
 // ---- the signed factorization ----------------------------------------------------------

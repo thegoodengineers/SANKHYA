@@ -5,12 +5,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
 
+#include "../util/profiler.hpp"
 #include "la/lu.hpp"
 #include "primal_simplex.hpp"
 #include "sankhya/tolerances.hpp"
@@ -42,7 +45,8 @@ struct Score {
 
 }  // namespace
 
-CrossoverGuess crossover_guess(const Model& model, const Solution& interior) {
+CrossoverGuess crossover_guess(const Model& model, const Solution& interior,
+                               const std::function<bool()>& should_stop) {
   const Index n = model.num_cols();
   const Index m = model.num_rows();
   CrossoverGuess guess;
@@ -168,6 +172,9 @@ CrossoverGuess crossover_guess(const Model& model, const Solution& interior) {
   // column no pivot reached is evicted for the logical of a row no pivot covered - the
   // repair of Maros sec. 9.4 and Suhl & Suhl 1990, applied until the basis factorizes. A
   // logical is a unit column, so every round strictly raises the rank and the loop ends.
+  // It ends on the deadline too (#951): with partial pivoting a round is a factorization
+  // with all the fill that pivoting allows, 8 s a round on the refinery year at T = 365, and
+  // a guess finished after the time limit is a guess nobody has time to use.
   std::vector<Index> basic_entries;
   basic_entries.reserve(static_cast<std::size_t>(m));
   for (Index j = 0; j < n; ++j) {
@@ -202,8 +209,16 @@ CrossoverGuess crossover_guess(const Model& model, const Solution& interior) {
   };
   SparseLu lu;
   for (int round = 0; round < 64; ++round) {
+    if (should_stop && should_stop()) {
+      guess.stopped = true;
+      return guess;
+    }
     fill_columns();
-    if (lu.factorize(columns, m, tol::kPivotTolerance, 1.0)) break;
+    if (lu.factorize(columns, m, tol::kPivotTolerance, 1.0, should_stop)) break;
+    if (lu.stopped_early()) {
+      guess.stopped = true;
+      return guess;
+    }
     const std::vector<Index> dependent = lu.dependent_positions();
     const std::vector<Index> uncovered = lu.uncovered_rows();
     if (dependent.empty() || dependent.size() != uncovered.size()) break;
@@ -303,6 +318,7 @@ Solution crossover_when_wanted(const Model& model, Solution interior, const Opti
 
 Solution crossover_to_vertex(const Model& model, Solution interior, const Options& options,
                              Logger& logger, SolveControl* control, const Timer& timer) {
+  const ProfileScope whole(logger.profiler(), "crossover");
   const bool from_optimal = interior.status == SolveStatus::kOptimal;
   if (!from_optimal) {
     if (!options.get_bool("crossover_from_nonoptimal") ||
@@ -324,7 +340,44 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
         to_string(interior.status), interior.primal_infeasibility_scaled,
         interior.dual_infeasibility_scaled);
   }
-  const CrossoverGuess guess = crossover_guess(model, interior);
+  // THE TIME LIMIT COVERS THE GUESS, NOT ONLY THE PIVOTS (#951). The deadline used to be
+  // read after the guess was built, and on the refinery year at T = 365 under a 20 s limit
+  // the interior point converged at 18.6 s and the result reported 26.3 s: the guess's rank
+  // repair, two factorizations with partial pivoting, ran past the limit before the
+  // crossover was told it had no time. The same remaining time now bounds both. A guess
+  // the limit stops leaves the interior point's answer exactly as an exhausted limit before
+  // the guess does; the status guard in solve() then measures that answer like any other.
+  const double time_limit = options.get_double("time_limit");
+  const bool limited = time_limit > 0.0 && std::isfinite(time_limit) && time_limit < 1e300;
+  const auto no_time_left = [&] {
+    interior.message += "; no time left for crossover, the interior point's answer stands";
+    withdraw_attached_point(model, &interior);
+    return std::move(interior);
+  };
+  if (limited && time_limit - timer.elapsed_seconds() <= 0.0) return no_time_left();
+  const std::function<bool()> should_stop = [&] {
+    return (limited && timer.elapsed_seconds() >= time_limit) ||
+           (control != nullptr && control->interruption_requested());
+  };
+  Timer guess_clock;
+  const CrossoverGuess guess = [&] {
+    const ProfileScope timed(logger.profiler(), "crossover basis guess",
+                             ProfileMode::kDetailed);
+    return crossover_guess(model, interior, should_stop);
+  }();
+  if (guess.stopped) {
+    const bool interrupted = control != nullptr && control->interruption_requested();
+    logger.info(
+        "Crossover: {} during the basis guess after {:.2f}s; keeping the interior "
+        "point's answer",
+        interrupted ? "interrupted" : "the time limit fell", guess_clock.elapsed_seconds());
+    interior.message += fmt::format(
+        "; crossover stopped by {} during its basis guess ({:.2f}s), the interior point's "
+        "answer stands",
+        interrupted ? "an interruption" : "the time limit", guess_clock.elapsed_seconds());
+    withdraw_attached_point(model, &interior);
+    return interior;
+  }
   if (guess.basic != model.num_rows()) {
     interior.message += "; crossover skipped: no basis guess could be built";
     withdraw_attached_point(model, &interior);
@@ -333,14 +386,9 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
 
   Options pivots = options;
   pivots.set_string("algorithm", "dual-simplex");
-  const double time_limit = options.get_double("time_limit");
-  if (time_limit > 0.0 && std::isfinite(time_limit) && time_limit < 1e300) {
+  if (limited) {
     const double remaining = time_limit - timer.elapsed_seconds();
-    if (remaining <= 0.0) {
-      interior.message += "; no time left for crossover, the interior point's answer stands";
-      withdraw_attached_point(model, &interior);
-      return interior;
-    }
+    if (remaining <= 0.0) return no_time_left();
     pivots.set_double("time_limit", remaining);
   }
   WarmStart warm;
@@ -355,8 +403,12 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
   // the model's units, and the relative pivot floor (#244) is what makes the unscaled loop
   // safe. It installs the guess, walks every superbasic variable to a bound while keeping
   // the point feasible, and finishes with the primal loop from the vertex it arrives at.
-  detail::Simplex simplex(model, pivots, logger, control);
-  Solution vertex = simplex.run_push(warm, interior.col_value, interior.row_activity);
+  Solution vertex;
+  {
+    const ProfileScope timed(logger.profiler(), "crossover pivots", ProfileMode::kDetailed);
+    detail::Simplex simplex(model, pivots, logger, control);
+    vertex = simplex.run_push(warm, interior.col_value, interior.row_activity);
+  }
   if (vertex.status != SolveStatus::kOptimal) {
     interior.message += fmt::format(
         "; crossover did not reach a vertex ({} after {} pivots, {:.2f}s), the interior "

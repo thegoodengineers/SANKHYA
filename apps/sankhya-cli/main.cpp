@@ -229,9 +229,18 @@ int main(int argc, char** argv) {
   app.require_subcommand(1);
   // The banner stays one line with the commit first in parentheses, because
   // bench/runners/stamp.py parses it; the repository goes on a line of its own (#538).
-  app.set_version_flag(
-      "--version", fmt::format("{}\nrepository {} {}", sankhya::banner(), sankhya::repository(),
-                               sankhya::repository_url()));
+  //
+  // LAZY, not a precomputed string (#758): sankhya::banner() probes the CUDA device, and an
+  // eagerly-built std::string here calls it while main() is still setting up the parser -
+  // before CLI11 has even looked at argv, so every invocation of every subcommand paid for a
+  // CUDA driver init whether or not that run ever touched the GPU. A finale walk on an A100
+  // measured 8.47s of its 10.1s total as system time from exactly this, repeated once per
+  // subprocess. The callback form defers banner() to the one invocation that actually asks
+  // for --version.
+  app.set_version_flag("--version", [] {
+    return fmt::format("{}\nrepository {} {}", sankhya::banner(), sankhya::repository(),
+                       sankhya::repository_url());
+  });
 
   std::vector<std::string> option_assignments;
 
@@ -275,6 +284,10 @@ int main(int argc, char** argv) {
                         "solve of this model or of an earlier version of it with rows and "
                         "columns since added or removed, matched by name (presolve is "
                         "bypassed)");
+  std::string mip_start_path;
+  solve_cmd->add_option("--start", mip_start_path,
+                        "A complete, feasible user-supplied MILP solution to install as "
+                        "the initial incumbent before the root search begins");
   bool compute_iis = false;
   solve_cmd->add_flag("--iis", compute_iis,
                       "On an infeasible model, name the irreducible infeasible subsystem: "
@@ -455,6 +468,14 @@ int main(int argc, char** argv) {
             "{} row(s) of the file are gone, {} of them basic\n",
             mapping.matched_cols, mapping.matched_rows, mapping.new_cols, mapping.new_rows,
             mapping.removed_cols, mapping.removed_rows, mapping.removed_basic);
+      }
+    }
+    if (!mip_start_path.empty()) {
+      std::string error;
+      if (!sankhya::io::read_solution_point(mip_start_path, model, &control.start_solution,
+                                            &error)) {
+        fmt::print(stderr, "error: {}\n", error);
+        return 3;
       }
     }
 

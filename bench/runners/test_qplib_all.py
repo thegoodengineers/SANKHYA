@@ -83,6 +83,8 @@ def test_doc() -> None:
         _row("QPLIB_0004", solved="1", matches_reference="0", beats_reference="1",
              verified="0"),
         _row("QPLIB_0005", read_ok="0", engine="", status="read_error", refusal="reader_error"),
+        _row("QPLIB_0006", status="time_limit", solved="0", matches_reference="0",
+             beats_reference="1", verified="1"),
     ]
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "qplib-all-abc1234.csv"
@@ -91,14 +93,17 @@ def test_doc() -> None:
             writer.writeheader()
             writer.writerows(rows)
         text = doc.section(path)
-    check("| in the run | 5 |" in text and "| read OK | 3 |" in text, "counts from the rows")
+    check("| in the run | 6 |" in text and "| read OK | 4 |" in text, "counts from the rows")
     check("| matched QPLIB's objective | 1 |" in text, "matched count")
-    check("Better than the reference: `QPLIB_0004`." in text, "a better-than-reference named")
+    check("Better than the reference at a verified point: `QPLIB_0006`." in text,
+          "a better-than-reference named only at a verified point")
+    check("point verified | 1 |" in text and "(proves nothing) | 1 |" in text,
+          "an unverified better objective counted apart, not as a better point")
     check("Reader error, crash or hang: `QPLIB_0005`." in text, "a reader error named")
     check("Optimal but not matching the reference: `QPLIB_0004`." in text,
           "an optimal mismatch named")
-    check(text.count("| QPLIB_000") == 5, "every instance in the per-instance table")
-    check("| qp-ipm | 3 | 1 | 2 | 1 | 1 |" in text, "the engine table", text[:0])
+    check(text.count("| QPLIB_000") == 6, "every instance in the per-instance table")
+    check("| qp-ipm | 4 | 1 | 2 | 1 | 2 |" in text, "the engine table", text[:0])
 
 
 def main() -> int:

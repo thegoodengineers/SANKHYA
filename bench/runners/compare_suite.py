@@ -121,10 +121,35 @@ def _virtualisation() -> str:
     return "bare metal"
 
 
-def machine_tag(kind: str | None = None) -> str:
+def cgroup_limits(root: Path = Path("/sys/fs/cgroup")) -> tuple[float | None, int | None]:
+    """The container's CPU quota (in cores) and memory limit (bytes), from cgroup v2
+    (cpu.max, memory.max) or v1 (cpu.cfs_quota_us over cfs_period_us, memory.limit_in_bytes);
+    None for either when there is no limit. /proc/cpuinfo and /proc/meminfo describe the
+    HOST, so a 16 vCPU, 32 GB TIR container read them as 256 cores and 1512 GiB (#504)."""
+    def read(name: str) -> str | None:
+        try:
+            return (root / name).read_text().strip()
+        except OSError:
+            return None
+    cores = memory = None
+    if (v2 := read("cpu.max")) is not None:
+        quota, _, period = v2.partition(" ")
+        if quota != "max" and period:
+            cores = int(quota) / int(period)
+    elif (q := read("cpu/cpu.cfs_quota_us")) is not None and int(q) > 0:
+        cores = int(q) / int(read("cpu/cpu.cfs_period_us") or 100000)
+    m = read("memory.max") or read("memory/memory.limit_in_bytes")
+    # v1 reports "no limit" as a huge page-aligned number rather than "max".
+    if m is not None and m != "max" and int(m) < 1 << 60:
+        memory = int(m)
+    return cores, memory
+
+
+def machine_tag(kind: str | None = None, cgroup_root: Path = Path("/sys/fs/cgroup")) -> str:
     """Where the numbers came from, stated plainly: what kind of machine (`kind` when the
     caller knows better, e.g. `cloud container`), CPU model, cores visible to this process,
-    RAM, OS and architecture."""
+    RAM, OS and architecture. Inside a container the cgroup quota and memory limit are what
+    the run had, so they are reported, with the host's figures beside them."""
     cpu, ram = platform.processor() or "unknown CPU", "unknown RAM"
     try:
         for line in Path("/proc/cpuinfo").read_text().splitlines():
@@ -139,7 +164,14 @@ def machine_tag(kind: str | None = None) -> str:
         pass
     where = kind or _virtualisation()
     cores = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
-    return (f"{where}; {cpu}; {cores} cores; {ram}; "
+    cores_text = f"{cores} cores"
+    quota, limit = cgroup_limits(cgroup_root)
+    if quota is not None and cores is not None and quota < cores:
+        cores_text = f"{quota:g} cores (cgroup quota; host {cores})"
+    if limit is not None:
+        host = ram.removesuffix(" RAM")
+        ram = f"{limit / 1073741824:.0f} GiB RAM (cgroup limit; host {host})"
+    return (f"{where}; {cpu}; {cores_text}; {ram}; "
             f"{platform.system()}-{platform.machine()}")
 
 

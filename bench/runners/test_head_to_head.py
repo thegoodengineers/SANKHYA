@@ -174,6 +174,18 @@ tag = compare_suite.machine_tag("cloud container")
 check(tag.startswith("cloud container;") and "cores" in tag and "RAM" in tag,
       "machine tag names the kind, CPU, cores and RAM", tag)
 
+with tempfile.TemporaryDirectory() as cg:
+    cgroot = Path(cg)
+    (cgroot / "cpu.max").write_text("1600000 100000\n")
+    (cgroot / "memory.max").write_text(str(32 * 1073741824) + "\n")
+    check(compare_suite.cgroup_limits(cgroot) == (16.0, 32 * 1073741824),
+          "cgroup v2 quota and limit are read", str(compare_suite.cgroup_limits(cgroot)))
+    tag = compare_suite.machine_tag("cloud container", cgroot)
+    check("32 GiB RAM (cgroup limit; host" in tag, "a container's memory limit is reported", tag)
+    (cgroot / "cpu.max").write_text("max 100000\n")
+    (cgroot / "memory.max").write_text("max\n")
+    check(compare_suite.cgroup_limits(cgroot) == (None, None), "no limit reads as none")
+
 print("performance profile")
 ROWS = [
     {"instance": "a", "solver": "sankhya", "counted_for_time": "1", "solver_seconds": "2"},

@@ -22,6 +22,7 @@
 // of the time limit, the interior point's answer stands and the message says so.
 #pragma once
 
+#include <functional>
 #include <vector>
 
 #include "sankhya/logging.hpp"
@@ -40,17 +41,28 @@ struct CrossoverGuess {
   Index basic = 0;     ///< entries marked basic (m for a well-formed model with a point)
   Index interior = 0;  ///< entries the interior point held strictly inside their bounds
   Index repaired = 0;  ///< structurals evicted for row logicals to make the guess full rank
+  /// True when `should_stop` fired during the rank repair (#951): the guess is unfinished
+  /// and is not a start for anything.
+  bool stopped = false;
 };
 
 /// Classify an interior point (`col_value`, `row_activity`, `col_dual` in the model's sense)
 /// into a basis guess with exactly m basic entries.
-[[nodiscard]] CrossoverGuess crossover_guess(const Model& model, const Solution& interior);
+///
+/// The rank repair factorizes the guess, round after round, and on the refinery LP at
+/// T = 365 (29,565 rows after presolve) two of those rounds took 8 s each (#951), so it
+/// reads a deadline: `should_stop` is consulted before every round and inside every
+/// factorization, before each pivot step, and when it fires the guess comes back with
+/// `stopped` set. Never asked, it changes nothing.
+[[nodiscard]] CrossoverGuess crossover_guess(const Model& model, const Solution& interior,
+                                             const std::function<bool()>& should_stop = {});
 
 /// Push `interior` (an interior-point answer to `model`) to an optimal vertex with the
 /// simplex warm-started from crossover_guess(). Returns the simplex's vertex when it reaches
 /// `optimal`, with the pivot count in the message and `iterations` summed; otherwise returns
 /// `interior` unchanged apart from a note saying why the vertex was not reached. `timer` is
-/// the solve's clock: the pivots get what the time limit has left.
+/// the solve's clock: the basis guess and the pivots get what the time limit has left, and a
+/// limit that falls during either leaves the interior point's answer as it came (#951).
 ///
 /// An optimal `interior` is always a start. One that is not optimal is a start only when
 /// crossover_from_nonoptimal is on and crossover_start_is_usable() says so (#474); anything

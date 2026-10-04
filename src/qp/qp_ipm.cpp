@@ -47,12 +47,15 @@
 //
 // WARM START (#494, #893): when the caller offers a QpIpmWarmStart whose col_value is the
 // model's own size, the usual least-squares start (Mehrotra 1992 sec. 7, "after Mehrotra"
-// below) is skipped; the point is mapped onto the internal columns instead, slacks recovered
-// from it by M v = b, pulled inside this node's (possibly tighter) bounds by the same margin
-// the cold start uses, with the bound multipliers always recomputed fresh from the residual
-// there - never carried over. y seeds from row_dual when given and its size matches, else the
-// usual zero. Not in this slice: continuing the proximal path itself (rho, delta) or the bound
-// multipliers from the parent, and scaling (#490's "Not done" otherwise still applies).
+// below) is skipped. The offered iterate - point, row and bound multipliers, proximal
+// parameters - is shifted into this model's interior instead (qp_ipm_warm.cpp, after Gondzio
+// 1998), and the iteration runs from there unchanged. A warm run that fails (a numerical
+// error, an iterate that stops being finite) or stalls (its worst relative measure not down
+// by kQpIpmWarmStallFactor in kQpIpmWarmStallWindow iterations) is abandoned and the model
+// solved again from the cold start, on what is left of the iteration and time limits, so a
+// warm start can cost iterations but never an answer. Every solve also hands back its own
+// save point through QpIpmWarmResult: the first iterate within kQpIpmWarmSaveLevel, not the
+// optimum. Scaling is still not done (#490's "Not done").
 
 #include "sankhya/qp.hpp"
 #include "sankhya/solve_control.hpp"
@@ -73,6 +76,7 @@
 
 #include "convexity.hpp"
 #include "qp_ipm_system.hpp"
+#include "qp_ipm_warm.hpp"
 
 namespace sankhya::qp {
 namespace {
@@ -214,14 +218,28 @@ bool ray_candidate(const Model& model, const Standard& s, const std::vector<doub
       [&](const std::vector<double>& d) { return ray_proves_unbounded(model, d); }, ray);
 }
 
+/// One run of the iteration, from the cold start or from `warm` (#494, #893).
+struct Run {
+  const QpIpmWarmStart* warm = nullptr;  ///< null: the cold start
+  Count iterations_before = 0;           ///< spent by an abandoned warm run, against the limits
+  QpIpmWarmStart* save = nullptr;        ///< receives the save point, when not null
+  bool stalled = false;                  ///< set when a warm run stopped for lack of progress
+};
+
+Solution iterate(const Model& model, const Standard& s, const Options& options, Logger& logger,
+                 SolveControl* control, const Timer& timer, const ResourceLimits& limits,
+                 Run* run);
+
 }  // namespace
 
 Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger& logger,
-                             SolveControl* control, const QpIpmWarmStart* warm_start) {
+                             SolveControl* control, const QpIpmWarmStart* warm_start,
+                             QpIpmWarmResult* warm_result) {
   Timer timer;
   Solution solution;
   solution.allocate_for(model);
   solution.algorithm = "qp-ipm";
+  if (warm_result != nullptr) *warm_result = QpIpmWarmResult{};
 
   // Read before the convexity test, which answers to the same clock (#835).
   const ResourceLimits limits(options, logger);
@@ -261,6 +279,44 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   }
 
   const Standard s = ipm_detail::standardize(model);
+  const bool warm_usable = warm_start != nullptr && !warm_start->empty() &&
+                           warm_start->col_value.size() == static_cast<std::size_t>(s.n);
+  QpIpmWarmStart* save = warm_result != nullptr ? &warm_result->next : nullptr;
+  Run first{warm_usable ? warm_start : nullptr, 0, save, false};
+  Solution solved = iterate(model, s, options, logger, control, timer, limits, &first);
+  if (!warm_usable) return solved;
+  if (warm_result != nullptr) warm_result->warm_used = true;
+  // A WARM RUN THAT FAILED OR STALLED is abandoned for the cold start: the answer must not
+  // depend on where the iteration began. A verdict (optimal, or a certificate the checker
+  // accepted) and a limit stand as they are.
+  const bool failed = solved.status == SolveStatus::kNumericalError ||
+                      solved.status == SolveStatus::kNotSolved ||
+                      (solved.status == SolveStatus::kIterationLimit && first.stalled);
+  if (!failed || !warm_start->retry_cold) return solved;
+  logger.verbose(
+      "QP interior point: the warm start {} after {} iterations ({}); solving again "
+      "from the cold start",
+      first.stalled ? "stalled" : "failed", solved.iterations, solved.message);
+  if (save != nullptr) *save = QpIpmWarmStart{};
+  Run cold{nullptr, solved.iterations, save, false};
+  Solution again = iterate(model, s, options, logger, control, timer, limits, &cold);
+  again.iterations += solved.iterations;
+  if (warm_result != nullptr) {
+    warm_result->fell_back = true;
+    warm_result->abandoned_iterations = solved.iterations;
+  }
+  return again;
+}
+
+namespace {
+
+Solution iterate(const Model& model, const Standard& s, const Options& options, Logger& logger,
+                 SolveControl* control, const Timer& timer, const ResourceLimits& limits,
+                 Run* run) {
+  Solution solution;
+  solution.allocate_for(model);
+  solution.algorithm = "qp-ipm";
+  const QpIpmWarmStart* warm_start = run->warm;
   const auto nc = static_cast<std::size_t>(s.cols);
   const auto nr = static_cast<std::size_t>(s.rows);
   const double tolerance = options.get_double("qp_ipm_tolerance");
@@ -325,6 +381,8 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   Count iterations_past_relative = 0;
   std::vector<double> kept_v, kept_y;
   double primal_rel = kInfinity, dual_rel = kInfinity, gap_rel = kInfinity;
+  // #494: the worst relative measure at each iteration of a warm run, for the stall test.
+  std::vector<double> worst_measure;
 
   const auto residuals = [&]() {
     hessian_times(s.h, v, &hv);
@@ -406,54 +464,35 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   std::vector<double> minus_rd(detect ? nc : 0);
 
   // ---- starting point ----------------------------------------------------------------------
-  // Warm (#494, #893): the caller's point, mapped onto the internal columns, slacks recovered
-  // from it by M v = b, and the equality duals from row_dual when its size matches. Cold, after
-  // Mehrotra (1992, sec. 7), adapted to bounds: v and y from min g'v + v'(H + I)v/2 s.t. M v =
-  // b, one factorization of the same pattern with Theta^{-1} = I, so the start already nearly
-  // satisfies the rows (from the unit start the primal residual stayed at 1.0 for thirty
-  // iterations on qpcboei2). Either way v is then moved inside its bounds by a margin that
-  // grows with how far outside the point was, and the bound multipliers take the sign-split
-  // stationarity residual plus a shift that balances them against the slacks - never carried
-  // over from the warm point, which is why this is a partial warm start.
-  {
-    const bool warm_usable =
-        warm_start != nullptr && !warm_start->empty() &&
-        warm_start->col_value.size() == static_cast<std::size_t>(model.num_cols());
-    if (warm_usable) {
-      std::fill(v.begin(), v.end(), 0.0);
-      for (Index j = 0; j < s.n; ++j) {
-        const auto u = static_cast<std::size_t>(j);
-        const Index kcol = s.column_of[u];
-        if (kcol >= 0) v[static_cast<std::size_t>(kcol)] = warm_start->col_value[u];
-      }
-      std::fill(mv.begin(), mv.end(), 0.0);
-      if (s.rows > 0) s.m.multiply_add(v.data(), mv.data());
-      for (Index k = 0; k < s.slacks; ++k) {
-        const auto slack = static_cast<std::size_t>(s.free_n + k);
-        const auto row = static_cast<std::size_t>(s.slack_row[static_cast<std::size_t>(k)]);
-        v[slack] = mv[row];
-      }
-      if (warm_start->row_dual.size() == static_cast<std::size_t>(model.num_rows())) {
-        const double sense = model.sense_multiplier();
-        for (Index i = 0; i < model.num_rows(); ++i) {
-          const auto u = static_cast<std::size_t>(i);
-          const Index r = s.row_of[u];
-          if (r >= 0) y[static_cast<std::size_t>(r)] = sense * warm_start->row_dual[u];
-        }
-      }
-    } else {
-      std::fill(theta_inverse.begin(), theta_inverse.end(), 1.0);
-      const SparseMatrix k0 = kkt.build(theta_inverse, rho, delta);
-      if (ldl.factorize_quasidefinite(k0, signs, tol::kQpIpmPivotShare * std::min(rho, delta),
-                                      should_stop) &&
-          ldl.regularized_pivots() == 0) {
-        for (std::size_t j = 0; j < nc; ++j) rhs[j] = s.g[j];
-        for (std::size_t i = 0; i < nr; ++i) rhs[nc + i] = s.b[i];
-        solve_refined(ldl, k0, rhs, &step);
-        if (std::all_of(step.begin(), step.end(), [](double x) { return std::isfinite(x); })) {
-          std::copy(step.begin(), step.begin() + static_cast<std::ptrdiff_t>(nc), v.begin());
-          std::copy(step.begin() + static_cast<std::ptrdiff_t>(nc), step.end(), y.begin());
-        }
+  // Warm (#494, #893): the caller's iterate shifted into this model's interior, see
+  // qp_ipm_warm.cpp. Cold, after Mehrotra (1992, sec. 7), adapted to bounds: v and y from
+  // min g'v + v'(H + I)v/2 s.t. M v = b, one factorization of the same pattern with
+  // Theta^{-1} = I, so the start already nearly satisfies the rows (from the unit start the
+  // primal residual stayed at 1.0 for thirty iterations on qpcboei2). v is then moved inside
+  // its bounds by a margin that grows with how far outside the point was, and the bound
+  // multipliers take the sign-split stationarity residual plus a shift that balances them
+  // against the slacks.
+  if (warm_start != nullptr) {
+    const ipm_detail::WarmShift shift = ipm_detail::warm_start_iterate(
+        model, s, *warm_start, regularization_floor, &v, &y, &zl, &zu);
+    rho = shift.rho;
+    delta = shift.delta;
+    logger.verbose(
+        "QP interior point: warm start, {} slack(s) moved inside, {} multiplier(s) recentred "
+        "on mu {:.2e}, rho {:.1e}",
+        shift.moved_inside, shift.recentred, shift.mu, rho);
+  } else {
+    std::fill(theta_inverse.begin(), theta_inverse.end(), 1.0);
+    const SparseMatrix k0 = kkt.build(theta_inverse, rho, delta);
+    if (ldl.factorize_quasidefinite(k0, signs, tol::kQpIpmPivotShare * std::min(rho, delta),
+                                    should_stop) &&
+        ldl.regularized_pivots() == 0) {
+      for (std::size_t j = 0; j < nc; ++j) rhs[j] = s.g[j];
+      for (std::size_t i = 0; i < nr; ++i) rhs[nc + i] = s.b[i];
+      solve_refined(ldl, k0, rhs, &step);
+      if (std::all_of(step.begin(), step.end(), [](double x) { return std::isfinite(x); })) {
+        std::copy(step.begin(), step.begin() + static_cast<std::ptrdiff_t>(nc), v.begin());
+        std::copy(step.begin() + static_cast<std::ptrdiff_t>(nc), step.end(), y.begin());
       }
     }
     double worst = 0.0;
@@ -557,6 +596,16 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
     // finite while mu is pushed to zero cannot cost the answer already found.
     const bool relative_met =
         primal_rel <= tolerance && dual_rel <= tolerance && gap_rel <= tolerance;
+    // #494: the save point a later solve can start from, the first iterate within
+    // kQpIpmWarmSaveLevel: advanced, and still well inside the bounds (Gondzio 1998). A
+    // qp_ipm_tolerance looser than that level saves the first iterate that meets it instead.
+    if (run->save != nullptr && run->save->empty() &&
+        (relative_met ||
+         (primal_rel <= tol::kQpIpmWarmSaveLevel && dual_rel <= tol::kQpIpmWarmSaveLevel &&
+          gap_rel <= tol::kQpIpmWarmSaveLevel))) {
+      *run->save = ipm_detail::save_iterate(model, s, v, y, zl, zu, rho, delta, mu,
+                                            run->iterations_before + iterations);
+    }
     if (relative_met &&
         (largest_product <= tol::kQpIpmComplementarityShare * tol::kComplementarity ||
          iterations_past_relative >= kIterationsForProducts)) {
@@ -576,21 +625,40 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
         break;
       }
     }
+    // #494: a warm run that has stopped making progress is handed back to be solved cold.
+    if (warm_start != nullptr) {
+      const double worst = std::max({primal_rel, dual_rel, gap_rel});
+      worst_measure.push_back(worst);
+      const auto window = static_cast<std::size_t>(tol::kQpIpmWarmStallWindow);
+      if (worst_measure.size() > window &&
+          !(worst <=
+            tol::kQpIpmWarmStallFactor * worst_measure[worst_measure.size() - 1 - window])) {
+        status = SolveStatus::kIterationLimit;
+        message = fmt::format(
+            "the warm start stalled: the worst relative measure is {:.1e} after {} iterations, "
+            "{:.1e} {} iterations before",
+            worst, iterations, worst_measure[worst_measure.size() - 1 - window], window);
+        run->stalled = true;
+        break;
+      }
+    }
     if (limits.time_exhausted(timer.elapsed_seconds())) {
       status = SolveStatus::kTimeLimit;
-      message = limits.describe(LimitReason::kTime, timer.elapsed_seconds(), iterations, 0);
+      message = limits.describe(LimitReason::kTime, timer.elapsed_seconds(),
+                                run->iterations_before + iterations, 0);
       break;
     }
-    if (limits.iterations_exhausted(iterations) ||
-        (limits.iteration_limit() < 0 && iterations >= kIterationCeiling)) {
+    const Count spent = run->iterations_before + iterations;
+    if (limits.iterations_exhausted(spent) ||
+        (limits.iteration_limit() < 0 && spent >= kIterationCeiling)) {
       status = SolveStatus::kIterationLimit;
-      message = limits.iteration_limit() >= 0
-                    ? limits.describe(LimitReason::kIterations, timer.elapsed_seconds(),
-                                      iterations, 0)
-                    : fmt::format(
-                          "stopped at this engine's own ceiling of {} iterations with "
-                          "relative residuals {:.1e} primal, {:.1e} dual, {:.1e} gap",
-                          kIterationCeiling, primal_rel, dual_rel, gap_rel);
+      message =
+          limits.iteration_limit() >= 0
+              ? limits.describe(LimitReason::kIterations, timer.elapsed_seconds(), spent, 0)
+              : fmt::format(
+                    "stopped at this engine's own ceiling of {} iterations with "
+                    "relative residuals {:.1e} primal, {:.1e} dual, {:.1e} gap",
+                    kIterationCeiling, primal_rel, dual_rel, gap_rel);
       break;
     }
     SolveStatus stop_status;
@@ -786,4 +854,5 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   return solution;
 }
 
+}  // namespace
 }  // namespace sankhya::qp

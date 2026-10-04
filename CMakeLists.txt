@@ -293,12 +293,14 @@ set(SANKHYA_CORE_SOURCES
   src/qp/qp_first_order_accel.cpp
   src/qp/qp_ipm.cpp
   src/qp/qp_ipm_system.cpp
+  src/qp/qp_ipm_warm.cpp
   src/la/ldl.cpp
   src/la/ldl_supernodal.cpp
   src/la/lu.cpp
   src/la/lu_eliminate.cpp
   src/la/lu_hyper.cpp
   src/la/normal_pattern.cpp
+  src/la/operator_norm.cpp
   src/la/scaling.cpp
   src/la/sparse.cpp
   src/simplex/dense_lu.cpp
@@ -371,6 +373,9 @@ set(SANKHYA_CORE_SOURCES
   src/ipm/dense_columns.cpp
   src/ipm/column_side.cpp
   src/ipm/centrality.cpp
+  src/ipm/hsd.cpp
+  src/ipm/hsd_certificate.cpp
+  src/ipm/hsd_run.cpp
   src/ipm/ipm.cpp
   src/ipm/model_space.cpp
   src/ipm/proximal_system.cpp
@@ -379,6 +384,7 @@ set(SANKHYA_CORE_SOURCES
   src/pdhg/pdhg_certificate.cpp
   src/pdhg/pdhg_feasibility_polish.cpp
   src/pdhg/pdhg_halpern.cpp
+  src/pdhg/pdhg_norm_rescale.cpp
   src/pdhg/batch_pdhg.cpp
   src/pdhg/batch_pdhg_cpu.cpp
   src/pdhg/pdhg_parallel.cpp

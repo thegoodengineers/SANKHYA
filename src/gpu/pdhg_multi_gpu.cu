@@ -241,6 +241,17 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
                 part.row_end, partition_weight(full_csr.row_starts(), part) - part.local_m());
   logger.info("Estimated ||A||_2 = {:.4e}, target tolerance {:.1e}, restarts {}", spectral_norm,
               tolerance, use_restarts ? "on" : "off");
+  // #482: the constant step and the PID primal weight reach the CPU engine and the
+  // single-card engine (pdhg_gpu.cu) only; this engine keeps the adaptive rule and PDLP's
+  // weight, and says so rather than ignoring the request silently.
+  if (options.get_bool("pdhg_constant_step") || options.get_bool("pdhg_primal_weight_pid") ||
+      options.get_bool("pdhg_bound_objective_rescaling") ||
+      options.get_bool("pdhg_initial_weight_from_norms")) {
+    logger.warning(
+        "pdhg_constant_step, pdhg_primal_weight_pid, pdhg_bound_objective_rescaling and "
+        "pdhg_initial_weight_from_norms are not implemented in the multi-GPU engine (#482); "
+        "it runs the adaptive step, the PDLP primal weight and no rescaling");
+  }
 
   // ---- Every card must hold its block (#295) -----------------------------
   // The partition is by work, never by memory: a card that cannot hold the block the

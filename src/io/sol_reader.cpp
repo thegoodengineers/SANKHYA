@@ -19,6 +19,9 @@
 
 #include <fmt/format.h>
 
+#include <cmath>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -67,6 +70,19 @@ bool parse_status(std::string_view text, BasisStatus* out) {
   if (it == kNames.end()) return false;
   *out = it->second;
   return true;
+}
+
+std::unordered_map<std::string, Index> index_by_name(const std::vector<std::string>& names,
+                                                     Index count, char fallback_prefix) {
+  std::unordered_map<std::string, Index> index;
+  for (Index k = 0; k < count; ++k) {
+    const auto u = static_cast<std::size_t>(k);
+    const std::string name = u < names.size() && !names[u].empty()
+                                 ? names[u]
+                                 : fmt::format("{}{}", fallback_prefix, k);
+    index.emplace(name, k);
+  }
+  return index;
 }
 
 }  // namespace
@@ -163,6 +179,77 @@ bool read_solution_basis(const std::string& path, const Model& model,
   *col_status = std::move(cols);
   *row_status = std::move(rows);
   if (mapping != nullptr) *mapping = counts;
+  return true;
+}
+
+bool read_solution_point(const std::string& path, const Model& model,
+                         std::vector<double>* col_values, std::string* error) {
+  LineReader reader;
+  if (!reader.open(path, error)) return false;
+  const auto cols = index_by_name(model.col_names, model.num_cols(), 'C');
+  col_values->assign(static_cast<std::size_t>(model.num_cols()),
+                     std::numeric_limits<double>::quiet_NaN());
+
+  enum class Section { kNone, kColumns, kOther } section = Section::kNone;
+  bool saw_columns = false;
+  std::string line;
+  std::vector<std::string_view> tokens;
+  while (reader.next(&line)) {
+    const std::string_view text = trim(line);
+    if (text.empty() || text.front() == '#') continue;
+    tokenize(text, &tokens);
+    if (tokens[0] == "begin") {
+      const std::string_view what = tokens.size() > 1 ? tokens[1] : std::string_view();
+      section = what == "columns" ? Section::kColumns : Section::kOther;
+      saw_columns = saw_columns || section == Section::kColumns;
+      continue;
+    }
+    if (tokens[0] == "end") {
+      section = Section::kNone;
+      continue;
+    }
+    if (section != Section::kColumns) continue;
+
+    std::string name;
+    std::string_view rest;
+    if (!leading_name(text, &name, &rest)) {
+      *error = reader.error_at("unterminated quoted name");
+      return false;
+    }
+    tokenize(rest, &tokens);
+    if (tokens.empty()) {
+      *error = reader.error_at(fmt::format("no value on the record for '{}'", name));
+      return false;
+    }
+
+    double value = 0.0;
+    try {
+      std::string token_str(tokens[0]);
+      std::size_t pos;
+      value = std::stod(token_str, &pos);
+      if (pos != token_str.size()) {
+        throw std::invalid_argument("not a full number");
+      }
+    } catch (...) {
+      *error =
+          reader.error_at(fmt::format("invalid value '{}' for column '{}'", tokens[0], name));
+      return false;
+    }
+
+    const auto it = cols.find(name);
+    if (it == cols.end()) {
+      *error = reader.error_at(fmt::format(
+          "column '{}' is not in the model, so this file is not a solution of it", name));
+      return false;
+    }
+    (*col_values)[static_cast<std::size_t>(it->second)] = value;
+  }
+
+  if (!saw_columns) {
+    *error = fmt::format("{}: no columns section: the file carries no point", path);
+    return false;
+  }
+
   return true;
 }
 

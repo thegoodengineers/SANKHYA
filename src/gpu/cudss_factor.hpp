@@ -62,10 +62,43 @@ struct CudssTiming {
   Count solves = 0;
 };
 
-class CudssFactor {
+// THE SEAM A TEST STANDS IN FOR (#907). The interior point only ever calls analyze(),
+// factorize(), solve() and the three readers below on whatever `device_` holds; this
+// interface is that and nothing else, so a CPU-only test can hand InteriorPoint a fake that
+// takes as long as the test likes without a cuDSS build or a GPU. CudssFactor is the only
+// real implementation; sankhya::ipm::testing::fake_device_factory (ipm_testing.hpp) is the
+// seam that lets a test substitute another one.
+class LinearSolverDevice {
+ public:
+  virtual ~LinearSolverDevice() = default;
+
+  /// Find a device and create the cuDSS handle. False, with the reason, when the build has
+  /// no cuDSS, no device answers, or the library cannot be initialised.
+  [[nodiscard]] virtual bool initialize(std::string* reason) = 0;
+
+  /// Upload the pattern of a symmetric matrix given by its LOWER triangle in CSC form (the
+  /// layout of normal_equations_lower()) and run reordering and symbolic factorization.
+  [[nodiscard]] virtual bool analyze(const SparseMatrix& lower, std::string* reason) = 0;
+
+  /// Numeric factorization of a matrix with the analysed pattern or a subset of it (the
+  /// missing entries are zeros), as SparseLdl::factorize() accepts; an entry outside it fails.
+  [[nodiscard]] virtual CudssOutcome factorize(const SparseMatrix& lower, double regularization,
+                                               std::string* reason) = 0;
+
+  /// Solve with the current factors in place. On failure `b` is left as it was.
+  [[nodiscard]] virtual bool solve(double* b, std::string* reason) = 0;
+
+  /// Pivots the last factorization replaced by the epsilon.
+  [[nodiscard]] virtual Count regularized_pivots() const noexcept = 0;
+  /// Nonzeros of the factor as cuDSS reports them after the analysis (-1 before).
+  [[nodiscard]] virtual std::int64_t factor_nonzeros() const noexcept = 0;
+  [[nodiscard]] virtual const CudssTiming& timing() const noexcept = 0;
+};
+
+class CudssFactor : public LinearSolverDevice {
  public:
   CudssFactor();
-  ~CudssFactor();
+  ~CudssFactor() override;
   CudssFactor(const CudssFactor&) = delete;
   CudssFactor& operator=(const CudssFactor&) = delete;
   CudssFactor(CudssFactor&&) = delete;
@@ -74,27 +107,14 @@ class CudssFactor {
   /// True when this build carries the backend (SANKHYA_ENABLE_CUDSS).
   [[nodiscard]] static bool compiled() noexcept;
 
-  /// Find a device and create the cuDSS handle. False, with the reason, when the build has
-  /// no cuDSS, no device answers, or the library cannot be initialised.
-  [[nodiscard]] bool initialize(std::string* reason);
-
-  /// Upload the pattern of a symmetric matrix given by its LOWER triangle in CSC form (the
-  /// layout of normal_equations_lower()) and run reordering and symbolic factorization.
-  [[nodiscard]] bool analyze(const SparseMatrix& lower, std::string* reason);
-
-  /// Numeric factorization of a matrix with the analysed pattern or a subset of it (the
-  /// missing entries are zeros), as SparseLdl::factorize() accepts; an entry outside it fails.
+  [[nodiscard]] bool initialize(std::string* reason) override;
+  [[nodiscard]] bool analyze(const SparseMatrix& lower, std::string* reason) override;
   [[nodiscard]] CudssOutcome factorize(const SparseMatrix& lower, double regularization,
-                                       std::string* reason);
-
-  /// Solve with the current factors in place. On failure `b` is left as it was.
-  [[nodiscard]] bool solve(double* b, std::string* reason);
-
-  /// Pivots the last factorization replaced by the epsilon.
-  [[nodiscard]] Count regularized_pivots() const noexcept;
-  /// Nonzeros of the factor as cuDSS reports them after the analysis (-1 before).
-  [[nodiscard]] std::int64_t factor_nonzeros() const noexcept;
-  [[nodiscard]] const CudssTiming& timing() const noexcept;
+                                       std::string* reason) override;
+  [[nodiscard]] bool solve(double* b, std::string* reason) override;
+  [[nodiscard]] Count regularized_pivots() const noexcept override;
+  [[nodiscard]] std::int64_t factor_nonzeros() const noexcept override;
+  [[nodiscard]] const CudssTiming& timing() const noexcept override;
 
  private:
   struct State;

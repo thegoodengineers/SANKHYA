@@ -48,6 +48,7 @@ add_executable(sankhya_tests
   unit/test_ldl_supernodal.cpp
   unit/test_ipm.cpp
   unit/test_ipm_proximal.cpp
+  unit/test_ipm_hsd.cpp
   unit/test_ipm_centrality.cpp
   unit/test_ipm_cudss.cpp
   unit/test_ipm_time_limit.cpp
@@ -62,6 +63,9 @@ add_executable(sankhya_tests
   unit/test_pdhg_parallel_spmv.cpp
   unit/test_pdhg_two_matvec.cpp
   unit/test_pdhg_halpern.cpp
+  unit/test_pdhg_step_weight.cpp
+  unit/test_operator_norm.cpp
+  unit/test_pdhg_norm_rescale.cpp
   unit/test_crossover.cpp
   unit/test_crossover_nonoptimal.cpp
   unit/test_dual_refuted_feasibility.cpp

@@ -69,6 +69,7 @@ constexpr const char* kNames[kSlots] = {"rounding",
                                         "PDHG feasibility pump",
                                         "fix-and-propagate"};
 static_assert(kDiveGuided - kDiveFractional + 1 == kDiveRules);
+}  // namespace
 
 /// The options a sub-MIP (RINS, RENS) is solved with: the search's own, quiet, capped at
 /// `node_limit` nodes, no pool, none of the search's files, one thread, and no sub-MIP
@@ -116,7 +117,6 @@ double sub_mip_seconds(const ResourceLimits& limits, double elapsed, bool second
   if (!seconds_budgets || !limits.has_time_limit()) return -1.0;
   return std::max(0.0, tol::kSubMipBudgetShare * limits.remaining_seconds(elapsed));
 }
-}  // namespace
 
 void BranchAndBound::init_heuristics() {
   heuristic_stats_.assign(kSlots, HeuristicStats{});
@@ -364,6 +364,7 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
     x = probe.col_value;
     // The next probe fixes one more column of THIS point, so this basis is its warm start.
     current_warm_ = basis_of(probe);
+    if (miqp_node_ipm_warm_start_) current_qp_warm_ = last_qp_warm_;  // #494, likewise
   }
   s.work += lp_resolves;
   unwind_to(mark);

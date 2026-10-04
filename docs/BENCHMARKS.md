@@ -1455,12 +1455,77 @@ At 600 s: **15 of 30** reach the published optimum, **9 of 30** prove it.
 
 #### The 60-instance tier over three seeds (#504)
 
-Not yet run. Reproduce with:
+Source CSV: `bench/results/miplib-tier2-seeds3-e7c0c60.csv`  
+Commit `e7c0c60` · machine `E2E TIR C3 container, 16 vCPU 32 GB plan (C3.32GB; corrected after the run, the label first read the host), AMD EPYC 9555 64-Core Processor host, nothing else running; AMD EPYC 9555 64-Core Processor; 256 cores; 1512 GiB RAM; Linux-x86_64` · 3 seeds · 300 s per run · one thread
 
-```
-python bench/runners/fetch_miplib.py --tier 2
-python bench/runners/miplib.py --tier 2 --seeds 3 --time-limit 300
-```
+The tier is chosen by the rule in `bench/runners/miplib_tier2.json`, written before it was run: the first 60 MIPLIB 2017 benchmark instances with a proven optimum, by file size. Over all 180 runs: **32** reached the published optimum and **18** proved it; shifted geometric mean time **264.13 s** (shift 10 s, every run that did not prove charged the limit).
+
+| instance | seeds matched | seeds proved | sgm time (s) | sgm first feasible (s) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|
+| `50v-10` | 0/3 | 0/3 | 300.00 | 1.636 | 110.43 |
+| `assign1-5-8` | 3/3 | 0/3 | 300.00 | 0.537 | 0.84 |
+| `b1c1s1` | 0/3 | 0/3 | 300.00 | 19.999 | 177.11 |
+| `beasleyC3` | 0/3 | 0/3 | 300.00 | 12.881 | 27.82 |
+| `binkar10_1` | 0/3 | 0/3 | 300.00 | 7.480 | 15.53 |
+| `bppc4-08` | 0/3 | 0/3 | 300.00 | 0.562 | 31.18 |
+| `cost266-UUE` | 0/3 | 0/3 | 300.00 | 12.317 | 84.35 |
+| `csched007` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `csched008` | 0/3 | 0/3 | 300.00 | 174.467 | 206.88 |
+| `cvs16r128-89` | 0/3 | 0/3 | 300.00 | 31.035 | 121.32 |
+| `enlight_hard` | 0/3 | 0/3 | 300.00 | 300.000 | 300.01 |
+| `exp-1-500-5-5` | 0/3 | 0/3 | 300.00 | 4.317 | 86.34 |
+| `fastxgemm-n2r6s0t2` | 0/3 | 0/3 | 300.00 | 10.500 | 206.52 |
+| `fhnw-binpack4-48` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `gen-ip002` | 3/3 | 0/3 | 300.00 | 0.006 | 0.05 |
+| `gen-ip054` | 3/3 | 0/3 | 300.00 | 0.028 | 0.15 |
+| `glass4` | 0/3 | 0/3 | 300.00 | 7.086 | 195.29 |
+| `gmu-35-40` | 0/3 | 0/3 | 300.00 | 276.212 | 278.29 |
+| `gmu-35-50` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `graphdraw-domain` | 0/3 | 0/3 | 300.00 | 5.855 | 55.09 |
+| `ic97_potential` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `icir97_tension` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `lotsize` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `mad` | 0/3 | 0/3 | 300.00 | 0.076 | 288.16 |
+| `markshare2` | 0/3 | 0/3 | 300.00 | 0.049 | 294.09 |
+| `markshare_4_0` | 3/3 | 3/3 | 155.28 | 0.005 | 60.12 |
+| `mas74` | 0/3 | 0/3 | 300.00 | 0.032 | 30.45 |
+| `mas76` | 3/3 | 3/3 | 92.41 | 0.023 | 0.96 |
+| `mc11` | 0/3 | 0/3 | 300.00 | 23.412 | 35.32 |
+| `mcsched` | 3/3 | 3/3 | 271.73 | 2.534 | 4.47 |
+| `mik-250-20-75-4` | 0/3 | 0/3 | 300.00 | 0.648 | 2.06 |
+| `milo-v12-6-r2-40-1` | 0/3 | 0/3 | 300.00 | 19.766 | 30.50 |
+| `n5-3` | 0/3 | 0/3 | 300.00 | 4.145 | 32.86 |
+| `neos-2657525-crna` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `neos-3024952-loue` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `neos-3046615-murg` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `neos-3381206-awhea` | 0/3 | 0/3 | 300.00 | 104.868 | 208.48 |
+| `neos-3627168-kasai` | 0/3 | 0/3 | 300.00 | 7.936 | 8.48 |
+| `neos-3754480-nidda` | 0/3 | 0/3 | 300.00 | 0.384 | 26.34 |
+| `neos-4338804-snowy` | 0/3 | 0/3 | 300.00 | 144.588 | 272.91 |
+| `neos-4738912-atrato` | 0/3 | 0/3 | 300.00 | 102.601 | 203.98 |
+| `neos-4954672-berkel` | 0/3 | 0/3 | 300.00 | 12.781 | 126.08 |
+| `neos-911970` | 0/3 | 0/3 | 300.00 | 0.682 | 125.05 |
+| `neos17` | 0/3 | 0/3 | 300.00 | 5.875 | 32.52 |
+| `neos5` | 3/3 | 0/3 | 300.00 | 0.138 | 2.68 |
+| `p200x1188c` | 2/3 | 0/3 | 300.00 | 4.819 | 11.84 |
+| `pg` | 0/3 | 0/3 | 300.00 | 1.427 | 15.63 |
+| `pg5_34` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `pk1` | 3/3 | 3/3 | 220.94 | 0.108 | 69.44 |
+| `qap10` | 3/3 | 3/3 | 36.15 | 21.600 | 21.84 |
+| `ran14x18-disj-8` | 0/3 | 0/3 | 300.00 | 1.498 | 14.44 |
+| `reblock115` | 0/3 | 0/3 | 300.00 | 300.000 | 300.00 |
+| `rococoB10-011000` | 0/3 | 0/3 | 300.00 | 160.628 | 182.78 |
+| `rococoC10-001000` | 0/3 | 0/3 | 300.00 | 36.002 | 134.14 |
+| `roll3000` | 0/3 | 0/3 | 300.00 | 278.711 | 283.07 |
+| `sp150x300d` | 3/3 | 3/3 | 0.90 | 0.632 | 0.64 |
+| `supportcase26` | 0/3 | 0/3 | 300.00 | 5.038 | 10.33 |
+| `timtab1` | 0/3 | 0/3 | 300.00 | 14.761 | 124.70 |
+| `tr12-30` | 0/3 | 0/3 | 300.00 | 13.684 | 69.48 |
+| `uct-subprob` | 0/3 | 0/3 | 300.00 | 8.778 | 32.62 |
+
+Runs that did not reach the published optimum, named: `50v-10` seed 0 (feasible), `50v-10` seed 1 (feasible), `50v-10` seed 2 (feasible), `b1c1s1` seed 0 (feasible), `b1c1s1` seed 1 (feasible), `b1c1s1` seed 2 (feasible), `beasleyC3` seed 0 (feasible), `beasleyC3` seed 1 (feasible), `beasleyC3` seed 2 (feasible), `binkar10_1` seed 0 (feasible), `binkar10_1` seed 1 (feasible), `binkar10_1` seed 2 (feasible), `bppc4-08` seed 0 (feasible), `bppc4-08` seed 1 (feasible), `bppc4-08` seed 2 (feasible), `cost266-UUE` seed 0 (feasible), `cost266-UUE` seed 1 (feasible), `cost266-UUE` seed 2 (feasible), `csched007` seed 0 (time_limit), `csched007` seed 1 (time_limit), `csched007` seed 2 (time_limit), `csched008` seed 0 (feasible), `csched008` seed 1 (time_limit), `csched008` seed 2 (feasible), `cvs16r128-89` seed 0 (feasible), `cvs16r128-89` seed 1 (feasible), `cvs16r128-89` seed 2 (time_limit), `enlight_hard` seed 0 (time_limit), `enlight_hard` seed 1 (time_limit), `enlight_hard` seed 2 (time_limit), `exp-1-500-5-5` seed 0 (feasible), `exp-1-500-5-5` seed 1 (feasible), `exp-1-500-5-5` seed 2 (feasible), `fastxgemm-n2r6s0t2` seed 0 (feasible), `fastxgemm-n2r6s0t2` seed 1 (feasible), `fastxgemm-n2r6s0t2` seed 2 (feasible), `fhnw-binpack4-48` seed 0 (time_limit), `fhnw-binpack4-48` seed 1 (time_limit), `fhnw-binpack4-48` seed 2 (time_limit), `glass4` seed 0 (feasible), `glass4` seed 1 (feasible), `glass4` seed 2 (feasible), `gmu-35-40` seed 0 (feasible), `gmu-35-40` seed 1 (time_limit), `gmu-35-40` seed 2 (time_limit), `gmu-35-50` seed 0 (time_limit), `gmu-35-50` seed 1 (time_limit), `gmu-35-50` seed 2 (time_limit), `graphdraw-domain` seed 0 (feasible), `graphdraw-domain` seed 1 (feasible), `graphdraw-domain` seed 2 (feasible), `ic97_potential` seed 0 (time_limit), `ic97_potential` seed 1 (time_limit), `ic97_potential` seed 2 (time_limit), `icir97_tension` seed 0 (time_limit), `icir97_tension` seed 1 (time_limit), `icir97_tension` seed 2 (time_limit), `lotsize` seed 0 (time_limit), `lotsize` seed 1 (time_limit), `lotsize` seed 2 (time_limit), `mad` seed 0 (feasible), `mad` seed 1 (feasible), `mad` seed 2 (feasible), `markshare2` seed 0 (feasible), `markshare2` seed 1 (feasible), `markshare2` seed 2 (feasible), `mas74` seed 0 (feasible), `mas74` seed 1 (feasible), `mas74` seed 2 (feasible), `mc11` seed 0 (feasible), `mc11` seed 1 (feasible), `mc11` seed 2 (feasible), `mik-250-20-75-4` seed 0 (feasible), `mik-250-20-75-4` seed 1 (feasible), `mik-250-20-75-4` seed 2 (feasible), `milo-v12-6-r2-40-1` seed 0 (feasible), `milo-v12-6-r2-40-1` seed 1 (feasible), `milo-v12-6-r2-40-1` seed 2 (feasible), `n5-3` seed 0 (feasible), `n5-3` seed 1 (feasible), `n5-3` seed 2 (feasible), `neos-2657525-crna` seed 0 (time_limit), `neos-2657525-crna` seed 1 (time_limit), `neos-2657525-crna` seed 2 (time_limit), `neos-3024952-loue` seed 0 (time_limit), `neos-3024952-loue` seed 1 (time_limit), `neos-3024952-loue` seed 2 (time_limit), `neos-3046615-murg` seed 0 (time_limit), `neos-3046615-murg` seed 1 (time_limit), `neos-3046615-murg` seed 2 (time_limit), `neos-3381206-awhea` seed 0 (time_limit), `neos-3381206-awhea` seed 1 (time_limit), `neos-3381206-awhea` seed 2 (feasible), `neos-3627168-kasai` seed 0 (feasible), `neos-3627168-kasai` seed 1 (feasible), `neos-3627168-kasai` seed 2 (feasible), `neos-3754480-nidda` seed 0 (feasible), `neos-3754480-nidda` seed 1 (feasible), `neos-3754480-nidda` seed 2 (feasible), `neos-4338804-snowy` seed 0 (feasible), `neos-4338804-snowy` seed 1 (time_limit), `neos-4338804-snowy` seed 2 (time_limit), `neos-4738912-atrato` seed 0 (feasible), `neos-4738912-atrato` seed 1 (feasible), `neos-4738912-atrato` seed 2 (feasible), `neos-4954672-berkel` seed 0 (feasible), `neos-4954672-berkel` seed 1 (feasible), `neos-4954672-berkel` seed 2 (feasible), `neos-911970` seed 0 (feasible), `neos-911970` seed 1 (feasible), `neos-911970` seed 2 (feasible), `neos17` seed 0 (feasible), `neos17` seed 1 (feasible), `neos17` seed 2 (feasible), `p200x1188c` seed 2 (feasible), `pg` seed 0 (feasible), `pg` seed 1 (feasible), `pg` seed 2 (feasible), `pg5_34` seed 0 (time_limit), `pg5_34` seed 1 (time_limit), `pg5_34` seed 2 (time_limit), `ran14x18-disj-8` seed 0 (feasible), `ran14x18-disj-8` seed 1 (feasible), `ran14x18-disj-8` seed 2 (feasible), `reblock115` seed 0 (time_limit), `reblock115` seed 1 (time_limit), `reblock115` seed 2 (time_limit), `rococoB10-011000` seed 0 (feasible), `rococoB10-011000` seed 1 (feasible), `rococoB10-011000` seed 2 (feasible), `rococoC10-001000` seed 0 (feasible), `rococoC10-001000` seed 1 (feasible), `rococoC10-001000` seed 2 (feasible), `roll3000` seed 0 (time_limit), `roll3000` seed 1 (time_limit), `roll3000` seed 2 (feasible), `supportcase26` seed 0 (feasible), `supportcase26` seed 1 (feasible), `supportcase26` seed 2 (feasible), `timtab1` seed 0 (feasible), `timtab1` seed 1 (feasible), `timtab1` seed 2 (feasible), `tr12-30` seed 0 (feasible), `tr12-30` seed 1 (feasible), `tr12-30` seed 2 (feasible), `uct-subprob` seed 0 (feasible), `uct-subprob` seed 1 (feasible), `uct-subprob` seed 2 (feasible).
+
+Runs reported optimal whose proof the independent verifier rejected, named (counted as proved above, as the solver reported them): `mcsched` seed 0 (relative gap 0.000123), `mcsched` seed 1 (relative gap 0.000123), `mcsched` seed 2 (relative gap 0.000123).
 
 #### A/B: the node LP factor cache (#501)
 
@@ -1514,6 +1579,102 @@ Source CSVs: `bench/results/miplib-506-fj-off-seeds3-bce539f.csv` and `bench/res
 Instances whose matched or proved seed count moved between the legs: `noswot` matched 0->1, proved 0->0.
 
 
+#### A/B: Devex for the node LPs on the seed harness (#792)
+
+Source CSVs: `bench/results/nodepricing-ab-miplib-seeds3-inherit-fef0192.csv` and `bench/results/nodepricing-ab-miplib-seeds3-devex-fef0192.csv`, `mip_node_pricing` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
+
+| leg | runs | matched | proved | sgm time (s, shift 10) | first feasible found | sgm first feasible (s, shift 1) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| off | 90 | 50 | 31 | 27.87 | 87 | 0.586 | 10.77 |
+| on | 90 | 52 | 33 | 27.36 | 86 | 0.522 | 10.10 |
+
+Instances whose matched or proved seed count moved between the legs: `enlight8` matched 3->2, proved 2->2; `markshare_4_0` matched 1->2, proved 0->0; `neos-3611689-kaihu` matched 3->3, proved 1->3; `noswot` matched 1->2, proved 0->0; `pk1` matched 0->1, proved 0->0.
+
+
+#### A/B: the root cut loop on the seed harness (#862)
+
+Source CSVs: `bench/results/rootloop-ab-miplib-seeds3-false-f7cfd57.csv` and `bench/results/rootloop-ab-miplib-seeds3-true-f7cfd57.csv`, `root_cut_loop` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
+
+| leg | runs | matched | proved | sgm time (s, shift 10) | first feasible found | sgm first feasible (s, shift 1) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| off | 90 | 50 | 31 | 27.87 | 87 | 0.583 | 10.76 |
+| on | 90 | 42 | 32 | 25.70 | 84 | 0.859 | 12.91 |
+
+Instances whose matched or proved seed count moved between the legs: `b-ball` matched 3->3, proved 1->2; `ej` matched 3->1, proved 0->0; `enlight8` matched 3->0, proved 2->0; `markshare_4_0` matched 1->0, proved 0->0; `neos-3611689-kaihu` matched 3->3, proved 1->3; `neos5` matched 3->0, proved 0->0; `noswot` matched 1->2, proved 0->0.
+
+
+#### A/B: root restarts on the plateau instances (#418)
+
+Issue #221 measured b-ball, opt1217, rlp1 and noswot holding the published optimum without
+proving it, every open node on one bound: more nodes, cuts and objective integrality did not
+move it.
+(b-ball closed at the root while the root separation loop, #495, was on by default; that
+default is off again since #957, and b-ball stays in the table either way.) The on leg sets `mip_reduced_cost_fixing=true
+mip_restarts=2` (a restart re-solves the root on the bounds reduced-cost fixing tightened),
+the off leg the defaults with `mip_restarts=0`; both off by default until this reads in their
+favour. A restart is triggered only by columns reduced-cost fixing fixed, so the per-run
+restart column below says whether the option did anything at all.
+
+Source CSVs: `bench/results/restarts-ab-miplib-seeds3-off-3e4acc9.csv` and `bench/results/restarts-ab-miplib-seeds3-on-3e4acc9.csv`, `mip_restarts` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
+
+| leg | runs | matched | proved | sgm time (s, shift 10) | first feasible found | sgm first feasible (s, shift 1) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| off | 90 | 50 | 31 | 27.87 | 87 | 0.583 | 10.76 |
+| on | 90 | 50 | 31 | 27.80 | 87 | 0.583 | 10.74 |
+
+Instances whose matched or proved seed count moved between the legs: none.
+
+Runs in the on leg that restarted at least once: **6 of 90**; that split a node on the objective row: **0 of 90**.
+
+| instance | seed | status off | status on | bound off | bound on | bound moved | nodes off | nodes on | restarts on | objective branches on |
+|---|---:|---|---|---:|---:|---|---:|---:|---:|---:|
+| `b-ball` | 0 | optimal | optimal | -1.5 | -1.5 | no | 331 | 331 | 0 | 0 |
+| `b-ball` | 1 | feasible | feasible | -1.76923 | -1.76923 | no | 451020 | 459187 | 0 | 0 |
+| `b-ball` | 2 | feasible | feasible | -1.71429 | -1.71429 | no | 458388 | 463828 | 0 | 0 |
+| `opt1217` | 0 | feasible | feasible | -19 | -19 | no | 258826 | 255456 | 0 | 0 |
+| `opt1217` | 1 | feasible | feasible | -19 | -19 | no | 243501 | 244815 | 0 | 0 |
+| `opt1217` | 2 | feasible | feasible | -19 | -19 | no | 258600 | 252578 | 0 | 0 |
+| `rlp1` | 0 | feasible | feasible | 14 | 14 | no | 318992 | 306487 | 0 | 0 |
+| `rlp1` | 1 | feasible | feasible | 14 | 14 | no | 307477 | 310071 | 0 | 0 |
+| `rlp1` | 2 | feasible | feasible | 14 | 14 | no | 295697 | 300159 | 0 | 0 |
+| `noswot` | 0 | feasible | feasible | -43 | -43 | no | 238941 | 239464 | 0 | 0 |
+| `noswot` | 1 | feasible | feasible | -43 | -43 | no | 253150 | 248705 | 0 | 0 |
+| `noswot` | 2 | feasible | feasible | -43 | -43 | no | 226496 | 225303 | 0 | 0 |
+
+Bound moved towards the published optimum: none. Moved away: none. #418's acceptance, bound movement on at least one of `b-ball`, `opt1217`, `rlp1`, `noswot`, is **not met** by this run.
+
+
+#### A/B: objective branching on the plateau instances (#418)
+
+Source CSVs: `bench/results/objbranch-ab-miplib-seeds3-off-3e4acc9.csv` and `bench/results/objbranch-ab-miplib-seeds3-on-3e4acc9.csv`, `mip_objective_branching` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
+
+| leg | runs | matched | proved | sgm time (s, shift 10) | first feasible found | sgm first feasible (s, shift 1) | mean primal integral (s) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| off | 90 | 47 | 30 | 27.96 | 85 | 0.594 | 11.00 |
+| on | 90 | 45 | 28 | 28.83 | 82 | 0.811 | 11.25 |
+
+Instances whose matched or proved seed count moved between the legs: `enlight8` matched 1->1, proved 1->0; `neos-3611689-kaihu` matched 3->0, proved 1->0; `noswot` matched 0->1, proved 0->0.
+
+Runs in the on leg that restarted at least once: **0 of 90**; that split a node on the objective row: **36 of 90**.
+
+| instance | seed | status off | status on | bound off | bound on | bound moved | nodes off | nodes on | restarts on | objective branches on |
+|---|---:|---|---|---:|---:|---|---:|---:|---:|---:|
+| `b-ball` | 0 | optimal | optimal | -1.5 | -1.5 | no | 331 | 331 | 0 | 0 |
+| `b-ball` | 1 | feasible | feasible | -1.76923 | -1.76923 | no | 358515 | 376046 | 0 | 0 |
+| `b-ball` | 2 | feasible | feasible | -1.71429 | -1.71429 | no | 371536 | 387128 | 0 | 0 |
+| `opt1217` | 0 | feasible | feasible | -19 | -19 | no | 209082 | 194720 | 0 | 15358 |
+| `opt1217` | 1 | feasible | feasible | -19 | -19 | no | 199319 | 159079 | 0 | 13393 |
+| `opt1217` | 2 | feasible | feasible | -19 | -19 | no | 212211 | 140353 | 0 | 11388 |
+| `rlp1` | 0 | feasible | feasible | 14 | 14 | no | 256673 | 240348 | 0 | 10516 |
+| `rlp1` | 1 | feasible | feasible | 14 | 14 | no | 252164 | 207315 | 0 | 33 |
+| `rlp1` | 2 | feasible | feasible | 14 | 14 | no | 244814 | 202446 | 0 | 285 |
+| `noswot` | 0 | feasible | feasible | -43 | -43 | no | 172723 | 163661 | 0 | 21528 |
+| `noswot` | 1 | feasible | feasible | -43 | -43 | no | 178972 | 163023 | 0 | 32059 |
+| `noswot` | 2 | feasible | feasible | -43 | -43 | no | 157978 | 153573 | 0 | 34864 |
+
+Bound moved towards the published optimum: none. Moved away: none. #418's acceptance, bound movement on at least one of `b-ball`, `opt1217`, `rlp1`, `noswot`, is **not met** by this run.
+
+
 ---
 
 ## 2a. MIPLIB 3, the classic set beside MIPLIB 2017 (#761)
@@ -1530,23 +1691,143 @@ The archive holds 65 models; **52** carry a reference and are the instances belo
 
 #### At 60 s
 
-Not yet run. Reproduce with:
+SANKHYA: `bench/results/miplib3-60s-seeds3-f2cf240.csv`, commit `f2cf240`, machine `E2E TIR C3 container, 16 vCPU 29 GB (cgroup limits), AMD EPYC 9555 64-Core Processor host, nothing else running; AMD EPYC 9555 64-Core Processor; 16 cores (cgroup quota; host 256); 30 GiB RAM (cgroup limit; host 1512 GiB); Linux-x86_64`, 1 thread(s), shipped defaults.  
+HiGHS: `bench/results/highs-miplib3-60s-f2cf240.csv`, HiGHS 1.15.1, machine `E2E TIR C3 container, 16 vCPU 29 GB (cgroup limits), AMD EPYC 9555 64-Core Processor host, nothing else running; AMD EPYC 9555 64-Core Processor; 16 cores (cgroup quota; host 256); 30 GiB RAM (cgroup limit; host 1512 GiB); Linux-x86_64`, one thread, 60.0 s.
 
-```
-python bench/runners/fetch_miplib3.py
-python bench/runners/miplib.py --set miplib3 --seeds 3 --time-limit 60
-python bench/runners/compare.py --suite miplib3 --time-limit 60
-```
+**SANKHYA**, 156 runs (52 instances x 3 seeds): **109** reached the published optimum, **95** proved it, **153 of 153** points verified; reached in every seed on 32 of 52 instances, proved in every seed on 28; shifted geometric mean time 16.51 s (shift 10 s, every run that did not prove charged 60 s).
+**HiGHS**, 52 runs: **48** optimal, **47** of them at the published optimum, **48** verified.
+
+| instance | published | reached (seeds) | proved (seeds) | verified | sgm time (s) | HiGHS |
+|---|---:|---:|---:|---:|---:|---|
+| `10teams` | 924 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 17.87 | optimal, matched, verified, 3.1 s |
+| `air03` | 340160 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.96 | optimal, matched, verified, 1.6 s |
+| `air04` | 56137 | 2/3 (0 2) | 1/3 (0) | 3/3 | 59.36 | optimal, matched, verified, 23.4 s |
+| `air05` | 26374 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 37.73 | optimal, matched, verified, 19.9 s |
+| `bell3a` | 878430.32 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 13.74 | optimal, matched, verified, 0.7 s |
+| `bell5` | 8966406.49 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.2 s |
+| `blend2` | 7.598985 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.71 | optimal, matched, verified, 1.4 s |
+| `cap6000` | -2451377 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, NOT matched, verified, 1.0 s |
+| `danoint` | 65.67 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `dcmulti` | 188182 | 1/3 (0) | 1/3 (0) | 3/3 | 28.03 | optimal, matched, verified, 1.3 s |
+| `dsbmip` | -305.19817501 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.97 | optimal, matched, verified, 0.3 s |
+| `egout` | 568.101 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.03 | optimal, matched, verified, 0.0 s |
+| `enigma` | 0.0 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.88 | optimal, matched, verified, 0.1 s |
+| `fast0507` | 174 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `fiber` | 405935.18000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.44 | optimal, matched, verified, 0.5 s |
+| `flugpl` | 1201500 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.05 | optimal, matched, verified, 0.1 s |
+| `gen` | 112313.3627179998 | 2/3 (0 2) | 2/3 (0 2) | 3/3 | 9.20 | optimal, matched, verified, 0.0 s |
+| `gesa2` | 25779856.372 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.24 | optimal, matched, verified, 0.3 s |
+| `gesa2_o` | 25779856.372 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.4 s |
+| `gesa3` | 27991042.648 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 9.81 | optimal, matched, verified, 1.4 s |
+| `gesa3_o` | 27991042.648 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 23.35 | optimal, matched, verified, 2.3 s |
+| `gt2` | 21166.000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.07 | optimal, matched, verified, 0.0 s |
+| `harp2` | -73899798.00 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 12.8 s |
+| `khb05250` | 106940226 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.18 | optimal, matched, verified, 0.2 s |
+| `l152lav` | 4722 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.60 | optimal, matched, verified, 1.9 s |
+| `lseu` | 1120 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.25 | optimal, matched, verified, 0.2 s |
+| `misc06` | 12850.8607 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 9.78 | optimal, matched, verified, 0.2 s |
+| `misc07` | 2810 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 45.1 s |
+| `mitre` | 115155 | 0/3 | 0/3 | - | 60.00 | optimal, matched, verified, 0.8 s |
+| `mod008` | 307 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.06 | optimal, matched, verified, 0.7 s |
+| `mod010` | 6548 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.31 | optimal, matched, verified, 0.5 s |
+| `mod011` | -54558535 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 32.1 s |
+| `modglob` | 20740508 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.3 s |
+| `noswot` | -41.00000885 | 1/3 (0) | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `nw04` | 16862 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 31.8 s |
+| `p0033` | 3089 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.02 | optimal, matched, verified, 0.0 s |
+| `p0201` | 7615 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.57 | optimal, matched, verified, 0.5 s |
+| `p0282` | 258411 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.21 | optimal, matched, verified, 0.1 s |
+| `p0548` | 8691 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.73 | optimal, matched, verified, 0.0 s |
+| `p2756` | 3124 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.3 s |
+| `pk1` | 11.0 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `qiu` | -132.873137 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 51.9 s |
+| `qnet1` | 16029.692681 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 6.18 | optimal, matched, verified, 0.4 s |
+| `qnet1_o` | 16029.692681 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 13.74 | optimal, matched, verified, 0.4 s |
+| `rentacar` | 30356761 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 6.31 | optimal, matched, verified, 3.3 s |
+| `rgn` | 82.1999 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.30 | optimal, matched, verified, 0.1 s |
+| `rout` | 1077.56 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 15.2 s |
+| `set1ch` | 54537.75 | 1/3 (0) | 1/3 (0) | 3/3 | 28.80 | optimal, matched, verified, 0.2 s |
+| `stein27` | 18 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.36 | optimal, matched, verified, 0.4 s |
+| `stein45` | 30 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 50.29 | optimal, matched, verified, 16.3 s |
+| `vpm1` | 20 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.02 | optimal, matched, verified, 0.0 s |
+| `vpm2` | 13.75 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 1.5 s |
+
+SANKHYA runs that did not reach the published optimum, named: `air04` seed 1 (feasible), `cap6000` seed 0 (optimal), `cap6000` seed 1 (optimal), `cap6000` seed 2 (optimal), `danoint` seed 0 (feasible), `danoint` seed 1 (feasible), `danoint` seed 2 (feasible), `dcmulti` seed 1 (optimal), `dcmulti` seed 2 (optimal), `fast0507` seed 0 (feasible), `fast0507` seed 1 (feasible), `fast0507` seed 2 (feasible), `gen` seed 1 (optimal), `gesa2_o` seed 0 (optimal), `gesa2_o` seed 1 (optimal), `gesa2_o` seed 2 (optimal), `gesa3_o` seed 2 (optimal), `harp2` seed 0 (feasible), `harp2` seed 1 (feasible), `harp2` seed 2 (feasible), `misc06` seed 2 (optimal), `mitre` seed 0 (time_limit), `mitre` seed 1 (time_limit), `mitre` seed 2 (time_limit), `mod011` seed 0 (feasible), `mod011` seed 1 (feasible), `mod011` seed 2 (feasible), `modglob` seed 0 (feasible), `modglob` seed 1 (feasible), `modglob` seed 2 (feasible), `noswot` seed 1 (feasible), `noswot` seed 2 (feasible), `nw04` seed 0 (feasible), `nw04` seed 1 (feasible), `nw04` seed 2 (feasible), `p2756` seed 0 (feasible), `p2756` seed 1 (feasible), `p2756` seed 2 (feasible), `pk1` seed 0 (feasible), `pk1` seed 1 (feasible), `pk1` seed 2 (feasible), `qnet1_o` seed 2 (optimal), `rout` seed 0 (feasible), `rout` seed 1 (feasible), `rout` seed 2 (feasible), `set1ch` seed 1 (optimal), `set1ch` seed 2 (optimal).
+
+Reported optimal but rejected by the verifier: none. Reported optimal away from the published optimum: `cap6000` seed 0, `cap6000` seed 1, `cap6000` seed 2, `dcmulti` seed 1, `dcmulti` seed 2, `gen` seed 1, `gesa2_o` seed 0, `gesa2_o` seed 1, `gesa2_o` seed 2, `gesa3_o` seed 2, `misc06` seed 2, `qnet1_o` seed 2, `set1ch` seed 1, `set1ch` seed 2.
+
+HiGHS runs that did not end optimal, matched and verified, named: `cap6000` (optimal, NOT matched, verified, 1.0 s), `danoint` (time_limit, 60.0 s), `fast0507` (time_limit, 60.0 s), `noswot` (time_limit, 60.0 s), `pk1` (time_limit, 60.0 s).
 
 #### At 300 s
 
-Not yet run. Reproduce with:
+SANKHYA: `bench/results/miplib3-300s-seeds3-f2cf240.csv`, commit `f2cf240`, machine `E2E TIR C3 container, 16 vCPU 32 GB (cgroup limits), AMD EPYC 9555 64-Core Processor host, nothing else running; AMD EPYC 9555 64-Core Processor; 16 cores (cgroup quota; host 256); 30 GiB RAM (cgroup limit; host 1512 GiB); Linux-x86_64`, 1 thread(s), shipped defaults.  
+HiGHS: `bench/results/highs-miplib3-300s-f2cf240.csv`, HiGHS 1.15.1, machine `E2E TIR C3 container, 16 vCPU 29 GB (cgroup limits), AMD EPYC 9555 64-Core Processor host, nothing else running; AMD EPYC 9555 64-Core Processor; 16 cores (cgroup quota; host 256); 30 GiB RAM (cgroup limit; host 1512 GiB); Linux-x86_64`, one thread, 300.0 s.
 
-```
-python bench/runners/fetch_miplib3.py
-python bench/runners/miplib.py --set miplib3 --seeds 3 --time-limit 300
-python bench/runners/compare.py --suite miplib3 --time-limit 300
-```
+**The two CSVs name different machines**, so their times are not comparable; the verdicts still are.
+
+**SANKHYA**, 156 runs (52 instances x 3 seeds): **120** reached the published optimum, **113** proved it, **153 of 153** points verified; reached in every seed on 35 of 52 instances, proved in every seed on 33; shifted geometric mean time 34.44 s (shift 10 s, every run that did not prove charged 300 s).
+**HiGHS**, 52 runs: **50** optimal, **49** of them at the published optimum, **50** verified.
+
+| instance | published | reached (seeds) | proved (seeds) | verified | sgm time (s) | HiGHS |
+|---|---:|---:|---:|---:|---:|---|
+| `10teams` | 924 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 18.99 | optimal, matched, verified, 3.1 s |
+| `air03` | 340160 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.21 | optimal, matched, verified, 1.6 s |
+| `air04` | 56137 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 82.24 | optimal, matched, verified, 23.3 s |
+| `air05` | 26374 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 42.46 | optimal, matched, verified, 19.8 s |
+| `bell3a` | 878430.32 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 14.18 | optimal, matched, verified, 0.7 s |
+| `bell5` | 8966406.49 | 3/3 (0 1 2) | 2/3 (1 2) | 3/3 | 170.94 | optimal, matched, verified, 0.2 s |
+| `blend2` | 7.598985 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.79 | optimal, matched, verified, 1.4 s |
+| `cap6000` | -2451377 | 0/3 | 0/3 | 3/3 | 300.00 | optimal, NOT matched, verified, 1.0 s |
+| `danoint` | 65.67 | 1/3 (0) | 0/3 | 3/3 | 300.00 | time_limit, 300.0 s |
+| `dcmulti` | 188182 | 1/3 (0) | 1/3 (0) | 3/3 | 92.66 | optimal, matched, verified, 1.3 s |
+| `dsbmip` | -305.19817501 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.13 | optimal, matched, verified, 0.3 s |
+| `egout` | 568.101 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.03 | optimal, matched, verified, 0.0 s |
+| `enigma` | 0.0 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.89 | optimal, matched, verified, 0.1 s |
+| `fast0507` | 174 | 0/3 | 0/3 | 3/3 | 300.00 | time_limit, 300.1 s |
+| `fiber` | 405935.18000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.54 | optimal, matched, verified, 0.5 s |
+| `flugpl` | 1201500 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.05 | optimal, matched, verified, 0.1 s |
+| `gen` | 112313.3627179998 | 2/3 (0 2) | 2/3 (0 2) | 3/3 | 21.55 | optimal, matched, verified, 0.0 s |
+| `gesa2` | 25779856.372 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.54 | optimal, matched, verified, 0.3 s |
+| `gesa2_o` | 25779856.372 | 0/3 | 0/3 | 3/3 | 300.00 | optimal, matched, verified, 0.4 s |
+| `gesa3` | 27991042.648 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 10.44 | optimal, matched, verified, 1.4 s |
+| `gesa3_o` | 27991042.648 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 45.95 | optimal, matched, verified, 2.3 s |
+| `gt2` | 21166.000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.08 | optimal, matched, verified, 0.0 s |
+| `harp2` | -73899798.00 | 0/3 | 0/3 | 3/3 | 300.00 | optimal, matched, verified, 12.9 s |
+| `khb05250` | 106940226 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.20 | optimal, matched, verified, 0.2 s |
+| `l152lav` | 4722 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.06 | optimal, matched, verified, 1.8 s |
+| `lseu` | 1120 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.26 | optimal, matched, verified, 0.2 s |
+| `misc06` | 12850.8607 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 22.51 | optimal, matched, verified, 0.2 s |
+| `misc07` | 2810 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 107.05 | optimal, matched, verified, 45.3 s |
+| `mitre` | 115155 | 0/3 | 0/3 | - | 300.00 | optimal, matched, verified, 0.9 s |
+| `mod008` | 307 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.09 | optimal, matched, verified, 0.6 s |
+| `mod010` | 6548 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.56 | optimal, matched, verified, 0.5 s |
+| `mod011` | -54558535 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 177.64 | optimal, matched, verified, 32.2 s |
+| `modglob` | 20740508 | 0/3 | 0/3 | 3/3 | 300.00 | optimal, matched, verified, 0.3 s |
+| `noswot` | -41.00000885 | 2/3 (0 2) | 0/3 | 3/3 | 300.00 | optimal, matched, verified, 62.4 s |
+| `nw04` | 16862 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 240.91 | optimal, matched, verified, 31.6 s |
+| `p0033` | 3089 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.02 | optimal, matched, verified, 0.0 s |
+| `p0201` | 7615 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.58 | optimal, matched, verified, 0.5 s |
+| `p0282` | 258411 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.23 | optimal, matched, verified, 0.1 s |
+| `p0548` | 8691 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.93 | optimal, matched, verified, 0.0 s |
+| `p2756` | 3124 | 0/3 | 0/3 | 3/3 | 300.00 | optimal, matched, verified, 0.3 s |
+| `pk1` | 11.0 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 247.18 | optimal, matched, verified, 197.0 s |
+| `qiu` | -132.873137 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 130.33 | optimal, matched, verified, 52.0 s |
+| `qnet1` | 16029.692681 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 6.43 | optimal, matched, verified, 0.4 s |
+| `qnet1_o` | 16029.692681 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 29.33 | optimal, matched, verified, 0.4 s |
+| `rentacar` | 30356761 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 6.57 | optimal, matched, verified, 3.2 s |
+| `rgn` | 82.1999 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.30 | optimal, matched, verified, 0.2 s |
+| `rout` | 1077.56 | 0/3 | 0/3 | 3/3 | 300.00 | optimal, matched, verified, 15.6 s |
+| `set1ch` | 54537.75 | 1/3 (0) | 1/3 (0) | 3/3 | 94.61 | optimal, matched, verified, 0.2 s |
+| `stein27` | 18 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.37 | optimal, matched, verified, 0.4 s |
+| `stein45` | 30 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 58.66 | optimal, matched, verified, 16.3 s |
+| `vpm1` | 20 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.02 | optimal, matched, verified, 0.0 s |
+| `vpm2` | 13.75 | 3/3 (0 1 2) | 0/3 | 3/3 | 300.00 | optimal, matched, verified, 1.5 s |
+
+SANKHYA runs that did not reach the published optimum, named: `cap6000` seed 0 (optimal), `cap6000` seed 1 (optimal), `cap6000` seed 2 (optimal), `danoint` seed 1 (feasible), `danoint` seed 2 (feasible), `dcmulti` seed 1 (optimal), `dcmulti` seed 2 (optimal), `fast0507` seed 0 (feasible), `fast0507` seed 1 (feasible), `fast0507` seed 2 (feasible), `gen` seed 1 (optimal), `gesa2_o` seed 0 (optimal), `gesa2_o` seed 1 (optimal), `gesa2_o` seed 2 (optimal), `gesa3_o` seed 2 (optimal), `harp2` seed 0 (feasible), `harp2` seed 1 (feasible), `harp2` seed 2 (feasible), `misc06` seed 2 (optimal), `mitre` seed 0 (time_limit), `mitre` seed 1 (time_limit), `mitre` seed 2 (time_limit), `modglob` seed 0 (feasible), `modglob` seed 1 (feasible), `modglob` seed 2 (feasible), `noswot` seed 1 (feasible), `p2756` seed 0 (feasible), `p2756` seed 1 (feasible), `p2756` seed 2 (feasible), `pk1` seed 2 (feasible), `qnet1_o` seed 2 (optimal), `rout` seed 0 (feasible), `rout` seed 1 (feasible), `rout` seed 2 (feasible), `set1ch` seed 1 (optimal), `set1ch` seed 2 (optimal).
+
+Reported optimal but rejected by the verifier: none. Reported optimal away from the published optimum: `cap6000` seed 0, `cap6000` seed 1, `cap6000` seed 2, `dcmulti` seed 1, `dcmulti` seed 2, `gen` seed 1, `gesa2_o` seed 0, `gesa2_o` seed 1, `gesa2_o` seed 2, `gesa3_o` seed 2, `misc06` seed 2, `qnet1_o` seed 2, `set1ch` seed 1, `set1ch` seed 2.
+
+HiGHS runs that did not end optimal, matched and verified, named: `cap6000` (optimal, NOT matched, verified, 1.0 s), `danoint` (time_limit, 300.0 s), `fast0507` (time_limit, 300.1 s).
 
 ---
 
@@ -1875,7 +2156,538 @@ quadratically constrained instances too, fetched and converted to QPS (integer m
 `QCMATRIX` rows included) by `bench/runners/fetch_qplib_all.py`, each conversion checked at
 QPLIB's published point, then solved by `bench/runners/qplib_all.py` under the CLI's defaults.
 
-Not yet run: no `bench/results/qplib-all-<commit>.csv`. Reproduce with
+From `bench/results/qplib-all-8860d2a.csv`: commit `8860d2a`, E2E TIR C3 container, 16 vCPU 29 GB (cgroup limits), AMD EPYC 9555 64-Core Processor host, nothing else running; AMD EPYC 9555 64-Core Processor; 256 cores; 1512 GiB RAM; Linux-x86_64, 60 s per instance, 1 instance(s) at a time. Default options: no engine chosen, no `nonconvex=global`, so this is what the reader and the dispatcher do on their own.
+
+| | instances |
+|---|---:|
+| in the run | 453 |
+| read OK | 169 |
+| refused (any reason) | 416 |
+| solved (status optimal) | 11 |
+| matched QPLIB's objective | 11 |
+| verified by `tools/verify_solution.py` | 31 |
+| better than QPLIB's objective by more than the tolerance, point verified | 1 |
+| a better objective at a point the verifier did not accept (proves nothing) | 2 |
+| point rejected by the verifier | 6 |
+
+Matched means optimal and |ours - ref| / max(1, |ref|) within 1e-6 for a continuous model, and within 1e-4 (`kMipRelativeGap`, the gap branch and bound stops at) for a model with integer columns. QPLIB's value is a best known point (`qplib.solu`), not always a proven optimum.
+
+**Refusals, by reason.**
+
+| reason | instances |
+|---|---:|
+| nonconvex objective, refused by the engine's convexity test | 132 |
+| quadratic constraints, refused by the reader without `--option nonconvex=global` | 284 |
+
+**By engine** (the dispatcher's `algorithm`, for every model it read).
+
+| engine | instances | refused | solved | matched | verified |
+|---|---:|---:|---:|---:|---:|
+| branch-and-bound | 144 | 126 | 1 | 1 | 18 |
+| qp-condat-vu | 2 | 0 | 1 | 1 | 1 |
+| qp-ipm | 23 | 6 | 9 | 9 | 12 |
+
+**By QPLIB class** (doc.html's O V C letters).
+
+| class | instances | read | refused | solved | matched |
+|---|---:|---:|---:|---:|---:|
+| CBL | 5 | 5 | 0 | 1 | 1 |
+| CCB | 3 | 3 | 0 | 3 | 3 |
+| CCL | 5 | 5 | 0 | 3 | 3 |
+| CCQ | 4 | 0 | 4 | 0 | 0 |
+| CML | 1 | 1 | 0 | 0 | 0 |
+| CMQ | 6 | 0 | 6 | 0 | 0 |
+| DCL | 11 | 11 | 0 | 4 | 4 |
+| DCQ | 7 | 0 | 7 | 0 | 0 |
+| DML | 11 | 11 | 0 | 0 | 0 |
+| LBQ | 9 | 0 | 9 | 0 | 0 |
+| LCD | 13 | 0 | 13 | 0 | 0 |
+| LCQ | 52 | 0 | 52 | 0 | 0 |
+| LGQ | 3 | 0 | 3 | 0 | 0 |
+| LIQ | 2 | 0 | 2 | 0 | 0 |
+| LMC | 12 | 0 | 12 | 0 | 0 |
+| LMD | 2 | 0 | 2 | 0 | 0 |
+| LMQ | 134 | 0 | 134 | 0 | 0 |
+| QBL | 91 | 91 | 91 | 0 | 0 |
+| QBN | 23 | 23 | 23 | 0 | 0 |
+| QBQ | 5 | 0 | 5 | 0 | 0 |
+| QCC | 2 | 0 | 2 | 0 | 0 |
+| QCD | 1 | 0 | 1 | 0 | 0 |
+| QCL | 6 | 6 | 6 | 0 | 0 |
+| QCQ | 30 | 0 | 30 | 0 | 0 |
+| QGQ | 1 | 0 | 1 | 0 | 0 |
+| QIL | 2 | 2 | 1 | 0 | 0 |
+| QML | 11 | 11 | 11 | 0 | 0 |
+| QMQ | 1 | 0 | 1 | 0 | 0 |
+
+**Named, because each is a bug until shown otherwise.**
+
+- Better than the reference at a verified point: `QPLIB_10038`.
+- Point rejected by the verifier: `QPLIB_10034`, `QPLIB_8500`, `QPLIB_8547`, `QPLIB_8559`, `QPLIB_8567`, `QPLIB_8602`.
+- Reader error, crash or hang: none.
+- Optimal but not matching the reference: none.
+
+<details><summary>Every instance</summary>
+
+| instance | class | read | engine | refusal | status | solved | ours | reference | rel gap | matched | verified | time (s) |
+|---|---|---|---|---|---|---|---:|---:|---:|---|---|---:|
+| QPLIB_0018 | QCL | yes | qp-ipm | nonconvex | model_error | no | - | -6.386014982 | - | no | - | 0.00 |
+| QPLIB_0031 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | 15.38637379 | - | no | - | 0.00 |
+| QPLIB_0032 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | 10.12639121 | - | no | - | 0.00 |
+| QPLIB_0067 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -110942.0 | - | no | - | 0.00 |
+| QPLIB_0343 | QCL | yes | qp-ipm | nonconvex | model_error | no | - | -6.386014982 | - | no | - | 0.00 |
+| QPLIB_0633 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 79.56070622 | - | no | - | 0.00 |
+| QPLIB_0678 | LMQ | no | - | quadratic_constraints | read_error | no | - | 48000000.0 | - | no | - | 0.02 |
+| QPLIB_0681 | LMQ | no | - | quadratic_constraints | read_error | no | - | 45.24444817 | - | no | - | 0.00 |
+| QPLIB_0682 | LMQ | no | - | quadratic_constraints | read_error | no | - | 39.6096563 | - | no | - | 0.00 |
+| QPLIB_0684 | LMQ | no | - | quadratic_constraints | read_error | no | - | 9.2266 | - | no | - | 0.00 |
+| QPLIB_0685 | LMQ | no | - | quadratic_constraints | read_error | no | - | - | - | - | - | 0.00 |
+| QPLIB_0686 | LMQ | no | - | quadratic_constraints | read_error | no | - | - | - | - | - | 0.01 |
+| QPLIB_0687 | LMQ | no | - | quadratic_constraints | read_error | no | - | - | - | - | - | 0.01 |
+| QPLIB_0688 | LMQ | no | - | quadratic_constraints | read_error | no | - | - | - | - | - | 0.02 |
+| QPLIB_0689 | LMQ | no | - | quadratic_constraints | read_error | no | - | 115.0613338 | - | no | - | 0.01 |
+| QPLIB_0690 | LMQ | no | - | quadratic_constraints | read_error | no | - | 226.49 | - | no | - | 0.11 |
+| QPLIB_0696 | LMQ | no | - | quadratic_constraints | read_error | no | - | 1086187.137 | - | no | - | 0.00 |
+| QPLIB_0698 | LMQ | no | - | quadratic_constraints | read_error | no | - | 1086187.137 | - | no | - | 0.00 |
+| QPLIB_0752 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 24071.0 | - | no | - | 0.00 |
+| QPLIB_0911 | QCQ | no | - | quadratic_constraints | read_error | no | - | -32.14755832 | - | no | - | 0.00 |
+| QPLIB_0975 | QCQ | no | - | quadratic_constraints | read_error | no | - | -37.85351052 | - | no | - | 0.00 |
+| QPLIB_10001 | LMC | no | - | quadratic_constraints | read_error | no | - | -25766.82 | - | no | - | 0.00 |
+| QPLIB_10002 | LMC | no | - | quadratic_constraints | read_error | no | - | -21931.57 | - | no | - | 0.00 |
+| QPLIB_10003 | LMC | no | - | quadratic_constraints | read_error | no | - | -21944.87 | - | no | - | 0.00 |
+| QPLIB_10004 | LMC | no | - | quadratic_constraints | read_error | no | - | -2588.21 | - | no | - | 0.00 |
+| QPLIB_10005 | LMC | no | - | quadratic_constraints | read_error | no | - | -9820.91 | - | no | - | 0.00 |
+| QPLIB_10006 | LMC | no | - | quadratic_constraints | read_error | no | - | -12527.2 | - | no | - | 0.00 |
+| QPLIB_10007 | LMC | no | - | quadratic_constraints | read_error | no | - | -17869.72 | - | no | - | 0.00 |
+| QPLIB_10008 | LMC | no | - | quadratic_constraints | read_error | no | - | -23176.19 | - | no | - | 0.00 |
+| QPLIB_10009 | LMC | no | - | quadratic_constraints | read_error | no | - | -23176.19 | - | no | - | 0.00 |
+| QPLIB_10010 | LMC | no | - | quadratic_constraints | read_error | no | - | -23003.31 | - | no | - | 0.00 |
+| QPLIB_10011 | LMC | no | - | quadratic_constraints | read_error | no | - | -23176.19 | - | no | - | 0.00 |
+| QPLIB_10012 | LMC | no | - | quadratic_constraints | read_error | no | - | -23176.19 | - | no | - | 0.00 |
+| QPLIB_10013 | LMQ | no | - | quadratic_constraints | read_error | no | - | 27642056.81 | - | no | - | 0.07 |
+| QPLIB_10014 | LMQ | no | - | quadratic_constraints | read_error | no | - | 25579413.86 | - | no | - | 0.06 |
+| QPLIB_10015 | LMQ | no | - | quadratic_constraints | read_error | no | - | 27069722.86 | - | no | - | 0.06 |
+| QPLIB_10016 | LMQ | no | - | quadratic_constraints | read_error | no | - | 29934289.13 | - | no | - | 0.06 |
+| QPLIB_10017 | LMQ | no | - | quadratic_constraints | read_error | no | - | 31154937.63 | - | no | - | 0.09 |
+| QPLIB_10018 | LMQ | no | - | quadratic_constraints | read_error | no | - | 34222560.14 | - | no | - | 0.09 |
+| QPLIB_10019 | LMQ | no | - | quadratic_constraints | read_error | no | - | 40389511.78 | - | no | - | 0.08 |
+| QPLIB_10020 | LMQ | no | - | quadratic_constraints | read_error | no | - | 33161690.23 | - | no | - | 0.08 |
+| QPLIB_10021 | LMQ | no | - | quadratic_constraints | read_error | no | - | 305256.2943 | - | no | - | 0.02 |
+| QPLIB_10022 | LMQ | no | - | quadratic_constraints | read_error | no | - | 1070374.161 | - | no | - | 0.02 |
+| QPLIB_10023 | LMQ | no | - | quadratic_constraints | read_error | no | - | 721348.9732 | - | no | - | 0.01 |
+| QPLIB_10024 | LMQ | no | - | quadratic_constraints | read_error | no | - | 115311.7109 | - | no | - | 0.02 |
+| QPLIB_10025 | CMQ | no | - | quadratic_constraints | read_error | no | - | 128.9160937 | - | no | - | 0.01 |
+| QPLIB_10026 | CMQ | no | - | quadratic_constraints | read_error | no | - | 143.8460104 | - | no | - | 0.02 |
+| QPLIB_10027 | CMQ | no | - | quadratic_constraints | read_error | no | - | 130.5620185 | - | no | - | 0.02 |
+| QPLIB_10028 | CMQ | no | - | quadratic_constraints | read_error | no | - | 125.061293 | - | no | - | 0.02 |
+| QPLIB_10029 | CMQ | no | - | quadratic_constraints | read_error | no | - | 133.9004219 | - | no | - | 0.01 |
+| QPLIB_10030 | LMQ | no | - | quadratic_constraints | read_error | no | - | 14509419100.0 | - | no | - | 0.01 |
+| QPLIB_10031 | LMQ | no | - | quadratic_constraints | read_error | no | - | 14426128900.0 | - | no | - | 0.01 |
+| QPLIB_10032 | LMQ | no | - | quadratic_constraints | read_error | no | - | 14465997920.0 | - | no | - | 0.01 |
+| QPLIB_10033 | LMQ | no | - | quadratic_constraints | read_error | no | - | 14487197400.0 | - | no | - | 0.01 |
+| QPLIB_10034 | DCL | yes | qp-ipm | - | time_limit | no | -0.06440278307323384 | -0.06601017605 | 0.0016073929767661532 | no | no | 60.13 |
+| QPLIB_10035 | LCQ | no | - | quadratic_constraints | read_error | no | - | 0.0005420935803 | - | no | - | 0.09 |
+| QPLIB_10036 | LCQ | no | - | quadratic_constraints | read_error | no | - | 0.06666666666 | - | no | - | 0.09 |
+| QPLIB_10037 | LCQ | no | - | quadratic_constraints | read_error | no | - | 0.06637131601 | - | no | - | 0.11 |
+| QPLIB_10038 | DCL | yes | qp-ipm | - | time_limit | no | -0.050066651606364025 | 0.0 | 0.050066651606364025 | no | yes | 60.70 |
+| QPLIB_10039 | LCQ | no | - | quadratic_constraints | read_error | no | - | 2.316338609 | - | no | - | 0.04 |
+| QPLIB_10040 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10041 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10042 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -20.8819262 | - | no | - | 0.01 |
+| QPLIB_10043 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10044 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -7.868866549 | - | no | - | 0.01 |
+| QPLIB_10045 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10046 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.7127002361 | - | no | - | 0.01 |
+| QPLIB_10047 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10048 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -13.56267356 | - | no | - | 0.01 |
+| QPLIB_10049 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10050 | CBL | yes | branch-and-bound | - | iteration_limit | no | inf | -25.69766163 | inf | no | yes | 48.16 |
+| QPLIB_10051 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10052 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -11.81057614 | - | no | - | 0.01 |
+| QPLIB_10053 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10054 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -10.19706381 | - | no | - | 0.01 |
+| QPLIB_10055 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -1.258548474 | - | no | - | 0.01 |
+| QPLIB_10056 | CBL | yes | branch-and-bound | - | time_limit | no | inf | -33.85678866 | inf | no | yes | 60.01 |
+| QPLIB_10057 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10058 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -3.566525619 | - | no | - | 0.01 |
+| QPLIB_10059 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10060 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10061 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -23.99855941 | - | no | - | 0.01 |
+| QPLIB_10062 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10063 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -42.51597243 | - | no | - | 0.01 |
+| QPLIB_10064 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10065 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -29.82242097 | - | no | - | 0.01 |
+| QPLIB_10066 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -32.97988603 | - | no | - | 0.01 |
+| QPLIB_10067 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -31.56870096 | - | no | - | 0.01 |
+| QPLIB_10068 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -31.6396972 | - | no | - | 0.01 |
+| QPLIB_10069 | CBL | yes | branch-and-bound | - | optimal | yes | 0.0 | -0.0 | 0.0 | yes | yes | 1.22 |
+| QPLIB_10070 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -25.33284987 | - | no | - | 0.01 |
+| QPLIB_10071 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.01 |
+| QPLIB_10072 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.00 |
+| QPLIB_10073 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.00 |
+| QPLIB_10074 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.00 |
+| QPLIB_1055 | QCQ | no | - | quadratic_constraints | read_error | no | - | -33.03702314 | - | no | - | 0.00 |
+| QPLIB_1143 | QCQ | no | - | quadratic_constraints | read_error | no | - | -57.24667411 | - | no | - | 0.00 |
+| QPLIB_1157 | QCQ | no | - | quadratic_constraints | read_error | no | - | -10.94820362 | - | no | - | 0.00 |
+| QPLIB_1353 | QCQ | no | - | quadratic_constraints | read_error | no | - | -7.714162166 | - | no | - | 0.00 |
+| QPLIB_1423 | QCQ | no | - | quadratic_constraints | read_error | no | - | -14.96746772 | - | no | - | 0.00 |
+| QPLIB_1437 | QCQ | no | - | quadratic_constraints | read_error | no | - | -7.789172855 | - | no | - | 0.00 |
+| QPLIB_1451 | QCQ | no | - | quadratic_constraints | read_error | no | - | -87.5764866 | - | no | - | 0.00 |
+| QPLIB_1493 | QCQ | no | - | quadratic_constraints | read_error | no | - | -43.16043152 | - | no | - | 0.00 |
+| QPLIB_1507 | QCQ | no | - | quadratic_constraints | read_error | no | - | -8.301376966 | - | no | - | 0.00 |
+| QPLIB_1535 | QCQ | no | - | quadratic_constraints | read_error | no | - | -11.5861351 | - | no | - | 0.00 |
+| QPLIB_1619 | QCQ | no | - | quadratic_constraints | read_error | no | - | -9.217302263 | - | no | - | 0.00 |
+| QPLIB_1661 | QCQ | no | - | quadratic_constraints | read_error | no | - | -15.95489773 | - | no | - | 0.00 |
+| QPLIB_1675 | QCQ | no | - | quadratic_constraints | read_error | no | - | -75.66868248 | - | no | - | 0.00 |
+| QPLIB_1703 | QCQ | no | - | quadratic_constraints | read_error | no | - | -132.8020247 | - | no | - | 0.00 |
+| QPLIB_1745 | QCQ | no | - | quadratic_constraints | read_error | no | - | -72.37658976 | - | no | - | 0.00 |
+| QPLIB_1773 | QCQ | no | - | quadratic_constraints | read_error | no | - | -14.64186129 | - | no | - | 0.00 |
+| QPLIB_1886 | QCQ | no | - | quadratic_constraints | read_error | no | - | -78.67156135 | - | no | - | 0.00 |
+| QPLIB_1913 | QCQ | no | - | quadratic_constraints | read_error | no | - | -52.1084813 | - | no | - | 0.00 |
+| QPLIB_1922 | QCQ | no | - | quadratic_constraints | read_error | no | - | -35.9505868 | - | no | - | 0.00 |
+| QPLIB_1931 | QCQ | no | - | quadratic_constraints | read_error | no | - | -55.70887522 | - | no | - | 0.00 |
+| QPLIB_1940 | QCQ | no | - | quadratic_constraints | read_error | no | - | -38.31010813 | - | no | - | 0.00 |
+| QPLIB_1967 | QCQ | no | - | quadratic_constraints | read_error | no | - | -107.5813416 | - | no | - | 0.00 |
+| QPLIB_1976 | QBQ | no | - | quadratic_constraints | read_error | no | - | -9594.0 | - | no | - | 0.00 |
+| QPLIB_2017 | QBQ | no | - | quadratic_constraints | read_error | no | - | -22984.0 | - | no | - | 0.00 |
+| QPLIB_2022 | QBQ | no | - | quadratic_constraints | read_error | no | - | -22747.5 | - | no | - | 0.00 |
+| QPLIB_2029 | QBQ | no | - | quadratic_constraints | read_error | no | - | -34704.0 | - | no | - | 0.00 |
+| QPLIB_2036 | QBQ | no | - | quadratic_constraints | read_error | no | - | -30820.0 | - | no | - | 0.00 |
+| QPLIB_2047 | LBQ | no | - | quadratic_constraints | read_error | no | - | 1182604.5 | - | no | - | 0.00 |
+| QPLIB_2055 | LBQ | no | - | quadratic_constraints | read_error | no | - | 3389110.0 | - | no | - | 0.00 |
+| QPLIB_2060 | LBQ | no | - | quadratic_constraints | read_error | no | - | 2528144.0 | - | no | - | 0.00 |
+| QPLIB_2067 | LBQ | no | - | quadratic_constraints | read_error | no | - | 3311060.0 | - | no | - | 0.00 |
+| QPLIB_2073 | LBQ | no | - | quadratic_constraints | read_error | no | - | 7600750.0 | - | no | - | 0.00 |
+| QPLIB_2077 | LBQ | no | - | quadratic_constraints | read_error | no | - | 2373966.0 | - | no | - | 0.00 |
+| QPLIB_2085 | LBQ | no | - | quadratic_constraints | read_error | no | - | 7034580.0 | - | no | - | 0.01 |
+| QPLIB_2087 | LBQ | no | - | quadratic_constraints | read_error | no | - | 3312579.0 | - | no | - | 0.01 |
+| QPLIB_2096 | LBQ | no | - | quadratic_constraints | read_error | no | - | 7064664.0 | - | no | - | 0.01 |
+| QPLIB_2165 | LMQ | no | - | quadratic_constraints | read_error | no | - | 11.0 | - | no | - | 0.00 |
+| QPLIB_2166 | LMQ | no | - | quadratic_constraints | read_error | no | - | 83.0 | - | no | - | 0.00 |
+| QPLIB_2167 | LMQ | no | - | quadratic_constraints | read_error | no | - | 6.0 | - | no | - | 0.00 |
+| QPLIB_2168 | LMQ | no | - | quadratic_constraints | read_error | no | - | 36.0 | - | no | - | 0.00 |
+| QPLIB_2169 | LMQ | no | - | quadratic_constraints | read_error | no | - | 29.0 | - | no | - | 0.00 |
+| QPLIB_2170 | LMQ | no | - | quadratic_constraints | read_error | no | - | 6.0 | - | no | - | 0.00 |
+| QPLIB_2171 | LMQ | no | - | quadratic_constraints | read_error | no | - | 25.0 | - | no | - | 0.00 |
+| QPLIB_2173 | LMQ | no | - | quadratic_constraints | read_error | no | - | 11.0 | - | no | - | 0.00 |
+| QPLIB_2174 | LMQ | no | - | quadratic_constraints | read_error | no | - | 147.0 | - | no | - | 0.00 |
+| QPLIB_2181 | LMQ | no | - | quadratic_constraints | read_error | no | - | 22.0 | - | no | - | 0.00 |
+| QPLIB_2187 | LMQ | no | - | quadratic_constraints | read_error | no | - | 13.0 | - | no | - | 0.00 |
+| QPLIB_2192 | LMQ | no | - | quadratic_constraints | read_error | no | - | 10.0 | - | no | - | 0.00 |
+| QPLIB_2195 | LMQ | no | - | quadratic_constraints | read_error | no | - | 9.0 | - | no | - | 0.00 |
+| QPLIB_2202 | LMQ | no | - | quadratic_constraints | read_error | no | - | 30.0 | - | no | - | 0.00 |
+| QPLIB_2203 | LMQ | no | - | quadratic_constraints | read_error | no | - | 33.0 | - | no | - | 0.00 |
+| QPLIB_2204 | LMQ | no | - | quadratic_constraints | read_error | no | - | 38.0 | - | no | - | 0.00 |
+| QPLIB_2205 | LMQ | no | - | quadratic_constraints | read_error | no | - | 86.0 | - | no | - | 0.00 |
+| QPLIB_2206 | LMQ | no | - | quadratic_constraints | read_error | no | - | 13.0 | - | no | - | 0.00 |
+| QPLIB_2315 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -29432.0 | - | no | - | 0.03 |
+| QPLIB_2353 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | -1674.0 | - | no | - | 0.01 |
+| QPLIB_2357 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -647.0 | - | no | - | 0.01 |
+| QPLIB_2359 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -648.0 | - | no | - | 0.01 |
+| QPLIB_2416 | LCQ | no | - | quadratic_constraints | read_error | no | - | 9.988706875 | - | no | - | 0.00 |
+| QPLIB_2430 | LCQ | no | - | quadratic_constraints | read_error | no | - | -3.256119092 | - | no | - | 0.00 |
+| QPLIB_2445 | LCQ | no | - | quadratic_constraints | read_error | no | - | 323.5051042 | - | no | - | 0.00 |
+| QPLIB_2456 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.9449662766 | - | no | - | 0.02 |
+| QPLIB_2468 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.9364048895 | - | no | - | 0.05 |
+| QPLIB_2480 | LCQ | no | - | quadratic_constraints | read_error | no | - | -4.27849041 | - | no | - | 0.00 |
+| QPLIB_2482 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.9681989608 | - | no | - | 0.00 |
+| QPLIB_2483 | LCQ | no | - | quadratic_constraints | read_error | no | - | 1812.170327 | - | no | - | 0.00 |
+| QPLIB_2492 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 2724.0 | - | no | - | 0.01 |
+| QPLIB_2505 | LCQ | no | - | quadratic_constraints | read_error | no | - | 1564.957983 | - | no | - | 0.00 |
+| QPLIB_2512 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 135028.0 | - | no | - | 0.00 |
+| QPLIB_2519 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.9511095024 | - | no | - | 0.01 |
+| QPLIB_2540 | LCQ | no | - | quadratic_constraints | read_error | no | - | 124.3594463 | - | no | - | 0.00 |
+| QPLIB_2546 | CCQ | no | - | quadratic_constraints | read_error | no | - | -8668213.409 | - | no | - | 0.00 |
+| QPLIB_2590 | LCQ | no | - | quadratic_constraints | read_error | no | - | 10.93834722 | - | no | - | 0.00 |
+| QPLIB_2626 | LCD | no | - | quadratic_constraints | read_error | no | - | -6.382103498 | - | no | - | 0.04 |
+| QPLIB_2635 | LCQ | no | - | quadratic_constraints | read_error | no | - | 75.10582011 | - | no | - | 0.00 |
+| QPLIB_2650 | LCQ | no | - | quadratic_constraints | read_error | no | - | 5.316106579 | - | no | - | 0.00 |
+| QPLIB_2658 | LCQ | no | - | quadratic_constraints | read_error | no | - | 7.164500275 | - | no | - | 0.00 |
+| QPLIB_2676 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.9670769923 | - | no | - | 0.01 |
+| QPLIB_2693 | LCQ | no | - | quadratic_constraints | read_error | no | - | 5.783005108 | - | no | - | 0.00 |
+| QPLIB_2696 | QCQ | no | - | quadratic_constraints | read_error | no | - | -38011.57283 | - | no | - | 0.01 |
+| QPLIB_2698 | LCQ | no | - | quadratic_constraints | read_error | no | - | 1201.038462 | - | no | - | 0.00 |
+| QPLIB_2702 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | 2814.190749 | - | no | - | 0.00 |
+| QPLIB_2703 | LCQ | no | - | quadratic_constraints | read_error | no | - | -4.275658867 | - | no | - | 0.00 |
+| QPLIB_2707 | LCQ | no | - | quadratic_constraints | read_error | no | - | 6.340367535 | - | no | - | 0.00 |
+| QPLIB_2708 | LMQ | no | - | quadratic_constraints | read_error | no | - | 1033013.037 | - | no | - | 0.00 |
+| QPLIB_2712 | QCL | yes | qp-ipm | nonconvex | model_error | no | - | 0.01286883278 | - | no | - | 0.01 |
+| QPLIB_2714 | LCQ | no | - | quadratic_constraints | read_error | no | - | 1.119122703 | - | no | - | 0.01 |
+| QPLIB_2733 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 5358.0 | - | no | - | 0.01 |
+| QPLIB_2738 | LCQ | no | - | quadratic_constraints | read_error | no | - | -4.284146268 | - | no | - | 0.00 |
+| QPLIB_2758 | LCQ | no | - | quadratic_constraints | read_error | no | - | 2127.115385 | - | no | - | 0.00 |
+| QPLIB_2761 | QCL | yes | qp-ipm | nonconvex | model_error | no | - | 0.001048529199 | - | no | - | 0.04 |
+| QPLIB_2784 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.9460284722 | - | no | - | 0.01 |
+| QPLIB_2819 | LCQ | no | - | quadratic_constraints | read_error | no | - | 797.9771512 | - | no | - | 0.00 |
+| QPLIB_2823 | LCQ | no | - | quadratic_constraints | read_error | no | - | 6.295168217 | - | no | - | 0.00 |
+| QPLIB_2834 | LCQ | no | - | quadratic_constraints | read_error | no | - | 365.7836065 | - | no | - | 0.00 |
+| QPLIB_2862 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.931383145 | - | no | - | 0.07 |
+| QPLIB_2880 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 1172056.0 | - | no | - | 0.05 |
+| QPLIB_2881 | LCQ | no | - | quadratic_constraints | read_error | no | - | 0.03090042153 | - | no | - | 0.00 |
+| QPLIB_2882 | LMQ | no | - | quadratic_constraints | read_error | no | - | 22.38189652 | - | no | - | 0.00 |
+| QPLIB_2894 | LCQ | no | - | quadratic_constraints | read_error | no | - | 4.999875265 | - | no | - | 0.00 |
+| QPLIB_2935 | LMQ | no | - | quadratic_constraints | read_error | no | - | 23.46428571 | - | no | - | 0.00 |
+| QPLIB_2957 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 3596.0 | - | no | - | 0.02 |
+| QPLIB_2958 | LMQ | no | - | quadratic_constraints | read_error | no | - | 131.6531381 | - | no | - | 0.00 |
+| QPLIB_2967 | QCC | no | - | quadratic_constraints | read_error | no | - | 10.92820323 | - | no | - | 0.00 |
+| QPLIB_2981 | CCQ | no | - | quadratic_constraints | read_error | no | - | -8668219.079 | - | no | - | 0.00 |
+| QPLIB_2987 | LCQ | no | - | quadratic_constraints | read_error | no | - | 513.0008681 | - | no | - | 0.00 |
+| QPLIB_2993 | LCQ | no | - | quadratic_constraints | read_error | no | - | 109.401405 | - | no | - | 0.00 |
+| QPLIB_3029 | LCD | no | - | quadratic_constraints | read_error | no | - | -6.295315542 | - | no | - | 0.01 |
+| QPLIB_3034 | LCQ | no | - | quadratic_constraints | read_error | no | - | 681.4104707 | - | no | - | 0.00 |
+| QPLIB_3049 | QCQ | no | - | quadratic_constraints | read_error | no | - | -38011.57283 | - | no | - | 0.01 |
+| QPLIB_3060 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | -128.9348188 | - | no | - | 0.00 |
+| QPLIB_3080 | CCQ | no | - | quadratic_constraints | read_error | no | - | -8668219.095 | - | no | - | 0.01 |
+| QPLIB_3083 | LCQ | no | - | quadratic_constraints | read_error | no | - | 1358.663378 | - | no | - | 0.00 |
+| QPLIB_3088 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.9460285027 | - | no | - | 0.01 |
+| QPLIB_3089 | LCQ | no | - | quadratic_constraints | read_error | no | - | 312.9215405 | - | no | - | 0.00 |
+| QPLIB_3105 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.9378032911 | - | no | - | 0.04 |
+| QPLIB_3120 | LCQ | no | - | quadratic_constraints | read_error | no | - | 1285.005897 | - | no | - | 0.00 |
+| QPLIB_3122 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | -48603430420.0 | - | no | - | 0.08 |
+| QPLIB_3147 | LCQ | no | - | quadratic_constraints | read_error | no | - | 565.3430361 | - | no | - | 0.00 |
+| QPLIB_3170 | LCQ | no | - | quadratic_constraints | read_error | no | - | 638.7167531 | - | no | - | 0.00 |
+| QPLIB_3177 | LCQ | no | - | quadratic_constraints | read_error | no | - | -4.274219874 | - | no | - | 0.00 |
+| QPLIB_3181 | LMQ | no | - | quadratic_constraints | read_error | no | - | 381396.6032 | - | no | - | 0.00 |
+| QPLIB_3185 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.9350528778 | - | no | - | 0.03 |
+| QPLIB_3192 | LCQ | no | - | quadratic_constraints | read_error | no | - | 783.9509681 | - | no | - | 0.00 |
+| QPLIB_3225 | LCQ | no | - | quadratic_constraints | read_error | no | - | 511.5267124 | - | no | - | 0.00 |
+| QPLIB_3240 | LCQ | no | - | quadratic_constraints | read_error | no | - | 1201.038462 | - | no | - | 0.00 |
+| QPLIB_3247 | LCQ | no | - | quadratic_constraints | read_error | no | - | 0.01223092249 | - | no | - | 0.01 |
+| QPLIB_3279 | LMQ | no | - | quadratic_constraints | read_error | no | - | 873535.3578 | - | no | - | 0.00 |
+| QPLIB_3297 | CCQ | no | - | quadratic_constraints | read_error | no | - | -8668219.094 | - | no | - | 0.01 |
+| QPLIB_3307 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 1240.0 | - | no | - | 0.01 |
+| QPLIB_3312 | LCD | no | - | quadratic_constraints | read_error | no | - | -0.9332596231 | - | no | - | 0.09 |
+| QPLIB_3318 | LCQ | no | - | quadratic_constraints | read_error | no | - | 9.945287281 | - | no | - | 0.00 |
+| QPLIB_3326 | QCQ | no | - | quadratic_constraints | read_error | no | - | -38011.57283 | - | no | - | 0.00 |
+| QPLIB_3334 | LCQ | no | - | quadratic_constraints | read_error | no | - | 744.0833799 | - | no | - | 0.00 |
+| QPLIB_3337 | LCQ | no | - | quadratic_constraints | read_error | no | - | -100000000.0 | - | no | - | 0.00 |
+| QPLIB_3338 | LCQ | no | - | quadratic_constraints | read_error | no | - | 662.8070384 | - | no | - | 0.00 |
+| QPLIB_3347 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 3818879.0 | - | no | - | 0.07 |
+| QPLIB_3358 | LCQ | no | - | quadratic_constraints | read_error | no | - | 2.848720213 | - | no | - | 0.00 |
+| QPLIB_3361 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 88700.0 | - | no | - | 0.06 |
+| QPLIB_3369 | LCQ | no | - | quadratic_constraints | read_error | no | - | 583.5215161 | - | no | - | 0.00 |
+| QPLIB_3380 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 56161.9323 | - | no | - | 0.04 |
+| QPLIB_3385 | LCQ | no | - | quadratic_constraints | read_error | no | - | 586.6800191 | - | no | - | 0.00 |
+| QPLIB_3387 | LCQ | no | - | quadratic_constraints | read_error | no | - | 403.1959738 | - | no | - | 0.00 |
+| QPLIB_3402 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 224416.0 | - | no | - | 0.00 |
+| QPLIB_3413 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 2192.0 | - | no | - | 0.00 |
+| QPLIB_3416 | LCQ | no | - | quadratic_constraints | read_error | no | - | 556.6751626 | - | no | - | 0.00 |
+| QPLIB_3496 | LGQ | no | - | quadratic_constraints | read_error | no | - | 191.7295481 | - | no | - | 0.00 |
+| QPLIB_3502 | LMQ | no | - | quadratic_constraints | read_error | no | - | - | - | - | - | 0.01 |
+| QPLIB_3505 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.127284376 | - | no | - | 0.02 |
+| QPLIB_3506 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 478.0 | - | no | - | 0.00 |
+| QPLIB_3508 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.151205516 | - | no | - | 0.00 |
+| QPLIB_3510 | LMQ | no | - | quadratic_constraints | read_error | no | - | 113658343.3 | - | no | - | 0.01 |
+| QPLIB_3511 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.140252838 | - | no | - | 0.01 |
+| QPLIB_3512 | LMQ | no | - | quadratic_constraints | read_error | no | - | 45.29656579 | - | no | - | 0.00 |
+| QPLIB_3513 | LMQ | no | - | quadratic_constraints | read_error | no | - | 85.44891308 | - | no | - | 0.01 |
+| QPLIB_3514 | LMQ | no | - | quadratic_constraints | read_error | no | - | 366.6218167 | - | no | - | 0.00 |
+| QPLIB_3515 | LMQ | no | - | quadratic_constraints | read_error | no | - | 950960.1503 | - | no | - | 0.00 |
+| QPLIB_3522 | LMQ | no | - | quadratic_constraints | read_error | no | - | 84.62501274 | - | no | - | 0.00 |
+| QPLIB_3523 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | -615.0 | - | no | - | 0.00 |
+| QPLIB_3524 | LMQ | no | - | quadratic_constraints | read_error | no | - | 4683.868286 | - | no | - | 0.00 |
+| QPLIB_3525 | QGQ | no | - | quadratic_constraints | read_error | no | - | 4026.58369 | - | no | - | 0.00 |
+| QPLIB_3529 | LMQ | no | - | quadratic_constraints | read_error | no | - | -46376.205 | - | no | - | 0.00 |
+| QPLIB_3533 | LMQ | no | - | quadratic_constraints | read_error | no | - | 484.3286442 | - | no | - | 0.00 |
+| QPLIB_3547 | DML | yes | branch-and-bound | - | iteration_limit | no | inf | -0.56000837 | inf | no | yes | 51.49 |
+| QPLIB_3549 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.111602303 | - | no | - | 0.00 |
+| QPLIB_3554 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | 424.5441036 | - | no | - | 0.01 |
+| QPLIB_3562 | LIQ | no | - | quadratic_constraints | read_error | no | - | 15.0 | - | no | - | 0.00 |
+| QPLIB_3565 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 282.0 | - | no | - | 0.00 |
+| QPLIB_3580 | LMQ | no | - | quadratic_constraints | read_error | no | - | 539635.469 | - | no | - | 0.00 |
+| QPLIB_3582 | LMQ | no | - | quadratic_constraints | read_error | no | - | 469619.8376 | - | no | - | 0.00 |
+| QPLIB_3584 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -25386.0 | - | no | - | 0.02 |
+| QPLIB_3587 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 15595.0 | - | no | - | 0.00 |
+| QPLIB_3588 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.129530785 | - | no | - | 0.00 |
+| QPLIB_3592 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | 388214.0 | - | no | - | 0.01 |
+| QPLIB_3596 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1961.815672 | - | no | - | 0.00 |
+| QPLIB_3600 | LMQ | no | - | quadratic_constraints | read_error | no | - | 300176.5637 | - | no | - | 0.00 |
+| QPLIB_3605 | LMQ | no | - | quadratic_constraints | read_error | no | - | 4792.32775 | - | no | - | 0.01 |
+| QPLIB_3614 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 14409.0 | - | no | - | 0.00 |
+| QPLIB_3620 | LMQ | no | - | quadratic_constraints | read_error | no | - | 132.5476009 | - | no | - | 0.01 |
+| QPLIB_3621 | LMQ | no | - | quadratic_constraints | read_error | no | - | 85.44891308 | - | no | - | 0.01 |
+| QPLIB_3622 | LMQ | no | - | quadratic_constraints | read_error | no | - | 197.3338812 | - | no | - | 0.00 |
+| QPLIB_3624 | LMQ | no | - | quadratic_constraints | read_error | no | - | 263.8991613 | - | no | - | 0.01 |
+| QPLIB_3625 | LMQ | no | - | quadratic_constraints | read_error | no | - | 106.3541548 | - | no | - | 0.00 |
+| QPLIB_3631 | LMQ | no | - | quadratic_constraints | read_error | no | - | 486.0998677 | - | no | - | 0.00 |
+| QPLIB_3642 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 1034.0 | - | no | - | 0.00 |
+| QPLIB_3643 | LGQ | no | - | quadratic_constraints | read_error | no | - | 205.1370794 | - | no | - | 0.00 |
+| QPLIB_3645 | LMQ | no | - | quadratic_constraints | read_error | no | - | -0.1050046074 | - | no | - | 0.01 |
+| QPLIB_3646 | LMQ | no | - | quadratic_constraints | read_error | no | - | 230.2021495 | - | no | - | 0.00 |
+| QPLIB_3648 | LMQ | no | - | quadratic_constraints | read_error | no | - | 94.6112071 | - | no | - | 0.00 |
+| QPLIB_3650 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 922.0 | - | no | - | 0.00 |
+| QPLIB_3651 | LMQ | no | - | quadratic_constraints | read_error | no | - | 85.44891245 | - | no | - | 0.01 |
+| QPLIB_3659 | LGQ | no | - | quadratic_constraints | read_error | no | - | 38025000.0 | - | no | - | 0.01 |
+| QPLIB_3661 | LMQ | no | - | quadratic_constraints | read_error | no | - | - | - | - | - | 0.02 |
+| QPLIB_3662 | LMQ | no | - | quadratic_constraints | read_error | no | - | 562617.8818 | - | no | - | 0.00 |
+| QPLIB_3670 | LMQ | no | - | quadratic_constraints | read_error | no | - | 114.9487764 | - | no | - | 0.00 |
+| QPLIB_3676 | LMQ | no | - | quadratic_constraints | read_error | no | - | 430.5766374 | - | no | - | 0.01 |
+| QPLIB_3677 | LMQ | no | - | quadratic_constraints | read_error | no | - | 363.0938483 | - | no | - | 0.01 |
+| QPLIB_3678 | LMD | no | - | quadratic_constraints | read_error | no | - | -0.1100882335 | - | no | - | 0.01 |
+| QPLIB_3680 | LMQ | no | - | quadratic_constraints | read_error | no | - | 347691.4107 | - | no | - | 0.00 |
+| QPLIB_3683 | LMQ | no | - | quadratic_constraints | read_error | no | - | 397992.2951 | - | no | - | 0.00 |
+| QPLIB_3690 | LMQ | no | - | quadratic_constraints | read_error | no | - | 557.84865 | - | no | - | 0.01 |
+| QPLIB_3692 | LMQ | no | - | quadratic_constraints | read_error | no | - | 502.417829 | - | no | - | 0.00 |
+| QPLIB_3693 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 1154.0 | - | no | - | 0.00 |
+| QPLIB_3694 | DML | yes | branch-and-bound | - | feasible | no | 280.5299881789391 | 263.8991613 | 0.06301962763736568 | no | yes | 60.01 |
+| QPLIB_3697 | LMQ | no | - | quadratic_constraints | read_error | no | - | 832795.5853 | - | no | - | 0.00 |
+| QPLIB_3698 | DML | yes | branch-and-bound | - | feasible | no | 410.34152106947715 | 363.0938483 | 0.13012523619083624 | no | yes | 60.02 |
+| QPLIB_3699 | LMQ | no | - | quadratic_constraints | read_error | no | - | 3128.558124 | - | no | - | 0.00 |
+| QPLIB_3701 | LMQ | no | - | quadratic_constraints | read_error | no | - | 115.2394293 | - | no | - | 0.00 |
+| QPLIB_3703 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 388214.0 | - | no | - | 0.01 |
+| QPLIB_3705 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 384.0 | - | no | - | 0.00 |
+| QPLIB_3706 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 682.0 | - | no | - | 0.00 |
+| QPLIB_3708 | DML | yes | branch-and-bound | - | iteration_limit | no | inf | -9411.998908 | inf | no | yes | 53.98 |
+| QPLIB_3709 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 5710645.0 | - | no | - | 0.05 |
+| QPLIB_3713 | LMQ | no | - | quadratic_constraints | read_error | no | - | 85.00707752 | - | no | - | 0.00 |
+| QPLIB_3714 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 1183.0 | - | no | - | 0.00 |
+| QPLIB_3719 | LMQ | no | - | quadratic_constraints | read_error | no | - | 417188.8105 | - | no | - | 0.00 |
+| QPLIB_3725 | LMQ | no | - | quadratic_constraints | read_error | no | - | 85.44891308 | - | no | - | 0.00 |
+| QPLIB_3726 | LMQ | no | - | quadratic_constraints | read_error | no | - | 3483.58288 | - | no | - | 0.00 |
+| QPLIB_3727 | LMQ | no | - | quadratic_constraints | read_error | no | - | 209.2548902 | - | no | - | 0.00 |
+| QPLIB_3728 | LMQ | no | - | quadratic_constraints | read_error | no | - | 205054.4585 | - | no | - | 0.00 |
+| QPLIB_3729 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.120343714 | - | no | - | 0.00 |
+| QPLIB_3733 | LMQ | no | - | quadratic_constraints | read_error | no | - | 106.3541548 | - | no | - | 0.00 |
+| QPLIB_3734 | LMQ | no | - | quadratic_constraints | read_error | no | - | -46377.99065 | - | no | - | 0.01 |
+| QPLIB_3738 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 422.0 | - | no | - | 0.00 |
+| QPLIB_3745 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 334.0 | - | no | - | 0.00 |
+| QPLIB_3748 | LMQ | no | - | quadratic_constraints | read_error | no | - | 281408.6353 | - | no | - | 0.00 |
+| QPLIB_3750 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 6348.0 | - | no | - | 0.00 |
+| QPLIB_3751 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 2312.0 | - | no | - | 0.00 |
+| QPLIB_3752 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -1306.0 | - | no | - | 0.01 |
+| QPLIB_3757 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -563.0 | - | no | - | 0.02 |
+| QPLIB_3762 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -296.0 | - | no | - | 0.00 |
+| QPLIB_3772 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -940.0 | - | no | - | 0.01 |
+| QPLIB_3775 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 3990.0 | - | no | - | 0.00 |
+| QPLIB_3780 | LIQ | no | - | quadratic_constraints | read_error | no | - | 90.6 | - | no | - | 0.00 |
+| QPLIB_3785 | LMQ | no | - | quadratic_constraints | read_error | no | - | 508718.0468 | - | no | - | 0.00 |
+| QPLIB_3790 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | 97.90443626 | - | no | - | 0.00 |
+| QPLIB_3792 | DML | yes | branch-and-bound | - | feasible | no | 642.7207756123091 | 557.84865 | 0.1521418499664902 | no | yes | 60.01 |
+| QPLIB_3794 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.127904351 | - | no | - | 0.00 |
+| QPLIB_3797 | LMQ | no | - | quadratic_constraints | read_error | no | - | 5122.564501 | - | no | - | 0.00 |
+| QPLIB_3798 | LMQ | no | - | quadratic_constraints | read_error | no | - | 110.3275823 | - | no | - | 0.00 |
+| QPLIB_3803 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -7360.0 | - | no | - | 0.01 |
+| QPLIB_3809 | LMQ | no | - | quadratic_constraints | read_error | no | - | 472093.078 | - | no | - | 0.00 |
+| QPLIB_3813 | LMQ | no | - | quadratic_constraints | read_error | no | - | 402.48853 | - | no | - | 0.01 |
+| QPLIB_3814 | QMQ | no | - | quadratic_constraints | read_error | no | - | 0.6259674725 | - | no | - | 0.00 |
+| QPLIB_3815 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -65.0 | - | no | - | 0.00 |
+| QPLIB_3816 | LMQ | no | - | quadratic_constraints | read_error | no | - | 7.3936 | - | no | - | 0.00 |
+| QPLIB_3822 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 850.0 | - | no | - | 0.01 |
+| QPLIB_3825 | LMQ | no | - | quadratic_constraints | read_error | no | - | 112.071483 | - | no | - | 0.00 |
+| QPLIB_3832 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 554.0 | - | no | - | 0.00 |
+| QPLIB_3834 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 3760.715066 | - | no | - | 0.00 |
+| QPLIB_3838 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 746.0 | - | no | - | 0.00 |
+| QPLIB_3840 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.138586607 | - | no | - | 0.01 |
+| QPLIB_3841 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -1817.0 | - | no | - | 0.01 |
+| QPLIB_3850 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 1198.0 | - | no | - | 0.01 |
+| QPLIB_3852 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 234.0 | - | no | - | 0.00 |
+| QPLIB_3854 | LMQ | no | - | quadratic_constraints | read_error | no | - | 94.6112071 | - | no | - | 0.00 |
+| QPLIB_3855 | LMQ | no | - | quadratic_constraints | read_error | no | - | 598.9191764 | - | no | - | 0.00 |
+| QPLIB_3856 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.030991192 | - | no | - | 0.00 |
+| QPLIB_3857 | LMQ | no | - | quadratic_constraints | read_error | no | - | -0.1291145306 | - | no | - | 0.02 |
+| QPLIB_3859 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.126956249 | - | no | - | 0.00 |
+| QPLIB_3860 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -20161.0 | - | no | - | 0.02 |
+| QPLIB_3861 | DML | yes | branch-and-bound | - | feasible | no | 608.6541424617164 | 430.5765521 | 0.41357939602888194 | no | yes | 60.01 |
+| QPLIB_3863 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.115657192 | - | no | - | 0.00 |
+| QPLIB_3865 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 6301723.0 | - | no | - | 0.04 |
+| QPLIB_3870 | QML | yes | branch-and-bound | nonconvex | model_error | no | - | -1148.0 | - | no | - | 0.01 |
+| QPLIB_3871 | DML | yes | branch-and-bound | - | feasible | no | 197.3338812420924 | 197.3338812 | 2.1330539327663997e-10 | no | yes | 60.01 |
+| QPLIB_3872 | LMQ | no | - | quadratic_constraints | read_error | no | - | 85.44891308 | - | no | - | 0.01 |
+| QPLIB_3877 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 602.0 | - | no | - | 0.00 |
+| QPLIB_3879 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.162171094 | - | no | - | 0.03 |
+| QPLIB_3883 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -788.0 | - | no | - | 0.00 |
+| QPLIB_3913 | CBL | yes | branch-and-bound | - | time_limit | no | inf | 42.925 | inf | no | yes | 60.02 |
+| QPLIB_3923 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 64.1 | - | no | - | 0.00 |
+| QPLIB_3931 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 79.93 | - | no | - | 0.00 |
+| QPLIB_3980 | CBL | yes | branch-and-bound | - | time_limit | no | inf | 6.325 | inf | no | yes | 60.01 |
+| QPLIB_4095 | CMQ | no | - | quadratic_constraints | read_error | no | - | 99.48264489 | - | no | - | 0.02 |
+| QPLIB_4270 | CML | yes | branch-and-bound | - | time_limit | no | inf | 99.48264828 | inf | no | yes | 60.02 |
+| QPLIB_4455 | LMQ | no | - | quadratic_constraints | read_error | no | - | 1039.0 | - | no | - | 0.02 |
+| QPLIB_4722 | LMQ | no | - | quadratic_constraints | read_error | no | - | 2639.0 | - | no | - | 0.01 |
+| QPLIB_4805 | LMQ | no | - | quadratic_constraints | read_error | no | - | 10729661.15 | - | no | - | 0.01 |
+| QPLIB_5023 | LMQ | no | - | quadratic_constraints | read_error | no | - | 495029.001 | - | no | - | 0.02 |
+| QPLIB_5442 | LMQ | no | - | quadratic_constraints | read_error | no | - | 884268627.4 | - | no | - | 0.01 |
+| QPLIB_5527 | DML | yes | branch-and-bound | - | time_limit | no | inf | 30599020.27 | inf | no | yes | 60.10 |
+| QPLIB_5543 | DML | yes | branch-and-bound | - | time_limit | no | inf | 37594528.33 | inf | no | yes | 60.11 |
+| QPLIB_5554 | LMQ | no | - | quadratic_constraints | read_error | no | - | 32746998.03 | - | no | - | 0.09 |
+| QPLIB_5573 | LMQ | no | - | quadratic_constraints | read_error | no | - | 33695951.51 | - | no | - | 0.09 |
+| QPLIB_5577 | DML | yes | branch-and-bound | - | time_limit | no | inf | 7193179.495 | inf | no | yes | 60.02 |
+| QPLIB_5721 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 8579363.0 | - | no | - | 0.01 |
+| QPLIB_5725 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 33611981.0 | - | no | - | 0.00 |
+| QPLIB_5755 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 24838942.0 | - | no | - | 0.00 |
+| QPLIB_5875 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 43757.0 | - | no | - | 0.01 |
+| QPLIB_5881 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 13067.0 | - | no | - | 0.00 |
+| QPLIB_5882 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 25388.0 | - | no | - | 0.01 |
+| QPLIB_5909 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 35726.0 | - | no | - | 0.00 |
+| QPLIB_5922 | QBN | yes | branch-and-bound | nonconvex | model_error | no | - | 128339.0 | - | no | - | 0.01 |
+| QPLIB_5924 | DML | yes | branch-and-bound | - | time_limit | no | inf | 118609.831 | inf | no | yes | 60.05 |
+| QPLIB_5925 | LMQ | no | - | quadratic_constraints | read_error | no | - | 124.091252 | - | no | - | 0.00 |
+| QPLIB_5926 | LMQ | no | - | quadratic_constraints | read_error | no | - | 176.6593991 | - | no | - | 0.08 |
+| QPLIB_5927 | LMQ | no | - | quadratic_constraints | read_error | no | - | 169.5734994 | - | no | - | 0.08 |
+| QPLIB_5935 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 4758.0 | - | no | - | 0.00 |
+| QPLIB_5944 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 1829.0 | - | no | - | 0.01 |
+| QPLIB_5962 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 6962.0 | - | no | - | 0.01 |
+| QPLIB_5971 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 2377.0 | - | no | - | 0.01 |
+| QPLIB_5980 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 895.0 | - | no | - | 0.01 |
+| QPLIB_6287 | LCQ | no | - | quadratic_constraints | read_error | no | - | -2410.687687 | - | no | - | 0.00 |
+| QPLIB_6310 | LCQ | no | - | quadratic_constraints | read_error | no | - | -689.1605698 | - | no | - | 0.00 |
+| QPLIB_6311 | LCQ | no | - | quadratic_constraints | read_error | no | - | -4539.912185 | - | no | - | 0.00 |
+| QPLIB_6324 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 159.0 | - | no | - | 0.03 |
+| QPLIB_6487 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 344592.0 | - | no | - | 0.02 |
+| QPLIB_6597 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 6491721.0 | - | no | - | 0.05 |
+| QPLIB_6647 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 2.0 | - | no | - | 0.01 |
+| QPLIB_6757 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 9.0 | - | no | - | 0.08 |
+| QPLIB_6764 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 9.0 | - | no | - | 0.08 |
+| QPLIB_6799 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 9.0 | - | no | - | 0.08 |
+| QPLIB_6941 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 9.0 | - | no | - | 0.09 |
+| QPLIB_7127 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | -0.0 | - | no | - | 0.02 |
+| QPLIB_7139 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 621.0 | - | no | - | 0.01 |
+| QPLIB_7144 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 813.0 | - | no | - | 0.01 |
+| QPLIB_7149 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 959.0 | - | no | - | 0.01 |
+| QPLIB_7154 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 1159.0 | - | no | - | 0.01 |
+| QPLIB_7159 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 1363.0 | - | no | - | 0.02 |
+| QPLIB_7164 | QBL | yes | branch-and-bound | nonconvex | model_error | no | - | 1551.0 | - | no | - | 0.02 |
+| QPLIB_7579 | LMD | no | - | quadratic_constraints | read_error | no | - | -0.1026336752 | - | no | - | 0.00 |
+| QPLIB_8009 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.114112248 | - | no | - | 0.01 |
+| QPLIB_8153 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.076351999 | - | no | - | 0.00 |
+| QPLIB_8381 | LMQ | no | - | quadratic_constraints | read_error | no | - | -1.103431777 | - | no | - | 0.00 |
+| QPLIB_8495 | DCL | yes | qp-ipm | - | optimal | yes | 42857.49640394573 | 42857.49639 | 3.25397761099978e-10 | yes | yes | 1.40 |
+| QPLIB_8500 | DCL | yes | qp-ipm | - | time_limit | no | 0.0673473516054729 | 0.01792173763 | 0.04942561397547289 | no | no | 61.12 |
+| QPLIB_8505 | QCL | yes | qp-ipm | nonconvex | model_error | no | - | -4974.50005 | - | no | - | 0.20 |
+| QPLIB_8515 | CCL | yes | qp-ipm | - | optimal | yes | 319.9999951950713 | 319.9999887 | 2.0297098408209766e-08 | yes | yes | 0.11 |
+| QPLIB_8547 | DCL | yes | qp-ipm | - | time_limit | no | 0.00019740124999999894 | -0.007398469784 | 0.007595871033999999 | no | no | 66.03 |
+| QPLIB_8553 | QCQ | no | - | quadratic_constraints | read_error | no | - | 1.311996694 | - | no | - | 0.12 |
+| QPLIB_8559 | CCL | yes | qp-condat-vu | - | time_limit | no | 74190107.48283371 | 74223239.83 | 0.00044638777884353797 | no | no | 60.03 |
+| QPLIB_8567 | CCL | yes | qp-ipm | - | time_limit | no | 78939901.22169805 | 78965987.95 | 0.0003303539787088455 | no | no | 60.04 |
+| QPLIB_8585 | DCQ | no | - | quadratic_constraints | read_error | no | - | 5.389672119 | - | no | - | 0.09 |
+| QPLIB_8595 | DCQ | no | - | quadratic_constraints | read_error | no | - | 10731.25 | - | no | - | 0.00 |
+| QPLIB_8602 | DCL | yes | qp-ipm | - | time_limit | no | 857276.5293912949 | 27353.3872 | 30.340781422174103 | no | no | 60.16 |
+| QPLIB_8605 | DCQ | no | - | quadratic_constraints | read_error | no | - | -20.34056648 | - | no | - | 0.00 |
+| QPLIB_8616 | DCL | yes | qp-ipm | - | optimal | yes | 245.06859783862072 | 245.0685978 | 1.5759149282840826e-10 | yes | yes | 0.09 |
+| QPLIB_8683 | DCQ | no | - | quadratic_constraints | read_error | no | - | - | - | - | - | 0.23 |
+| QPLIB_8685 | DCQ | no | - | quadratic_constraints | read_error | no | - | 100.0 | - | no | - | 0.00 |
+| QPLIB_8758 | QCQ | no | - | quadratic_constraints | read_error | no | - | -41.87500005 | - | no | - | 0.17 |
+| QPLIB_8777 | QCL | yes | qp-ipm | nonconvex | model_error | no | - | -2238983072.0 | - | no | - | 0.04 |
+| QPLIB_8784 | QCC | no | - | quadratic_constraints | read_error | no | - | -0.0683939176 | - | no | - | 0.00 |
+| QPLIB_8785 | DCL | yes | qp-ipm | - | optimal | yes | 7867.491148857769 | 7867.491149 | 1.8078358938457494e-11 | yes | yes | 6.82 |
+| QPLIB_8790 | CCB | yes | qp-ipm | - | optimal | yes | -0.00015624210914988126 | -0.0001562421091 | 4.988126882030097e-14 | yes | yes | 0.45 |
+| QPLIB_8792 | CCB | yes | qp-ipm | - | optimal | yes | 3593.5162940934047 | 3593.518355 | 5.735066282939946e-07 | yes | yes | 0.19 |
+| QPLIB_8803 | DCQ | no | - | quadratic_constraints | read_error | no | - | 293.8760751 | - | no | - | 0.19 |
+| QPLIB_8810 | DCQ | no | - | quadratic_constraints | read_error | no | - | 74653384040.0 | - | no | - | 0.23 |
+| QPLIB_8815 | QCD | no | - | quadratic_constraints | read_error | no | - | -0.03155633953 | - | no | - | 0.03 |
+| QPLIB_8845 | CCL | yes | qp-ipm | - | optimal | yes | 10907992.49400398 | 10907992.49 | 3.670683922234576e-10 | yes | yes | 0.30 |
+| QPLIB_8906 | CCL | yes | qp-condat-vu | - | optimal | yes | 2699111.5134512703 | 2699111.513 | 1.671922366716906e-10 | yes | yes | 28.32 |
+| QPLIB_8938 | DCL | yes | qp-ipm | - | optimal | yes | -35.77945295233443 | -35.77945295 | 6.52450253552842e-11 | yes | yes | 0.09 |
+| QPLIB_8991 | CCB | yes | qp-ipm | - | optimal | yes | -0.0016678673779135212 | -0.001667867378 | 8.64787842030923e-14 | yes | yes | 0.12 |
+| QPLIB_9002 | DCL | yes | qp-ipm | - | iteration_limit | no | 173212684388.32343 | - | - | - | yes | 2.35 |
+| QPLIB_9004 | QCQ | no | - | quadratic_constraints | read_error | no | - | 2.766394482 | - | no | - | 0.05 |
+| QPLIB_9008 | DCL | yes | qp-ipm | - | time_limit | no | 0.0 | -0.07472027822 | 0.07472027822 | no | yes | 68.90 |
+| QPLIB_9030 | QIL | yes | branch-and-bound | - | time_limit | no | inf | 375818.0 | inf | no | yes | 60.03 |
+| QPLIB_9048 | QIL | yes | branch-and-bound | nonconvex | model_error | no | - | -1.165682 | - | no | - | 0.00 |
+
+</details>
+
+Reproduce with
 
 ```
 python bench/runners/fetch_qplib_all.py

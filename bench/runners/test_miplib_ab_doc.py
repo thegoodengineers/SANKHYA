@@ -56,6 +56,60 @@ def main() -> int:
 
         text = miplib_ab_doc.tier2_section(d / "on.csv")
         assert "`b` seed 1 (feasible)" in text and "`b` seed 2 (feasible)" in text, text
+        assert "verifier rejected" not in text, text
+        claimed = [dict(run("a", 0, True, True, 0.1), independently_verified=1, relative_gap=""),
+                   dict(run("c", 1, True, True, 0.1), independently_verified=0,
+                        relative_gap=1.2269e-4)]
+        write(d / "t2.csv", claimed)
+        write(d / "summary-t2.csv", [{"time_limit": 300}])
+        text = miplib_ab_doc.tier2_section(d / "t2.csv")
+        assert "verifier rejected" in text and "`c` seed 1 (relative gap 0.000123)" in text, text
+        assert "`a` seed 0 (relative" not in text, text
+
+        # #418: the plateau instances' bounds, seed by seed. rlp1 (min, optimum 15) moves its
+        # bound from 14 to 14.5 on seed 1; noswot (min, optimum -41) moves AWAY on seed 0; a
+        # maximisation case (b-ball read as max here, optimum 2) moves from 3 to 2.5, which is
+        # closer although the number fell; opt1217 is absent from the on leg and named.
+        def plateau(i, seed, bound, published, restarts="", branches=""):
+            return dict(run(i, seed, True, False, 0.1), dual_bound=bound,
+                        published_objective=published, restarts=restarts,
+                        objective_branches=branches)
+        p_off = [plateau("rlp1", s, 14.0, 15.0) for s in range(2)] + \
+                [plateau("noswot", 0, -43.0, -41.0), plateau("b-ball", 0, 3.0, 2.0),
+                 plateau("opt1217", 0, -20.0, -16.0)]
+        p_on = [plateau("rlp1", 0, 14.0, 15.0, 1, 0), plateau("rlp1", 1, 14.5, 15.0, 2, 0),
+                plateau("noswot", 0, -44.0, -41.0, 0, 0), plateau("b-ball", 0, 2.5, 2.0, 1, 3)]
+        for name, rows in (("p_off.csv", p_off), ("p_on.csv", p_on)):
+            write(d / name, rows)
+            write(d / ("summary-" + name), [{"time_limit": 60}])
+        text = miplib_ab_doc.plateau_ab(d / "p_off.csv", d / "p_on.csv", "mip_restarts")
+        assert "Bound moved towards the published optimum: `b-ball` seed 0, `rlp1` seed 1." \
+            in text, text
+        assert "Moved away: `noswot` seed 0." in text, text
+        assert "Not in both legs: `opt1217`." in text, text
+        assert "is **met** by this run." in text, text
+        assert "restarted at least once: **3 of 4**" in text, text
+        assert "objective row: **1 of 4**" in text, text
+        assert "| `rlp1` | 1 | feasible | feasible | 14 | 14.5 | **closer** |" in text, text
+        assert "| `rlp1` | 0 | feasible | feasible | 14 | 14 | no |" in text, text
+        assert "| on | 4 |" in text, text  # seeds_ab's table sits above
+
+        # Nothing moved: the verdict says so.
+        text = miplib_ab_doc.plateau_ab(d / "p_off.csv", d / "p_off.csv", "mip_restarts")
+        assert "Bound moved towards the published optimum: none." in text, text
+        assert "is **not met** by this run." in text, text
+        assert "restarted at least once: **0 of 5**" in text, text
+
+        # Legs from two commits, or a dirty one, are not compared at all.
+        write(d / "other.csv", [dict(r, git_commit="def5678") for r in p_on])
+        write(d / "summary-other.csv", [{"time_limit": 60}])
+        text = miplib_ab_doc.plateau_ab(d / "p_off.csv", d / "other.csv", "mip_restarts")
+        assert text.startswith("Not compared:") and "`abc1234`, `def5678`" in text, text
+        write(d / "dirty.csv", [dict(r, git_commit="abc1234-dirty") for r in p_on])
+        write(d / "summary-dirty.csv", [{"time_limit": 60}])
+        assert miplib_ab_doc.plateau_ab(d / "dirty.csv", d / "dirty.csv", "x") \
+            .startswith("Not compared:")
+        assert miplib_ab_doc.plateau_ab(None, d / "p_on.csv", "x") == ""
     print("test_miplib_ab_doc: ok")
     return 0
 

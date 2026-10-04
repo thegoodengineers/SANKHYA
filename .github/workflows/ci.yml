@@ -423,6 +423,12 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_gpu_runners.py
 
+      - name: The PDHG step and primal-weight A/B runner's legs and rows (#482)
+        # Pure Python, no solve: each leg passes exactly its own switches, after any
+        # --solver-option; each scheme its two; PDHG alone; one row per scheme and leg.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_pdhg_step_weight_ab.py
+
       - name: The head-to-head's rival parsers, grading, profile and doc section (#766)
         # Pure Python, no solver runs: Clp's and GLPK's output layouts, the .sol conversion
         # and name reconciliation, GLPK's objective-constant restatement, the grading rules,
@@ -447,6 +453,11 @@ jobs:
         # Pure Python, no solve.
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_presolve_shrink.py
+
+      - name: The feasibility polish A/B runner reads the engine's message and the verifier
+        # Pure Python, no solve.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_pdhg_polish_ab.py
 
       - name: The independent verifier passes its own self-test (#542)
         if: matrix.name == 'Release'
@@ -504,6 +515,13 @@ jobs:
         # match tolerances, better-than-reference flags and the rendered section.
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_qplib_all.py
+
+      - name: The QPLIB MIQP warm-start A/B runner's selection, arms and verdicts pass their tests (#494)
+        # Hermetic: no download and no solve. QPLIB's letters for the convex MIQP subset, the
+        # one option that differs between the arms, iterations per node from the stats JSON,
+        # warm-against-cold agreement within kMipRelativeGap and the summary totals.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_qplib_miqp.py
 
       - name: Every QPLIB conversion is checked at QPLIB's published point by its test classes (#835)
         # Hermetic: no download and no solve. Inline .qplib, .sol and GAMS-head fixtures for

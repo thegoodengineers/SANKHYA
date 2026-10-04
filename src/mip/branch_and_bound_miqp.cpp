@@ -26,9 +26,15 @@
 // otherwise the node is re-solved by Condat-Vu, as without the option.
 //
 // WARM START (miqp_node_ipm_warm_start, #494, #893): with the option on, a child node's IPM
-// starts from the parent's converged iterate (current_qp_warm_, set alongside current_warm_
-// where the tree assigns a node its basis) instead of cold. Off by default, same as
-// miqp_node_ipm itself, until its own A/B.
+// starts from its parent's save point instead of cold. The save point is the first iterate of
+// the parent's solve within tol::kQpIpmWarmSaveLevel, not its optimum, with its row and bound
+// multipliers and proximal parameters; the engine shifts it into the child's interior and
+// recentres it (src/qp/qp_ipm_warm.cpp, after Gondzio 1998), and abandons it for the cold
+// start when it fails or stalls. The bound the node is pruned on is the one above, valid for
+// whatever point the solve returns, so where the IPM started cannot make the search fathom
+// the optimum. A node whose IPM fell back to the LP or Condat-Vu hands its children nothing,
+// and they start cold. Off by default, same as miqp_node_ipm itself, until its own A/B
+// (bench/runners/qplib_miqp.py).
 //
 // References:
 //   Friedlander & Orban, "A primal-dual regularized interior-point method for convex
@@ -37,12 +43,15 @@
 //     Math. Programming 99 (2004) - the bound from any multipliers.
 //   Gupta & Ravindran, "Branch and bound experiments in convex nonlinear integer
 //     programming", Management Science 31(12) (1985) - branch and bound over convex nodes.
+//   Gondzio, "Warm start of the primal-dual method applied in the cutting-plane scheme",
+//     Math. Programming 83 (1998) - the warm start, in src/qp/qp_ipm_warm.cpp.
 
 #include "branch_and_bound_internal.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "core/safe_bound.hpp"
@@ -53,24 +62,47 @@ Solution BranchAndBound::solve_qp_node_ipm(Options& options) {
   // A strong-branching probe (probe_options_) only scores a column; its status is read for
   // kInfeasible alone, so it is not worth the fallback below.
   const bool node_solve = &options == &node_options_;
-  const bool warm_usable = node_solve && miqp_node_ipm_warm_start_ && !current_qp_warm_.empty();
+  if (!node_solve) return qp::solve_convex_qp_ipm(working_, options, logger_, control_);
   // The time that is left, which solve_node_with() has just written into `options`, and not
   // the whole time_limit node_ipm_options_ was copied with (#835).
-  if (node_solve && limits_.has_time_limit()) {
+  const auto time_left = [&](Options* target) {
+    if (limits_.has_time_limit()) {
+      target->set_double("time_limit", limits_.remaining_seconds(timer_.elapsed_seconds()));
+    }
+  };
+  if (limits_.has_time_limit()) {
     node_ipm_options_.set_double("time_limit", options.get_double("time_limit"));
   }
-  Solution ipm =
-      qp::solve_convex_qp_ipm(working_, node_solve ? node_ipm_options_ : options, logger_,
-                              control_, warm_usable ? &current_qp_warm_ : nullptr);
-  if (!node_solve) return ipm;
+  last_qp_warm_ = qp::QpIpmWarmStart{};
   ++miqp_ipm_nodes_;
-  if (ipm.status == SolveStatus::kOptimal || ipm.status == SolveStatus::kTimeLimit ||
-      ipm.status == SolveStatus::kInterrupted) {
-    return ipm;
-  }
+  const auto finished = [](const Solution& s) {
+    return s.status == SolveStatus::kOptimal || s.status == SolveStatus::kTimeLimit ||
+           s.status == SolveStatus::kInterrupted;
+  };
+  // One IPM solve, counted; an optimal one leaves its save point for the children (#494).
+  const auto ipm_solve = [&](const qp::QpIpmWarmStart* warm) {
+    qp::QpIpmWarmResult result;
+    Solution solved =
+        qp::solve_convex_qp_ipm(working_, node_ipm_options_, logger_, control_, warm,
+                                miqp_node_ipm_warm_start_ ? &result : nullptr);
+    miqp_ipm_iterations_ += solved.iterations;
+    if (solved.status == SolveStatus::kOptimal) last_qp_warm_ = std::move(result.next);
+    return solved;
+  };
+
+  // WARM, when the parent left a save point. The engine is told not to retry cold itself
+  // (retry_cold): a warm run that fails here is most often an infeasible node, which the
+  // node LP below proves for the price of one simplex solve, where a cold IPM run would
+  // first spend its own iterations failing the same way.
+  const bool warm = miqp_node_ipm_warm_start_ && !current_qp_warm_.empty();
+  if (warm) current_qp_warm_.retry_cold = false;
+  Solution ipm = ipm_solve(warm ? &current_qp_warm_ : nullptr);
+  if (warm) ++miqp_ipm_warm_starts_;
+  if (finished(ipm)) return ipm;
   ++miqp_ipm_fallbacks_;
-  logger_.verbose("MIQP node: the interior point returned {} ({}); deciding the node by its LP",
-                  to_string(ipm.status), ipm.message);
+  logger_.verbose(
+      "MIQP node: the {} interior point returned {} ({}); deciding the node by its LP",
+      warm ? "warm-started" : "cold", to_string(ipm.status), ipm.message);
 
   Model feasibility = working_;
   const Index n = feasibility.num_cols();
@@ -78,19 +110,24 @@ Solution BranchAndBound::solve_qp_node_ipm(Options& options) {
   feasibility.hessian.finalize();
   std::fill(feasibility.col_cost.begin(), feasibility.col_cost.end(), 0.0);
   // Each fallback solve on what the ones before it left, not on what was left at the top.
-  const auto time_left = [&] {
-    if (limits_.has_time_limit()) {
-      options.set_double("time_limit", limits_.remaining_seconds(timer_.elapsed_seconds()));
-    }
-  };
-  time_left();
+  time_left(&options);
   Solution lp = solve_primal_simplex(feasibility, options, logger_, control_);
   if (lp.status == SolveStatus::kInfeasible || lp.status == SolveStatus::kTimeLimit ||
       lp.status == SolveStatus::kInterrupted) {
     if (lp.status == SolveStatus::kInfeasible) ++miqp_ipm_lp_infeasible_;
     return lp;
   }
-  time_left();
+  if (warm) {
+    // A feasible node the warm start could not finish: the cold IPM, exactly as without the
+    // option, before Condat-Vu.
+    ++miqp_ipm_warm_fallbacks_;
+    time_left(&node_ipm_options_);
+    Solution cold = ipm_solve(nullptr);
+    if (finished(cold)) return cold;
+    logger_.verbose("MIQP node: the cold interior point returned {} ({}) as well",
+                    to_string(cold.status), cold.message);
+  }
+  time_left(&options);
   return qp::solve_convex_qp(working_, options, logger_, control_);
 }
 
@@ -148,10 +185,25 @@ double BranchAndBound::safe_qp_node_bound(const Solution& relaxation) {
 void BranchAndBound::report_miqp_ipm() const {
   if (!miqp_node_ipm_) return;
   logger_.info(
-      "MIQP node IPM (#494): {} node QP(s), {} not finished by the interior point ({} of them "
-      "proved infeasible by the node LP, the rest re-solved by Condat-Vu); {} node(s) with no "
-      "finite linearised bound",
-      miqp_ipm_nodes_, miqp_ipm_fallbacks_, miqp_ipm_lp_infeasible_, miqp_safe_bound_infinite_);
+      "MIQP node IPM (#494): {} node QP(s), {} interior point iterations, {} not finished by "
+      "the interior point ({} of them proved infeasible by the node LP, the rest re-solved by "
+      "Condat-Vu); {} node(s) with no finite linearised bound",
+      miqp_ipm_nodes_, miqp_ipm_iterations_, miqp_ipm_fallbacks_, miqp_ipm_lp_infeasible_,
+      miqp_safe_bound_infinite_);
+  if (miqp_node_ipm_warm_start_) {
+    logger_.info(
+        "MIQP node IPM warm start (#494, #893): {} node QP(s) started from the parent's "
+        "iterate, {} of them abandoned for the cold start",
+        miqp_ipm_warm_starts_, miqp_ipm_warm_fallbacks_);
+  }
+}
+
+void BranchAndBound::record_miqp_ipm(Solution* solution) const {
+  if (!miqp_node_ipm_) return;
+  solution->qp_node_solves = miqp_ipm_nodes_;
+  solution->qp_node_iterations = miqp_ipm_iterations_;
+  solution->qp_node_warm_starts = miqp_ipm_warm_starts_;
+  solution->qp_node_warm_fallbacks = miqp_ipm_warm_fallbacks_;
 }
 
 }  // namespace sankhya::mip

@@ -272,6 +272,29 @@ TEST(FuzzAgainstOracle, HyperSparseSolvesAgainstOracle) {
   EXPECT_GT(tally.compared(), 800) << "the oracle abstained too often to prove anything";
 }
 
+TEST(FuzzAgainstOracle, HomogeneousSelfDualInteriorPointAgainstOracle) {
+  // #475: algorithm=ipm with ipm_hsd ends an infeasible or unbounded LP with a certificate,
+  // so the exact oracle can judge it on all three statuses. random_lp is mostly infeasible or
+  // unbounded, which is the point here. Presolve is off so the embedding, not presolve's
+  // bound arithmetic, is what decides; every infeasible verdict must carry a Farkas vector
+  // that verifies (solve() reports one without it as numerical_error, a mismatch).
+  std::mt19937_64 rng(475000475);
+  GeneratorConfig config;
+  Tally tally;
+  const OptionList homogeneous = {
+      {"algorithm", "ipm"}, {"ipm_hsd", "true"}, {"presolve", "false"}};
+  for (int trial = 0; trial < 500; ++trial) {
+    compare(random_lp(rng, config), &tally, homogeneous);
+    compare(degenerate_lp(rng, config), &tally, homogeneous);
+  }
+  report("1000 instances (random + degenerate) under algorithm=ipm, ipm_hsd, presolve off",
+         tally);
+  EXPECT_EQ(tally.mismatched, 0);
+  EXPECT_GT(tally.compared(), 800) << "the oracle abstained too often to prove anything";
+  EXPECT_GT(tally.infeasible_agreed, 50);
+  EXPECT_GT(tally.unbounded_agreed, 20);
+}
+
 TEST(FuzzAgainstOracle, KktInstancesAgainstTheAnalyticOptimum) {
   // The float solver against an optimum known in closed form - no oracle in the loop at all,
   // so this cannot be fooled by the oracle and the solver sharing a mistake.

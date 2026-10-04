@@ -780,6 +780,28 @@ def mittelmann_cause(row: dict) -> str:
     return f"other ({status})"
 
 
+# The #418 A/B legs, as a clean node on `main` runs them (MIPLIB tier 1, three seeds, 60 s).
+RESTARTS_AB_NOT_RUN = "\n".join([
+    "Not yet run on an idle machine at a commit on `main`. Reproduce with (`<sha>` the "
+    "commit `sankhya version` reports):", "", "```",
+    "python bench/runners/miplib.py --seeds 3 --time-limit 60 --solver-option mip_restarts=0 "
+    "--out bench/results/restarts-ab-miplib-seeds3-off-<sha>.csv",
+    "python bench/runners/miplib.py --seeds 3 --time-limit 60 "
+    "--solver-option mip_reduced_cost_fixing=true --solver-option mip_restarts=2 "
+    "--out bench/results/restarts-ab-miplib-seeds3-on-<sha>.csv",
+    "```"])
+OBJECTIVE_BRANCHING_AB_NOT_RUN = "\n".join([
+    "Not yet run on an idle machine at a commit on `main`. Reproduce with (`<sha>` the "
+    "commit `sankhya version` reports):", "", "```",
+    "python bench/runners/miplib.py --seeds 3 --time-limit 60 "
+    "--solver-option mip_objective_branching=false "
+    "--out bench/results/objbranch-ab-miplib-seeds3-off-<sha>.csv",
+    "python bench/runners/miplib.py --seeds 3 --time-limit 60 "
+    "--solver-option mip_objective_branching=true "
+    "--out bench/results/objbranch-ab-miplib-seeds3-on-<sha>.csv",
+    "```"])
+
+
 def newest_option_run(pattern: str, option: str) -> Path | None:
     """The most recent CSV matching `pattern` whose `solver_options` column contains
     `option` - the per-engine Mittelmann runs of #216 (`--solver-option algorithm=pdhg`),
@@ -2822,6 +2844,21 @@ def main() -> int:
                 newest_option_run("miplib-501-cache8-*.csv", "mip_node_factor_cache=8"))
     fj_ab = (newest_option_run("miplib-506-fj-off-seeds*-*.csv", "mip_heur_fj=off"),
              newest_option_run("miplib-506-fj-on-seeds*-*.csv", "mip_heur_fj=on"))
+    nodepricing_ab = (newest_option_run("nodepricing-ab-miplib-seeds*-inherit-*.csv",
+                                        "mip_node_pricing=inherit"),
+                      newest_option_run("nodepricing-ab-miplib-seeds*-devex-*.csv",
+                                        "mip_node_pricing=devex"))
+    rootloop_ab = (newest_option_run("rootloop-ab-miplib-seeds*-false-*.csv",
+                                     "root_cut_loop=false"),
+                   newest_option_run("rootloop-ab-miplib-seeds*-true-*.csv",
+                                     "root_cut_loop=true"))
+    # #418: root restarts, and objective branching, each read for bound movement on the four
+    # plateau instances. `<topic>-ab-` names, so no MIPLIB tier glob above can pick them up.
+    restarts_ab = (newest_option_run("restarts-ab-miplib-seeds*-off-*.csv", "mip_restarts=0"),
+                   newest_option_run("restarts-ab-miplib-seeds*-on-*.csv", "mip_restarts=2"))
+    objective_branching_ab = (
+        newest_option_run("objbranch-ab-miplib-seeds*-off-*.csv", "mip_objective_branching=false"),
+        newest_option_run("objbranch-ab-miplib-seeds*-on-*.csv", "mip_objective_branching=true"))
     milp_long_csv = newest_named("miplib-600s-*.csv")
     # MIPLIB 3 (#761) at each of its limits, SANKHYA's run and HiGHS's: names of their own
     # (`miplib3-`, `highs-miplib3-`) that none of the MIPLIB 2017 globs above can match.
@@ -3201,6 +3238,32 @@ is a harder library: MIPLIB instances are chosen to be difficult for mature solv
 #### A/B: Feasibility Jump on the seed harness (#506)
 
 {miplib_ab_doc.seeds_ab(*fj_ab, "mip_heur_fj") or "Not yet run on an idle machine."}
+
+#### A/B: Devex for the node LPs on the seed harness (#792)
+
+{miplib_ab_doc.seeds_ab(*nodepricing_ab, "mip_node_pricing") or "Not yet run on an idle machine."}
+
+#### A/B: the root cut loop on the seed harness (#862)
+
+{miplib_ab_doc.seeds_ab(*rootloop_ab, "root_cut_loop") or "Not yet run on an idle machine."}
+
+#### A/B: root restarts on the plateau instances (#418)
+
+Issue #221 measured b-ball, opt1217, rlp1 and noswot holding the published optimum without
+proving it, every open node on one bound: more nodes, cuts and objective integrality did not
+move it.
+(b-ball closed at the root while the root separation loop, #495, was on by default; that
+default is off again since #957, and b-ball stays in the table either way.) The on leg sets `mip_reduced_cost_fixing=true
+mip_restarts=2` (a restart re-solves the root on the bounds reduced-cost fixing tightened),
+the off leg the defaults with `mip_restarts=0`; both off by default until this reads in their
+favour. A restart is triggered only by columns reduced-cost fixing fixed, so the per-run
+restart column below says whether the option did anything at all.
+
+{miplib_ab_doc.plateau_ab(*restarts_ab, "mip_restarts") or RESTARTS_AB_NOT_RUN}
+
+#### A/B: objective branching on the plateau instances (#418)
+
+{miplib_ab_doc.plateau_ab(*objective_branching_ab, "mip_objective_branching") or OBJECTIVE_BRANCHING_AB_NOT_RUN}
 
 ---
 

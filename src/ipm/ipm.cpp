@@ -23,7 +23,9 @@
 // WHAT THIS METHOD DOES NOT DO. It produces no basis, so it cannot warm-start branch and
 // bound and the simplex remains the node engine. It does not certify infeasibility or
 // unboundedness: when it fails to converge it says so and hands back a numerical error,
-// never a claim it cannot prove. Both are stated in the option's description.
+// never a claim it cannot prove. Both are stated in the option's description. The option
+// ipm_hsd (#475, off by default) solves the homogeneous self-dual embedding instead
+// (ipm/hsd.cpp), which does end an infeasible or unbounded LP with a checked certificate.
 
 #include "sankhya/ipm.hpp"
 #include "util/memory.hpp"
@@ -44,6 +46,7 @@
 #include "ipm/centrality.hpp"
 #include "ipm/column_side.hpp"
 #include "ipm/dense_columns.hpp"
+#include "ipm/hsd.hpp"
 #include "ipm/ipm_testing.hpp"
 #include "ipm/model_space.hpp"
 #include "ipm/proximal_system.hpp"
@@ -353,9 +356,16 @@ class InteriorPoint {
   // equations are analysed, factored and solved by cuDSS, and ldl_ is analysed and used only
   // for a matrix the device declines or after a device failure. Null by default, and then
   // nothing below changes.
-  std::unique_ptr<gpu::CudssFactor> device_;
+  std::unique_ptr<gpu::LinearSolverDevice> device_;
   /// The current factors of normal_lower_ are the device's, not ldl_'s.
   bool device_factored_ = false;
+  /// #907: set when normal_solve()'s own mid-solve CPU fallback (the device was factored but
+  /// a solve of it failed or was declined) itself fails - the deadline was already past when
+  /// its analyze or factorize was tried. Neither device_ nor ldl_ then holds usable factors
+  /// of normal_lower_, and every later normal_solve() of this same factor_normal() must say
+  /// so too rather than solve with whatever ldl_ last held. Cleared only where a fresh
+  /// factorization starts, in factor_normal().
+  bool normal_factor_unusable_ = false;
   /// Factorizations the device left with a negative pivot, redone on the CPU.
   Count device_declined_ = 0;
   /// The device's phase times, kept when a failure drops it mid-solve.
@@ -1022,6 +1032,18 @@ bool InteriorPoint::factorize() {
                                            "normal equations",
                                            system.num_nonzeros()));
     }
+    // #907: cuDSS's own analyze() does not consult the deadline once it is called - a single
+    // call on a system the size of refinery_year's (11.1M nonzeros) can run for thousands of
+    // seconds with no way to interrupt it from the host, so the only lever here is not
+    // STARTING it once the set-up's own share of the time limit (ordering_deadline_, #357) is
+    // already spent - the same share the CPU ordering below is already held to. Declining
+    // drops to the CPU path immediately rather than paying for an analysis whose result would
+    // be thrown away by setup_stop() failing it anyway.
+    if (device_ != nullptr && setup_stop()) {
+      drop_device(
+          "the set-up's share of the time limit was spent before cuDSS analysis could "
+          "start (#907)");
+    }
     if (device_ != nullptr) {
       ProfileScope timed(profiler, "cudss analysis", ProfileMode::kDetailed);
       std::string reason;
@@ -1122,7 +1144,11 @@ void InteriorPoint::choose_linear_solver() {
 }
 
 bool InteriorPoint::start_device(bool automatic, const std::string& why) {
-  auto device = std::make_unique<gpu::CudssFactor>();
+  // #907: a test's fake device (ipm_testing.hpp) stands in for the real one so the deadline
+  // handling below the device path can be exercised on the CPU, with no cuDSS build or GPU.
+  std::unique_ptr<gpu::LinearSolverDevice> device = testing::fake_device_factory
+                                                        ? testing::fake_device_factory()
+                                                        : std::make_unique<gpu::CudssFactor>();
   std::string reason;
   if (!device->initialize(&reason)) {
     if (automatic) {
@@ -1221,6 +1247,17 @@ bool InteriorPoint::analyze_on_cpu(const SparseMatrix& system,
 
 bool InteriorPoint::factor_normal(const SparseLdl::ShouldStop& stop) {
   device_factored_ = false;
+  // #907: THE CRASH THIS GUARDS. Once normal_solve()'s own CPU fallback (below) has to run
+  // mid-solve - the device was factored but a solve of it is declined or fails - it can fail
+  // too (the deadline was already past when the fallback's own analyze or factorize was
+  // tried): device_factored_ is false by then, exactly as it is after an ordinary CPU
+  // factorization, and normal_solve() cannot tell "ldl_ holds this iteration's factors" from
+  // "it does not" by that bit alone. Without this flag the NEXT solve of the same
+  // factorization (the predictor-corrector's refinement loop calls normal_solve() several
+  // times on one factor_normal()) fell through to ldl_.solve() on whatever ldl_ last held -
+  // uninitialised, or another system's, of another dimension - and indexed past the end of
+  // its own storage. Reset here, at the one place a fresh factorization starts.
+  normal_factor_unusable_ = false;
   // cuDSS does not consult the deadline, so a deadline already past goes to ldl_, which
   // reports it through stopped_early() as it always has.
   if (device_ != nullptr && !(stop && stop())) {
@@ -1247,15 +1284,30 @@ bool InteriorPoint::factor_normal(const SparseLdl::ShouldStop& stop) {
 }
 
 void InteriorPoint::normal_solve(double* v) {
+  if (normal_factor_unusable_) {
+    // #907: a previous solve of this same factorization already fell to the CPU fallback
+    // and found it, too, past the deadline; there are no factors here to solve with, on the
+    // device or off it, and no later call in this factorization gets any either.
+    std::fill(v, v + m_, std::numeric_limits<double>::quiet_NaN());
+    return;
+  }
   if (device_factored_) {
-    std::string reason;
-    if (device_->solve(v, &reason)) return;
-    drop_device(reason);
+    // #907: the same reasoning as the analyze() guard above - a solve already running late
+    // cannot be interrupted, so skip it rather than start one, and fall to the CPU path below
+    // exactly as a cuDSS failure already does.
+    if (should_stop_ && should_stop_()) {
+      drop_device("the deadline was already passed before a cuDSS solve could start (#907)");
+    } else {
+      std::string reason;
+      if (device_->solve(v, &reason)) return;
+      drop_device(reason);
+    }
     // The same matrix on the CPU. A factorization stopped by the deadline leaves no factor
     // to solve with, and a non-finite direction is what the loop already recovers from.
     ++factorizations_;
     if ((!cpu_analyzed_ && !analyze_on_cpu(normal_lower_, should_stop_)) ||
         !ldl_.factorize(normal_lower_, dual_regularization_, should_stop_)) {
+      normal_factor_unusable_ = true;
       std::fill(v, v + m_, std::numeric_limits<double>::quiet_NaN());
       return;
     }
@@ -1835,6 +1887,7 @@ bool InteriorPoint::model_space_holds_as_reported(bool throttled) {
 }
 
 bool InteriorPoint::purify_duals() {
+  const ProfileScope timed(logger_.profiler(), "dual purification", ProfileMode::kDetailed);
   // On the proximal path ldl_ holds the augmented system's factors; the normal equations
   // the purification needs are ordered once, on first use, into their own object (#473).
   if (m_ == 0 || total_ == 0 || (!analyzed_ && proximal_ == nullptr)) return false;
@@ -2658,6 +2711,46 @@ Solution InteriorPoint::run() {
   }
 }
 
+/// #475: THE EMBEDDING'S ANSWER, OR THE DEFAULT LOOP'S. The embedding (ipm_hsd) is the path
+/// that can end infeasible or unbounded with a certificate; on a model with an optimum it has
+/// none of the default loop's recovery machinery (dual purification, the barrier-exhausted
+/// step, the model-space stall rule's purification), and on Netlib it stalled short of the
+/// tolerances on models the default loop solves. So when it ends with no verdict of its own
+/// (a numerical error, a feasible point that is not a proof, the iteration limit), the default
+/// loop runs on the same model and the time that is left, and its answer is kept when it is
+/// optimal or when the embedding had no point to offer. A certificate, an optimum, and a time
+/// limit or interruption from the embedding stand as they are.
+Solution default_loop_after_the_embedding(Solution embedded, const Model& model,
+                                          const Options& options, Logger& logger,
+                                          SolveControl* control, const Timer& clock,
+                                          const Scaling* scaling) {
+  const bool no_verdict = embedded.status == SolveStatus::kNumericalError ||
+                          embedded.status == SolveStatus::kFeasible ||
+                          embedded.status == SolveStatus::kIterationLimit;
+  if (!no_verdict) return embedded;
+  logger.info(
+      "Interior point: the homogeneous self-dual embedding ended {} ({}); the default loop "
+      "runs on the time that is left (#475)",
+      to_string(embedded.status), embedded.message);
+  InteriorPoint engine(model, options, logger, control, nullptr, &clock);
+  if (scaling != nullptr) engine.set_scaling(scaling);
+  Solution fallback = engine.run();
+  const bool adopt =
+      fallback.status == SolveStatus::kOptimal || embedded.status != SolveStatus::kFeasible;
+  if (!adopt) {
+    embedded.message += fmt::format("; the default loop then ended {} and was not adopted",
+                                    to_string(fallback.status));
+    return embedded;
+  }
+  const std::string note = fmt::format(
+      "the homogeneous self-dual embedding ended {} ({}), and this is the default loop's "
+      "answer (#475)",
+      to_string(embedded.status), embedded.message);
+  fallback.message = fallback.message.empty() ? note : fallback.message + "; " + note;
+  fallback.iterations += embedded.iterations;
+  return fallback;
+}
+
 /// Scaled solve: Ruiz + Pock-Chambolle equilibration, exactly as the simplex entry point
 /// applies it, then the point, the row duals and the reduced costs are mapped back:
 /// x = Dc xhat, y = Dr yhat, d = Dc^-1 dhat (la/scaling.hpp).
@@ -2666,7 +2759,18 @@ Solution solve_scaled(const Model& model, const Options& options, Logger& logger
   // The clock the time limit runs on starts HERE. Scaling a 500,000-row model and copying
   // it are tens of seconds, and a polish's budget of 30 used to begin only after them.
   Timer clock;
+  // THE HOMOGENEOUS SELF-DUAL EMBEDDING (#475, ipm_hsd, off by default) replaces the loop
+  // below for a cold solve; a warm start (the polish of a first-order answer) keeps it.
+  const bool homogeneous = warm == nullptr && options.get_bool("ipm_hsd");
+  if (homogeneous) announce_homogeneous(options, logger);
   if (!options.get_bool("scaling")) {
+    if (homogeneous) {
+      Solution solution = default_loop_after_the_embedding(
+          solve_homogeneous(model, options, logger, control, clock, nullptr), model, options,
+          logger, control, clock, nullptr);
+      keep_only_a_proved_certificate(model, &solution, logger);
+      return solution;
+    }
     InteriorPoint engine(model, options, logger, control, warm, &clock);
     return engine.run();
   }
@@ -2713,23 +2817,34 @@ Solution solve_scaled(const Model& model, const Options& options, Logger& logger
   }
   logger.verbose("interior point: scaled model and warm start ready at {:.2f}s",
                  clock.elapsed_seconds());
-  InteriorPoint engine(scaled, options, logger, control, warm, &clock);
-  engine.set_scaling(&scaling);
-  Solution solution = engine.run();
+  Solution solution;
+  if (homogeneous) {
+    solution = default_loop_after_the_embedding(
+        solve_homogeneous(scaled, options, logger, control, clock, &scaling, &model), scaled,
+        options, logger, control, clock, &scaling);
+  } else {
+    InteriorPoint engine(scaled, options, logger, control, warm, &clock);
+    engine.set_scaling(&scaling);
+    solution = engine.run();
+  }
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
     const double dc = scaling.column[u];
     if (u < solution.col_value.size()) solution.col_value[u] *= dc;
     if (u < solution.col_dual.size()) solution.col_dual[u] /= dc;
+    // A ray maps as a point does (x = Dc xhat), a Farkas vector as the row duals (y = Dr yhat).
+    if (u < solution.primal_ray.size()) solution.primal_ray[u] *= dc;
   }
   for (Index i = 0; i < m; ++i) {
     const auto u = static_cast<std::size_t>(i);
     if (u < solution.row_dual.size()) solution.row_dual[u] *= scaling.row[u];
+    if (u < solution.farkas_dual.size()) solution.farkas_dual[u] *= scaling.row[u];
   }
   if (solution.status == SolveStatus::kOptimal) {
     solution.dual_bound = model.evaluate_objective(solution.col_value.data());
   }
   solution.recompute_quality(model);
+  if (homogeneous) keep_only_a_proved_certificate(model, &solution, logger);
   return solution;
 }
 

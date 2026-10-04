@@ -238,6 +238,22 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"devex", "dantzig", "dual-steepest-edge"}});
+    s.push_back({"mip_node_pricing",
+                 OptionType::String,
+                 std::string("devex"),
+                 "Pricing for the node LPs after the root and for strong-branching probes: "
+                 "inherit uses `pricing`; devex (default), dantzig or dual-steepest-edge "
+                 "override it there only, so the root LP keeps the rule `pricing` names. A "
+                 "node LP is a warm re-solve a few pivots from its parent's basis, and dual "
+                 "steepest edge's extra FTRAN per pivot and its norm start cost more there "
+                 "than they save: the node-rate bisect over 90f5d35..d0f20dc put the 30 "
+                 "percent slower nodes on markshare_4_0 and neos-3611689-kaihu at #860, "
+                 "which made it the default (#792). Devex by default since the A/B on main "
+                 "fef0192 (MIPLIB tier 1, 3 seeds at 60 s: "
+                 "inherit 50 of 90 matched and 31 proved, devex 52 and 33; #971).",
+                 0.0,
+                 0.0,
+                 {"inherit", "devex", "dantzig", "dual-steepest-edge"}});
     s.push_back({"basis_update",
                  OptionType::String,
                  std::string("product-form"),
@@ -546,16 +562,16 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"root_cut_loop",
                  OptionType::Bool,
-                 true,
+                 false,
                  "Root cuts (#495): after the first round, separate again at the new LP "
                  "point, add, re-solve warm, and repeat until the bound stalls (3 rounds "
                  "moving it by at most 1e-3 of the gap, or of max(1, |bound|) with no "
                  "incumbent), 20 rounds, 20 percent of time_limit, a round that takes "
                  "nothing, or max(100, m) cut rows added in all, m the rows before the first "
-                 "cut. Logs one line per round. Only read when enable_root_cuts is set. On by "
-                 "default since the A/B on main 4797f7e (MIPLIB easy, node_limit 10000, 3 "
-                 "seeds: 30 of 90 proved and 39 matched against 28 and 37; "
-                 "bench/results/miplib-4797f7e-n10000-loop-s3.csv).",
+                 "cut. Logs one line per round. Only read when enable_root_cuts is set. Off by "
+                 "default again after the 60 s A/B on main f7cfd57 (MIPLIB tier 1, 3 seeds: "
+                 "off 50 of 90 matched and 31 proved, on 42 and 32; "
+                 "bench/results/rootloop-ab-miplib-seeds3-*-f7cfd57.csv, #956).",
                  0.0,
                  0.0,
                  {}});
@@ -832,11 +848,15 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Bool,
                  false,
                  "With miqp_node_ipm: start a child node's interior point from its parent's "
-                 "converged point (#494, #893) instead of the engine's usual cold start - the "
-                 "primal point, mapped onto the child's columns and pulled back inside any "
-                 "bound the branch just tightened, and the parent's row duals, not its "
-                 "regularization or bound multipliers (a partial warm start). Ignored when "
-                 "miqp_node_ipm is off. Off by default until its own A/B on main.",
+                 "save point (#494, #893) instead of the engine's cold start - the parent's "
+                 "first iterate within 1e-2 relative residuals and gap, not its optimum, with "
+                 "its row and bound multipliers and proximal parameters, shifted into the "
+                 "child's interior and recentred (Gondzio, 'Warm start of the primal-dual "
+                 "method applied in the cutting-plane scheme', Math. Programming 83 (1998)). "
+                 "A node the warm run cannot finish is decided by its LP, then solved cold. "
+                 "Ignored when "
+                 "miqp_node_ipm is off. Off by default until its own A/B on main "
+                 "(bench/runners/qplib_miqp.py).",
                  0.0,
                  0.0,
                  {}});
@@ -2107,6 +2127,26 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          10.0,
          {}});
+    s.push_back(
+        {"ipm_hsd",
+         OptionType::Bool,
+         false,
+         "Solve the LP interior point's cold solves through the simplified homogeneous "
+         "self-dual embedding (#475; Ye, Todd and Mizuno 1994, Xu, Hung and Ye 1996, Andersen "
+         "and Andersen 2000) in place of the default Mehrotra loop: the same normal equations "
+         "and the same LDL^T, with the one extra unknown tau eliminated by a second solve per "
+         "factorization. At the limit tau > 0 gives the optimum and kappa > 0 a ray: the "
+         "dual ray y is reported as a Farkas certificate (infeasible) or the primal ray x as "
+         "a ray of unboundedness, the latter with a feasible point from a second, zero-cost "
+         "solve of the embedding; either only when farkas_proves_infeasible or "
+         "ray_proves_unbounded (src/core/certificate.cpp) accepts it, on the scaled model and "
+         "again in the model's units. A warm start (the PDHG polish) keeps the default loop, "
+         "and ipm_proximal_regularization, ipm_dense_columns, ipm_normal_side, "
+         "ipm_linear_solver=cudss and ipm_centrality_correctors do not apply. Default OFF "
+         "until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
                  tol::kPdhgLoose,
@@ -2200,6 +2240,95 @@ const std::vector<OptionSpec>& Options::registry() {
          false,
          "Schedule early PDHG convergence evaluations geometrically (1, 2, 4, 8...) when "
          "the interaction term is zero, rather than every iteration (#480). Default off.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
+        {"pdhg_constant_step",
+         OptionType::Bool,
+         false,
+         "Run the LP PDHG at the constant step eta = 0.998 / U instead of the adaptive rule "
+         "of PDLP section 3.1 (#482), U a PROVED upper bound on ||A||_2 of the scaled matrix: "
+         "the smallest of ||A||_F, sqrt(||A||_1 ||A||_inf) and a Collatz-Wielandt bound on "
+         "|A|^T |A| from 30 power steps (src/la/operator_norm.hpp; Horn & Johnson, Matrix "
+         "Analysis, Theorem 8.1.18 and Corollary 8.1.29). tau sigma ||A||^2 < 1 then holds "
+         "(Chambolle & Pock 2011), so every step is accepted and no step is retried. The "
+         "share 0.998 is that of Lu, Peng & Yang, cuPDLPx, arXiv:2507.14051, which pairs it "
+         "with the reflected Halpern iteration (pdhg_halpern). The log states the bound, the "
+         "power-iteration lower bound and their ratio. CPU engine and the single-card CUDA "
+         "engine (both its paths); the multi-GPU engine ignores it and says so. Off by "
+         "default until an A/B on main (bench/runners/pdhg_step_weight_ab.py).",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
+        {"pdhg_primal_weight_pid",
+         OptionType::Bool,
+         false,
+         "Move the LP PDHG primal weight omega at each restart by a PID controller on "
+         "e = log(omega ||dx|| / ||dy||), the period's primal and dual movement (#482): "
+         "log omega -= kp e + ki sum(e) + kd de, the integral clamped to +-5, omega kept in "
+         "[1e-6, 1e6] - the controller of the first-order QP engine (#493, "
+         "src/qp/qp_first_order_accel.cpp), called as is. With kp = 0.5 and ki = kd = 0 it is "
+         "the default smoothed update of PDLP section 3.2 (theta = 0.5). Applies to the PDLP "
+         "restarts and to the pdhg_halpern restarts, on the CPU engine and the single-card "
+         "CUDA engine; the multi-GPU engine ignores it and says so. Reference: Lu, Peng & "
+         "Yang, cuPDLPx, arXiv:2507.14051. Off by default until an A/B on main "
+         "(bench/runners/pdhg_step_weight_ab.py); the gains and how they were chosen are in "
+         "src/pdhg/pdhg.cpp and the #482 rows of docs/PROVENANCE.md.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back({"pdhg_pid_kp",
+                 OptionType::Double,
+                 0.5,
+                 "pdhg_primal_weight_pid: proportional gain. 0.5 with ki = kd = 0 is PDLP's "
+                 "smoothed primal-weight update (theta = 0.5). The defaults (0.5, 0.1, 0.2) "
+                 "are the best of an 18-point grid on a tuning set disjoint from the A/B's "
+                 "(#482; src/pdhg/pdhg.cpp says how).",
+                 0.0,
+                 2.0,
+                 {}});
+    s.push_back({"pdhg_pid_ki",
+                 OptionType::Double,
+                 0.1,
+                 "pdhg_primal_weight_pid: integral gain, on the clamped sum of log-errors.",
+                 0.0,
+                 2.0,
+                 {}});
+    s.push_back({"pdhg_pid_kd",
+                 OptionType::Double,
+                 0.2,
+                 "pdhg_primal_weight_pid: derivative gain, on the change of the log-error "
+                 "between restarts.",
+                 0.0,
+                 2.0,
+                 {}});
+    s.push_back(
+        {"pdhg_bound_objective_rescaling",
+         OptionType::Bool,
+         false,
+         "After the Ruiz and Pock-Chambolle scaling, divide the LP PDHG's scaled objective by "
+         "||c||_2 + 1 and every scaled row and column bound by ||b||_2 + 1, b the row "
+         "right-hand sides (#482 item 3). The matrix is untouched; the rescaling is folded "
+         "into the scaling, so the answer is reported on the original model as before. The "
+         "issue cites Lu, Peng & Yang, cuPDLPx, arXiv:2507.14051 for b and c rescaled by "
+         "their norms; the + 1 is this project's guard against a zero or tiny norm. CPU "
+         "engine only: the CUDA engines warn and run without it. Off by default until an A/B "
+         "on main (bench/runners/pdhg_step_weight_ab.py, leg norms).",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
+        {"pdhg_initial_weight_from_norms",
+         OptionType::Bool,
+         false,
+         "Start the LP PDHG primal weight at ||c||_2 / ||b||_2 of the scaled problem (after "
+         "pdhg_bound_objective_rescaling when that is on), clamped to [1e-6, 1e6], instead "
+         "of 1; 1 when either norm is zero, and a warm start's own weight still wins (#482 "
+         "item 3; Applegate et al., PDLP, NeurIPS 2021, section 3.2). CPU engine only: the "
+         "CUDA engines warn and start at 1. Off by default until an A/B on main "
+         "(bench/runners/pdhg_step_weight_ab.py, leg norms).",
          0.0,
          0.0,
          {}});

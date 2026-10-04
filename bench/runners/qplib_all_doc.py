@@ -69,8 +69,10 @@ def section(path: Path | None) -> str:
         f"| solved (status optimal) | {count('solved')} |",
         f"| matched QPLIB's objective | {count('matches_reference')} |",
         f"| verified by `tools/verify_solution.py` | {count('verified')} |",
-        f"| better than QPLIB's objective by more than the tolerance | "
-        f"{count('beats_reference')} |",
+        f"| better than QPLIB's objective by more than the tolerance, point verified | "
+        f"{sum(_yes(r, 'beats_reference') and _yes(r, 'verified') for r in rows)} |",
+        f"| a better objective at a point the verifier did not accept (proves nothing) | "
+        f"{sum(_yes(r, 'beats_reference') and not _yes(r, 'verified') for r in rows)} |",
         f"| point rejected by the verifier | {sum(r['verified'] == '0' for r in rows)} |",
         "",
         "Matched means optimal and |ours - ref| / max(1, |ref|) within 1e-6 for a continuous "
@@ -108,12 +110,14 @@ def section(path: Path | None) -> str:
                    f"{sum(bool(r['refusal']) for r in mine)} | "
                    f"{sum(_yes(r, 'solved') for r in mine)} | "
                    f"{sum(_yes(r, 'matches_reference') for r in mine)} |")
-    beats = [r for r in rows if _yes(r, "beats_reference")]
+    # A better objective counts only at a point the verifier accepted: a time-limit point
+    # that violates a row can "beat" any reference and proves nothing.
+    beats = [r for r in rows if _yes(r, "beats_reference") and _yes(r, "verified")]
     rejected = [r for r in rows if r["verified"] == "0"]
     broken = [r for r in rows if r["refusal"] in ("reader_error", "crashed", "hung")]
     wrong = [r for r in rows if _yes(r, "solved") and r["matches_reference"] == "0"]
     out += ["", "**Named, because each is a bug until shown otherwise.**", ""]
-    out.append(f"- Better than the reference: {_names(beats) or 'none'}.")
+    out.append(f"- Better than the reference at a verified point: {_names(beats) or 'none'}.")
     out.append(f"- Point rejected by the verifier: {_names(rejected) or 'none'}.")
     out.append(f"- Reader error, crash or hang: {_names(broken) or 'none'}.")
     out.append(f"- Optimal but not matching the reference: {_names(wrong) or 'none'}.")

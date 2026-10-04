@@ -1869,6 +1869,10 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.conflict_nodes_pruned = reduced.conflict_nodes_pruned;
   solution.conflict_tightenings = reduced.conflict_tightenings;
   solution.clique_cuts_generated = reduced.clique_cuts_generated;
+  solution.qp_node_solves = reduced.qp_node_solves;
+  solution.qp_node_iterations = reduced.qp_node_iterations;
+  solution.qp_node_warm_starts = reduced.qp_node_warm_starts;
+  solution.qp_node_warm_fallbacks = reduced.qp_node_warm_fallbacks;
   // The root bounds are objective values of the reduced model, whose objective_offset
   // carries the constant the removed columns contributed, so they are already in the
   // original model's units (#221).

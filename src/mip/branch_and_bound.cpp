@@ -276,6 +276,84 @@ Solution BranchAndBound::run() {
     solution.message = problem;
     return solution;
   }
+
+  // Phase 1 and 2: validate, repair, and install a user-supplied initial solution.
+  // A start with one value per column of a different model (an edited model, or a caller
+  // that kept the previous answer) is not indexed: it is ignored, and the log says why.
+  const bool start_fits =
+      control_ && control_->has_start_solution() &&
+      control_->start_solution.size() == static_cast<std::size_t>(original_.num_cols());
+  if (control_ && control_->has_start_solution() && !start_fits) {
+    logger_.warning(
+        "The starting solution has {} values for a model of {} columns; it is ignored (#753)",
+        control_->start_solution.size(), original_.num_cols());
+  }
+  if (start_fits) {
+    bool accepted = false;
+    bool has_nans = false;
+    for (const double v : control_->start_solution) {
+      if (std::isnan(v)) {
+        has_nans = true;
+        break;
+      }
+    }
+    if (!has_nans) {
+      accepted = offer_incumbent(control_->start_solution);
+    }
+    if (accepted) {
+      logger_.info(
+          "Accepted user-supplied starting solution as initial incumbent: objective {:.6g}",
+          incumbent_internal_);
+    } else {
+      Model box = original_;
+      bool missing_integer = false;
+      for (const Index j : integer_columns_) {
+        const auto u = static_cast<std::size_t>(j);
+        const double v = control_->start_solution[u];
+        if (!std::isnan(v)) {
+          const double nearest = std::round(v);
+          box.col_lower[u] = nearest;
+          box.col_upper[u] = nearest;
+        } else {
+          missing_integer = true;
+        }
+      }
+      Logger quiet(nullptr);
+      const Count node_limit = missing_integer ? 100 : 0;
+
+      struct StartSolutionGuard {
+        SolveControl* control;
+        std::vector<double> saved;
+        explicit StartSolutionGuard(SolveControl* c) : control(c) {
+          if (control) saved.swap(control->start_solution);
+        }
+        ~StartSolutionGuard() {
+          if (control) control->start_solution.swap(saved);
+        }
+      } guard(control_);
+
+      const Solution found = solve_branch_and_bound(
+          box,
+          sub_mip_options(
+              options_, node_limit,
+              sub_mip_seconds(limits_, timer_.elapsed_seconds(), schedule_.seconds_budgets)),
+          quiet, control_);
+      if (claims_a_point(found.status) && !found.col_value.empty()) {
+        if (offer_incumbent(found.col_value)) {
+          logger_.info(
+              "Repaired partial or infeasible starting solution as initial incumbent: "
+              "objective {:.6g}",
+              incumbent_internal_);
+          accepted = true;
+        }
+      }
+      if (!accepted) {
+        logger_.warning(
+            "The user-supplied starting solution is either infeasible or not an integer "
+            "assignment, and a repair attempt failed.");
+      }
+    }
+  }
   // Formulation symmetry (#413), not for a quadratic objective, whose Hessian the detection
   // does not read. A parallel worker (#222) appends the rows the driver derived once from
   // the same model, in the same order, so every subtree searches the same restricted
@@ -475,7 +553,10 @@ Solution BranchAndBound::run() {
       // sit below the incumbent once every OTHER branch has been explored) would fire this
       // check before the loop ever reaches it to prune it honestly.
       if (gap > 0.0) {
-        const double relative = gap / std::max(1.0, std::fabs(incumbent_internal_));
+        // Relative to the objective the user sees, offset included: the internal value
+        // leaves the constant out, and on mcsched that made a 1.23e-4 gap read 9.9e-5 and
+        // stop as optimal under a 1e-4 target the verifier then rejected (#504).
+        const double relative = gap / std::max(1.0, std::fabs(reported(incumbent_internal_)));
         if (gap <= absolute_gap_target_ || relative <= relative_gap_target_) {
           // Meeting the gap target is what every MIP solver means by "optimal": the
           // incumbent is within the requested tolerance of the best any open node can
@@ -548,6 +629,14 @@ Solution BranchAndBound::run() {
         analyze_conflict(node_index, ConflictSource::kPropagation, nullptr);
       }
       continue;
+    }
+
+    // mip_node_pricing (#792): every node LP after the root, and the strong-branching
+    // probes from here on, take the node rule; the root LP and its cut rounds kept `pricing`.
+    if (node_index != 0 && !node_pricing_applied_ && node_pricing_ != "inherit") {
+      node_options_.set_string("pricing", node_pricing_);
+      probe_options_.set_string("pricing", node_pricing_);
+      node_pricing_applied_ = true;
     }
 
     // The node LP's size, before the pool or a cut round changes it (#497's measure).
@@ -664,6 +753,10 @@ Solution BranchAndBound::run() {
       tree_cut_round(node.depth, &relaxation);
     }
     age_cut_rows(&relaxation);
+    // miqp_node_ipm_warm_start (#494, #893): the save point of the solve that produced the
+    // relaxation as it now stands, taken before the heuristics below can solve other QPs.
+    qp::QpIpmWarmStart node_qp_warm;
+    if (miqp_node_ipm_warm_start_) node_qp_warm = last_qp_warm_;
 
     // Node bound in minimise space, excluding the offset (added back on report). Stored and
     // ordered raw; can_prune() and the gap test round it up to the next value an integer
@@ -742,19 +835,11 @@ Solution BranchAndBound::run() {
     // strong-branching probes can replace current_warm_ with the bases of their own solves.
     WarmStart children_warm = basis_of(relaxation);
     current_warm_ = children_warm;
-    // miqp_node_ipm_warm_start (#494, #893): the children start their own IPM from this node's
-    // converged point, pulled back inside whichever bound the branch just tightened. Only
-    // relaxation.col_value's size is checked here; a point size-correct but not actually
-    // converged (the IPM's own fallback path) is still a better start than the engine's cold
-    // one, so it is not filtered further.
-    qp::QpIpmWarmStart children_qp_warm;
-    if (miqp_node_ipm_warm_start_ &&
-        relaxation.col_value.size() == static_cast<std::size_t>(working_.num_cols())) {
-      children_qp_warm.col_value = relaxation.col_value;
-      if (relaxation.row_dual.size() == static_cast<std::size_t>(working_.num_rows())) {
-        children_qp_warm.row_dual = relaxation.row_dual;
-      }
-    }
+    // miqp_node_ipm_warm_start (#494, #893): the children, and the dives below, start their
+    // own IPM from this node's save point (empty when the node's IPM did not end optimal, and
+    // they then start cold).
+    qp::QpIpmWarmStart children_qp_warm = std::move(node_qp_warm);
+    current_qp_warm_ = children_qp_warm;
 
     // Diving (#25, #414): at the root, and every mip_dive_frequency nodes when that is set.
     // node_index == 0 identifies the root directly - it is the one node present in open_
@@ -768,6 +853,7 @@ Solution BranchAndBound::run() {
       ProfileScope timed(logger_.profiler(), "heuristics", ProfileMode::kDetailed);
       run_dives(node_index, relaxation.col_value);
       current_warm_ = children_warm;
+      current_qp_warm_ = children_qp_warm;
       // The feasibility pump only at the root, and only when rounding, repair and the dives
       // all came back empty: its value is an incumbent where there is none, and it costs
       // LP solves.
@@ -810,14 +896,9 @@ Solution BranchAndBound::run() {
     keep_inherited();  // a strong-branch fix (#502) may have re-solved the node LP
     if (!strong_fixes_.empty()) {
       children_warm = basis_of(relaxation);
-      if (miqp_node_ipm_warm_start_ &&
-          relaxation.col_value.size() == static_cast<std::size_t>(working_.num_cols())) {
-        children_qp_warm.col_value = relaxation.col_value;
-        children_qp_warm.row_dual =
-            relaxation.row_dual.size() == static_cast<std::size_t>(working_.num_rows())
-                ? relaxation.row_dual
-                : std::vector<double>{};
-      }
+      // The re-solve after the fixes is the last node QP solve, so its save point is the
+      // node's now.
+      if (miqp_node_ipm_warm_start_) children_qp_warm = last_qp_warm_;
     }
     if (branch_column == kBranchIntegral && !strong_fixes_.empty()) {
       offer_incumbent(relaxation.col_value);
@@ -921,9 +1002,10 @@ Solution BranchAndBound::run() {
     if (nodes_explored_ % 20 == 1 || nodes_explored_ < 5) {
       const double incumbent_report =
           have_incumbent_ ? reported(incumbent_internal_) : kInfinity;
-      const double gap = have_incumbent_ ? std::fabs(incumbent_internal_ - best_open_bound) /
-                                               std::max(1.0, std::fabs(incumbent_internal_))
-                                         : kInfinity;
+      const double gap = have_incumbent_
+                             ? std::fabs(incumbent_internal_ - best_open_bound) /
+                                   std::max(1.0, std::fabs(reported(incumbent_internal_)))
+                             : kInfinity;
       logger_.node(nodes_explored_, static_cast<Count>(open_.size()), incumbent_report,
                    reported(best_open_bound), gap, timer_.elapsed_seconds());
     }
@@ -1005,6 +1087,7 @@ Solution BranchAndBound::run() {
     record_safe_bounds(&solution);
     record_conflicts(&solution);
     record_cut_counts(&solution);
+    record_miqp_ipm(&solution);
     solution.solve_seconds = timer_.elapsed_seconds();
     report_root(&solution);
     return solution;
@@ -1019,6 +1102,7 @@ Solution BranchAndBound::run() {
   record_safe_bounds(&solution);
   record_conflicts(&solution);
   record_cut_counts(&solution);
+  record_miqp_ipm(&solution);
   solution.solve_seconds = timer_.elapsed_seconds();
   report_root(&solution);
 

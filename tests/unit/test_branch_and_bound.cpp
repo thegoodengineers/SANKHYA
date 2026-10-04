@@ -481,6 +481,26 @@ TEST(BranchAndBound, StopsOnALooseRelativeGapAndReportsOptimalWithinIt) {
   EXPECT_LE(relative, 0.5 + 1e-9);
 }
 
+TEST(BranchAndBound, TheRelativeGapIsMeasuredOnTheObjectiveWithItsConstant) {
+  // #504: the gap stop divided by the incumbent without the objective constant, so on
+  // mcsched a 1.23e-4 gap read 9.9e-5 and was reported optimal under the 1e-4 target, and
+  // the verifier, which measures on the objective the user sees, rejected the claim. Same
+  // knapsack as above (optimum -17), with a constant of +16 so the user's optimum is -1:
+  // a 0.5 relative target then allows a gap of at most 0.5, not 8.5.
+  Model model =
+      make_milp({{5.0, 4.0, 3.0, 2.0}}, {-kInfinity}, {10.0}, {-10.0, -7.0, -4.0, -3.0},
+                {1.0, 1.0, 1.0, 1.0}, {true, true, true, true});
+  model.objective_offset = 16.0;
+  Options options = mip_options();
+  options.set_double("mip_relative_gap", 0.5);
+  const Solution s = solve(model, options);
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_NEAR(s.objective, -1.0, 1e-9) << s.message;
+  const double relative =
+      std::fabs(s.objective - s.dual_bound) / std::max(1.0, std::fabs(s.objective));
+  EXPECT_LE(relative, 0.5 + 1e-9) << s.message;
+}
+
 TEST(BranchAndBound, AnAlreadyProvenTreeReportsOptimalNotFeasible) {
   // Found via data/casestudies/power_dispatch.mps (4-unit single-period unit commitment,
   // #37's own reference implementation in generate.py). The termination check added for
@@ -631,6 +651,11 @@ struct FuzzTally {
   /// which these stay zero never removed or re-added a row.
   long long cut_rows_removed = 0;
   long long cut_rows_readded = 0;
+  /// Restarts, reduced-cost fixings and objective-row branches (#418), summed the same way:
+  /// a sweep with those options on in which these stay zero exercised none of them.
+  long long restarts = 0;
+  long long reduced_cost_fixings = 0;
+  long long objective_branches = 0;
   std::vector<std::string> failures;
 };
 
@@ -638,7 +663,7 @@ struct FuzzTally {
 /// density filter (kCutMaxDensity = 0.2) and sparse rows so single-row MIR cuts have that
 /// support; the small shape rejects every cut and so cannot exercise a cut round at all.
 FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = false,
-                        int trials = 600) {
+                        int trials = 600, const oracle::GeneratorConfig* shape = nullptr) {
   std::mt19937_64 rng(20260906);
   oracle::GeneratorConfig config;
   // Small: the oracle explores the tree in exact arithmetic and copies both bound vectors
@@ -649,6 +674,7 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
   config.max_cols = wide ? 20 : 5;
   config.magnitude = 4;
   if (wide) config.density = 0.15;
+  if (shape != nullptr) config = *shape;
 
   FuzzTally tally;
   int& agreed_optimal = tally.agreed_optimal;
@@ -685,6 +711,9 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
     tally.cuts_applied += s.cuts_applied;
     tally.cut_rows_removed += s.cut_rows_removed;
     tally.cut_rows_readded += s.cut_rows_readded;
+    tally.restarts += s.restarts;
+    tally.reduced_cost_fixings += s.reduced_cost_fixings;
+    tally.objective_branches += s.objective_branches;
 
     const auto disagree = [&](const std::string& why) {
       ++mismatched;
@@ -761,7 +790,10 @@ FuzzTally run_milp_fuzz(const Options& options, const char* label, bool wide = f
             << "  MISMATCHED          " << mismatched << "\n"
             << "  cut rows applied    " << tally.cuts_applied << "\n"
             << "  pool rows removed   " << tally.cut_rows_removed << "\n"
-            << "  pool rows re-added  " << tally.cut_rows_readded << "\n";
+            << "  pool rows re-added  " << tally.cut_rows_readded << "\n"
+            << "  restarts            " << tally.restarts << "\n"
+            << "  reduced-cost fixes  " << tally.reduced_cost_fixings << "\n"
+            << "  objective branches  " << tally.objective_branches << "\n";
   for (const std::string& failure : failures) {
     std::cout << "\n--- failing instance ---\n" << failure << "\n";
   }
@@ -848,6 +880,25 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheNodeFactorCache) {
                      200, 100);
 }
 
+// mip_node_pricing (#792) under the exact oracle: the node LPs after the root switch from
+// dual steepest edge to Devex (or Dantzig) mid-search, with tree cuts and the factor cache
+// on so the switch meets rebuilt rows and kept factorizations. A pricing rule only changes
+// the path to a node's optimum, never the optimum, so every answer must still agree.
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithNodePricing) {
+  for (const std::string rule : {"devex", "dantzig"}) {
+    Options options = mip_options();
+    options.set_string("mip_node_pricing", rule);
+    const std::string small = "node pricing " + rule;
+    expect_clean_sweep(run_milp_fuzz(options, small.c_str()));
+    options.set_bool("enable_root_cuts", true);
+    options.set_int("tree_cut_depth", 4);
+    options.set_int("mip_node_factor_cache", 8);
+    options.set_bool("presolve", false);
+    const std::string wide = small + ", tree cuts, wide";
+    expect_clean_sweep(run_milp_fuzz(options, wide.c_str(), true, 600), 200, 100);
+  }
+}
+
 // The cut pool (#497) under the exact rational oracle: aged cut rows DELETED from the node
 // LP and appended again when violated. An age limit of 1 removes a row at nearly every node
 // where it is slack, so stored bases are remapped onto changed rows all the time; a row put
@@ -869,6 +920,91 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheCutPool) {
   EXPECT_GT(wide.cut_rows_readded, 0) << "no removed cut row was ever appended again";
   // These shapes close in a few nodes, so rows come back rarely here; the sweep in
   // test_cut_pool.cpp puts deeper knapsack trees through the same oracle.
+}
+
+// ROOT RESTARTS AND REDUCED-COST FIXING (#418) under the exact rational oracle. A bound
+// fixed for the whole tree by a reduced cost the root did not prove, or a restart that
+// dropped an open node it still needed, makes the search prove the second-best answer
+// optimal; the oracle knows the true optimum, so either shows up as a mismatch. The restart
+// fraction is 0 so that a single fixed column is enough to restart, which puts as many
+// restarts through the sweep as the cap allows.
+//
+// The small and wide shapes above close in a handful of nodes, so they restart rarely; the
+// DEEP shape (ten to twelve general-integer columns, four to six denser rows) builds trees
+// of a few hundred nodes the exact oracle still finishes, and is where restarts and
+// objective-row branches actually happen. Presolve is off on it so the tree sees the model.
+oracle::GeneratorConfig deep_shape() {
+  oracle::GeneratorConfig config;
+  config.min_rows = 4;
+  config.max_rows = 6;
+  config.min_cols = 10;
+  config.max_cols = 12;
+  config.magnitude = 8;
+  config.density = 0.5;
+  return config;
+}
+
+Options restart_options() {
+  Options options = mip_options();
+  options.set_bool("mip_reduced_cost_fixing", true);
+  options.set_int("mip_restarts", 2);
+  options.set_double("mip_restart_fraction", 0.0);
+  return options;
+}
+
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithRestarts) {
+  Options options = restart_options();
+  expect_clean_sweep(run_milp_fuzz(options, "restarts"));
+  options.set_bool("presolve", false);
+  expect_clean_sweep(run_milp_fuzz(options, "restarts, wide", true, 600), 200, 100);
+  const oracle::GeneratorConfig deep = deep_shape();
+  const FuzzTally tree = run_milp_fuzz(options, "restarts, deep", false, 600, &deep);
+  expect_clean_sweep(tree, 300, 100);
+  EXPECT_GT(tree.reduced_cost_fixings, 0) << "no bound was ever fixed by reduced cost";
+  EXPECT_GE(tree.restarts, 20) << "too few searches restarted for the sweep to mean much";
+  // With the heuristics on (off by default, and in the MIPLIB A/B) the incumbent arrives
+  // before the tree finds one, so fixing starts earlier; fewer trials, the heuristics cost
+  // more per solve than these trees do.
+  options.set_bool("mip_heuristics", true);
+  const FuzzTally heuristics =
+      run_milp_fuzz(options, "restarts, heuristics on, deep", false, 60, &deep);
+  expect_clean_sweep(heuristics, 30, 20);
+  EXPECT_GT(heuristics.restarts, 0) << "no search restarted with the heuristics on";
+}
+
+// OBJECTIVE BRANCHING (#418), the plateau half: a node whose relaxation value sits between
+// two multiples of the objective's step is split on the objective row. A row bound applied
+// to the wrong side, or left behind when the search moved on, cuts off the optimum.
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithObjectiveBranching) {
+  Options options = mip_options();
+  options.set_bool("mip_objective_branching", true);
+  expect_clean_sweep(run_milp_fuzz(options, "objective branching"));
+  options.set_bool("presolve", false);
+  expect_clean_sweep(run_milp_fuzz(options, "objective branching, wide", true, 600), 200, 100);
+  const oracle::GeneratorConfig deep = deep_shape();
+  const FuzzTally tree = run_milp_fuzz(options, "objective branching, deep", false, 600, &deep);
+  expect_clean_sweep(tree, 300, 100);
+  EXPECT_GE(tree.objective_branches, 20)
+      << "too few nodes were split on the objective row for the sweep to mean much";
+}
+
+// Everything #418 adds at once, beside the cut rounds and conflict analysis it has to share
+// the tree with: a restart carries the objective row's bounds and the cut rows across the
+// new root, and the oracle checks the combination rather than each part alone.
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithRestartsObjectiveBranchingAndCuts) {
+  Options options = restart_options();
+  options.set_bool("mip_objective_branching", true);
+  options.set_bool("enable_root_cuts", true);
+  options.set_int("tree_cut_depth", 4);
+  options.set_bool("conflict_analysis", true);
+  options.set_bool("presolve", false);
+  const oracle::GeneratorConfig deep = deep_shape();
+  const FuzzTally tree =
+      run_milp_fuzz(options, "#418 switches, cuts, conflicts, deep", false, 600, &deep);
+  expect_clean_sweep(tree, 300, 100);
+  EXPECT_GT(tree.restarts, 0) << "no search ever restarted";
+  EXPECT_GT(tree.objective_branches, 0) << "no node was ever split on the objective row";
+  EXPECT_GT(tree.cuts_applied, 0) << "no cut row was ever applied";
 }
 
 TEST(TreeCuts, RowsAddedBelowTheRootKeepTheAnswerAndAreCounted) {
@@ -1250,6 +1386,100 @@ TEST(BranchAndBound, LearnedBranchingZeroOneKnapsack) {
   // 5+4=9 (cost -17), 5+3+2=10 (cost -17), 4+3+2=9 (cost -14)
   // Optimal objective is -17.
   EXPECT_NEAR(s.objective, -17.0, 1e-9);
+}
+
+TEST(BranchAndBound, MipStart_ValidStartIsAccepted) {
+  // maximize x + y
+  // x, y <= 1, integer
+  Model model = make_milp({}, {}, {}, {1.0, 1.0}, {1.0, 1.0}, {true, true});
+  model.sense = ObjSense::kMaximize;
+
+  SolveControl control;
+  control.start_solution = {1.0, 1.0};  // The optimal point
+  Solution sol = solve(model, mip_options(), &control);
+
+  EXPECT_EQ(sol.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(sol.objective, 2.0, 1e-9);
+  // It should be accepted. The root node is evaluated and it terminates.
+  EXPECT_EQ(sol.nodes, 1);
+}
+
+TEST(BranchAndBound, MipStart_InfeasibleStartIsRejected) {
+  // maximize x + y
+  // x, y <= 1, integer
+  // 0 <= x + y <= 1
+  Model model = make_milp({{1.0, 1.0}}, {0.0}, {1.0}, {1.0, 1.0}, {1.0, 1.0}, {true, true});
+  model.sense = ObjSense::kMaximize;
+
+  SolveControl control;
+  control.start_solution = {1.0, 1.0};  // Infeasible (x+y=2 > 1)
+  Solution sol = solve(model, mip_options(), &control);
+
+  // The start is rejected, repair fails, and the solve continues normally.
+  EXPECT_EQ(sol.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(sol.objective, 1.0, 1e-9);
+}
+
+TEST(BranchAndBound, MipStart_FractionalStartIsRejected) {
+  Model model = make_milp({{1.0, 1.0}}, {0.0}, {1.0}, {1.0, 1.0}, {1.0, 1.0}, {true, true});
+  model.sense = ObjSense::kMaximize;
+
+  SolveControl control;
+  control.start_solution = {0.5, 0.5};  // Feasible but fractional
+  Solution sol = solve(model, mip_options(), &control);
+
+  // The fractional start is rounded/rejected, repair fails, and the solve continues normally.
+  EXPECT_EQ(sol.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(sol.objective, 1.0, 1e-9);
+}
+
+TEST(BranchAndBound, MipStart_NoStartLeavesBehaviorUnchanged) {
+  Model model = make_milp({{1.0, 1.0}}, {0.0}, {1.0}, {1.0, 1.0}, {1.0, 1.0}, {true, true});
+  model.sense = ObjSense::kMaximize;
+
+  SolveControl control;
+  Solution sol = solve(model, mip_options(), &control);
+
+  EXPECT_EQ(sol.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(sol.objective, 1.0, 1e-9);
+}
+
+TEST(BranchAndBound, MipStart_WrongSizeStartIsIgnored) {
+  // A start with too many or too few values is ignored, never indexed (#753): the solve ends
+  // as it would with no start.
+  Model model = make_milp({{1.0, 1.0}}, {0.0}, {1.0}, {1.0, 1.0}, {1.0, 1.0}, {true, true});
+  model.sense = ObjSense::kMaximize;
+  for (const std::vector<double>& start :
+       {std::vector<double>{1.0}, std::vector<double>{1.0, 0.0, 1.0, 1.0}}) {
+    SolveControl control;
+    control.start_solution = start;
+    const Solution sol = solve(model, mip_options(), &control);
+    EXPECT_EQ(sol.status, SolveStatus::kOptimal) << start.size() << " values";
+    EXPECT_NEAR(sol.objective, 1.0, 1e-9) << start.size() << " values";
+  }
+}
+
+TEST(BranchAndBound, MipStart_PresolveIsSkippedSoTheStartKeepsItsColumns) {
+  // Column 0 is fixed at 1, which presolve would remove and so renumber the rest; with a
+  // start supplied presolve is skipped and the start's values stay on their columns (#753).
+  Model model = make_milp({{1.0, 1.0, 1.0}}, {0.0}, {2.0}, {1.0, 1.0, 1.0}, {1.0, 1.0, 1.0},
+                          {true, true, true});
+  model.col_lower[0] = 1.0;
+  model.sense = ObjSense::kMaximize;
+  Options options = mip_options();
+  options.set_bool("presolve", true);
+  {
+    const Solution cold = solve(model, options);
+    ASSERT_EQ(cold.status, SolveStatus::kOptimal);
+    EXPECT_LT(cold.presolve_report.reduced_cols, cold.presolve_report.original_cols)
+        << "the fixed column should be presolved away without a start";
+  }
+  SolveControl control;
+  control.start_solution = {1.0, 1.0, 0.0};
+  const Solution started = solve(model, options, &control);
+  EXPECT_EQ(started.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(started.objective, 2.0, 1e-9);
+  EXPECT_FALSE(started.presolve_report.ran) << "presolve should be skipped with a start";
 }
 
 }  // namespace sankhya

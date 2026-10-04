@@ -222,6 +222,9 @@ CSV_COLUMNS = [
     "probing_implications",
     "probing_cliques",
     "clique_cuts_generated",
+    # Objective branching (#418): nodes split on the objective row rather than a column, from
+    # the stats JSON; zero unless mip_objective_branching is on. Last, for the same reason.
+    "objective_branches",
 ]
 
 PROBING_COLUMNS = ("probing_fixings", "probing_tightenings", "probing_implications",
@@ -356,6 +359,7 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             "reduced_cost_fixings": effort.get("reduced_cost_fixings", ""),
             **{key: effort.get(key, "") for key in SAFE_BOUND_COLUMNS},
             "clique_cuts_generated": effort.get("clique_cuts_generated", ""),
+            "objective_branches": effort.get("objective_branches", ""),
             **{key: blob.get("presolve", {}).get("reductions", {}).get(key, "")
                for key in PROBING_COLUMNS},
             "root_bound": as_number(effort.get("root_bound")),
@@ -683,7 +687,7 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
         "reduced_cost_fixings": blob.get("reduced_cost_fixings", ""),
         **{key: ("" if blob.get(key) is None else blob[key]) for key in SAFE_BOUND_COLUMNS},
         **{key: ("" if blob.get(key) is None else blob[key])
-           for key in PROBING_COLUMNS + ("clique_cuts_generated",)},
+           for key in PROBING_COLUMNS + ("clique_cuts_generated", "objective_branches")},
         "machine": machine,
         "timestamp_utc": stamp,
         "certificate": blob.get("certificate") or "",

@@ -25,6 +25,101 @@
 #include "util/profiler.hpp"
 
 namespace sankhya {
+namespace {
+
+// THE WITNESS IS JUDGED THE WAY THE VERIFIER JUDGES IT (#475). A trial solve hands back a
+// point the status guard calls feasible, and the guard measures a row's violation against the
+// largest term of its activity sum. tools/verify_solution.py measures a witness against
+// max(1, |activity|, |the row's bounds|), which is the smaller scale whenever the terms
+// cancel: on Netlib klein2, from the interior point's certificate, four witnesses violated
+// another IIS row by 1.0e-7 to 2.2e-7 in that measure, and the file was rejected. So every
+// witness is checked here by the verifier's rule before irreducibility is claimed.
+/// How far, in units of the primal tolerance in the verifier's measure, the other elements
+/// are pulled inward when a witness is solved for again: the first that yields a witness
+/// that holds is kept. A larger pull leaves more room for the solver's own tolerance, which
+/// is measured against the terms of a row and not against its activity.
+constexpr double kWitnessMargins[] = {0.5, 5.0, 50.0};
+
+struct IisElement {
+  int kind = 0;  // 0 a row, 1 a column lower bound, 2 a column upper bound
+  Index index = 0;
+};
+
+double relative_violation(double value, double lower, double upper) {
+  const double below = is_finite_bound(lower) ? lower - value : 0.0;
+  const double above = is_finite_bound(upper) ? value - upper : 0.0;
+  const double worst = std::max({below, above, 0.0});
+  double scale = std::max(1.0, std::fabs(value));
+  if (is_finite_bound(lower)) scale = std::max(scale, std::fabs(lower));
+  if (is_finite_bound(upper)) scale = std::max(scale, std::fabs(upper));
+  return worst / scale;
+}
+
+/// Does `point` satisfy every element of `iis` but `self` to `tolerance`, and violate `self`
+/// by more than it? The verifier's test, element for element.
+bool witness_holds(const Model& model, const std::vector<IisElement>& iis, std::size_t self,
+                   const std::vector<double>& point, double tolerance) {
+  if (point.size() != static_cast<std::size_t>(model.num_cols())) return false;
+  std::vector<double> activity(static_cast<std::size_t>(model.num_rows()), 0.0);
+  model.matrix.multiply_add(point.data(), activity.data());
+  for (std::size_t e = 0; e < iis.size(); ++e) {
+    const auto u = static_cast<std::size_t>(iis[e].index);
+    double v = 0.0;
+    if (iis[e].kind == 0) {
+      v = relative_violation(activity[u], model.row_lower[u], model.row_upper[u]);
+    } else if (iis[e].kind == 1) {
+      v = relative_violation(point[u], model.col_lower[u], kInfinity);
+    } else {
+      v = relative_violation(point[u], -kInfinity, model.col_upper[u]);
+    }
+    if (e == self ? v <= tolerance : v > tolerance) return false;
+  }
+  return true;
+}
+
+/// A witness for `self` from the IIS `sub` with `self` removed and every other element pulled
+/// inward by `margin` times max(1, |bound|) in the verifier's measure, so that the point the
+/// solve stops at, within the solver's own tolerance of those bounds, is inside them by the
+/// verifier's. Empty when that system is not found feasible.
+std::vector<double> tightened_witness(const Model& sub, const std::vector<IisElement>& iis,
+                                      std::size_t self, double margin,
+                                      const Options& sub_opts) {
+  Model trial = sub;
+  const auto inward = [margin](double bound) {
+    return margin * std::max(1.0, std::fabs(bound));
+  };
+  for (std::size_t e = 0; e < iis.size(); ++e) {
+    const auto u = static_cast<std::size_t>(iis[e].index);
+    if (iis[e].kind == 0) {
+      double& lo = trial.row_lower[u];
+      double& hi = trial.row_upper[u];
+      if (e == self) {
+        lo = -kInfinity;
+        hi = kInfinity;
+        continue;
+      }
+      if (is_finite_bound(lo)) lo += inward(lo);
+      if (is_finite_bound(hi)) hi -= inward(hi);
+      if (is_finite_bound(lo) && is_finite_bound(hi) && lo > hi) lo = hi = 0.5 * (lo + hi);
+    } else if (iis[e].kind == 1) {
+      double& lo = trial.col_lower[u];
+      lo = e == self ? -kInfinity : lo + inward(lo);
+    } else {
+      double& hi = trial.col_upper[u];
+      hi = e == self ? kInfinity : hi - inward(hi);
+    }
+    if (trial.col_lower[u] > trial.col_upper[u] && iis[e].kind != 0) {
+      trial.col_lower[u] = trial.col_upper[u] = 0.5 * (trial.col_lower[u] + trial.col_upper[u]);
+    }
+  }
+  const Solution solved = solve(trial, sub_opts);
+  if (solved.status != SolveStatus::kOptimal && solved.status != SolveStatus::kFeasible) {
+    return {};
+  }
+  return solved.col_value;
+}
+
+}  // namespace
 
 void compute_iis(const Model& model, Solution* solution, const Options& options,
                  Logger& logger) {
@@ -273,6 +368,42 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
     witnesses.push_back(std::move(w));
   }
   if (!every_witness) inconclusive = true;
+  if (!inconclusive) {
+    // Each witness is held to the verifier's own measure; one that misses it is solved for
+    // again with the other elements pulled inward, and when that does not produce one that
+    // holds either, irreducibility is not claimed. The certificate is untouched by this.
+    const double tolerance = options.get_double("primal_feasibility_tolerance");
+    std::vector<IisElement> iis;
+    for (const Index i : solution->iis_rows) iis.push_back({0, i});
+    for (const Index j : solution->iis_col_lo) iis.push_back({1, j});
+    for (const Index j : solution->iis_col_hi) iis.push_back({2, j});
+    Index repaired = 0;
+    for (std::size_t e = 0; e < iis.size() && !inconclusive; ++e) {
+      if (witness_holds(model, iis, e, witnesses[e], tolerance)) continue;
+      bool held = false;
+      for (const double share : kWitnessMargins) {
+        std::vector<double> retry = tightened_witness(sub, iis, e, share * tolerance, sub_opts);
+        if (witness_holds(model, iis, e, retry, tolerance)) {
+          witnesses[e] = std::move(retry);
+          held = true;
+          break;
+        }
+      }
+      if (held) {
+        ++repaired;
+        continue;
+      }
+      logger.warning(
+          "IIS: no witness for element {} holds to {:.0e} in the verifier's measure; "
+          "irreducibility is not claimed",
+          e, tolerance);
+      inconclusive = true;
+    }
+    if (repaired > 0) {
+      logger.info("IIS: {} witness(es) solved again with the other elements pulled inward",
+                  repaired);
+    }
+  }
   if (!inconclusive) solution->iis_witnesses = std::move(witnesses);
   solution->iis_inconclusive = inconclusive;
 

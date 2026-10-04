@@ -360,6 +360,16 @@ inline constexpr Count kPdhgPolishFirstIteration = 100;
 inline constexpr double kPdhgPolishGap = 1e-2;
 inline constexpr Count kPdhgPolishBudgetDivisor = 8;
 
+/// PDHG constant step (#482, option pdhg_constant_step): eta = kPdhgConstantStepShare / U,
+/// U the certified upper bound on ||A||_2 of src/la/operator_norm.hpp, so tau sigma ||A||^2 =
+/// eta^2 ||A||^2 <= 0.996 < 1 holds strictly (Chambolle & Pock 2011, Theorem 1) even where U
+/// is exact. 0.998 is the share Lu, Peng & Yang use (cuPDLPx, arXiv:2507.14051), there on an
+/// estimate of the norm. The bound is built from kPdhgConstantStepPowerIterations power
+/// steps on A^T A (its lower side, for the log) and as many on |A|^T |A| (the
+/// Collatz-Wielandt part of its upper side).
+inline constexpr double kPdhgConstantStepShare = 0.998;
+inline constexpr int kPdhgConstantStepPowerIterations = 30;
+
 // ---------------------------------------------------------------------------------------
 // Cuts
 // ---------------------------------------------------------------------------------------
@@ -523,6 +533,35 @@ inline constexpr int kQpIpmRegularizationAttempts = 8;
 /// is reported only if the checker accepts it.
 inline constexpr double kQpIpmCertificateRounding = 1e-6;
 
+/// #494, #893 (miqp_node_ipm_warm_start): the iterate a QP interior point hands on as a warm
+/// start is the first one whose relative primal residual, dual residual and gap are all at or
+/// below this, not the optimum: an advanced point that is still well inside the bounds
+/// (Gondzio 1998, see src/qp/qp_ipm_warm.cpp). Our choice, not the paper's number: on the 80
+/// random MIQPs of tests/unit/test_miqp_node_ipm.cpp, 1e-2 took 2,088 node IPM iterations
+/// against 2,102 at 1e-1 and 2,100 at 3e-1, and the cold start 2,617.
+inline constexpr double kQpIpmWarmSaveLevel = 1e-2;
+
+/// The shift of a warm start into the interior: every column at least this far from each of
+/// its finite bounds (half its width when narrower). 1e-3 left 9 of 242 warm starts on the
+/// 80 random MIQPs to fail or stall, 1e-1 none.
+inline constexpr double kQpIpmWarmShiftDistance = 0.1;
+
+/// The least centring target of the shift, so the centrality box below is never empty.
+inline constexpr double kQpIpmWarmCentringFloor = 1e-6;
+
+/// ...and every complementarity product s z then moved into [low mu, high mu] by its
+/// multiplier, mu the average product at the shifted point, the centrality box of Gondzio's
+/// multiple centrality correctors (Gondzio 1996, beta_min = 0.1 and beta_max = 10).
+inline constexpr double kQpIpmWarmCentringLow = 0.1;
+inline constexpr double kQpIpmWarmCentringHigh = 10.0;
+
+/// A warm run is abandoned for the cold start when its worst relative measure (primal
+/// residual, dual residual, gap) has not fallen by kQpIpmWarmStallFactor over the last
+/// kQpIpmWarmStallWindow iterations. Mehrotra's method gains an order of magnitude every two
+/// or three iterations when it is converging, so ten iterations without one is a stall.
+inline constexpr int kQpIpmWarmStallWindow = 10;
+inline constexpr double kQpIpmWarmStallFactor = 0.1;
+
 // ---- Proximal regularization of the LP interior point (#473, ipm_proximal_regularization) --
 
 /// rho = delta = max(floor, min(previous, kIpmProximalShare * mu)), starting from
@@ -558,6 +597,23 @@ inline constexpr double kIpmProximalRefinementShrink = 0.1;
 /// term as large as the matrix, whose refinement then has nothing to converge to.
 inline constexpr double kIpmProximalRecoveryRaise = 100.0;
 inline constexpr double kIpmProximalRecoveryCap = 1e-4;
+
+// ---- The homogeneous self-dual embedding of the LP interior point (#475, ipm_hsd) ----------
+
+/// Convergence to an optimum, measured on the point x/tau, y/tau, z/tau: relative primal and
+/// dual residuals, relative gap and the worst relative complementarity product, each at or
+/// below this. The default path's kIpmTolerance, kIpmGap and kIpmComplementarity (1e-8, set in
+/// ipm.cpp for the reasons written there), so the two paths converge to the same standard.
+inline constexpr double kIpmHsdTolerance = 1e-8;
+/// A certificate candidate (the dual ray y for infeasibility, the primal ray x for
+/// unboundedness) is offered to the checker first with every entry at or below this share of
+/// its largest set to zero, then as it came: the QP interior point's kQpIpmCertificateRounding
+/// and for the same reason, the part of the iterate that converges to zero along the ray.
+inline constexpr double kIpmHsdCertificateRounding = 1e-6;
+/// The iteration stops without a verdict once mu has fallen this far below its starting
+/// value while tau and kappa still have not decided: every residual has fallen as far with
+/// it (they shrink at one rate in the embedding), so nothing is left for another step to show.
+inline constexpr double kIpmHsdMuFloor = 1e-15;
 
 // ---- Gondzio's centrality correctors in the LP interior point (#472) ----------------------
 
