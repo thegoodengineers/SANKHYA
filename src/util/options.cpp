@@ -2041,8 +2041,10 @@ const std::vector<OptionSpec>& Options::registry() {
          "Order the interior point's matrix by approximate minimum degree with supervariables "
          "and mass elimination (#471; Amestoy, Davis & Duff 1996): variables with identical "
          "neighbourhoods are merged and eliminated together. Any ordering is a permutation, so "
-         "the answer is the same; only the fill and the time differ. Default OFF; the "
-         "unweighted ordering is the oracle it is compared with.",
+         "in exact arithmetic the answer is the same, but the pivots round differently and the "
+         "outcome can change: on Netlib sierra and perold the interior point stalls with it on "
+         "and converges with it off. Default OFF; the unweighted ordering is the oracle it is "
+         "compared with.",
          0.0,
          0.0,
          {}});

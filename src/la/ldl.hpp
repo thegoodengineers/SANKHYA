@@ -183,7 +183,8 @@ class SparseLdl {
   /// quotient-graph neighbourhoods are identical are merged and eliminated as one, and a
   /// variable left with no neighbour but the pivot's clique leaves with it. Off by default;
   /// the ordering of ldl.cpp is the oracle it is compared with. Either way the result is a
-  /// permutation, so the factorization it feeds is exact; only the fill and the time differ.
+  /// permutation of the same matrix; the fill, the time and the rounding differ, and the last
+  /// can change an interior point's outcome (Netlib sierra and perold stall with it on).
   void set_supervariables(bool on) noexcept { supervariables_ = on; }
   [[nodiscard]] bool supervariables() const noexcept { return supervariables_; }
   /// Variables the last supervariable ordering did not have to order on their own: merged
