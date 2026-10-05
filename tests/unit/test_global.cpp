@@ -7,12 +7,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <map>
 #include <random>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
 #include "global/global_internal.hpp"
 #include "sankhya/io.hpp"
@@ -409,6 +413,89 @@ TEST(SpatialBranchAndBound, NoGridPointBeatsAClaimedGlobalOptimum) {
     EXPECT_LE(solution.dual_bound, solution.objective + 1e-9) << trial;
   }
   EXPECT_EQ(claimed, 25);
+}
+
+// ---- the bound certificate (#514) ---------------------------------------------------------
+
+TEST(Global, ACertifiedSearchProvesTheSameOptimumAndWritesASoundTree) {
+  const QcqpModel model = read_or_fail(kHaverly1);
+  Options plain;
+  plain.set_bool("log_to_console", false);
+  const Solution reference = solve_global(model, plain);
+  ASSERT_EQ(reference.status, SolveStatus::kOptimal) << reference.message;
+
+  const TempFile out("", ".json");
+  Options certified = plain;
+  certified.set_string("write_certificate", out.path());
+  const Solution solution = solve_global(model, certified);
+  ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
+  // Certifying turns bound tightening off, which changes how the tree is searched and not what
+  // it proves: Haverly's optimum is -400 either way.
+  EXPECT_NEAR(solution.objective, -400.0, 1e-4);
+  EXPECT_NEAR(solution.objective, reference.objective, 1e-6);
+
+  std::ifstream in(out.path());
+  std::stringstream text;
+  text << in.rdbuf();
+  const nlohmann::json cert = nlohmann::json::parse(text.str());
+  EXPECT_EQ(cert["format"], "sankhya-global-certificate-1");
+  EXPECT_EQ(cert["columns"].get<Index>(), model.linear.num_cols());
+  EXPECT_EQ(cert["rows"].get<Index>(), model.linear.num_rows());
+  EXPECT_EQ(cert["status"], "optimal");
+  ASSERT_TRUE(cert["incumbent"].is_array());
+  EXPECT_EQ(cert["incumbent"].size(), static_cast<std::size_t>(model.linear.num_cols()));
+  EXPECT_GT(cert["products"].size(), 0u);
+
+  // The tree: one root, every split node has exactly a low and a high child, every other node
+  // none, and a proof always carries multipliers.
+  std::map<long long, std::map<std::string, int>> kids;
+  int roots = 0;
+  int proofs = 0;
+  for (const nlohmann::json& node : cert["nodes"]) {
+    if (node["parent"].get<long long>() == -1) {
+      ++roots;
+      EXPECT_EQ(node["side"], "root");
+    } else {
+      ++kids[node["parent"].get<long long>()][node["side"].get<std::string>()];
+    }
+    if (node.contains("proof")) {
+      ++proofs;
+      EXPECT_TRUE(node["y"].is_array());
+    }
+  }
+  EXPECT_EQ(roots, 1);
+  EXPECT_GT(proofs, 0) << "a certificate with no multipliers proves no bound";
+  for (const nlohmann::json& node : cert["nodes"]) {
+    const long long id = node["id"].get<long long>();
+    const auto found = kids.find(id);
+    if (node.contains("branch")) {
+      ASSERT_NE(found, kids.end()) << "node " << id << " is split but has no children";
+      EXPECT_EQ(found->second.size(), 2u);
+      EXPECT_EQ(found->second.at("low"), 1);
+      EXPECT_EQ(found->second.at("high"), 1);
+    } else {
+      EXPECT_EQ(found, kids.end()) << "node " << id << " has children but no branch";
+    }
+  }
+}
+
+TEST(Global, ACertifiedSearchNeedsTheProductColumnsBoundedAsGiven) {
+  // No bound tightening is used when certifying, so a product column that is only bounded by
+  // what tightening would derive is refused, with the reason, instead of certified wrongly.
+  const QcqpModel model = read_or_fail(
+      "NAME unbounded_product\n"
+      "ROWS\n N obj\n L cap\n"
+      "COLUMNS\n x obj -1\n x cap 1\n y obj -1\n y cap 1\n"
+      "RHS\n rhs cap 4\n"
+      "QCMATRIX cap\n x y 1\n y x 1\n"
+      "ENDATA\n");
+  const TempFile out("", ".json");
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_string("write_certificate", out.path());
+  const Solution solution = solve_global(model, options);
+  EXPECT_EQ(solution.status, SolveStatus::kNotSolved);
+  EXPECT_NE(solution.message.find("as given"), std::string::npos) << solution.message;
 }
 
 }  // namespace

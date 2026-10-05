@@ -2521,8 +2521,15 @@ const std::vector<OptionSpec>& Options::registry() {
                  "a cut whose derivation does not check is dropped, and the clique, flow "
                  "cover, implied-bound and c-MIR separators and tree cut rounds are off in "
                  "this mode. Nothing is written, and the log says why, when symmetry or "
-                 "objective rows were added, after a restart, or for an MIQP. Empty (default) "
-                 "disables it.",
+                 "objective rows were added, after a restart, or for an MIQP. With "
+                 "nonconvex=global (#514) it writes the spatial branch and bound's tree "
+                 "instead: every node, its split, and the row multipliers of each McCormick "
+                 "relaxation that proved a bound or an empty box, checked by "
+                 "tools/verify_global_certificate.py with its own MPS reader in exact "
+                 "arithmetic (it rebuilds every relaxation from the model and the box, so "
+                 "a multiplier cannot make a bound too good). That search then uses no bound "
+                 "tightening, so every product column must be bounded in the model as given. "
+                 "Empty (default) disables it.",
                  0.0,
                  0.0,
                  {},

@@ -365,6 +365,7 @@ set(SANKHYA_CORE_SOURCES
   src/nlp/sparsity.cpp
   src/nlp/tape.cpp
   src/global/fbbt.cpp
+  src/global/global_certificate.cpp
   src/global/local_search.cpp
   src/global/qcqp_model.cpp
   src/global/relaxation.cpp
