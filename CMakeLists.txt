@@ -357,6 +357,7 @@ set(SANKHYA_CORE_SOURCES
   src/nlp/filter_ipm_restoration.cpp
   src/nlp/filter_ipm_step.cpp
   src/nlp/minlp_bnb.cpp
+  src/nlp/minlp_oa.cpp
   src/nlp/nl_reader.cpp
   src/nlp/nlp_kkt.cpp
   src/nlp/nlp_kkt_check.cpp

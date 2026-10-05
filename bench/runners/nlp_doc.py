@@ -25,6 +25,10 @@ REPRODUCE = [
     "```",
     "python bench/runners/nlp_bench.py --data data/nlp/hs                              # 70 Hock-Schittkowski",
     "python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4  # convex MINLPLib",
+    "python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4 \\",
+    "    --solver-option minlp_method=oa                                                # the same, by outer approximation",
+    "python bench/runners/nlp_bench.py --data data/nlp/minlplib --match-tolerance 1e-4 \\",
+    "    --solver-option minlp_method=bnb                                               # the tree as an option run, for the comparison",
     "```",
 ]
 
@@ -109,7 +113,57 @@ def set_section(title: str, path: Path | None, what: str) -> str:
     return "\n".join(out)
 
 
-def section(hs_path: Path | None, minlp_path: Path | None) -> str:
+def comparison(default_path: Path | None, oa_path: Path) -> str:
+    """The two MINLP methods side by side on the same instances (#528): one row per instance,
+    each method's status, objective and wall time, and whether they reached the same value.
+    Both CSVs are runs of the same binary's two methods on the same set, so a difference in
+    a row is a difference between the methods, not between the inputs."""
+    if default_path is None:
+        return "No default-method run is committed to compare against."
+    by_name = {r["instance"]: r for r in read_rows(default_path)}
+    oa_rows = {r["instance"]: r for r in read_rows(oa_path)}
+    names = sorted(set(by_name) & set(oa_rows))
+
+    def cell(row: dict) -> tuple[str, str]:
+        ours = _float(row, "objective")
+        seconds = _float(row, "seconds")
+        status = row.get("status", "")
+        return (f"{status}" + ("" if ours is None else f" {ours:.10g}"),
+                "-" if seconds is None else f"{seconds:.2f}")
+
+    out = ["Outer approximation against NLP-based branch and bound, instance by instance "
+           f"(`{oa_path.name}` against `{default_path.name}`):", "",
+           "| problem | branch and bound | s | outer approximation | s | published | both optimal "
+           "and equal |", "|---|---|---:|---|---:|---:|:--:|"]
+    both = 0
+    for name in names:
+        b, o = by_name[name], oa_rows[name]
+        (bs, bt), (os_, ot) = cell(b), cell(o)
+        bo, oo = _float(b, "objective"), _float(o, "objective")
+        same = (b.get("status") == "optimal" and o.get("status") == "optimal"
+                and bo is not None and oo is not None
+                and abs(bo - oo) <= 2e-4 * max(1.0, abs(bo)))
+        both += same
+        ref = _float(b, "reference_objective")
+        out.append(f"| `{name}` | {bs} | {bt} | {os_} | {ot} "
+                   f"| {'-' if ref is None else f'{ref:.10g}'} | {'yes' if same else '-'} |")
+    out += ["", f"Both methods proved the same optimum on **{both} of {len(names)}** instances.",
+            ""]
+    return "\n".join(out)
+
+
+def section(hs_path: Path | None, minlp_path: Path | None,
+            minlp_oa_path: Path | None = None, minlp_bnb_path: Path | None = None) -> str:
+    oa_part = [
+        set_section("MINLPLib, convex, outer approximation", minlp_oa_path,
+                    "the same instances and tolerance, solved with `--option minlp_method=oa`: "
+                    "a MILP master over linearizations of the nonlinear rows (Duran and "
+                    "Grossmann 1986) alternated with the convex NLP at the master's integers, "
+                    "off by default (#528)."),
+        "",
+    ]
+    if minlp_oa_path is not None:
+        oa_part += [comparison(minlp_bnb_path or minlp_path, minlp_oa_path), ""]
     out = [
         set_section("Hock-Schittkowski", hs_path,
                     "the 70 problems of Hock and Schittkowski, *Test Examples for Nonlinear "
@@ -126,6 +180,7 @@ def section(hs_path: Path | None, minlp_path: Path | None) -> str:
                     "and bound - run only when the relaxation is proved convex, so `optimal` "
                     "here is a closed bound."),
         "",
+        *oa_part,
         "Reproduce:",
         "",
         *REPRODUCE,

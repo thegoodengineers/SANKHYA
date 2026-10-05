@@ -39,7 +39,7 @@ import stamp
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIELDS = ["instance", "sha256", "status", "objective", "reference_objective", "abs_gap",
           "rel_gap", "match", "verified", "seconds", "iterations", "git_commit", "machine",
-          "time_limit", "timestamp_utc"]
+          "time_limit", "timestamp_utc", "solver_options"]
 
 
 def field(stdout: str, name: str) -> str:
@@ -58,12 +58,19 @@ def main() -> int:
     parser.add_argument("--data", type=Path, default=REPO_ROOT / "data" / "nlp" / "hs")
     parser.add_argument("--match-tolerance", type=float, default=1e-6,
                         help="relative gap to the published objective that counts as a match")
+    parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE",
+                        help="an engine option, e.g. minlp_method=oa; recorded in the CSV's "
+                             "solver_options column, which marks the run as a measurement of "
+                             "that option and keeps it out of the default evidence")
     args = parser.parse_args()
+    solver_options = " ".join(args.solver_option)
     data_dir = args.data
     commit = stamp.stamp(args.binary)
     machine = f"{platform.system()}-{platform.machine()}"
     now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-    out = args.out or REPO_ROOT / "bench" / "results" / f"nlp-{data_dir.name}-{commit}-{platform.node()}.csv"
+    suffix = "".join("-" + option.replace("=", "-") for option in args.solver_option)
+    out = args.out or (REPO_ROOT / "bench" / "results"
+                       / f"nlp-{data_dir.name}-{commit}-{platform.node()}{suffix}.csv")
     rows = list(csv.DictReader(open(data_dir / "REFERENCE.csv", encoding="utf-8")))
     results = []
     with tempfile.TemporaryDirectory() as tmp:
@@ -72,9 +79,11 @@ def main() -> int:
             nl = data_dir / f"{name}.nl"
             sol = Path(tmp) / f"{name}.sol"
             started = time.monotonic()
-            run = subprocess.run([str(args.binary), "solve", str(nl), "--write-sol", str(sol),
-                                  "--option", f"time_limit={args.time_limit}"],
-                                 capture_output=True, text=True, check=False)
+            command = [str(args.binary), "solve", str(nl), "--write-sol", str(sol),
+                       "--option", f"time_limit={args.time_limit}"]
+            for option in args.solver_option:
+                command += ["--option", option]
+            run = subprocess.run(command, capture_output=True, text=True, check=False)
             seconds = time.monotonic() - started
             status = field(run.stdout, "status") or "crashed"
             objective = field(run.stdout, "objective")
@@ -98,7 +107,7 @@ def main() -> int:
                 "abs_gap": abs_gap, "rel_gap": rel_gap, "match": match, "verified": verified,
                 "seconds": f"{seconds:.3f}", "iterations": field(run.stdout, "iterations"),
                 "git_commit": commit, "machine": machine, "time_limit": args.time_limit,
-                "timestamp_utc": now})
+                "timestamp_utc": now, "solver_options": solver_options})
             print(f"{name:<8} {status:<20} {objective:>22} {ref['reference_objective']:>22} "
                   f"match={match:<3} verified={verified}")
     out.parent.mkdir(parents=True, exist_ok=True)

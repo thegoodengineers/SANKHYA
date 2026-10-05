@@ -9,7 +9,7 @@
 // and x_j >= ceil(v). Nodes are taken best bound first. Related: Dakin, "A tree-search
 // algorithm for mixed integer programming problems", The Computer Journal 8(3) (1965), the
 // dichotomy branching; Duran and Grossmann (1986) and Fletcher and Leyffer (1994) are the
-// outer-approximation alternative (#528), not this.
+// outer-approximation alternative (#528, minlp_oa.hpp, `minlp_method=oa`), not this.
 //
 // VALID ONLY FOR A CONVEX RELAXATION, AND ONLY CLAIMED THERE. A node's relaxation value is a
 // lower bound on every integer point below it only when the relaxation's optimum is GLOBAL,
@@ -44,7 +44,17 @@
 namespace sankhya::nlp {
 
 /// Solve a nonlinear model with integer columns (a model without them goes to solve_nlp()).
+/// `minlp_method=bnb` (default) is this file's tree; `oa` is outer approximation
+/// (minlp_oa.hpp).
 [[nodiscard]] Solution solve_minlp(const NonlinearModel& model, const Options& options,
                                    SolveControl* control = nullptr);
+
+/// The convex minimum-violation problem over `node`'s box: the same rows, each given a surplus
+/// p and a slack n (both >= 0), the objective sum(p + n), no integrality. Its optimum is the
+/// least total violation of any point in the box; convex whenever `node` is, since adding
+/// p - n changes no curvature and the objective is linear. The first num_cols columns of its
+/// answer are the original columns. Shared by the tree (to certify an empty node) and by outer
+/// approximation (to cut off an integer assignment whose continuous problem is infeasible).
+[[nodiscard]] NonlinearModel violation_model(const NonlinearModel& node);
 
 }  // namespace sankhya::nlp

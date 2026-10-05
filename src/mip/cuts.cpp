@@ -528,6 +528,8 @@ RowTightening tighten_integral_rows(Model* model, Logger& logger) {
     double& lower = model->row_lower[u];
     double& upper = model->row_upper[u];
     bool moved = false;
+    bool lower_moved = false;
+    bool upper_moved = false;
 
     // Round INWARD on both sides. Outward would relax the row, which is not what this is for
     // and would be a silent correctness change in the other direction.
@@ -542,6 +544,7 @@ RowTightening tighten_integral_rows(Model* model, Logger& logger) {
         lower = rounded;
         ++result.bounds_moved;
         moved = true;
+        lower_moved = true;
       }
     }
     if (is_finite_bound(upper)) {
@@ -550,6 +553,25 @@ RowTightening tighten_integral_rows(Model* model, Logger& logger) {
         upper = rounded;
         ++result.bounds_moved;
         moved = true;
+        upper_moved = true;
+      }
+    }
+
+    // THE TOLERANCE CAN CROSS A ROW BY DUST. An equality whose right-hand side is -2.8e-17 (an
+    // outer-approximation cut whose exact value is 0, #528) has both bounds within the
+    // tolerance of the integer 0: the lower bound rounds UP to 0, which is above it, while
+    // floor(upper + tol) = 0 is not below the upper bound, so the upper bound stays and the row
+    // is left with lower 0 above upper -2.8e-17 - a model Model::validate() rejects, for a row
+    // every integer activity of 0 satisfies. When the rounding moved exactly one of the two and
+    // the crossing is within the same tolerance, both bounds are on one integer: put the bound
+    // that was not moved on it, which only relaxes that bound by the dust. A crossing wider
+    // than the tolerance is a row with no integral activity, and is left visible as before.
+    if (is_finite_bound(lower) && is_finite_bound(upper) && lower > upper &&
+        lower - upper <= tol::kIntegrality && lower_moved != upper_moved) {
+      if (lower_moved) {
+        upper = lower;
+      } else {
+        lower = upper;
       }
     }
 

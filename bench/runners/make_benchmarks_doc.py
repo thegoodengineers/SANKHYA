@@ -2922,6 +2922,12 @@ def main() -> int:
     nlp_hs_csv = newest("nlp-hs-*.csv")
     decomposition_csv = newest("decomposition-*.csv")
     nlp_minlp_csv = newest("nlp-minlplib-*.csv")
+    # The outer-approximation run (#528) carries `minlp_method=oa` in solver_options, which
+    # newest() skips, so it never replaces the default method's evidence above.
+    nlp_minlp_oa_csv = newest_option_run("nlp-minlplib-*.csv", "minlp_method=oa")
+    # The tree measured as an explicit option run on the same binary and machine as the OA run,
+    # so the comparison is of the two methods and nothing else.
+    nlp_minlp_bnb_csv = newest_option_run("nlp-minlplib-*.csv", "minlp_method=bnb")
     commercial_csv = newest("commercial-agreement-*.csv")
     gpu_domain_prop_csv = newest("gpu-domain-prop-*.csv", prefix="gpu-domain-prop")
     multi_gpu_csv = newest("multi-gpu-*.csv")
@@ -3336,7 +3342,7 @@ its own reader and evaluates the constraints with its own derivatives. The statu
 finding: `optimal` is claimed only where the model is proved convex, `locally_optimal` is any
 other KKT point, and `locally_infeasible` is a local minimizer of the violation.
 
-{nlp_doc.section(nlp_hs_csv, nlp_minlp_csv)}
+{nlp_doc.section(nlp_hs_csv, nlp_minlp_csv, nlp_minlp_oa_csv, nlp_minlp_bnb_csv)}
 ---
 
 ## 3. Correctness beyond the objective value

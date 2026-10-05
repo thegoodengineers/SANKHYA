@@ -13,6 +13,7 @@
 
 #include <fmt/format.h>
 
+#include "nlp/minlp_oa.hpp"
 #include "nlp/nlp_solve.hpp"
 #include "sankhya/logging.hpp"
 #include "sankhya/timer.hpp"
@@ -44,10 +45,8 @@ void with_bounds(const TreeNode& node, NonlinearModel* work) {
   work->base.col_upper = node.upper;
 }
 
-/// The convex minimum-violation problem over the node's box: the same rows, each given a
-/// surplus p and a slack n (both >= 0), the objective sum(p + n), no integrality. Its optimum
-/// is the least total violation of any point in the box; convex whenever `node` is, since
-/// adding p - n changes no curvature and the objective is linear.
+}  // namespace
+
 NonlinearModel violation_model(const NonlinearModel& node) {
   const Model& b = node.base;
   const Index n = b.num_cols();
@@ -93,8 +92,6 @@ NonlinearModel violation_model(const NonlinearModel& node) {
   return out;
 }
 
-}  // namespace
-
 Solution solve_minlp(const NonlinearModel& model, const Options& options,
                      SolveControl* control) {
   const Timer timer;
@@ -120,6 +117,9 @@ Solution solve_minlp(const NonlinearModel& model, const Options& options,
         "(nlp_assume_convex=true runs it as a heuristic, and then nothing is called optimal)",
         convexity.reasons.empty() ? "no proof" : convexity.reasons.front());
     return out;
+  }
+  if (options.get_string("minlp_method") == "oa") {
+    return solve_minlp_oa(model, options, control, assumed);
   }
 
   const double sense = model.base.sense == ObjSense::kMaximize ? -1.0 : 1.0;
