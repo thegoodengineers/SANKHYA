@@ -412,6 +412,11 @@ BendersOutcome solve_benders(const Model& model, const BlockStructure& structure
   if (threads <= 0)
     threads = std::max<Index>(1, static_cast<Index>(std::thread::hardware_concurrency()));
   threads = std::min(threads, blocks);
+  // The caller's progress callback, and the window SolveControl keeps for it, were never
+  // promised to be thread-safe (#222): the engine race and the parallel tree call it from the
+  // caller's thread only. Every block solve is handed the caller's control, so with a callback
+  // attached the blocks are solved on this thread.
+  if (control != nullptr && control->progress_callback) threads = 1;
   const auto left = [&] { return std::max(0.0, budget - timer.elapsed_seconds()); };
   const auto stop_reason = [&]() {
     if (control != nullptr && control->interruption_requested()) return LimitReason::kInterrupt;
@@ -487,11 +492,14 @@ BendersOutcome solve_benders(const Model& model, const BlockStructure& structure
     // the result do not depend on which thread finished first.
     std::vector<BlockAnswer> answers(at(blocks));
     {
-      const Options opts = sub_options(options, left());
       std::atomic<Index> next{0};
+      // Each block is given the budget left when it starts, not when the round started: with
+      // fewer threads than blocks one thread solves several in turn, and a limit read once per
+      // round would let each of them spend all of it.
       const auto work = [&] {
         for (Index b = next.fetch_add(1); b < blocks; b = next.fetch_add(1)) {
-          answers[at(b)] = solve_block(setup.blocks[at(b)], y, opts, control);
+          answers[at(b)] =
+              solve_block(setup.blocks[at(b)], y, sub_options(options, left()), control);
         }
       };
       if (threads <= 1) {

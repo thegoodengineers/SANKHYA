@@ -12,8 +12,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <mutex>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -21,6 +23,7 @@
 #include "decomp/structure.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/solve_control.hpp"
 
 namespace sankhya {
 namespace {
@@ -495,6 +498,36 @@ TEST(Decomposition, TheThreadCountDoesNotChangeABit) {
     EXPECT_EQ(a.row_dual, b.row_dual) << "trial " << trial;
     EXPECT_EQ(a.iterations, b.iterations) << "trial " << trial;
   }
+}
+
+TEST(Decomposition, AProgressCallbackIsOnlyEverCalledOnTheCallersThread) {
+  // The callback and SolveControl's window for it are not thread-safe (#222); every other
+  // parallel path calls it from the caller's thread only. The callback here reopens the window
+  // each time, so every check in every block solve calls it: a block solved on a worker
+  // thread would show up as a call from another thread.
+  std::mt19937 rng(99);
+  const Model model = block_angular(rng, 4, 6, 4, 3, 1);
+  Options o = forced(4);
+  o.set_int("decomposition_threads", 4);
+  const std::thread::id caller = std::this_thread::get_id();
+  std::mutex mutex;
+  int calls = 0;
+  int elsewhere = 0;
+  SolveControl control;
+  control.progress_callback = [&](const Progress&) {
+    {
+      const std::lock_guard<std::mutex> lock(mutex);
+      ++calls;
+      if (std::this_thread::get_id() != caller) ++elsewhere;
+    }
+    control.reset();
+    return 0;
+  };
+  const Solution s = solve(model, o, &control);
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_EQ(s.algorithm, "benders") << s.message;
+  EXPECT_GT(calls, 0);
+  EXPECT_EQ(elsewhere, 0) << "of " << calls << " calls";
 }
 
 }  // namespace
