@@ -1438,6 +1438,7 @@ bool InteriorPoint::fold_dense_columns_back(Count iteration) {
   SparseLdl analysis;
   analysis.set_ordering_budget(ldl_.ordering_budget());
   analysis.set_supernodal(ldl_.supernodal());
+  analysis.set_supervariables(ldl_.supervariables());
   analysis.set_factor_budget(max_factor_nonzeros_);
   if (!analysis.analyze(lower, should_stop_)) {
     logger_.verbose(
@@ -2189,6 +2190,7 @@ Solution InteriorPoint::run() {
                                ? auto_ordering_budget(physical_memory_bytes())
                                : static_cast<std::size_t>(ordering_entries));
   ldl_.set_supernodal(options_.get_bool("ipm_supernodal"));
+  ldl_.set_supervariables(options_.get_bool("ipm_amd_supervariables"));
   run_clock_ = &timer;
   ordering_declined_ = false;
   ordering_deadline_ = std::numeric_limits<double>::infinity();

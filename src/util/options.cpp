@@ -2094,6 +2094,20 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          {}});
     s.push_back(
+        {"ipm_amd_supervariables",
+         OptionType::Bool,
+         false,
+         "Order the interior point's matrix by approximate minimum degree with supervariables "
+         "and mass elimination (#471; Amestoy, Davis & Duff 1996): variables with identical "
+         "neighbourhoods are merged and eliminated together. Any ordering is a permutation, so "
+         "in exact arithmetic the answer is the same, but the pivots round differently and the "
+         "outcome can change: on Netlib sierra and perold the interior point stalls with it on "
+         "and converges with it off. Default OFF; the unweighted ordering is the oracle it is "
+         "compared with.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
         {"ipm_proximal_regularization",
          OptionType::Bool,
          false,
