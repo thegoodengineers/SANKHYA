@@ -214,6 +214,17 @@ is section 13; the steps for adding one are `docs/ADDING_AN_ENGINE.md`.
   refuses a nonconvex MINLP with the reason. It certifies an infeasible node by solving the
   convex minimum-violation problem, reuses the MIP tree's gap test and limits, and reports
   `optimal` only when every node was resolved with a certificate.
+
+A minimisation LP whose constraint matrix is block-angular - independent groups of rows joined by a
+few linking columns, such as the stocks that join the periods of a planning model - can be solved by
+Benders decomposition (`--option decomposition=auto`, `src/decomp/`, off by default). `structure.cpp`
+finds the blocks by balanced hypergraph partitioning and accepts a split only when it is strong;
+`benders.cpp` alternates a master LP over the linking columns with one small LP per block, the
+blocks in parallel. `solve()` holds the decomposed answer to the same measurement as any engine's
+and falls back to the ordinary engines, saying why in the log, when the structure is weak, the
+method declines (an integer, quadratic or maximisation model; an unbounded block) or the answer
+does not pass. Linking rows, the form Dantzig-Wolfe decomposition is for, are detected and
+reported but not solved.
 - **Cutting planes** — already present, and off by default. Root GMI and lifted cover cuts
   landed in #159 (`src/mip/cuts.cpp`) and single-row MIR cuts in #221
   (`src/mip/mir_cuts.cpp`), appended as rows of the working model before the search

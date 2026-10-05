@@ -1052,6 +1052,21 @@ inline constexpr Count kNlpMaxRestorationIterations = 500;
 /// violation problem, exceeds this. Ten times kPrimalFeasibility's worth per unit, so that a
 /// feasible node whose minimum sits at the solver's tolerance is never declared empty.
 inline constexpr double kMinlpEmptyViolation = 1e-6;
+/// Benders decomposition (#525): the master's bound and the value of the blocks at its point
+/// agree - and the decomposition has converged - when they differ by no more than this,
+/// relative to max(1, |value|). An LP is solved to about 1e-9 relative, and the two numbers are
+/// sums of several such solves, so the figure sits a decade above that; the answer is then
+/// measured by solve() against kPrimalFeasibility and kDualFeasibility like any other, which is
+/// the test that decides whether it is believed.
+inline constexpr double kBendersGap = 1e-8;
+/// A block's cut is generated only when the master's epigraph value falls short of the block's
+/// value by more than this, relative to max(1, |value|): a decade inside kBendersGap, so that a
+/// round which is not converged always has a cut to add.
+/// A shortfall below it would give a cut the master cannot tell from rounding.
+inline constexpr double kBendersCutViolation = 1e-9;
+/// A block that the LP engine reports infeasible must also show a violation in its elastic LP
+/// above this; below it the verdicts disagree, which is a numerical failure and not a cut.
+inline constexpr double kBendersFeasibilityCut = 1e-9;
 
 /// Scenario runs (#752): a scenario's objective and that of a separate single solve of the
 /// same edited model must agree to this relative difference, measured against max(1, |obj|).

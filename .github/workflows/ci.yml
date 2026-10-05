@@ -59,7 +59,7 @@ jobs:
           TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
         run: >-
           ./build/tests/sankhya_tests
-          --gtest_filter='ParallelTree.*:BranchAndBound*.*:SolutionPool*.*:NodeSelection*.*:ResourceLimits.*:EngineConcurrency.*:EngineRace.*:KktCheck.*:PdhgParallelSpmv.*'
+          --gtest_filter='ParallelTree.*:BranchAndBound*.*:SolutionPool*.*:NodeSelection*.*:ResourceLimits.*:EngineConcurrency.*:EngineRace.*:KktCheck.*:PdhgParallelSpmv.*:Decomposition.TheThreadCount*:Decomposition.AProgressCallback*'
 
   fuzz-readers:
     # #534: a libFuzzer target per reader (MPS fixed, MPS free, LP, QPS' QUADOBJ extension),
