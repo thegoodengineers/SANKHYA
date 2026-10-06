@@ -79,6 +79,7 @@ add_executable(sankhya_tests
   unit/test_kkt_check_qp.cpp
   unit/test_qp_590.cpp
   unit/test_qp_ipm.cpp
+  unit/test_qp_stall_handoff.cpp
   unit/test_qp_ipm_infeasibility.cpp
   unit/test_qp_halpern.cpp
   unit/test_solver_engine.cpp

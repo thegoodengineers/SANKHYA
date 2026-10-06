@@ -2010,6 +2010,29 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"qp_ipm_stall_handoff",
+         OptionType::Bool,
+         false,
+         "qp_algorithm=ipm (#981): tell a stall from slow progress, and try the other QP "
+         "engine on what is left of the time limit instead of stopping with most of it "
+         "unused. On Maros-Meszaros nine instances stopped at the interior point's fixed "
+         "200-iteration ceiling (kIterationCeiling, src/qp/qp_ipm.cpp) under 4s into a 60s "
+         "limit; two were close (ubh1, liswet2) and seven a real stall. With this on, a cold "
+         "run with no explicit iteration_limit is held to the warm run's existing stall test "
+         "(#494: the worst of the three relative measures - primal residual, dual residual, "
+         "gap - not down by tol::kQpIpmWarmStallFactor over the last "
+         "tol::kQpIpmWarmStallWindow iterations) in place of that ceiling, so it keeps going "
+         "while genuinely converging; a run that then stalls for real hands its iterate to "
+         "the first-order engine (Condat-Vu with Halpern restarts, #493) as a starting point, "
+         "and the reverse direction - that engine's own ceiling or a time limit ending it - "
+         "hands its point to the interior point the same way, through the warm-start "
+         "plumbing #494 already built. Whichever engine's answer is adopted (only when it is "
+         "better) is named in the algorithm field, e.g. qp-ipm+convex-qp. Off by default "
+         "until an A/B on main (#981's acceptance item).",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"pdhg_polish",
                  OptionType::Bool,
                  true,
