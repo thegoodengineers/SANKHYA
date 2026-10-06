@@ -37,9 +37,19 @@ import tempfile
 import time
 from pathlib import Path
 
-SOLVERS = ("highs", "scip", "cbc-clp", "glpk")
+SOLVERS = ("highs", "scip", "cbc-clp", "glpk", "osqp", "clarabel", "piqp", "scs")
 LABELS = {"sankhya": "SANKHYA", "highs": "HiGHS", "scip": "SCIP", "cbc-clp": "CBC/Clp",
-          "glpk": "GLPK"}
+          "glpk": "GLPK", "osqp": "OSQP", "clarabel": "Clarabel", "piqp": "PIQP",
+          "scs": "SCS"}
+# osqp, clarabel, piqp and scs (#983) are the convex QP comparators Maros-Meszaros is
+# published against. Each is a pip package, imported only inside its own worker process
+# (QP_PYTHON_SOLVERS), exactly like highspy and pyscipopt above: never a build or test
+# dependency of the library. All four are set to the project's own relative tolerance,
+# 1e-6, and polishing/refinement left at each package's default (stated per row in
+# `solver_options`, #983's acceptance criterion 3) rather than silently retuned to flatter
+# one of them.
+QP_PYTHON_SOLVERS = ("osqp", "clarabel", "piqp", "scs")
+QP_RELATIVE_TOLERANCE = 1e-6
 FEASIBILITY_TOLERANCE = 1e-7
 # The child is killed this long after its own limit should have stopped it.
 HANG_MARGIN_SECONDS = 60.0
@@ -49,8 +59,15 @@ SINGLE_THREAD_ENV = {"OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
 
 
 def supports(solver: str, kind: str) -> bool:
-    """GLPK has no quadratic objective; everything else takes both LPs and QPs."""
-    return not (solver == "glpk" and kind == "qp")
+    """GLPK has no quadratic objective. The four QP comparators (#983) are run only where
+    the issue asks for them, beside Maros-Meszaros: they are convex-QP solvers, not general
+    LP/MIP engines, so they are excluded from the LP and MIP suites rather than run there
+    on Q=0 and reported as if that were a fair comparison."""
+    if solver == "glpk" and kind == "qp":
+        return False
+    if solver in QP_PYTHON_SOLVERS and kind != "qp":
+        return False
+    return True
 
 
 # =========================================================================================
@@ -453,6 +470,259 @@ def _glpk(model: Path, time_limit: float, sol: Path) -> dict:
 
 
 # =========================================================================================
+# osqp, clarabel, piqp and scs: pip packages, each run in a child process of this script
+# (#983). None of them is pyscipopt-shaped (they take raw matrices, not a model file), so
+# each worker reads the .qps itself with tools/verify_solution_mps.parse_mps - the same
+# reader the verifier and compare_suite.py's own grading use, so nothing here can read the
+# model differently from the number it is graded against.
+# =========================================================================================
+
+def _qp_standard_form(model) -> tuple:
+    """(P, q, A, l, u): the general convex-QP form every one of the four comparators
+    accepts in some corner of its API - minimize 0.5 x'Px + q'x subject to l <= Ax <= u.
+
+    P is the FULL symmetric Hessian (model.hessian is the lower triangle, #514's QUADOBJ
+    convention, mirrored here, not doubled: model.hessian_times already contributes an
+    off-diagonal entry to both rows once each, so mirroring is the whole job).
+    `A` stacks the model's own rows first, then one identity row per column for its bounds,
+    so every one of the four APIs - whether it wants a single general A or a separate box -
+    can be fed from the same two matrices; the per-solver code below slices the identity
+    block back out where an API asks for box constraints instead of extra rows."""
+    import numpy as np  # noqa: PLC0415
+    import scipy.sparse as sp  # noqa: PLC0415
+    n = model.num_cols
+    rows_i, cols_i, vals = [], [], []
+    for (r, c), value in model.hessian.items():
+        rows_i.append(r); cols_i.append(c); vals.append(value)
+        if r != c:
+            rows_i.append(c); cols_i.append(r); vals.append(value)
+    P = sp.csc_matrix((vals, (rows_i, cols_i)), shape=(n, n)) if vals else sp.csc_matrix((n, n))
+    q = np.array(model.col_cost, dtype=float)
+    m = model.num_rows
+    a_rows, a_cols, a_vals = [], [], []
+    for j in range(n):
+        for i, value in model.entries[j]:
+            a_rows.append(i); a_cols.append(j); a_vals.append(value)
+    A_rows = sp.csc_matrix((a_vals, (a_rows, a_cols)), shape=(m, n))
+    A_box = sp.identity(n, format="csc")
+    A = sp.vstack([A_rows, A_box], format="csc")
+    l = np.concatenate([np.array(model.row_lower, dtype=float),
+                        np.array(model.col_lower, dtype=float)])
+    u = np.concatenate([np.array(model.row_upper, dtype=float),
+                        np.array(model.col_upper, dtype=float)])
+    return P, q, A, l, u
+
+
+def _qp_point(model, x) -> tuple[dict, dict]:
+    """A solver's own `x` turned into the (activity, 0.0) / (value, 0.0) maps write_sol
+    wants. None of the four comparators used here hands back row or column duals in a form
+    worth carrying through rivals.reconcile's name games, so the point is written primal
+    only, the same choice already made for SCIP above - `verification` is then
+    `primal-only` and the duality-gap conditions are skipped rather than claimed."""
+    columns = {name: (float(x[j]), 0.0) for j, name in enumerate(model.col_names)}
+    activity = [0.0] * model.num_rows
+    for j, name in enumerate(model.col_names):
+        for i, value in model.entries[j]:
+            activity[i] += value * float(x[j])
+    rows = {name: (activity[i], 0.0) for i, name in enumerate(model.row_names)}
+    return columns, rows
+
+
+def _read_qp_model(model_path: Path):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+    from verify_solution_mps import parse_mps  # noqa: PLC0415
+    return parse_mps(model_path)
+
+
+def _objective(model, x) -> float:
+    # float(...): x and model.col_cost can be numpy arrays, and write_sol's `!r` would
+    # otherwise print `np.float64(0.25)` into the .sol file - a token the verifier's own
+    # parser (and every other solver's row in the same file) does not expect.
+    return float(sum(c * v for c, v in zip(model.col_cost, x)) + model.quadratic_objective(x)
+                + model.objective_offset)
+
+
+def _worker_osqp(model_path: Path, time_limit: float, sol: Path) -> dict:
+    import osqp  # noqa: PLC0415 - external solver, never a build dependency
+    model = _read_qp_model(model_path)
+    P, q, A, l, u = _qp_standard_form(model)
+    solver = osqp.OSQP()
+    settings = {"eps_abs": QP_RELATIVE_TOLERANCE, "eps_rel": QP_RELATIVE_TOLERANCE,
+                "time_limit": float(time_limit), "verbose": False, "polish": True}
+    solver.setup(P.tocsc(), q, A.tocsc(), l, u, **settings)
+    result = solver.solve()
+    status = result.info.status
+    mapped = {"solved": "optimal", "solved inaccurate": "feasible",
+              "primal infeasible": "infeasible", "dual infeasible": "unbounded",
+              "maximum iterations reached": "iteration_limit",
+              "run time limit reached": "time_limit"}.get(status, status)
+    out = {"status": mapped, "message": status, "seconds": result.info.run_time,
+           "iterations": result.info.iter, "duals": False, "version": osqp.__version__,
+           "solver_options": (f"eps_abs={settings['eps_abs']:g},eps_rel="
+                              f"{settings['eps_rel']:g},polish=true"),
+           "objective": None}
+    if mapped == "optimal" and result.x is not None:
+        out["objective"] = _objective(model, result.x)
+        columns, rows = _qp_point(model, result.x)
+        write_sol(sol, solver="osqp", status="feasible", objective=out["objective"],
+                 columns=columns, rows=rows, message="primal only; see rivals.py _qp_point")
+    return out
+
+
+def _worker_clarabel(model_path: Path, time_limit: float, sol: Path) -> dict:
+    import clarabel  # noqa: PLC0415 - external solver, never a build dependency
+    model = _read_qp_model(model_path)
+    P, q, A_box, l, u = _qp_standard_form(model)
+    # Clarabel's cone form is A x + s = b, s in the nonnegative cone split in two halves:
+    # Ax <= u becomes (A)x + s = u, and -Ax <= -l becomes (-A)x + s = -l; a row with
+    # l == u (an equality) is folded into the ZeroConeT half instead of two inequalities.
+    import numpy as np  # noqa: PLC0415
+    import scipy.sparse as sp  # noqa: PLC0415
+    eq = l == u
+    A_eq, b_eq = A_box[eq], l[eq]
+    A_ineq = sp.vstack([A_box[~eq], -A_box[~eq]], format="csc")
+    b_ineq = np.concatenate([u[~eq], -l[~eq]])
+    big = 1e20
+    keep = np.isfinite(b_ineq) & (np.abs(b_ineq) < big)
+    A_stack = sp.vstack([A_eq, A_ineq[keep]], format="csc")
+    b_stack = np.concatenate([b_eq, b_ineq[keep]])
+    cones = [clarabel.ZeroConeT(int(eq.sum())), clarabel.NonnegativeConeT(int(keep.sum()))]
+    settings = clarabel.DefaultSettings()
+    settings.verbose = False
+    settings.time_limit = float(time_limit)
+    settings.tol_feas = QP_RELATIVE_TOLERANCE
+    settings.tol_gap_abs = QP_RELATIVE_TOLERANCE
+    settings.tol_gap_rel = QP_RELATIVE_TOLERANCE
+    solver = clarabel.DefaultSolver(P.tocsc(), q, A_stack, b_stack, cones, settings)
+    solution = solver.solve()
+    status = str(solution.status)
+    mapped = {"Solved": "optimal", "PrimalInfeasible": "infeasible",
+              "DualInfeasible": "unbounded", "MaxIterations": "iteration_limit",
+              "MaxTime": "time_limit"}.get(status, status)
+    out = {"status": mapped, "message": status, "seconds": solution.solve_time,
+           "iterations": solution.iterations, "duals": False,
+           "version": clarabel.__version__,
+           "solver_options": f"tol_feas={QP_RELATIVE_TOLERANCE:g}", "objective": None}
+    if mapped == "optimal" and solution.x is not None:
+        out["objective"] = _objective(model, solution.x)
+        columns, rows = _qp_point(model, solution.x)
+        write_sol(sol, solver="clarabel", status="feasible", objective=out["objective"],
+                 columns=columns, rows=rows, message="primal only; see rivals.py _qp_point")
+    return out
+
+
+def _worker_piqp(model_path: Path, time_limit: float, sol: Path) -> dict:
+    import piqp  # noqa: PLC0415 - external solver, never a build dependency
+    model = _read_qp_model(model_path)
+    P, q, A_box, l, u = _qp_standard_form(model)
+    import numpy as np  # noqa: PLC0415
+    n = model.num_cols
+    A_rows, l_rows, u_rows = A_box[:model.num_rows], l[:model.num_rows], u[:model.num_rows]
+    x_l, x_u = l[model.num_rows:], u[model.num_rows:]
+    solver = piqp.SparseSolver()
+    solver.settings.eps_abs = QP_RELATIVE_TOLERANCE
+    solver.settings.eps_rel = QP_RELATIVE_TOLERANCE
+    solver.settings.verbose = False
+    solver.setup(P.tocsc(), q, G=A_rows.tocsc(), h_l=l_rows, h_u=u_rows, x_l=x_l, x_u=x_u)
+    status = solver.solve()
+    mapped = {piqp.PIQP_SOLVED: "optimal", piqp.PIQP_PRIMAL_INFEASIBLE: "infeasible",
+              piqp.PIQP_DUAL_INFEASIBLE: "unbounded",
+              piqp.PIQP_MAX_ITER_REACHED: "iteration_limit"}.get(status, str(status))
+    info = solver.result.info
+    out = {"status": mapped, "message": str(status), "seconds": info.run_time,
+           "iterations": info.iter, "duals": False, "version": piqp.__version__,
+           "solver_options": f"eps_abs={QP_RELATIVE_TOLERANCE:g}", "objective": None}
+    if mapped == "optimal":
+        x = np.asarray(solver.result.x).ravel()
+        out["objective"] = _objective(model, x)
+        columns, rows = _qp_point(model, x)
+        write_sol(sol, solver="piqp", status="feasible", objective=out["objective"],
+                 columns=columns, rows=rows, message="primal only; see rivals.py _qp_point")
+    return out
+
+
+def _worker_scs(model_path: Path, time_limit: float, sol: Path) -> dict:
+    import scs  # noqa: PLC0415 - external solver, never a build dependency
+    model = _read_qp_model(model_path)
+    P, q, A_box, l, u = _qp_standard_form(model)
+    import numpy as np  # noqa: PLC0415
+    import scipy.sparse as sp  # noqa: PLC0415
+    # SCS's box cone (>= 3.0) is {(t, s): t*l <= s <= t*u}, one dimension larger than the
+    # number of rows it bounds: `t` is its own extra row, fixed to 1 by a zero row of A and
+    # b=1 (SCS's own box-cone example fixes it the same way). Equalities go in the zero
+    # cone first, same split clarabel's worker above makes.
+    eq = l == u
+    box = ~eq
+    n_box = int(box.sum())
+    zero_row = sp.csc_matrix((1, A_box.shape[1]))
+    # s = b - Ax must land in [l, u] for the box rows; A x + s = b with b = 0 gives
+    # s = -Ax, so the box block's A is negated here (s = -(-Ax) = Ax then lands in [l, u]
+    # directly) rather than flipping l and u, which is easier to misread.
+    A_stack = sp.vstack([A_box[eq], zero_row, -A_box[box]], format="csc")
+    b_stack = np.concatenate([l[eq], [1.0], np.zeros(n_box)])
+    data = {"P": P.tocsc(), "A": A_stack, "b": b_stack, "c": q}
+    cone = {"z": int(eq.sum()), "bl": l[box], "bu": u[box]}
+    solver = scs.SCS(data, cone, eps_abs=QP_RELATIVE_TOLERANCE, eps_rel=QP_RELATIVE_TOLERANCE,
+                     time_limit_secs=float(time_limit), verbose=False)
+    result = solver.solve()
+    status = result["info"]["status"]
+    mapped = {"solved": "optimal", "solved/inaccurate": "feasible",
+              "infeasible": "infeasible", "unbounded": "unbounded",
+              "time limit reached": "time_limit"}.get(status, status)
+    out = {"status": mapped, "message": status, "seconds": result["info"]["solve_time"] / 1000.0,
+           "iterations": result["info"]["iter"], "duals": False, "version": scs.__version__,
+           "solver_options": f"eps_abs={QP_RELATIVE_TOLERANCE:g}", "objective": None}
+    if mapped == "optimal":
+        x = result["x"]
+        out["objective"] = _objective(model, x)
+        columns, rows = _qp_point(model, x)
+        write_sol(sol, solver="scs", status="feasible", objective=out["objective"],
+                 columns=columns, rows=rows, message="primal only; see rivals.py _qp_point")
+    return out
+
+
+QP_WORKERS = {"osqp": _worker_osqp, "clarabel": _worker_clarabel, "piqp": _worker_piqp,
+             "scs": _worker_scs}
+
+
+def _python_qp_rival(solver: str, model: Path, time_limit: float, sol: Path) -> dict:
+    """Same subprocess/timeout harness as _python_rival above, with one addition the issue
+    asks for explicitly: a package that is not installed is reported as `not_installed`,
+    named, in the row the CSV gets - never silently dropped from the suite."""
+    with tempfile.TemporaryDirectory() as tmp:
+        report = Path(tmp) / "report.json"
+        command = [sys.executable, str(Path(__file__).resolve()), "--qp-worker", solver,
+                   str(model), repr(float(time_limit)), str(sol), str(report)]
+        started = time.perf_counter()
+        try:
+            done = subprocess.run(command, capture_output=True, text=True,
+                                  timeout=time_limit + HANG_MARGIN_SECONDS,
+                                  env={**os.environ, **SINGLE_THREAD_ENV})
+        except subprocess.TimeoutExpired:
+            return {"status": "hung", "wall_seconds": time.perf_counter() - started,
+                    "message": f"no exit within {time_limit + HANG_MARGIN_SECONDS:g} s"}
+        wall = time.perf_counter() - started
+        if not report.exists():
+            stderr = done.stderr.strip()
+            if f"No module named '{solver}'" in stderr:
+                return {"status": "not_installed", "wall_seconds": wall,
+                        "message": f"{LABELS[solver]} ({solver}) is not installed; "
+                                   f"skipped by name, not silently (pip install {solver})"}
+            return {"status": "crashed", "wall_seconds": wall,
+                    "message": (stderr.splitlines() or ["no output"])[-1][:300]}
+        out = json.loads(report.read_text(encoding="utf-8"))
+    out["wall_seconds"] = wall
+    return out
+
+
+def _qp_worker(argv: list[str]) -> int:
+    solver, model, time_limit, sol, report = argv
+    out = QP_WORKERS[solver](Path(model), float(time_limit), Path(sol))
+    Path(report).write_text(json.dumps(out), encoding="utf-8")
+    return 0
+
+
+# =========================================================================================
 # The entry point compare.py calls
 # =========================================================================================
 
@@ -471,6 +741,8 @@ def run(solver: str, model: Path, kind: str, time_limit: float, sol: Path) -> di
         return _clp(model, kind, time_limit, sol)
     if solver == "glpk":
         return _glpk(model, time_limit, sol)
+    if solver in QP_PYTHON_SOLVERS:
+        return _python_qp_rival(solver, model, time_limit, sol)
     raise ValueError(f"unknown solver {solver}")
 
 
@@ -485,5 +757,7 @@ def _worker(argv: list[str]) -> int:
 if __name__ == "__main__":
     if len(sys.argv) == 7 and sys.argv[1] == "--worker":
         sys.exit(_worker(sys.argv[2:]))
+    if len(sys.argv) == 7 and sys.argv[1] == "--qp-worker":
+        sys.exit(_qp_worker(sys.argv[2:]))
     print(__doc__)
     sys.exit(2)

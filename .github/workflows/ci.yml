@@ -589,6 +589,17 @@ jobs:
           python3 bench/runners/test_check_result_stamps.py
           python3 bench/runners/check_result_stamps.py --base origin/main
 
+      - name: README's scoreboard matches bench/results/*.csv on this commit (#983)
+        # bench/runners/make_scoreboard.py reads bench/results/*.csv and renders the
+        # scoreboard table under the title block of README.md; this fails when that table
+        # has drifted from what the CSVs on this commit actually give, the same kind of
+        # check check_result_stamps.py runs above for the stamps themselves.
+        if: matrix.name == 'Release'
+        run: |
+          python3 bench/runners/test_make_scoreboard.py
+          python3 bench/runners/test_qp_rivals.py
+          python3 bench/runners/make_scoreboard.py --check
+
       # The next four steps ran on both Release and the unsplit ASan leg; `after_tests` keeps
       # them to Release and the ASan leg's third part, so each still runs exactly once per
       # build type.
