@@ -63,6 +63,7 @@ add_executable(sankhya_tests
   unit/test_ipm_normal_side.cpp
   unit/test_pdhg_parallel_spmv.cpp
   unit/test_pdhg_two_matvec.cpp
+  unit/test_pdhg_refinement.cpp
   unit/test_pdhg_halpern.cpp
   unit/test_pdhg_step_weight.cpp
   unit/test_operator_norm.cpp
@@ -83,6 +84,7 @@ add_executable(sankhya_tests
   unit/test_qp_ipm_finish.cpp
   unit/test_qp_ipm_infeasibility.cpp
   unit/test_qp_halpern.cpp
+  unit/test_qp_stall_handoff.cpp
   unit/test_solver_engine.cpp
   unit/test_solver_engine_conformance.cpp
   unit/test_warm_start.cpp
