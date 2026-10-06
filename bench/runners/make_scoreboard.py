@@ -43,6 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import latest_result  # noqa: E402
+import miplib3_doc  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 README = REPO_ROOT / "README.md"
@@ -181,14 +182,14 @@ def miplib_row() -> Row | None:
 
 
 def miplib3_row() -> Row | None:
-    path = latest_result.latest("miplib3-300s-seeds*-*.csv")
+    path = latest_result.latest(miplib3_doc.sankhya_pattern(300))
     if path is None:
         return None
     rows = read_csv(path)
     passed, total = passed_predicate(
         rows, lambda r: r.get("matched_published") == "1"
         and r.get("independently_verified") == "1")
-    highs = latest_result.latest("highs-miplib3-300s-[0-9a-f]*.csv")
+    highs = latest_result.latest(miplib3_doc.highs_pattern(300))
     reference = "HiGHS (same host)" if highs else "-"
     return Row("MIPLIB 3", path, passed, total,
                "matched the published optimum and verified, best of 3 seeds", reference)
