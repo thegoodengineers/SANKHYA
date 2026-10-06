@@ -834,6 +834,16 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     delta = rho;
   }
 
+  // #981: the iterate the run stopped at, whatever its quality, for a caller that wants to
+  // hand it to another engine (qp_ipm_stall_handoff) - unlike `run->save`, filled whenever a
+  // point exists, which is every status but kInfeasible and kUnbounded (#191: no point for a
+  // verdict that does not claim one).
+  if (run->final_point != nullptr && status != SolveStatus::kInfeasible &&
+      status != SolveStatus::kUnbounded) {
+    *run->final_point = ipm_detail::save_iterate(model, s, v, y, zl, zu, rho, delta, last_mu,
+                                                 run->iterations_before + iterations);
+  }
+
   // ---- back to the caller's model -------------------------------------------------------
   const double sense = model.sense_multiplier();
   for (Index j = 0; j < s.n; ++j) {
