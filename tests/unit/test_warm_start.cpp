@@ -499,5 +499,63 @@ TEST(WarmStart, ABasisOfTheWrongShapeRunsColdUnlessMappedByName) {
   EXPECT_NE(warm.message.find("warm start"), std::string::npos) << warm.message;
 }
 
+// #913 part 2, through the public entry point: SolveControl::start_col_value /
+// start_row_dual, not solve_pdhg() called directly (test_pdhg.cpp covers that function in
+// isolation). Before this test, nothing in solve.cpp ever read those fields - the struct
+// pdhg::solve_pdhg takes existed and was tested, but no caller through solve() ever built
+// one, so the feature was unreachable end to end despite the unit-level tests passing.
+//
+// presolve=false: unlike the LP basis warm start (which bypasses presolve, #218), a PDHG
+// warm iterate does not - want_pdhg never sets chosen.engine's supports_warm_start, so the
+// model solve_pdhg actually sees is the PRESOLVED one, which can hold fewer columns than
+// `first.col_value` (in the ORIGINAL model's space). The engine's own size check then finds
+// a mismatch and runs cold, silently and safely, but without presolve's reduction this test
+// could not tell "ran cold because the sizes did not match" from "ran cold because the
+// plumbing was never wired" - which is the bug this test exists to catch. Left as a
+// documented limitation rather than fixed here: bypassing presolve for PDHG the way the
+// basis warm start does is a larger change this slice does not make.
+TEST(WarmStart, APdhgIterateThroughSolveControlResolvesInFewerIterationsThanCold) {
+  Model model = netlib("afiro");
+  Options options = quiet("pdhg");
+  options.set_bool("pdhg_polish", false);
+  options.set_bool("presolve", false);
+  const Solution first = solve(model, options);
+  ASSERT_EQ(first.status, SolveStatus::kOptimal) << first.message;
+
+  // A small cost change: the optimum moves, but the previous iterate is still a reasonable
+  // starting point for it.
+  Model edited = model;
+  for (Index j = 0; j < edited.num_cols(); ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    edited.col_cost[u] *= 1.01;
+  }
+  const Solution cold = solve(edited, options);
+  ASSERT_EQ(cold.status, SolveStatus::kOptimal) << cold.message;
+
+  SolveControl control;
+  control.start_col_value = first.col_value;
+  control.start_row_dual = first.row_dual;
+  const Solution warm = solve(edited, options, &control);
+  ASSERT_EQ(warm.status, SolveStatus::kOptimal) << warm.message;
+  EXPECT_NEAR(warm.objective, cold.objective, 1e-6 * std::max(1.0, std::fabs(cold.objective)));
+  EXPECT_LT(warm.iterations, cold.iterations)
+      << "warm " << warm.iterations << " vs cold " << cold.iterations;
+}
+
+// A warm iterate of the wrong size (model.num_cols() changed) is ignored: solve() must not
+// crash or hand the engine a vector it cannot use, and the cold answer comes back.
+TEST(WarmStart, APdhgIterateOfTheWrongSizeIsIgnoredAndTheSolveRunsCold) {
+  Model model = netlib("afiro");
+  Options options = quiet("pdhg");
+  const Solution cold = solve(model, options);
+  ASSERT_EQ(cold.status, SolveStatus::kOptimal) << cold.message;
+
+  SolveControl control;
+  control.start_col_value.assign(3, 0.0);
+  const Solution s = solve(model, options, &control);
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_NEAR(s.objective, cold.objective, 1e-7 * std::max(1.0, std::fabs(cold.objective)));
+}
+
 }  // namespace
 }  // namespace sankhya
