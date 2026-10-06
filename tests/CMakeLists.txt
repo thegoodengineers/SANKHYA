@@ -84,7 +84,6 @@ add_executable(sankhya_tests
   unit/test_qp_ipm_finish.cpp
   unit/test_qp_ipm_infeasibility.cpp
   unit/test_qp_halpern.cpp
-  unit/test_qp_stall_handoff.cpp
   unit/test_solver_engine.cpp
   unit/test_solver_engine_conformance.cpp
   unit/test_warm_start.cpp

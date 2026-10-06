@@ -64,8 +64,8 @@ inline constexpr double kMinUsefulShrink = 0.5;
 /// relative tolerance (the same `pdhg_tolerance` the double engine is held to); `max_rounds`
 /// bounds the refinement loop so a stalled-but-not-yet-detected case cannot run forever.
 [[nodiscard]] inline RefinementAction decide_refinement_action(const RefinementState& state,
-                                                                double target,
-                                                                std::int64_t max_rounds) {
+                                                               double target,
+                                                               std::int64_t max_rounds) {
   if (state.current_residual <= target) return RefinementAction::kDone;
   if (state.rounds_run == 0) {
     // First round has not been judged yet; the caller always gets at least one attempt
