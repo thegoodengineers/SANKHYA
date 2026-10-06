@@ -62,7 +62,8 @@ class QpOperator {
   /// point's iterate when it stalls (qp_ipm_stall_handoff). False declines (sizes that do
   /// not match this operator's model, or no device support yet) and the caller keeps the
   /// cold start, which never costs an answer. The default implementation always declines.
-  [[nodiscard]] virtual bool upload(const std::vector<double>& x, const std::vector<double>& y) {
+  [[nodiscard]] virtual bool upload(const std::vector<double>& x,
+                                    const std::vector<double>& y) {
     (void)x;
     (void)y;
     return false;

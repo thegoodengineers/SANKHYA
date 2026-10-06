@@ -50,34 +50,6 @@ Model inequality_qp() {
   return model;
 }
 
-/// min (x1^2 + x2^2 + x3^2) / 2  s.t.  x1 + x2 + x3 = 3,  1 <= x1 - x2 <= 2,  x1 free,
-/// x2 >= 0, x3 fixed at 0.5. Optimum (1.75, 0.75, 0.5), objective 1.9375 (test_qp_ipm.cpp's
-/// derivation). None of these numbers is exact in binary, so the residual floor a run
-/// plateaus at is genuine floating-point noise, not an exact zero a trivial model can hit.
-Model equality_ranged_free_fixed_qp() {
-  Model model;
-  model.sense = ObjSense::kMinimize;
-  model.col_cost = {0.0, 0.0, 0.0};
-  model.col_lower = {-kInfinity, 0.0, 0.5};
-  model.col_upper = {kInfinity, kInfinity, 0.5};
-  model.col_type = {VarType::kContinuous, VarType::kContinuous, VarType::kContinuous};
-  model.row_lower = {3.0, 1.0};
-  model.row_upper = {3.0, 2.0};
-  model.matrix.reset(2, 3);
-  model.matrix.add_entry(0, 0, 1.0);
-  model.matrix.add_entry(0, 1, 1.0);
-  model.matrix.add_entry(0, 2, 1.0);
-  model.matrix.add_entry(1, 0, 1.0);
-  model.matrix.add_entry(1, 1, -1.0);
-  model.matrix.finalize();
-  model.hessian.reset(3, 3);
-  model.hessian.add_entry(0, 0, 1.0);
-  model.hessian.add_entry(1, 1, 1.0);
-  model.hessian.add_entry(2, 2, 1.0);
-  model.hessian.finalize();
-  return model;
-}
-
 // ---- (d) the option defaults off, and off changes nothing -------------------------------
 
 TEST(QpIpmStallHandoff, DefaultsOff) {
@@ -172,8 +144,8 @@ TEST(QpIpmStallHandoff, TheStalledPointCanBeHandedToTheFirstOrderEngineWithoutCr
   Options options = quiet();
   options.set_bool("qp_ipm_stall_handoff", true);
   qp::QpIpmWarmResult result;
-  const Solution stalled = qp::solve_convex_qp_ipm(model, options, logger, nullptr, nullptr,
-                                                    &result);
+  const Solution stalled =
+      qp::solve_convex_qp_ipm(model, options, logger, nullptr, nullptr, &result);
   ASSERT_TRUE(result.stalled);
   ASSERT_FALSE(result.final_point.empty());
 

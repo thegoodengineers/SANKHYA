@@ -391,7 +391,7 @@ void handoff_qp_ipm_stall_to_first_order(Solution* ipm, const qp::QpIpmWarmResul
     return;
   }
   qp::QpFirstOrderWarmStart warm{ipm_result.final_point.col_value,
-                                ipm_result.final_point.row_dual};
+                                 ipm_result.final_point.row_dual};
   logger.info(
       "QP interior point: stalled after {} iterations; handing its point to the "
       "first-order engine for the time left (#981)",
@@ -433,7 +433,8 @@ void handoff_qp_first_order_limit_to_ipm(Solution* first, const Model& model,
                                          const ResourceLimits& limits,
                                          const WithTheTimeLeft& with_the_time_that_is_left,
                                          std::string* engine_ran) {
-  if (first->status != SolveStatus::kIterationLimit && first->status != SolveStatus::kTimeLimit) {
+  if (first->status != SolveStatus::kIterationLimit &&
+      first->status != SolveStatus::kTimeLimit) {
     return;
   }
   const auto n = static_cast<std::size_t>(model.num_cols());
@@ -450,14 +451,14 @@ void handoff_qp_first_order_limit_to_ipm(Solution* first, const Model& model,
       "QP first-order engine: stopped at {} after {} iterations; handing its point to the "
       "interior point for the time left (#981)",
       to_string(first->status), first->iterations);
-  Solution finished =
-      qp::solve_convex_qp_ipm(model, with_the_time_that_is_left(options), logger, control, &warm);
+  Solution finished = qp::solve_convex_qp_ipm(model, with_the_time_that_is_left(options),
+                                              logger, control, &warm);
   const auto worst = [](const Solution& s) {
     return std::max(s.primal_infeasibility_scaled, s.dual_infeasibility_scaled);
   };
-  const bool better = finished.status == SolveStatus::kOptimal ||
-                      (finished.status == SolveStatus::kFeasible &&
-                       worst(finished) < worst(*first));
+  const bool better =
+      finished.status == SolveStatus::kOptimal ||
+      (finished.status == SolveStatus::kFeasible && worst(finished) < worst(*first));
   if (!better) {
     first->message += fmt::format(
         "; handed to the interior point, which did not improve it ({} after {} "
@@ -1575,8 +1576,8 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     solution = with_presolve(
         [&](const Model& target) {
           if (!want_qp_ipm) {
-            Solution first =
-                qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger, control);
+            Solution first = qp::solve_convex_qp(target, with_the_time_that_is_left(options),
+                                                 logger, control);
             // #981, the reverse direction: the first-order engine's own ceiling or a time
             // limit, finished by the interior point on the time left.
             if (qp_stall_handoff) {
