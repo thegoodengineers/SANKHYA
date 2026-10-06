@@ -64,6 +64,16 @@ struct QpIpmWarmResult {
   bool fell_back = false;
   /// Iterations the abandoned warm run spent; zero when there was none.
   Count abandoned_iterations = 0;
+  /// #981, qp_ipm_stall_handoff: the final status is kIterationLimit because the worst
+  /// relative measure stalled (the stall test below, generalized to the cold run by that
+  /// option), rather than because an explicit iteration_limit was reached.
+  bool stalled = false;
+  /// #981, qp_ipm_stall_handoff: the iterate at the point the solve stopped, on the model's
+  /// own columns and rows, whatever that point's quality - unlike `next`, which is empty
+  /// unless tol::kQpIpmWarmSaveLevel was reached. Filled whenever the solve ends with a
+  /// point (every status but kInfeasible and kUnbounded), so a stall that never got close can
+  /// still be handed to another engine with whatever it has.
+  QpIpmWarmStart final_point;
 };
 
 /// Solve a convex QP:
@@ -75,9 +85,23 @@ struct QpIpmWarmResult {
 /// A non-convex Hessian is REFUSED (kModelError), never solved to whatever local point the
 /// iteration happens to reach. Convexity is decided before any arithmetic starts; see
 /// src/qp/convexity.hpp.
+/// A starting point for solve_convex_qp (#981): typically the interior point's iterate when
+/// it has stalled short of the standard, in the model's own columns and rows, offered so the
+/// first-order iteration does not start at the projection of zero. Only `col_value` is
+/// required; `row_dual`, in the model's sense (Solution::row_dual's convention), is used when
+/// its size matches the model's rows and left at zero otherwise. Honoured on the host
+/// operator only (qp_gpu=false); the device operator declines it like a model it cannot take
+/// and the iteration starts cold, which never costs an answer.
+struct QpFirstOrderWarmStart {
+  std::vector<double> col_value;
+  std::vector<double> row_dual;
+
+  [[nodiscard]] bool empty() const noexcept { return col_value.empty(); }
+};
+
 [[nodiscard]] Solution solve_convex_qp(const Model& model, const Options& options,
-                                       Logger& logger,
-                                       sankhya::SolveControl* control = nullptr);
+                                       Logger& logger, sankhya::SolveControl* control = nullptr,
+                                       const QpFirstOrderWarmStart* warm_start = nullptr);
 
 /// The same problem by a proximal interior point (#490): Mehrotra predictor-corrector on the
 /// regularized, quasi-definite augmented system, factored by the project's sparse LDL^T.

@@ -45,6 +45,18 @@
 // them; see the #893 comment above farkas_candidate below. Off, an infeasible model runs to
 // the iteration ceiling or a non-finite iterate and says so, as before.
 //
+// STALL DETECTION AND CROSS-ENGINE HANDOFF (#981, qp_ipm_stall_handoff, off by default): a
+// warm run has always been abandoned on a stall, read off the three relative measures (#494,
+// below); with the option on, a COLD run with no explicit iteration_limit is held to the same
+// test in place of the fixed kIterationCeiling, so an iterate that is still falling keeps
+// going on whatever time is left, and only a genuine stall stops it. The caller
+// (src/core/solve.cpp) reads the stall back through QpIpmWarmResult::stalled and hands the
+// iterate in QpIpmWarmResult::final_point to the first-order engine (qp_condat_vu.cpp) for
+// the time that remains, and the reverse direction - that engine's own ceiling or time limit
+// handed to this one as a QpIpmWarmStart - is the existing warm-start plumbing below, called
+// from the same place. Nothing here is new arithmetic: both engines and the stall test
+// already existed (#490, #493, #494); #981 is the orchestration between them.
+//
 // WARM START (#494, #893): when the caller offers a QpIpmWarmStart whose col_value is the
 // model's own size, the usual least-squares start (Mehrotra 1992 sec. 7, "after Mehrotra"
 // below) is skipped. The offered iterate - point, row and bound multipliers, proximal
@@ -223,7 +235,11 @@ struct Run {
   const QpIpmWarmStart* warm = nullptr;  ///< null: the cold start
   Count iterations_before = 0;           ///< spent by an abandoned warm run, against the limits
   QpIpmWarmStart* save = nullptr;        ///< receives the save point, when not null
-  bool stalled = false;                  ///< set when a warm run stopped for lack of progress
+  bool stalled = false;                  ///< set when the run stopped for lack of progress
+  // #981, qp_ipm_stall_handoff: the iterate the run stopped at, whatever its quality -
+  // unlike `save`, filled unconditionally (not only once tol::kQpIpmWarmSaveLevel is
+  // reached), so a genuine stall can still hand its point to another engine.
+  QpIpmWarmStart* final_point = nullptr;
 };
 
 Solution iterate(const Model& model, const Standard& s, const Options& options, Logger& logger,
@@ -282,9 +298,15 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   const bool warm_usable = warm_start != nullptr && !warm_start->empty() &&
                            warm_start->col_value.size() == static_cast<std::size_t>(s.n);
   QpIpmWarmStart* save = warm_result != nullptr ? &warm_result->next : nullptr;
-  Run first{warm_usable ? warm_start : nullptr, 0, save, false};
+  QpIpmWarmStart* final_point = warm_result != nullptr ? &warm_result->final_point : nullptr;
+  Run first{warm_usable ? warm_start : nullptr, 0, save, false, final_point};
   Solution solved = iterate(model, s, options, logger, control, timer, limits, &first);
-  if (!warm_usable) return solved;
+  if (!warm_usable) {
+    if (warm_result != nullptr) {
+      warm_result->stalled = first.stalled && solved.status == SolveStatus::kIterationLimit;
+    }
+    return solved;
+  }
   if (warm_result != nullptr) warm_result->warm_used = true;
   // A WARM RUN THAT FAILED OR STALLED is abandoned for the cold start: the answer must not
   // depend on where the iteration began. A verdict (optimal, or a certificate the checker
@@ -292,18 +314,24 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   const bool failed = solved.status == SolveStatus::kNumericalError ||
                       solved.status == SolveStatus::kNotSolved ||
                       (solved.status == SolveStatus::kIterationLimit && first.stalled);
-  if (!failed || !warm_start->retry_cold) return solved;
+  if (!failed || !warm_start->retry_cold) {
+    if (warm_result != nullptr) {
+      warm_result->stalled = first.stalled && solved.status == SolveStatus::kIterationLimit;
+    }
+    return solved;
+  }
   logger.verbose(
       "QP interior point: the warm start {} after {} iterations ({}); solving again "
       "from the cold start",
       first.stalled ? "stalled" : "failed", solved.iterations, solved.message);
   if (save != nullptr) *save = QpIpmWarmStart{};
-  Run cold{nullptr, solved.iterations, save, false};
+  Run cold{nullptr, solved.iterations, save, false, final_point};
   Solution again = iterate(model, s, options, logger, control, timer, limits, &cold);
   again.iterations += solved.iterations;
   if (warm_result != nullptr) {
     warm_result->fell_back = true;
     warm_result->abandoned_iterations = solved.iterations;
+    warm_result->stalled = cold.stalled && again.status == SolveStatus::kIterationLimit;
   }
   return again;
 }
@@ -321,6 +349,11 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   const auto nr = static_cast<std::size_t>(s.rows);
   const double tolerance = options.get_double("qp_ipm_tolerance");
   const bool detect = options.get_bool("qp_ipm_detect_infeasibility");  // #893
+  // #981: generalize the warm run's stall test (#494) to the cold run too, in place of the
+  // fixed kIterationCeiling, and report a genuine stall so the caller can hand the point to
+  // the first-order engine for whatever time is left. See the file header and the comment at
+  // the stall test below.
+  const bool stall_handoff = options.get_bool("qp_ipm_stall_handoff");
   const double primal_tolerance = options.get_double("primal_feasibility_tolerance");
   StopController stop(control, timer, limits);
 
@@ -381,6 +414,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   Count iterations_past_relative = 0;
   std::vector<double> kept_v, kept_y;
   double primal_rel = kInfinity, dual_rel = kInfinity, gap_rel = kInfinity;
+  double last_mu = 0.0;  // #981: mu at the point the loop stopped, for final_point below
   // #494: the worst relative measure at each iteration of a warm run, for the stall test.
   std::vector<double> worst_measure;
 
@@ -562,6 +596,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     }
     const double mu =
         bound_count > 0 ? complementarity / static_cast<double>(bound_count) : 0.0;
+    last_mu = mu;
 
     // Relative residuals, and the Dorn duality gap: primal g'v + v'Hv/2 against
     // b'y + l'z_l - u'z_u - v'Hv/2.
@@ -625,8 +660,14 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
         break;
       }
     }
-    // #494: a warm run that has stopped making progress is handed back to be solved cold.
-    if (warm_start != nullptr) {
+    // #494, generalized by #981 (qp_ipm_stall_handoff): a run that has stopped making
+    // progress is handed back - to the cold start when it was warm (#494, unconditional), or
+    // to the caller to try the first-order engine when it was cold and the option is on
+    // (#981). The test is the same either way: the largest of the three relative measures
+    // has not fallen by kQpIpmWarmStallFactor over the last kQpIpmWarmStallWindow iterations
+    // (Mehrotra 1992's predictor-corrector gains an order of magnitude every two or three
+    // iterations while converging, so ten without one is a stall, not slow progress).
+    if (warm_start != nullptr || stall_handoff) {
       const double worst = std::max({primal_rel, dual_rel, gap_rel});
       worst_measure.push_back(worst);
       const auto window = static_cast<std::size_t>(tol::kQpIpmWarmStallWindow);
@@ -635,9 +676,10 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
             tol::kQpIpmWarmStallFactor * worst_measure[worst_measure.size() - 1 - window])) {
         status = SolveStatus::kIterationLimit;
         message = fmt::format(
-            "the warm start stalled: the worst relative measure is {:.1e} after {} iterations, "
-            "{:.1e} {} iterations before",
-            worst, iterations, worst_measure[worst_measure.size() - 1 - window], window);
+            "{} stalled: the worst relative measure is {:.1e} after {} iterations, {:.1e} "
+            "{} iterations before",
+            warm_start != nullptr ? "the warm start" : "the interior point", worst, iterations,
+            worst_measure[worst_measure.size() - 1 - window], window);
         run->stalled = true;
         break;
       }
@@ -649,8 +691,13 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
       break;
     }
     const Count spent = run->iterations_before + iterations;
+    // #981: with qp_ipm_stall_handoff, the fixed ceiling is replaced by the stall test above
+    // for a cold run with no explicit iteration_limit - it already broke the loop once the
+    // worst measure stopped falling, so reaching here means it is STILL falling and keeps
+    // going on whatever time is left (checked just above). Off, or with an explicit
+    // iteration_limit, nothing here changes.
     if (limits.iterations_exhausted(spent) ||
-        (limits.iteration_limit() < 0 && spent >= kIterationCeiling)) {
+        (limits.iteration_limit() < 0 && !stall_handoff && spent >= kIterationCeiling)) {
       status = SolveStatus::kIterationLimit;
       message =
           limits.iteration_limit() >= 0

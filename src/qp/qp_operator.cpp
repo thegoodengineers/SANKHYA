@@ -51,6 +51,20 @@ class HostOperator final : public QpOperator {
     }
   }
 
+  // #981: a point from elsewhere (QpFirstOrderWarmStart), typically the interior point's
+  // stalled iterate - projected onto the box the way the zero start already is, since the
+  // model may differ in scale from wherever the point was taken. y is accepted as given;
+  // the dual side has no box to project onto.
+  bool upload(const std::vector<double>& x, const std::vector<double>& y) override {
+    if (x.size() != x_.size() || y.size() != y_.size()) return false;
+    for (Index j = 0; j < n_; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      x_[u] = project(x[u], model_.col_lower[u], model_.col_upper[u]);
+    }
+    y_ = y;
+    return true;
+  }
+
   bool step(double tau, double sigma) override {
     // Primal: x' = proj_box( x - tau (c + Qx + A'y) ). The Qx term is the whole difference
     // from the LP engine; everything else is Chambolle-Pock unchanged.
