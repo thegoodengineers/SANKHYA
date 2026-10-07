@@ -298,7 +298,12 @@ Solution solve_convex_qp_ipm(const Model& model, const Options& options, Logger&
   const bool warm_usable = warm_start != nullptr && !warm_start->empty() &&
                            warm_start->col_value.size() == static_cast<std::size_t>(s.n);
   QpIpmWarmStart* save = warm_result != nullptr ? &warm_result->next : nullptr;
-  QpIpmWarmStart* final_point = warm_result != nullptr ? &warm_result->final_point : nullptr;
+  // #981: only a caller that can hand the point on asks for it; the MIQP node solver passes a
+  // warm_result on every node, and with the option off it does not pay for this copy.
+  QpIpmWarmStart* final_point =
+      warm_result != nullptr && options.get_bool("qp_ipm_stall_handoff")
+          ? &warm_result->final_point
+          : nullptr;
   Run first{warm_usable ? warm_start : nullptr, 0, save, false, final_point};
   Solution solved = iterate(model, s, options, logger, control, timer, limits, &first);
   if (!warm_usable) {
