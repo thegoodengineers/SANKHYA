@@ -115,19 +115,25 @@ TEST(QpIpmStallHandoff, OffAnInfeasibleModelRunsToNumericalErrorExactlyAsBefore)
   EXPECT_FALSE(result.stalled);
 }
 
-TEST(QpIpmStallHandoff, OnTheSameModelIsRecognizedAsAGenuineStallInstead) {
+TEST(QpIpmStallHandoff, OnTheSameModelEndsExactlyAsOffBecauseTheOptionNeverCutsARunShort) {
+  // A cold run is held to the stall test only from the old 200-iteration ceiling on, so its
+  // first 200 iterations are the option-off run's. This model goes non-finite well before
+  // that, on or off. (Testing the stall from the first iteration, as this option first did,
+  // stopped Maros-Meszaros ubh1 at 10 iterations 3.6e-1 from the reference.)
   const Model model = infeasible_qp();
   Logger logger(nullptr);
-  Options options = quiet();
-  options.set_bool("qp_ipm_stall_handoff", true);
+  Options off = quiet();
+  Options on = quiet();
+  on.set_bool("qp_ipm_stall_handoff", true);
   qp::QpIpmWarmResult result;
-  const Solution s = qp::solve_convex_qp_ipm(model, options, logger, nullptr, nullptr, &result);
-  EXPECT_EQ(s.status, SolveStatus::kIterationLimit);
-  EXPECT_TRUE(result.stalled) << s.message;
-  EXPECT_NE(s.message.find("stalled"), std::string::npos) << s.message;
-  EXPECT_LT(s.iterations, 200);  // caught well before the old fixed ceiling
-  // #981: the point to hand to the other engine is filled, unlike `next` (the
-  // kQpIpmWarmSaveLevel save point), which a model that never gets close never reaches.
+  const Solution a = qp::solve_convex_qp_ipm(model, off, logger);
+  const Solution b = qp::solve_convex_qp_ipm(model, on, logger, nullptr, nullptr, &result);
+  EXPECT_EQ(a.status, b.status);
+  EXPECT_EQ(a.iterations, b.iterations);
+  EXPECT_EQ(a.message, b.message);
+  EXPECT_FALSE(result.stalled);
+  // #981: the point to hand to another engine is filled on any ending with a point, not only
+  // once tol::kQpIpmWarmSaveLevel is reached as `next` is.
   ASSERT_FALSE(result.final_point.empty());
   EXPECT_EQ(result.final_point.col_value.size(), 2u);
 }
@@ -137,16 +143,17 @@ TEST(QpIpmStallHandoff, OnTheSameModelIsRecognizedAsAGenuineStallInstead) {
 
 TEST(QpIpmStallHandoff, TheStalledPointCanBeHandedToTheFirstOrderEngineWithoutCrashing) {
   // The model has no optimum, so this only exercises that the hand-off itself (sizes,
-  // QpFirstOrderWarmStart's row_dual sign convention, op->upload) is sound on a real stalled
-  // point; see the next test for a model where "correct answer" means something.
+  // QpFirstOrderWarmStart's row_dual sign convention, op->upload) is sound on the point a
+  // failed interior-point run stopped at; see the next test for a model where "correct
+  // answer" means something.
   const Model model = infeasible_qp();
   Logger logger(nullptr);
   Options options = quiet();
   options.set_bool("qp_ipm_stall_handoff", true);
   qp::QpIpmWarmResult result;
-  const Solution stalled =
+  const Solution failed =
       qp::solve_convex_qp_ipm(model, options, logger, nullptr, nullptr, &result);
-  ASSERT_TRUE(result.stalled);
+  EXPECT_NE(failed.status, SolveStatus::kOptimal);
   ASSERT_FALSE(result.final_point.empty());
 
   qp::QpFirstOrderWarmStart warm{result.final_point.col_value, result.final_point.row_dual};

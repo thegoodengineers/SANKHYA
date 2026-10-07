@@ -48,8 +48,8 @@
 // STALL DETECTION AND CROSS-ENGINE HANDOFF (#981, qp_ipm_stall_handoff, off by default): a
 // warm run has always been abandoned on a stall, read off the three relative measures (#494,
 // below); with the option on, a COLD run with no explicit iteration_limit is held to the same
-// test in place of the fixed kIterationCeiling, so an iterate that is still falling keeps
-// going on whatever time is left, and only a genuine stall stops it. The caller
+// test from the fixed kIterationCeiling on (not before it), so an iterate that is still falling
+// keeps going on whatever time is left, and only a genuine stall stops it. The caller
 // (src/core/solve.cpp) reads the stall back through QpIpmWarmResult::stalled and hands the
 // iterate in QpIpmWarmResult::final_point to the first-order engine (qp_condat_vu.cpp) for
 // the time that remains, and the reverse direction - that engine's own ceiling or time limit
@@ -354,7 +354,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   const auto nr = static_cast<std::size_t>(s.rows);
   const double tolerance = options.get_double("qp_ipm_tolerance");
   const bool detect = options.get_bool("qp_ipm_detect_infeasibility");  // #893
-  // #981: generalize the warm run's stall test (#494) to the cold run too, in place of the
+  // #981: generalize the warm run's stall test (#494) to the cold run too, past the
   // fixed kIterationCeiling, and report a genuine stall so the caller can hand the point to
   // the first-order engine for whatever time is left. See the file header and the comment at
   // the stall test below.
@@ -671,8 +671,13 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     // (#981). The test is the same either way: the largest of the three relative measures
     // has not fallen by kQpIpmWarmStallFactor over the last kQpIpmWarmStallWindow iterations
     // (Mehrotra 1992's predictor-corrector gains an order of magnitude every two or three
-    // iterations while converging, so ten without one is a stall, not slow progress).
-    if (warm_start != nullptr || stall_handoff) {
+    // iterations while converging, so ten without one is a stall, not slow progress). A cold
+    // run is held to it only from kIterationCeiling on: its first iterations are exactly the
+    // ones the option-off run takes, so the option can lengthen a run, never cut one short.
+    // On Maros-Meszaros, applying it from the first iteration stopped ubh1 at 10 iterations
+    // 3.6e-1 from the reference, where the ceiling run ends 1.8e-8 from it.
+    if (warm_start != nullptr ||
+        (stall_handoff && run->iterations_before + iterations >= kIterationCeiling)) {
       const double worst = std::max({primal_rel, dual_rel, gap_rel});
       worst_measure.push_back(worst);
       const auto window = static_cast<std::size_t>(tol::kQpIpmWarmStallWindow);
