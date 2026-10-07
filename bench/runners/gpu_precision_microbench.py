@@ -29,10 +29,7 @@ built (`cmake --build build -DSANKHYA_ENABLE_CUDA=ON --target sankhya-precision-
      #982's acceptance item asks for.
 
 NOTE on step 2 - the one piece this script cannot finish without a CUDA build to test
-against: sankhya-cli has no "dump the scaled CSR of this model" flag today. `dump_csr_stub`
-below writes the UNSCALED model's CSR as a placeholder dump (so the script and the
-micro-benchmark tool's binary contract can be exercised end to end on a CPU-only machine for
-format checking, by passing --skip-microbench); the real run needs either a small addition to
+against: sankhya-cli has no "dump the scaled CSR of this model" flag today. the real run needs either a small addition to
 sankhya-cli (e.g. `--dump-scaled-csr PATH`, printing the same CsrView src/gpu/pdhg_gpu.cu
 uploads) or scaling the matrix independently here in Python before the dump. Flagged rather
 than guessed at, since adding a CLI flag is itself a small code change that deserves its own
@@ -46,12 +43,9 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import csv
-import hashlib
-import platform
 import struct
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -68,45 +62,6 @@ CSV_COLUMNS = [
     "final_residual_dual_double", "final_residual_gap_double", "status", "verifier_verdict",
     "peak_device_memory_bytes", "git_commit", "card", "timestamp_utc",
 ]
-
-# This runner only fills the device-product-pair rows (precision_arm in {double-product,
-# float-product}); iterations/restarts/refinement_rounds/status/verifier_verdict are left
-# blank here because this step measures the PRODUCT PAIR, not a PDHG solve - the end-to-end
-# arms (precision_arm in {double, mixed}) are a later runner's job once this step clears.
-PRODUCT_ONLY_COLUMNS = {"seconds_per_iteration"}  # ax+atx seconds, repurposed for this row
-
-
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    h.update(path.read_bytes())
-    return h.hexdigest()
-
-
-def dump_csr_stub(mps_path: Path, dump_path: Path) -> tuple[int, int, int]:
-    """Write bench/tools/gpu_precision_microbench.cu's flat CSR format from the model's OWN
-    coefficients - i.e. unscaled - by reading the MPS file with a minimal parser. This is a
-    format-level placeholder (see the NOTE in the module docstring): it lets the dump/run/
-    parse plumbing below be exercised without a GPU, but the real measurement needs the
-    SCALED matrix PDHG actually runs on, not this. Returns (rows, cols, nnz).
-    """
-    # Deliberately does not import sankhya's own MPS reader (no CPython extension exists for
-    # it); a tiny free-format MPS/LP coefficient scan is enough for a format check, not for
-    # a real measurement - see the module docstring's NOTE.
-    raise NotImplementedError(
-        "dump_csr_stub needs a matrix source; pass --csr-dump to supply one directly "
-        "(rows,cols,nnz,row_ptr,col_idx,values packed as the tool expects), or add the "
-        "sankhya-cli scaled-CSR dump flag described in this module's docstring."
-    )
-
-
-def write_csr_dump(dump_path: Path, rows: int, cols: int, row_ptr: list[int],
-                   col_idx: list[int], values: list[float]) -> None:
-    nnz = len(values)
-    with open(dump_path, "wb") as f:
-        f.write(struct.pack("<qqq", rows, cols, nnz))
-        f.write(struct.pack(f"<{len(row_ptr)}i", *row_ptr))
-        f.write(struct.pack(f"<{len(col_idx)}i", *col_idx))
-        f.write(struct.pack(f"<{len(values)}d", *values))
 
 
 def run_microbench(microbench: Path, dump_path: Path, warmup: int, timed: int) -> dict:

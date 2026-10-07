@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "pdhg/pdhg_refinement.hpp"
+#include "sankhya/options.hpp"
 
 namespace sankhya::pdhg {
 namespace {
@@ -36,7 +37,7 @@ TEST(PdhgRefinement, GoodShrinkKeepsRefining) {
   RefinementState state;
   state.rounds_run = 1;
   state.previous_residual = 1e-4;
-  state.current_residual = 1e-6;  // shrink = 1e-2, well under kMinUsefulShrink
+  state.current_residual = 1e-6;  // shrink = 1e-2, well under tol::kPdhgMixedMinUsefulShrink
   EXPECT_EQ(decide_refinement_action(state, 1e-8, 10), RefinementAction::kRefineAgain);
 }
 
@@ -44,7 +45,8 @@ TEST(PdhgRefinement, StalledRoundFallsBackToDouble) {
   RefinementState state;
   state.rounds_run = 1;
   state.previous_residual = 1e-4;
-  state.current_residual = 0.9e-4;  // shrink = 0.9 > kMinUsefulShrink: not worth another round
+  state.current_residual =
+      0.9e-4;  // shrink = 0.9 > tol::kPdhgMixedMinUsefulShrink: not worth another round
   EXPECT_EQ(decide_refinement_action(state, 1e-8, 10), RefinementAction::kFallBackToDouble);
 }
 
@@ -68,7 +70,8 @@ TEST(PdhgRefinement, ExactThresholdShrinkCountsAsNotUseful) {
   RefinementState state;
   state.rounds_run = 1;
   state.previous_residual = 1e-4;
-  state.current_residual = 0.5e-4;  // shrink == kMinUsefulShrink exactly: boundary, not `<=`
+  state.current_residual =
+      0.5e-4;  // shrink == tol::kPdhgMixedMinUsefulShrink exactly: boundary, not `<=`
   EXPECT_EQ(decide_refinement_action(state, 1e-8, 10), RefinementAction::kRefineAgain);
 }
 
@@ -79,6 +82,12 @@ TEST(PdhgRefinement, MissingPreviousResidualFallsBackSafely) {
                                   // by zero or crash
   state.current_residual = 1e-6;
   EXPECT_EQ(decide_refinement_action(state, 1e-8, 10), RefinementAction::kFallBackToDouble);
+}
+
+// The default is double precision: #982's mixed path is off unless a caller opts in, so no
+// default solve, benchmark or reported number goes near a float.
+TEST(PdhgRefinement, PrecisionDefaultsToDouble) {
+  EXPECT_EQ(Options().get_string("pdhg_precision"), "double");
 }
 
 }  // namespace

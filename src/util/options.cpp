@@ -2382,28 +2382,26 @@ const std::vector<OptionSpec>& Options::registry() {
         {"pdhg_precision",
          OptionType::String,
          std::string("double"),
-         "GPU PDHG only (#982): double (default) keeps the matrix values and both iterates "
-         "in double precision throughout, as before. mixed holds the matrix values and the "
-         "iterate between restarts in single precision and runs the two sparse products "
-         "(A x and A^T y) in single precision - the memory traffic PDLP's per-iteration cost "
-         "is bound by - while every decision stays in double: the residuals behind the "
-         "restart test and the convergence test are formed in double from a double copy of "
-         "the iterate and the matrix at the cadence the test already runs, iterative "
-         "refinement runs when single precision stalls above the target tolerance, and the "
-         "final point is judged by the same in-process KKT check and tools/verify_solution.py "
-         "at the tolerances a double run is held to - a mixed run that cannot pass ends with "
-         "the status a double run would give, never a looser one. The CPU engine and the "
-         "multi-GPU engine ignore this option and run in double; the single-card CUDA engine "
-         "warns and runs in double if asked for mixed without a CUDA device. Citations: "
-         "Carson & Higham, 'Accelerating the solution of linear systems by iterative "
-         "refinement in three precisions', SIAM J. Sci. Comput. 40 (2018); Gleixner, Steffy "
-         "& Wolter, 'Iterative refinement for linear programming', INFORMS J. Comput. 28 "
-         "(2016); Higham & Mary, 'Mixed precision algorithms in numerical linear algebra', "
-         "Acta Numerica 31 (2022). Default double until the device micro-benchmark required "
-         "by #982 (bench/results/gpu-precision-<card>-<commit>.csv) shows the single-precision "
-         "product pair is actually faster than double on the target card; as of this change "
-         "that benchmark has not been run on any card, so mixed is unverified beyond static "
-         "review (docs/PROVENANCE.md).",
+         "GPU PDHG only (#982): double (default) runs everything in double precision, as "
+         "before. mixed runs ONLY the iteration's two sparse products, A x and A^T y, on a "
+         "float copy of the scaled matrix values: the double operand is cast to float before "
+         "each product and the result cast back to double after it. The iterates, the step "
+         "rule, the restart and convergence tests, every residual, the objective and the "
+         "returned point stay in double; the residuals are formed from double products of the "
+         "double iterate, and the final point is judged by the same double KKT evaluation, "
+         "in-process check and tools/verify_solution.py a double run is held to. When a "
+         "restart period fails to cut the double KKT residual to "
+         "tol::kPdhgMixedMinUsefulShrink of the previous one, the run falls back to double "
+         "products for the rest of the solve (src/pdhg/pdhg_refinement.hpp). Not combined "
+         "with deterministic=true or the device loop (gpu_on_device_loop): those run in "
+         "double. "
+         "The CPU engine and the multi-GPU engine ignore this option. Citations: Carson & "
+         "Higham, SIAM J. Sci. Comput. 40 (2018); Gleixner, Steffy & Wolter, INFORMS J. "
+         "Comput. 28 (2016); Higham & Mary, Acta Numerica 31 (2022). A deviation from "
+         "'double precision everywhere', logged as a judgement call in docs/PROVENANCE.md; "
+         "stays off until the device micro-benchmark #982 asks for "
+         "(bench/results/gpu-precision-<card>-<commit>.csv) and an A/B on main exist - "
+         "neither has been run on any card yet.",
          0.0,
          0.0,
          {"double", "mixed"}});

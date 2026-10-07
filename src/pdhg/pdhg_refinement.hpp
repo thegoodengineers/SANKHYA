@@ -21,10 +21,12 @@
 //           not also accept on that residual.
 //   [HM22]  Higham & Mary, "Mixed precision algorithms in numerical linear algebra",
 //           Acta Numerica 31 (2022) - survey; sec. 4 on stagnation detection is the basis for
-//           `kMinUsefulShrink` below.
+//           `tol::kPdhgMixedMinUsefulShrink`.
 #pragma once
 
 #include <cstdint>
+
+#include "sankhya/tolerances.hpp"
 
 namespace sankhya::pdhg {
 
@@ -54,12 +56,6 @@ struct RefinementState {
   std::int64_t rounds_run = 0;
 };
 
-/// A round only counts as useful progress if it shrinks the residual by at least this factor
-/// ([HM22] sec. 4: a round that buys less than a decimal digit of accuracy is not worth its
-/// cost, and a round that buys less than this is indistinguishable from noise at single
-/// precision's ~6e-8 unit roundoff). 0.5 means "cut the residual in half or better".
-inline constexpr double kMinUsefulShrink = 0.5;
-
 /// Decide the next action from the residual trend alone. `target` is the caller's requested
 /// relative tolerance (the same `pdhg_tolerance` the double engine is held to); `max_rounds`
 /// bounds the refinement loop so a stalled-but-not-yet-detected case cannot run forever.
@@ -79,7 +75,7 @@ inline constexpr double kMinUsefulShrink = 0.5;
     return RefinementAction::kFallBackToDouble;
   }
   const double shrink = state.current_residual / state.previous_residual;
-  if (shrink > kMinUsefulShrink) {
+  if (shrink > tol::kPdhgMixedMinUsefulShrink) {
     // The round did not buy enough: [CH18]'s stalling condition.
     return RefinementAction::kFallBackToDouble;
   }

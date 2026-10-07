@@ -867,6 +867,13 @@ inline constexpr Count kFixPropRepairWork = 1'000'000;
 inline constexpr int kPdhgDetectionMinRestarts = 2;
 inline constexpr double kPdhgDetectionMinNorm = 1e-12;
 
+/// Mixed-precision GPU PDHG (#982, pdhg_precision=mixed, off by default): a restart period
+/// run on single-precision products counts as useful only when it cuts the double-precision
+/// KKT residual to at most this share of the previous restart's; otherwise the run falls
+/// back to double products for the rest of the solve (src/pdhg/pdhg_refinement.hpp; Higham &
+/// Mary, Acta Numerica 31 (2022), sec. 4, on stagnation detection). 0.5: half or better.
+inline constexpr double kPdhgMixedMinUsefulShrink = 0.5;
+
 // ---- Restarted Halpern Condat-Vu and the PID primal weight for QP (#493) -------------------
 //
 /// A restart when the fixed-point residual ||T z - z|| has fallen to this share of its value at
