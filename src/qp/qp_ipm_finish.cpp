@@ -100,7 +100,15 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
   // inside solve_refined, the row block delta I), assembled with add_entry/finalize instead
   // of a fixed pattern because the reduction changes the pattern every time it runs.
   const Index dim = nf + s.rows;
-  SparseMatrix k(dim, dim);
+  // `k` carries the regularization the factorization needs (quasi-definite); `exact` is the
+  // same reduced system without it, and the refinement below is against `exact`, so the answer
+  // is the reduced system's and not one biased by reg * v (a free slack's row dual would
+  // otherwise come back as -reg * activity, and the product guard would refuse the finish).
+  SparseMatrix k(dim, dim), exact(dim, dim);
+  const auto both = [&](Index r, Index c, double value) {
+    k.add_entry(r, c, value);
+    exact.add_entry(r, c, value);
+  };
   std::vector<double> rhs(static_cast<std::size_t>(dim), 0.0);
   for (Index oj = 0; oj < s.free_n; ++oj) {
     const auto uoj = static_cast<std::size_t>(oj);
@@ -109,13 +117,13 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
       const Index row = q.rows[p];
       const double value = q.values[p];
       if (row == oj) {
-        if (new_col[uoj] >= 0) k.add_entry(new_col[uoj], new_col[uoj], -value);
+        if (new_col[uoj] >= 0) both(new_col[uoj], new_col[uoj], -value);
         continue;
       }
       const auto urow = static_cast<std::size_t>(row);
       const bool row_free = new_col[urow] >= 0, col_free = new_col[uoj] >= 0;
       if (row_free && col_free) {
-        k.add_entry(new_col[urow], new_col[uoj], -value);
+        both(new_col[urow], new_col[uoj], -value);
       } else if (row_free && !col_free) {
         rhs[static_cast<std::size_t>(new_col[urow])] += value * fixed[uoj];
       } else if (!row_free && col_free) {
@@ -130,7 +138,7 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
       const auto nj = static_cast<std::size_t>(new_col[j]);
       k.add_entry(new_col[j], new_col[j], -regularization_floor);
       rhs[nj] += s.g[j];
-      for (Index p = 0; p < a.size; ++p) k.add_entry(nf + a.rows[p], new_col[j], a.values[p]);
+      for (Index p = 0; p < a.size; ++p) both(nf + a.rows[p], new_col[j], a.values[p]);
     } else {
       for (Index p = 0; p < a.size; ++p) {
         b_adj[static_cast<std::size_t>(a.rows[p])] -= a.values[p] * fixed[j];
@@ -142,6 +150,7 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
     rhs[static_cast<std::size_t>(nf + r)] += b_adj[static_cast<std::size_t>(r)];
   }
   k.finalize();
+  exact.finalize();
 
   std::vector<signed char> signs(static_cast<std::size_t>(dim), 1);
   for (Index j = 0; j < nf; ++j) signs[static_cast<std::size_t>(j)] = -1;
@@ -151,7 +160,7 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
     return false;  // the reduced system refuses to factor: keep the IPM's own point
   }
   std::vector<double> solved;
-  solve_refined(ldl, k, rhs, &solved);
+  solve_refined(ldl, exact, rhs, &solved);
   if (!std::all_of(solved.begin(), solved.end(), [](double x) { return std::isfinite(x); })) {
     return false;
   }
