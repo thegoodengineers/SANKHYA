@@ -115,7 +115,7 @@ the one stamped in the file's rows, the build that produced it.
 | Maros-Meszaros convex QP: 106 of 138 at the published objective, 120 verifier-accepted, 0 optimal answers rejected | `bench/results/maros-meszaros-9094e1c.csv` | `9094e1c` |
 | Hock-Schittkowski NLP: 64 of 70 at the published objective, 70 accepted by the checker | `bench/results/nlp-hs-ad57c03.csv` | `ad57c03` |
 | Convex MINLPLib: 14 of 17 at the published objective, 16 accepted by the checker | `bench/results/nlp-minlplib-ad57c03.csv` | `ad57c03` |
-| Stress set, 126 badly scaled and adversarial LPs: SANKHYA 105 correct / 0 wrong / 21 declined; HiGHS on its defaults 29 / 90 / 7 | `bench/results/stress-348d60ff.csv` | `348d60ff` |
+| Stress set, 126 badly scaled and adversarial LPs: SANKHYA 106 correct / 0 wrong / 20 declined; HiGHS on its defaults 29 / 90 / 7 | `bench/results/stress-afdbdbb5.csv` | `afdbdbb5` |
 | `sankhya scenarios`: 1130 of 1130 scenarios verified | `bench/results/scenarios-de0f393a.csv` | `de0f393a` |
 | A million rows on the CPU: 2 of 9 engine runs optimal and verified (transport 1,000,000 rows by `pdhg` in 119 s; refinery 1,007,400 rows by `pdhg` in 2,336 s) | `bench/results/million-cpu-b561fba.csv` | `b561fba` |
 | HiGHS agreement, medium Netlib tier: objectives agree on 50 of 50 | `bench/results/compare-highs-medium-ad57c03.csv` | `ad57c03` |
@@ -234,8 +234,8 @@ machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores
   (`bench/results/mittelmann-72123ff.csv`, `docs/BENCHMARKS.md` section 1d).
 - **MILP proofs.** 11 of 30 MIPLIB instances proved, 14
   at the published optimum (`bench/results/miplib-ad57c03.csv`, section 2).
-- **Declined instances.** Stress set: 21 of 126 declined,
-  0 wrong (`bench/results/stress-348d60ff.csv`, section 5b). Maros-Meszaros: 106
+- **Declined instances.** Stress set: 20 of 126 declined,
+  0 wrong (`bench/results/stress-afdbdbb5.csv`, section 5b). Maros-Meszaros: 106
   of 138 optimal (`bench/results/maros-meszaros-9094e1c.csv`, section 2b). Safe bounds: 18 of
   93 with no finite bound (`bench/results/certified-gap-netlib-full-0134c92.csv`).
 - **No real industrial model.** Every refinery number is from a generated model.
@@ -401,15 +401,15 @@ With the `exact` option the duals, reduced costs and ranges are re-derived from 
 
 **Q16. What happens on badly scaled models?**
 
-On 126 scaled-Netlib and adversarial LPs SANKHYA is correct on 105, wrong on 0 and declines 21. HiGHS 1.15.1 on its default options is 29 correct, 90 wrong, 7 failed on the same files; its defaults drop the tiny coefficients these files carry, so this measures defaults on extreme scaling, not HiGHS in general.
+On 126 scaled-Netlib and adversarial LPs SANKHYA is correct on 106, wrong on 0 and declines 20. HiGHS 1.15.1 on its default options is 29 correct, 90 wrong, 7 failed on the same files; its defaults drop the tiny coefficients these files carry, so this measures defaults on extreme scaling, not HiGHS in general.
 
-*Evidence: `bench/results/stress-348d60ff.csv` at `348d60ff`; `docs/BENCHMARKS.md` section 5b.*
+*Evidence: `bench/results/stress-afdbdbb5.csv` at `afdbdbb5`; `docs/BENCHMARKS.md` section 5b.*
 
 **Q17. What does the solver do when it cannot solve a model?**
 
-It declines: the status is a limit, `numerical_error` or `feasible`, never `optimal`. The 21 stress-set runs above and the Maros-Meszaros runs short of `optimal` (106 of 138 are optimal) are named instance by instance.
+It declines: the status is a limit, `numerical_error` or `feasible`, never `optimal`. The 20 stress-set runs above and the Maros-Meszaros runs short of `optimal` (106 of 138 are optimal) are named instance by instance.
 
-*Evidence: `bench/results/stress-348d60ff.csv`; `bench/results/maros-meszaros-9094e1c.csv`; `docs/ARCHITECTURE.md` section 8 (resource limits and what each one means).*
+*Evidence: `bench/results/stress-afdbdbb5.csv`; `bench/results/maros-meszaros-9094e1c.csv`; `docs/ARCHITECTURE.md` section 8 (resource limits and what each one means).*
 
 **Q18. Does it handle non-convex QP?**
 

@@ -50,7 +50,7 @@ statement, what is different, the evidence, how to use it, and the team, on one 
 | MIPLIB 2017 | 30 | **14 of 30** (matched the published optimum and verified) | - | `bench/results/miplib-ad57c03.csv` | `ad57c03` | 2026-09-27 |
 | Maros-Meszaros (QP) | 138 | **106 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-9094e1c.csv` | `9094e1c` | 2026-09-29 |
 | QPLIB (convex) | 16 | **9 of 16** (within relative 1e-6 of the published or best-known value and verified, `passed`) | - | `bench/results/qplib-5a39fb2.csv` | `5a39fb2` | 2026-10-01 |
-| Stress set | 126 | **105 of 126** (verdict `correct`) | - | `bench/results/stress-348d60ff.csv` | `348d60ff` | 2026-10-01 |
+| Stress set | 126 | **106 of 126** (verdict `correct`) | - | `bench/results/stress-afdbdbb5.csv` | `afdbdbb5` | 2026-10-07 |
 | GPU, real instances (A100) | 3 | **2 of 3** (faster than the faster CPU arm on the same instance) | construction, highs | `bench/results/gpu-real-a100-fdd1f35.csv` | `fdd1f35` | 2026-09-27 |
 | GPU, real instances (L4) | 3 | **2 of 3** (faster than the faster CPU arm on the same instance) | construction, highs | `bench/results/gpu-real-l4-58a8374.csv` | `58a8374` | 2026-09-25 |
 <!-- scoreboard:end -->

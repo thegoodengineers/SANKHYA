@@ -3488,43 +3488,42 @@ row of the file as written and most of its certificates failing to prove the fil
 (each failing check is named below); Klee-Minty from n = 30, whose last right-hand sides
 reach 5^29 > 1e20, comes back unbounded.
 
-Measured on SANKHYA commit `348d60ff` against HiGHS 1.15.1 (highspy, separate process), machine `laptop-i5-1135G7-7.7GB-Windows-AMD64-shared`, 126 instances. Source: `stress-348d60ff.csv`.
+Measured on SANKHYA commit `afdbdbb5` against HiGHS 1.15.1 (highspy, separate process), machine `laptop, shared with other jobs; Windows-AMD64`, 126 instances. Source: `stress-afdbdbb5.csv`.
 
 | family | instances | sankhya correct / wrong / failed | highs correct / wrong / failed |
 |---|---|---|---|
 | `degenerate` | 5 | 5 / 0 / 0 | 5 / 0 / 0 |
 | `klee_minty` | 7 | 7 / 0 / 0 | 4 / 3 / 0 |
 | `near_singular` | 8 | 8 / 0 / 0 | 8 / 0 / 0 |
-| `scaled_netlib` | 94 | 73 / 0 / 21 | 0 / 87 / 7 |
+| `scaled_netlib` | 94 | 74 / 0 / 20 | 0 / 87 / 7 |
 | `thin_infeasible` | 8 | 8 / 0 / 0 | 8 / 0 / 0 |
 | `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 |
-| **all** | 126 | 105 / 0 / 21 | 29 / 90 / 7 |
+| **all** | 126 | 106 / 0 / 20 | 29 / 90 / 7 |
 
 **Reported `optimal` and wrong**, the headline count (#750): sankhya **0**, highs **31**.
 
-**sankhya, failed** (21):
+**sankhya, failed** (20):
 
-- `scaled_80bau3b`: no verdict: time_limit (stopped at the time limit of 29.9981s after 30.00s, 61479 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_bnl2`: no verdict: time_limit (time limit 29.9988s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_cycle`: no verdict: time_limit (stopped at the time limit of 29.9987s after 30.00s, 166058 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_d2q06c`: no verdict: time_limit (time limit 50.6978s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned nume)
-- `scaled_dfl001`: no verdict: numerical_error (dual simplex: basic variable 15943 is outside its bounds by 3.146e+06, far above the 1.0e-07 feasibility tolerance, and )
-- `scaled_etamacro`: no verdict: feasible (engine reported optimal but the largest /multiplier/ * slack is 1.122e-02 (1.122e-02 relative to its magnitudes), above )
-- `scaled_fit2p`: no verdict: time_limit (stopped at the time limit of 29.9976s after 30.00s, 33175 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_ganges`: no verdict: numerical_error (route: the scaled attempt returned optimal after 0.0 s of its 30 s share; neither attempt produced a usable point; the s)
+- `scaled_80bau3b`: no verdict: time_limit (time limit 59.9848s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_bnl2`: no verdict: time_limit (time limit 59.9974s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_cycle`: no verdict: time_limit (stopped at the time limit of 59.9948s after 59.99s, 166918 iterations, 0 nodes; route: the scaled attempt returned time_)
+- `scaled_d2q06c`: no verdict: time_limit (time limit 40.323s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned numer)
+- `scaled_dfl001`: no verdict: time_limit (stopped at the time limit of 59.9811s after 60.09s, 6763 iterations, 0 nodes; route: the scaled attempt returned time_li)
+- `scaled_fit2p`: no verdict: time_limit (stopped at the time limit of 59.9824s after 60.58s, 29445 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_ganges`: no verdict: numerical_error (route: the scaled attempt returned optimal after 0.1 s of its 60 s share; neither attempt produced a usable point; the s)
 - `scaled_modszk1`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 3.765e+08 from a least of 6.093e-08, which cannot happen on faithf)
-- `scaled_nesm`: no verdict: time_limit (stopped at the time limit of 29.9989s after 30.00s, 130406 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_perold`: no verdict: time_limit (stopped at the time limit of 29.9995s after 30.00s, 7119 iterations, 0 nodes; route: the scaled attempt returned time_li)
-- `scaled_pilot`: no verdict: numerical_error (basis became singular at iteration 896; route: the scaled attempt returned time_limit after 30.0 s of its 30 s share; ne)
-- `scaled_pilot.ja`: no verdict: time_limit (time limit 29.9991s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_nesm`: no verdict: time_limit (time limit 59.9976s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_perold`: no verdict: time_limit (time limit 59.9928s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot`: no verdict: time_limit (time limit 59.9905s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot.ja`: no verdict: time_limit (time limit 59.9981s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 - `scaled_pilot.we`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 1.765e+06 from a least of 1.388e-17, which cannot happen on faithf)
-- `scaled_pilot4`: no verdict: time_limit (time limit 29.9996s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot87`: no verdict: time_limit (time limit 29.9913s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilotnov`: no verdict: time_limit (time limit 29.9976s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_stair`: no verdict: time_limit (time limit 29.9997s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_stocfor2`: no verdict: time_limit (stopped at the time limit of 29.9982s after 30.00s, 122773 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_stocfor3`: no verdict: time_limit (stopped at the time limit of 29.9937s after 29.99s, 19964 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_woodw`: no verdict: numerical_error (route: the scaled attempt returned optimal after 0.2 s of its 30 s share; neither attempt produced a usable point; the s)
+- `scaled_pilot4`: no verdict: time_limit (time limit 59.9992s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot87`: no verdict: time_limit (time limit 59.993s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
+- `scaled_pilotnov`: no verdict: time_limit (time limit 59.9974s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_stair`: no verdict: time_limit (time limit 59.9994s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_stocfor2`: no verdict: time_limit (stopped at the time limit of 59.9985s after 60.00s, 236852 iterations, 0 nodes; route: the scaled attempt returned time_)
+- `scaled_stocfor3`: no verdict: time_limit (stopped at the time limit of 59.9891s after 59.99s, 40843 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_woodw`: no verdict: numerical_error (route: the scaled attempt returned optimal after 0.3 s of its 60 s share; neither attempt produced a usable point; the s)
 
 **highs, wrong** (90):
 
@@ -3583,7 +3582,7 @@ Measured on SANKHYA commit `348d60ff` against HiGHS 1.15.1 (highspy, separate pr
 - `scaled_recipe`: infeasible, verifier rejects: [FAIL] infeasibility proof                the rows aggregate to at least 0.000000000000e+00, the column bounds allow at most 6.675720214844e-05, a contradiction of -6.676e-05
 - `scaled_sc105`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.876e-02 (1.876e-02 relative to the row's terms) on R25; [FAIL] activity agreement                max /ours - solver's/ = 1.876e-02; [F
 - `scaled_sc205`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.882e-02 (2.882e-02 relative to the row's terms) on R116; [FAIL] activity agreement                max /ours - solver's/ = 2.882e-02; [
-- `scaled_sc50a`: optimal, verifier rejects: [FAIL] reduced costs                     max /c - A^T y - d/ = 1.112e-04 (1.112e-04 relative to its terms) on C44
+- `scaled_sc50a`: optimal, verifier rejects: [FAIL] reduced costs                     max /c - A^T y - d/ = 1.112e-04 (1.000e+00 relative to its terms) on C44
 - `scaled_sc50b`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.150e-04 (1.150e-04 relative to the row's terms) on R35; [FAIL] activity agreement                max /ours - solver's/ = 1.150e-04
 - `scaled_scagr25`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C117, C126
 - `scaled_scagr7`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C96
