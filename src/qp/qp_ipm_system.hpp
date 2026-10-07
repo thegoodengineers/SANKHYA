@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "la/ldl.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/sparse.hpp"
 
@@ -67,5 +68,10 @@ class KktMatrix {
   std::vector<Index> starts_;
   std::vector<Index> rows_;
 };
+
+/// Solve K x = rhs with the factors of K, then two steps of iterative refinement against the
+/// regularized K itself (the lower triangle `k`, as KktMatrix::multiply reads it).
+void solve_refined(const SparseLdl& ldl, const SparseMatrix& k, const std::vector<double>& rhs,
+                   std::vector<double>* x);
 
 }  // namespace sankhya::qp::ipm_detail

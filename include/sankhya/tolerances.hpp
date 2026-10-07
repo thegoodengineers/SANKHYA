@@ -525,6 +525,13 @@ inline constexpr double kQpIpmPivotShare = 0.1;
 inline constexpr double kQpIpmRegularizationRaise = 100.0;
 inline constexpr int kQpIpmRegularizationAttempts = 8;
 
+/// The active-set finish after the QP interior point (#980, qp_ipm_finish, off by default):
+/// a bound counts as active when the point is within this distance of it, scaled by
+/// max(1, |bound|). Loose on purpose - pinning a bound that should have stayed inactive only
+/// costs a rejected finish (the acceptance guard in src/qp/qp_ipm_finish.cpp), never a wrong
+/// answer; chosen by hand, not tuned on a benchmark.
+inline constexpr double kQpIpmFinishActiveDistance = 1e-4;
+
 /// #893: a certificate candidate read off the QP interior point's iterates is offered to the
 /// checker first with every entry at or below this share of its largest set to zero, then
 /// as it came. The step that runs away along a ray still carries the part of the iterate
