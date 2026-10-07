@@ -2031,6 +2031,10 @@ const std::vector<OptionSpec>& Options::registry() {
          "plumbing #494 already built. Whichever engine's answer is adopted (only when it is "
          "better) is named in the algorithm field, e.g. qp-ipm+convex-qp. Off by default "
          "until an A/B on main (#981's acceptance item).",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
         {"qp_ipm_finish",
          OptionType::Bool,
          false,
