@@ -102,7 +102,7 @@ CSV_COLUMNS = [
     "absolute_gap", "relative_gap", "matches_reference", "exact_objective", "matches_exact",
     "verification", "independently_verified", "verifier_message", "counted_for_time",
     "solver_seconds", "wall_seconds", "iterations", "time_limit", "threads",
-    "git_commit", "machine", "timestamp_utc",
+    "git_commit", "machine", "timestamp_utc", "solver_options",
 ]
 
 
@@ -360,7 +360,7 @@ def run_suite(args) -> int:
                    "solver_seconds": out.get("seconds"), "wall_seconds": out.get("wall_seconds"),
                    "iterations": out.get("iterations", ""), "time_limit": time_limit,
                    "threads": 1, "git_commit": commit, "machine": machine,
-                   "timestamp_utc": timestamp}
+                   "timestamp_utc": timestamp, "solver_options": out.get("solver_options", "")}
             rows.append({key: text(row.get(key)) for key in CSV_COLUMNS})
             # The exact grade where the suite has one, as counted_for_time uses it.
             correct = (verdict["matches_exact"] if verdict["matches_exact"] is not None
