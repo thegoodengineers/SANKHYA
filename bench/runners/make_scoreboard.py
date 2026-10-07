@@ -136,10 +136,8 @@ def mittelmann_row() -> Row | None:
     path = latest_result.latest("mittelmann-*.csv", prefix="mittelmann")
     if path is None:
         return None
-    rows = [r for r in read_csv(path) if "reference_source" not in r
-            or True]  # the plain mittelmann.py CSV, not a *-ab-* A/B variant
-    passed, total = passed_column(rows)
-    reference = sorted({r.get("algorithm", "") for r in rows if r.get("algorithm")})
+    # prefix= already keeps only the plain mittelmann.py CSV, not a named A/B variant.
+    passed, total = passed_column(read_csv(path))
     return Row("Mittelmann", path, passed, total,
                "matches HiGHS's objective and verified, `passed`", "HiGHS (objective check)")
 
@@ -148,10 +146,9 @@ def maros_meszaros_row() -> Row | None:
     path = latest_result.latest("maros-meszaros-*.csv", prefix="maros-meszaros")
     if path is None:
         return None
-    rows = read_csv(path)
-    # Leave out the A/B and engine-specific variants (maros-meszaros-493-*, *-cv-*,
-    # *-ipm-*): their names carry an option, not the headline run's.
-    passed, total = passed_column(rows)
+    # prefix= leaves out the A/B and engine-specific variants (maros-meszaros-493-*,
+    # *-cv-*, *-ipm-*): their names carry an option, not the headline run's.
+    passed, total = passed_column(read_csv(path))
     return Row("Maros-Meszaros (QP)", path, passed, total,
                "within relative 1e-6 of the reference and verified, `passed`", "-")
 

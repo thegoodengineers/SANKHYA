@@ -52,6 +52,11 @@ def test_supports() -> None:
 def test_standard_form_shape() -> None:
     """P mirrors the stored half-Hessian without doubling it (#514's convention) and A
     stacks the model's own row first, then the identity block for the column bounds."""
+    try:
+        importlib.import_module("scipy.sparse")
+    except ImportError:
+        check(True, "scipy not installed in this environment", "(standard form skipped by name)")
+        return
     model = rivals._read_qp_model(TINY_QP)  # noqa: SLF001 - exercising the private helper
     P, q, A, l, u = rivals._qp_standard_form(model)  # noqa: SLF001
     check(P.shape == (2, 2), "P is 2x2", str(P.shape))
