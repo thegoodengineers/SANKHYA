@@ -366,6 +366,118 @@ void polish_with_the_interior_point(Solution* first, const Model& model, const O
   *first = std::move(polished);
 }
 
+/// A copy of `Options` narrowed to whatever is left of a finite time_limit (or the options
+/// unchanged, with none); the signature of the `with_the_time_that_is_left` lambda every
+/// engine call in solve() already uses, named so the #981 handoffs below can take it as a
+/// parameter instead of recomputing it.
+using WithTheTimeLeft = std::function<Options(const Options&)>;
+
+/// #981, qp_ipm_stall_handoff: the QP interior point's point, when it has genuinely stalled
+/// (QpIpmWarmResult::stalled, not an explicit iteration_limit reached), handed to the
+/// first-order engine (Condat-Vu with Halpern restarts, #493) as a starting point for
+/// whatever is left of the time limit. A stalled Newton iteration and a first-order method
+/// fail in different ways, so the handoff can succeed where sitting at the fixed ceiling
+/// with the time unused could not. Adopted only when it is better; the stalled interior-point
+/// answer stands otherwise and the message says the handoff did not help. `ipm` and
+/// `engine_ran` are updated in place.
+void handoff_qp_ipm_stall_to_first_order(Solution* ipm, const qp::QpIpmWarmResult& ipm_result,
+                                         const Model& model, const Options& options,
+                                         Logger& logger, SolveControl* control,
+                                         const Timer& timer, const ResourceLimits& limits,
+                                         const WithTheTimeLeft& with_the_time_that_is_left,
+                                         std::string* engine_ran) {
+  if (ipm_result.final_point.empty()) return;
+  if (!limits.has_time_limit() || limits.remaining_seconds(timer.elapsed_seconds()) <= 0.0) {
+    return;
+  }
+  qp::QpFirstOrderWarmStart warm{ipm_result.final_point.col_value,
+                                 ipm_result.final_point.row_dual};
+  logger.info(
+      "QP interior point: stalled after {} iterations; handing its point to the "
+      "first-order engine for the time left (#981)",
+      ipm->iterations);
+  Solution handed =
+      qp::solve_convex_qp(model, with_the_time_that_is_left(options), logger, control, &warm);
+  const auto worst = [](const Solution& s) {
+    return std::max(s.primal_infeasibility_scaled, s.dual_infeasibility_scaled);
+  };
+  const bool better = handed.status == SolveStatus::kOptimal ||
+                      (handed.status == SolveStatus::kFeasible &&
+                       ipm->status != SolveStatus::kOptimal && worst(handed) < worst(*ipm));
+  if (!better) {
+    ipm->message += fmt::format(
+        "; handed to the first-order engine after the stall, which did not improve it ({} "
+        "after {} iterations: {})",
+        to_string(handed.status), handed.iterations, handed.message);
+    return;
+  }
+  const Count ipm_iterations = ipm->iterations;
+  handed.iterations += ipm_iterations;
+  handed.algorithm = "qp-ipm+" + handed.algorithm;
+  handed.message = fmt::format(
+      "the interior point stalled after {} iterations; finished by the first-order "
+      "engine ({})",
+      ipm_iterations, handed.message);
+  *ipm = std::move(handed);
+  *engine_ran = "qp-ipm+convex-qp";
+}
+
+/// #981, qp_ipm_stall_handoff: the reverse direction - the first-order QP engine's point,
+/// when it stopped at its own ceiling or the time limit, handed to the interior point as a
+/// warm start through the plumbing #494 already built (qp_ipm_warm.cpp shifts an arbitrary
+/// offered iterate into the model's interior, so this needs no new machinery). Adopted only
+/// when it is better; `first` and `engine_ran` are updated in place.
+void handoff_qp_first_order_limit_to_ipm(Solution* first, const Model& model,
+                                         const Options& options, Logger& logger,
+                                         SolveControl* control, const Timer& timer,
+                                         const ResourceLimits& limits,
+                                         const WithTheTimeLeft& with_the_time_that_is_left,
+                                         std::string* engine_ran) {
+  if (first->status != SolveStatus::kIterationLimit &&
+      first->status != SolveStatus::kTimeLimit) {
+    return;
+  }
+  const auto n = static_cast<std::size_t>(model.num_cols());
+  const auto m = static_cast<std::size_t>(model.num_rows());
+  if (first->col_value.size() != n || first->row_dual.size() != m) return;
+  if (!limits.has_time_limit() || limits.remaining_seconds(timer.elapsed_seconds()) <= 0.0) {
+    return;
+  }
+  qp::QpIpmWarmStart warm;
+  warm.col_value = first->col_value;
+  warm.row_dual = first->row_dual;
+  warm.retry_cold = false;  // the caller already has an answer; a failed warm run keeps it
+  logger.info(
+      "QP first-order engine: stopped at {} after {} iterations; handing its point to the "
+      "interior point for the time left (#981)",
+      to_string(first->status), first->iterations);
+  Solution finished = qp::solve_convex_qp_ipm(model, with_the_time_that_is_left(options),
+                                              logger, control, &warm);
+  const auto worst = [](const Solution& s) {
+    return std::max(s.primal_infeasibility_scaled, s.dual_infeasibility_scaled);
+  };
+  const bool better =
+      finished.status == SolveStatus::kOptimal ||
+      (finished.status == SolveStatus::kFeasible && worst(finished) < worst(*first));
+  if (!better) {
+    first->message += fmt::format(
+        "; handed to the interior point, which did not improve it ({} after {} "
+        "iterations: {})",
+        to_string(finished.status), finished.iterations, finished.message);
+    return;
+  }
+  const Count first_iterations = first->iterations;
+  const std::string first_algorithm = first->algorithm;
+  finished.iterations += first_iterations;
+  finished.algorithm = first_algorithm + "+" + finished.algorithm;
+  finished.message = fmt::format(
+      "the first-order engine stopped at {} after {} iterations; finished by the interior "
+      "point ({})",
+      to_string(first->status), first_iterations, finished.message);
+  *first = std::move(finished);
+  *engine_ran = "convex-qp+qp-ipm";
+}
+
 /// PDHG's share of a finite time limit when a polish is to follow; the rest is the polish's.
 constexpr double kPdhgShareOfTheTimeLimit = 0.7;
 /// Ruiz rounds for the prescaled retry (#792): the engine's own equilibration uses 10; the
@@ -1458,20 +1570,42 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // qp_gpu asks for the device QP engine, and only Condat-Vu has one, so it keeps that.
     const bool want_qp_ipm =
         options.get_string("qp_algorithm") == "ipm" && !options.get_bool("qp_gpu");
+    // #981: off by default, so with it off every call below behaves exactly as before.
+    const bool qp_stall_handoff = options.get_bool("qp_ipm_stall_handoff");
     *engine_ran = want_qp_ipm ? "qp-ipm" : "convex-qp";
     solution = with_presolve(
         [&](const Model& target) {
           if (!want_qp_ipm) {
+            Solution first = qp::solve_convex_qp(target, with_the_time_that_is_left(options),
+                                                 logger, control);
+            // #981, the reverse direction: the first-order engine's own ceiling or a time
+            // limit, finished by the interior point on the time left.
+            if (qp_stall_handoff) {
+              handoff_qp_first_order_limit_to_ipm(&first, target, options, logger, control,
+                                                  timer, limits, with_the_time_that_is_left,
+                                                  engine_ran);
+            }
+            return first;
+          }
+          qp::QpIpmWarmResult ipm_result;
+          Solution ipm = qp::solve_convex_qp_ipm(target, with_the_time_that_is_left(options),
+                                                 logger, control, /*warm_start=*/nullptr,
+                                                 qp_stall_handoff ? &ipm_result : nullptr);
+          if (ipm.status == SolveStatus::kNumericalError) {
+            logger.warning("QP interior point: {}; falling back to Condat-Vu", ipm.message);
+            *engine_ran = "qp-ipm+convex-qp";
             return qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger,
                                        control);
           }
-          Solution ipm = qp::solve_convex_qp_ipm(target, with_the_time_that_is_left(options),
-                                                 logger, control);
-          if (ipm.status != SolveStatus::kNumericalError) return ipm;
-          logger.warning("QP interior point: {}; falling back to Condat-Vu", ipm.message);
-          *engine_ran = "qp-ipm+convex-qp";
-          return qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger,
-                                     control);
+          // #981: a genuine stall, not an explicit iteration_limit, handed to the
+          // first-order engine for whatever time is left.
+          if (qp_stall_handoff && ipm.status == SolveStatus::kIterationLimit &&
+              ipm_result.stalled) {
+            handoff_qp_ipm_stall_to_first_order(&ipm, ipm_result, target, options, logger,
+                                                control, timer, limits,
+                                                with_the_time_that_is_left, engine_ran);
+          }
+          return ipm;
         },
         &presolve_proved_it);
     if (presolve_proved_it) {

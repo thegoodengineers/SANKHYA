@@ -175,7 +175,7 @@ std::unique_ptr<QpOperator> choose_operator(const Model& model, const Options& o
 }  // namespace
 
 Solution solve_convex_qp(const Model& model, const Options& options, Logger& logger,
-                         SolveControl* control) {
+                         SolveControl* control, const QpFirstOrderWarmStart* warm_start) {
   Timer timer;
   Solution solution;
   solution.allocate_for(model);
@@ -235,6 +235,21 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
   if (op->where() != std::string("host")) solution.algorithm = "qp-condat-vu-cuda";
   std::vector<double> x(un, 0.0), y(um, 0.0);  // the evaluated point, when read back
   std::vector<double> qx(un, 0.0), at_y(un, 0.0), ax(um, 0.0);
+
+  // #981: a point from elsewhere (typically the interior point's stalled iterate,
+  // qp_ipm_stall_handoff in src/core/solve.cpp), in place of the projection of zero. row_dual
+  // is in Solution::row_dual's convention (solution.row_dual = -sense * y below), so the
+  // internal y is its negation times sense; a size that does not match is left at zero,
+  // which is what the cold start already does.
+  if (warm_start != nullptr && !warm_start->empty() && warm_start->col_value.size() == un) {
+    std::vector<double> y_internal(um, 0.0);
+    if (warm_start->row_dual.size() == um) {
+      for (std::size_t i = 0; i < um; ++i) y_internal[i] = -sense * warm_start->row_dual[i];
+    }
+    if (op->upload(warm_start->col_value, y_internal)) {
+      logger.verbose("QP first-order: warm start from an offered point (#981)");
+    }
+  }
 
   const double tolerance = options.get_double("qp_tolerance");
   // A first-order method with no iteration limit still needs a stopping point, so an absent

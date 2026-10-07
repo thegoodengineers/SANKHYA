@@ -57,6 +57,17 @@ class QpOperator {
                                       std::vector<double>* y) = 0;
   /// Where the arithmetic ran, for the log and the solution's algorithm string.
   [[nodiscard]] virtual const char* where() const = 0;
+  /// Seed z = (x, y) directly (#981, QpFirstOrderWarmStart), when the caller has a point
+  /// from elsewhere worth starting from rather than the projection of zero - the interior
+  /// point's iterate when it stalls (qp_ipm_stall_handoff). False declines (sizes that do
+  /// not match this operator's model, or no device support yet) and the caller keeps the
+  /// cold start, which never costs an answer. The default implementation always declines.
+  [[nodiscard]] virtual bool upload(const std::vector<double>& x,
+                                    const std::vector<double>& y) {
+    (void)x;
+    (void)y;
+    return false;
+  }
 };
 
 /// The reference arithmetic on the host. x starts at the projection of 0 onto the box, y
