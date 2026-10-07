@@ -2031,6 +2031,22 @@ const std::vector<OptionSpec>& Options::registry() {
          "plumbing #494 already built. Whichever engine's answer is adopted (only when it is "
          "better) is named in the algorithm field, e.g. qp-ipm+convex-qp. Off by default "
          "until an A/B on main (#981's acceptance item).",
+        {"qp_ipm_finish",
+         OptionType::Bool,
+         false,
+         "qp_algorithm=ipm (#980): when the relative measures are met but at least one "
+         "complementarity product is still above the in-process KKT gate's share "
+         "(tol::kQpIpmComplementarityShare * tol::kComplementarity), take the active set the "
+         "iterate already identifies - a bound is active when the point already sits on it to "
+         "a loose, scale-aware tolerance - hold those columns exactly at their bound values "
+         "and solve the equality-constrained KKT system on the rest with the same sparse "
+         "LDL^T and refinement this engine already uses (solution polishing, after Stellato, "
+         "Banjac, Goulart, Bemporad and Boyd, 'OSQP: an operator splitting solver for "
+         "quadratic programs', Math. Prog. Comp. 12 (2020), applied after an interior point "
+         "instead of after ADMM). The finished point is kept only if it is primal feasible, "
+         "every multiplier has the right sign, and every product is under the gate; "
+         "otherwise the interior point's own point stands unchanged, so this can never make "
+         "an answer worse. Off by default until an A/B on main.",
          0.0,
          0.0,
          {}});

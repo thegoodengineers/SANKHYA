@@ -87,36 +87,24 @@
 #include "sankhya/tolerances.hpp"
 
 #include "convexity.hpp"
+#include "qp_ipm_finish.hpp"
 #include "qp_ipm_system.hpp"
 #include "qp_ipm_warm.hpp"
 
 namespace sankhya::qp {
 namespace {
 
+using ipm_detail::active_set_finish;
 using ipm_detail::hessian_times;
 using ipm_detail::inf_norm;
 using ipm_detail::KktMatrix;
+using ipm_detail::largest_complementarity_product;
+using ipm_detail::solve_refined;
 using ipm_detail::Standard;
 
 constexpr double kFractionToBoundary = 0.995;  // Mehrotra (1992), and #490
 constexpr Count kIterationCeiling = 200;       // an IPM that has not converged by here won't
 constexpr Count kIterationsForProducts = 5;    // extra iterations to close the products
-
-/// Solve K x = rhs with the factors, then two steps of iterative refinement against the
-/// regularized K itself: the factors belong to K up to rounding and any lifted pivot, and the
-/// refinement recovers what that costs without changing the system being solved.
-void solve_refined(const SparseLdl& ldl, const SparseMatrix& k, const std::vector<double>& rhs,
-                   std::vector<double>* x) {
-  *x = rhs;
-  ldl.solve(x->data());
-  std::vector<double> kx(rhs.size()), correction(rhs.size());
-  for (int step = 0; step < 2; ++step) {
-    KktMatrix::multiply(k, *x, &kx);
-    for (std::size_t i = 0; i < rhs.size(); ++i) correction[i] = rhs[i] - kx[i];
-    ldl.solve(correction.data());
-    for (std::size_t i = 0; i < rhs.size(); ++i) (*x)[i] += correction[i];
-  }
-}
 
 // ---- infeasibility and unboundedness from the proximal iterates (#893) -------------------
 //
@@ -842,6 +830,25 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     // centres move with the iterate, so a large rho slows the method and never biases it).
     rho = std::max(regularization_floor, std::min(rho, 0.1 * mu));
     delta = rho;
+  }
+
+  // #980: the active-set finish, only once the IPM itself claims optimal and only when its
+  // own point still has a complementarity product open against the in-process KKT gate - the
+  // case the comment above kIterationsForProducts says more iterations cannot close.
+  if (status == SolveStatus::kOptimal && options.get_bool("qp_ipm_finish")) {
+    residuals();
+    const double largest_product_at_exit =
+        largest_complementarity_product(s, has_lower, has_upper, v, y, zl, zu, rp);
+    if (largest_product_at_exit > tol::kQpIpmComplementarityShare * tol::kComplementarity) {
+      const bool finished =
+          active_set_finish(s, has_lower, has_upper, tolerance, primal_tolerance,
+                            regularization_floor, &v, &y, &zl, &zu);
+      logger.verbose(
+          "QP interior point: active-set finish (#980) on a product of {:.1e} against the "
+          "gate's {:.1e} - {}",
+          largest_product_at_exit, tol::kQpIpmComplementarityShare * tol::kComplementarity,
+          finished ? "accepted" : "rejected, the interior point's own point stands");
+    }
   }
 
   // #981: the iterate the run stopped at, whatever its quality, for a caller that wants to

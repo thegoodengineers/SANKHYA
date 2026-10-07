@@ -295,6 +295,7 @@ set(SANKHYA_CORE_SOURCES
   src/qp/qp_operator.cpp
   src/qp/qp_first_order_accel.cpp
   src/qp/qp_ipm.cpp
+  src/qp/qp_ipm_finish.cpp
   src/qp/qp_ipm_system.cpp
   src/qp/qp_ipm_warm.cpp
   src/la/ldl.cpp

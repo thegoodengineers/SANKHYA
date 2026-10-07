@@ -190,4 +190,20 @@ void KktMatrix::multiply(const SparseMatrix& k, const std::vector<double>& x,
   }
 }
 
+/// Solve K x = rhs with the factors, then two steps of iterative refinement against the
+/// regularized K itself: the factors belong to K up to rounding and any lifted pivot, and the
+/// refinement recovers what that costs without changing the system being solved.
+void solve_refined(const SparseLdl& ldl, const SparseMatrix& k, const std::vector<double>& rhs,
+                   std::vector<double>* x) {
+  *x = rhs;
+  ldl.solve(x->data());
+  std::vector<double> kx(rhs.size()), correction(rhs.size());
+  for (int step = 0; step < 2; ++step) {
+    KktMatrix::multiply(k, *x, &kx);
+    for (std::size_t i = 0; i < rhs.size(); ++i) correction[i] = rhs[i] - kx[i];
+    ldl.solve(correction.data());
+    for (std::size_t i = 0; i < rhs.size(); ++i) (*x)[i] += correction[i];
+  }
+}
+
 }  // namespace sankhya::qp::ipm_detail
