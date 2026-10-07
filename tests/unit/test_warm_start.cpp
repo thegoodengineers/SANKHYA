@@ -543,18 +543,27 @@ TEST(WarmStart, APdhgIterateThroughSolveControlResolvesInFewerIterationsThanCold
 }
 
 // A warm iterate of the wrong size (model.num_cols() changed) is ignored: solve() must not
-// crash or hand the engine a vector it cannot use, and the cold answer comes back.
-TEST(WarmStart, APdhgIterateOfTheWrongSizeIsIgnoredAndTheSolveRunsCold) {
+// crash or hand the engine a vector it cannot use, and the cold run comes back BIT FOR BIT -
+// as it does through a SolveControl that offers no iterate at all. The cold start is the
+// default every benchmark CSV was produced with, so wiring the warm start in must not move
+// one bit of it.
+TEST(WarmStart, APdhgIterateOfTheWrongSizeIsIgnoredAndTheSolveRunsColdBitForBit) {
   Model model = netlib("afiro");
   Options options = quiet("pdhg");
   const Solution cold = solve(model, options);
   ASSERT_EQ(cold.status, SolveStatus::kOptimal) << cold.message;
 
-  SolveControl control;
-  control.start_col_value.assign(3, 0.0);
-  const Solution s = solve(model, options, &control);
-  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
-  EXPECT_NEAR(s.objective, cold.objective, 1e-7 * std::max(1.0, std::fabs(cold.objective)));
+  SolveControl wrong_size;
+  wrong_size.start_col_value.assign(3, 0.0);
+  SolveControl none;
+  for (SolveControl* control : {&wrong_size, &none}) {
+    const Solution s = solve(model, options, control);
+    ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+    EXPECT_EQ(s.iterations, cold.iterations);
+    EXPECT_EQ(s.objective, cold.objective);
+    EXPECT_EQ(s.col_value, cold.col_value);
+    EXPECT_EQ(s.row_dual, cold.row_dual);
+  }
 }
 
 }  // namespace
