@@ -1140,7 +1140,11 @@ jobs:
             -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
 
       - name: Build
-        run: cmake --build build -j
+        run: |
+          cmake --build build -j
+          # #982's device micro-benchmark is EXCLUDE_FROM_ALL; compile it here so it is not
+          # first built on a card.
+          cmake --build build -j --target sankhya-precision-microbench
 
   format:
     name: clang-format

@@ -63,6 +63,7 @@ add_executable(sankhya_tests
   unit/test_ipm_normal_side.cpp
   unit/test_pdhg_parallel_spmv.cpp
   unit/test_pdhg_two_matvec.cpp
+  unit/test_pdhg_refinement.cpp
   unit/test_pdhg_halpern.cpp
   unit/test_pdhg_step_weight.cpp
   unit/test_operator_norm.cpp

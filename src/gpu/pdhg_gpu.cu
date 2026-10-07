@@ -43,6 +43,7 @@
 #include "pdhg_gpu.hpp"
 
 #include "../pdhg/pdhg_evaluate.hpp"
+#include "../pdhg/pdhg_refinement.hpp"
 #include "../pdhg/pdhg_trace.hpp"
 
 #include <cuda_runtime.h>
@@ -106,6 +107,11 @@ static bool launch_ok() {
 // ---- cuSPARSE scalar constants (host pointers, valid as alpha/beta) -----
 static const double kOne = 1.0;
 static const double kZero = 0.0;
+// Single-precision counterparts for the mixed-precision sparse products (#982, see
+// pdhg_precision below). The adaptive step rule, the restart logic and the projections stay
+// in double; only A x and A^T y run through these when pdhg_precision=mixed.
+static const float kOneF = 1.0f;
+static const float kZeroF = 0.0f;
 
 // ---- CUDA kernels -------------------------------------------------------
 
@@ -211,6 +217,25 @@ __global__ void k_accum_m(const double* __restrict__ v, double* __restrict__ sum
   sum[i] += v[i];
 }
 
+// ---- Mixed precision (#982): cast kernels around the single-precision sparse products ----
+// Single precision alone cannot reach the project's tolerances (1e-8 relative is below the
+// ~6e-8 unit roundoff of float), so the matrix values and the vector operand of each product
+// are cast down to float immediately before cusparseSpMV and the product's result is cast
+// back up to double immediately after. Every other array - the iterate, the residual and
+// restart state, the step-size scalars - stays double, as it already is in the code above;
+// only the two sparse products' memory traffic (the dominant per-iteration cost PDLP cites,
+// issue #982 "Why") is halved on the vector side and by a third on the matrix side. See
+// pdhg_precision in src/util/options.cpp for the full scope of what is and is not covered.
+__global__ void k_cast_d2f(const double* __restrict__ in, float* __restrict__ out, int n) {
+  const int j = blockIdx.x * blockDim.x + threadIdx.x;
+  if (j < n) out[j] = static_cast<float>(in[j]);
+}
+
+__global__ void k_cast_f2d(const float* __restrict__ in, double* __restrict__ out, int n) {
+  const int j = blockIdx.x * blockDim.x + threadIdx.x;
+  if (j < n) out[j] = static_cast<double>(in[j]);
+}
+
 // ---- Device-memory helpers ----------------------------------------------
 
 static double* dev_zeros(std::size_t count) {
@@ -218,6 +243,19 @@ static double* dev_zeros(std::size_t count) {
   double* p = nullptr;
   if (cudaMalloc(&p, count * sizeof(double)) != cudaSuccess) return nullptr;
   if (cudaMemset(p, 0, count * sizeof(double)) != cudaSuccess) {
+    cudaFree(p);
+    return nullptr;
+  }
+  return p;
+}
+
+// Mixed precision (#982): the float counterpart of dev_zeros, for the matrix mirror and the
+// per-call cast scratch the single-precision products use.
+static float* dev_zeros_f(std::size_t count) {
+  if (count == 0) return nullptr;
+  float* p = nullptr;
+  if (cudaMalloc(&p, count * sizeof(float)) != cudaSuccess) return nullptr;
+  if (cudaMemset(p, 0, count * sizeof(float)) != cudaSuccess) {
     cudaFree(p);
     return nullptr;
   }
@@ -267,6 +305,17 @@ struct GpuState {
   // A^T in CSR (the CSC arrays of A), deterministic mode only (#478): n + 1 row offsets.
   int *d_trowptr{}, *d_tcolidx{};
   double* d_tvals{};
+  // Mixed precision (#982): the matrix values mirrored in float (same d_rowptr/d_colidx,
+  // index arrays are unchanged by #982 point 2), plus n- and m-sized float scratch the cast
+  // kernels cast into and out of around each single-precision product. Allocated only when
+  // pdhg_precision=mixed; never combined with deterministic=true or the device loop in this
+  // change (see the mixed_precision gating in solve_pdhg_gpu, #982).
+  float* d_vals_f{};
+  float *d_mix_n{}, *d_mix_m{};
+  void* d_spmv_f{};
+  cusparseSpMatDescr_t mat_f{};
+  cusparseDnVecDescr_t vn_f{};
+  cusparseDnVecDescr_t vm_f{};
   // cuSPARSE SpMV workspaces, ONE PER MATRIX DESCRIPTOR, each passed to every product on
   // its descriptor and to no other. A probe against the cuSPARSE of CUDA 12.4 on the L4
   // (#478) found that a descriptor keeps state in the workspace of its first product: with
@@ -287,6 +336,9 @@ struct GpuState {
   int n{}, m{}, nnz{};
 
   ~GpuState() {
+    if (vm_f) cusparseDestroyDnVec(vm_f);
+    if (vn_f) cusparseDestroyDnVec(vn_f);
+    if (mat_f) cusparseDestroySpMat(mat_f);
     if (vm) cusparseDestroyDnVec(vm);
     if (vn) cusparseDestroyDnVec(vn);
     if (mat_t) cusparseDestroySpMat(mat_t);
@@ -325,6 +377,10 @@ struct GpuState {
     cudaFree(d_tvals);
     cudaFree(d_spmv);
     cudaFree(d_spmv_t);
+    cudaFree(d_vals_f);
+    cudaFree(d_mix_n);
+    cudaFree(d_mix_m);
+    cudaFree(d_spmv_f);
   }
 
   [[nodiscard]] bool alloc_ok() const {
@@ -364,6 +420,51 @@ static bool spmv_t(GpuState& g, double* d_in_m, double* d_out_n) {
   }
   CS_CHECK(cusparseSpMV(g.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOne, g.mat, g.vm, &kZero, g.vn,
                         CUDA_R_64F, g.alg, g.d_spmv));  // mat's workspace, as for A x
+  return true;
+}
+
+// Mixed precision (#982): non-transpose SpMV d_out_m = A * d_in_n with the product itself run
+// in float. d_in_n is cast down to g.d_mix_n, the product computed on mat_f into g.d_mix_m,
+// and the result cast back up into d_out_m - the same pattern [CH18] and [GSW16] use for a
+// low-precision inner solve inside a higher-precision outer loop (see pdhg_refinement.hpp
+// for the round-level decision this is meant to feed). Never called when g.mat_f is null
+// (mixed_precision is false for this solve).
+static bool spmv_nt_mixed(GpuState& g, double* d_in_n, double* d_out_m) {
+  if (g.m == 0 || g.nnz == 0) {
+    if (g.m > 0) cudaMemset(d_out_m, 0, static_cast<std::size_t>(g.m) * sizeof(double));
+    return true;
+  }
+  const int bn = (g.n + kBlockSize - 1) / kBlockSize;
+  const int bm = (g.m + kBlockSize - 1) / kBlockSize;
+  k_cast_d2f<<<bn, kBlockSize>>>(d_in_n, g.d_mix_n, g.n);
+  if (!launch_ok()) return false;
+  CS_CHECK(cusparseDnVecSetValues(g.vn_f, g.d_mix_n));
+  CS_CHECK(cusparseDnVecSetValues(g.vm_f, g.d_mix_m));
+  CS_CHECK(cusparseSpMV(g.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOneF, g.mat_f, g.vn_f,
+                        &kZeroF, g.vm_f, CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT, g.d_spmv_f));
+  k_cast_f2d<<<bm, kBlockSize>>>(g.d_mix_m, d_out_m, g.m);
+  if (!launch_ok()) return false;
+  return true;
+}
+
+// Mixed precision (#982): transpose SpMV d_out_n = A^T * d_in_m, float product on mat_f (the
+// explicit-A^T determinism path of #478 is not covered - mixed_precision and deterministic
+// are mutually exclusive, enforced in solve_pdhg_gpu).
+static bool spmv_t_mixed(GpuState& g, double* d_in_m, double* d_out_n) {
+  if (g.m == 0 || g.nnz == 0) {
+    if (g.n > 0) cudaMemset(d_out_n, 0, static_cast<std::size_t>(g.n) * sizeof(double));
+    return true;
+  }
+  const int bn = (g.n + kBlockSize - 1) / kBlockSize;
+  const int bm = (g.m + kBlockSize - 1) / kBlockSize;
+  k_cast_d2f<<<bm, kBlockSize>>>(d_in_m, g.d_mix_m, g.m);
+  if (!launch_ok()) return false;
+  CS_CHECK(cusparseDnVecSetValues(g.vm_f, g.d_mix_m));
+  CS_CHECK(cusparseDnVecSetValues(g.vn_f, g.d_mix_n));
+  CS_CHECK(cusparseSpMV(g.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOneF, g.mat_f, g.vm_f, &kZeroF,
+                        g.vn_f, CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT, g.d_spmv_f));
+  k_cast_f2d<<<bn, kBlockSize>>>(g.d_mix_n, d_out_n, g.n);
+  if (!launch_ok()) return false;
   return true;
 }
 
@@ -447,6 +548,26 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   bool device_loop = options.get_bool("gpu_on_device_loop");
   // Bit-for-bit repeatable run to run (#383, #478): explicit A^T, CSR_ALG2 for both products.
   const bool deterministic = options.get_bool("deterministic");
+  // pdhg_precision (#982): single-precision A x and A^T y, every decision still in double.
+  // Scoped out, in this change, from the deterministic path (whose bit-for-bit guarantee is
+  // documented by cuSPARSE for the double-precision CSR_ALG2 product only) and from the
+  // device loop (#478's CUDA-graph capture, which this change does not touch). Both
+  // combinations fall back to the ordinary double run rather than silently do something
+  // 982 did not ask for.
+  bool mixed_precision = options.get_string("pdhg_precision") == "mixed";
+  if (mixed_precision && deterministic) {
+    logger.warning(
+        "GPU PDHG: pdhg_precision=mixed is not combined with deterministic=true (#982); "
+        "running this solve in double precision");
+    mixed_precision = false;
+  }
+  if (mixed_precision && device_loop) {
+    logger.warning(
+        "GPU PDHG: pdhg_precision=mixed is not wired into the device loop (#478) yet; "
+        "overriding gpu_on_device_loop to false for this solve so the per-iteration path "
+        "runs instead (#982)");
+    device_loop = false;
+  }
 
   logger.info("Solving LP with CUDA restarted PDHG on {}: {} rows, {} columns, {} nonzeros",
               device_desc, rows, cols, model.num_nonzeros());
@@ -523,9 +644,16 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     g.d_tvals = nnz > 0 ? dev_zeros(static_cast<std::size_t>(nnz)) : nullptr;
   }
 
+  if (mixed_precision) {
+    g.d_vals_f = nnz > 0 ? dev_zeros_f(static_cast<std::size_t>(nnz)) : nullptr;
+    g.d_mix_n = dev_zeros_f(n);
+    g.d_mix_m = dev_zeros_f(m);
+  }
+
   if (!g.alloc_ok() || !g.d_rowptr || (m > 0 && (!g.d_rlo || !g.d_rhi)) ||
       (nnz > 0 && (!g.d_colidx || !g.d_vals)) ||
-      (deterministic && (!g.d_trowptr || (nnz > 0 && (!g.d_tcolidx || !g.d_tvals))))) {
+      (deterministic && (!g.d_trowptr || (nnz > 0 && (!g.d_tcolidx || !g.d_tvals)))) ||
+      (mixed_precision && ((nnz > 0 && !g.d_vals_f) || !g.d_mix_n || (m > 0 && !g.d_mix_m)))) {
     logger.warning("GPU PDHG: device allocation failed; falling back to CPU solver");
     return pdhg::solve_pdhg(model, options, logger, control, warm_start);
   }
@@ -551,6 +679,18 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
                    !hd_copy(scaling.row_upper.data(), g.d_rhi, m)))) {
       logger.warning("GPU PDHG: data upload failed; falling back to CPU solver");
       return pdhg::solve_pdhg(model, options, logger, control, warm_start);
+    }
+    // Mixed precision (#982): the same scaled values, rounded to float once here rather than
+    // re-cast from the double copy on every product - a constant cost paid once per solve,
+    // not per iteration.
+    if (mixed_precision && nnz > 0) {
+      std::vector<float> cv_f(cv.size());
+      for (std::size_t k = 0; k < cv.size(); ++k) cv_f[k] = static_cast<float>(cv[k]);
+      if (!hd_copy(cv_f.data(), g.d_vals_f, cv_f.size())) {
+        logger.warning("GPU PDHG: mixed-precision matrix upload failed; falling back to CPU "
+                       "solver");
+        return pdhg::solve_pdhg(model, options, logger, control, warm_start);
+      }
     }
     // A^T in CSR is A in CSC: the scaled matrix's own column starts, row indices and values,
     // uploaded as they are (#478). Index is int32, as for the CSR of A above.
@@ -664,9 +804,61 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       return cs_failed();
   }
 
+  // Mixed precision (#982): the float matrix descriptor and dense vectors the two
+  // single-precision products (spmv_nt_mixed/spmv_t_mixed) use, built the same way as the
+  // double descriptors above but on g.d_vals_f and CUDA_R_32F. Always the default algorithm
+  // (CSR_ALG2's bit-for-bit guarantee is documented for CUDA_R_64F only); mixed_precision and
+  // deterministic are mutually exclusive, enforced earlier in this function.
+  if (mixed_precision) {
+    if (cusparseCreateCsr(&g.mat_f, static_cast<int64_t>(mi), static_cast<int64_t>(ni),
+                          static_cast<int64_t>(nnz), g.d_rowptr, g.d_colidx, g.d_vals_f,
+                          CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO,
+                          CUDA_R_32F) != CUSPARSE_STATUS_SUCCESS)
+      return cs_failed();
+    void* mix_n_init = g.d_mix_n ? g.d_mix_n : vn_init;
+    void* mix_m_init = g.d_mix_m ? g.d_mix_m : vm_init;
+    if (cusparseCreateDnVec(&g.vn_f, static_cast<int64_t>(ni), mix_n_init, CUDA_R_32F) !=
+        CUSPARSE_STATUS_SUCCESS)
+      return cs_failed();
+    if (mi > 0 && cusparseCreateDnVec(&g.vm_f, static_cast<int64_t>(mi), mix_m_init,
+                                      CUDA_R_32F) != CUSPARSE_STATUS_SUCCESS)
+      return cs_failed();
+    if (m > 0 && nnz > 0) {
+      std::size_t bytes_nt_f = 0, bytes_t_f = 0;
+      cusparseDnVecSetValues(g.vn_f, g.d_mix_n);
+      cusparseDnVecSetValues(g.vm_f, g.d_mix_m);
+      if (cusparseSpMV_bufferSize(g.cs, CUSPARSE_OPERATION_NON_TRANSPOSE, &kOneF, g.mat_f,
+                                  g.vn_f, &kZeroF, g.vm_f, CUDA_R_32F,
+                                  CUSPARSE_SPMV_ALG_DEFAULT,
+                                  &bytes_nt_f) != CUSPARSE_STATUS_SUCCESS)
+        return cs_failed();
+      if (cusparseSpMV_bufferSize(g.cs, CUSPARSE_OPERATION_TRANSPOSE, &kOneF, g.mat_f, g.vm_f,
+                                  &kZeroF, g.vn_f, CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT,
+                                  &bytes_t_f) != CUSPARSE_STATUS_SUCCESS)
+        return cs_failed();
+      const std::size_t bytes_mat_f = std::max(bytes_nt_f, bytes_t_f);
+      if (bytes_mat_f > 0 && cudaMalloc(&g.d_spmv_f, bytes_mat_f) != cudaSuccess)
+        return cs_failed();
+    }
+  }
+
   // ---- Main iteration loop -----------------------------------------------
   const int bn = (ni + kBlockSize - 1) / kBlockSize;
   const int bm = (mi + kBlockSize - 1) / kBlockSize;
+
+  // Mixed precision (#982): the two sparse products the per-iteration path below takes,
+  // dispatched to the single-precision pair when pdhg_precision=mixed and to the ordinary
+  // double pair otherwise. Every other call site in this function - the convergence
+  // evaluation (evaluate_on_device, above) and the host evaluation path it falls back to -
+  // stays on spmv_nt/spmv_t directly, in double, by construction: #982 point 3 ("decisions
+  // in double") is satisfied by NOT routing those call sites through this dispatch, not by a
+  // runtime check.
+  auto product_nt = [&](double* in, double* out) {
+    return mixed_precision ? spmv_nt_mixed(g, in, out) : spmv_nt(g, in, out);
+  };
+  auto product_t = [&](double* in, double* out) {
+    return mixed_precision ? spmv_t_mixed(g, in, out) : spmv_t(g, in, out);
+  };
 
   // CPU-side vectors for convergence evaluation
   std::vector<double> h_x(n), h_y(m), h_xsum(n), h_ysum(m);
@@ -716,6 +908,15 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
                      : 1.0;
   Count iteration = 0, restarts = 0, last_restart = 0, averaged = 0;
   double restart_kkt = std::numeric_limits<double>::infinity();
+  // Mixed precision (#982 point 4): the refinement round this run is on is read off the
+  // restart cadence already above - each restart's double-precision KKT residual against the
+  // previous restart's is exactly the round history pdhg_refinement.hpp's decision rule wants
+  // (compute the residual in double, run more work at the lower precision, repeat). When a
+  // restart stops shrinking that residual usefully, this run falls back to full double
+  // precision for its remaining iterations rather than keep paying for single precision
+  // products that are not buying accuracy.
+  pdhg::RefinementState refine_state;
+  Count refinement_fallback_at_restart = -1;
   // First crossings of the relative KKT error (#486), recorded as the CPU engine does and
   // on the same measure (pdhg::evaluate), so a CUDA row in a runner CSV is not "never
   // reached" beside a verified optimum.
@@ -744,7 +945,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
 
   // Two-mat-vec (#479): the cache starts as A x0, filled once the SpMV buffers exist.
   if (two_matvec) {
-    if ((mi > 0 && (g.d_axc == nullptr || g.d_axn == nullptr)) || !spmv_nt(g, g.d_x, g.d_axc)) {
+    if ((mi > 0 && (g.d_axc == nullptr || g.d_axn == nullptr)) || !product_nt(g.d_x, g.d_axc)) {
       gpu_error = true;  // the CPU fallback below takes over
     }
   }
@@ -793,6 +994,12 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   if (deterministic && !gpu_error) {
     logger.info("GPU PDHG: deterministic, fixed-order reductions and both products on CSR "
                 "with CUSPARSE_SPMV_CSR_ALG2 on an explicit A^T (#478)");
+  }
+  if (mixed_precision && !gpu_error) {
+    logger.info("GPU PDHG: pdhg_precision=mixed, A x and A^T y run in single precision; "
+                "residuals, restarts and the step rule stay in double (#982). UNVERIFIED ON "
+                "HARDWARE as of this change - no device micro-benchmark has been run; see "
+                "bench/runners/gpu_precision_microbench.py and #982");
   }
   // THE EVALUATION ON THE DEVICE (#478 item 3). On the stream the products run on: the
   // device loop's while it holds the cuSPARSE handle, else the legacy default stream.
@@ -876,7 +1083,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     const double sigma = eta * omega;
 
     // 1. A^T y  [cuPDLP §3, transpose SpMV]
-    if (!spmv_t(g, g.d_y, g.d_aty)) {
+    if (!product_t(g.d_y, g.d_aty)) {
       gpu_error = true;
       break;
     }
@@ -893,7 +1100,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     // 3. A * extrapolated  [CP11 Alg.1 dual step]. With two_matvec (#479): A x_{k+1} once,
     // and A xbar and A dx derived from it and the cached A x_k.
     if (two_matvec) {
-      if (!spmv_nt(g, g.d_xn, g.d_axn)) {
+      if (!product_nt(g.d_xn, g.d_axn)) {
         gpu_error = true;
         break;
       }
@@ -902,7 +1109,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
         gpu_error = true;
         break;
       }
-    } else if (!spmv_nt(g, g.d_ext, g.d_ax)) {
+    } else if (!product_nt(g.d_ext, g.d_ax)) {
       gpu_error = true;
       break;
     }
@@ -917,7 +1124,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     }
 
     // 5. A * dx  [PDLP §3.1 interaction term]; already derived with two_matvec.
-    if (!two_matvec && !spmv_nt(g, g.d_dx, g.d_adx)) {
+    if (!two_matvec && !product_nt(g.d_dx, g.d_adx)) {
       gpu_error = true;
       break;
     }
@@ -1119,12 +1326,29 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
           x_restart = h_x;
           y_restart = h_y;
         }
+        if (mixed_precision && std::isfinite(restart_kkt)) {
+          refine_state.previous_residual = restart_kkt;
+          refine_state.current_residual = kkt;
+          const pdhg::RefinementAction action =
+              pdhg::decide_refinement_action(refine_state, tolerance, iteration_limit);
+          ++refine_state.rounds_run;
+          if (action == pdhg::RefinementAction::kFallBackToDouble) {
+            mixed_precision = false;
+            refinement_fallback_at_restart = restarts;
+            logger.info(
+                "GPU PDHG: single precision stalled at restart {} (KKT {:.3e} -> {:.3e}, "
+                "shrink {:.3f}); falling back to double precision for the rest of this "
+                "solve (#982)",
+                restarts, refine_state.previous_residual, refine_state.current_residual,
+                refine_state.current_residual / refine_state.previous_residual);
+          }
+        }
         restart_kkt = kkt;
         last_restart = iteration;
         ++restarts;
         // The cache is A x carried forward by derivation; at each restart it is recomputed
         // from x so rounding cannot accumulate across restart periods (#479).
-        if (two_matvec && !spmv_nt(g, g.d_x, g.d_axc)) {
+        if (two_matvec && !product_nt(g.d_x, g.d_axc)) {
           gpu_error = true;
           break;
         }
@@ -1232,6 +1456,11 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
               solution.solve_seconds);
   logger.info("Relative residuals: primal {:.3e}, dual {:.3e}, gap {:.3e}", final_r.primal,
               final_r.dual, final_r.gap);
+  if (refinement_fallback_at_restart >= 0) {
+    logger.info("GPU PDHG: pdhg_precision=mixed fell back to double precision at restart {} "
+                "of {} (#982)",
+                refinement_fallback_at_restart, restarts);
+  }
   if (!solution.message.empty()) logger.info("{}", solution.message);
   return solution;
 }

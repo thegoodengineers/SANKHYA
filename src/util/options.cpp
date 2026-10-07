@@ -2379,6 +2379,33 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          {"cpu", "true", "false"}});
     s.push_back(
+        {"pdhg_precision",
+         OptionType::String,
+         std::string("double"),
+         "GPU PDHG only (#982): double (default) runs everything in double precision, as "
+         "before. mixed runs ONLY the iteration's two sparse products, A x and A^T y, on a "
+         "float copy of the scaled matrix values: the double operand is cast to float before "
+         "each product and the result cast back to double after it. The iterates, the step "
+         "rule, the restart and convergence tests, every residual, the objective and the "
+         "returned point stay in double; the residuals are formed from double products of the "
+         "double iterate, and the final point is judged by the same double KKT evaluation, "
+         "in-process check and tools/verify_solution.py a double run is held to. When a "
+         "restart period fails to cut the double KKT residual to "
+         "tol::kPdhgMixedMinUsefulShrink of the previous one, the run falls back to double "
+         "products for the rest of the solve (src/pdhg/pdhg_refinement.hpp). Not combined "
+         "with deterministic=true or the device loop (gpu_on_device_loop): those run in "
+         "double. "
+         "The CPU engine and the multi-GPU engine ignore this option. Citations: Carson & "
+         "Higham, SIAM J. Sci. Comput. 40 (2018); Gleixner, Steffy & Wolter, INFORMS J. "
+         "Comput. 28 (2016); Higham & Mary, Acta Numerica 31 (2022). A deviation from "
+         "'double precision everywhere', logged as a judgement call in docs/PROVENANCE.md; "
+         "stays off until the device micro-benchmark #982 asks for "
+         "(bench/results/gpu-precision-<card>-<commit>.csv) and an A/B on main exist - "
+         "neither has been run on any card yet.",
+         0.0,
+         0.0,
+         {"double", "mixed"}});
+    s.push_back(
         {"pdhg_geometric_evaluation",
          OptionType::Bool,
          false,
