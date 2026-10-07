@@ -377,11 +377,11 @@ using pdhg::Residuals;
 // ---- Main solver --------------------------------------------------------
 
 Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logger,
-                        SolveControl* control) {
+                        SolveControl* control, const pdhg::PdhgWarmStart* warm_start) {
   std::string device_desc;
   if (!device_available(&device_desc)) {
     logger.warning("GPU PDHG: no CUDA device ({}); falling back to CPU solver", device_desc);
-    return pdhg::solve_pdhg(model, options, logger, control);
+    return pdhg::solve_pdhg(model, options, logger, control, warm_start);
   }
 
   Timer timer;
@@ -527,8 +527,13 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       (nnz > 0 && (!g.d_colidx || !g.d_vals)) ||
       (deterministic && (!g.d_trowptr || (nnz > 0 && (!g.d_tcolidx || !g.d_tvals))))) {
     logger.warning("GPU PDHG: device allocation failed; falling back to CPU solver");
-    return pdhg::solve_pdhg(model, options, logger, control);
+    return pdhg::solve_pdhg(model, options, logger, control, warm_start);
   }
+
+  // #913 part 2: usable only when offered and sized for THIS model, as pdhg::solve_pdhg
+  // checks it. Needed again below, at the primal weight's seed, so it is function-scoped.
+  const bool warm_usable = warm_start != nullptr && !warm_start->empty() &&
+                           warm_start->x.size() == static_cast<std::size_t>(cols);
 
   // ---- Upload matrix and problem data ------------------------------------
   {
@@ -545,7 +550,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
         (m > 0 && (!hd_copy(scaling.row_lower.data(), g.d_rlo, m) ||
                    !hd_copy(scaling.row_upper.data(), g.d_rhi, m)))) {
       logger.warning("GPU PDHG: data upload failed; falling back to CPU solver");
-      return pdhg::solve_pdhg(model, options, logger, control);
+      return pdhg::solve_pdhg(model, options, logger, control, warm_start);
     }
     // A^T in CSR is A in CSC: the scaled matrix's own column starts, row indices and values,
     // uploaded as they are (#478). Index is int32, as for the CSR of A above.
@@ -558,15 +563,18 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
           (nnz > 0 && (!hd_copy(ti.data(), g.d_tcolidx, ti.size()) ||
                        !hd_copy(tv.data(), g.d_tvals, tv.size())))) {
         logger.warning("GPU PDHG: transpose upload failed; falling back to CPU solver");
-        return pdhg::solve_pdhg(model, options, logger, control);
+        return pdhg::solve_pdhg(model, options, logger, control, warm_start);
       }
     }
 
-    // Initial x: projection of 0 onto column bounds (same as CPU PDHG)
+    // Initial x: the caller's warm iterate, divided by this solve's own scaling and
+    // projected into its own bounds (#913 part 2, same mapping as pdhg::solve_pdhg), when
+    // one is offered and sized for this model; otherwise the projection of 0 onto column
+    // bounds (the cold start, same as CPU PDHG).
     std::vector<double> x0(n);
     for (Index j = 0; j < cols; ++j) {
       const auto u = static_cast<std::size_t>(j);
-      double v = 0.0;
+      double v = warm_usable ? warm_start->x[u] / scaling.column[u] : 0.0;
       if (!std::isinf(scaling.col_lower[u]) && v < scaling.col_lower[u])
         v = scaling.col_lower[u];
       if (!std::isinf(scaling.col_upper[u]) && v > scaling.col_upper[u])
@@ -575,19 +583,30 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     }
     if (!hd_copy(x0.data(), g.d_x, n)) {
       logger.warning("GPU PDHG: initial iterate upload failed; falling back to CPU solver");
-      return pdhg::solve_pdhg(model, options, logger, control);
+      return pdhg::solve_pdhg(model, options, logger, control, warm_start);
+    }
+    if (warm_usable && warm_start->y.size() == static_cast<std::size_t>(rows) && m > 0) {
+      std::vector<double> y0(m);
+      for (Index i = 0; i < rows; ++i) {
+        const auto u = static_cast<std::size_t>(i);
+        y0[u] = warm_start->y[u] / scaling.row[u];
+      }
+      if (!hd_copy(y0.data(), g.d_y, m)) {
+        logger.warning("GPU PDHG: initial dual iterate upload failed; falling back to CPU solver");
+        return pdhg::solve_pdhg(model, options, logger, control, warm_start);
+      }
     }
   }
 
   // ---- cuSPARSE setup ----------------------------------------------------
   if (cusparseCreate(&g.cs) != CUSPARSE_STATUS_SUCCESS) {
     logger.warning("GPU PDHG: cusparseCreate failed; falling back to CPU solver");
-    return pdhg::solve_pdhg(model, options, logger, control);
+    return pdhg::solve_pdhg(model, options, logger, control, warm_start);
   }
 
   auto cs_failed = [&]() -> Solution {
     logger.warning("GPU PDHG: cuSPARSE setup failed; falling back to CPU solver");
-    return pdhg::solve_pdhg(model, options, logger, control);
+    return pdhg::solve_pdhg(model, options, logger, control, warm_start);
   };
 
   // Create CSR matrix descriptor.  When nnz=0, d_colidx/d_vals are nullptr;
@@ -653,18 +672,24 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   std::vector<double> h_x(n), h_y(m), h_xsum(n), h_ysum(m);
   std::vector<double> x_unscaled(n), y_unscaled(m);
   std::vector<double> activity(m), reduced_costs(n);
-  // Restart reference point (scaled)
+  // Restart reference point (scaled): the same initial iterate x0 was set to above - the
+  // warm one when #913 part 2 offered one, the cold projection of 0 otherwise.
   std::vector<double> x_restart(n, 0.0), y_restart(m, 0.0);
   {
-    // init x_restart = x0 (same as initial iterate)
     for (Index j = 0; j < cols; ++j) {
       const auto u = static_cast<std::size_t>(j);
-      double v = 0.0;
+      double v = warm_usable ? warm_start->x[u] / scaling.column[u] : 0.0;
       if (!std::isinf(scaling.col_lower[u]) && v < scaling.col_lower[u])
         v = scaling.col_lower[u];
       if (!std::isinf(scaling.col_upper[u]) && v > scaling.col_upper[u])
         v = scaling.col_upper[u];
       x_restart[u] = v;
+    }
+    if (warm_usable && warm_start->y.size() == static_cast<std::size_t>(rows)) {
+      for (Index i = 0; i < rows; ++i) {
+        const auto u = static_cast<std::size_t>(i);
+        y_restart[u] = warm_start->y[u] / scaling.row[u];
+      }
     }
   }
 
@@ -683,7 +708,12 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
   if (constant_step) {
     eta = norm_bound.upper > 0.0 ? tol::kPdhgConstantStepShare / norm_bound.upper : 1.0;
   }
-  double omega = 1.0;
+  // #913 part 2: the caller's primal weight carried over, when offered and positive and
+  // finite; every restart below still re-derives omega from the iterates, so a bad carried
+  // value only costs the first step.
+  double omega = (warm_usable && std::isfinite(warm_start->omega) && warm_start->omega > 0.0)
+                     ? warm_start->omega
+                     : 1.0;
   Count iteration = 0, restarts = 0, last_restart = 0, averaged = 0;
   double restart_kkt = std::numeric_limits<double>::infinity();
   // First crossings of the relative KKT error (#486), recorded as the CPU engine does and
@@ -1128,7 +1158,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
         "GPU PDHG: CUDA error during solve after {:.2f}s; falling back to the CPU "
         "solver on the remaining budget",
         timer.elapsed_seconds());
-    return pdhg::solve_pdhg(model, remaining, logger, control);
+    return pdhg::solve_pdhg(model, remaining, logger, control, warm_start);
   }
 
   // ---- Extract solution --------------------------------------------------

@@ -882,6 +882,19 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
             std::isfinite(time_limit)) {
           first_pass.set_double("time_limit", time_limit * kPdhgShareOfTheTimeLimit);
         }
+        // #913 part 2: the caller's previous PDHG iterate, read off SolveControl. x must
+        // match THIS call's model (target - which presolve may have reduced from the one the
+        // point was found on); solve_pdhg/solve_pdhg_gpu check that themselves and run cold
+        // on a mismatch, exactly as the LP basis warm start does on a shape it cannot place.
+        pdhg::PdhgWarmStart pdhg_warm;
+        if (control != nullptr && control->has_pdhg_warm_start()) {
+          pdhg_warm.x = control->start_col_value;
+          pdhg_warm.y = control->start_row_dual;
+          if (std::isfinite(control->start_pdhg_omega) && control->start_pdhg_omega > 0.0) {
+            pdhg_warm.omega = control->start_pdhg_omega;
+          }
+        }
+        const pdhg::PdhgWarmStart* pdhg_warm_ptr = pdhg_warm.empty() ? nullptr : &pdhg_warm;
 #ifdef SANKHYA_ENABLE_CUDA
         if (use_gpu_pdhg) {
           // GPU path: auto-routed by size:pdhg-gpu, or explicit --gpu flag (both gated by the
@@ -895,15 +908,17 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
               gpu::parse_device_ids(options.get_string("gpu_devices"));
           Solution first;
           if (gpu_dev_ids.size() > 1 || options.get_bool("gpu_partitioned")) {
+            // Multi-GPU warm start is not in this slice (#913): gpu::solve_pdhg_multi_gpu
+            // takes none yet.
             first = gpu::solve_pdhg_multi_gpu(target, first_pass, gpu_dev_ids, logger, control);
           } else {
-            first = gpu::solve_pdhg_gpu(target, first_pass, logger, control);
+            first = gpu::solve_pdhg_gpu(target, first_pass, logger, control, pdhg_warm_ptr);
           }
           polish_with_the_interior_point(&first, target, options, logger, control, timer);
           return first;
         }
 #endif
-        Solution first = pdhg::solve_pdhg(target, first_pass, logger, control);
+        Solution first = pdhg::solve_pdhg(target, first_pass, logger, control, pdhg_warm_ptr);
         polish_with_the_interior_point(&first, target, engine_options, logger, control, timer);
         return first;
       }

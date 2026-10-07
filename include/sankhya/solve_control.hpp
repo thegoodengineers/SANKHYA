@@ -77,6 +77,21 @@ class SolveControl {
   std::vector<double> start_solution;
   [[nodiscard]] bool has_start_solution() const noexcept { return !start_solution.empty(); }
 
+  /// A STARTING PDHG ITERATE (#913 part 2): the primal-dual pair a previous solve converged
+  /// to (`col_value`, `row_dual`), in the MODEL's own unscaled space, offered again for a
+  /// re-solve after the model was edited. The PDHG engines (`pdhg::solve_pdhg`,
+  /// `gpu::solve_pdhg_gpu`) divide by their own scaling before use and project `x` into
+  /// their own bounds, so a point the edit left outside them is pulled back rather than run
+  /// with. `start_pdhg_omega`, when finite and positive, seeds the first step's primal
+  /// weight; every restart after that re-derives it from the iterates regardless, so an
+  /// unset one only costs that first step. Only `start_col_value` is required to ask for a
+  /// warm start at all; a `start_row_dual` of the wrong length is ignored like a missing
+  /// one. Other engines ignore these fields.
+  std::vector<double> start_col_value;
+  std::vector<double> start_row_dual;
+  double start_pdhg_omega = 0.0;
+  [[nodiscard]] bool has_pdhg_warm_start() const noexcept { return !start_col_value.empty(); }
+
   /// How often the progress callback is invoked, at most: the first check of a solve
   /// always calls it, and after that one call per interval.
   static constexpr std::chrono::milliseconds kCallbackInterval{100};
