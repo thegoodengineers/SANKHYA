@@ -689,7 +689,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
       if (!hd_copy(cv_f.data(), g.d_vals_f, cv_f.size())) {
         logger.warning("GPU PDHG: mixed-precision matrix upload failed; falling back to CPU "
                        "solver");
-        return pdhg::solve_pdhg(model, options, logger, control);
+        return pdhg::solve_pdhg(model, options, logger, control, warm_start);
       }
     }
     // A^T in CSR is A in CSC: the scaled matrix's own column starts, row indices and values,
