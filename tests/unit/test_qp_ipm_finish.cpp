@@ -226,7 +226,8 @@ TEST(QpIpmFinish, ActiveSetFinishSnapsANearlyActiveBoundExactlyOntoIt) {
   // tight_bound_large_curvature_qp's optimum (1, 1), offered with x1 a hair above its bound,
   // as an interior point leaves it: the finish pins x1 = 1 EXACTLY and re-solves the rest.
   // Internal columns: x1, x2, then the slack w of the one-sided row x1 + x2 - w = 0.
-  const qp::ipm_detail::Standard s = qp::ipm_detail::standardize(tight_bound_large_curvature_qp());
+  const qp::ipm_detail::Standard s =
+      qp::ipm_detail::standardize(tight_bound_large_curvature_qp());
   ASSERT_EQ(s.cols, 3);
   const Bounds b = finite_bounds(s);
   std::vector<double> v = {1.0 + 1e-7, 1.0, 2.0 + 1e-7}, y = {0.0}, zl(3, 0.0), zu(3, 0.0);

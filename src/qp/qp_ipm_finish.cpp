@@ -15,12 +15,10 @@
 
 namespace sankhya::qp::ipm_detail {
 
-double largest_complementarity_product(const Standard& s, const std::vector<bool>& has_lower,
-                                       const std::vector<bool>& has_upper,
-                                       const std::vector<double>& v, const std::vector<double>& y,
-                                       const std::vector<double>& zl,
-                                       const std::vector<double>& zu,
-                                       const std::vector<double>& rp) {
+double largest_complementarity_product(
+    const Standard& s, const std::vector<bool>& has_lower, const std::vector<bool>& has_upper,
+    const std::vector<double>& v, const std::vector<double>& y, const std::vector<double>& zl,
+    const std::vector<double>& zu, const std::vector<double>& rp) {
   const auto nc = static_cast<std::size_t>(s.cols);
   double largest = 0.0;
   for (std::size_t j = 0; j < nc; ++j) {
@@ -192,8 +190,8 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
     if (has_upper[j] && new_v[j] > s.upper[j] + primal_tolerance) return false;
     if (new_zl[j] < -primal_tolerance || new_zu[j] < -primal_tolerance) return false;
   }
-  const double largest_product = largest_complementarity_product(
-      s, has_lower, has_upper, new_v, new_y, new_zl, new_zu, rp);
+  const double largest_product = largest_complementarity_product(s, has_lower, has_upper, new_v,
+                                                                 new_y, new_zl, new_zu, rp);
   if (largest_product > tol::kQpIpmComplementarityShare * tol::kComplementarity) return false;
 
   *v = std::move(new_v);
