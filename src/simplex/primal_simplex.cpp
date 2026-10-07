@@ -2199,28 +2199,31 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   //     x = Dc xhat        y = Dr yhat        d = Dc^-1 dhat
   const Index n = model.num_cols();
   const Index m = model.num_rows();
-  for (Index j = 0; j < n; ++j) {
-    const auto u = static_cast<std::size_t>(j);
-    const double dc = scaling.column[u];
-    if (u < solution.col_value.size()) solution.col_value[u] *= dc;
-    if (u < solution.col_dual.size()) solution.col_dual[u] /= dc;
-    // A ray is a difference of primal points, so it maps exactly as a point does (#191).
-    if (u < solution.primal_ray.size()) solution.primal_ray[u] *= dc;
-  }
-  for (Index i = 0; i < m; ++i) {
-    const auto u = static_cast<std::size_t>(i);
-    if (u < solution.row_dual.size()) solution.row_dual[u] *= scaling.row[u];
-    // Farkas multipliers are row duals, and map the same way.
-    if (u < solution.farkas_dual.size()) solution.farkas_dual[u] *= scaling.row[u];
-  }
+  const auto unscale = [&](Solution& result) {
+    for (Index j = 0; j < n; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      const double dc = scaling.column[u];
+      if (u < result.col_value.size()) result.col_value[u] *= dc;
+      if (u < result.col_dual.size()) result.col_dual[u] /= dc;
+      // A ray is a difference of primal points, so it maps exactly as a point does (#191).
+      if (u < result.primal_ray.size()) result.primal_ray[u] *= dc;
+    }
+    for (Index i = 0; i < m; ++i) {
+      const auto u = static_cast<std::size_t>(i);
+      if (u < result.row_dual.size()) result.row_dual[u] *= scaling.row[u];
+      // Farkas multipliers are row duals, and map the same way.
+      if (u < result.farkas_dual.size()) result.farkas_dual[u] *= scaling.row[u];
+    }
 
-  // Re-measure against the ORIGINAL model. This is the second half of the correctness
-  // argument and it is not optional: tolerances in tolerances.hpp are ABSOLUTE and stated in
-  // the original problem's units, so a point judged feasible in scaled space says nothing
-  // about the answer we return. recompute_quality rebuilds the row activities from the
-  // original matrix and recomputes the objective, so everything reported below is measured
-  // where the caller lives.
-  solution.recompute_quality(model);
+    // Re-measure against the ORIGINAL model. This is the second half of the correctness
+    // argument and it is not optional: tolerances in tolerances.hpp are ABSOLUTE and stated in
+    // the original problem's units, so a point judged feasible in scaled space says nothing
+    // about the answer we return. recompute_quality rebuilds the row activities from the
+    // original matrix and recomputes the objective, so everything reported below is measured
+    // where the caller lives.
+    result.recompute_quality(model);
+  };
+  unscale(solution);
 
   // FALL BACK WHEN SCALING DOES NOT PAY. Equilibration is a heuristic: it rescues models the
   // unscaled simplex cannot factorize at all, and on a handful of models it costs more
@@ -2290,6 +2293,65 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
       return solution;
     }
     retry_options.set_double("time_limit", remaining);
+  }
+
+  // FIRST, STAY IN SCALED SPACE WITH TIGHTER TOLERANCES (#792). The engine judges its
+  // tolerances on the scaled variables, and a value 1e-7 outside its bound in scaled units
+  // is r times that in original units, r the variable's scale factor. On the badly scaled
+  // Netlib set that factor runs to 2^20: scaled ganges ends with an equality row's logical
+  // basic 2.1e-6 off its right-hand side in original units, scaled woodw 4.8e-7. The
+  // unscaled retry below cannot help there - the unscaled matrix holds 1e10 entries, and
+  // the basis is singular in it - but the same basis in scaled space is a few pivots from a
+  // point that holds: the dual simplex just has to treat that logical as infeasible. So the
+  // scaled model is solved again from its own basis with each tolerance divided by twice the
+  // amplification the unscaled measurement showed (Koberstein, PhD thesis, Paderborn 2005, on
+  // scaled tolerances that do not survive unscaling), and the answer is kept only on the same
+  // primal and dual test, in original units and at the caller's tolerances, that the
+  // scaled attempt failed.
+  if (solution.status == SolveStatus::kOptimal &&
+      solution.col_status.size() == static_cast<std::size_t>(n) &&
+      solution.row_status.size() == static_cast<std::size_t>(m)) {
+    const auto tightened = [](double tolerance, double measured) {
+      return measured <= tolerance ? tolerance
+                                   : std::max(tolerance * tolerance / (2.0 * measured),
+                                              tol::kTightenedFeasibilityFloor);
+    };
+    Options tight_options = retry_options;
+    tight_options.set_double("primal_feasibility_tolerance",
+                             tightened(primal_tolerance, solution.primal_infeasibility_scaled));
+    tight_options.set_double("dual_feasibility_tolerance",
+                             tightened(dual_tolerance, solution.dual_infeasibility_scaled));
+    logger.info(
+        "Scaled solve returned optimal but primal infeasibility {:.3e} and dual "
+        "infeasibility {:.3e} in original units; re-solving scaled from its basis at "
+        "tolerances {:.1e} and {:.1e}",
+        solution.primal_infeasibility_scaled, solution.dual_infeasibility_scaled,
+        tight_options.get_double("primal_feasibility_tolerance"),
+        tight_options.get_double("dual_feasibility_tolerance"));
+    WarmStart own_basis;
+    own_basis.col_status = solution.col_status;
+    own_basis.row_status = solution.row_status;
+    Solution tight = run_engine_from(scaled, tight_options, nullptr, &own_basis);
+    unscale(tight);
+    if (tight.status == SolveStatus::kOptimal &&
+        tight.primal_infeasibility_scaled <= primal_tolerance &&
+        tight.dual_infeasibility_scaled <= dual_tolerance) {
+      tight.iterations += solution.iterations;
+      logger.info("Scaled re-solve at tighter tolerances succeeded in {} iteration(s)",
+                  tight.iterations);
+      note_route(tight,
+                 "the scaled re-solve from its basis at tighter tolerances produced "
+                 "this answer");
+      return tight;
+    }
+    if (limited) {
+      const double remaining = time_limit - budget.elapsed_seconds();
+      if (remaining <= 0.0) {
+        note_route(solution, "nothing was left for an unscaled retry");
+        return solution;
+      }
+      retry_options.set_double("time_limit", remaining);
+    }
   }
 
   // THE RETRY STARTS WHERE THE SCALED ATTEMPT STOPPED, WHEN THAT WAS AN OPTIMAL BASIS. A

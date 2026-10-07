@@ -31,6 +31,13 @@ inline constexpr double kPrimalFeasibility = 1e-7;
 /// 0.026, pilotnov 0.89, tuff 0.005), and the A/B in the #783 pull request covers them.
 inline constexpr double kDualFeasibility = 1e-7;
 
+/// The least feasibility tolerance the simplex is handed when a scaled optimum is re-solved
+/// at tighter tolerances because it did not hold in original units (#792). The tolerance is
+/// divided by twice the measured amplification; this floor keeps it above the level the
+/// basic-system residual reaches after refinement on badly conditioned bases, where a
+/// tighter tolerance only chases rounding.
+inline constexpr double kTightenedFeasibilityFloor = 1e-10;
+
 /// Max allowed distance from an integer before a value is called fractional.
 inline constexpr double kIntegrality = 1e-6;
 

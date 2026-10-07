@@ -483,6 +483,8 @@ constexpr double kPdhgShareOfTheTimeLimit = 0.7;
 /// Ruiz rounds for the prescaled retry (#792): the engine's own equilibration uses 10; the
 /// factors are rounded to powers of two afterwards, so a few more rounds cost nothing.
 constexpr int kPrescalePasses = 20;
+/// The no-presolve retry's share of the time left when the prescaled retry follows it.
+constexpr double kNoPresolveRetryShare = 0.5;
 
 void reconcile_status_with_measurement(const Model& model, Solution* solution,
                                        const Options& options, Logger& logger,
@@ -786,10 +788,13 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
   const ResourceLimits limits(options, logger);
   // The options an engine is given when part of the budget is already spent. A no-limit
   // solve gets the options unchanged, so nothing is copied on the common path.
+  // A rescue that another rescue follows takes only its share of what is left (#792).
+  double share_of_what_is_left = 1.0;
   const auto with_the_time_that_is_left = [&](const Options& base) -> Options {
     if (!limits.has_time_limit()) return base;
     Options narrowed = base;
-    narrowed.set_double("time_limit", limits.remaining_seconds(timer.elapsed_seconds()));
+    narrowed.set_double("time_limit", share_of_what_is_left *
+                                          limits.remaining_seconds(timer.elapsed_seconds()));
     return narrowed;
   };
 
@@ -1254,6 +1259,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       verify_and_keep_certificate(&retry, model, logger);
       if (!adopt(retry)) {
         logger.info("{}", declined);
+        solution.solve_seconds = retry.solve_seconds;  // the retry's time was spent too
         return;
       }
       retry.engine_rule = solution.engine_rule;
@@ -1352,6 +1358,10 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           "presolve found no certifiable proof; retried directly against the original model "
           "and this is that retry's result");
     }
+    const auto prescale_retry_applies = [&] {
+      return !race && !warm_answer && !model.has_integrality() &&
+             !model.has_quadratic_objective() && options.get_bool("prescale_retry");
+    };
     // #783: AN OPTIMALITY CLAIM THAT DID NOT SURVIVE POSTSOLVE is retried against the original
     // model too. Netlib sc205 with its rows and columns scaled by powers of two in
     // 2^-20..2^20: presolve eliminates the one costed column through a doubleton equation
@@ -1364,11 +1374,18 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     if ((solution.status == SolveStatus::kFeasible ||
          solution.status == SolveStatus::kNumericalError) &&
         !race && !warm_answer && options.get_bool("presolve")) {
+      // THE PRESCALED RETRY BELOW MUST STILL HAVE TIME (#792). This retry runs the same
+      // engine, with the same internal scaling, on the model presolve was skipped for; on
+      // scaled modszk1 it diverged in phase 1 for all 60 s, and the prescaled retry, the
+      // one that changes the numbers the engine sees, was skipped for want of time. When
+      // that retry will follow, this one takes half of what is left.
+      if (prescale_retry_applies()) share_of_what_is_left = kNoPresolveRetryShare;
       retry_on_original(
           "the presolved solve made no optimality claim that survived postsolve; retried "
           "directly against the original model and this is that retry's result",
           [](const Solution& retry) { return retry.status == SolveStatus::kOptimal; },
           "Retry without presolve (#783): not optimal either; the first answer stands");
+      share_of_what_is_left = 1.0;
     }
     if (!race && !warm_answer) certify_by_elastic();
     refuse_an_unproved_infeasibility(model, &solution, logger);
@@ -1385,8 +1402,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // scaled Netlib models the default path left without a verdict at 0e1a0d25 solve.
     const bool no_verdict = solution.status == SolveStatus::kNumericalError ||
                             solution.status == SolveStatus::kFeasible;
-    if (no_verdict && !race && !warm_answer && !model.has_integrality() &&
-        !model.has_quadratic_objective() && options.get_bool("prescale_retry")) {
+    if (no_verdict && prescale_retry_applies()) {
       const PrescaledModel prescaled = prescale_by_powers_of_two(model, kPrescalePasses);
       const bool changes_something =
           std::any_of(prescaled.row.begin(), prescaled.row.end(),
