@@ -80,6 +80,32 @@ TEST(Prescale, ThePointAndTheDualsMapBackExactly) {
   EXPECT_DOUBLE_EQ(s.row_activity[1], 6.0);
 }
 
+// #792, scaled modszk1 and pilot.we: Ruiz alone stops at a fixed point that keeps part of a
+// diagonal rescaling. A 4-cycle of ones (rows {0,1}, {0,2}, {1,3}, {2,3}) with its rows and
+// columns scaled by powers of two up to 2^20 comes out of 20 Ruiz rounds with entries spanning
+// a factor of 1024; the geometric passes in front take it back to all ones.
+TEST(Prescale, ADiagonalRescalingIsUndoneNotInherited) {
+  const double rows[] = {0x1p-20, 0x1p13, 0x1p-7, 0x1p20};
+  const double cols[] = {0x1p17, 0x1p-20, 0x1p5, 0x1p-11};
+  Model model = badly_scaled();
+  model.col_cost.assign(4, -1.0);
+  model.col_lower.assign(4, 0.0);
+  model.col_upper.assign(4, kInf);
+  model.col_type.assign(4, VarType::kContinuous);
+  model.row_lower.assign(4, -kInf);
+  model.row_upper.assign(4, 1.0);
+  model.matrix.reset(4, 4);
+  const int pattern[4][2] = {{0, 1}, {0, 2}, {1, 3}, {2, 3}};
+  for (int j = 0; j < 4; ++j) {
+    for (const int i : pattern[j]) model.matrix.add_entry(i, j, rows[i] * cols[j]);
+  }
+  model.matrix.finalize(0.0);
+  model.hessian.reset(4, 4);
+  model.hessian.finalize();
+  const PrescaledModel p = prescale_by_powers_of_two(model, 20);
+  for (const double v : p.model.matrix.values()) EXPECT_EQ(std::fabs(v), 1.0) << v;
+}
+
 TEST(Prescale, AnEquilibratedModelIsLeftAlone) {
   Model model = badly_scaled();
   model.matrix.reset(2, 2);

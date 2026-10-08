@@ -17,6 +17,10 @@ double nearest_power_of_two(double value) {
   return std::ldexp(1.0, static_cast<int>(std::lround(std::log2(value))));
 }
 
+/// Geometric mean passes before the Ruiz rounds; the iteration settles in a handful (Fourer
+/// 1982 used up to 20 and saw little change after the first few).
+constexpr int kGeometricPasses = 8;
+
 double scaled_bound(double bound, double factor) {
   return is_finite_bound(bound) ? bound * factor : bound;
 }
@@ -32,6 +36,47 @@ PrescaledModel prescale_by_powers_of_two(const Model& model, int passes) {
   std::vector<double> column(un, 1.0);
   std::vector<double> row_max(um);
   std::vector<double> column_max(un);
+  // GEOMETRIC PASSES FIRST. Ruiz's infinity-norm iteration stops once every row and column
+  // has its largest entry at one, and that fixed point depends on where it started: on
+  // modszk1 it reaches 1.9e-4..0.74, on the same model with rows and columns scaled by up to
+  // 2^20 (#762) it stops at 7e-10..1, and the simplex then pivots on 1e-9 and diverges. The
+  // geometric mean scaling divides each row, then each column, by sqrt(min |a| * max |a|),
+  // which works on log |a| the way Curtis and Reid's least squares does and so undoes a
+  // diagonal rescaling instead of inheriting it (Fourer, "Solving staircase linear programs
+  // by the simplex method, 1: Inversion", Math. Programming 23 (1982), sec. 4; Tomlin, "On
+  // scaling linear programming problems", Math. Programming Study 4 (1975)). Ruiz then sets
+  // the largest entry of each row and column to about one.
+  std::vector<double> row_min(um);
+  std::vector<double> column_min(un);
+  const auto extremes = [&]() {
+    std::fill(row_max.begin(), row_max.end(), 0.0);
+    std::fill(column_max.begin(), column_max.end(), 0.0);
+    std::fill(row_min.begin(), row_min.end(), HUGE_VAL);
+    std::fill(column_min.begin(), column_min.end(), HUGE_VAL);
+    for (Index j = 0; j < n; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      const ColumnView view = model.matrix.column(j);
+      for (Index k = 0; k < view.size; ++k) {
+        const auto i = static_cast<std::size_t>(view.rows[k]);
+        const double a = std::fabs(view.values[k] * row[i] * column[u]);
+        if (a == 0.0) continue;
+        row_max[i] = std::max(row_max[i], a);
+        row_min[i] = std::min(row_min[i], a);
+        column_max[u] = std::max(column_max[u], a);
+        column_min[u] = std::min(column_min[u], a);
+      }
+    }
+  };
+  for (int pass = 0; pass < kGeometricPasses; ++pass) {
+    extremes();
+    for (std::size_t i = 0; i < um; ++i) {
+      if (row_max[i] > 0.0) row[i] /= std::sqrt(row_min[i] * row_max[i]);
+    }
+    extremes();
+    for (std::size_t j = 0; j < un; ++j) {
+      if (column_max[j] > 0.0) column[j] /= std::sqrt(column_min[j] * column_max[j]);
+    }
+  }
   for (int pass = 0; pass < passes; ++pass) {
     std::fill(row_max.begin(), row_max.end(), 0.0);
     std::fill(column_max.begin(), column_max.end(), 0.0);

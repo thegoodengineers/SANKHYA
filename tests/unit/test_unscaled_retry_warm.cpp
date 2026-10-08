@@ -5,8 +5,9 @@
 // pilot4 is the Netlib medium-tier instance that takes this route on main: the scaled
 // attempt is optimal after about a thousand iterations, but its point is not feasible to
 // the tolerance in original units, and the retry used to begin again from the slack basis.
-// Started from the scaled basis it needs a handful of pivots. What is under test is that
-// the shortcut changes the route and not the claim: the answer is optimal, at the
+// Started from the scaled basis it needs a handful of pivots; since #792 those pivots are
+// taken in scaled space at tighter tolerances, before any unscaled retry. What is under test is
+// that the shortcut changes the route and not the claim: the answer is optimal, at the
 // published objective, and meets primal and dual feasibility measured afresh against the
 // model - the checks tools/verify_solution.py makes.
 
@@ -45,7 +46,10 @@ TEST(UnscaledRetryWarm, Pilot4IsCleanedUpFromTheScaledBasisAndStillVerifies) {
   options.set_string("pricing", "devex");
   const Solution solution = solve(model, options);
   ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
-  EXPECT_NE(solution.message.find("the unscaled retry from its basis produced this answer"),
+  // Since #792 the scaled re-solve at tighter tolerances, from the same basis, comes first
+  // and is the rung that cleans pilot4 up; the unscaled one is the fallback behind it.
+  EXPECT_NE(solution.message.find("the scaled re-solve from its basis at tighter tolerances "
+                                  "produced this answer"),
             std::string::npos)
       << solution.message;
 
