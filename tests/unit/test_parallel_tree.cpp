@@ -15,6 +15,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <mutex>
 #include <random>
 #include <regex>
@@ -24,6 +25,7 @@
 
 #include <gtest/gtest.h>
 
+#include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 #include "sankhya/solve_control.hpp"
@@ -591,6 +593,46 @@ class MemoryPressure {
   std::atomic<bool> stop_{false};
   std::vector<std::thread> threads_;
 };
+
+/// tests/data/miplib/gen-ip016.mps, fetched from MIPLIB 2017 for this reproducer: the actual
+/// instance #733 was seen failing on, not the market_split stand-in the earlier two stress
+/// tests above use (PR #736, PR #947). Those PRs could not reach miplib.zib.de from their
+/// sandboxes (a 403 from the outbound proxy) and said so; this run could reach it, so this
+/// test closes that specific gap in the prior investigation rather than repeating it.
+std::string fixture(const std::string& name) {
+  return (std::filesystem::path(__FILE__).parent_path().parent_path() / "data" / "miplib" / name)
+      .string();
+}
+
+TEST(ParallelTree, RepeatedGenIp016SolvesUnderLoadNeverEndInNumericalError) {
+  // Same opt-in stress gate as its siblings above.
+  if (std::getenv("SANKHYA_STRESS") == nullptr) {
+    GTEST_SKIP() << "set SANKHYA_STRESS=1 to run the #733 load reproducer";
+  }
+  Model model;
+  const std::string path = fixture("gen-ip016.mps");
+  const io::ReadResult read = io::read_model(path, &model);
+  ASSERT_TRUE(read.ok) << path << ": " << read.error;
+
+  const unsigned cores = std::max(1u, std::thread::hardware_concurrency());
+  const BackgroundLoad load(cores * 3);
+
+  const int kThreads = 4;
+  const int kTrials = 40;
+  for (int trial = 0; trial < kTrials; ++trial) {
+    const std::uint32_t seed = 733100u + static_cast<std::uint32_t>(trial);
+    Options options = on_threads(kThreads);
+    options.set_double("time_limit", 2.0);
+    options.set_int("random_seed", static_cast<int>(seed));
+    const Solution solved = solve(model, options);
+    ASSERT_NE(solved.status, SolveStatus::kNumericalError)
+        << "#733 reproduced on gen-ip016 itself: mip_threads=" << kThreads
+        << " random_seed=" << seed << " under " << (cores * 3) << " background spinners on "
+        << cores << " hardware thread(s): " << solved.message;
+    ASSERT_NE(solved.status, SolveStatus::kModelError)
+        << "mip_threads=" << kThreads << " random_seed=" << seed << ": " << solved.message;
+  }
+}
 
 TEST(ParallelTree,
      RepeatedSolvesUnderOversubscribedThreadsAndMemoryPressureNeverEndInNumericalError) {
