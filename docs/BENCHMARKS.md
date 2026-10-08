@@ -3488,42 +3488,37 @@ row of the file as written and most of its certificates failing to prove the fil
 (each failing check is named below); Klee-Minty from n = 30, whose last right-hand sides
 reach 5^29 > 1e20, comes back unbounded.
 
-Measured on SANKHYA commit `afdbdbb5` against HiGHS 1.15.1 (highspy, separate process), machine `laptop, shared with other jobs; Windows-AMD64`, 126 instances. Source: `stress-afdbdbb5.csv`.
+Measured on SANKHYA commit `d32b3847` against HiGHS 1.15.1 (highspy, separate process), machine `laptop, shared with other jobs; Windows-AMD64`, 126 instances. Source: `stress-d32b3847.csv`.
 
 | family | instances | sankhya correct / wrong / failed | highs correct / wrong / failed |
 |---|---|---|---|
 | `degenerate` | 5 | 5 / 0 / 0 | 5 / 0 / 0 |
 | `klee_minty` | 7 | 7 / 0 / 0 | 4 / 3 / 0 |
 | `near_singular` | 8 | 8 / 0 / 0 | 8 / 0 / 0 |
-| `scaled_netlib` | 94 | 74 / 0 / 20 | 0 / 87 / 7 |
+| `scaled_netlib` | 94 | 79 / 0 / 15 | 0 / 87 / 7 |
 | `thin_infeasible` | 8 | 8 / 0 / 0 | 8 / 0 / 0 |
 | `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 |
-| **all** | 126 | 106 / 0 / 20 | 29 / 90 / 7 |
+| **all** | 126 | 111 / 0 / 15 | 29 / 90 / 7 |
 
 **Reported `optimal` and wrong**, the headline count (#750): sankhya **0**, highs **31**.
 
-**sankhya, failed** (20):
+**sankhya, failed** (15):
 
-- `scaled_80bau3b`: no verdict: time_limit (time limit 59.9848s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_bnl2`: no verdict: time_limit (time limit 59.9974s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_cycle`: no verdict: time_limit (stopped at the time limit of 59.9948s after 59.99s, 166918 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_d2q06c`: no verdict: time_limit (time limit 40.323s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned numer)
-- `scaled_dfl001`: no verdict: time_limit (stopped at the time limit of 59.9811s after 60.09s, 6763 iterations, 0 nodes; route: the scaled attempt returned time_li)
-- `scaled_fit2p`: no verdict: time_limit (stopped at the time limit of 59.9824s after 60.58s, 29445 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_ganges`: no verdict: numerical_error (route: the scaled attempt returned optimal after 0.1 s of its 60 s share; neither attempt produced a usable point; the s)
-- `scaled_modszk1`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 3.765e+08 from a least of 6.093e-08, which cannot happen on faithf)
-- `scaled_nesm`: no verdict: time_limit (time limit 59.9976s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_perold`: no verdict: time_limit (time limit 59.9928s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot`: no verdict: time_limit (time limit 59.9905s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot.ja`: no verdict: time_limit (time limit 59.9981s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot.we`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 1.765e+06 from a least of 1.388e-17, which cannot happen on faithf)
-- `scaled_pilot4`: no verdict: time_limit (time limit 59.9992s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot87`: no verdict: time_limit (time limit 59.993s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
-- `scaled_pilotnov`: no verdict: time_limit (time limit 59.9974s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_stair`: no verdict: time_limit (time limit 59.9994s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_stocfor2`: no verdict: time_limit (stopped at the time limit of 59.9985s after 60.00s, 236852 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_stocfor3`: no verdict: time_limit (stopped at the time limit of 59.9891s after 59.99s, 40843 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_woodw`: no verdict: numerical_error (route: the scaled attempt returned optimal after 0.3 s of its 60 s share; neither attempt produced a usable point; the s)
+- `scaled_80bau3b`: no verdict: time_limit (stopped at the time limit of 59.9897s after 59.99s, 89877 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_bnl2`: no verdict: time_limit (time limit 59.9973s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_cycle`: no verdict: time_limit (stopped at the time limit of 59.9969s after 60.00s, 255383 iterations, 0 nodes; route: the scaled attempt returned time_)
+- `scaled_d2q06c`: no verdict: time_limit (time limit 47.5275s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned nume)
+- `scaled_dfl001`: no verdict: time_limit (time limit 59.9929s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_nesm`: no verdict: time_limit (time limit 59.9978s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_perold`: no verdict: time_limit (time limit 59.9984s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot`: no verdict: time_limit (time limit 59.9881s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot.ja`: no verdict: time_limit (stopped at the time limit of 59.9912s after 59.99s, 27840 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_pilot4`: no verdict: time_limit (time limit 59.9867s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot87`: no verdict: time_limit (time limit 59.9899s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilotnov`: no verdict: time_limit (time limit 59.9978s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_stair`: no verdict: time_limit (time limit 59.999s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
+- `scaled_stocfor2`: no verdict: time_limit (stopped at the time limit of 59.9984s after 60.00s, 311808 iterations, 0 nodes; route: the scaled attempt returned time_)
+- `scaled_stocfor3`: no verdict: time_limit (stopped at the time limit of 59.9876s after 59.99s, 61021 iterations, 0 nodes; route: the scaled attempt returned time_l)
 
 **highs, wrong** (90):
 
