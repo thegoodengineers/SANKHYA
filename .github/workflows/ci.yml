@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SANKHYA - continuous integration.
 #
-# ubuntu-latest is the authority on -Werror cleanliness and on the sanitizer runs; the
-# Windows build is a developer convenience and is not gated here.
+# ubuntu-latest is the authority on -Werror cleanliness and on the sanitizer runs. The MinGW
+# Windows build is a developer convenience and is not gated here; the MSVC leg is, because
+# nvcc on Windows takes MSVC as its host compiler and the Windows CUDA archive needs it.
 #
 # The `provenance` job is not decoration. ENGINEERING_RULES.md commits us to proving that nothing from
 # an optimization solver is linked in, and the cheapest proof is a machine-generated link
@@ -111,6 +112,32 @@ jobs:
         with:
           name: fuzz-crashes
           path: /tmp/fuzz-artifacts/
+
+  msvc:
+    # The tree under MSVC (#748): /W4 /WX, every test. It keeps the Windows CUDA archive
+    # buildable (nvcc on Windows has only MSVC as a host compiler) and runs the rational
+    # oracle on the portable 128-bit integer that MSVC gets in place of __int128.
+    name: Windows MSVC (CPU)
+    runs-on: windows-latest
+    env:
+      SERIAL_TESTS: '^(ParallelTree|PdhgParallelSpmv|EngineConcurrency|EngineRace|EngineDeterminism|Deterministic|RunOrderDeterminism)\.'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure
+        run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=cl -DSANKHYA_BUILD_TESTS=ON -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: |
+          ctest --test-dir build --output-on-failure -j 4 -E $env:SERIAL_TESTS
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          ctest --test-dir build --output-on-failure -R $env:SERIAL_TESTS
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
   build-and-test:
     name: ${{ matrix.name }}

@@ -19,6 +19,7 @@ add_executable(sankhya_tests
   unit/test_exact_lu.cpp
   unit/test_exact_repair.cpp
   unit/test_exact_verify.cpp
+  unit/test_wide_mul.cpp
   unit/test_certificate_writer.cpp
   unit/test_cut_derivation.cpp
   unit/test_cuts.cpp
@@ -183,6 +184,7 @@ add_executable(sankhya_tests
   oracles/rational_simplex.cpp
   oracles/lp_generator.cpp
   oracles/test_rational_oracle.cpp
+  oracles/test_int128.cpp
   oracles/test_fuzz_against_oracle.cpp
   oracles/test_safe_bound.cpp
   oracles/test_batch_pdhg.cpp

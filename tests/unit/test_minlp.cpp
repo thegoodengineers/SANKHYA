@@ -6,6 +6,7 @@
 // no arithmetic with the solver: not its relaxations, not its KKT check, not its tree.
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -103,7 +104,7 @@ TEST(Minlp, MixedBinaryWithLinearRowsAgainstEnumeration) {
   m.objective = m.graph.sum(terms);
   double best = kInf;
   for (int mask = 0; mask < 16; ++mask) {
-    if (__builtin_popcount(static_cast<unsigned>(mask)) > 2) continue;
+    if (std::popcount(static_cast<unsigned>(mask)) > 2) continue;
     double f = 0.0;
     for (int i = 0; i < 4; ++i) {
       const auto u = static_cast<std::size_t>(i);

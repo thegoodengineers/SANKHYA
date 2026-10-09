@@ -55,6 +55,7 @@
 #include "la/lu.hpp"
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
+#include "util/wide_mul.hpp"
 
 namespace sankhya {
 namespace {
@@ -346,7 +347,6 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
             if (!vi.m.is_zero()) r[p] = r[p] + vi;
             continue;
           }
-#ifdef __SIZEOF_INT128__
           if (column_fits[p] != 0) {
             std::uint64_t magnitude[2][4] = {{0, 0, 0, 0}, {0, 0, 0, 0}};
             const ColumnView col = model.matrix.column(variable[p]);
@@ -354,29 +354,26 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
               const long long step = steps[static_cast<Sz>(col.rows[e])];
               const long long mantissa = entry_mantissa[k];
               if (step == 0 || mantissa == 0) continue;
-              const unsigned __int128 product =
-                  static_cast<unsigned __int128>(mantissa < 0 ? -mantissa : mantissa) *
-                  static_cast<unsigned __int128>(step < 0 ? -step : step);
+              const U128 product =
+                  mul_64x64(static_cast<std::uint64_t>(mantissa < 0 ? -mantissa : mantissa),
+                            static_cast<std::uint64_t>(step < 0 ? -step : step));
               std::uint64_t* acc = magnitude[(mantissa < 0) != (step < 0) ? 1 : 0];
               const int shift = entry_shift[k];
               const int word = shift / 64;
               const int bits = shift % 64;
               std::uint64_t words[3];
               if (bits == 0) {
-                words[0] = static_cast<std::uint64_t>(product);
-                words[1] = static_cast<std::uint64_t>(product >> 64);
+                words[0] = product.lo;
+                words[1] = product.hi;
                 words[2] = 0;
               } else {
-                words[0] = static_cast<std::uint64_t>(product << bits);
-                words[1] = static_cast<std::uint64_t>(product >> (64 - bits));
-                words[2] = static_cast<std::uint64_t>(product >> (128 - bits));
+                words[0] = product.lo << bits;
+                words[1] = (product.lo >> (64 - bits)) | (product.hi << bits);
+                words[2] = product.hi >> (64 - bits);
               }
-              unsigned __int128 carry = 0;
+              unsigned carry = 0;
               for (int w = word; w < 4; ++w) {
-                const unsigned __int128 sum = static_cast<unsigned __int128>(acc[w]) +
-                                              (w - word < 3 ? words[w - word] : 0) + carry;
-                acc[w] = static_cast<std::uint64_t>(sum);
-                carry = sum >> 64;
+                carry = add_carry(acc[w], w - word < 3 ? words[w - word] : 0, carry, &acc[w]);
               }
             }
             // positive - negative, as a signed 256-bit magnitude.
@@ -401,7 +398,6 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
                                  column_exponent[p] + step_exponent};
             continue;
           }
-#endif
           r[p] = r[p] - apply(p, dx);
         }
         int new_t = kZero;
