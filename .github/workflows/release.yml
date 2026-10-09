@@ -9,12 +9,9 @@
 # archives attached and its notes read from .github/release-notes/<tag>.md. Pushing the
 # tag is the decision to publish the image; making the release public is a click after it.
 #
-# What is not built, and why:
-#   Windows CUDA: nvcc on Windows requires MSVC as its host compiler, and this tree builds
-#   with MinGW-w64 GCC. Under MSVC 19.44 seven translation units do not compile: the exact
-#   arithmetic uses GCC's __int128 and __builtin_ctz (src/exact/bigint.hpp, included by the
-#   five src/exact files, and src/core/lp_exact_dual.cpp), and src/util/memory.cpp meets the
-#   min/max macros of windows.h. A CUDA build for Windows needs those ported first.
+# The Windows CUDA archive is built with MSVC, the only host compiler nvcc accepts on Windows
+# (the CPU archive stays MinGW-w64 GCC). The ci workflow's MSVC leg keeps the tree building
+# and its tests passing under MSVC.
 
 name: release
 
@@ -223,6 +220,94 @@ jobs:
             dist/*.whl
             dist/timing-*.txt
 
+  windows-cuda:
+    name: Windows x64 CUDA archive (compiled without a card)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # The toolkit only: the compiler, the runtime, cuSPARSE (with nvJitLink, which it loads)
+      # and CCCL's headers for cub. No driver, no card.
+      - uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: '12.6.3'
+          method: network
+          sub-packages: '["nvcc", "cudart", "cusparse", "cusparse_dev", "nvjitlink", "thrust"]'
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build
+        # cuSPARSE has no static library on Windows, so the runtime and cuSPARSE DLLs ship
+        # beside the binary (both are in the toolkit's redistributable list).
+        run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DSANKHYA_BUILD_TESTS=OFF `
+            -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl `
+            -DSANKHYA_ENABLE_CUDA=ON "-DCMAKE_CUDA_COMPILER=$env:CUDA_PATH\bin\nvcc.exe" `
+            -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cmake --build build -j
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Collect the runtime DLLs the binaries import
+        # Every DLL the binary or the library imports, and theirs in turn, that lives in the
+        # CUDA toolkit or the MSVC redistributable directory; Windows' own DLLs are left out.
+        run: |
+          $dirs = @("$env:CUDA_PATH\bin", "$env:VCToolsRedistDir\x64\Microsoft.VC143.CRT",
+                    "$env:VCToolsRedistDir\x64\Microsoft.VC143.OpenMP")
+          $todo = [System.Collections.Generic.Queue[string]]::new()
+          'build\sankhya.exe', 'build\sankhya.dll' | ForEach-Object { $todo.Enqueue($_) }
+          $found = @{}
+          while ($todo.Count -gt 0) {
+            $file = $todo.Dequeue()
+            $names = dumpbin /nologo /dependents $file | Where-Object { $_ -match '^\s+\S+\.dll$' } |
+              ForEach-Object { $_.Trim() }
+            foreach ($n in $names) {
+              if ($found.ContainsKey($n.ToLower())) { continue }
+              foreach ($d in $dirs) {
+                $p = Join-Path $d $n
+                if (Test-Path $p) { $found[$n.ToLower()] = $p; $todo.Enqueue($p); break }
+              }
+            }
+          }
+          New-Item -ItemType Directory -Force runtime | Out-Null
+          $found.Values | ForEach-Object { Copy-Item $_ runtime\; "shipping $_" }
+      - name: Package
+        shell: bash
+        run: scripts/package_release.sh build windows-x64-cuda dist runtime/*.dll
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run the demo from the archive, with no compiler on PATH and no card
+        run: |
+          $zip = Get-ChildItem dist/*.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath $env:RUNNER_TEMP
+          $dir = Get-ChildItem $env:RUNNER_TEMP -Directory -Filter 'sankhya-*' | Select-Object -First 1
+          Set-Location $dir.FullName
+          # The runner image carries compilers and the toolkit on PATH; the run gets Windows
+          # and Python only.
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:pythonLocation"
+          $env:CUDA_PATH = $null
+          foreach ($cc in 'g++', 'gcc', 'cl', 'clang', 'nvcc') {
+            if (Get-Command $cc -ErrorAction SilentlyContinue) { throw "$cc is on PATH" }
+          }
+          $t = [Diagnostics.Stopwatch]::StartNew()
+          .\build\sankhya.exe version
+          if ($LASTEXITCODE -ne 0) { throw "version failed" }
+          .\build\sankhya.exe solve demo\crude_blend.mps --gpu --write-sol blend.sol
+          if ($LASTEXITCODE -ne 0) { throw "solve failed" }
+          python tools\verify_solution.py demo\crude_blend.mps blend.sol
+          if ($LASTEXITCODE -ne 0) { throw "verifier rejected" }
+          $env:PYTHONPATH = "bindings\python"
+          python -c "import sankhya; print(sankhya.Model.read('demo/crude_blend.mps').solve().objective)"
+          if ($LASTEXITCODE -ne 0) { throw "bindings failed" }
+          "Windows x64 CUDA archive, windows-latest runner with no card and no compiler on PATH: demo (CPU fallback), verifier and bindings in {0:N2} s" -f $t.Elapsed.TotalSeconds |
+            Tee-Object "$env:GITHUB_WORKSPACE\dist\timing-windows-x64-cuda.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sankhya-windows-x64-cuda
+          path: |
+            dist/*.zip
+            dist/*.sha256
+            dist/timing-*.txt
+
   wheel-test:
     # One wheel per platform serves every CPython (ctypes, no extension module; see
     # scripts/build_wheel.py). Each is installed into a clean venv of each version and must
@@ -289,7 +374,7 @@ jobs:
 
   checksums:
     name: SHA256SUMS over every archive
-    needs: [linux-cpu, linux-cuda, windows-cpu]
+    needs: [linux-cpu, linux-cuda, windows-cpu, windows-cuda]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
