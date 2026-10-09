@@ -188,6 +188,63 @@ TEST(InteriorPointTimeLimit, TheDeviceDeadlineStopsAfterOneLateCallNotNineteen) 
   EXPECT_LE(wall, kLimit + kMargin) << solved.message;
 }
 
+// #907: starting the device at all - the CUDA context, the handle - is itself an
+// uninterruptible call cuDSS does not bound either, so an explicit ipm_linear_solver = cudss
+// must decline to even start the device when too little of the time limit is left to recover
+// from one such call (device_start_affordable(), tol::kIpmDeviceStartSeconds = 2.0s), exactly
+// as ipm_linear_solver = auto already did. This counts initialize() calls on a fake device to
+// prove the device is never started at all, not merely that its analysis is later declined.
+class CountingDevice : public gpu::LinearSolverDevice {
+ public:
+  explicit CountingDevice(int* initialize_calls) : initialize_calls_(initialize_calls) {}
+
+  bool initialize(std::string* /*reason*/) override {
+    ++*initialize_calls_;
+    return true;
+  }
+  bool analyze(const SparseMatrix& lower, std::string* /*reason*/) override {
+    return ldl_.analyze(lower);
+  }
+  gpu::CudssOutcome factorize(const SparseMatrix& lower, double regularization,
+                              std::string* /*reason*/) override {
+    if (!ldl_.factorize(lower, regularization)) return gpu::CudssOutcome::kFailed;
+    return gpu::CudssOutcome::kFactored;
+  }
+  bool solve(double* b, std::string* /*reason*/) override {
+    ldl_.solve(b);
+    return true;
+  }
+  Count regularized_pivots() const noexcept override { return ldl_.regularized_pivots(); }
+  std::int64_t factor_nonzeros() const noexcept override {
+    return static_cast<std::int64_t>(ldl_.factor_nonzeros()) + ldl_.dimension();
+  }
+  const gpu::CudssTiming& timing() const noexcept override { return timing_; }
+
+ private:
+  int* initialize_calls_;
+  SparseLdl ldl_;
+  gpu::CudssTiming timing_;
+};
+
+TEST(InteriorPointTimeLimit, AnExplicitCudssDoesNotStartTheDeviceWithNoBudgetToRecoverFromIt) {
+  constexpr double kLimit = 1.0;  // under kIpmDeviceStartSeconds (2.0s), over what a tiny
+                                   // model like this one needs to solve on the CPU alone.
+  int initialize_calls = 0;
+  ipm::testing::fake_device_factory = [&] {
+    return std::unique_ptr<gpu::LinearSolverDevice>(new CountingDevice(&initialize_calls));
+  };
+  const Model model = l_infinity_shape(20);
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_string("ipm_linear_solver", "cudss");
+  options.set_double("time_limit", kLimit);
+  Logger quiet(nullptr);
+  const Solution solved = ipm::solve_ipm(model, options, quiet);
+  ipm::testing::fake_device_factory = nullptr;
+  EXPECT_EQ(initialize_calls, 0) << solved.message;
+  EXPECT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+}
+
 TEST(InteriorPointTimeLimit, ADenseColumnDoesNotCarryTheSolvePastItsTimeLimit) {
   // The clock this time, on the whole engine: a limit of half a second on a model whose
   // normal equations hold 4.5 million entries and whose factor is dense. The engine must

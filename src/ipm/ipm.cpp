@@ -1140,6 +1140,18 @@ void InteriorPoint::choose_linear_solver() {
     device_auto_ = true;
     return;
   }
+  // #907: the same allowance device_start_affordable() already holds the auto path to (an
+  // analysis or factorization cuDSS starts cannot be interrupted, so starting the device at
+  // all - the handle, the context, the first upload - must not be begun on a budget too
+  // small to recover from a single uninterruptible call) applies just as much to an explicit
+  // ipm_linear_solver = cudss: a tiny time_limit should not pay for a CUDA context only to
+  // decline the analysis a line later anyway. Logged as kept-CPU, not as a cuDSS failure.
+  if (!device_start_affordable()) {
+    logger_.warning(
+        "interior point: ipm_linear_solver = cudss keeps the CPU factor: too little of the "
+        "time limit is left to start the device (#907)");
+    return;
+  }
   (void)start_device(false, "ipm_linear_solver = cudss");
 }
 
