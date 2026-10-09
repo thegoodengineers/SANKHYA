@@ -11,8 +11,10 @@
 #
 # What is not built, and why:
 #   Windows CUDA: nvcc on Windows requires MSVC as its host compiler, and this tree builds
-#   with MinGW-w64 GCC (the -static runtime link in CMakeLists.txt). A CUDA build for Windows
-#   needs the tree to build under MSVC first.
+#   with MinGW-w64 GCC. Under MSVC 19.44 seven translation units do not compile: the exact
+#   arithmetic uses GCC's __int128 and __builtin_ctz (src/exact/bigint.hpp, included by the
+#   five src/exact files, and src/core/lp_exact_dual.cpp), and src/util/memory.cpp meets the
+#   min/max macros of windows.h. A CUDA build for Windows needs those ported first.
 
 name: release
 

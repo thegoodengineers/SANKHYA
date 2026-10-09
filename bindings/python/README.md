@@ -23,7 +23,9 @@ print(model.solve().objective)   # -464.7531428571429
 
 ## Install
 
-There is nothing to install and nothing to compile. Build the solver, then put the package
+`pip install` the wheel attached to a release (`py3-none-manylinux_2_35_x86_64` or
+`py3-none-win_amd64`, any CPython from 3.9): it carries the library and the CLI inside the
+package. From a checkout there is nothing to install. Build the solver, then put the package
 on your path:
 
 ```bash

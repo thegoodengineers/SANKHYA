@@ -19,6 +19,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import re
+import stat
 import subprocess
 import sys
 import zipfile
@@ -65,7 +66,10 @@ def main(build: Path, platform_tag: str, out: Path, extras: list[Path]) -> Path:
     def add(archive: zipfile.ZipFile, name: str, data: bytes, executable: bool) -> None:
         info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
         info.compress_type = zipfile.ZIP_DEFLATED
-        info.external_attr = (0o755 if executable else 0o644) << 16
+        # A regular-file type with the mode: pip restores the executable bit only when both
+        # are present (S_ISREG on the stored mode), and the CLI must stay runnable.
+        info.create_system = 3
+        info.external_attr = (stat.S_IFREG | (0o755 if executable else 0o644)) << 16
         archive.writestr(info, data)
         digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
         record.append(f"{name},sha256={digest},{len(data)}")
