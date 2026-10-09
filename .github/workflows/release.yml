@@ -179,7 +179,7 @@ jobs:
           extras=$(ldd build/sankhya.exe build/libsankhya.dll | awk '/ucrt64/ {print $3}' | sort -u)
           echo "shipping: $extras"
           scripts/package_release.sh build windows-x64-cpu dist $extras
-          mkdir -p wheel-libs && cp $extras wheel-libs/
+          mkdir -p wheel-libs && for f in $extras; do cp "$f" wheel-libs/; done
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -208,7 +208,10 @@ jobs:
             Tee-Object "$env:GITHUB_WORKSPACE\dist\timing-windows-x64-cpu.txt"
       - name: Wheel
         shell: pwsh
-        run: python scripts/build_wheel.py build win_amd64 dist (Get-ChildItem wheel-libs/*).FullName
+        # Usually no extra libraries: the static MinGW link leaves only system DLLs to import.
+        run: |
+          $libs = @(Get-ChildItem wheel-libs -File | ForEach-Object FullName)
+          python scripts/build_wheel.py build win_amd64 dist @libs
       - uses: actions/upload-artifact@v4
         with:
           name: sankhya-windows-x64-cpu
