@@ -58,8 +58,10 @@ def locate() -> Path:
     root = _repository_root()
     tried: list[str] = []
 
-    for directory in search_directories:
-        candidate = root / directory / exe_name
+    # An installed wheel carries the executable inside the package, beside this file (#748).
+    for candidate in [Path(__file__).resolve().parent / exe_name] + [
+        root / directory / exe_name for directory in search_directories
+    ]:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return candidate
         tried.append(f"{candidate}")

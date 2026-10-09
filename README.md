@@ -369,7 +369,8 @@ prints the fix for each.
 
 ## Build
 
-Requires CMake 3.20+, Ninja, and a C++20 compiler (GCC 10+ / Clang 12+ / MSVC 19.30+).
+Requires CMake 3.20+, Ninja, and a C++20 compiler: GCC 10+ or Clang 12+ (MinGW-w64 GCC on
+Windows). MSVC does not build the tree yet; see the Windows CUDA note below.
 
 ```bash
 scripts/configure.sh build Release
@@ -388,8 +389,10 @@ this README works from the unpacked directory, and carries `MANIFEST.txt` (the `
 version` banner and the link dependencies of the shipped files, grepped for solver libraries)
 and its own `SHA256SUMS`; the release's `SHA256SUMS` covers the archives. The archives of this
 pre-release are named `0.1.0`, the version the tree carried when it was tagged. There is no
-Windows CUDA archive: nvcc on Windows needs MSVC as its host compiler and this tree builds with
-MinGW GCC.
+Windows CUDA archive: nvcc on Windows needs MSVC as its host compiler, and under MSVC 19.44
+seven translation units of the CPU code do not compile - the exact-arithmetic integers use
+GCC's `__int128` and `__builtin_ctz` (`src/exact/bigint.hpp`, and `src/core/lp_exact_dual.cpp`
+directly), and `src/util/memory.cpp` meets the `min`/`max` macros of `windows.h`.
 
 ```bash
 tar -xzf sankhya-0.1.0-linux-x86_64-cpu.tar.gz && cd sankhya-0.1.0-linux-x86_64-cpu
@@ -398,6 +401,20 @@ build/sankhya solve demo/crude_blend.mps --write-sol blend.sol
 python3 tools/verify_solution.py demo/crude_blend.mps blend.sol
 demo/finale.sh                        # Windows: unzip, then demo\finale.cmd
 ```
+
+**From pip.** The bindings are ctypes over the C API, so one wheel per platform, with the
+library and the CLI inside it, serves CPython 3.9 to 3.13: `manylinux_2_35_x86_64` (glibc 2.35
+or later) and `win_amd64`. CI installs each into a clean venv of every one of those versions
+and solves and verifies the demo there. Releases from the next tag on carry them; install
+straight from the release:
+
+```bash
+pip install https://github.com/thegoodengineers/SANKHYA/releases/download/<tag>/sankhya-1.0.0-py3-none-manylinux_2_35_x86_64.whl
+# Windows: .../sankhya-1.0.0-py3-none-win_amd64.whl
+python -c "import sankhya; print(sankhya.version())"
+```
+
+Until then the wheels are artifacts of the `release` workflow run on `main`. Nothing is on PyPI.
 
 The container image (the CUDA build, the verifier and the demo models) is public at
 `ghcr.io/thegoodengineers/sankhya:v1.0.0-rc1`:
