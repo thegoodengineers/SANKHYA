@@ -51,7 +51,9 @@ def _candidate_paths() -> list[Path]:
         return [Path(override)]
 
     root = _repository_root()
-    found: list[Path] = []
+    # An installed wheel carries the library inside the package, beside this file (#748). A
+    # checkout has none there, so this costs the build-directory search nothing.
+    found: list[Path] = [Path(__file__).resolve().parent / name for name in _LIBRARY_NAMES]
     for directory in _SEARCH_DIRECTORIES:
         base = root / directory
         for name in _LIBRARY_NAMES:
