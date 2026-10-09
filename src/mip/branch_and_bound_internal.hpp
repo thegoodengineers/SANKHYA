@@ -486,6 +486,10 @@ class BranchAndBound {
   /// Feasibility Jump (#506): before the root LP when `from` is null, else from `from`
   /// rounded; the root only, and only when mip_heur_fj resolves on.
   void run_feasibility_jump(const std::vector<double>* from);
+  /// The parity heuristic (#841, parity.hpp): before the root LP, each GF(2) fixing of the
+  /// parity rows' binaries completed by a sub-MIP. run_parity_in counts against `slot`.
+  void run_parity();
+  void run_parity_in(std::size_t slot);
   void report_heuristics();
   // ---- Reduced-cost fixing and restarts (#418), in branch_and_bound_restart.cpp ---------
   /// Keep the root relaxation's reduced costs and basis: the material fixing works from.

@@ -621,6 +621,20 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"auto", "on", "off"}});
+    s.push_back({"mip_heur_parity",
+                 OptionType::String,
+                 std::string("auto"),
+                 "The parity heuristic (#841): the equality rows whose odd-coefficient "
+                 "columns are all binary are read modulo 2 and solved by Gaussian "
+                 "elimination over GF(2), once before the root LP; each 0/1 fixing it "
+                 "allows (at most 16, from a null space enumerated lowest column first) is "
+                 "completed by a sub-MIP of at most 1000 nodes, and what that finds is "
+                 "checked against the original model before it can become the incumbent. "
+                 "Generic: a model with no such row costs one pass over its rows. auto "
+                 "follows mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
     s.push_back({"mip_fj_work",
                  OptionType::Int,
                  std::int64_t{tol::kFeasibilityJumpWork},

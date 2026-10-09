@@ -409,6 +409,7 @@ Solution BranchAndBound::run() {
   // Feasibility Jump before any LP (#506), when asked for: an incumbent now prunes from
   // the first node.
   run_feasibility_jump(nullptr);
+  run_parity();  // #841, off by default
 
   // THE ROOT STARTS WITH NO BOUND PROVED (#289). TreeNode::bound is 0.0 by default, which
   // is a placeholder for "inherited from the parent" and the root has no parent. A search

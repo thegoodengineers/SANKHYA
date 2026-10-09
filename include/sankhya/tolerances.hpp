@@ -83,6 +83,14 @@ inline constexpr int kFeasibilityJumpSample = 25;
 inline constexpr Count kFeasibilityJumpWork = 10'000'000;
 inline constexpr double kFeasibilityJumpMinScore = 1e-9;
 
+/// The parity heuristic (#841, src/mip/parity.hpp): the most binary columns its dense GF(2)
+/// elimination takes (rows x 2048^2 / 64 word operations at most, well under a second); the
+/// fixings it tries, 2^4, so a null space of dimension four is enumerated whole; and the
+/// node limit of the sub-MIP that completes each fixing.
+inline constexpr int kParityMaxColumns = 2048;
+inline constexpr int kParityCandidates = 16;
+inline constexpr Count kParitySubMipNodes = 1000;
+
 /// Reliability branching (#69; Achterberg, Koch & Martin, "Branching rules revisited",
 /// Operations Research Letters 33 (2005), 42-54). A column's pseudocost in a direction is
 /// trusted once it has been observed this many times; until then the column is a
