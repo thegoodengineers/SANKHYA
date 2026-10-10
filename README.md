@@ -389,11 +389,12 @@ verifier, Python bindings) before it was attached. Each archive keeps this repos
 this README works from the unpacked directory, and carries `MANIFEST.txt` (the `sankhya
 version` banner and the link dependencies of the shipped files, grepped for solver libraries)
 and its own `SHA256SUMS`; the release's `SHA256SUMS` covers the archives. The archives of this
-pre-release are named `0.1.0`, the version the tree carried when it was tagged. There is no
-Windows CUDA archive: nvcc on Windows needs MSVC as its host compiler, and under MSVC 19.44
-seven translation units of the CPU code do not compile - the exact-arithmetic integers use
-GCC's `__int128` and `__builtin_ctz` (`src/exact/bigint.hpp`, and `src/core/lp_exact_dual.cpp`
-directly), and `src/util/memory.cpp` meets the `min`/`max` macros of `windows.h`.
+pre-release are named `0.1.0`, the version the tree carried when it was tagged, and it has no
+Windows CUDA archive. The workflow now builds one, Windows x64 CUDA: MSVC (the host compiler
+nvcc requires on Windows) with the CUDA 12.6 toolkit on a `windows-2022` runner, compiled
+without a card, the CUDA runtime, cuSPARSE and MSVC runtime DLLs beside the binary, unpacked
+and run on a runner with no compiler and no card (the `--gpu` solve falls back to the CPU and
+verifies). The next tag's release carries it.
 
 ```bash
 tar -xzf sankhya-0.1.0-linux-x86_64-cpu.tar.gz && cd sankhya-0.1.0-linux-x86_64-cpu

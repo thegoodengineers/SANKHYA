@@ -4,9 +4,10 @@
 #
 #     scripts/package_release.sh BUILD_DIR FLAVOR OUT_DIR [EXTRA_LIB ...]
 #
-# FLAVOR names the archive (linux-x86_64-cpu, windows-x64-cpu, linux-x86_64-cuda). EXTRA_LIB
-# are runtime libraries copied beside the binary (libgomp on Linux, the MinGW DLLs the shared
-# library imports on Windows), so the archive runs on a machine with no compiler.
+# FLAVOR names the archive (linux-x86_64-cpu, windows-x64-cpu, linux-x86_64-cuda,
+# windows-x64-cuda). EXTRA_LIB are runtime libraries copied beside the binary (libgomp on
+# Linux, the MinGW DLLs the shared library imports on Windows, the CUDA and MSVC runtime DLLs
+# for Windows CUDA), so the archive runs on a machine with no compiler.
 #
 # The archive keeps the repository's layout - the binary and library in build/, the Python
 # package in bindings/python, the verifier in tools/ - because every script and the bindings
@@ -35,7 +36,8 @@ STAGE="$OUT/$NAME"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/build" "$STAGE/bench/runners" "$STAGE/docs" "$STAGE/scripts"
 cp "$BUILD/$EXE" "$STAGE/build/"
-for lib in "$BUILD"/libsankhya.so* "$BUILD"/libsankhya.dll "$BUILD"/libsankhya.dylib; do
+# MinGW names the DLL libsankhya.dll, MSVC sankhya.dll.
+for lib in "$BUILD"/libsankhya.so* "$BUILD"/libsankhya.dll "$BUILD"/sankhya.dll "$BUILD"/libsankhya.dylib; do
   [ -e "$lib" ] && cp -P "$lib" "$STAGE/build/"
 done
 for extra in "$@"; do cp -L "$extra" "$STAGE/build/"; done
@@ -62,7 +64,8 @@ deps() {
   echo "packaged    $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   command -v nvcc >/dev/null 2>&1 && echo "nvcc        $(nvcc --version | tail -1)"
   echo
-  for f in "$STAGE/build/$EXE" "$STAGE"/build/libsankhya.so "$STAGE"/build/libsankhya.dll; do
+  for f in "$STAGE/build/$EXE" "$STAGE"/build/libsankhya.so "$STAGE"/build/libsankhya.dll \
+           "$STAGE"/build/sankhya.dll; do
     [ -e "$f" ] || continue
     echo "=== link dependencies of build/$(basename "$f") ==="
     deps "$f"
