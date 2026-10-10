@@ -53,6 +53,8 @@ enum Slot : std::size_t {
   kPdhgPump,
   kFixAndPropagate,
   kParity,
+  kPropDive,
+  kLocalBranching,
   kSlots
 };
 constexpr const char* kNames[kSlots] = {"rounding",
@@ -69,7 +71,9 @@ constexpr const char* kNames[kSlots] = {"rounding",
                                         "feasibility jump",
                                         "PDHG feasibility pump",
                                         "fix-and-propagate",
-                                        "parity"};
+                                        "parity",
+                                        "propagation dive",
+                                        "local branching"};
 static_assert(kDiveGuided - kDiveFractional + 1 == kDiveRules);
 }  // namespace
 
@@ -83,8 +87,9 @@ Options sub_mip_options(const Options& base, Count node_limit, double time_limit
   sub.set_bool("mip_heuristics", false);
   for (const char* name :
        {"mip_heur_lock_rounding", "mip_heur_repair", "mip_heur_pump", "mip_heur_rins",
-        "mip_heur_rens", "mip_heur_fj", "mip_heur_parity", "mip_heur_dive_coefficient",
-        "mip_heur_dive_vector_length", "mip_heur_dive_guided"}) {
+        "mip_heur_rens", "mip_heur_fj", "mip_heur_parity", "mip_heur_prop_dive",
+        "mip_heur_local_branching", "mip_heur_dive_coefficient", "mip_heur_dive_vector_length",
+        "mip_heur_dive_guided"}) {
     sub.set_string(name, "off");
   }
   sub.set_bool("gpu_pump", false);
@@ -512,6 +517,15 @@ void BranchAndBound::run_feasibility_jump(const std::vector<double>* from) {
 
 void BranchAndBound::run_parity() {
   run_parity_in(kParity);
+}
+
+// The two #841 heuristics at the root, after the LP dives (branch_and_bound_lns.cpp): the
+// propagation dive only while there is no incumbent, local branching either way.
+void BranchAndBound::run_root_lns(const Solution& relaxation) {
+  if (integer_columns_.empty() || (seed_ != nullptr && !seed_->is_root)) return;
+  if (schedule_.prop_dive && !have_incumbent_)
+    propagation_dive(kPropDive, relaxation.col_value);
+  if (schedule_.local_branching) local_branching(kLocalBranching, relaxation.col_value);
 }
 
 void BranchAndBound::report_heuristics() {

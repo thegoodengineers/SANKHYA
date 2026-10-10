@@ -635,6 +635,29 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"auto", "on", "off"}});
+    s.push_back({"mip_heur_prop_dive",
+                 OptionType::String,
+                 std::string("auto"),
+                 "The propagation dive at the root when there is no incumbent (#841; "
+                 "Achterberg 2007, ch. 9; Berthold 2014): fix one integer column at a time "
+                 "to its rounded root-relaxation value, least fractional first, propagate "
+                 "the rows, and on a proved-empty box back up to the latest fix with an "
+                 "untried value - no LP until every integer column is fixed. Bounded by a "
+                 "counted budget of propagation passes. auto follows mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
+    s.push_back({"mip_heur_local_branching",
+                 OptionType::String,
+                 std::string("auto"),
+                 "Local branching at the root (#841; Fischetti and Lodi, Math. Programming "
+                 "98, 2003): the sub-MIP of points within Hamming distance 20 on the binary "
+                 "columns of the incumbent, or of the rounded root relaxation when there is "
+                 "none, at most 1000 nodes, recentred on each improvement up to five times. "
+                 "auto follows mip_heuristics.",
+                 0.0,
+                 0.0,
+                 {"auto", "on", "off"}});
     s.push_back({"mip_fj_work",
                  OptionType::Int,
                  std::int64_t{tol::kFeasibilityJumpWork},

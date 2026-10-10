@@ -91,6 +91,17 @@ inline constexpr int kParityMaxColumns = 2048;
 inline constexpr int kParityCandidates = 16;
 inline constexpr Count kParitySubMipNodes = 1000;
 
+/// The propagation dive (#841): its budget in nonzero visits, spent as whole propagation
+/// passes over the matrix (a pass reads every nonzero up to three times).
+inline constexpr Count kPropagationDiveWork = 200'000'000;
+
+/// Local branching (#841; Fischetti and Lodi 2003): the Hamming radius k on the binary
+/// columns (the paper's range is 10 to 20), the node limit of one neighbourhood's sub-MIP,
+/// and the recentrings after an improvement.
+inline constexpr int kLocalBranchingRadius = 20;
+inline constexpr Count kLocalBranchingNodes = 1000;
+inline constexpr int kLocalBranchingRounds = 5;
+
 /// Reliability branching (#69; Achterberg, Koch & Martin, "Branching rules revisited",
 /// Operations Research Letters 33 (2005), 42-54). A column's pseudocost in a direction is
 /// trusted once it has been observed this many times; until then the column is a
