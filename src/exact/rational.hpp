@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdint>
 #include <exception>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -86,6 +87,9 @@ class Rational {
     int den_exp = 0;
     numerator_.leading_bits(&num, &num_exp);
     denominator_.leading_bits(&den, &den_exp);
+    // Unreachable: the denominator is positive by construction. MSVC 14.51 sees the early
+    // return in leading_bits and reports C4723 (potential divide by 0) without this branch.
+    if (den == 0) return std::numeric_limits<double>::infinity();
     const double ratio = static_cast<double>(num) / static_cast<double>(den);
     return (numerator_.sign() < 0 ? -1.0 : 1.0) * std::ldexp(ratio, num_exp - den_exp);
   }
