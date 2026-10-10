@@ -490,6 +490,11 @@ class BranchAndBound {
   /// parity rows' binaries completed by a sub-MIP. run_parity_in counts against `slot`.
   void run_parity();
   void run_parity_in(std::size_t slot);
+  /// The propagation dive and local branching (#841, branch_and_bound_lns.cpp), at the root
+  /// after the LP dives, each behind its own switch. The dive leaves working_ as it found it.
+  void run_root_lns(const Solution& relaxation);
+  void propagation_dive(std::size_t slot, const std::vector<double>& guide);
+  void local_branching(std::size_t slot, const std::vector<double>& relaxation);
   void report_heuristics();
   // ---- Reduced-cost fixing and restarts (#418), in branch_and_bound_restart.cpp ---------
   /// Keep the root relaxation's reduced costs and basis: the material fixing works from.

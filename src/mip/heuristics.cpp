@@ -654,6 +654,8 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   s.fj = resolve_switch(options, "mip_heur_fj", master);
   s.fj_work = options.get_int("mip_fj_work");
   s.parity = resolve_switch(options, "mip_heur_parity", master);
+  s.prop_dive = resolve_switch(options, "mip_heur_prop_dive", master);
+  s.local_branching = resolve_switch(options, "mip_heur_local_branching", master);
   s.dive[static_cast<std::size_t>(DiveRule::kFractional)] =
       resolve_switch(options, "mip_heur_dive_fractional", master);
   s.dive[static_cast<std::size_t>(DiveRule::kCoefficient)] =
@@ -679,8 +681,9 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
 }
 
 bool HeuristicSchedule::any_optional() const {
-  return lock_rounding || repair || pump || rins || rens || fj || parity || pdhg_pump ||
-         fix_and_propagate || dive[static_cast<std::size_t>(DiveRule::kCoefficient)] ||
+  return lock_rounding || repair || pump || rins || rens || fj || parity || prop_dive ||
+         local_branching || pdhg_pump || fix_and_propagate ||
+         dive[static_cast<std::size_t>(DiveRule::kCoefficient)] ||
          dive[static_cast<std::size_t>(DiveRule::kVectorLength)] ||
          dive[static_cast<std::size_t>(DiveRule::kGuided)];
 }
@@ -694,6 +697,8 @@ std::string HeuristicSchedule::names() const {
   };
   add(fj, "feasibility jump");
   add(parity, "parity");
+  add(prop_dive, "propagation dive");
+  add(local_branching, "local branching");
   add(lock_rounding, "lock rounding");
   add(repair, "repair");
   for (std::size_t r = 0; r < kDiveRules; ++r)
