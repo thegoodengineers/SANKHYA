@@ -52,6 +52,7 @@ enum Slot : std::size_t {
   kFeasibilityJump,
   kPdhgPump,
   kFixAndPropagate,
+  kParity,
   kSlots
 };
 constexpr const char* kNames[kSlots] = {"rounding",
@@ -67,7 +68,8 @@ constexpr const char* kNames[kSlots] = {"rounding",
                                         "local MIP",
                                         "feasibility jump",
                                         "PDHG feasibility pump",
-                                        "fix-and-propagate"};
+                                        "fix-and-propagate",
+                                        "parity"};
 static_assert(kDiveGuided - kDiveFractional + 1 == kDiveRules);
 }  // namespace
 
@@ -81,7 +83,7 @@ Options sub_mip_options(const Options& base, Count node_limit, double time_limit
   sub.set_bool("mip_heuristics", false);
   for (const char* name :
        {"mip_heur_lock_rounding", "mip_heur_repair", "mip_heur_pump", "mip_heur_rins",
-        "mip_heur_rens", "mip_heur_fj", "mip_heur_dive_coefficient",
+        "mip_heur_rens", "mip_heur_fj", "mip_heur_parity", "mip_heur_dive_coefficient",
         "mip_heur_dive_vector_length", "mip_heur_dive_guided"}) {
     sub.set_string(name, "off");
   }
@@ -506,6 +508,10 @@ void BranchAndBound::run_feasibility_jump(const std::vector<double>* from) {
   logger_.verbose("Feasibility jump ({}): {} point(s), {} move(s), {} weight update(s)",
                   from != nullptr ? "from the root relaxation" : "before the root LP",
                   found.points.size(), found.moves, found.weight_updates);
+}
+
+void BranchAndBound::run_parity() {
+  run_parity_in(kParity);
 }
 
 void BranchAndBound::report_heuristics() {

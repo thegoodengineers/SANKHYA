@@ -323,6 +323,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/debug_solution.cpp
   src/mip/branch_and_bound_root_loop.cpp
   src/mip/branch_and_bound_heuristics.cpp
+  src/mip/branch_and_bound_parity.cpp
   src/mip/branch_and_bound_restart.cpp
   src/mip/branch_and_bound_safe.cpp
   src/mip/branch_and_bound_sos.cpp
@@ -347,6 +348,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/branch_and_bound_conflicts.cpp
   src/mip/heuristics.cpp
   src/mip/feasibility_jump.cpp
+  src/mip/parity.cpp
   src/mip/pdhg_heuristics.cpp
   src/mip/branch_and_bound_parallel.cpp
   src/nlp/convex_nlp.cpp

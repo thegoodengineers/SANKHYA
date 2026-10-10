@@ -65,7 +65,8 @@ constexpr const char* kEverySwitch[] = {"mip_heur_lock_rounding",
                                         "mip_heur_dive_fractional",
                                         "mip_heur_dive_coefficient",
                                         "mip_heur_dive_vector_length",
-                                        "mip_heur_dive_guided"};
+                                        "mip_heur_dive_guided",
+                                        "mip_heur_parity"};
 
 constexpr std::size_t rule_index(DiveRule rule) {
   return static_cast<std::size_t>(rule);
@@ -373,6 +374,7 @@ TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   EXPECT_FALSE(s.dive[rule_index(DiveRule::kVectorLength)]);
   EXPECT_FALSE(s.dive[rule_index(DiveRule::kGuided)]);
   EXPECT_FALSE(s.dive_backtrack);
+  EXPECT_FALSE(s.parity);  // #841: off until its A/B
   EXPECT_FALSE(s.any_optional());
   EXPECT_EQ(s.names(), "rounding, fractional diving");
   EXPECT_TRUE(s.seconds_budgets);
@@ -381,7 +383,7 @@ TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   Options all;
   all.set_bool("mip_heuristics", true);
   s = HeuristicSchedule::from(all);
-  EXPECT_TRUE(s.lock_rounding && s.repair && s.pump && s.rins && s.rens);
+  EXPECT_TRUE(s.lock_rounding && s.repair && s.pump && s.rins && s.rens && s.parity);
   for (std::size_t r = 0; r < kDiveRules; ++r) EXPECT_TRUE(s.dive[r]) << r;
   EXPECT_TRUE(s.any_optional());
   all.set_string("mip_heur_rins", "off");

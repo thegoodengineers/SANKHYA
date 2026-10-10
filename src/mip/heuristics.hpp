@@ -141,7 +141,8 @@ struct HeuristicSchedule {
   bool pump = false;
   bool rins = false;
   bool rens = false;
-  bool fj = false;  ///< Feasibility Jump (#506), feasibility_jump.hpp
+  bool fj = false;      ///< Feasibility Jump (#506), feasibility_jump.hpp
+  bool parity = false;  ///< parity rows over GF(2) (#841), parity.hpp
   /// The PDHG heuristics (#509), pdhg_heuristics.hpp: their own Bool switches (gpu_pump,
   /// gpu_fix_and_prop), not mip_heuristics, like gpu_domain_prop; off by default.
   bool pdhg_pump = false;
