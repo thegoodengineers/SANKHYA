@@ -222,7 +222,9 @@ jobs:
 
   windows-cuda:
     name: Windows x64 CUDA archive (compiled without a card)
-    runs-on: windows-latest
+    # windows-2022, not -latest: CUDA 12.6's host_config.h accepts Visual Studio 2022 (MSVC
+    # 14.4x) and refuses the Visual Studio 18 that windows-latest carries (MSVC 14.51).
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
         with:
