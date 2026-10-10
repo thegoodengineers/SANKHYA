@@ -370,7 +370,8 @@ prints the fix for each.
 ## Build
 
 Requires CMake 3.20+, Ninja, and a C++20 compiler: GCC 10+ or Clang 12+ (MinGW-w64 GCC on
-Windows). MSVC does not build the tree yet; see the Windows CUDA note below.
+Windows). MSVC 19.44 (Visual Studio 2022) builds it too, and CI builds and tests it there on
+every pull request.
 
 ```bash
 scripts/configure.sh build Release

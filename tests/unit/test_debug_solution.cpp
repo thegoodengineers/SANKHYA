@@ -254,7 +254,8 @@ Enumerated enumerate(const oracle::GeneratedLp& lp) {
       std::int64_t objective = 0;
       for (std::size_t k = 0; k < value.size(); ++k) objective += lp.c[k] * value[k];
       sub.objective = Rational(objective);
-      sub.x.assign(value.begin(), value.end());
+      sub.x.clear();
+      for (const std::int64_t v : value) sub.x.emplace_back(v);
     } else {
       oracle::GeneratedLp fixed = lp;
       fixed.lower.assign(static_cast<std::size_t>(lp.num_cols), 0);

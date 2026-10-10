@@ -16,12 +16,15 @@
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "util/wide_mul.hpp"
 
 namespace sankhya::exact {
 
@@ -252,7 +255,6 @@ class BigInt {
 
  private:
   using Limbs = std::vector<std::uint32_t>;
-  __extension__ using Wide = __int128;
 
   explicit BigInt(Limbs mag) : mag_(std::move(mag)) { trim(&mag_); }
 
@@ -265,7 +267,7 @@ class BigInt {
   static int trailing_zeros(const Limbs& v) {
     int zeros = 0;
     for (const std::uint32_t w : v) {
-      if (w != 0) return zeros + __builtin_ctz(w);
+      if (w != 0) return zeros + std::countr_zero(w);
       zeros += 32;
     }
     return zeros;
@@ -290,8 +292,13 @@ class BigInt {
     for (std::size_t k = 0; k < 3; ++k) {
       const std::size_t i = limb + k;
       if (i >= v.size()) break;
-      const auto w = static_cast<Wide>(v[i]) << (32 * static_cast<int>(k));
-      r |= static_cast<std::uint64_t>(w >> offset);
+      // Where bit 0 of v[i] lands in the result; bits that land at or past 64 are dropped.
+      const int at = 32 * static_cast<int>(k) - offset;
+      if (at < 0) {
+        r |= static_cast<std::uint64_t>(v[i]) >> -at;
+      } else if (at < 64) {
+        r |= static_cast<std::uint64_t>(v[i]) << at;
+      }
     }
     return r;
   }
@@ -299,16 +306,29 @@ class BigInt {
   static Limbs combine(const Limbs& u, const Limbs& v, std::int64_t a, std::int64_t b) {
     const std::size_t n = std::max(u.size(), v.size());
     Limbs r(n + 1, 0);
-    Wide carry = 0;
+    // The carry is a signed 128-bit two's-complement value held as two words (#748).
+    std::uint64_t lo = 0;
+    std::uint64_t hi = 0;
     for (std::size_t i = 0; i < n; ++i) {
-      carry += static_cast<Wide>(a) * (i < u.size() ? u[i] : 0U) +
-               static_cast<Wide>(b) * (i < v.size() ? v[i] : 0U);
-      r[i] = static_cast<std::uint32_t>(carry & 0xFFFFFFFF);
-      carry >>= 32;  // arithmetic: the floor, matching the two's-complement low word above
+      add_signed_product(a, i < u.size() ? u[i] : 0U, &lo, &hi);
+      add_signed_product(b, i < v.size() ? v[i] : 0U, &lo, &hi);
+      r[i] = static_cast<std::uint32_t>(lo);
+      // Arithmetic shift by 32: the floor, matching the two's-complement low word above.
+      lo = (lo >> 32) | (hi << 32);
+      hi = static_cast<std::uint64_t>(static_cast<std::int64_t>(hi) >> 32);
     }
-    r[n] = static_cast<std::uint32_t>(carry & 0xFFFFFFFF);
+    r[n] = static_cast<std::uint32_t>(lo);
     trim(&r);
     return r;
+  }
+
+  /// (hi, lo) += a * w, modulo 2^128. Read as unsigned, a negative a is a + 2^64, so its
+  /// product is too large by w 2^64, which comes off the high word.
+  static void add_signed_product(std::int64_t a, std::uint32_t w, std::uint64_t* lo,
+                                 std::uint64_t* hi) {
+    U128 p = mul_64x64(static_cast<std::uint64_t>(a), w);
+    if (a < 0) p.hi -= w;
+    *hi += p.hi + add_carry(*lo, p.lo, 0, lo);
   }
 
   static BigInt make(Limbs mag, bool negative) {

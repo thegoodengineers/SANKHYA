@@ -70,7 +70,10 @@ std::vector<std::vector<double>> integer_points(const Model& m) {
       const auto u = static_cast<std::size_t>(i);
       ok = activity >= m.row_lower[u] - 1e-9 && activity <= m.row_upper[u] + 1e-9;
     }
-    if (ok) points.emplace_back(x.begin(), x.end());
+    if (ok) {
+      std::vector<double>& p = points.emplace_back();
+      for (const std::int64_t v : x) p.push_back(static_cast<double>(v));
+    }
     std::size_t k = 0;
     while (k < n && x[k] == hi[k]) {
       x[k] = lo[k];

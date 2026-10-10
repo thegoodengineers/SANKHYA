@@ -11,10 +11,17 @@
 // wrapping. That distinction matters: a wrapped intermediate would silently turn the oracle
 // into a random number generator, and the fuzz harness would then "confirm" whatever the
 // float simplex did. Overflow is counted and reported by the harness instead.
+//
+// A compiler without __int128 (MSVC) gets the two-word Int128 of int128.hpp, which has the
+// same values and the same overflow reports (#748).
 #pragma once
 
 #include <cstdint>
 #include <exception>
+
+#if !defined(__SIZEOF_INT128__)
+#include "int128.hpp"
+#endif
 
 namespace sankhya::oracle {
 
@@ -27,7 +34,11 @@ struct RationalOverflow : std::exception {
 
 class Rational {
  public:
+#if defined(__SIZEOF_INT128__)
   using Int = __int128;
+#else
+  using Int = Int128;
+#endif
 
   Rational() = default;
   Rational(Int numerator) : numerator_(numerator), denominator_(1) {}  // NOLINT: implicit
@@ -107,13 +118,21 @@ class Rational {
 
   static Int add(Int a, Int b) {
     Int result = 0;
+#if defined(__SIZEOF_INT128__)
     if (__builtin_add_overflow(a, b, &result)) throw RationalOverflow();
+#else
+    if (Int128::add_overflow(a, b, &result)) throw RationalOverflow();
+#endif
     return result;
   }
 
   static Int multiply(Int a, Int b) {
     Int result = 0;
+#if defined(__SIZEOF_INT128__)
     if (__builtin_mul_overflow(a, b, &result)) throw RationalOverflow();
+#else
+    if (Int128::mul_overflow(a, b, &result)) throw RationalOverflow();
+#endif
     return result;
   }
 
