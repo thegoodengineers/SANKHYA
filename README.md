@@ -693,4 +693,4 @@ apply to it.
 
 ## Licence
 
-Apache-2.0.
+Apache-2.0. The full text is in [LICENSE](LICENSE); every source file carries an `SPDX-License-Identifier: Apache-2.0` header.
