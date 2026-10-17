@@ -1361,12 +1361,33 @@ Every arm that did not finish, and the numbers that say why. `attribution` is re
 
 A multi-period planning model is independent periods joined by what each carries to the next. Where the joining part is a few LINKING COLUMNS - here the crude and product stocks - Benders decomposition (`decomposition=benders`, issue #525) fixes them and solves each group of periods as a small LP of its own, the groups in parallel, with a master LP over the stocks collecting a cut from each. The refinery ladder of #517 (`bench/case_studies/refinery/generator.py`) is that model at three sizes, and its exact analytic optimum, verified in rational arithmetic by the generator, is the reference.
 
-**Not yet run at this commit.** The run is made from `main` after the decomposition merges, so that its stamp is a commit on `main`; the command is:
+Source CSV: `bench/results/decomposition-b54f4b53.csv`  
+Commit `b54f4b53` · machine `Linux-x86_64` · 300.0 s per solve
+
+| instance | rows x cols | mode | method that ran | status | objective | vs exact optimum | wall (s) | x monolithic | rounds | same objective | verified |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|:--:|:--:|
+| `refinery-small` | 88 x 84 | monolithic | simplex-dual | optimal | -1308.89504 | 1.7e-16 | 0.83 | 1.00 | 51 | yes | yes |
+| `refinery-small` | 88 x 84 | benders-2 | simplex-dual | optimal | -1308.89504 | 1.7e-16 | 0.11 | 7.81 | 51 | yes | yes |
+| `refinery-small` | 88 x 84 | benders-4 | simplex-dual | optimal | -1308.89504 | 1.7e-16 | 0.03 | 26.03 | 51 | yes | yes |
+| `refinery-small` | 88 x 84 | benders-8 | benders | optimal | -1308.89504 | 3.5e-16 | 0.07 | 12.41 | 6 | yes | yes |
+| `refinery-medium` | 516 x 576 | monolithic | simplex-dual+primal | optimal | -14776.99668 | 1.2e-16 | 0.48 | 1.00 | 513 | yes | yes |
+| `refinery-medium` | 516 x 576 | benders-2 | benders | optimal | -14776.99668 | 3.7e-16 | 4.88 | 0.10 | 18 | yes | yes |
+| `refinery-medium` | 516 x 576 | benders-4 | benders | optimal | -14776.99668 | 3.7e-16 | 95.81 | 0.01 | 188 | yes | yes |
+| `refinery-medium` | 516 x 576 | benders-8 | simplex-dual+primal | optimal | -14776.99668 | 1.2e-16 | 0.16 | 3.06 | 513 | yes | yes |
+| `refinery-large` | 3536 x 4212 | monolithic | simplex-dual+primal | optimal | -116915.8528 | 3.7e-16 | 4.52 | 1.00 | 4967 | yes | yes |
+| `refinery-large` | 3536 x 4212 | benders-2 | simplex-dual+primal | optimal | -116915.8528 | 3.7e-16 | 157.19 | 0.03 | 4967 | yes | yes |
+| `refinery-large` | 3536 x 4212 | benders-4 | simplex-dual+primal | optimal | -116915.8528 | 3.7e-16 | 199.84 | 0.02 | 4967 | yes | yes |
+| `refinery-large` | 3536 x 4212 | benders-8 | simplex-dual+primal | optimal | -116915.8528 | 3.7e-16 | 176.22 | 0.03 | 4967 | yes | yes |
+
+**3 of 9** decomposed solves ran Benders; **1** of those were faster than the monolithic solve. 0 disagreed with the monolithic objective; 0 answers were rejected by the independent verifier (`tools/verify_solution.py`).
+
+**Fell back to the monolithic engines**, named rather than dropped: `refinery-small` (benders-2: simplex-dual), `refinery-small` (benders-4: simplex-dual), `refinery-medium` (benders-8: simplex-dual+primal), `refinery-large` (benders-2: simplex-dual+primal), `refinery-large` (benders-4: simplex-dual+primal), `refinery-large` (benders-8: simplex-dual+primal).
+
+Reproduce:
 
 ```
 python bench/runners/decomposition.py --blocks 2 4 8
 ```
-
 
 ---
 
