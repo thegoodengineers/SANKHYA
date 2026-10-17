@@ -2856,6 +2856,12 @@ def main() -> int:
             **{leg: newest_option_run(f"miplib-841-{s}-{leg}-*.csv", f"{option}=on")
                for leg, option in miplib_ab_doc.HEURISTICS_841}}
         for s in ("six-60s", "proof-300s", "tier1-n2000")}
+    # #414: every optional heuristic alone on the node-limited seed harness; the base leg is
+    # read by its node_limit like the #841 one, each heuristic leg by its own switch.
+    heuristics_414 = {
+        "base": newest_option_run("miplib-414-n2000-base-seeds*-*.csv", "node_limit=2000"),
+        **{leg: newest_option_run(f"miplib-414-n2000-{leg}-seeds*-*.csv", f"{option}=on")
+           for leg, option in miplib_ab_doc.HEURISTICS_414}}
     nodepricing_ab = (newest_option_run("nodepricing-ab-miplib-seeds*-inherit-*.csv",
                                         "mip_node_pricing=inherit"),
                       newest_option_run("nodepricing-ab-miplib-seeds*-devex-*.csv",
@@ -3296,6 +3302,16 @@ optimum, and opt1217, rlp1 and noswot hold the published optimum without a proof
 heuristics, each off by default and read here against the same binary's defaults.
 
 {miplib_ab_doc.heuristics_841_section(heuristics_841)}
+
+#### A/B: every optional heuristic alone on the node-limited seed harness (#414)
+
+Issue #414: each primal heuristic behind its own `mip_heur_*` switch, measured alone against
+the defaults (Feasibility Jump and parity on) at `node_limit=2000` over three seeds, so a
+shared machine cannot move the counts. A switch is turned on by default when its leg gains a
+matched or a proved seed and loses neither; the time columns are stated for completeness
+only.
+
+{miplib_ab_doc.heuristics_414_section(heuristics_414)}
 
 #### A/B: Devex for the node LPs on the seed harness (#792)
 

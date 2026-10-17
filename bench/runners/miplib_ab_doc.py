@@ -268,6 +268,78 @@ def heuristics_841_section(legs: dict[str, dict[str, Path | None]]) -> str:
     return "\n".join(out) if out else "Not yet run on an idle machine at a commit on `main`."
 
 
+# #414: every heuristic behind its own mip_heur_* switch that is not yet on by default, each
+# alone against the defaults (which carry Feasibility Jump and parity since #1022 and #1024).
+HEURISTICS_414 = (("lock-rounding", "mip_heur_lock_rounding"), ("repair", "mip_heur_repair"),
+                  ("pump", "mip_heur_pump"), ("rins", "mip_heur_rins"),
+                  ("rens", "mip_heur_rens"),
+                  ("dive-coefficient", "mip_heur_dive_coefficient"),
+                  ("dive-vector-length", "mip_heur_dive_vector_length"),
+                  ("dive-guided", "mip_heur_dive_guided"),
+                  ("prop-dive", "mip_heur_prop_dive"),
+                  ("local-branching", "mip_heur_local_branching"))
+
+
+def heuristics_414_section(legs: dict[str, Path | None]) -> str:
+    """`legs` maps `base` and each HEURISTICS_414 name to its per-seed CSV on the node-limited
+    harness (#414). One row per leg against base: matched and proved seeds (what a loaded
+    machine cannot move), the primal side (first feasible, primal integral), the node count
+    over the runs that end with the same status, and the instances whose matched or proved
+    seed count moved. A leg earns a default when matched or proved goes up and neither down."""
+    base_path = legs.get("base")
+    if base_path is None:
+        return "Not yet run at a commit on `main`."
+    base = _leg(base_path)
+    base_rows = {(r["instance"], r.get("seed") or "0"): r for r in _read(base_path)}
+    commit = _read(base_path)[0]["git_commit"]
+    t0 = base["total"]
+    out = [
+        f"Source CSVs: `bench/results/{base_path.name}` (the defaults) and one "
+        f"`bench/results/miplib-414-n2000-<leg>-seeds{base['seeds']}-{commit}.csv` per leg, "
+        f"commit `{commit}`, {base['seeds']} seeds each (the published file and row and "
+        f"column permutations of it), `node_limit=2000`, one thread. The time columns say "
+        f"nothing on a shared machine; matched, proved and the node ratio are the reading.",
+        "",
+        "| leg | option | matched | proved | first feasible found | sgm first feasible (s, "
+        "shift 1) | mean primal integral (s) | nodes | instances moved |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---|",
+        f"| base | - | {t0['matched']} | {t0['proved']} | {base['found']} | "
+        f"{_fmt(base['sgm_first'], '.3f')} | {_fmt(base['mean_integral'])} | 1.000x | - |",
+    ]
+    earners, missing = [], []
+    for leg_name, option in HEURISTICS_414:
+        path = legs.get(leg_name)
+        if path is None:
+            missing.append(leg_name)
+            continue
+        leg = _leg(path)
+        t = leg["total"]
+        rows = {(r["instance"], r.get("seed") or "0"): r for r in _read(path)}
+        same = [k for k in rows if k in base_rows and rows[k]["status"] == base_rows[k]["status"]]
+        nodes = lambda r: int(_float(r.get("nodes")) or 0)  # noqa: E731
+        n0 = sum(nodes(base_rows[k]) for k in same)
+        ratio = (sum(nodes(rows[k]) for k in same) / n0) if n0 else None
+        a, b = base["summary"], leg["summary"]
+        moved = []
+        for n in sorted(set(a) & set(b)):
+            if (a[n]["seeds_matched"], a[n]["seeds_proved"]) != \
+                    (b[n]["seeds_matched"], b[n]["seeds_proved"]):
+                moved.append(f"`{n}` {a[n]['seeds_matched']}/{a[n]['seeds_proved']}->"
+                             f"{b[n]['seeds_matched']}/{b[n]['seeds_proved']}")
+        out.append(f"| {leg_name} | `{option}=on` | {t['matched']} | {t['proved']} | "
+                   f"{leg['found']} | {_fmt(leg['sgm_first'], '.3f')} | "
+                   f"{_fmt(leg['mean_integral'])} | {_fmt(ratio, '.3f')}x | "
+                   f"{'; '.join(moved) or 'none'} |")
+        if t["matched"] >= t0["matched"] and t["proved"] >= t0["proved"] and \
+                (t["matched"] > t0["matched"] or t["proved"] > t0["proved"]):
+            earners.append(leg_name)
+    out += ["", "Instances moved are matched/proved seed counts, base -> leg. Legs whose "
+            "matched or proved count goes up with neither going down: "
+            + (", ".join(earners) if earners else "none") + "."
+            + (f" Not run: {', '.join(missing)}." if missing else ""), ""]
+    return "\n".join(out)
+
+
 def tier2_section(path: Path | None) -> str:
     """The 60-instance tier (#504) over its seeds, every instance listed."""
     if path is None:
