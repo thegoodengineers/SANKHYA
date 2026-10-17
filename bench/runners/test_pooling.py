@@ -200,6 +200,13 @@ def test_classify() -> None:
           "optimum", "a bound above the known optimum is flagged before anything else")
     check(runner.classify({"status": "optimal", "objective": -400.0, "verifier_rc": 1}, ref)
           == "rejected by the verifier", "the verifier has the last word")
+    certified = {**base, "status": "optimal", "objective": -400.0, "dual_bound": -400.0}
+    check(runner.classify({**certified, "certificate": "verified"}, ref) == "",
+          "an optimum whose certificate the checker accepts passes")
+    check(runner.classify({**certified, "certificate": "rejected"}, ref)
+          == "certificate rejected", "under --certificate the checker must accept the claim")
+    check(runner.classify({**certified, "certificate": "not written"}, ref)
+          == "certificate not written", "a missing certificate is not a pass")
     check(abs(runner.tolerance(-3500.0) - 0.35) < 1e-15 and runner.tolerance(0.0) == 1e-6,
           "pass tolerance is 1e-4 relative with a 1e-6 floor")
 
@@ -236,6 +243,8 @@ def test_doc_section() -> None:
                              for key in columns})
         check("modified tree" in doc.section(dirty), "a -dirty CSV is refused")
     check("Not yet run" in doc.section(None), "no CSV says so and how to reproduce")
+    check("--certificate" in doc.certificate_section(None),
+          "no certified CSV says so and how to reproduce")
 
 
 def main() -> int:

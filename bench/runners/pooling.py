@@ -28,6 +28,13 @@ Usage:
     python bench/runners/pooling.py --binary build/sankhya --time-limit 60
     python bench/runners/pooling.py --instances haverly1 foulds2 --formulations pq
     python bench/runners/pooling.py --solver-option node_limit=1000
+    python bench/runners/pooling.py --certificate
+
+--certificate (#514) has every run write its global bound certificate (write_certificate) and
+checks it with tools/verify_global_certificate.py, which never links the solver. A certified
+search uses no bound tightening, so it is a different search from the default run: its CSV is
+pooling-certificate-<sha>.csv and does not replace the tier's run. A run passes under it only
+when the checker also accepts the claim (exit 0).
 """
 from __future__ import annotations
 
@@ -51,6 +58,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data" / "pooling"
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
+CERTIFICATE_CHECKER = REPO_ROOT / "tools" / "verify_global_certificate.py"
+# tools/verify_global_certificate.py's exit status, as the CSV records it.
+CERTIFICATE_VERDICTS = {0: "verified", 1: "rejected", 2: "not shown"}
 FORMULATIONS = ("p", "q", "pq")
 
 # The MIP gap convention of include/sankhya/tolerances.hpp: relative 1e-4 with an absolute
@@ -83,6 +93,10 @@ CSV_COLUMNS = [
     "bound_valid",
     "independently_verified",
     "verifier_message",
+    # --certificate only: the checker's verdict (verified / rejected / not shown / not
+    # written) and its last line; empty without --certificate.
+    "certificate",
+    "certificate_message",
     "passed",
     "failure_reason",
     "wall_seconds",
@@ -149,6 +163,8 @@ def classify(flat: dict, reference: float) -> str:
         return "not verified"
     if flat["verifier_rc"] != 0:
         return "rejected by the verifier"
+    if "certificate" in flat and flat["certificate"] != "verified":
+        return f"certificate {flat['certificate']}"
     return ""
 
 
@@ -177,14 +193,16 @@ RUNNER_OPTIONS = ["nonconvex=global"]
 
 
 def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
-            solver_options: list[str]) -> dict:
+            solver_options: list[str], certify: bool = False) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         stats_path = Path(tmp) / "stats.json"
         sol_path = Path(tmp) / "solution.sol"
         command = [str(binary), "solve", str(mps), "--stats", str(stats_path), "--write-sol",
                    str(sol_path), "--time-limit", str(time_limit), "--option",
                    "log_to_console=false"]
-        for option in RUNNER_OPTIONS + solver_options:
+        cert_path = Path(tmp) / "certificate.json"
+        certificate = [f"write_certificate={cert_path}"] if certify else []
+        for option in RUNNER_OPTIONS + certificate + solver_options:
             command += ["--option", option]
         started = time.perf_counter()
         completed = subprocess.run(command, capture_output=True, text=True)
@@ -213,7 +231,20 @@ def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
                                    capture_output=True, text=True)
             flat["verifier_rc"] = check.returncode
             flat["verifier_text"] = check.stdout + check.stderr
+        if certify:
+            flat["certificate"], flat["certificate_message"] = check_certificate(mps, cert_path)
         return flat
+
+
+def check_certificate(mps: Path, cert_path: Path) -> tuple[str, str]:
+    """The checker's verdict on the certificate the run wrote, and its last line."""
+    if not cert_path.exists():
+        return "not written", ""
+    check = subprocess.run([sys.executable, str(CERTIFICATE_CHECKER), str(mps), str(cert_path)],
+                           capture_output=True, text=True)
+    lines = [line.strip() for line in (check.stdout + check.stderr).splitlines() if line.strip()]
+    return (CERTIFICATE_VERDICTS.get(check.returncode, f"exit {check.returncode}"),
+            lines[-1][:300] if lines else "")
 
 
 def csv_row(name: str, formulation: str, mps: Path, entry: dict, flat: dict,
@@ -242,6 +273,8 @@ def csv_row(name: str, formulation: str, mps: Path, entry: dict, flat: dict,
         "bound_valid": "" if bound is None else int(bound <= reference + tolerance(reference)),
         "independently_verified": verified,
         "verifier_message": verifier_failures(flat.get("verifier_text", "")),
+        "certificate": flat.get("certificate", ""),
+        "certificate_message": flat.get("certificate_message", ""),
         "passed": int(reason == ""), "failure_reason": reason,
         "wall_seconds": round(flat.get("wall_seconds", 0.0), 6),
         "solver_seconds": flat.get("solver_seconds", ""),
@@ -261,6 +294,8 @@ def main() -> int:
     parser.add_argument("--no-verify", action="store_true")
     parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE",
                         help="passed as --option KEY=VALUE; repeatable, recorded in the CSV")
+    parser.add_argument("--certificate", action="store_true",
+                        help="write and check each run's global bound certificate (#514)")
     parser.add_argument("--out", type=Path, default=None,
                         help="destination CSV; relative paths resolve against the repo root")
     args = parser.parse_args()
@@ -299,7 +334,7 @@ def main() -> int:
                 print(f"{name:<10}{formulation:<5}MISSING (run pooling_models.py)")
                 continue
             flat = run_one(binary, mps, args.time_limit, not args.no_verify,
-                           args.solver_option)
+                           args.solver_option, args.certificate)
             row = csv_row(name, formulation, mps, entry, flat, reference, context)
             rows.append(row)
             ours = row["our_objective"]
@@ -307,7 +342,8 @@ def main() -> int:
                   f"{(f'{float(ours):.8g}' if ours else '-'):>16}{reference:>16.10g}"
                   f"{(format(float(row['root_bound']), '.6g') if row['root_bound'] else '-'):>14}"
                   f"{row['wall_seconds']:>8.2f}s  "
-                  f"{'PASS' if row['passed'] else 'FAIL: ' + row['failure_reason']}")
+                  f"{'PASS' if row['passed'] else 'FAIL: ' + row['failure_reason']}"
+                  + (f"  [certificate {row['certificate']}]" if args.certificate else ""))
             if not row["matches_manifest"]:
                 print(f"{'':15}the file on disk is not the one reference.json recorded")
 
@@ -324,7 +360,8 @@ def main() -> int:
         print(f"  {reason} ({len(failed)}): {', '.join(failed)}")
 
     whole = set(names) == set(instances) and set(args.formulations) == set(FORMULATIONS)
-    out_path = args.out or (RESULTS_DIR / f"pooling-{'' if whole else 'partial-'}{commit}.csv")
+    kind = ("certificate-" if args.certificate else "") + ("" if whole else "partial-")
+    out_path = args.out or (RESULTS_DIR / f"pooling-{kind}{commit}.csv")
     out_path = (REPO_ROOT / out_path).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", newline="", encoding="utf-8") as handle:

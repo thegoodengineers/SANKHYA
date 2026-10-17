@@ -2240,6 +2240,20 @@ Every run that did not pass, named:
 - **gap not closed** (4): `bental5_q`, `foulds3_q`, `foulds4_q`, `foulds5_q`.
 - **gap not closed, incumbent worse than the optimum** (3): `adhya3_p`, `adhya3_q`, `adhya4_q`.
 
+#### The global bound certificate, checked (#514)
+
+Each run writes the tree of its search and the multipliers of every node's relaxation
+(`write_certificate`); `tools/verify_global_certificate.py`, which never links the solver,
+rebuilds every relaxation from the original model in exact arithmetic and accepts an optimum
+only when the bound it proves closes the gap. A certified search uses no bound tightening, so
+it is a different search from the run above.
+
+Not yet run on `main`. Reproduce with:
+
+```
+python bench/runners/pooling.py --certificate --time-limit 60
+```
+
 ---
 
 ## 2d. QPLIB, the convex continuous QPs

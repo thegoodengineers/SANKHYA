@@ -2923,6 +2923,8 @@ def main() -> int:
     # Only a run over all 39 (instance, formulation) pairs is pooling-<sha>.csv; a subset
     # is pooling-partial-<sha>.csv and the prefix filter keeps it out (#516).
     pooling_csv = newest("pooling-*.csv", prefix="pooling")
+    # The certified run of #514 (pooling.py --certificate), under its own prefix.
+    pooling_certificate_csv = newest("pooling-certificate-*.csv", prefix="pooling-certificate")
     # QPLIB (#492): the full selection is qplib-<sha>.csv; without one, the small tier's
     # qplib-small-<sha>.csv. Any other subset is qplib-partial-<sha>.csv and never read.
     qplib_csv = (newest("qplib-*.csv", prefix="qplib")
@@ -3338,6 +3340,15 @@ the published optimum with a solution the independent verifier accepts; a model 
 refuses is listed as refused, not dropped (`bench/runners/pooling.py`).
 
 {pooling_doc.section(pooling_csv)}
+#### The global bound certificate, checked (#514)
+
+Each run writes the tree of its search and the multipliers of every node's relaxation
+(`write_certificate`); `tools/verify_global_certificate.py`, which never links the solver,
+rebuilds every relaxation from the original model in exact arithmetic and accepts an optimum
+only when the bound it proves closes the gap. A certified search uses no bound tightening, so
+it is a different search from the run above.
+
+{pooling_doc.certificate_section(pooling_certificate_csv)}
 ---
 
 ## 2d. QPLIB, the convex continuous QPs

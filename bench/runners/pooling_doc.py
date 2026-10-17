@@ -113,3 +113,52 @@ def section(path: Path | None) -> str:
         out.append("Every run passed.")
     out.append("")
     return "\n".join(out)
+
+
+def certificate_section(path: Path | None) -> str:
+    """The certified run of #514 (`pooling.py --certificate`): per run, the status and what
+    tools/verify_global_certificate.py, which never links the solver, made of the certificate.
+    A certified search uses no bound tightening, so it is reported beside the run above, not
+    in place of it."""
+    reproduce = ["```", "python bench/runners/pooling.py --certificate --time-limit 60", "```"]
+    if path is None:
+        return "\n".join(["Not yet run on `main`. Reproduce with:", "", *reproduce, ""])
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return f"`{path.name}` holds no rows.\n"
+    commit = rows[0].get("git_commit", "unknown")
+    if "-dirty" in commit:
+        return (f"`{path.name}` is stamped `{commit}`: produced from a modified tree. "
+                "Re-run on a clean checkout of a main commit.\n")
+    certified = [r for r in rows if r.get("passed") == "1"]
+    statuses: dict[str, int] = {}
+    verdicts: dict[str, int] = {}
+    for row in rows:
+        statuses[row.get("status", "")] = statuses.get(row.get("status", ""), 0) + 1
+        verdicts[row.get("certificate") or "-"] = verdicts.get(row.get("certificate") or "-",
+                                                               0) + 1
+    limit = _float(rows[0], "time_limit")
+    out = [
+        f"Source CSV: `bench/results/{path.name}`  ",
+        f"Commit `{commit}` · machine `{rows[0].get('machine', 'unknown')}` · time limit "
+        f"{'-' if limit is None else f'{limit:g}'} s per run · `nonconvex=global` and "
+        "`write_certificate` (set by the runner)",
+        "",
+        f"**{len(certified)} of {len(rows)} runs certified**: `optimal` at the published "
+        "global optimum, accepted by `tools/verify_solution.py`, and the certificate accepted "
+        "by `tools/verify_global_certificate.py` in exact arithmetic. Status: "
+        + ", ".join(f"{k} {v}" for k, v in sorted(statuses.items())) + ". Checker verdict: "
+        + ", ".join(f"{k} {v}" for k, v in sorted(verdicts.items())) + ".",
+        "",
+        "| instance | form | status | our objective | proven bound | nodes | time (s) | "
+        "certificate |",
+        "|---|---|---|---:|---:|---:|---:|---|",
+    ]
+    for row in sorted(rows, key=lambda r: (r["instance"], r["formulation"])):
+        out.append(f"| `{row['instance']}` | {row['formulation'].upper()} | "
+                   f"{row.get('status', '')} | {_num(row, 'our_objective')} | "
+                   f"{_num(row, 'dual_bound')} | {row.get('nodes', '') or '-'} | "
+                   f"{_num(row, 'wall_seconds', '.2f')} | {row.get('certificate') or '-'} |")
+    out.append("")
+    return "\n".join(out)
