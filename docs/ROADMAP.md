@@ -8,7 +8,7 @@ CSV in `bench/results/` where a number was promised). An unticked line is open, 
 reason is in the table at the end. This file is the record; the issue tracker is the
 authority if they differ.
 
-**Where it stands:** of the 68 planned items, 60 are closed and 8 open. Of the 18 items
+**Where it stands:** of the 77 planned items, 69 are closed and 8 open. Of the 18 items
 that were already open when the plan was written, 15 are closed and 3 open. Every P0 item
 but #470 is closed.
 
