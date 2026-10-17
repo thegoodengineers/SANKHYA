@@ -696,8 +696,8 @@ evidence and its acceptance criteria. Three kinds: things to **create** that do 
 things to **improve** that exist and are measured short, and work to **finish** that is
 started. Nothing here is a claim; every row points at where the claim would have to be
 earned. A row whose issue is closed says *Landed* and stays as the record of what moved;
-the open successors are the finale roadmap, #540, and each row names the ones that
-apply to it.
+the open successors are the finale roadmap, #540 (its state against `main` in
+[`docs/ROADMAP.md`](docs/ROADMAP.md)), and each row names the ones that apply to it.
 
 ### Create
 
