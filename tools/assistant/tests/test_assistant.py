@@ -116,6 +116,34 @@ Subject To
 End
 ```"""
 
+INFEASIBLE_RESPONSE = """```lp
+Maximize
+ obj: x
+Subject To
+ cap: x <= 1
+Bounds
+ x >= 2
+End
+```
+```mps
+NAME          INFEAS
+OBJSENSE
+ MAXIMIZE
+ROWS
+ N  obj
+ L  cap
+COLUMNS
+    x         obj       1.0
+    x         cap       1.0
+RHS
+    RHS1      cap       1.0
+BOUNDS
+ LO BND1      x         2.0
+ENDATA
+```
+"""
+
+
 class TestAssistant(unittest.TestCase):
     def setUp(self):
         self.held, sys.stdout = sys.stdout, StringIO()
@@ -217,6 +245,45 @@ class TestAssistant(unittest.TestCase):
         result = assistant.ask_assistant("Test")
         self.assertIsNone(result)
         self.assertEqual(mock_correct.call_count, 3)
+
+    @patch.dict(os.environ, {"SANKHYA_ASSISTANT_URL": "http://stub"}, clear=True)
+    @patch('assistant.generate_lp')
+    @patch('builtins.input')
+    def test_binding_constraints_and_shadow_prices_by_name(self, mock_input, mock_generate):
+        mock_input.return_value = ""
+        mock_generate.return_value = VALID_RESPONSE
+        result = assistant.ask_assistant("Test")
+        self.assertEqual(result.status, "optimal")
+        out = sys.stdout.getvalue()
+        self.assertIn("Binding constraints and their shadow prices", out)
+        self.assertIn("c1: 1", out)
+        self.assertIn("c2: 1", out)
+        self.assertIn("Independent verification passed", out)
+
+    @patch.dict(os.environ, {"SANKHYA_ASSISTANT_URL": "http://stub"}, clear=True)
+    @patch('assistant.generate_lp')
+    @patch('builtins.input')
+    def test_infeasible_request_names_the_iis(self, mock_input, mock_generate):
+        mock_input.return_value = ""
+        mock_generate.return_value = INFEASIBLE_RESPONSE
+        result = assistant.ask_assistant("Test")
+        self.assertEqual(result.status, "infeasible")
+        out = sys.stdout.getvalue()
+        self.assertIn("cannot all hold at once", out)
+        self.assertIn("constraints: cap", out)
+        self.assertIn("bounds on: x", out)
+
+    @patch.dict(os.environ, {"SANKHYA_ASSISTANT_URL": "http://stub"}, clear=True)
+    @patch('assistant.generate_lp')
+    @patch('builtins.input')
+    def test_no_temporary_file_is_left_behind(self, mock_input, mock_generate):
+        mock_input.return_value = ""
+        mock_generate.return_value = VALID_RESPONSE
+        before = set(os.listdir(tempfile.gettempdir()))
+        assistant.ask_assistant("Test")
+        left = [n for n in set(os.listdir(tempfile.gettempdir())) - before
+                if n.startswith("sankhya-assistant-")]
+        self.assertEqual(left, [])
 
 if __name__ == '__main__':
     unittest.main()

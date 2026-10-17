@@ -263,6 +263,40 @@ def compare_canonical(lp_canon, mps_canon, tol=1e-5):
 
     return True, "Equivalent"
 
+def report(result: sankhya.Result, v_model) -> None:
+    """The answer in the planner's words (#799): the binding constraints with their shadow
+    prices by name, or, when the request is infeasible, the IIS by name."""
+    row_names = list(getattr(v_model, 'row_names', []))
+    col_names = list(getattr(v_model, 'col_names', []))
+    row = lambda i: row_names[i] if i < len(row_names) else f"R{i}"
+    col = lambda j: col_names[j] if j < len(col_names) else f"C{j}"
+    print(f"Status: {result.status}")
+    if result.status in ("optimal", "feasible") and result.x:
+        print(f"Objective: {result.objective}")
+        print("Values:", result.x)
+        duals = result.row_duals
+        binding = [(row(i), d) for i, d in enumerate(duals) if abs(d) > 1e-9]
+        if binding:
+            print("Binding constraints and their shadow prices (the objective's change per "
+                  "unit of right-hand side):")
+            for name, d in binding:
+                print(f"  {name}: {d:.6g}")
+        elif duals:
+            print("No constraint is binding: every shadow price is zero.")
+    elif result.status == "infeasible":
+        rows = [row(i) for i in result.iis_rows]
+        bounds = sorted({col(j) for j in result.iis_col_lower} | {col(j) for j in result.iis_col_upper})
+        if rows or bounds:
+            print("The request cannot be met. These cannot all hold at once:")
+            if rows:
+                print("  constraints: " + ", ".join(rows))
+            if bounds:
+                print("  bounds on: " + ", ".join(bounds))
+            print("Relax one of them and ask again.")
+        else:
+            print("The request cannot be met, and no small set of constraints explains it.")
+
+
 def ask_assistant(prompt: str, data: str = None) -> sankhya.Result | None:
     endpoint = os.environ.get("SANKHYA_ASSISTANT_URL")
     if not endpoint:
@@ -275,142 +309,105 @@ def ask_assistant(prompt: str, data: str = None) -> sankhya.Result | None:
         print("Failed to extract LP and MPS blocks from response.")
         return None
 
-    model = None
-    temp_lp_path = None
-
     tools_dir = str(Path(__file__).resolve().parents[1])
     if tools_dir not in sys.path:
         sys.path.insert(0, tools_dir)
+    import verify_solution as vs
 
-    for i in range(4): # 1 initial + 3 corrections
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.lp', delete=False) as f:
-            f.write(lp_content)
-            temp_lp_path = f.name
+    # Every file this tool writes lives here and goes with it, whichever way out is taken.
+    with tempfile.TemporaryDirectory(prefix="sankhya-assistant-") as tmp:
+        lp_path = Path(tmp) / "model.lp"
+        mps_path = Path(tmp) / "model.mps"
+        sol_path = Path(tmp) / "model.sol"
 
-        error_msg = None
-        try:
-            model = sankhya.Model.read(temp_lp_path)
-
-            temp_mps_path = temp_lp_path + ".mps"
-            with open(temp_mps_path, 'w') as f:
-                f.write(mps_content)
-
+        model = None
+        v_model = None
+        for i in range(4):  # 1 initial + 3 corrections
+            lp_path.write_text(lp_content)
+            mps_path.write_text(mps_content)
+            error_msg = None
             try:
-                import verify_solution as vs
-                v_model = vs.parse_mps(Path(temp_mps_path))
+                model = sankhya.Model.read(str(lp_path))
+                try:
+                    v_model = vs.parse_mps(mps_path)
+                    print("Validating LP and MPS equivalence...")
+                    is_eq, eq_msg = compare_canonical(parse_canonical_lp(lp_content),
+                                                      build_canonical_mps(v_model))
+                    if not is_eq:
+                        error_msg = f"LP and MPS models are not equivalent: {eq_msg}"
+                except Exception as e:
+                    error_msg = f"Failed to parse MPS or build canonical representation: {e}"
+                if not error_msg:
+                    break  # Success!
+            except sankhya.SankhyaError as e:
+                error_msg = str(e)
 
-                print("Validating LP and MPS equivalence...")
-                lp_canon = parse_canonical_lp(lp_content)
-                mps_canon = build_canonical_mps(v_model)
-                is_eq, eq_msg = compare_canonical(lp_canon, mps_canon)
+            model = None
+            if i == 3:  # Already did 3 corrections
+                print(f"Failed to parse model or establish equivalence after 3 correction rounds. Last error: {error_msg}")
+                return None
 
-                if not is_eq:
-                    error_msg = f"LP and MPS models are not equivalent: {eq_msg}"
-            except Exception as e:
-                error_msg = f"Failed to parse MPS or build canonical representation: {e}"
-            finally:
-                if os.path.exists(temp_mps_path):
-                    os.remove(temp_mps_path)
+            response_text = correct_lp(error_msg, endpoint)
+            lp_content, mps_content = extract_blocks(response_text)
+            if not lp_content or not mps_content:
+                lp_content = ""
+                mps_content = ""
 
-            if not error_msg:
-                break # Success!
-
-        except sankhya.SankhyaError as e:
-            error_msg = str(e)
-
-        os.remove(temp_lp_path)
-        temp_lp_path = None
-
-        if i == 3:  # Already did 3 corrections
-            print(f"Failed to parse model or establish equivalence after 3 correction rounds. Last error: {error_msg}")
+        if not model:
+            print("Failed to parse model after 3 correction rounds.")
             return None
 
-        response_text = correct_lp(error_msg, endpoint)
-        lp_content, mps_content = extract_blocks(response_text)
-        if not lp_content or not mps_content:
-            lp_content = ""
-            mps_content = ""
+        # Echo the model
+        print("Generated Model Description:")
+        print(lp_content)
 
-    if not model or not temp_lp_path:
-        print("Failed to parse model after 3 correction rounds.")
-        return None
+        print("the certificate proves the answer to this model")
 
-    # Echo the model
-    print("Generated Model Description:")
-    print(lp_content)
+        try:
+            ans = input("Press Enter to confirm and solve...")
+            if ans.strip().lower() in ('n', 'no', 'c', 'cancel', 'q', 'quit'):
+                print("Cancelled.")
+                return None
+        except EOFError:
+            pass
+        result = model.solve(compute_iis=True)
+        report(result, v_model)
 
-    print("the certificate proves the answer to this model")
-
-    try:
-        ans = input("Press Enter to confirm and solve...")
-        if ans.strip().lower() in ('n', 'no', 'c', 'cancel', 'q', 'quit'):
-            print("Cancelled.")
-            os.remove(temp_lp_path)
-            return None
-    except EOFError:
-        pass
-    result = model.solve()
-    print(f"Status: {result.status}")
-    if result.status in ("optimal", "feasible") and result.x:
-        print(f"Objective: {result.objective}")
-        print("Values:", result.x)
-        if hasattr(result, 'row_duals') and result.row_duals:
-            print("Shadow prices (Duals):", result.row_duals)
-
-    # Independent verification
-    sol_path = temp_lp_path + ".sol"
-    temp_mps_path = temp_lp_path + ".mps"
-    try:
-        with open(temp_mps_path, 'w') as f:
-            f.write(mps_content)
-
-        verify_script = Path(__file__).resolve().parents[1] / "verify_solution.py"
-
-        tools_dir = str(Path(__file__).resolve().parents[1])
-        if tools_dir not in sys.path:
-            sys.path.insert(0, tools_dir)
-        import verify_solution as vs
-        verify_model = vs.parse_mps(Path(temp_mps_path))
-
+        # Independent verification
         with open(sol_path, 'w') as f:
             f.write(f"objective {result.objective}\n")
             f.write(f"status {result.status}\n")
             if result.status in ("optimal", "feasible") and result.x:
-                basis_names = getattr(sankhya.Result, '_BASIS_NAMES', {})
                 f.write("begin columns\n")
+                col_statuses = result.col_statuses
+                reduced = result.reduced_costs
                 for j, x_val in enumerate(result.x):
-                    col_statuses = getattr(result, 'col_statuses', None)
-                    status = basis_names.get(col_statuses[j], "unknown") if col_statuses else "unknown"
-                    dual = result.reduced_costs[j] if hasattr(result, 'reduced_costs') and result.reduced_costs else 0.0
-                    col_name = verify_model.col_names[j] if j < len(verify_model.col_names) else f"C{j}"
+                    status = col_statuses[j] if col_statuses else "unknown"
+                    dual = reduced[j] if reduced else 0.0
+                    col_name = v_model.col_names[j] if j < len(v_model.col_names) else f"C{j}"
                     f.write(f"{col_name} {x_val} {dual} {status}\n")
                 f.write("end\n")
 
                 if result.row_activities:
                     f.write("begin rows\n")
+                    row_statuses = result.row_statuses
+                    duals = result.row_duals
                     for i, r_val in enumerate(result.row_activities):
-                        row_statuses = getattr(result, 'row_statuses', None)
-                        status = basis_names.get(row_statuses[i], "unknown") if row_statuses else "unknown"
-                        dual = result.row_duals[i] if hasattr(result, 'row_duals') and result.row_duals else 0.0
-                        row_name = verify_model.row_names[i] if i < len(verify_model.row_names) else f"R{i}"
+                        status = row_statuses[i] if row_statuses else "unknown"
+                        dual = duals[i] if duals else 0.0
+                        row_name = v_model.row_names[i] if i < len(v_model.row_names) else f"R{i}"
                         f.write(f"{row_name} {r_val} {dual} {status}\n")
                     f.write("end\n")
 
-        verify_script = Path(__file__).resolve().parents[1] / "verify_solution.py"
+        verify_script = Path(tools_dir) / "verify_solution.py"
         import subprocess
-        proc = subprocess.run([sys.executable, str(verify_script), temp_mps_path, sol_path, "--quiet"], capture_output=True, text=True)
+        proc = subprocess.run([sys.executable, str(verify_script), str(mps_path), str(sol_path), "--quiet"], capture_output=True, text=True)
         if proc.returncode == 0:
             print("Independent verification passed")
         else:
             print("Independent verification failed:")
             print(proc.stdout)
             print(proc.stderr)
-    finally:
-        os.remove(temp_lp_path)
-        if os.path.exists(temp_mps_path):
-            os.remove(temp_mps_path)
-        if os.path.exists(sol_path):
-            os.remove(sol_path)
 
     return result
 
