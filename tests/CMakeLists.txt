@@ -42,6 +42,7 @@ add_executable(sankhya_tests
   unit/test_dual_harris.cpp
   unit/test_ranging.cpp
   unit/test_dense_lu.cpp
+  unit/test_ft_file.cpp
   unit/test_sparse_lu.cpp
   unit/test_sparse_lu_singletons.cpp
   unit/test_sparse_lu_hyper.cpp
