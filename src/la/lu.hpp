@@ -54,6 +54,8 @@
 #include "sankhya/sparse.hpp"
 #include "sankhya/types.hpp"
 
+#include "lu_ft_file.hpp"
+
 namespace sankhya {
 
 /// One basis column, as a list of (row, value) pairs. The simplex holds its columns in the
@@ -248,11 +250,9 @@ class SparseLu {
   // (already partially reduced through U). The two modes' "declined as unsafe" counts are
   // therefore not directly comparable.
   //
-  // KNOWN COST. ft_row_/ft_col_ are vector<vector<pair<Index,double>>>: correct and simple,
-  // but two heap allocations per step at every ft_init() and pointer-chasing on every solve,
-  // rather than the one contiguous array u_start_/u_steps_ gives the product form. A CSR
-  // layout with per-row slack (Koberstein 2005, ch. 5) would keep this O(fill) instead of
-  // O(m) allocations and let solves walk one array; not done here.
+  // STORAGE. ft_row_/ft_col_ are row and column files (lu_ft_file.hpp; Suhl & Suhl 1993,
+  // Koberstein 2005 ch. 5): one contiguous array each, a span per step with slack for the
+  // fill an update adds, so ft_init() costs O(nnz(U)) and a solve walks one array.
   // -------------------------------------------------------------------------------------
 
   /// The Forrest-Tomlin counterpart to update(): same contract, same `alpha`, but the
@@ -481,8 +481,10 @@ class SparseLu {
   /// ft_erase(): ft_row_[s] is step s's own row, i.e. the OTHER steps its row references
   /// (matching u_steps_ before any update); ft_col_[s] is the steps that reference s (their
   /// ROW has an entry AT s), the mirror image, matching uc_steps_. Both exclude the diagonal.
-  std::vector<std::vector<std::pair<Index, double>>> ft_row_;
-  std::vector<std::vector<std::pair<Index, double>>> ft_col_;
+  FtFile ft_row_;
+  FtFile ft_col_;
+  /// update_forrest_tomlin()'s copy of s0's old row or column, taken before erasing it.
+  std::vector<Index> ft_old_steps_;
 
   /// The row-eta file (Forrest & Tomlin 1972, eq. for R): one entry per update, applied
   /// between L and U rather than appended outside both as update()'s eta file is. Update k

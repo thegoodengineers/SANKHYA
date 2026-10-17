@@ -87,6 +87,11 @@ constexpr double kFtRowEtaBound = 1e6;
 /// fires first; this is the backstop for a model whose solves are so cheap that it does not.
 constexpr Index kMaxEtaCount = 128;
 
+/// Room ft_init() leaves in each row and column list of U beyond its entries, for the fill
+/// the Forrest-Tomlin updates add before the list has to move (lu_ft_file.hpp). A storage
+/// constant: it decides how often a list moves, never what it holds.
+constexpr Index kFtFileSlack = 4;
+
 }  // namespace
 
 SparseLu::WorkspaceCache::WorkspaceCache() noexcept = default;
@@ -651,16 +656,29 @@ void SparseLu::ft_init() {
   // (u_start_/u_steps_/u_values_, and their column-wise mirror uc_ - both already keyed by
   // step) into the mutable STEP-keyed lists an update folds fill into. U itself is left
   // exactly as factorize() produced it; only these copies ever change.
-  ft_row_.assign(static_cast<std::size_t>(m), {});
-  ft_col_.assign(static_cast<std::size_t>(m), {});
+  // Row s holds U's step-s row as u_start_/u_steps_ has it; column s the steps whose row
+  // references s, in increasing step order, as the push loop below has always filed them.
+  {
+    std::vector<Index> row_room(static_cast<std::size_t>(m));
+    std::vector<Index> col_room(static_cast<std::size_t>(m), kFtFileSlack);
+    for (Index k = 0; k < m; ++k) {
+      const auto uk = static_cast<std::size_t>(k);
+      row_room[uk] = u_start_[uk + 1] - u_start_[uk] + kFtFileSlack;
+      for (Index p = u_start_[uk]; p < u_start_[uk + 1]; ++p) {
+        ++col_room[static_cast<std::size_t>(u_steps_[static_cast<std::size_t>(p)])];
+      }
+    }
+    ft_row_.reset(row_room);
+    ft_col_.reset(col_room);
+  }
   for (Index k = 0; k < m; ++k) {
     const auto uk = static_cast<std::size_t>(k);
     for (Index p = u_start_[uk]; p < u_start_[uk + 1]; ++p) {
       const auto up = static_cast<std::size_t>(p);
       const Index step = u_steps_[up];
       const double value = u_values_[up];
-      ft_row_[uk].emplace_back(step, value);
-      ft_col_[static_cast<std::size_t>(step)].emplace_back(k, value);
+      ft_row_.append(k, step, value);
+      ft_col_.append(step, k, value);
     }
   }
   ft_base_row_nonzeros_ = static_cast<Index>(u_steps_.size());
@@ -680,50 +698,13 @@ void SparseLu::ft_init() {
 }
 
 void SparseLu::ft_set(Index owner_step, Index referenced_step, double value) {
-  auto& r = ft_row_[static_cast<std::size_t>(owner_step)];
-  bool found = false;
-  for (auto& entry : r) {
-    if (entry.first == referenced_step) {
-      entry.second = value;
-      found = true;
-      break;
-    }
-  }
-  if (!found) {
-    r.emplace_back(referenced_step, value);
-    ++ft_row_fill_;
-  }
-
-  auto& c = ft_col_[static_cast<std::size_t>(referenced_step)];
-  found = false;
-  for (auto& entry : c) {
-    if (entry.first == owner_step) {
-      entry.second = value;
-      found = true;
-      break;
-    }
-  }
-  if (!found) c.emplace_back(owner_step, value);
+  if (ft_row_.set(owner_step, referenced_step, value)) ++ft_row_fill_;
+  ft_col_.set(referenced_step, owner_step, value);
 }
 
 void SparseLu::ft_erase(Index owner_step, Index referenced_step) {
-  auto& r = ft_row_[static_cast<std::size_t>(owner_step)];
-  for (std::size_t i = 0; i < r.size(); ++i) {
-    if (r[i].first == referenced_step) {
-      r[i] = r.back();
-      r.pop_back();
-      --ft_row_fill_;
-      break;
-    }
-  }
-  auto& c = ft_col_[static_cast<std::size_t>(referenced_step)];
-  for (std::size_t i = 0; i < c.size(); ++i) {
-    if (c[i].first == owner_step) {
-      c[i] = c.back();
-      c.pop_back();
-      break;
-    }
-  }
+  if (ft_row_.erase(owner_step, referenced_step)) --ft_row_fill_;
+  ft_col_.erase(referenced_step, owner_step);
 }
 
 void SparseLu::ft_btran_unit(Index step) const {
@@ -756,8 +737,8 @@ void SparseLu::ft_btran_unit(Index step) const {
     ft_btran_scratch_[us] = value;
     if (value == 0.0) continue;
     ft_btran_touched_.push_back(occupant);
-    for (const auto& [other_step, coefficient] : ft_row_[us]) {
-      ft_btran_scratch_[static_cast<std::size_t>(other_step)] -= coefficient * value;
+    for (Index p = ft_row_.begin(occupant); p < ft_row_.end(occupant); ++p) {
+      ft_btran_scratch_[static_cast<std::size_t>(ft_row_.index(p))] -= ft_row_.value(p) * value;
     }
   }
 }
@@ -810,8 +791,8 @@ void SparseLu::ft_back_substitute(double* residual_by_step, double* solution_by_
     const double value = residual_by_step[us] / ft_diag_[us];
     solution_by_step[us] = value;
     if (value == 0.0) continue;
-    for (const auto& [other_step, coefficient] : ft_col_[us]) {
-      residual_by_step[static_cast<std::size_t>(other_step)] -= coefficient * value;
+    for (Index p = ft_col_.begin(step); p < ft_col_.end(step); ++p) {
+      residual_by_step[static_cast<std::size_t>(ft_col_.index(p))] -= ft_col_.value(p) * value;
     }
   }
 }
@@ -827,8 +808,8 @@ void SparseLu::ft_forward_substitute(double* z_by_step) const {
     const double value = z_by_step[us] / ft_diag_[us];
     z_by_step[us] = value;
     if (value == 0.0) continue;
-    for (const auto& [other_step, coefficient] : ft_row_[us]) {
-      z_by_step[static_cast<std::size_t>(other_step)] -= coefficient * value;
+    for (Index p = ft_row_.begin(step); p < ft_row_.end(step); ++p) {
+      z_by_step[static_cast<std::size_t>(ft_row_.index(p))] -= ft_row_.value(p) * value;
     }
   }
 }
@@ -909,7 +890,9 @@ bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha
     const auto us = static_cast<std::size_t>(s);
     const double w = work_[us];
     spike_add(s, ft_diag_[us] * w);
-    for (const auto& [row, coefficient] : ft_col_[us]) spike_add(row, coefficient * w);
+    for (Index p = ft_col_.begin(s); p < ft_col_.end(s); ++p) {
+      spike_add(ft_col_.index(p), ft_col_.value(p) * w);
+    }
   }
 
   // The row eta: r^T = u-bar_p^T U^-1, where u-bar_p is s0's OWN off-diagonal row (about to
@@ -973,13 +956,20 @@ bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha
   // position's occupant, and R above is exactly what accounts for it - nothing else needs to
   // change to compensate, which is the point of computing r from it rather than rewriting
   // every step downstream by hand.
-  const auto old_row = ft_row_[static_cast<std::size_t>(s0)];
-  for (const auto& [other_step, value] : old_row) ft_erase(s0, other_step);
+  // Copied out first, in list order, because each erase reorders the list it walks.
+  ft_old_steps_.clear();
+  for (Index p = ft_row_.begin(s0); p < ft_row_.end(s0); ++p) {
+    ft_old_steps_.push_back(ft_row_.index(p));
+  }
+  for (const Index other_step : ft_old_steps_) ft_erase(s0, other_step);
 
   // Replace s0's old column (other steps' existing references to it): stale regardless of
   // value, since column s0 is being replaced outright, not perturbed.
-  const auto old_column = ft_col_[static_cast<std::size_t>(s0)];
-  for (const auto& [other_step, value] : old_column) ft_erase(other_step, s0);
+  ft_old_steps_.clear();
+  for (Index p = ft_col_.begin(s0); p < ft_col_.end(s0); ++p) {
+    ft_old_steps_.push_back(ft_col_.index(p));
+  }
+  for (const Index other_step : ft_old_steps_) ft_erase(other_step, s0);
 
   // Install the new column: every OTHER step whose row now references s0, unchanged from
   // the spike (R^-1 never touched these). Valid regardless of position, once s0 is last. A
