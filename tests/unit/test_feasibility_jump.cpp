@@ -180,6 +180,27 @@ TEST(FeasibilityJump, FindsAnAssignment) {
   expect_all_feasible(m, r);
 }
 
+TEST(FeasibilityJump, StopsWhenItStallsInsteadOfSpendingTheBudget) {
+  // #1030: the cover above is solved in its first moves, yet the loop ran until the
+  // 10M-visit budget was gone, bumping the objective weight. The stall stop ends it after
+  // kFeasibilityJumpStallSteps idle steps, so a tiny model spends a small fraction of the
+  // budget. The budget itself still binds on a model the search cannot solve (next test).
+  const Model m = make_model({{1, 1, 0, 0, 0, 0, 0, 0},
+                              {0, 1, 1, 0, 0, 0, 0, 1},
+                              {0, 0, 1, 1, 0, 0, 0, 0},
+                              {1, 0, 0, 0, 1, 1, 0, 0},
+                              {0, 0, 0, 0, 0, 1, 1, 0},
+                              {0, 0, 0, 1, 0, 0, 1, 1}},
+                             std::vector<double>(6, 1.0), std::vector<double>(6, kInfinity),
+                             std::vector<double>(8, 1.0), std::vector<double>(8, 0.0),
+                             std::vector<double>(8, 1.0), std::vector<bool>(8, true));
+  const FeasibilityJumpResult r = run(m, tol::kFeasibilityJumpWork);
+  ASSERT_FALSE(r.points.empty());
+  expect_all_feasible(m, r);
+  EXPECT_LT(r.work, tol::kFeasibilityJumpWork / 10)
+      << r.moves << " moves, " << r.weight_updates << " weight updates";
+}
+
 TEST(FeasibilityJump, ReturnsNothingWhenNoIntegerPointExists) {
   // 2x + 2y = 3 has real solutions and no integer one; x + y >= 3 over two binaries has
   // neither. The budget runs out and nothing is claimed.

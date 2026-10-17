@@ -279,7 +279,26 @@ FeasibilityJumpResult Search::run(const std::vector<double>& start) {
   if (!set_up(start)) return result_;
   double best = kInf;
   bool checked = false;  // the current point has been re-measured since the last move
+  // STALL STOP (#1030). The work budget alone let a 10-column model solved in its first
+  // moves spend all 10M visits bumping the objective weight. Luteberget and Sartor run FJ
+  // under a wall-clock cutoff and restart it when it stops making progress; here the search
+  // STOPS instead (the second call, from the rounded root relaxation, is the restart) after
+  // kFeasibilityJumpStallSteps steps - or kFeasibilityJumpStallSweeps passes over the columns
+  // on a model with more columns than that, so a large model gets its sweeps - in which
+  // neither the number of violated rows fell below its best nor a better point was found.
+  // The number of violated rows, not the weighted violation, is the progress measure: the
+  // weights grow at every local minimum, so the weighted sum is not comparable across steps.
+  // Counted in steps, not seconds, so a run stays reproducible for a seed.
+  const Count stall_limit =
+      std::max<Count>(tol::kFeasibilityJumpStallSteps,
+                      tol::kFeasibilityJumpStallSweeps * static_cast<Count>(x_.size()));
+  Count stalled = 0;
+  std::size_t fewest_violated = violated_.size();
   while (!out_of_work()) {
+    if (violated_.size() < fewest_violated) {
+      fewest_violated = violated_.size();
+      stalled = 0;
+    }
     if (violated_.empty() && !checked) {
       // Feasible by the running activities. Re-measure every row from scratch before
       // believing it: the running sums drift, and a proposal should not.
@@ -292,9 +311,11 @@ FeasibilityJumpResult Search::run(const std::vector<double>& start) {
         result_.points.push_back(x_);
         if (settings_.on_point) settings_.on_point(x_);
         best = value;
+        stalled = 0;
       }
       if (costed_.empty()) break;  // nothing left to improve
     }
+    if (++stalled > stall_limit) break;
 
     Jump chosen;
     for (int s = 0; s < tol::kFeasibilityJumpSample; ++s) {

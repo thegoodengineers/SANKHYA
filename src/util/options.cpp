@@ -672,7 +672,9 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Int,
                  std::int64_t{tol::kFeasibilityJumpWork},
                  "The work budget of one Feasibility Jump run (#506), in nonzero visits: "
-                 "counted, not timed, so a run is reproducible.",
+                 "counted, not timed, so a run is reproducible. A run also stops early when "
+                 "it stalls (#1030): 1000 steps, or two steps per column on a larger model, "
+                 "without fewer violated rows or a better point.",
                  1.0,
                  kNoLimit,
                  {}});

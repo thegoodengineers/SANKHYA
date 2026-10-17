@@ -78,10 +78,16 @@ inline constexpr double kSubMipBudgetShare = 0.1;
 /// the candidate jumps sampled per move, the paper's 25; the default work budget of one run
 /// in nonzero visits, the default of mip_fj_work; and the least decrease of the weighted
 /// violation a jump must bring to be taken, so rounding noise in the scores cannot keep the
-/// search cycling between two values of one column.
+/// search cycling between two values of one column. The stall stop (#1030): a run ends
+/// after kFeasibilityJumpStallSteps steps (moves or weight updates), or
+/// kFeasibilityJumpStallSweeps steps per column when that is more, without the number of
+/// violated rows falling below its best or a better point being found; the paper restarts
+/// on no progress under a wall-clock cutoff, and this is the step-counted equivalent.
 inline constexpr int kFeasibilityJumpSample = 25;
 inline constexpr Count kFeasibilityJumpWork = 10'000'000;
 inline constexpr double kFeasibilityJumpMinScore = 1e-9;
+inline constexpr Count kFeasibilityJumpStallSteps = 1000;
+inline constexpr Count kFeasibilityJumpStallSweeps = 2;
 
 /// The parity heuristic (#841, src/mip/parity.hpp): the most binary columns its dense GF(2)
 /// elimination takes (rows x 2048^2 / 64 word operations at most, well under a second); the

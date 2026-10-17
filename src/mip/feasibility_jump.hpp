@@ -28,6 +28,11 @@
 //     term is left out altogether.
 //   - The work is counted in nonzero visits, so a run is reproducible for a given seed and
 //     budget, and is independent of the clock.
+//   - A run stops when it stalls (#1030): kFeasibilityJumpStallSteps steps, or
+//     kFeasibilityJumpStallSweeps per column on a larger model, in which the number of
+//     violated rows did not fall below its best and no better point was found. The paper
+//     restarts on no progress under a wall-clock cutoff; the second call, from the rounded
+//     root relaxation, is this implementation's restart.
 //
 // A point this returns is feasible by FJ's own exact recomputation of every row activity,
 // but it is a PROPOSAL: the caller sends it through BranchAndBound::offer_incumbent(),
