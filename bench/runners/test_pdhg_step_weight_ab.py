@@ -133,8 +133,6 @@ def test_references() -> None:
           "the refinery manifest gives the LP rows only", f"{len(refinery)} instances")
     check(abs(ab.references()["afiro"] - (-464.7531428571)) < 1e-6,
           "data/netlib/reference.json is still the default")
-    check(ab.leg_options("cpu", "averaged", "default", 1, [], 0, "1e-4")[2]
-          == "pdhg_tolerance=1e-4", "--tolerance reaches pdhg_tolerance")
 
 
 def main() -> int:

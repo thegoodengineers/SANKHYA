@@ -23,8 +23,10 @@ row measures the step and the weight, nothing else.
 Instances: the nine committed Netlib instances (#481's set: data/netlib, published optimum
 from data/netlib/reference.json), or `--instances` under `--data-dir` (data/kennington's
 reference.json, data/refinery's manifest.json; `--instances all` is every instance there with
-a published optimum, LP rows only for the refinery). `--tolerance` sets pdhg_tolerance
-(1e-8 by default; 1e-4 is the other level #482 reports at). Per row: the columns
+a published optimum, LP rows only for the refinery). Every solve runs to 1e-8; the 1e-4
+level is read off the same run, as the kkt_1e4_iterations crossing, because a looser
+pdhg_tolerance alone changes nothing (#180: the loop runs on to the project's absolute
+tolerances unless pdhg_stop_at_request is set). Per row: the columns
 ENGINEERING_RULES.md requires (instance, its sha256, objective, published objective,
 absolute and relative error, status, wall and solver seconds, iterations, git commit,
 machine), the relative-KKT crossings of the run as iterations and seconds (#486,
@@ -49,7 +51,7 @@ The CUDA engine has no Halpern iteration (pdhg_halpern is read by the CPU engine
 `--engine cuda` takes `--scheme averaged` and refuses the others rather than label an
 averaged run "halpern".
 
-Writes bench/results/pdhg-step-weight-ab-<engine>-<set>-<tolerance>-<sha>.csv (the sha from
+Writes bench/results/pdhg-step-weight-ab-<engine>-<set>-<sha>.csv (the sha from
 the binary, #433), a name no glob of make_benchmarks_doc.py or latest_result.py reads, or
 --out.
 """
@@ -101,11 +103,11 @@ COLUMNS = [
 
 
 def leg_options(engine: str, scheme: str, leg: str, iteration_limit: int,
-                extra: list[str], seed: int = 0, tolerance: str = "1e-8") -> list[str]:
+                extra: list[str], seed: int = 0) -> list[str]:
     """The --option list of one solve. The leg's switches and the seed come after
     `extra`, so a --solver-option cannot quietly turn one leg into another; the gains can be
     set there."""
-    return ["algorithm=pdhg", "pdhg_polish=false", f"pdhg_tolerance={tolerance}",
+    return ["algorithm=pdhg", "pdhg_polish=false", "pdhg_tolerance=1e-8",
             f"iteration_limit={iteration_limit}",
             f"gpu={'true' if engine == 'cuda' else 'false'}",
             *extra, *SCHEMES[scheme], *LEGS[leg], f"random_seed={seed}"]
@@ -179,9 +181,6 @@ def main() -> int:
     parser.add_argument("--instances", nargs="*", metavar="NAME", default=None,
                         help="names under --data-dir (default: the nine committed Netlib "
                              "instances; 'all' is every instance with a published optimum)")
-    parser.add_argument("--tolerance", default="1e-8",
-                        help="pdhg_tolerance of every solve (default 1e-8); the verifier's "
-                             "own tolerances do not move with it")
     parser.add_argument("--seeds", nargs="*", type=int, default=[0, 1, 2],
                         help="random_seed values; every leg runs at each (default 0 1 2)")
     parser.add_argument("--iteration-limit", type=int, default=1000000,
@@ -232,7 +231,7 @@ def main() -> int:
                 mine = []
                 for leg in legs:
                     options = leg_options(args.engine, scheme, leg, args.iteration_limit,
-                                          args.solver_option, seed, args.tolerance)
+                                          args.solver_option, seed)
                     result = netlib.run_one(binary, mps, args.time_limit, not args.no_verify,
                                             options)
                     mine.append(make_row(name, digest, reference, args, scheme, leg, seed,
@@ -278,7 +277,7 @@ def main() -> int:
 
     tag = re.sub(r"[^A-Za-z0-9]+", "-", " ".join(args.solver_option)).strip("-")
     out = args.out or (RESULTS_DIR / f"pdhg-step-weight-ab-{args.engine}-{data_dir.name}-"
-                       f"{args.tolerance}-{commit}{'-' + tag if tag else ''}.csv")
+                       f"{commit}{'-' + tag if tag else ''}.csv")
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=COLUMNS)
