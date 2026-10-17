@@ -1,0 +1,181 @@
+# SPDX-License-Identifier: Apache-2.0
+# SANKHYA - benchmark runs on a GitHub-hosted runner, dispatched by hand.
+#
+# WHY. The team laptop runs many sessions at a 1-minute load of 12 to 18, so every timed or
+# time-limited run there is contaminated (#1023: pilot87 hit 120 s, which it solves in 22 s
+# alone). This job builds the exact ref from a clean checkout, so the stamp the runner reads
+# from the binary is not -dirty, runs the existing runner in bench/runners/ and uploads the
+# CSV(s) and the run log as an artifact. It changes nothing in the repository.
+#
+# A GitHub-hosted runner is a shared VM: its timings are indicative, the counts (optimal,
+# verified, certified) are the headline. The machine tag names the runner, its vCPUs, CPU
+# model and RAM, read from lscpu and free on the box.
+#
+# Committing a result goes through a pull request like any other change:
+#
+#   gh run download <run-id> -R thegoodengineers/SANKHYA -D /tmp/bench
+#   cp /tmp/bench/bench-*/results/* bench/results/
+#   python bench/runners/make_benchmarks_doc.py   # and the other generators the CSV feeds
+#
+# `options` is appended to the runner's command line, split on spaces, e.g.
+# `--solver-option presolve=off` or, for ab-netlib, `--new-option engine_race=true --repeats 5`.
+# ab-supernodal (#470) runs bench/runners/supernodal_ab.py's four IPM arms over base_ref and ref.
+
+name: bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: which runner
+        type: choice
+        options:
+          - netlib-full
+          - netlib-certified
+          - maros-meszaros
+          - kennington
+          - miplib-tier1
+          - refinery
+          - ab-netlib
+          - ab-supernodal
+        required: true
+      ref:
+        description: commit, branch or tag to build and run (ab-* - the new arm)
+        default: main
+        required: true
+      base_ref:
+        description: ab-* only - the base arm
+        default: main
+        required: false
+      time_limit:
+        description: seconds per solve (empty - the runner's default)
+        default: ""
+        required: false
+      options:
+        description: extra arguments for the runner
+        default: ""
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: ${{ inputs.suite }} at ${{ inputs.ref }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      SUITE: ${{ inputs.suite }}
+      TIME_LIMIT: ${{ inputs.time_limit }}
+      OPTIONS: ${{ inputs.options }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Check out the base arm
+        if: startsWith(inputs.suite, 'ab-')
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_ref }}
+          path: .base
+          fetch-depth: 0
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build zlib1g-dev
+
+      # HiGHS and SCIP are rivals in the refinery head-to-head, run as separate processes
+      # (bench/runners/rivals.py); nothing here is linked into SANKHYA.
+      - name: Install the refinery rivals
+        if: inputs.suite == 'refinery'
+        run: pip install numpy highspy pyscipopt
+
+      - name: Build
+        run: |
+          scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF
+          cmake --build build -j
+          build/sankhya version
+
+      - name: Build the base arm
+        if: startsWith(inputs.suite, 'ab-')
+        working-directory: .base
+        run: |
+          scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF
+          cmake --build build -j
+          build/sankhya version
+
+      - name: Run
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/out"
+          mkdir -p "$out/results"
+          cpu="$(lscpu | sed -n 's/^Model name: *//p' | head -1)"
+          ram="$(free -g | awk '/^Mem:/ {print $2}')"
+          machine="github-actions ubuntu-latest $(nproc) vCPU ${cpu} ${ram} GiB RAM"
+          sha="$(python3 -c 'import sys; sys.path.insert(0, "bench/runners"); import stamp; print(stamp.binary_commit("build/sankhya"))')"
+          echo "machine $machine"
+          echo "binary  $sha"
+          limit=()
+          [ -n "$TIME_LIMIT" ] && limit=(--time-limit "$TIME_LIMIT")
+          # shellcheck disable=SC2086  # options are split on spaces on purpose
+          set -- $OPTIONS
+          case "$SUITE" in
+            netlib-full|netlib-certified|ab-netlib)
+              python3 bench/runners/fetch_data.py --set full --offline-fallback ;;
+            maros-meszaros) python3 bench/runners/fetch_maros_meszaros.py ;;
+            kennington) python3 bench/runners/fetch_kennington.py ;;
+            miplib-tier1) python3 bench/runners/fetch_miplib.py ;;
+            ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
+          esac
+          # The stamp marks a modified tracked file -dirty; say so before the run, not after.
+          git status --porcelain --untracked-files=no
+          {
+            case "$SUITE" in
+              netlib-full)
+                python3 bench/runners/netlib.py --binary build/sankhya --machine "$machine" \
+                  ${limit[@]+"${limit[@]}"} "$@" ;;
+              netlib-certified)
+                python3 bench/runners/netlib.py --binary build/sankhya --machine "$machine" \
+                  --out "bench/results/certified-gap-netlib-full-${sha}.csv" \
+                  ${limit[@]+"${limit[@]}"} "$@" ;;
+              maros-meszaros)
+                python3 bench/runners/maros_meszaros.py --binary build/sankhya \
+                  --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
+              kennington)
+                python3 bench/runners/kennington.py --binary build/sankhya --machine "$machine" \
+                  ${limit[@]+"${limit[@]}"} "$@" ;;
+              # miplib.py and compare.py build their own tag (CPU, cores, RAM, OS) around
+              # the kind given here.
+              miplib-tier1)
+                python3 bench/runners/miplib.py --binary build/sankhya --tier 1 \
+                  --machine-kind "github-actions ubuntu-latest" ${limit[@]+"${limit[@]}"} "$@" ;;
+              refinery)
+                python3 bench/runners/compare.py --suite refinery --sankhya-binary build/sankhya \
+                  --machine-kind "github-actions ubuntu-latest" ${limit[@]+"${limit[@]}"} "$@" ;;
+              ab-netlib)
+                base_sha="$(python3 -c 'import sys; sys.path.insert(0, "bench/runners"); import stamp; print(stamp.binary_commit(".base/build/sankhya"))')"
+                python3 bench/runners/netlib_ab.py --base .base/build/sankhya \
+                  --new build/sankhya --machine "$machine" \
+                  --out-prefix "bench/results/ab-netlib-${base_sha}-vs-${sha}" \
+                  ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #470: scalar and supernodal IPM factorization, 1 and 4 threads, over two refs.
+              ab-supernodal)
+                python3 bench/runners/supernodal_ab.py --base .base/build/sankhya                   --new build/sankhya --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
+            esac
+          } 2>&1 | tee "$out/run.log" || status=$?
+          # Every result file the run wrote or rewrote goes into the artifact.
+          git status --porcelain --untracked-files=all -- bench/results \
+            | awk '{print $2}' | xargs -r -I{} cp {} "$out/results/"
+          ls -l "$out/results"
+          exit "${status:-0}"
+
+      - name: Upload the results and the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ inputs.suite }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: warn

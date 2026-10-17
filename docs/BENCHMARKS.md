@@ -21,6 +21,14 @@ Reporting follows Mittelmann's conventions: shifted geometric means with a
 1-second shift, an explicit time limit, and failures counted and named
 rather than dropped.
 
+Where a run was made is in its machine tag. A tag beginning `github-actions ubuntu-latest`
+comes from `.github/workflows/bench.yml`, dispatched by hand: a GitHub-hosted runner builds
+the named commit Release from a clean checkout through `scripts/configure.sh`, runs the
+runner from `bench/runners/` and uploads the CSV and the run log, which then reach
+`bench/results/` through a pull request. Those runners are shared virtual machines (the tag
+gives their vCPUs, CPU model and RAM), so their timings are indicative only; the counts -
+optimal, verified, certified - are the headline.
+
 ---
 
 ## 1. Netlib LP — accuracy against published optima
