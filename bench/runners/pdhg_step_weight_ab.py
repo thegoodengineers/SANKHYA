@@ -21,7 +21,10 @@ so a point the first-order method leaves short is not finished by the interior p
 row measures the step and the weight, nothing else.
 
 Instances: the nine committed Netlib instances (#481's set: data/netlib, published optimum
-from data/netlib/reference.json), or `--instances`. Per row: the columns
+from data/netlib/reference.json), or `--instances` under `--data-dir` (data/kennington's
+reference.json, data/refinery's manifest.json; `--instances all` is every instance there with
+a published optimum, LP rows only for the refinery). `--tolerance` sets pdhg_tolerance
+(1e-8 by default; 1e-4 is the other level #482 reports at). Per row: the columns
 ENGINEERING_RULES.md requires (instance, its sha256, objective, published objective,
 absolute and relative error, status, wall and solver seconds, iterations, git commit,
 machine), the relative-KKT crossings of the run as iterations and seconds (#486,
@@ -46,8 +49,9 @@ The CUDA engine has no Halpern iteration (pdhg_halpern is read by the CPU engine
 `--engine cuda` takes `--scheme averaged` and refuses the others rather than label an
 averaged run "halpern".
 
-Writes bench/results/pdhg-step-weight-ab-<engine>-<sha>.csv (the sha from the binary,
-#433), a name no glob of make_benchmarks_doc.py or latest_result.py reads, or --out.
+Writes bench/results/pdhg-step-weight-ab-<engine>-<set>-<tolerance>-<sha>.csv (the sha from
+the binary, #433), a name no glob of make_benchmarks_doc.py or latest_result.py reads, or
+--out.
 """
 from __future__ import annotations
 
@@ -97,11 +101,11 @@ COLUMNS = [
 
 
 def leg_options(engine: str, scheme: str, leg: str, iteration_limit: int,
-                extra: list[str], seed: int = 0) -> list[str]:
+                extra: list[str], seed: int = 0, tolerance: str = "1e-8") -> list[str]:
     """The --option list of one solve. The leg's switches and the seed come after
     `extra`, so a --solver-option cannot quietly turn one leg into another; the gains can be
     set there."""
-    return ["algorithm=pdhg", "pdhg_polish=false", "pdhg_tolerance=1e-8",
+    return ["algorithm=pdhg", "pdhg_polish=false", f"pdhg_tolerance={tolerance}",
             f"iteration_limit={iteration_limit}",
             f"gpu={'true' if engine == 'cuda' else 'false'}",
             *extra, *SCHEMES[scheme], *LEGS[leg], f"random_seed={seed}"]
@@ -114,8 +118,17 @@ def gpu_description(binary: Path) -> str:
     return match.group(1).strip() if match else ""
 
 
-def references() -> dict[str, float]:
-    blob = json.loads((DATA_DIR / "reference.json").read_text())
+def references(data_dir: Path = DATA_DIR) -> dict[str, float]:
+    """Published optimum per instance: data/netlib and data/kennington keep a reference.json
+    (published_optimal); data/refinery a manifest.json (reference_objective, LP rows only -
+    PDHG is an LP engine, and a MILP row would measure branch and bound)."""
+    manifest = data_dir / "manifest.json"
+    if manifest.exists():
+        blob = json.loads(manifest.read_text())
+        return {name: float(entry["reference_objective"])
+                for name, entry in blob["instances"].items()
+                if entry.get("kind") == "lp" and entry.get("reference_objective") is not None}
+    blob = json.loads((data_dir / "reference.json").read_text())
     return {name: float(entry["published_optimal"])
             for name, entry in blob["instances"].items()
             if entry.get("published_optimal") is not None}
@@ -160,8 +173,15 @@ def main() -> int:
     parser.add_argument("--engine", choices=("cpu", "cuda"), default="cpu")
     parser.add_argument("--scheme", choices=("averaged", "halpern", "both"), default="both")
     parser.add_argument("--legs", nargs="*", choices=tuple(LEGS), default=list(LEGS))
-    parser.add_argument("--instances", nargs="*", metavar="NAME", default=NETLIB_NINE,
-                        help="Netlib names under data/netlib (default: the nine committed)")
+    parser.add_argument("--data-dir", type=Path, default=DATA_DIR,
+                        help="where the .mps files and their reference.json or manifest.json "
+                             "live: data/netlib (default), data/kennington, data/refinery")
+    parser.add_argument("--instances", nargs="*", metavar="NAME", default=None,
+                        help="names under --data-dir (default: the nine committed Netlib "
+                             "instances; 'all' is every instance with a published optimum)")
+    parser.add_argument("--tolerance", default="1e-8",
+                        help="pdhg_tolerance of every solve (default 1e-8); the verifier's "
+                             "own tolerances do not move with it")
     parser.add_argument("--seeds", nargs="*", type=int, default=[0, 1, 2],
                         help="random_seed values; every leg runs at each (default 0 1 2)")
     parser.add_argument("--iteration-limit", type=int, default=1000000,
@@ -170,6 +190,8 @@ def main() -> int:
     parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE",
                         help="passed to every solve of every leg and recorded, e.g. "
                              "pdhg_pid_ki=0.1 or gpu_on_device_loop=true")
+    parser.add_argument("--machine", default=None,
+                        help="machine tag for the CSV, to say which box and under what load")
     parser.add_argument("--no-verify", action="store_true")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()
@@ -180,9 +202,14 @@ def main() -> int:
     binary = args.binary or netlib.default_binary()
     commit = netlib.git_commit(binary)
     gpu = gpu_description(binary) if args.engine == "cuda" else ""
-    machine = netlib.machine_tag()
+    machine = args.machine or netlib.machine_tag()
     stamp_time = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
-    published = references()
+    data_dir = args.data_dir if args.data_dir.is_absolute() else REPO_ROOT / args.data_dir
+    published = references(data_dir)
+    if args.instances == ["all"]:
+        args.instances = sorted(published)
+    elif args.instances is None:
+        args.instances = NETLIB_NINE
     schemes = ["averaged", "halpern"] if args.scheme == "both" else [args.scheme]
     legs = [leg for leg in LEGS if leg in args.legs]
     print(f"binary {binary}  commit {commit}  engine {args.engine} {gpu}  schemes "
@@ -195,7 +222,7 @@ def main() -> int:
               f"seed\n")
         print(f"{'instance':<11}{'seed':>5}" + "".join(f"{leg:>24}" for leg in legs))
         for name in args.instances:
-            mps = DATA_DIR / f"{name}.mps"
+            mps = data_dir / f"{name}.mps"
             if not mps.exists():
                 print(f"{name:<11}  missing {mps}")
                 continue
@@ -205,7 +232,7 @@ def main() -> int:
                 mine = []
                 for leg in legs:
                     options = leg_options(args.engine, scheme, leg, args.iteration_limit,
-                                          args.solver_option, seed)
+                                          args.solver_option, seed, args.tolerance)
                     result = netlib.run_one(binary, mps, args.time_limit, not args.no_verify,
                                             options)
                     mine.append(make_row(name, digest, reference, args, scheme, leg, seed,
@@ -250,8 +277,8 @@ def main() -> int:
                   f"{'-' if mean is None else f'{mean:.3f}x'} over {len(ratios)}")
 
     tag = re.sub(r"[^A-Za-z0-9]+", "-", " ".join(args.solver_option)).strip("-")
-    out = args.out or (RESULTS_DIR / f"pdhg-step-weight-ab-{args.engine}-{commit}"
-                       f"{'-' + tag if tag else ''}.csv")
+    out = args.out or (RESULTS_DIR / f"pdhg-step-weight-ab-{args.engine}-{data_dir.name}-"
+                       f"{args.tolerance}-{commit}{'-' + tag if tag else ''}.csv")
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=COLUMNS)

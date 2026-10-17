@@ -127,9 +127,20 @@ def test_rows() -> None:
           "stamp, verdict and instance digest on every row")
 
 
+def test_references() -> None:
+    refinery = ab.references(netlib.REPO_ROOT / "data" / "refinery")
+    check("crude_blend_small" in refinery and "lot_sizing_small" not in refinery,
+          "the refinery manifest gives the LP rows only", f"{len(refinery)} instances")
+    check(abs(ab.references()["afiro"] - (-464.7531428571)) < 1e-6,
+          "data/netlib/reference.json is still the default")
+    check(ab.leg_options("cpu", "averaged", "default", 1, [], 0, "1e-4")[2]
+          == "pdhg_tolerance=1e-4", "--tolerance reaches pdhg_tolerance")
+
+
 def main() -> int:
     test_leg_options()
     test_rows()
+    test_references()
     print(f"\n{'all passed' if FAILURES == 0 else f'{FAILURES} FAILED'}")
     return 1 if FAILURES else 0
 
