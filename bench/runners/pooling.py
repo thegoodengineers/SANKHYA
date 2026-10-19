@@ -298,6 +298,8 @@ def main() -> int:
                         help="write and check each run's global bound certificate (#514)")
     parser.add_argument("--out", type=Path, default=None,
                         help="destination CSV; relative paths resolve against the repo root")
+    parser.add_argument("--machine", default=None,
+                        help="machine tag for the CSV (default: OS-architecture)")
     args = parser.parse_args()
 
     reference_doc = json.loads((DATA_DIR / "reference.json").read_text(encoding="utf-8"))
@@ -307,7 +309,7 @@ def main() -> int:
     commit = stamp.stamp(args.binary)
     context = {
         "time_limit": args.time_limit, "git_commit": commit,
-        "machine": f"{platform.system()}-{platform.machine()}",
+        "machine": args.machine or f"{platform.system()}-{platform.machine()}",
         "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(
             timespec="seconds"),
         "solver_options": " ".join(args.solver_option),

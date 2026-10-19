@@ -47,6 +47,7 @@ on:
           - mittelmann
           - pdhg-step-weight-ab
           - rolling-warm-start
+          - ab-option
         required: true
       ref:
         description: commit (short or full sha), branch or tag to build and run (ab-* - the new arm)
@@ -171,6 +172,15 @@ jobs:
             pdhg-step-weight-ab)
               python3 bench/runners/fetch_data.py --set full --offline-fallback
               python3 bench/runners/fetch_kennington.py ;;
+            ab-option)
+              case "$OPTIONS" in
+                *netlib.py*)
+                  python3 bench/runners/fetch_data.py --set full --offline-fallback
+                  git checkout -- 'data/netlib/*.mps' ;;
+                *kennington.py*) python3 bench/runners/fetch_kennington.py ;;
+                *maros_meszaros.py*) python3 bench/runners/fetch_maros_meszaros.py ;;
+                *miplib.py*) python3 bench/runners/fetch_miplib.py ;;
+              esac ;;
           esac
           # The stamp marks a modified tracked file -dirty (the fetchers' manifests aside), and
           # a -dirty CSV is no evidence, so the run stops here rather than produce one.
@@ -209,6 +219,11 @@ jobs:
                   --machine-kind "github-actions ubuntu-latest" ${limit[@]+"${limit[@]}"} "$@" ;;
               # #913: options="--algorithm pdhg" for the PDHG warm start. Runs through the
               # Python bindings, which load build/libsankhya; it takes no time limit.
+              # One job, one machine, one binary: both arms of an option A/B interleaved
+              # per instance (bench/runners/option_ab.py), e.g. options="--runner
+              # kennington.py --option ipm_supernodal=true --instances cre-a pds-02".
+              ab-option)
+                python3 bench/runners/option_ab.py --binary build/sankhya --machine "$machine"                   --out-prefix "bench/results/option-ab-${sha}" ${limit[@]+"${limit[@]}"} "$@" ;;
               rolling-warm-start)
                 python3 bench/runners/rolling_warm_start.py --machine "$machine" "$@" ;;
               ab-netlib)
