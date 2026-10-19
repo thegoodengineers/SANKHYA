@@ -731,6 +731,70 @@ TEST(SparseLuForrestTomlin, ManyUpdatesInSequenceStayCorrect) {
   EXPECT_LT(worst, 1e-7) << "stacked updates drift from a fresh factorization by " << worst;
 }
 
+TEST(SparseLuForrestTomlin, TheUpdateOverAlphasSupportIsTheSameToTheBit) {
+  // The dual loop hands the update alpha's nonzero positions (#1042), and the update then
+  // scans those instead of all m: the factors must come out bit-for-bit the ones the full
+  // scan gives, or the pivot path moves. Two copies of one factorization take the same
+  // sparse entering columns, one with the support and one without, and every solve after
+  // every update is compared exactly.
+  std::mt19937 rng(20261019);
+  std::uniform_real_distribution<double> value(-3.0, 3.0);
+  std::uniform_real_distribution<double> unit(0.0, 1.0);
+
+  constexpr Index m = 30;
+  const TestMatrix basis = random_basis(rng, m, 0.15);
+  SparseLu full;
+  SparseLu sparse;
+  ASSERT_TRUE(full.factorize(basis.columns(), m, tol::kPivotTolerance, kThreshold));
+  ASSERT_TRUE(sparse.factorize(basis.columns(), m, tol::kPivotTolerance, kThreshold));
+
+  int applied = 0;
+  for (int step = 0; step < 40; ++step) {
+    const Index leaving = static_cast<Index>((7 * step) % m);
+    std::vector<double> entering(static_cast<std::size_t>(m), 0.0);
+    for (Index i = 0; i < m; ++i) {
+      if (unit(rng) < 0.12 || i == leaving) entering[static_cast<std::size_t>(i)] = value(rng);
+    }
+    std::vector<double> alpha = entering;
+    full.solve(alpha.data());
+    std::vector<double> alpha_sparse = entering;
+    sparse.solve(alpha_sparse.data());
+    for (Index i = 0; i < m; ++i) {
+      ASSERT_EQ(alpha[static_cast<std::size_t>(i)], alpha_sparse[static_cast<std::size_t>(i)]);
+    }
+    std::vector<Index> support;
+    for (Index i = 0; i < m; ++i) {
+      if (alpha[static_cast<std::size_t>(i)] != 0.0) support.push_back(i);
+    }
+    const bool a = full.update_forrest_tomlin(leaving, alpha.data());
+    const bool b = sparse.update_forrest_tomlin(leaving, alpha_sparse.data(), &support);
+    ASSERT_EQ(a, b) << "update " << step;
+    if (!a) {
+      ASSERT_TRUE(full.factorize(basis.columns(), m, tol::kPivotTolerance, kThreshold));
+      ASSERT_TRUE(sparse.factorize(basis.columns(), m, tol::kPivotTolerance, kThreshold));
+      continue;
+    }
+    ++applied;
+    std::vector<double> rhs(static_cast<std::size_t>(m));
+    for (double& v : rhs) v = value(rng);
+    std::vector<double> x = rhs;
+    std::vector<double> y = rhs;
+    full.solve(x.data());
+    sparse.solve(y.data());
+    std::vector<double> xt = rhs;
+    std::vector<double> yt = rhs;
+    full.solve_transpose(xt.data());
+    sparse.solve_transpose(yt.data());
+    for (Index i = 0; i < m; ++i) {
+      ASSERT_EQ(x[static_cast<std::size_t>(i)], y[static_cast<std::size_t>(i)])
+          << "update " << step;
+      ASSERT_EQ(xt[static_cast<std::size_t>(i)], yt[static_cast<std::size_t>(i)])
+          << "update " << step;
+    }
+  }
+  EXPECT_GE(applied, 10) << "too few updates accepted to compare";
+}
+
 TEST(SparseLuForrestTomlin, SparseEnteringColumnsStackLikeDenseOnes) {
   // The stacking test above replaces columns with DENSE entering vectors, so every entry of
   // alpha is nonzero and the sparse spike, the partial BTRAN started at the leaving

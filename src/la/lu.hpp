@@ -264,7 +264,12 @@ class SparseLu {
   /// first write; a caller that reads false may keep using this instance exactly as
   /// update()'s caller does. Every caller today refactorizes anyway once either update
   /// returns false, but this instance itself is not the reason to.
-  [[nodiscard]] bool update_forrest_tomlin(Index leaving_position, const double* alpha);
+  ///
+  /// `support`, when given, is alpha's nonzero positions (every position where alpha is
+  /// nonzero; the rest hold exact zeros), as update()'s second form takes it: the two scans
+  /// of alpha run over it instead of all m positions, and the update is the same to the bit.
+  [[nodiscard]] bool update_forrest_tomlin(Index leaving_position, const double* alpha,
+                                           const std::vector<Index>* support = nullptr);
 
   /// Both update() forms: `support` is alpha's nonzero positions, or nullptr for all m.
   [[nodiscard]] bool update_over(Index leaving_position, const double* alpha,
@@ -518,7 +523,7 @@ class SparseLu {
   /// plain members here rather than that class so update_forrest_tomlin's existing
   /// dense-array field names (spike, ft_diag_, ...) did not all need to change shape.
   std::vector<double> ft_spike_;
-  mutable std::vector<bool> ft_spike_marked_;
+  mutable std::vector<char> ft_spike_marked_;
   mutable std::vector<Index> ft_spike_touched_;
   /// Nonzero steps of the CURRENT call's alpha-by-step vector (work_), collected for free
   /// while work_ is gathered from the caller's dense `alpha` (that gather is the one place

@@ -282,7 +282,7 @@ bool SparseLu::update_over(Index leaving_position, const double* alpha,
   if (leaving_position < 0 || leaving_position >= m_) return false;
   // The scheme the caller chose (use_forrest_tomlin) is honoured here, so the simplex has
   // one call and one set of counters whichever form is in play.
-  if (forrest_tomlin_) return update_forrest_tomlin(leaving_position, alpha);
+  if (forrest_tomlin_) return update_forrest_tomlin(leaving_position, alpha, support);
   // The symmetric guard to update_forrest_tomlin()'s own check: once Forrest-Tomlin mode
   // has folded any update into U, appending a product-form eta here would never be read by
   // either solve() path - U itself, not an outer eta file, is what represents those updates.
@@ -687,7 +687,7 @@ void SparseLu::ft_init() {
   ft_btran_scratch_.assign(static_cast<std::size_t>(m), 0.0);
   ft_btran_touched_.clear();
   ft_spike_.assign(static_cast<std::size_t>(m), 0.0);
-  ft_spike_marked_.assign(static_cast<std::size_t>(m), false);
+  ft_spike_marked_.assign(static_cast<std::size_t>(m), 0);
   ft_spike_touched_.clear();
   ft_work_nz_.clear();
   ft_reta_pivot_step_.clear();
@@ -814,7 +814,8 @@ void SparseLu::ft_forward_substitute(double* z_by_step) const {
   }
 }
 
-bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha) {
+bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha,
+                                     const std::vector<Index>* support) {
   if (m_ == 0) return false;
   if (leaving_position < 0 || leaving_position >= m_) return false;
   if (!ft_active_) {
@@ -835,9 +836,17 @@ bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha
   // new_diagonal / old_diagonal(s0): the test on the new diagonal alone lets a pivot through
   // whenever the old diagonal is large. The product form's own rule, on the same alpha, is
   // applied first so both schemes refuse the same pivots.
+  // Over alpha's support when the caller has it (#1042): a position outside it holds an
+  // exact zero, which moves neither the maximum nor the pattern below.
   double largest_alpha = 0.0;
-  for (Index i = 0; i < m; ++i) {
-    largest_alpha = std::max(largest_alpha, std::fabs(alpha[static_cast<std::size_t>(i)]));
+  if (support == nullptr) {
+    for (Index i = 0; i < m; ++i) {
+      largest_alpha = std::max(largest_alpha, std::fabs(alpha[static_cast<std::size_t>(i)]));
+    }
+  } else {
+    for (const Index i : *support) {
+      largest_alpha = std::max(largest_alpha, std::fabs(alpha[static_cast<std::size_t>(i)]));
+    }
   }
   const double alpha_p = alpha[up];
   if (!std::isfinite(alpha_p) || !std::isfinite(largest_alpha)) return false;
@@ -854,11 +863,24 @@ bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha
   // issue #279's follow-up ("a sparse spike... walk ft_row_/ft_col_ from the nonzeros of
   // alpha") is what everything from here on reads instead of a second 0..m sweep.
   ft_work_nz_.clear();
-  for (Index s = 0; s < m; ++s) {
-    const auto us = static_cast<std::size_t>(s);
-    const double value = alpha[static_cast<std::size_t>(pivot_col_[us])];
-    work_[us] = value;
-    if (value != 0.0) ft_work_nz_.push_back(s);
+  if (support == nullptr) {
+    for (Index s = 0; s < m; ++s) {
+      const auto us = static_cast<std::size_t>(s);
+      const double value = alpha[static_cast<std::size_t>(pivot_col_[us])];
+      work_[us] = value;
+      if (value != 0.0) ft_work_nz_.push_back(s);
+    }
+  } else {
+    // The same steps from the support, each the step whose pivot column is that position,
+    // then sorted: the spike below accumulates each entry's terms in increasing step order,
+    // as the full scan lists them, so the sums are the same to the bit. work_ is read only
+    // at these steps.
+    for (const Index position : *support) {
+      const Index s = ft_step_of_position_[static_cast<std::size_t>(position)];
+      work_[static_cast<std::size_t>(s)] = alpha[static_cast<std::size_t>(position)];
+      ft_work_nz_.push_back(s);
+    }
+    std::sort(ft_work_nz_.begin(), ft_work_nz_.end());
   }
   // ft_spike_ is member scratch, sized once by ft_init(), for the same reason work_ is: this
   // runs on the pivot path several hundred times a second. Cleared here from whatever the
@@ -873,13 +895,13 @@ bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha
   for (Index touched : ft_spike_touched_) {
     const auto ut = static_cast<std::size_t>(touched);
     spike[ut] = 0.0;
-    ft_spike_marked_[ut] = false;
+    ft_spike_marked_[ut] = 0;
   }
   ft_spike_touched_.clear();
   const auto spike_add = [&](Index index, double delta) {
     const auto ui = static_cast<std::size_t>(index);
-    if (!ft_spike_marked_[ui]) {
-      ft_spike_marked_[ui] = true;
+    if (ft_spike_marked_[ui] == 0) {
+      ft_spike_marked_[ui] = 1;
       spike[ui] = delta;
       ft_spike_touched_.push_back(index);
     } else {
