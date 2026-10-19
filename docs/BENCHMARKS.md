@@ -2199,52 +2199,52 @@ Bilinear quality terms make every one a non-convex QCQP. A run passes only on `o
 the published optimum with a solution the independent verifier accepts; a model the solver
 refuses is listed as refused, not dropped (`bench/runners/pooling.py`).
 
-Source CSV: `bench/results/pooling-5a39fb2.csv`  
-Commit `5a39fb2` · machine `Windows-AMD64` · time limit 60 s per run · `nonconvex=global` (set by the runner, #516), otherwise solver defaults
+Source CSV: `bench/results/pooling-729112d.csv`  
+Commit `729112d` · machine `Linux-x86_64` · time limit 60 s per run · `nonconvex=global` (set by the runner, #516), otherwise solver defaults
 
 **32 of 39 runs** (13 instances) reached the published global optimum within 1e-4 relative, claimed `optimal`, and were accepted by `tools/verify_solution.py` against the original non-convex model.
 
 | instance | form | status | our objective | global optimum | proven bound | root bound | nodes | time (s) | verified |
 |---|---|---|---:|---:|---:|---:|---:|---:|:--:|
-| `adhya1` | P | optimal | -549.7948331 | -549.8030502 | -549.8487943 | -989.18928 | 3601 | 5.50 | yes |
-| `adhya1` | PQ | optimal | -549.765337 | -549.8030502 | -549.8199626 | -840.27056 | 181 | 0.28 | yes |
-| `adhya1` | Q | optimal | -549.7938835 | -549.8030502 | -549.847225 | -1335 | 5699 | 5.30 | yes |
-| `adhya2` | P | optimal | -549.7707537 | -549.8030502 | -549.8256722 | -847.00386 | 13359 | 24.88 | yes |
-| `adhya2` | PQ | optimal | -549.7936477 | -549.8030502 | -549.8479255 | -574.78261 | 149 | 0.20 | yes |
-| `adhya2` | Q | optimal | -549.7841738 | -549.8030502 | -549.8387989 | -1335 | 5347 | 4.54 | yes |
-| `adhya3` | P | feasible | -558.1999612 | -561.0446875 | -578.0302274 | -876.20685 | 20917 | 60.04 | yes |
-| `adhya3` | PQ | optimal | -561.0446804 | -561.0446875 | -561.0446909 | -574.78261 | 130 | 0.33 | yes |
-| `adhya3` | Q | feasible | -559.2204679 | -561.0446875 | -662.3196974 | -1335 | 21838 | 60.03 | yes |
-| `adhya4` | P | optimal | -877.6417921 | -877.6457399 | -877.6767281 | -992.66728 | 890 | 1.48 | yes |
-| `adhya4` | PQ | optimal | -877.6457443 | -877.6457399 | -877.6462669 | -961.93218 | 40 | 0.12 | yes |
-| `adhya4` | Q | feasible | -857.8808973 | -877.6457399 | -1023.391537 | -1345 | 27903 | 60.04 | yes |
-| `bental4` | P | optimal | -450 | -450 | -450 | -550 | 3 | 0.02 | yes |
-| `bental4` | PQ | optimal | -450 | -450 | -450 | -550 | 3 | 0.03 | yes |
-| `bental4` | Q | optimal | -450.0000003 | -450 | -450.0132749 | -2933.3333 | 197 | 0.11 | yes |
-| `bental5` | P | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.03 | yes |
-| `bental5` | PQ | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.03 | yes |
-| `bental5` | Q | feasible | -3500 | -3500 | -7035.831399 | -9700 | 28251 | 60.04 | yes |
-| `foulds2` | P | optimal | -1100 | -1100 | -1100 | -1100 | 1 | 0.03 | yes |
-| `foulds2` | PQ | optimal | -1100 | -1100 | -1100 | -1100 | 1 | 0.03 | yes |
-| `foulds2` | Q | optimal | -1100.000001 | -1100 | -1100.107363 | -6900 | 15523 | 12.40 | yes |
-| `foulds3` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.04 | yes |
-| `foulds3` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.08 | yes |
-| `foulds3` | Q | feasible | -8 | -8 | -260 | -260 | 9499 | 60.05 | yes |
-| `foulds4` | P | optimal | -8 | -8 | -8 | -8 | 2 | 0.06 | yes |
+| `adhya1` | P | optimal | -549.7948331 | -549.8030502 | -549.8487943 | -989.18928 | 3601 | 3.80 | yes |
+| `adhya1` | PQ | optimal | -549.765337 | -549.8030502 | -549.8199626 | -840.27056 | 181 | 0.18 | yes |
+| `adhya1` | Q | optimal | -549.7938835 | -549.8030502 | -549.847225 | -1335 | 5699 | 4.09 | yes |
+| `adhya2` | P | optimal | -549.7707537 | -549.8030502 | -549.8256722 | -847.00386 | 13359 | 22.97 | yes |
+| `adhya2` | PQ | optimal | -549.7936477 | -549.8030502 | -549.8479255 | -574.78261 | 149 | 0.16 | yes |
+| `adhya2` | Q | optimal | -549.7841738 | -549.8030502 | -549.8387989 | -1335 | 5347 | 3.96 | yes |
+| `adhya3` | P | feasible | -557.329488 | -561.0446875 | -578.7302661 | -876.20685 | 19323 | 60.01 | yes |
+| `adhya3` | PQ | optimal | -561.0446804 | -561.0446875 | -561.0446909 | -574.78261 | 130 | 0.26 | yes |
+| `adhya3` | Q | feasible | -559.2204679 | -561.0446875 | -627.0629097 | -1335 | 30714 | 60.01 | yes |
+| `adhya4` | P | optimal | -877.6417921 | -877.6457399 | -877.6767281 | -992.66728 | 890 | 1.42 | yes |
+| `adhya4` | PQ | optimal | -877.6457443 | -877.6457399 | -877.6462669 | -961.93218 | 40 | 0.07 | yes |
+| `adhya4` | Q | feasible | -871.3110415 | -877.6457399 | -1018.789903 | -1345 | 31852 | 60.02 | yes |
+| `bental4` | P | optimal | -450 | -450 | -450 | -550 | 3 | 0.00 | yes |
+| `bental4` | PQ | optimal | -450 | -450 | -450 | -550 | 3 | 0.00 | yes |
+| `bental4` | Q | optimal | -450.0000003 | -450 | -450.0132749 | -2933.3333 | 197 | 0.05 | yes |
+| `bental5` | P | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.01 | yes |
+| `bental5` | PQ | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.00 | yes |
+| `bental5` | Q | feasible | -3500 | -3500 | -7015.668933 | -9700 | 29730 | 60.03 | yes |
+| `foulds2` | P | optimal | -1100 | -1100 | -1100 | -1100 | 1 | 0.00 | yes |
+| `foulds2` | PQ | optimal | -1100 | -1100 | -1100 | -1100 | 1 | 0.00 | yes |
+| `foulds2` | Q | optimal | -1100.000001 | -1100 | -1100.107363 | -6900 | 15523 | 7.50 | yes |
+| `foulds3` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.03 | yes |
+| `foulds3` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.07 | yes |
+| `foulds3` | Q | feasible | -8 | -8 | -260 | -260 | 6596 | 60.02 | yes |
+| `foulds4` | P | optimal | -8 | -8 | -8 | -8 | 2 | 0.04 | yes |
 | `foulds4` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.09 | yes |
-| `foulds4` | Q | feasible | -8 | -8 | -260 | -260 | 9543 | 60.04 | yes |
-| `foulds5` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.03 | yes |
-| `foulds5` | PQ | optimal | -8 | -8 | -8 | -8 | 2 | 0.12 | yes |
-| `foulds5` | Q | feasible | -8 | -8 | -258.5134801 | -260 | 6580 | 60.04 | yes |
-| `haverly1` | P | optimal | -400 | -400 | -400 | -500 | 3 | 0.02 | yes |
-| `haverly1` | PQ | optimal | -400 | -400 | -400 | -500 | 3 | 0.03 | yes |
-| `haverly1` | Q | optimal | -400.0000011 | -400 | -400.0000011 | -2450 | 41 | 0.05 | yes |
-| `haverly2` | P | optimal | -600 | -600 | -600 | -1000 | 7 | 0.03 | yes |
-| `haverly2` | PQ | optimal | -600 | -600 | -600 | -1000 | 3 | 0.03 | yes |
-| `haverly2` | Q | optimal | -600 | -600 | -600.0000002 | -4700 | 33 | 0.04 | yes |
-| `haverly3` | P | optimal | -750 | -750 | -750 | -800 | 7 | 0.03 | yes |
-| `haverly3` | PQ | optimal | -750 | -750 | -750 | -800 | 3 | 0.03 | yes |
-| `haverly3` | Q | optimal | -750.0000011 | -750 | -750.0000011 | -2450 | 29 | 0.05 | yes |
+| `foulds4` | Q | feasible | -8 | -8 | -260 | -260 | 6691 | 60.01 | yes |
+| `foulds5` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.02 | yes |
+| `foulds5` | PQ | optimal | -8 | -8 | -8 | -8 | 2 | 0.11 | yes |
+| `foulds5` | Q | feasible | -8 | -8 | -260 | -260 | 4403 | 60.02 | yes |
+| `haverly1` | P | optimal | -400 | -400 | -400 | -500 | 3 | 0.00 | yes |
+| `haverly1` | PQ | optimal | -400 | -400 | -400 | -500 | 3 | 0.00 | yes |
+| `haverly1` | Q | optimal | -400.0000011 | -400 | -400.0000011 | -2450 | 41 | 0.01 | yes |
+| `haverly2` | P | optimal | -600 | -600 | -600 | -1000 | 7 | 0.01 | yes |
+| `haverly2` | PQ | optimal | -600 | -600 | -600 | -1000 | 3 | 0.00 | yes |
+| `haverly2` | Q | optimal | -600 | -600 | -600.0000002 | -4700 | 33 | 0.01 | yes |
+| `haverly3` | P | optimal | -750 | -750 | -750 | -800 | 7 | 0.00 | yes |
+| `haverly3` | PQ | optimal | -750 | -750 | -750 | -800 | 3 | 0.00 | yes |
+| `haverly3` | Q | optimal | -750.0000011 | -750 | -750.0000011 | -2450 | 29 | 0.01 | yes |
 
 #### Root relaxation: PQ against P
 
@@ -2277,11 +2277,52 @@ rebuilds every relaxation from the original model in exact arithmetic and accept
 only when the bound it proves closes the gap. A certified search uses no bound tightening, so
 it is a different search from the run above.
 
-Not yet run on `main`. Reproduce with:
+Source CSV: `bench/results/pooling-certificate-729112d.csv`  
+Commit `729112d` · machine `Linux-x86_64` · time limit 60 s per run · `nonconvex=global` and `write_certificate` (set by the runner)
 
-```
-python bench/runners/pooling.py --certificate --time-limit 60
-```
+**32 of 39 runs certified**: `optimal` at the published global optimum, accepted by `tools/verify_solution.py`, and the certificate accepted by `tools/verify_global_certificate.py` in exact arithmetic. Status: feasible 7, optimal 32. Checker verdict: verified 39.
+
+| instance | form | status | our objective | proven bound | nodes | time (s) | certificate |
+|---|---|---|---:|---:|---:|---:|---|
+| `adhya1` | P | optimal | -549.7685155 | -549.8233376 | 5037 | 5.20 | verified |
+| `adhya1` | PQ | optimal | -549.7912685 | -549.8295776 | 260 | 0.21 | verified |
+| `adhya1` | Q | optimal | -549.7868114 | -549.8417839 | 14733 | 10.08 | verified |
+| `adhya2` | P | optimal | -549.7983014 | -549.8531637 | 16063 | 26.51 | verified |
+| `adhya2` | PQ | optimal | -549.8021965 | -549.8031651 | 390 | 0.33 | verified |
+| `adhya2` | Q | optimal | -549.8018498 | -549.8568155 | 13381 | 9.76 | verified |
+| `adhya3` | P | feasible | -558.765194 | -580.0450057 | 18975 | 60.36 | verified |
+| `adhya3` | PQ | optimal | -561.0348454 | -561.0448366 | 160 | 0.26 | verified |
+| `adhya3` | Q | feasible | -556.7204874 | -672.2611562 | 42947 | 60.65 | verified |
+| `adhya4` | P | optimal | -877.6442226 | -877.6857026 | 1310 | 1.94 | verified |
+| `adhya4` | PQ | optimal | -877.6429502 | -877.65716 | 30 | 0.07 | verified |
+| `adhya4` | Q | feasible | -870.0801347 | -1025.798983 | 33050 | 60.59 | verified |
+| `bental4` | P | optimal | -450 | -450 | 3 | 0.00 | verified |
+| `bental4` | PQ | optimal | -450 | -450 | 3 | 0.00 | verified |
+| `bental4` | Q | optimal | -450 | -450.0255012 | 281 | 0.07 | verified |
+| `bental5` | P | optimal | -3500 | -3500 | 1 | 0.01 | verified |
+| `bental5` | PQ | optimal | -3500 | -3500 | 1 | 0.00 | verified |
+| `bental5` | Q | feasible | -3500 | -7081.634645 | 30766 | 60.62 | verified |
+| `foulds2` | P | optimal | -1100 | -1100 | 1 | 0.00 | verified |
+| `foulds2` | PQ | optimal | -1100 | -1100 | 1 | 0.01 | verified |
+| `foulds2` | Q | optimal | -1100 | -1100.109233 | 35359 | 18.02 | verified |
+| `foulds3` | P | optimal | -8 | -8 | 1 | 0.03 | verified |
+| `foulds3` | PQ | optimal | -8 | -8 | 1 | 0.07 | verified |
+| `foulds3` | Q | feasible | -8 | -260 | 6963 | 60.38 | verified |
+| `foulds4` | P | optimal | -8 | -8 | 2 | 0.04 | verified |
+| `foulds4` | PQ | optimal | -8 | -8 | 1 | 0.09 | verified |
+| `foulds4` | Q | feasible | -8 | -260 | 6785 | 60.38 | verified |
+| `foulds5` | P | optimal | -8 | -8 | 1 | 0.02 | verified |
+| `foulds5` | PQ | optimal | -8 | -8 | 2 | 0.11 | verified |
+| `foulds5` | Q | feasible | -8 | -260 | 4600 | 60.16 | verified |
+| `haverly1` | P | optimal | -400 | -400 | 3 | 0.00 | verified |
+| `haverly1` | PQ | optimal | -400 | -400 | 3 | 0.00 | verified |
+| `haverly1` | Q | optimal | -400 | -400 | 67 | 0.02 | verified |
+| `haverly2` | P | optimal | -600 | -600 | 7 | 0.01 | verified |
+| `haverly2` | PQ | optimal | -600 | -600 | 3 | 0.00 | verified |
+| `haverly2` | Q | optimal | -600 | -600 | 61 | 0.02 | verified |
+| `haverly3` | P | optimal | -750 | -750 | 7 | 0.01 | verified |
+| `haverly3` | PQ | optimal | -750 | -750 | 3 | 0.00 | verified |
+| `haverly3` | Q | optimal | -750 | -750 | 63 | 0.02 | verified |
 
 ---
 
