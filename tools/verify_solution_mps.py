@@ -42,6 +42,10 @@ class Model:
         # is a'x + sum over listed entries of value * x_i * x_j. Kept entry by entry, so the
         # reading is the format's and not a folded form of it.
         self.qc_entries: dict[tuple[int, int, int], float] = {}
+        # CSECTION second-order cones (#755, the MOSEK MPS extension): (name, kind, columns)
+        # with kind "QUAD" (x_0 >= ||x_1..||) or "RQUAD" (2 x_0 x_1 >= ||x_2..||^2, both
+        # heads >= 0), the columns in the file's order.
+        self.cones: list[tuple[str, str, list[int]]] = []
         # Semi-continuous columns and special ordered sets (#754), read by
         # verify_solution_sos.py's own rules: an SC column takes 0 or a value in
         # [col_lower, col_upper]; a set is (type, name, columns, weights), members in weight
@@ -200,6 +204,15 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                     qc_row = model.row_index[head[1]]
                     if any(key3[0] == qc_row for key3 in model.qc_entries):
                         raise ValueError(f"{path}:{lineno}: second QCMATRIX for {head[1]}")
+                elif key == "CSECTION":
+                    # A cone (#755): `CSECTION <name> <parameter> <QUAD|RQUAD>`, then one
+                    # column name per line. The parameter belongs to cone types this
+                    # script does not read.
+                    if len(head) < 4 or head[3].upper() not in ("QUAD", "RQUAD"):
+                        raise ValueError(f"{path}:{lineno}: CSECTION must read "
+                                         "'CSECTION name parameter QUAD|RQUAD'")
+                    section = "CSECTION"
+                    model.cones.append((head[1], head[3].upper(), []))
                 elif key == "ENDATA":
                     break
                 else:
@@ -299,6 +312,13 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
 
             if section == "SOS":
                 sos.section_line(fields, model.col_index, f"{path}:{lineno}")
+                continue
+
+            if section == "CSECTION":
+                if len(fields) != 1 or fields[0] not in model.col_index:
+                    raise ValueError(f"{path}:{lineno}: CSECTION entry must be one known "
+                                     "column name")
+                model.cones[-1][2].append(model.col_index[fields[0]])
                 continue
 
             if section == "QCMATRIX":

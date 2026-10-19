@@ -22,6 +22,7 @@ from verify_solution_mps import _parse_mps  # noqa: E402
 import test_verify_solution_limits  # noqa: E402
 import test_verify_solution_names  # noqa: E402
 import test_verify_solution_nlp  # noqa: E402
+import test_verify_solution_conic  # noqa: E402
 import test_verify_solution_qcqp  # noqa: E402
 import test_verify_solution_safe_bound  # noqa: E402
 import test_verify_solution_sensitivity  # noqa: E402
@@ -980,6 +981,8 @@ def main() -> int:
     test_verify_solution_sos.run(check)
     print("quadratic rows, QCMATRIX (#514)")
     test_verify_solution_qcqp.run(check)
+    print("convex quadratic rows and cones by the conic interior point (#755)")
+    test_verify_solution_conic.run(check)
     print("nonlinear models, .nl (NLP stage 2)")
     test_verify_solution_nlp.run(check)
     test_verify_solution_nlp.run_minlp(check)

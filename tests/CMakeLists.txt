@@ -171,6 +171,7 @@ add_executable(sankhya_tests
   unit/test_minlp_minlplib.cpp
   unit/test_minlp_oa_minlplib.cpp
   unit/test_global.cpp
+  unit/test_conic.cpp
   unit/test_fractional_integer_bounds.cpp
   unit/test_deterministic.cpp
   unit/test_run_order_determinism.cpp

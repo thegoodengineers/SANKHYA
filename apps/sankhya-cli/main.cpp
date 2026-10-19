@@ -128,9 +128,9 @@ bool load_model(const std::string& path, const sankhya::Options& options,
   return true;
 }
 
-/// The model with its quadratic rows, read only under `nonconvex=global` (#514). A file
-/// with QCMATRIX sections reaches the global method; one without is solved exactly as
-/// load_model() + solve() would, since solve_global() hands a product-free model to solve().
+/// The model with its quadratic rows (#514) and cones (#755), for `solve`. A file with
+/// neither is read exactly as load_model() reads it, and `solve` hands its linear part to
+/// solve() unchanged.
 bool load_qcqp_model(const std::string& path, const sankhya::Options& options,
                      sankhya::QcqpModel* model) {
   sankhya::io::MpsFormat format = sankhya::io::MpsFormat::kAuto;
@@ -434,15 +434,16 @@ int main(int argc, char** argv) {
     if (sankhya::nlp::looks_like_nl(model_path)) {
       return sankhya::cli::nonlinear_solve(model_path, options, solution_path, stats_path);
     }
-    sankhya::Model model;
-    // Under nonconvex=global the model is read with its quadratic rows and solved by the
-    // global method (#514); `model` then holds the linear part, for names and the writers.
+    // The model is read with its quadratic rows and cones. Under nonconvex=global it goes to
+    // the global method (#514); otherwise quadratic rows and cones go to the conic interior
+    // point (#755), which refuses a non-convex row with its certificate, and a model with
+    // neither goes to solve() exactly as before. `model` holds the linear part, for the warm
+    // starts, the names and the writers.
     const bool global = options.get_string("nonconvex") == "global";
     sankhya::QcqpModel qcqp;
-    if (global ? !load_qcqp_model(model_path, options, &qcqp)
-               : !load_model(model_path, options, &model)) {
-      return 3;
-    }
+    if (!load_qcqp_model(model_path, options, &qcqp)) return 3;
+    const bool conic = !global && (qcqp.has_quadratic_rows() || qcqp.has_cones());
+    sankhya::Model model = qcqp.linear;
     if (!progress_out_path.empty()) options.set_string("progress_out", progress_out_path);
 
     g_cli_interrupt = 0;
@@ -479,9 +480,9 @@ int main(int argc, char** argv) {
       }
     }
 
-    const sankhya::Solution solution = global ? sankhya::solve_global(qcqp, options, &control)
-                                              : sankhya::solve(model, options, &control);
-    if (global) model = std::move(qcqp.linear);
+    const sankhya::Solution solution = global  ? sankhya::solve_global(qcqp, options, &control)
+                                       : conic ? sankhya::solve_conic(qcqp, options, &control)
+                                               : sankhya::solve(model, options, &control);
 
     std::signal(SIGINT, SIG_DFL);
 

@@ -55,6 +55,7 @@ enum class Section {
   kBounds,
   kQuadratic,  ///< QUADOBJ / QMATRIX / QSECTION - the QPS quadratic objective
   kQcMatrix,   ///< QCMATRIX <row> - a quadratic row, read only when a sink is set (#514)
+  kCsection,   ///< CSECTION <name> <par> <QUAD|RQUAD> - a cone, read only with a sink (#755)
   kSos,        ///< SOS / SETS - special ordered sets (#754), read in mps_sos.cpp
   kEnd
 };
@@ -532,11 +533,26 @@ ReadResult MpsParser::parse(const std::string& path) {
               "QCMATRIX section: quadratic constraints are not supported. This solver reads "
               "a quadratic OBJECTIVE only (QUADOBJ); a model with bilinear constraints, such "
               "as a pooling problem, is refused rather than read with those terms dropped. "
-              "--option nonconvex=global reads it and solves it with the global method");
+              "`sankhya solve` reads it: a convex row goes to the conic interior point "
+              "(#755), and --option nonconvex=global solves any row with the global method");
           return ReadResult::refusal(error);
         }
         if (!begin_qcmatrix(&error)) return ReadResult::failure(error);
         section = Section::kQcMatrix;
+        continue;
+      }
+      // A cone section - CSECTION <name> <parameter> <QUAD|RQUAD>, the MOSEK MPS extension
+      // (#755) - refused by name for the same reason as QCMATRIX when there is no sink.
+      if (to_upper(tok_[0]) == "CSECTION") {
+        if (cone_sink_ == nullptr) {
+          error = reader_.error_at(
+              "CSECTION section: a model with second-order cones is refused by this reader "
+              "rather than read with the cones dropped; `sankhya solve` reads it and hands "
+              "it to the conic interior point");
+          return ReadResult::refusal(error);
+        }
+        if (!begin_csection(&error)) return ReadResult::failure(error);
+        section = Section::kCsection;
         continue;
       }
       Section next = Section::kNone;
@@ -599,6 +615,9 @@ ReadResult MpsParser::parse(const std::string& path) {
         break;
       case Section::kQcMatrix:
         if (!do_qcmatrix(&error)) return ReadResult::failure(error);
+        break;
+      case Section::kCsection:
+        if (!do_csection(&error)) return ReadResult::failure(error);
         break;
       case Section::kSos:
         if (!do_sos(&error)) return ReadResult::failure(error);

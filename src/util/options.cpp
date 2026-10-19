@@ -160,11 +160,14 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::String,
                  std::string("refuse"),
                  "Models with products of columns in their rows (MPS QCMATRIX sections): "
-                 "refuse (default; the reader refuses them, as a local method would return a "
-                 "local point) or global (#514: read them and solve by spatial branch and "
-                 "bound over McCormick relaxations; `optimal` only when the proven bound "
-                 "closes mip_relative_gap / mip_absolute_gap, otherwise `feasible` with the "
-                 "bound; continuous models, every column of a product bounded).",
+                 "refuse (default; a row whose matrix is not semidefinite on the right side "
+                 "is refused with the LDL^T certificate, as a local method would return a "
+                 "local point, while a CONVEX row and an explicit cone (CSECTION) go to the "
+                 "conic interior point, #755) or global (#514: every quadratic row solved by "
+                 "spatial branch and bound over McCormick relaxations; `optimal` only when "
+                 "the proven bound closes mip_relative_gap / mip_absolute_gap, otherwise "
+                 "`feasible` with the bound; continuous models, every column of a product "
+                 "bounded).",
                  0.0,
                  0.0,
                  {"refuse", "global"}});

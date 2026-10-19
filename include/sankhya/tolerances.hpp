@@ -1195,4 +1195,34 @@ inline constexpr double kIpmDeviceStartSeconds = 2.0;
 /// (bench runs in #489). The largest system the device solved was rmine15's, 7.8e6.
 inline constexpr double kIpmDeviceSystemCeiling = 1e8;
 
+// ---- The conic interior point: second-order cones and convex quadratic rows (#755) ---------
+
+/// Convergence of the homogeneous self-dual embedding to an optimum, measured on the point
+/// x/tau, y/tau, s/tau: relative primal residual, relative dual residual and relative gap each
+/// at or below this. The LP embedding's kIpmHsdTolerance, so the two converge alike.
+inline constexpr double kConicTolerance = 1e-8;
+/// A certificate (a dual ray y, s with A'y + s = 0, s in the dual cone, b'y = 1; or a primal
+/// ray x with A x = 0, x in the cone, c'x = -1) is accepted when its defining equation holds
+/// to this, relative to the terms it is made of.
+inline constexpr double kConicCertificateTolerance = 1e-8;
+/// The step keeps this fraction of the distance to the cone's boundary (Mehrotra 1992).
+inline constexpr double kConicFractionToBoundary = 0.99;
+/// The iteration stops without a verdict once mu has fallen this far below its starting
+/// value while tau and kappa still have not decided, as kIpmHsdMuFloor does for the LP.
+inline constexpr double kConicMuFloor = 1e-15;
+/// The primal (rho, on the cone block) and dual (delta, on the rows) regularization that
+/// keeps the augmented system quasi-definite with free columns in it (Altman & Gondzio 1999);
+/// iterative refinement against the unregularized matrix takes it back out of the step.
+inline constexpr double kConicRegularization = 1e-9;
+/// Iterations after which the embedding is taken not to converge.
+inline constexpr int kConicIterationCeiling = 200;
+/// A convex quadratic row's matrix Q_r, and the objective's Hessian, are factored as F F'
+/// by a dense pivoted Cholesky on their support (Higham 1990), which needs the support's
+/// square in memory; a support wider than this is refused rather than factored.
+inline constexpr Index kConicDenseFactorLimit = 4000;
+/// The pivoted Cholesky stops at a pivot below this share of the largest diagonal: the rest
+/// of the matrix is rounding of a rank-deficient but positive semidefinite Q (the convexity
+/// test already accepted it at kCurvatureTolerance, 1e-12, of the same scale).
+inline constexpr double kConicCholeskyPivotShare = 1e-12;
+
 }  // namespace sankhya::tol

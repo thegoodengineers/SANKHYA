@@ -40,6 +40,7 @@ on:
           - head-to-head-maros-meszaros
           - pooling
           - pooling-certified
+          - qplib-qcqp
           - kennington
           - miplib-tier1
           - refinery
@@ -167,6 +168,12 @@ jobs:
               git checkout -- 'data/netlib/*.mps' ;;
             maros-meszaros|head-to-head-maros-meszaros)
               python3 bench/runners/fetch_maros_meszaros.py ;;
+            # #755: QPLIB's convex QCQPs. The fetch rewrites the tracked manifest from the
+            # site, which would stamp the run -dirty; the committed one, whose sha256s the
+            # instances were checked against, is put back, as for Netlib above.
+            qplib-qcqp)
+              python3 bench/runners/fetch_qplib.py --qcqp
+              git checkout -- data/qplib/reference_qcqp.json ;;
             kennington) python3 bench/runners/fetch_kennington.py ;;
             miplib-tier1) python3 bench/runners/fetch_miplib.py ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
@@ -202,6 +209,10 @@ jobs:
                   --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
               kennington)
                 python3 bench/runners/kennington.py --binary build/sankhya --machine "$machine" \
+                  ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #755: the conic interior point and the global method on each instance.
+              qplib-qcqp)
+                python3 bench/runners/qplib_qcqp.py --binary build/sankhya --machine "$machine" \
                   ${limit[@]+"${limit[@]}"} "$@" ;;
               # miplib.py and compare.py build their own tag (CPU, cores, RAM, OS) around
               # the kind given here.
