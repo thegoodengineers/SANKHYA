@@ -1,0 +1,31 @@
+instance,seeds,seeds_matched,seeds_proved,matched_seeds,proved_seeds,sgm_seconds,sgm_first_feasible_seconds,mean_primal_integral,time_limit,git_commit,machine
+b-ball,3,3,1,0 1 2,0,166.1115,0.1650,0.1676,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+ej,3,0,0,,,600.0000,600.0000,1.7643,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+enlight8,3,3,0,0 1 2,,600.0000,0.4919,0.4923,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+enlight_hard,3,3,0,0 1 2,,600.0000,0.3871,0.3889,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+f2gap40400,3,3,3,0 1 2,0 1 2,6.8520,0.5743,0.5930,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+flugpl,3,3,3,0 1 2,0 1 2,1.4093,1.2904,1.2997,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+gen-ip016,3,0,0,,,600.0000,0.0015,0.2390,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+gen-ip054,3,0,0,,,600.0000,0.0007,0.1138,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+gr4x6,3,3,3,0 1 2,0 1 2,1.2860,0.0015,0.0722,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+gt2,3,3,3,0 1 2,0 1 2,1.3381,0.0015,0.2170,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+k16x240b,3,0,0,,,600.0000,0.0161,1.8211,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+markshare1,3,0,0,,,600.0000,0.2290,2.1264,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+markshare_4_0,3,0,0,,,600.0000,0.0065,1.9613,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+markshare_5_0,3,0,0,,,600.0000,0.0111,2.5244,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+neos-1425699,3,3,3,0 1 2,0 1 2,1.2576,0.1157,0.3290,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+neos-3072252-nete,3,0,0,,,600.0000,1.4536,2.1910,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+neos-3611689-kaihu,3,1,0,2,,600.0000,0.0434,0.2707,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+neos-5140963-mincio,3,0,0,,,600.0000,0.0194,1.5657,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+neos-5192052-neckar,3,3,3,0 1 2,0 1 2,0.7868,0.0099,0.3035,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+neos5,3,0,0,,,600.0000,0.0249,0.6679,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+noswot,3,1,0,0,,600.0000,0.0073,0.0798,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+opt1217,3,3,0,0 1 2,,600.0000,0.0047,0.0075,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+p0201,3,3,3,0 1 2,0 1 2,3.7630,0.0076,0.0757,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+pk1,3,0,0,,,600.0000,0.0028,2.1576,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+ran12x21,3,0,0,,,600.0000,0.0106,1.6499,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+ran13x13,3,0,0,,,600.0000,0.0142,0.9701,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+rlp1,3,3,0,0 1 2,,600.0000,0.3747,0.3778,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+supportcase14,3,3,3,0 1 2,0 1 2,1.9175,0.8075,0.9046,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+supportcase16,3,3,3,0 1 2,0 1 2,2.0838,0.7657,0.9295,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64
+timtab1,3,0,0,,,600.0000,600.0000,6.7852,600,729112d8,wsl2 ubuntu-22.04 shared laptop; 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz; 4 cores; 5 GiB RAM; Linux-x86_64

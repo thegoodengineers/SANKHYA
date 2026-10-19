@@ -1766,6 +1766,33 @@ Instances whose matched or proved seed count moved between the legs: `gt2` match
 On the node-limited set the time columns charge every unproved run the runner's nominal 100000 s limit and say nothing; the proved and matched counts, which a loaded machine cannot move, are the reading.
 
 
+#### A/B: every optional heuristic alone on the node-limited seed harness (#414)
+
+Issue #414: each primal heuristic behind its own `mip_heur_*` switch, measured alone against
+the defaults (Feasibility Jump and parity on) at `node_limit=2000` over three seeds, so a
+shared machine cannot move the counts. A switch is turned on by default when its leg gains a
+matched or a proved seed and loses neither; the time columns are stated for completeness
+only.
+
+Source CSVs: `bench/results/miplib-414-n2000-base-seeds3-729112d8.csv` (the defaults) and one `bench/results/miplib-414-n2000-<leg>-seeds3-729112d8.csv` per leg, commit `729112d8`, 3 seeds each (the published file and row and column permutations of it), `node_limit=2000`, one thread. The time columns say nothing on a shared machine; matched, proved and the node ratio are the reading.
+
+| leg | option | matched | proved | first feasible found | sgm first feasible (s, shift 1) | mean primal integral (s) | nodes | instances moved |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| base | - | 44 | 28 | 84 | 1.143 | 2.63 | 1.000x | - |
+| lock-rounding | `mip_heur_lock_rounding=on` | 44 | 28 | 84 | 0.951 | 1.65 | 1.000x | none |
+| repair | `mip_heur_repair=on` | 44 | 28 | 84 | 0.832 | 0.96 | 1.000x | none |
+| pump | `mip_heur_pump=on` | 44 | 28 | 84 | 0.702 | 0.67 | 1.000x | none |
+| rins | `mip_heur_rins=on` | 45 | 28 | 84 | 0.722 | 0.73 | 1.000x | `neos-3611689-kaihu` 1/0->2/0 |
+| rens | `mip_heur_rens=on` | 43 | 28 | 84 | 0.752 | 0.88 | 1.000x | `neos-3611689-kaihu` 1/0->0/0 |
+| dive-coefficient | `mip_heur_dive_coefficient=on` | 44 | 28 | 84 | 0.812 | 1.10 | 1.000x | none |
+| dive-vector-length | `mip_heur_dive_vector_length=on` | 44 | 28 | 84 | 0.802 | 1.07 | 1.000x | none |
+| dive-guided | `mip_heur_dive_guided=on` | 44 | 28 | 84 | 0.805 | 1.13 | 1.000x | none |
+| prop-dive | `mip_heur_prop_dive=on` | 44 | 28 | 84 | 0.883 | 13.87 | 1.000x | none |
+| local-branching | `mip_heur_local_branching=on` | 43 | 28 | 84 | 1.143 | 3.20 | 0.998x | `neos-3611689-kaihu` 1/0->0/0 |
+
+Instances moved are matched/proved seed counts, base -> leg. Legs whose matched or proved count goes up with neither going down: rins.
+
+
 #### A/B: Devex for the node LPs on the seed harness (#792)
 
 Source CSVs: `bench/results/nodepricing-ab-miplib-seeds3-inherit-fef0192.csv` and `bench/results/nodepricing-ab-miplib-seeds3-devex-fef0192.csv`, `mip_node_pricing` off and on, 3 seeds each (the published file and row and column permutations of it), 60 s per run, one thread.
