@@ -145,6 +145,19 @@ Measured at `45f31f8c` (branch) under WSL on the laptop with other jobs running,
 
 Where both arms reached the same iteration the stalled measure was no better with the floor on, and no instance moved toward its reference: keeping mu up does not unfreeze the residual, so the barrier collapsing is not what holds LISWET. Not merged, because an off-by-default option with no measured benefit is code without a reason. The CSVs were not committed (the branch stamp is not on `main`).
 
+### An outer proximal method of multipliers for the QP interior point (#981, branch `qp-ipm-outer-pmm`, not merged)
+
+The interior point moves both proximal centres to the current iterate at every iteration. This held the dual centre across inner iterations instead: each Newton step was the proximal subproblem's, M dv + delta dy = b - M v - delta (y - y_centre), refined against the matrix with delta kept and rho removed; the centre moved to y once the subproblem's residual was a tenth of the true one; delta was held at least 1e-6 (Rockafellar, Math. Oper. Res. 1, 1976; Pougkakiotis & Gondzio, Comput. Optim. Appl. 78, 2021). The aim was the LISWET stalls.
+
+Measured at `6a31c05` (branch) in CI, `bench.yml`'s `maros-meszaros` suite on GitHub Actions `ubuntu-latest`, 60 s, both arms on the same binary (runs 39230376494 off and 39230384791 on): the eleven stall instances and twelve controls.
+
+| | passed | verified | optimal | rejected optimal |
+|---|---:|---:|---:|---:|
+| off | 13 | 14 | 14 | 0 |
+| on | 8 | 9 | 8 | 0 |
+
+Nothing in the stall set improved: liswet2 lost its verified optimum (reached through the hand-off when off) to the 210-iteration stall, yao's gap went from 0.616 to 0.918, and the other LISWET instances ended where they were. Five controls that were optimal were lost - qseba, qship12s, qgrow15, powell20 and qcapri - most of them handed to the first-order engine after the interior point gave up. Holding the dual centre makes the step worse on well-posed models and does not help the degenerate ones. Not merged. The CSVs were not committed (the branch stamp is not on `main`).
+
 ---
 
 ## 3. Built opt-in, awaiting the measurement
