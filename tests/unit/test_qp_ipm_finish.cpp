@@ -347,5 +347,43 @@ TEST(QpIpmFinish, ActiveSetFinishIsExactWhenTheActiveRowsAreDependent) {
   EXPECT_NEAR(zl[0], 1.0, 1e-12);
 }
 
+TEST(QpIpmFinish, ActiveSetFinishKeepsCoefficientsBelowTheStructuralZeroThreshold) {
+  // #1079: min 0.5 (x1^2 + x2^2) s.t. 1e-12 x1 + 2e-12 x2 = 1e-12, x >= 0 - the row
+  // x1 + 2 x2 = 1 written with coefficients under tol::kZeroDrop. The least-norm point on it
+  // is x = (1, 2) / 5 = (0.2, 0.4), with row dual y = x1 / 1e-12 = 2e+11. Dropping the
+  // coefficients as structural zeros would solve a different system; the finish must keep
+  // them and land on the optimum exactly.
+  Model model;
+  model.sense = ObjSense::kMinimize;
+  model.col_cost = {0.0, 0.0};
+  model.col_lower = {0.0, 0.0};
+  model.col_upper = {kInfinity, kInfinity};
+  model.col_type = {VarType::kContinuous, VarType::kContinuous};
+  model.row_lower = {1e-12};
+  model.row_upper = {1e-12};
+  model.matrix.reset(1, 2);
+  model.matrix.add_entry(0, 0, 1e-12);
+  model.matrix.add_entry(0, 1, 2e-12);
+  model.matrix.finalize(0.0);
+  model.hessian.reset(2, 2);
+  model.hessian.add_entry(0, 0, 1.0);
+  model.hessian.add_entry(1, 1, 1.0);
+  model.hessian.finalize();
+  const qp::ipm_detail::Standard s = qp::ipm_detail::standardize(model);
+  ASSERT_EQ(s.m.num_nonzeros(), 2);  // the premise: standardize keeps them
+  const Bounds b = finite_bounds(s);
+  // As an interior point leaves it: a little off the optimum in both x and y.
+  std::vector<double> v = {0.2 + 1e-9, 0.4 - 1e-9}, y = {2e11 * (1.0 + 1e-9)}, zl(2, 0.0),
+                      zu(2, 0.0);
+  const Options options;
+  ASSERT_TRUE(qp::ipm_detail::active_set_finish(
+      s, b.lower, b.upper, options.get_double("qp_ipm_tolerance"),
+      options.get_double("primal_feasibility_tolerance"),
+      options.get_double("qp_ipm_regularization"), [] { return false; }, &v, &y, &zl, &zu));
+  EXPECT_NEAR(v[0], 0.2, 1e-14);
+  EXPECT_NEAR(v[1], 0.4, 1e-14);
+  EXPECT_NEAR(y[0] / 2e11, 1.0, 1e-12);
+}
+
 }  // namespace
 }  // namespace sankhya

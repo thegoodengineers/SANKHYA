@@ -187,8 +187,14 @@ bool solve_reduced(const Standard& s, const std::vector<Pin>& pin,
     rhs[static_cast<std::size_t>(nf + sel)] = b_adj[r];
     base[static_cast<std::size_t>(nf + sel)] = y0[r];
   }
-  k.finalize();
-  exact.finalize();
+  // Every entry kept, as standardize() keeps them for s.h and s.m: the default finalize()
+  // drops entries below tol::kZeroDrop (1e-11), and a coefficient that small is still the
+  // model's. Maros-Meszaros huestis has row coefficients from 2e-21 up, multiplied by row
+  // duals near 1e9: dropping column 177's 9.9e-12 made K * base read a stationarity residual
+  // of 9.5e-3 at an interior point whose true one is 2e-10, the finish "corrected" an exact
+  // value away from the optimum, and then cycled (#1079).
+  k.finalize(0.0);
+  exact.finalize(0.0);
 
   // Solve for the correction to the interior point's own point (base).
   std::vector<double> kb(rhs.size());
