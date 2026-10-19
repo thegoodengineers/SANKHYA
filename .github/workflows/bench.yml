@@ -124,14 +124,22 @@ jobs:
           set -- $OPTIONS
           case "$SUITE" in
             netlib-full|netlib-certified|ab-netlib)
-              python3 bench/runners/fetch_data.py --set full --offline-fallback ;;
+              # fetch_data.py parses the published optima out of the live readme, and decodes
+              # every instance again on the way. On Linux the decode writes LF where the
+              # tracked copies are CRLF (stored byte-for-byte, .gitattributes), which marked
+              # 92 files modified and stamped the run -dirty. The tracked files are the ones
+              # every committed CSV's sha256 names, so they are put back and solved.
+              python3 bench/runners/fetch_data.py --set full --offline-fallback
+              git checkout -- 'data/netlib/*.mps' ;;
             maros-meszaros) python3 bench/runners/fetch_maros_meszaros.py ;;
             kennington) python3 bench/runners/fetch_kennington.py ;;
             miplib-tier1) python3 bench/runners/fetch_miplib.py ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
           esac
-          # The stamp marks a modified tracked file -dirty; say so before the run, not after.
-          git status --porcelain --untracked-files=no
+          # The stamp marks a modified tracked file -dirty (the fetchers' manifests aside), and
+          # a -dirty CSV is no evidence, so the run stops here rather than produce one.
+          dirty="$(git status --porcelain --untracked-files=no -- . ':!data/*/reference.json')"
+          if [ -n "$dirty" ]; then echo "tracked files modified before the run:"; echo "$dirty"; exit 1; fi
           {
             case "$SUITE" in
               netlib-full)
