@@ -453,11 +453,12 @@ void BranchAndBound::run_pdhg_heuristics(const Solution& relaxation) {
 namespace {
 /// `x` with its continuous columns re-solved by an LP that fixes every integer column at its
 /// (rounded) value in `x`, solved with the search's node options; empty unless the LP ended
-/// optimal. `seconds_left` below zero sets no time limit.
+/// optimal. `seconds_left` below zero sets no time limit. The LP's iterations are added to
+/// `*iterations`.
 std::vector<double> complete_continuous_columns(const Model& model,
                                                 const std::vector<Index>& integer_columns,
                                                 const std::vector<double>& x, Options options,
-                                                double seconds_left) {
+                                                double seconds_left, Count* iterations) {
   Model lp = model;
   for (const Index j : integer_columns) {
     const auto u = static_cast<std::size_t>(j);
@@ -469,6 +470,7 @@ std::vector<double> complete_continuous_columns(const Model& model,
   options.set_bool("presolve", false);
   if (seconds_left >= 0.0) options.set_double("time_limit", seconds_left);
   const Solution completed = solve(lp, options);
+  *iterations += completed.iterations;
   if (completed.status != SolveStatus::kOptimal ||
       completed.col_value.size() != static_cast<std::size_t>(model.num_cols())) {
     return {};
@@ -510,14 +512,17 @@ void BranchAndBound::run_feasibility_jump(const std::vector<double>* from) {
   // as good. The raw point is offered only when the LP did not end optimal.
   const bool mixed = integer_columns_.size() < static_cast<std::size_t>(original_.num_cols());
   Count completions = 0;
-  settings.on_point = [this, mixed, &completions](const std::vector<double>& point) {
+  Count completion_iterations = 0;
+  settings.on_point = [this, mixed, &completions,
+                       &completion_iterations](const std::vector<double>& point) {
     if (mixed) {
       ++completions;
       const double seconds_left = schedule_.seconds_budgets && limits_.has_time_limit()
                                       ? limits_.remaining_seconds(timer_.elapsed_seconds())
                                       : -1.0;
-      const std::vector<double> completed = complete_continuous_columns(
-          original_, integer_columns_, point, node_options_, seconds_left);
+      const std::vector<double> completed =
+          complete_continuous_columns(original_, integer_columns_, point, node_options_,
+                                      seconds_left, &completion_iterations);
       if (!completed.empty()) {
         (void)offer_from(kFeasibilityJump, completed);
         return;
@@ -525,10 +530,24 @@ void BranchAndBound::run_feasibility_jump(const std::vector<double>* from) {
     }
     (void)offer_from(kFeasibilityJump, point);
   };
+  // The completion LPs can be charged to the run (#1030): FJ's work budget counts its own
+  // nonzero visits only, and on a mixed model with hundreds of improving points (refinery
+  // lot_sizing_large) the LP after each one can take most of the time limit. With
+  // mip_fj_completion_iterations > 0 the run stops once they have spent that many simplex
+  // iterations per row of the model (at least kFeasibilityJumpCompletionIterationsFloor).
+  // The default is 0, no limit, because every budget tried cost 60 s objective on those
+  // models (tolerances.hpp). Counted in iterations, not seconds, so a run is reproducible.
+  const Count completion_budget =
+      schedule_.fj_completion_iterations <= 0
+          ? std::numeric_limits<Count>::max()
+          : std::max<Count>(tol::kFeasibilityJumpCompletionIterationsFloor,
+                            schedule_.fj_completion_iterations *
+                                static_cast<Count>(original_.num_rows()));
   // An interrupt always stops it; the time limit only when the schedule counts seconds, so
   // a deterministic (work-budgeted) run stays independent of the clock.
-  settings.should_stop = [this]() {
+  settings.should_stop = [this, &completion_iterations, completion_budget]() {
     if (control_ != nullptr && control_->interruption_requested()) return true;
+    if (completion_iterations >= completion_budget) return true;
     return schedule_.seconds_budgets && limits_.time_exhausted(timer_.elapsed_seconds());
   };
   const std::vector<double> start =
@@ -566,9 +585,10 @@ void BranchAndBound::run_feasibility_jump(const std::vector<double>* from) {
   s.seconds += clock.elapsed_seconds();
   logger_.verbose(
       "Feasibility jump ({}): {} point(s), {} move(s), {} weight update(s), {} completion "
-      "LP(s)",
+      "LP(s) of {} iteration(s){}",
       from != nullptr ? "from the root relaxation" : "before the root LP", found.points.size(),
-      found.moves, found.weight_updates, completions);
+      found.moves, found.weight_updates, completions, completion_iterations,
+      completion_iterations >= completion_budget ? ", stopped on the completion budget" : "");
 }
 
 void BranchAndBound::run_parity() {

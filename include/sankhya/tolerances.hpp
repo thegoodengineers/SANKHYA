@@ -88,6 +88,15 @@ inline constexpr Count kFeasibilityJumpWork = 10'000'000;
 inline constexpr double kFeasibilityJumpMinScore = 1e-9;
 inline constexpr Count kFeasibilityJumpStallSteps = 1000;
 inline constexpr Count kFeasibilityJumpStallSweeps = 2;
+/// The completion LPs a run on a mixed model may spend (#1030), in simplex iterations per
+/// row of the model (mip_fj_completion_iterations), with a floor for small models. The
+/// default is 0, no limit: on GitHub runner 39564590275 every finite budget tried (10, 30
+/// and 100 per row) ended the refinery lot_sizing medium and large models at a worse 60 s
+/// objective than no limit (88045.4 against 87064.0, and 473108.6 to 489285.2 against
+/// 454941.1), bench/results/fj-share-1030-sweep-d1a87e6.csv. The option stays for a caller
+/// who prefers a bounded heuristic to its last improving points.
+inline constexpr Count kFeasibilityJumpCompletionIterationsPerRow = 0;
+inline constexpr Count kFeasibilityJumpCompletionIterationsFloor = 10'000;
 
 /// The parity heuristic (#841, src/mip/parity.hpp): the most binary columns its dense GF(2)
 /// elimination takes (rows x 2048^2 / 64 word operations at most, well under a second); the

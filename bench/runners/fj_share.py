@@ -55,11 +55,14 @@ def instances(which: str) -> list[tuple[str, Path, float | None]]:
     return rows
 
 
-def run_one(binary: Path, path: Path, time_limit: float, threads: int) -> dict:
+def run_one(binary: Path, path: Path, time_limit: float, threads: int,
+            options: list[str]) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         stats_path = Path(tmp) / "stats.json"
         cmd = [str(binary), "solve", str(path), "--stats", str(stats_path), "--time-limit",
                str(time_limit), "--option", "log_to_console=true", "--option", f"threads={threads}"]
+        for option in options:
+            cmd += ["--option", option]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         stats = json.loads(stats_path.read_text()) if stats_path.exists() else {}
     out = proc.stdout
@@ -86,24 +89,42 @@ def main() -> int:
     parser.add_argument("--time-limit", type=float, default=60.0)
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument("--machine-kind", default=None,
+                        help="what kind of machine, e.g. github-actions ubuntu-latest")
     parser.add_argument("--set", dest="which", choices=("refinery", "miplib"), default="refinery",
                         help="refinery: demo/blend_milp.mps and the refinery suite MILPs; "
                              "miplib: the fetched MIPLIB tier 1")
+    parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE",
+                        help="passed to every solve; recorded in the solver_options column")
+    parser.add_argument("--instances", nargs="*", help="only these (default: the whole set)")
+    parser.add_argument("--sweep", default=None, metavar="KEY=V1,V2,...",
+                        help="run every instance and repeat once per value of one option, in "
+                             "one process on one machine, the order rotating so a drift lands "
+                             "on every value; a 60 s objective depends on the CPU, and separate "
+                             "jobs can land on different ones (#1030)")
     args = parser.parse_args()
+    arms: list[list[str]] = [[]]
+    if args.sweep:
+        key, values = args.sweep.split("=", 1)
+        arms = [[f"{key}={v}"] for v in values.split(",")]
     commit = stamp.stamp(args.binary)
-    machine = machine_tag()
+    machine = machine_tag(args.machine_kind)
     fields = ["instance", "sha256", "objective", "reference_objective", "absolute_gap",
               "relative_gap", "status", "solve_seconds", "fj_seconds", "fj_share", "fj_calls",
-              "fj_proposed", "fj_improved", "fj_work", "nodes", "repeat", "git_commit",
-              "machine"]
+              "fj_proposed", "fj_improved", "fj_work", "nodes", "repeat", "solver_options",
+              "git_commit", "machine"]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         for name, path, reference in instances(args.which):
+            if args.instances and name not in args.instances:
+                continue
             sha = hashlib.sha256(path.read_bytes()).hexdigest()
-            for repeat in range(args.repeats):
-                r = run_one(args.binary, path, args.time_limit, args.threads)
+            for repeat, arm in ((rep, arms[(rep + k) % len(arms)])
+                                for rep in range(args.repeats) for k in range(len(arms))):
+                options = args.solver_option + arm
+                r = run_one(args.binary, path, args.time_limit, args.threads, options)
                 objective = r["objective"]
                 abs_gap = rel_gap = ""
                 if reference is not None and isinstance(objective, (int, float)) and math.isfinite(objective):
@@ -114,11 +135,13 @@ def main() -> int:
                 row = {"instance": name, "sha256": sha, "objective": objective,
                        "reference_objective": reference if reference is not None else "",
                        "absolute_gap": abs_gap, "relative_gap": rel_gap, "repeat": repeat,
-                       "fj_share": share, "git_commit": commit, "machine": machine, **r}
+                       "fj_share": share, "solver_options": " ".join(options),
+                       "git_commit": commit, "machine": machine, **r}
                 writer.writerow(row)
                 handle.flush()
                 share_text = "" if share == "" else f"{share:.3f}"
-                print(f"{name:<28} {r['status']:<10} {r['solve_seconds']!s:>9}s  "
+                print(f"{name:<28} {' '.join(options):<36} {r['status']:<10} "
+                      f"{r['solve_seconds']!s:>9}s obj {objective}  "
                       f"fj {r['fj_seconds']:.3f}s  share {share_text}", flush=True)
     return 0
 

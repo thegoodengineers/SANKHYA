@@ -51,6 +51,8 @@ on:
           - rolling-warm-start
           - ab-option
           - decomposition
+          - fj-share-refinery
+          - fj-share-miplib
         required: true
       ref:
         description: commit (short or full sha), branch or tag to build and run (ab-* - the new arm)
@@ -175,7 +177,7 @@ jobs:
               python3 bench/runners/fetch_qplib.py --qcqp
               git checkout -- data/qplib/reference_qcqp.json ;;
             kennington) python3 bench/runners/fetch_kennington.py ;;
-            miplib-tier1) python3 bench/runners/fetch_miplib.py ;;
+            miplib-tier1|fj-share-miplib) python3 bench/runners/fetch_miplib.py ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
             mittelmann) python3 bench/runners/fetch_mittelmann.py --set small ;;
             pdhg-step-weight-ab)
@@ -240,6 +242,14 @@ jobs:
                 python3 bench/runners/option_ab.py --binary build/sankhya --machine "$machine"                   --out-prefix "bench/results/option-ab-${sha}" ${limit[@]+"${limit[@]}"} "$@" ;;
               rolling-warm-start)
                 python3 bench/runners/rolling_warm_start.py --machine "$machine" "$@" ;;
+              # #1030: the share of each solve spent in Feasibility Jump, with its objective -
+              # the demo blend MILP and the refinery suite MILPs, or MIPLIB tier 1 (seed 0).
+              # options take --repeats, --instances, --solver-option KEY=VALUE and --out.
+              fj-share-refinery|fj-share-miplib)
+                python3 bench/runners/fj_share.py --binary build/sankhya \
+                  --set "${SUITE#fj-share-}" --machine-kind "github-actions ubuntu-latest" \
+                  --out "bench/results/${SUITE}-${sha}.csv" \
+                  ${limit[@]+"${limit[@]}"} "$@" ;;
               ab-netlib)
                 base_sha="$(python3 -c 'import sys; sys.path.insert(0, "bench/runners"); import stamp; print(stamp.binary_commit(".base/build/sankhya"))')"
                 python3 bench/runners/netlib_ab.py --base .base/build/sankhya \

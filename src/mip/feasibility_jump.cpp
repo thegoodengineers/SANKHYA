@@ -310,6 +310,9 @@ FeasibilityJumpResult Search::run(const std::vector<double>& start) {
           value < best - tol::kFeasibilityJumpMinScore * std::max(1.0, std::fabs(best))) {
         result_.points.push_back(x_);
         if (settings_.on_point) settings_.on_point(x_);
+        // The caller's handling of a point can be the dear part (a completion LP, #1030), so
+        // its stop is polled right after, not only on the work stride.
+        next_poll_ = result_.work;
         best = value;
         stalled = 0;
       }

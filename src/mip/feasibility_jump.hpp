@@ -57,8 +57,9 @@ struct FeasibilityJumpSettings {
   /// Called with each point the moment it is found, so the caller can offer it at once
   /// rather than after the whole budget is spent; the point is kept in `points` as well.
   std::function<void(const std::vector<double>&)> on_point;
-  /// Polled every kFeasibilityJumpPollWork work units; true stops the search with what it
-  /// has found (an interrupt, or the time limit when the schedule is clock-based).
+  /// Polled every kFeasibilityJumpPollWork work units and right after each on_point call;
+  /// true stops the search with what it has found (an interrupt, the time limit when the
+  /// schedule is clock-based, or the caller's completion-LP budget, #1030).
   std::function<bool()> should_stop;
 };
 

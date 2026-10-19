@@ -248,6 +248,27 @@ TEST(FeasibilityJump, HandsEachPointOverAsItIsFound) {
   EXPECT_EQ(seen, r.points);
 }
 
+TEST(FeasibilityJump, PollsTheStopRightAfterEachPoint) {
+  // #1030: the branch and bound charges the completion LP it runs on each point and stops
+  // the search when they have spent their budget. That only bounds them if the stop is
+  // polled after the point, not on the next work stride, which on a large model can be
+  // several points later. A stop that turns true in on_point ends the run at one point.
+  Model m = make_model({{5, 7, 4, 4}}, {-kInfinity}, {12.0}, {10.0, 13.0, 7.0, 8.0},
+                       {0.0, 0.0, 0.0, 0.0}, {1.0, 1.0, 1.0, 1.0}, {true, true, true, true});
+  m.sense = ObjSense::kMaximize;
+  FeasibilityJumpSettings settings;
+  settings.work_limit = tol::kFeasibilityJumpWork;
+  settings.seed = 1;
+  bool spent = false;
+  settings.on_point = [&spent](const std::vector<double>&) { spent = true; };
+  settings.should_stop = [&spent]() { return spent; };
+  const FeasibilityJumpResult r = feasibility_jump(m, feasibility_jump_zero_start(m), settings);
+  EXPECT_EQ(r.points.size(), 1U);
+  expect_all_feasible(m, r);
+  // The same search unstopped improves on that first point.
+  EXPECT_GT(run(m, tol::kFeasibilityJumpWork, 1).points.size(), 1U);
+}
+
 TEST(FeasibilityJump, IsReproducibleForASeed) {
   const Model m =
       make_model({{1, 1, 1}, {1, -1, 0}, {0, 1, 1}}, {7.0, 1.0, 3.0}, {7.0, 1.0, kInfinity},

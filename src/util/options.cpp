@@ -681,6 +681,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  1.0,
                  kNoLimit,
                  {}});
+    s.push_back({"mip_fj_completion_iterations",
+                 OptionType::Int,
+                 std::int64_t{tol::kFeasibilityJumpCompletionIterationsPerRow},
+                 "On a mixed model, the simplex iterations per model row that one Feasibility "
+                 "Jump run may spend in the LPs that complete its points' continuous columns "
+                 "(#1030), with a floor of 10000; the run stops when they are spent. Counted, "
+                 "not timed, so a run is reproducible. 0, the default, sets no limit: every "
+                 "budget tried (10, 30, 100) cost 60 s objective on the refinery lot_sizing "
+                 "models (bench/results/fj-share-1030-sweep-d1a87e6.csv).",
+                 0.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"mip_pump_rounds",
                  OptionType::Int,
                  std::int64_t{20},

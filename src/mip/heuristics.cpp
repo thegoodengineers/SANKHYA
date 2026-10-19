@@ -653,6 +653,7 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   s.rens = resolve_switch(options, "mip_heur_rens", master);
   s.fj = resolve_switch(options, "mip_heur_fj", master);
   s.fj_work = options.get_int("mip_fj_work");
+  s.fj_completion_iterations = options.get_int("mip_fj_completion_iterations");
   s.parity = resolve_switch(options, "mip_heur_parity", master);
   s.prop_dive = resolve_switch(options, "mip_heur_prop_dive", master);
   s.local_branching = resolve_switch(options, "mip_heur_local_branching", master);
