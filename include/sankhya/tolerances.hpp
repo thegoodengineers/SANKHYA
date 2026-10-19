@@ -1224,5 +1224,14 @@ inline constexpr Index kConicDenseFactorLimit = 4000;
 /// of the matrix is rounding of a rank-deficient but positive semidefinite Q (the convexity
 /// test already accepted it at kCurvatureTolerance, 1e-12, of the same scale).
 inline constexpr double kConicCholeskyPivotShare = 1e-12;
+/// Dual recovery at the conic optimum (conic_duals.cpp): a row or a column bound is taken as
+/// active when its slack is at most this share of max(1, the magnitude of its terms). The
+/// interior point's point is right to about kConicTolerance relative, so a window a hundred
+/// times wider identifies every tight row while staying far below any slack that is genuinely
+/// open; a misidentified row only costs the recovery, which is kept when it measures better.
+inline constexpr double kConicActiveShare = 1e-6;
+/// The Tikhonov term of the recovery's least-squares system [I M; M' -eps I], which keeps it
+/// quasi-definite when the active gradients are linearly dependent (degenerate optimum).
+inline constexpr double kConicRecoveryRegularization = 1e-12;
 
 }  // namespace sankhya::tol

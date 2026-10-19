@@ -377,6 +377,7 @@ set(SANKHYA_CORE_SOURCES
   src/global/qcqp_model.cpp
   src/global/relaxation.cpp
   src/global/spatial_bnb.cpp
+  src/conic/conic_duals.cpp
   src/conic/conic_form.cpp
   src/conic/conic_ipm.cpp
   src/conic/conic_solve.cpp
