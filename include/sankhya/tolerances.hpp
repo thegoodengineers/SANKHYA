@@ -1230,8 +1230,9 @@ inline constexpr double kConicCholeskyPivotShare = 1e-12;
 /// times wider identifies every tight row while staying far below any slack that is genuinely
 /// open; a misidentified row only costs the recovery, which is kept when it measures better.
 inline constexpr double kConicActiveShare = 1e-6;
-/// The Tikhonov term of the recovery's least-squares system [I M; M' -eps I], which keeps it
-/// quasi-definite when the active gradients are linearly dependent (degenerate optimum).
+/// The Tikhonov term of the recovery's normal equations (M'M + eps I), relative to the largest
+/// diagonal of M'M, which keeps them positive definite when the active gradients are linearly
+/// dependent (a degenerate optimum).
 inline constexpr double kConicRecoveryRegularization = 1e-12;
 
 }  // namespace sankhya::tol

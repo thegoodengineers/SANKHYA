@@ -24,13 +24,9 @@
 // objective's gradient and M's columns the active rows' gradients a_i + 2 Q_i x and the unit
 // vectors of the active bounds - the classical way to obtain multipliers from a primal
 // solution (Nocedal & Wright, "Numerical Optimization", 2nd ed. (2006), section 18.3,
-// least-squares multiplier estimates). It is solved through the regularized augmented system
-//
-//     [ I    M      ] [res   ]   [r]
-//     [ M'  -eps I  ] [lambda] = [0]
-//
-// quasi-definite for eps > 0 (Vanderbei 1995), so the project's signed LDL^T factors it with
-// no pivoting even when the active gradients are dependent.
+// least-squares multiplier estimates). It is solved by the normal equations
+// (M'M + eps I) lambda = M'r with the project's sparse LDL^T, positive definite for eps > 0
+// even when the active gradients are dependent, and refined on the residual r - M lambda.
 //
 // SAFE BY CONSTRUCTION. The recovered multipliers replace the interior point's only when their
 // measured KKT error - sign violations of every multiplier and |multiplier| * slack - is
@@ -178,36 +174,68 @@ bool recover_duals(const QcqpModel& model, Solution* solution) {
   }
   const auto k = static_cast<Index>(active_rows.size() + active_cols.size());
 
-  // ---- [I M; M' -eps I] [res; lambda] = [r; 0], lower triangle by columns -----------------
-  const Index dim = n + k;
-  SparseMatrix kkt(dim, dim);
-  for (Index j = 0; j < n; ++j) kkt.add_entry(j, j, 1.0);
+  // ---- (M'M + eps I) lambda = M'r, refined on the least-squares residual -------------------
+  // M by model column: column j of the model meets active constraint t with coefficient v.
+  std::vector<std::vector<std::pair<Index, double>>> by_column(static_cast<std::size_t>(n));
   for (std::size_t t = 0; t < active_rows.size(); ++t) {
     for (const auto& [j, v] : gradients[static_cast<std::size_t>(active_rows[t])]) {
-      kkt.add_entry(n + static_cast<Index>(t), j, v);
+      by_column[static_cast<std::size_t>(j)].emplace_back(static_cast<Index>(t), v);
     }
   }
   for (std::size_t t = 0; t < active_cols.size(); ++t) {
-    kkt.add_entry(n + static_cast<Index>(active_rows.size() + t), active_cols[t], 1.0);
+    by_column[static_cast<std::size_t>(active_cols[t])].emplace_back(
+        static_cast<Index>(active_rows.size() + t), 1.0);
   }
-  for (Index t = 0; t < k; ++t) kkt.add_entry(n + t, n + t, -tol::kConicRecoveryRegularization);
-  kkt.finalize(0.0);
-  std::vector<signed char> signs(static_cast<std::size_t>(dim), 1);
-  for (Index t = 0; t < k; ++t) signs[static_cast<std::size_t>(n + t)] = -1;
-  SparseLdl ldl;
-  if (!ldl.analyze(kkt) ||
-      !ldl.factorize_quasidefinite(kkt, signs, tol::kConicRecoveryRegularization)) {
-    return false;
+  const auto m_times = [&](const std::vector<double>& lambda, std::vector<double>* out) {
+    out->assign(static_cast<std::size_t>(n), 0.0);
+    for (std::size_t j = 0; j < by_column.size(); ++j) {
+      for (const auto& [t, v] : by_column[j])
+        (*out)[j] += v * lambda[static_cast<std::size_t>(t)];
+    }
+  };
+  const auto mt_times = [&](const std::vector<double>& v_n, std::vector<double>* out) {
+    out->assign(static_cast<std::size_t>(k), 0.0);
+    for (std::size_t j = 0; j < by_column.size(); ++j) {
+      for (const auto& [t, v] : by_column[j]) (*out)[static_cast<std::size_t>(t)] += v * v_n[j];
+    }
+  };
+  std::vector<double> lambda(static_cast<std::size_t>(k), 0.0);
+  if (k > 0) {
+    SparseMatrix normal(k, k);
+    double largest = 1.0;
+    for (const auto& column : by_column) {
+      for (const auto& [t1, v1] : column) {
+        for (const auto& [t2, v2] : column) {
+          if (t2 > t1) continue;  // lower triangle: row t1 >= column t2
+          normal.add_entry(t1, t2, v1 * v2);
+          if (t1 == t2) largest = std::max(largest, v1 * v1);
+        }
+      }
+    }
+    const double eps = tol::kConicRecoveryRegularization * largest;
+    for (Index t = 0; t < k; ++t) normal.add_entry(t, t, eps);
+    normal.finalize(0.0);
+    SparseLdl ldl;
+    if (!ldl.analyze(normal) || !ldl.factorize(normal, eps)) return false;
+    // Positive definite, so any ordering is stable (an augmented system with an eps block
+    // is not: an ordering that pivots on -eps first swells the rest to 1/eps). The normal
+    // equations square the condition number; refining on the residual r - M lambda takes
+    // most of that back (Bjorck, "Numerical Methods for Least Squares Problems", SIAM 1996,
+    // section 2.9, the corrected seminormal equations).
+    std::vector<double> residual = r;
+    std::vector<double> mlambda, step;
+    for (int pass = 0; pass < 3; ++pass) {
+      mt_times(residual, &step);
+      ldl.solve(step.data());
+      for (std::size_t t = 0; t < lambda.size(); ++t) lambda[t] += step[t];
+      m_times(lambda, &mlambda);
+      for (std::size_t j = 0; j < residual.size(); ++j) residual[j] = r[j] - mlambda[j];
+    }
   }
-  std::vector<double> rhs(static_cast<std::size_t>(dim), 0.0);
-  std::copy(r.begin(), r.end(), rhs.begin());
-  std::vector<double> sol;
-  qp::ipm_detail::solve_refined(ldl, kkt, rhs, &sol);
   std::vector<double> y(static_cast<std::size_t>(m), 0.0);
   for (std::size_t t = 0; t < active_rows.size(); ++t) {
-    const double lambda = sol[static_cast<std::size_t>(n) + t];
-    if (!std::isfinite(lambda)) return false;
-    y[static_cast<std::size_t>(active_rows[t])] = lambda;
+    if (!std::isfinite(lambda[t])) return false;
+    y[static_cast<std::size_t>(active_rows[t])] = lambda[t];
   }
 
   // ---- keep whichever measures better -----------------------------------------------------
