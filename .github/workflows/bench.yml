@@ -23,6 +23,7 @@
 # pdhg-step-weight-ab (#482) runs bench/runners/pdhg_step_weight_ab.py on one binary, e.g.
 # `--data-dir data/netlib --instances all --scheme averaged --seeds 0 --iteration-limit 100000`
 # (data/kennington and data/refinery work the same way).
+# decomposition (#525, #1048) runs bench/runners/decomposition.py over the refinery ladder.
 
 name: bench
 
@@ -48,6 +49,7 @@ on:
           - pdhg-step-weight-ab
           - rolling-warm-start
           - ab-option
+          - decomposition
         required: true
       ref:
         description: commit (short or full sha), branch or tag to build and run (ab-* - the new arm)
@@ -243,6 +245,10 @@ jobs:
               # #482: the step and primal-weight legs on one binary.
               pdhg-step-weight-ab)
                 python3 bench/runners/pdhg_step_weight_ab.py --binary build/sankhya \
+                  --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #525, #1048: the refinery ladder, decomposed against monolithic.
+              decomposition)
+                python3 bench/runners/decomposition.py --binary build/sankhya \
                   --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
             esac
           } 2>&1 | tee "$out/run.log" || status=$?

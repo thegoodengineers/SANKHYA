@@ -226,7 +226,9 @@ few linking columns, such as the stocks that join the periods of a planning mode
 Benders decomposition (`--option decomposition=auto`, `src/decomp/`, off by default). `structure.cpp`
 finds the blocks by balanced hypergraph partitioning and accepts a split only when it is strong;
 `benders.cpp` alternates a master LP over the linking columns with one small LP per block, the
-blocks in parallel. `solve()` holds the decomposed answer to the same measurement as any engine's
+blocks in parallel. Before it starts, a forecast of its work from the block sizes and
+the number of linking columns (#1048) sends a model on which it cannot win straight to the monolithic
+solve. `solve()` holds the decomposed answer to the same measurement as any engine's
 and falls back to the ordinary engines, saying why in the log, when the structure is weak, the
 method declines (an integer, quadratic or maximisation model; an unbounded block) or the answer
 does not pass. Linking rows, the form Dantzig-Wolfe decomposition is for, are detected and
