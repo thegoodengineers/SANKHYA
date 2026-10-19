@@ -102,11 +102,11 @@ the one stamped in the file's rows, the build that produced it.
 
 | measurement | CSV | commit |
 |---|---|---|
-| Netlib LP, full set: 90 of 92 within 1e-6 of Koch's exact optimum and verified; 82 match the readme; 92 accepted by the independent verifier | `bench/results/netlib-full-9094e1c.csv` | `9094e1c` |
+| Netlib LP, full set: 94 of 94 within 1e-6 of Koch's exact optimum and verified; 83 match the readme; 94 accepted by the independent verifier | `bench/results/netlib-full-945cb4f.csv` | `945cb4f` |
 | Head-to-head, Netlib LP, 92 instances: SGM10 0.575 s against HiGHS 0.163 s; against HiGHS faster on 3, tie on 72, slower on 17 | `bench/results/head-to-head-netlib-5e490ef.csv` | `5e490ef` |
 | Head-to-head, Kennington LP, 16 instances: SGM10 9.430 s against HiGHS 1.855 s; against HiGHS faster on 3, tie on 2, slower on 11 | `bench/results/head-to-head-kennington-1860864.csv` | `1860864` |
 | Head-to-head, Maros-Meszaros QP, 138 instances: SGM10 6.437 s against HiGHS 35.781 s; against HiGHS faster on 82, tie on 22, slower on 5 | `bench/results/head-to-head-maros-meszaros-1860864.csv` | `1860864` |
-| Safe bounds on Netlib: 90 of 94 optimal answers certified to 1e-6 by a rigorous bound, 3 with no finite bound | `bench/results/certified-gap-netlib-full-736a1106.csv` | `736a1106` |
+| Safe bounds on Netlib: 91 of 94 optimal answers certified to 1e-6 by a rigorous bound, 2 with no finite bound | `bench/results/certified-gap-netlib-full-945cb4f.csv` | `945cb4f` |
 | Netlib infeasible set, verdict with a verified Farkas certificate: 28 of 29 | `bench/results/netlib-infeasible-5a39fb2.csv` | `5a39fb2` |
 | Exact sensitivity: 69 of 96 LPs with every dual, reduced cost and range re-derived in rational arithmetic; 4,479 of 431,730 floating-point values corrected | `bench/results/exact-sensitivity-60455ce.csv` | `60455ce` |
 | Kennington LP, matched and verified: 16 of 16 | `bench/results/kennington-full-9463fd7.csv` | `9463fd7` |
@@ -212,16 +212,16 @@ machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores
 
 - **An independent verifier.** `tools/verify_solution.py` reads only the model file and the
   written `.sol` file, with its own parsers, and never links the C++. On the full Netlib set
-  it accepts 92 of 92 answers, and 90 of 92 are
-  within 1e-6 of Koch's exact rational optimum (`bench/results/netlib-full-9094e1c.csv`, `docs/BENCHMARKS.md`
+  it accepts 94 of 94 answers, and 94 of 94 are
+  within 1e-6 of Koch's exact rational optimum (`bench/results/netlib-full-945cb4f.csv`, `docs/BENCHMARKS.md`
   section 1c). In the head-to-head run the same verifier rejected 5
   rival answers on Netlib (`bench/results/head-to-head-netlib-5e490ef.csv`, section 4a.1).
 - **Certificates of infeasibility.** 28 of 29 of Netlib's
   infeasible LPs end with a Farkas certificate the verifier accepts (`bench/results/netlib-infeasible-5a39fb2.csv`,
   section 3a). A verdict with no certificate is not counted.
-- **Safe bounds.** 90 of 94 optimal Netlib answers carry a
+- **Safe bounds.** 91 of 94 optimal Netlib answers carry a
   Neumaier-Shcherbina bound within 1e-6 of the objective, re-derived exactly by the
-  verifier; 3 have no finite bound and say so (`bench/results/certified-gap-netlib-full-736a1106.csv`,
+  verifier; 2 have no finite bound and say so (`bench/results/certified-gap-netlib-full-945cb4f.csv`,
   section 1c.2).
 - **Exact sensitivity.** On 69 of 96 LPs every dual, reduced cost and range
   was re-derived in rational arithmetic, correcting 4,479 of 431,730
@@ -242,8 +242,8 @@ machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores
   at the published optimum (`bench/results/miplib-ad57c03.csv`, section 2).
 - **Declined instances.** Stress set: 15 of 126 declined,
   0 wrong (`bench/results/stress-d32b3847.csv`, section 5b). Maros-Meszaros: 116
-  of 138 optimal (`bench/results/maros-meszaros-dcbd32eb.csv`, section 2b). Safe bounds: 3 of
-  94 with no finite bound (`bench/results/certified-gap-netlib-full-736a1106.csv`).
+  of 138 optimal (`bench/results/maros-meszaros-dcbd32eb.csv`, section 2b). Safe bounds: 2 of
+  94 with no finite bound (`bench/results/certified-gap-netlib-full-945cb4f.csv`).
 - **No real industrial model.** Every refinery number is from a generated model.
 - **The GPU, against the faster CPU arm of the same engine** (`bench/results/gpu-real-a100-fdd1f35.csv`, commit
   `fdd1f35`, NVIDIA A100-SXM4-40GB; `docs/BENCHMARKS.md` section 1g.3, where the small-model losses
@@ -331,15 +331,15 @@ Revised primal and dual simplex, restarted PDHG on CPU and CUDA, an interior poi
 
 **Q3. How do I know an answer is right, not just plausible?**
 
-Every solve writes a `.sol` file, and `tools/verify_solution.py`, a separate Python program that shares no code with the solver, re-reads the model and re-derives feasibility, dual feasibility, complementarity and the objective. On the full Netlib set it accepts 92 of 92 answers.
+Every solve writes a `.sol` file, and `tools/verify_solution.py`, a separate Python program that shares no code with the solver, re-reads the model and re-derives feasibility, dual feasibility, complementarity and the objective. On the full Netlib set it accepts 94 of 94 answers.
 
-*Evidence: `bench/results/netlib-full-9094e1c.csv` at `9094e1c`; `docs/BENCHMARKS.md` section 1c.*
+*Evidence: `bench/results/netlib-full-945cb4f.csv` at `945cb4f`; `docs/BENCHMARKS.md` section 1c.*
 
 **Q4. The verifier is yours too. Why should I trust it?**
 
-Three independent anchors. The Netlib answers are graded against Koch's optima, computed in exact rational arithmetic: 90 of 92 within 1e-6. The same verifier judges the rivals' answers in the head-to-head run and rejected 5 of theirs on Netlib, each named with the violated condition. And HiGHS, as a separate process, agrees on the objective on 50 of 50 medium-tier instances.
+Three independent anchors. The Netlib answers are graded against Koch's optima, computed in exact rational arithmetic: 94 of 94 within 1e-6. The same verifier judges the rivals' answers in the head-to-head run and rejected 5 of theirs on Netlib, each named with the violated condition. And HiGHS, as a separate process, agrees on the objective on 50 of 50 medium-tier instances.
 
-*Evidence: `bench/results/netlib-full-9094e1c.csv`; `bench/results/head-to-head-netlib-5e490ef.csv` and `docs/BENCHMARKS.md` section 4a.1; `bench/results/compare-highs-medium-ad57c03.csv` and section 4.*
+*Evidence: `bench/results/netlib-full-945cb4f.csv`; `bench/results/head-to-head-netlib-5e490ef.csv` and `docs/BENCHMARKS.md` section 4a.1; `bench/results/compare-highs-medium-ad57c03.csv` and section 4.*
 
 **Q5. How fast is it against HiGHS on Netlib?**
 
@@ -397,9 +397,9 @@ A Farkas certificate, written to the solution file and checked by the verifier: 
 
 **Q14. What is a "safe bound", and why does it matter to a planner?**
 
-A lower bound on the true optimum computed from the reported duals with outward rounding (Neumaier and Shcherbina), so it holds despite floating-point error, and re-derived exactly by the verifier. Of 94 optimal Netlib answers, 90 are certified within 1e-6 of the true optimum this way, 1 have a looser finite bound and 3 have none, and the file then claims nothing.
+A lower bound on the true optimum computed from the reported duals with outward rounding (Neumaier and Shcherbina), so it holds despite floating-point error, and re-derived exactly by the verifier. Of 94 optimal Netlib answers, 91 are certified within 1e-6 of the true optimum this way, 1 have a looser finite bound and 2 have none, and the file then claims nothing.
 
-*Evidence: `bench/results/certified-gap-netlib-full-736a1106.csv` at `736a1106`; `docs/BENCHMARKS.md` section 1c.2.*
+*Evidence: `bench/results/certified-gap-netlib-full-945cb4f.csv` at `945cb4f`; `docs/BENCHMARKS.md` section 1c.2.*
 
 **Q15. Can the shadow prices be trusted for pricing decisions?**
 
