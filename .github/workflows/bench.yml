@@ -20,6 +20,9 @@
 # `options` is appended to the runner's command line, split on spaces, e.g.
 # `--solver-option presolve=off` or, for ab-netlib, `--new-option engine_race=true --repeats 5`.
 # ab-supernodal (#470) runs bench/runners/supernodal_ab.py's four IPM arms over base_ref and ref.
+# pdhg-step-weight-ab (#482) runs bench/runners/pdhg_step_weight_ab.py on one binary, e.g.
+# `--data-dir data/netlib --instances all --scheme averaged --seeds 0 --iteration-limit 100000`
+# (data/kennington and data/refinery work the same way).
 
 name: bench
 
@@ -39,6 +42,7 @@ on:
           - ab-netlib
           - ab-supernodal
           - mittelmann
+          - pdhg-step-weight-ab
         required: true
       ref:
         description: commit, branch or tag to build and run (ab-* - the new arm)
@@ -131,6 +135,9 @@ jobs:
             miplib-tier1) python3 bench/runners/fetch_miplib.py ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
             mittelmann) python3 bench/runners/fetch_mittelmann.py --set small ;;
+            pdhg-step-weight-ab)
+              python3 bench/runners/fetch_data.py --set full --offline-fallback
+              python3 bench/runners/fetch_kennington.py ;;
           esac
           # The stamp marks a modified tracked file -dirty; say so before the run, not after.
           git status --porcelain --untracked-files=no
@@ -171,6 +178,10 @@ jobs:
               mittelmann)
                 python3 bench/runners/mittelmann.py --binary build/sankhya \
                   ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #482: the step and primal-weight legs on one binary.
+              pdhg-step-weight-ab)
+                python3 bench/runners/pdhg_step_weight_ab.py --binary build/sankhya \
+                  --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
             esac
           } 2>&1 | tee "$out/run.log" || status=$?
           # Every result file the run wrote or rewrote goes into the artifact.
