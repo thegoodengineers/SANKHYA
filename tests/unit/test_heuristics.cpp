@@ -365,7 +365,8 @@ TEST(Heuristics, RensFixesTheIntegralColumnsAndBoxesTheRest) {
 TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   // Defaults: rounding, the fractional dive, parity (on since its A/B, #841:
   // bench/results/miplib-841-parity-default-*-seeds3-fa9e8b4d.csv) and Feasibility Jump
-  // (on since the #506 A/B, #930); nothing else.
+  // (on since the #506 A/B, #930) and RINS (on since the #414 per-heuristic A/B:
+  // bench/results/miplib-414-n2000-rins-seeds3-729112d8.csv); nothing else.
   Options defaults;
   HeuristicSchedule s = HeuristicSchedule::from(defaults);
   EXPECT_TRUE(s.dive[rule_index(DiveRule::kFractional)]);
@@ -373,7 +374,7 @@ TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   EXPECT_FALSE(s.lock_rounding);
   EXPECT_FALSE(s.repair);
   EXPECT_FALSE(s.pump);
-  EXPECT_FALSE(s.rins);
+  EXPECT_TRUE(s.rins);  // #414: on, whatever mip_heuristics says
   EXPECT_FALSE(s.rens);
   EXPECT_FALSE(s.dive[rule_index(DiveRule::kCoefficient)]);
   EXPECT_FALSE(s.dive[rule_index(DiveRule::kVectorLength)]);
@@ -383,7 +384,7 @@ TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   EXPECT_FALSE(s.prop_dive);
   EXPECT_FALSE(s.local_branching);
   EXPECT_TRUE(s.any_optional());
-  EXPECT_EQ(s.names(), "rounding, feasibility jump, parity, fractional diving");
+  EXPECT_EQ(s.names(), "rounding, feasibility jump, parity, fractional diving, RINS");
   defaults.set_string("mip_heur_fj", "auto");
   EXPECT_FALSE(HeuristicSchedule::from(defaults).fj) << "auto follows the master switch";
   EXPECT_TRUE(s.seconds_budgets);
@@ -406,13 +407,13 @@ TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   one.set_string("mip_heur_rens", "on");
   s = HeuristicSchedule::from(one);
   EXPECT_TRUE(s.rens);
-  EXPECT_FALSE(s.rins);
+  EXPECT_TRUE(s.rins);
   EXPECT_TRUE(s.any_optional());
-  EXPECT_EQ(s.names(), "rounding, feasibility jump, parity, fractional diving, RENS");
+  EXPECT_EQ(s.names(), "rounding, feasibility jump, parity, fractional diving, RINS, RENS");
   one.set_string("mip_heur_dive_fractional", "off");
   s = HeuristicSchedule::from(one);
   EXPECT_FALSE(s.dive[rule_index(DiveRule::kFractional)]);
-  EXPECT_EQ(s.names(), "rounding, feasibility jump, parity, RENS");
+  EXPECT_EQ(s.names(), "rounding, feasibility jump, parity, RINS, RENS");
 
   // Deterministic drops the budgets in seconds and keeps the counted ones.
   one.set_bool("deterministic", true);

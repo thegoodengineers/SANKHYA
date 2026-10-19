@@ -582,11 +582,11 @@ const std::vector<OptionSpec>& Options::registry() {
                  "The master switch for the primal heuristics (#290, #414): every heuristic "
                  "whose own mip_heur_* option is auto follows it. On, that is lock rounding "
                  "at every node, a repair search and RENS at the root, the feasibility pump "
-                 "at the root when nothing else found an incumbent, RINS on "
-                 "mip_rins_frequency, and the coefficient, vector length and guided dives "
-                 "beside the fractional one. Rounding at every node, the fractional root "
-                 "dive, Feasibility Jump (mip_heur_fj=on) and parity (mip_heur_parity=on) run "
-                 "either way. Every candidate is checked against the original model before "
+                 "at the root when nothing else found an incumbent, and the coefficient, "
+                 "vector length and guided dives beside the fractional one. Rounding at every "
+                 "node, the fractional root dive, Feasibility Jump (mip_heur_fj=on), parity "
+                 "(mip_heur_parity=on) and RINS (mip_heur_rins=on) run either way. Every "
+                 "candidate is checked against the original model before "
                  "it can become the incumbent. "
                  "OFF until the per-heuristic MIPLIB A/B "
                  "on main, alone on the machine, says which earn their place; a default is a "
@@ -720,11 +720,15 @@ const std::vector<OptionSpec>& Options::registry() {
                  {"auto", "on", "off"}});
     s.push_back({"mip_heur_rins",
                  OptionType::String,
-                 std::string("auto"),
+                 std::string("on"),
                  "RINS every mip_rins_frequency nodes once there is an incumbent (#290, "
                  "#414; Danna, Rothberg and Le Pape 2005): the sub-MIP over the columns on "
                  "which the relaxation and the incumbent disagree, capped by mip_rins_nodes. "
-                 "auto follows mip_heuristics.",
+                 "on by default after the #414 per-heuristic A/B on main 729112d8 (MIPLIB "
+                 "tier 1 x 3 seeds, node_limit 2000, one thread: matched 44->45, proved "
+                 "28->28, the only leg of ten to gain without losing; bench/results/"
+                 "miplib-414-n2000-{base,rins}-seeds3-729112d8.csv), so it runs whatever "
+                 "mip_heuristics says; auto follows mip_heuristics.",
                  0.0,
                  0.0,
                  {"auto", "on", "off"}});
