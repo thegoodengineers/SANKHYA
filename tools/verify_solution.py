@@ -564,9 +564,13 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
     report.check(worst <= 1e-6, "complementary slackness",
                  f"worst |multiplier| * slack = {worst:.3e} relative to its magnitudes"
                  + (f" on {where}" if where else ""))
+    # A cone's columns are priced by the cone's dual and their own bounds' multipliers,
+    # which the decomposition separates; their split feeds strong duality below.
+    cone_mu: dict[int, float] = {}
+    cone_complementarity = 0.0
     if model.cones:
-        verify_solution_conic.check_dual(model, x, d, model.col_lower, model.col_upper, report,
-                                         dual_tol, primal_tol)
+        cone_mu, cone_complementarity = verify_solution_conic.check_dual(
+            model, x, d, report, dual_tol, primal_tol)
 
     # ---- The basis (#218) -----------------------------------------------------------------
     # A simplex answer carries a status per column and per row. When it does, it has to be a
@@ -626,8 +630,10 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         dual_objective_min_space += bound_contribution(
             y[i], model.row_lower[i], model.row_upper[i])
     for j in range(model.num_cols):
+        # A cone column contributes only its bound multiplier: the cone's own share of the
+        # Lagrangian is -s_K'x_K, zero at a complementary point and accounted for below.
         dual_objective_min_space += bound_contribution(
-            d[j], model.col_lower[j], model.col_upper[j])
+            cone_mu.get(j, d[j]), model.col_lower[j], model.col_upper[j])
 
     # THE GAP IS AN IDENTITY, NOT A MEASUREMENT OF ITS OWN. With d = c - A^T y and the
     # activities recomputed from x, primal - dual is exactly the sum over every column and
@@ -665,7 +671,11 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
     for j in range(model.num_cols):
         scale_j = max(dual_floor, abs(cost[j]),
                       max((abs(value * y[i]) for i, value in model.entries[j]), default=0.0))
-        accounted += share(d[j], x[j], model.col_lower[j], model.col_upper[j], scale_j)
+        # A cone column's bound multiplier explains its share like any column's; the cone part
+        # explains only the complementarity product the cone checks accepted, nothing more.
+        accounted += share(cone_mu.get(j, d[j]), x[j], model.col_lower[j], model.col_upper[j],
+                           scale_j)
+    accounted += cone_complementarity
     for i in range(model.num_rows):
         accounted += share(y[i], activity[i], model.row_lower[i], model.row_upper[i], dual_norm)
     # For a QP the bound contributions sum, at a KKT point, to (c + Qx)'x = c'x + x'Qx, which

@@ -61,6 +61,28 @@ ENDATA
 """
 
 
+# #1061 review: min t s.t. t >= ||(x1, x2)||, x1 + x2 = 2, x1 and x2 at the MPS default lower
+# bound 0. The optimum is sqrt 2 at x = (1, 1). The point t = 2, x = (2, 0) is 41% worse and
+# sits with x2 at its own bound; skipping the cone's dual checks there let it pass.
+AT_BOUND = """\
+NAME probe
+ROWS
+ N obj
+ E sum
+COLUMNS
+ t obj 1
+ x1 sum 1
+ x2 sum 1
+RHS
+ rhs sum 2
+CSECTION k 0.0 QUAD
+ t
+ x1
+ x2
+ENDATA
+"""
+
+
 def _activities(model, x: dict[str, float]) -> dict[str, float]:
     values = [x[name] for name in model.col_names]
     activity = [0.0] * model.num_rows
@@ -132,6 +154,23 @@ def run(check) -> None:
                             {"t": 0.0, "x1": 0.0, "x2": 0.0}, status="feasible")
         check(_verify(model, outside).failures > 0, "a point outside the cone is rejected",
               "exact membership")
+
+        # A cone member at its own bound: the reduced costs are split into the cone's dual
+        # and the bound's multiplier, never skipped (#1061 review).
+        path = Path(tmp) / "at_bound.mps"
+        path.write_text(AT_BOUND)
+        bound_model = vs.parse_mps(path)
+        wrong = _solution(bound_model, {"t": 2.0, "x1": 2.0, "x2": 0.0}, 2.0, {"sum": 1.0},
+                          {"t": 1.0, "x1": -1.0, "x2": -1.0})
+        check(_verify(bound_model, wrong).failures > 0,
+              "a 41% worse point with a cone member at its bound is rejected",
+              "its bound multiplier has the wrong sign once the cone's dual is split off")
+        y = 1.0 / math.sqrt(2.0)
+        right = _solution(bound_model, {"t": math.sqrt(2.0), "x1": 1.0, "x2": 1.0},
+                          math.sqrt(2.0), {"sum": y}, {"t": 1.0, "x1": -y, "x2": -y})
+        report = _verify(bound_model, right)
+        check(report.failures == 0, "the true optimum of the same model is accepted",
+              f"{report.failures} check(s) failed")
 
         # Duals outside the dual cone: d_t = 1 < ||(-1, -1)||.
         wrong_dual = _solution(model, x, -r2, {"tfix": -1.0}, {"t": 1.0, "x1": -1.0, "x2": -1.0})

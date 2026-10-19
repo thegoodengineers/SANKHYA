@@ -434,7 +434,6 @@ Finish finish_on_active_set(const QcqpModel& model, Solution* solution) {
   solution->col_dual.assign(best.d.size(), 0.0);
   for (std::size_t j = 0; j < best.d.size(); ++j) solution->col_dual[j] = sigma * best.d[j];
   solution->objective = model.objective(best.x);
-  solution->dual_bound = solution->objective;
   return result;
 }
 

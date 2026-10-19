@@ -71,9 +71,15 @@ void fix(QcqpModel* m, Index j, double value) {
   m->linear.col_upper[static_cast<std::size_t>(j)] = value;
 }
 
-/// The KKT conditions of the model at the reported point: every row and bound within 1e-6,
+/// The threshold of every KKT condition below: the 1e-6 tools/verify_solution.py holds a
+/// point's feasibility, its multipliers' signs and its complementarity products to, so a test
+/// that passes here describes an answer the verifier accepts.
+constexpr double kKktTolerance = 1e-6;
+
+/// The KKT conditions of the model at the reported point: every row and bound feasible,
 /// reduced costs with the right sign against the bounds (free columns: zero), row duals with
-/// the right sign, and complementary slackness, all at 1e-6 of the magnitudes involved.
+/// the right sign, and complementary slackness, all within kKktTolerance of the magnitudes
+/// involved.
 void expect_kkt(const QcqpModel& m, const Solution& s) {
   const Model& lin = m.linear;
   ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
@@ -82,20 +88,21 @@ void expect_kkt(const QcqpModel& m, const Solution& s) {
   for (Index i = 0; i < lin.num_rows(); ++i) {
     const auto u = static_cast<std::size_t>(i);
     const double scale = std::max(1.0, std::fabs(activity[u]));
-    EXPECT_LE(lin.row_lower[u] - activity[u], 1e-6 * scale) << "row " << i;
-    EXPECT_LE(activity[u] - lin.row_upper[u], 1e-6 * scale) << "row " << i;
+    EXPECT_LE(lin.row_lower[u] - activity[u], kKktTolerance * scale) << "row " << i;
+    EXPECT_LE(activity[u] - lin.row_upper[u], kKktTolerance * scale) << "row " << i;
     const double y = sigma * s.row_dual[u];
     if (!is_finite_bound(lin.row_lower[u])) {
-      EXPECT_LE(y, 1e-6) << "row " << i;
+      EXPECT_LE(y, kKktTolerance) << "row " << i;
     }
     if (!is_finite_bound(lin.row_upper[u])) {
-      EXPECT_GE(y, -1e-6) << "row " << i;
+      EXPECT_GE(y, -kKktTolerance) << "row " << i;
     }
     if (lin.row_lower[u] != lin.row_upper[u]) {
       const double slack =
           std::min(activity[u] - lin.row_lower[u], lin.row_upper[u] - activity[u]);
       if (std::isfinite(slack)) {
-        EXPECT_LE(std::fabs(y) * slack, 1e-5 * scale) << "row " << i << ": " << s.message;
+        EXPECT_LE(std::fabs(y) * slack, kKktTolerance * scale)
+            << "row " << i << ": " << s.message;
       }
     }
   }
@@ -106,20 +113,20 @@ void expect_kkt(const QcqpModel& m, const Solution& s) {
   for (Index j = 0; j < lin.num_cols(); ++j) {
     const auto u = static_cast<std::size_t>(j);
     const double x = s.col_value[u];
-    EXPECT_LE(lin.col_lower[u] - x, 1e-6) << "column " << j;
-    EXPECT_LE(x - lin.col_upper[u], 1e-6) << "column " << j;
+    EXPECT_LE(lin.col_lower[u] - x, kKktTolerance) << "column " << j;
+    EXPECT_LE(x - lin.col_upper[u], kKktTolerance) << "column " << j;
     if (in_cone[u]) continue;
     const double d = sigma * s.col_dual[u];
     if (!is_finite_bound(lin.col_lower[u])) {
-      EXPECT_LE(d, 1e-6) << "column " << j;
+      EXPECT_LE(d, kKktTolerance) << "column " << j;
     }
     if (!is_finite_bound(lin.col_upper[u])) {
-      EXPECT_GE(d, -1e-6) << "column " << j;
+      EXPECT_GE(d, -kKktTolerance) << "column " << j;
     }
     if (lin.col_lower[u] != lin.col_upper[u]) {
       const double slack = std::min(x - lin.col_lower[u], lin.col_upper[u] - x);
       if (std::isfinite(slack)) {
-        EXPECT_LE(std::fabs(d) * slack, 1e-5) << "column " << j << ": " << s.message;
+        EXPECT_LE(std::fabs(d) * slack, kKktTolerance) << "column " << j << ": " << s.message;
       }
     }
   }
@@ -138,9 +145,9 @@ void expect_kkt(const QcqpModel& m, const Solution& s) {
       xd += at(s.col_value, i) * sigma * at(s.col_dual, i);
     }
     if (cone.kind == Cone::Kind::kRotated) {
-      EXPECT_GE(2.0 * at(s.col_value, 0) * at(s.col_value, 1) - xx, -1e-6);
+      EXPECT_GE(2.0 * at(s.col_value, 0) * at(s.col_value, 1) - xx, -kKktTolerance);
     } else {
-      EXPECT_GE(at(s.col_value, 0) - std::sqrt(xx), -1e-6);
+      EXPECT_GE(at(s.col_value, 0) - std::sqrt(xx), -kKktTolerance);
     }
     // A member at a finite bound of its own has a reduced cost that is the cone's dual PLUS
     // that bound's multiplier, and the two cannot be told apart from the column's reduced
@@ -150,17 +157,18 @@ void expect_kkt(const QcqpModel& m, const Solution& s) {
       const auto j = static_cast<std::size_t>(cone.columns[i]);
       at_bound = at_bound ||
                  (is_finite_bound(lin.col_lower[j]) &&
-                  std::fabs(s.col_value[j] - lin.col_lower[j]) <= 1e-6) ||
+                  std::fabs(s.col_value[j] - lin.col_lower[j]) <= kKktTolerance) ||
                  (is_finite_bound(lin.col_upper[j]) &&
-                  std::fabs(s.col_value[j] - lin.col_upper[j]) <= 1e-6);
+                  std::fabs(s.col_value[j] - lin.col_upper[j]) <= kKktTolerance);
     }
     if (at_bound) continue;
     if (cone.kind == Cone::Kind::kRotated) {
-      EXPECT_GE(2.0 * sigma * at(s.col_dual, 0) * sigma * at(s.col_dual, 1) - dd, -1e-6);
+      EXPECT_GE(2.0 * sigma * at(s.col_dual, 0) * sigma * at(s.col_dual, 1) - dd,
+                -kKktTolerance);
     } else {
-      EXPECT_GE(sigma * at(s.col_dual, 0) - std::sqrt(dd), -1e-6);
+      EXPECT_GE(sigma * at(s.col_dual, 0) - std::sqrt(dd), -kKktTolerance);
     }
-    EXPECT_NEAR(xd, 0.0, 1e-5);
+    EXPECT_NEAR(xd, 0.0, kKktTolerance);
   }
 }
 
@@ -313,6 +321,46 @@ TEST(Conic, PivotedCholeskyRecoversTheMatrix) {
       EXPECT_NEAR(sum, q[i][j], 1e-12);
     }
   }
+}
+
+// #1061 review: the rank stop judged every pivot against the LARGEST diagonal, so a small but
+// real curvature was dropped. Each pivot is now judged at its own column's scale.
+TEST(Conic, PivotedCholeskyKeepsSmallPivotsAtTheirOwnScale) {
+  const conic::DenseFactor wide = conic::pivoted_cholesky(2, {0, 1}, {0, 1}, {1e6, 1e-7});
+  ASSERT_EQ(wide.rank, 2);
+  EXPECT_EQ(wide.negative_column, -1);
+  EXPECT_NEAR(wide.at(0, 0) * wide.at(0, 0) + wide.at(0, 1) * wide.at(0, 1), 1e6, 1e-6);
+  EXPECT_NEAR(wide.at(1, 0) * wide.at(1, 0) + wide.at(1, 1) * wide.at(1, 1), 1e-7, 1e-20);
+  const conic::DenseFactor tiny = conic::pivoted_cholesky(1, {0}, {0}, {1e-14});
+  ASSERT_EQ(tiny.rank, 1);
+  EXPECT_NEAR(tiny.at(0, 0) * tiny.at(0, 0), 1e-14, 1e-27);
+}
+
+// The same scales in a model: min -x2 subject to 1e6 x1^2 + 1e-7 x2^2 <= 1. The optimum is
+// x1 = 0, x2 = sqrt(1e7) = 3162.27766..., objective -sqrt(1e7). Dropping the 1e-7 pivot made
+// the row a bound on x1 alone and the model unbounded.
+TEST(Conic, BadlyScaledQuadraticRowKeepsItsSmallCurvature) {
+  QcqpModel m = blank(2);
+  m.linear.col_cost = {0.0, -1.0};
+  add_row(&m, {}, -kInfinity, 1.0);
+  m.quadratic = {{0, 0, 0, 1e6}, {0, 1, 1, 1e-7}};
+  const Solution s = solve_conic(m, quiet());
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_NEAR(s.objective, -std::sqrt(1e7), 1e-7 * std::sqrt(1e7)) << s.message;
+  EXPECT_NEAR(s.col_value[0], 0.0, 1e-6);
+}
+
+// #1061 review, item 6: the certificate tests read a ray off the iterate once kappa > tau.
+// A feasible model with a large optimum - min t subject to t >= |x|, x = 1e9 - has a small
+// tau throughout; it must still end optimal at 1e9, not with a certificate.
+TEST(Conic, LargeOptimumIsNotMistakenForARay) {
+  QcqpModel m = blank(2);
+  m.linear.col_cost = {1.0, 0.0};
+  add_row(&m, {{1, 1.0}}, 1e9, 1e9);
+  m.cones.push_back({Cone::Kind::kQuadratic, "abs", {0, 1}});
+  const Solution s = solve_conic(m, quiet());
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_NEAR(s.objective, 1e9, 1e9 * 1e-8) << s.message;
 }
 
 // ---- a Haverly-style blending model with a convex quadratic blending row -------------------

@@ -31,21 +31,33 @@ DenseFactor pivoted_cholesky(Index k, const std::vector<Index>& rows,
   }
   std::vector<Index> perm(n);
   for (std::size_t i = 0; i < n; ++i) perm[i] = static_cast<Index>(i);
-  double largest = 0.0;
-  for (std::size_t i = 0; i < n; ++i) largest = std::max(largest, q[i * n + i]);
-  const double floor = tol::kConicCholeskyPivotShare * std::max(1.0, largest);
+  // EACH PIVOT IS JUDGED AT ITS OWN COLUMN'S SCALE (#1061 review). A floor relative to the
+  // largest diagonal dropped real curvature: diag(1e6, 1e-7) came out rank 1 and diag(1e-14)
+  // rank 0, turning 1e6 x1^2 + 1e-7 x2^2 <= 1 into a constraint on x1 alone and the
+  // minimization of -x2 into an unbounded one. A column's elimination residue is rounding of
+  // its own entries, so the floor is tol::kConicCholeskyPivotShare of the largest magnitude
+  // in that column of the original Q, which keeps a small but real pivot and still stops at
+  // the rounding a rank-deficient Q leaves.
+  std::vector<double> floor(n, 0.0);
+  for (std::size_t j = 0; j < n; ++j) {
+    for (std::size_t i = 0; i < n; ++i) floor[j] = std::max(floor[j], std::fabs(q[j * n + i]));
+    floor[j] *= tol::kConicCholeskyPivotShare;
+  }
 
   // Outer-product Cholesky with complete (diagonal) pivoting, in place: after step r the
   // leading r columns of `q` hold L's columns in the permuted order.
   Index rank = 0;
   for (std::size_t r = 0; r < n; ++r) {
-    std::size_t pivot = r;
-    for (std::size_t i = r + 1; i < n; ++i) {
-      if (q[i * n + i] > q[pivot * n + pivot]) pivot = i;
+    // The largest remaining pivot among those above their own column's floor.
+    std::size_t pivot = n;
+    for (std::size_t i = r; i < n; ++i) {
+      if (q[i * n + i] <= floor[i]) continue;
+      if (pivot == n || q[i * n + i] > q[pivot * n + pivot]) pivot = i;
     }
-    if (q[pivot * n + pivot] <= floor) break;
+    if (pivot == n) break;
     if (pivot != r) {
       std::swap(perm[r], perm[pivot]);
+      std::swap(floor[r], floor[pivot]);
       for (std::size_t j = 0; j < n; ++j) std::swap(q[j * n + r], q[j * n + pivot]);  // rows
       for (std::size_t i = 0; i < n; ++i) std::swap(q[r * n + i], q[pivot * n + i]);  // cols
     }
@@ -64,6 +76,16 @@ DenseFactor pivoted_cholesky(Index k, const std::vector<Index>& rows,
   DenseFactor out;
   out.k = k;
   out.rank = rank;
+  // What stopped it must be negligible: a remaining pivot below MINUS its column's floor is
+  // curvature of the wrong sign at that column's own scale, and dropping it would solve a
+  // different constraint. Refused, not truncated.
+  for (std::size_t i = static_cast<std::size_t>(rank); i < n; ++i) {
+    if (q[i * n + i] < -floor[i]) {
+      out.negative_pivot = q[i * n + i];
+      out.negative_column = perm[i];
+      return out;
+    }
+  }
   out.f.assign(n * static_cast<std::size_t>(rank), 0.0);
   for (std::size_t col = 0; col < static_cast<std::size_t>(rank); ++col) {
     for (std::size_t i = col; i < n; ++i) {
@@ -421,6 +443,14 @@ bool Builder::quadratic_row(const QuadraticRowClass& cls) {
     vals.push_back(a == b ? sign * t.value : 0.5 * sign * t.value);
   }
   const DenseFactor factor = pivoted_cholesky(k, qr, qc, vals);
+  if (factor.negative_column >= 0) {
+    problem_ = fmt::format(
+        "quadratic row {} has a pivot of {:.3e} at column {}, negative beyond rounding at that "
+        "column's own scale; refused rather than factored without it",
+        cls.row, factor.negative_pivot,
+        support[static_cast<std::size_t>(factor.negative_column)]);
+    return false;
+  }
 
   Ref w;
   Ref v;
@@ -487,6 +517,13 @@ bool Builder::quadratic_objective() {
     }
   }
   const DenseFactor factor = pivoted_cholesky(k, qr, qc, vals);
+  if (factor.negative_column >= 0) {
+    problem_ = fmt::format(
+        "the quadratic objective's Hessian has a pivot of {:.3e} at column {}, negative beyond "
+        "rounding at that column's own scale; refused rather than factored without it",
+        factor.negative_pivot, support[static_cast<std::size_t>(factor.negative_column)]);
+    return false;
+  }
   // 0.5 x'Hx = 0.5 ||z||^2 <= 0.5 t with 2 t v >= ||z||^2, v = 1/2: the objective takes 0.5 t.
   Ref t;
   Ref v;

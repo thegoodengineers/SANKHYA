@@ -208,7 +208,6 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
   const std::vector<double>& x = solution.col_value;
   solution.row_activity = model.row_activity(x);
   solution.objective = model.objective(x);
-  solution.dual_bound = solution.objective;
   solution.row_dual.assign(static_cast<std::size_t>(m), 0.0);
   for (Index i = 0; i < m; ++i) {
     const auto u = static_cast<std::size_t>(i);
@@ -286,16 +285,67 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
   }
   solution.dual_infeasibility = dual;
   solution.dual_infeasibility_scaled = dual / dual_scale;
-  solution.absolute_gap = 0.0;
-  solution.relative_gap = 0.0;
-  solution.message = fmt::format(
-      "optimal: relative residuals {:.2e} primal, {:.2e} dual, {:.2e} gap on the conic form; "
-      "{}",
-      run.primal_residual, run.dual_residual, run.gap,
-      finish == conic::Finish::kPolished
-          ? "point and multipliers polished by Newton on the active set"
-      : finish == conic::Finish::kDuals ? "multipliers recovered on the active set"
-                                        : "as the interior point left it");
+
+  // ---- the dual bound: the Wolfe dual value at the reported multipliers -------------------
+  // In minimization space f(x) - sum_i y_i (g_i(x) - b_i) - sum_j d_j (x_j - l_j), each
+  // multiplier against the bound its sign prices (a cone's columns, the cone's -s'x). For a
+  // convex model it is a lower bound wherever the multipliers have their signs and x is
+  // stationary for the Lagrangian; a multiplier pricing a bound that does not exist makes
+  // it -inf. Not set to the objective: the gap reported is the one these numbers give.
+  {
+    double value = sigma * solution.objective;
+    bool finite = true;
+    const auto price = [&](double multiplier, double at, double lower, double upper) {
+      if (multiplier == 0.0) return;
+      const double bound = multiplier > 0.0 ? lower : upper;
+      if (!is_finite_bound(bound)) {
+        finite = false;
+        return;
+      }
+      value -= multiplier * (at - bound);
+    };
+    for (Index i = 0; i < m; ++i) {
+      const auto u = static_cast<std::size_t>(i);
+      price(sigma * solution.row_dual[u], solution.row_activity[u], lin.row_lower[u],
+            lin.row_upper[u]);
+    }
+    for (Index j = 0; j < n; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      const double dj = sigma * solution.col_dual[u];
+      if (in_cone[u]) {
+        value -= dj * x[u];
+      } else {
+        price(dj, x[u], lin.col_lower[u], lin.col_upper[u]);
+      }
+    }
+    solution.dual_bound = finite ? sigma * value : sigma * -kInfinity;
+    solution.absolute_gap = std::fabs(solution.objective - solution.dual_bound);
+    solution.relative_gap =
+        solution.absolute_gap / std::max(1.0, std::fabs(solution.objective));
+  }
+
+  const std::string finished =
+      finish == conic::Finish::kPolished ? "point and multipliers polished by Newton on the "
+                                           "active set"
+      : finish == conic::Finish::kDuals  ? "multipliers recovered on the active set"
+                                         : "as the interior point left it";
+  // The conic form's optimum is claimed optimal only when the MODEL's point is feasible to
+  // the project tolerance: the form is a reformulation, and a factor or a map that lost
+  // something shows up here, not in the form's own residuals (#1061 review).
+  if (solution.primal_infeasibility_scaled > tol::kPrimalFeasibility) {
+    solution.status = SolveStatus::kNumericalError;
+    solution.message = fmt::format(
+        "the conic form converged (relative residuals {:.2e} primal, {:.2e} dual, {:.2e} gap) "
+        "but its point violates the model by {:.3e} ({:.3e} relative), above the primal "
+        "tolerance; not claimed optimal ({})",
+        run.primal_residual, run.dual_residual, run.gap, solution.primal_infeasibility,
+        solution.primal_infeasibility_scaled, finished);
+  } else {
+    solution.message = fmt::format(
+        "optimal: relative residuals {:.2e} primal, {:.2e} dual, {:.2e} gap on the conic form; "
+        "{}; Wolfe dual gap {:.2e} relative",
+        run.primal_residual, run.dual_residual, run.gap, finished, solution.relative_gap);
+  }
   logger.info("conic interior point: {} iterations, {}", run.iterations, solution.message);
   return solution;
 }

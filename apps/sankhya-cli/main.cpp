@@ -443,7 +443,9 @@ int main(int argc, char** argv) {
     sankhya::QcqpModel qcqp;
     if (!load_qcqp_model(model_path, options, &qcqp)) return 3;
     const bool conic = !global && (qcqp.has_quadratic_rows() || qcqp.has_cones());
-    sankhya::Model model = qcqp.linear;
+    // Copied only when a quadratic engine still needs `qcqp`; an LP or MILP is moved, so a
+    // large model is not held twice.
+    sankhya::Model model = (global || conic) ? qcqp.linear : std::move(qcqp.linear);
     if (!progress_out_path.empty()) options.set_string("progress_out", progress_out_path);
 
     g_cli_interrupt = 0;

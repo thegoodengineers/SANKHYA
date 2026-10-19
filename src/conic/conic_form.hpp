@@ -39,13 +39,17 @@ struct ColumnMap {
 };
 
 /// Q = P' L L' P for a symmetric positive semidefinite Q of order k given by its lower
-/// triangle (duplicates summed), by a complete-pivoting Cholesky that stops at the first
-/// pivot below tol::kConicCholeskyPivotShare of the largest initial diagonal (Higham,
-/// "Analysis of the Cholesky decomposition of a semi-definite matrix", 1990). Returns F = P'L
-/// as `rank` dense columns of length k, column-major, so Q = F F'.
+/// triangle (duplicates summed), by a complete-pivoting Cholesky that stops when every
+/// remaining pivot is within tol::kConicCholeskyPivotShare of its OWN column's largest
+/// original magnitude (Higham, "Analysis of the Cholesky decomposition of a semi-definite
+/// matrix", 1990). Returns F = P'L as `rank` dense columns of length k, column-major, so
+/// Q = F F'. When a remaining pivot is negative beyond that floor, `negative_column` names it
+/// and `f` is empty: the caller refuses the matrix rather than truncate it.
 struct DenseFactor {
   Index k = 0;
   Index rank = 0;
+  Index negative_column = -1;  ///< a support position with curvature of the wrong sign, or -1
+  double negative_pivot = 0.0;
   std::vector<double> f;  ///< k x rank, column-major
   [[nodiscard]] double at(Index i, Index col) const noexcept {
     return f[static_cast<std::size_t>(col) * static_cast<std::size_t>(k) +
