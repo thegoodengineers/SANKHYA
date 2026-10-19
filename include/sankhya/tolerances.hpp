@@ -379,6 +379,15 @@ inline constexpr double kPdhgLoose = 1e-4;
 /// simplex starts: the vertex it returns is judged at kPrimalFeasibility and
 /// kDualFeasibility like any other.
 inline constexpr double kCrossoverStartInfeasibility = 1e-4;
+
+/// The crossover's pivot budget, per row and column of the model it runs on (#1072): its
+/// simplex stops with the interior point's answer standing after this many pivots times
+/// rows + columns, whatever the clock says, so where it gives up is the same on every
+/// machine. Measured under algorithm=ipm over the 94 Netlib instances (19 Oct 2026), the
+/// largest successful crossover was degen2's 641 pivots on 444 + 534, 0.66 per row and
+/// column; 10 leaves fifteen times that. cycle's failing push (221,027 pivots, 57 per row
+/// and column of its presolved model) is stopped at 38,920.
+inline constexpr double kCrossoverPivotsPerDimension = 10.0;
 inline constexpr double kPdhgTight = 1e-8;
 
 /// PDHG feasibility polishing (#483, option pdhg_feasibility_polish; Applegate, Hinder, Lu &

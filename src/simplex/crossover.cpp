@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <string>
@@ -386,6 +387,18 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
 
   Options pivots = options;
   pivots.set_string("algorithm", "dual-simplex");
+  // THE PIVOTS ARE BOUNDED BY A COUNT, NOT ONLY BY THE CLOCK (#1072). On Netlib cycle the
+  // push from the interior point's guess cycles through phase 1 for 221,027 pivots before
+  // the basis turns singular for good: 55 s on one hosted runner, under 40 s on a faster
+  // one. Which of the two came first decided whether the retries after it (#783, #792) ran,
+  // so the same build and model returned `feasible` after 44 interior point iterations on
+  // one machine and a verified optimum on the other. A pivot budget proportional to the
+  // model's size ends that crossover at the same pivot on every machine.
+  const auto pivot_budget =
+      static_cast<std::int64_t>(tol::kCrossoverPivotsPerDimension *
+                                static_cast<double>(model.num_rows() + model.num_cols()));
+  const std::int64_t asked = options.get_int("iteration_limit");
+  pivots.set_int("iteration_limit", asked >= 0 ? std::min(asked, pivot_budget) : pivot_budget);
   if (limited) {
     const double remaining = time_limit - timer.elapsed_seconds();
     if (remaining <= 0.0) return no_time_left();

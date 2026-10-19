@@ -9,6 +9,7 @@
 // stops at the analytic centre of a whole optimal face - is where a crossover earns its
 // keep, so that is the first model.
 
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -336,6 +337,39 @@ TEST(Crossover, MarosR7EndsAtAVertex) {
   EXPECT_NEAR(s.objective, 1497185.1665, 1e-6 * 1497185.1665);
   EXPECT_NE(s.algorithm.find("crossover"), std::string::npos) << s.message;
   expect_a_vertex(model, s);
+}
+
+TEST(Crossover, CycleGivesTheSameAnswerOnEveryRunAndThreadCount) {
+  // #1072: the same build gave cycle `feasible` after 44 interior point iterations on one
+  // hosted runner and a verified optimum after 30 on another. The push from the first
+  // interior point cycled for 221,027 pivots; whether it gave up before the time limit
+  // decided whether the prescaled retry (#792) ran. Under the pivot budget
+  // (tol::kCrossoverPivotsPerDimension) it gives up at the same pivot on every machine, the
+  // retry runs, and every run returns the same bits. No time limit here, so nothing but
+  // the work done decides the answer.
+  Model model;
+  const std::string path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+       "data/netlib/cycle.mps")
+          .string();
+  const io::ReadResult read = io::read_model(path, &model);
+  ASSERT_TRUE(read.ok) << path << ": " << read.error;
+  std::vector<Solution> runs;
+  for (const std::int64_t threads : {1, 4}) {
+    Options options = ipm_options(true);
+    options.set_int("threads", threads);
+    runs.push_back(solve(model, options));
+  }
+  ASSERT_EQ(runs[0].status, SolveStatus::kOptimal) << runs[0].message;
+  EXPECT_NEAR(runs[0].objective, -5.2263930249, 1e-9 * 5.2263930249);
+  expect_a_vertex(model, runs[0]);
+  for (std::size_t r = 1; r < runs.size(); ++r) {
+    EXPECT_EQ(runs[r].status, runs[0].status) << "run " << r << ": " << runs[r].message;
+    EXPECT_EQ(runs[r].iterations, runs[0].iterations) << "run " << r;
+    EXPECT_EQ(std::bit_cast<std::uint64_t>(runs[r].objective),
+              std::bit_cast<std::uint64_t>(runs[0].objective))
+        << "run " << r << ": " << runs[r].objective << " against " << runs[0].objective;
+  }
 }
 
 }  // namespace
