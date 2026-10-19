@@ -6,7 +6,15 @@
 // its gradient a_r + 2 Q_r x in the Lagrangian, which is what the cone's dual reduces to: on
 // the rotated cone 2 w v >= ||z||^2 the dual at the boundary is a multiple beta of (v, w, -z),
 // and with v = 1/2 and z = F'x the stationarity c - A'y - y_w (a_r + 2 F F'x) = 0 follows with
-// y_w = -beta/2 (conic_form.hpp). Reduced costs are c + Hx - sum_i y_i grad_i, which for a
+// y_w = -beta/2 (conic_form.hpp). That identity holds at the limit only: at a finite gap the
+// iterate is off the central path, and the w row's multiplier carries an error that falls
+// like the square root of the gap (7.8e-6 at a gap of 1.2e-9 on the unit disc, while the point
+// is right to 1e-9). The conic duals themselves are accurate - dual feasibility A'y + s = c
+// holds to the tolerance - so the multiplier is read from ALL the form rows the quadratic row
+// became: their contribution t to c - A'y over the model's columns, fitted to the model's
+// gradient, y_r = -(g't) / (g'g) with g = a + 2Qx (row_multiplier below). On the disc that is
+// right to 3e-11 at the same gap. The verifier then re-derives stationarity from the .sol file,
+// so the fit is checked, not trusted. Reduced costs are c + Hx - sum_i y_i grad_i, which for a
 // column of an explicit cone is the cone's dual variable s, so tools/verify_solution.py can
 // check x in K, s in K* and x's = 0 from the .sol file alone.
 
@@ -64,6 +72,48 @@ std::string describe_refusal(const QcqpModel& model, const QuadraticRowClass& c)
     }
   }
   return text + "; --option nonconvex=global solves it by spatial branch and bound (#514)";
+}
+
+/// A convex quadratic row's multiplier in MINIMIZATION space, fitted from every form row it
+/// became (see the file comment). t_j = -sign a_j y_primary + sum_col F[j, col] y_z[col] is the
+/// row's contribution to c - A'y on model column j, and the model writes it -y_r g_j with
+/// g = a + 2 Q x; y_r is the least-squares scalar. With g = 0 (a row whose gradient vanishes)
+/// there is nothing to fit and the primary row's own multiplier, sign * y_primary, stands.
+double row_multiplier(const QcqpModel& model, const conic::QuadraticRowMap& map,
+                      const std::vector<double>& x, const std::vector<double>& y,
+                      const CsrView& rows) {
+  const auto n = static_cast<std::size_t>(model.linear.num_cols());
+  std::vector<double> g(n, 0.0);
+  std::vector<double> t(n, 0.0);
+  const double y_primary = y[static_cast<std::size_t>(map.primary)];
+  const ColumnView linear = rows.row(map.row);
+  for (Index p = 0; p < linear.size; ++p) {
+    const auto j = static_cast<std::size_t>(linear.rows[p]);
+    g[j] += linear.values[p];
+    t[j] -= map.sign * linear.values[p] * y_primary;
+  }
+  for (const QuadraticTerm& term : model.quadratic) {
+    if (term.row != map.row) continue;
+    const auto a = static_cast<std::size_t>(term.first);
+    const auto b = static_cast<std::size_t>(term.second);
+    // d(v x_a x_b) = v x_b on a and v x_a on b (2 v x_a on a square).
+    g[a] += term.value * x[b];
+    g[b] += term.value * x[a];
+  }
+  for (std::size_t i = 0; i < map.support.size(); ++i) {
+    const auto j = static_cast<std::size_t>(map.support[i]);
+    for (Index col = 0; col < map.factor.rank; ++col) {
+      t[j] += map.factor.at(static_cast<Index>(i), col) *
+              y[static_cast<std::size_t>(map.first_z_row + col)];
+    }
+  }
+  double gg = 0.0;
+  double gt = 0.0;
+  for (std::size_t j = 0; j < n; ++j) {
+    gg += g[j] * g[j];
+    gt += g[j] * t[j];
+  }
+  return gg > 0.0 ? -gt / gg : map.sign * y_primary;
 }
 
 /// How far x is from the cones of `model`, as an absolute violation.
@@ -164,6 +214,13 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
     const Index r = form.row_of[u];
     if (r >= 0)
       solution.row_dual[u] = sigma * form.row_sign[u] * run.y[static_cast<std::size_t>(r)];
+  }
+  {
+    const CsrView rows(lin.matrix);
+    for (const conic::QuadraticRowMap& map : form.quadratic_rows) {
+      solution.row_dual[static_cast<std::size_t>(map.row)] =
+          sigma * row_multiplier(model, map, x, run.y, rows);
+    }
   }
   // c + Hx - A'y - sum over quadratic rows of y_r grad(x'Q_r x), the model's own sense.
   std::vector<double> d(static_cast<std::size_t>(n), 0.0);

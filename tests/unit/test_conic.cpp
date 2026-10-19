@@ -127,9 +127,25 @@ void expect_kkt(const QcqpModel& m, const Solution& s) {
     }
     if (cone.kind == Cone::Kind::kRotated) {
       EXPECT_GE(2.0 * at(s.col_value, 0) * at(s.col_value, 1) - xx, -1e-6);
-      EXPECT_GE(2.0 * sigma * at(s.col_dual, 0) * sigma * at(s.col_dual, 1) - dd, -1e-6);
     } else {
       EXPECT_GE(at(s.col_value, 0) - std::sqrt(xx), -1e-6);
+    }
+    // A member at a finite bound of its own has a reduced cost that is the cone's dual PLUS
+    // that bound's multiplier, and the two cannot be told apart from the column's reduced
+    // cost alone; tools/verify_solution.py skips such a cone's duals for the same reason.
+    bool at_bound = false;
+    for (std::size_t i = 0; i < cone.columns.size(); ++i) {
+      const auto j = static_cast<std::size_t>(cone.columns[i]);
+      at_bound = at_bound ||
+                 (is_finite_bound(lin.col_lower[j]) &&
+                  std::fabs(s.col_value[j] - lin.col_lower[j]) <= 1e-6) ||
+                 (is_finite_bound(lin.col_upper[j]) &&
+                  std::fabs(s.col_value[j] - lin.col_upper[j]) <= 1e-6);
+    }
+    if (at_bound) continue;
+    if (cone.kind == Cone::Kind::kRotated) {
+      EXPECT_GE(2.0 * sigma * at(s.col_dual, 0) * sigma * at(s.col_dual, 1) - dd, -1e-6);
+    } else {
       EXPECT_GE(sigma * at(s.col_dual, 0) - std::sqrt(dd), -1e-6);
     }
     EXPECT_NEAR(xd, 0.0, 1e-5);

@@ -38,6 +38,37 @@ struct ColumnMap {
   double shift = 0.0;
 };
 
+/// Q = P' L L' P for a symmetric positive semidefinite Q of order k given by its lower
+/// triangle (duplicates summed), by a complete-pivoting Cholesky that stops at the first
+/// pivot below tol::kConicCholeskyPivotShare of the largest initial diagonal (Higham,
+/// "Analysis of the Cholesky decomposition of a semi-definite matrix", 1990). Returns F = P'L
+/// as `rank` dense columns of length k, column-major, so Q = F F'.
+struct DenseFactor {
+  Index k = 0;
+  Index rank = 0;
+  std::vector<double> f;  ///< k x rank, column-major
+  [[nodiscard]] double at(Index i, Index col) const noexcept {
+    return f[static_cast<std::size_t>(col) * static_cast<std::size_t>(k) +
+             static_cast<std::size_t>(i)];
+  }
+};
+[[nodiscard]] DenseFactor pivoted_cholesky(Index k, const std::vector<Index>& rows,
+                                           const std::vector<Index>& cols,
+                                           const std::vector<double>& values);
+
+/// What a convex quadratic row became, kept so its multiplier can be read back from every
+/// form row it touches (conic_solve.cpp): sign * (a'x + x'Qx) <= side as `primary` (w + sign
+/// a'x = side) and z = F'x as the rank rows from `first_z_row`, with sign * Q = F F' over
+/// `support`, the model columns in the row's products.
+struct QuadraticRowMap {
+  Index row = 0;
+  double sign = 1.0;
+  Index primary = -1;
+  Index first_z_row = -1;
+  std::vector<Index> support;
+  DenseFactor factor;
+};
+
 struct ConicForm {
   Index n = 0;
   Index m = 0;
@@ -57,6 +88,8 @@ struct ConicForm {
   /// the row has no finite side and was dropped.
   std::vector<Index> row_of;
   std::vector<double> row_sign;
+  /// One entry per convex quadratic row with a finite side.
+  std::vector<QuadraticRowMap> quadratic_rows;
   /// Non-empty when the form could not be built; the form is then unusable.
   std::string problem;
 
@@ -65,27 +98,8 @@ struct ConicForm {
 };
 
 /// Build the form. `classes` is classify_quadratic_rows(model) and every verdict in it must
-/// be kConvex; `objective_convex` says sigma * H passed the convexity test (false with an
-/// empty Hessian is fine).
+/// be kConvex; the caller has checked the objective's Hessian is convex in the model's sense.
 [[nodiscard]] ConicForm build_conic_form(const QcqpModel& model,
                                          const std::vector<QuadraticRowClass>& classes);
-
-/// Q = P' L L' P for a symmetric positive semidefinite Q of order k given by its lower
-/// triangle (duplicates summed), by a complete-pivoting Cholesky that stops at the first
-/// pivot below tol::kConicCholeskyPivotShare of the largest initial diagonal (Higham,
-/// "Analysis of the Cholesky decomposition of a semi-definite matrix", 1990). Returns F = P'L
-/// as `rank` dense columns of length k, column-major, so Q = F F'.
-struct DenseFactor {
-  Index k = 0;
-  Index rank = 0;
-  std::vector<double> f;  ///< k x rank, column-major
-  [[nodiscard]] double at(Index i, Index col) const noexcept {
-    return f[static_cast<std::size_t>(col) * static_cast<std::size_t>(k) +
-             static_cast<std::size_t>(i)];
-  }
-};
-[[nodiscard]] DenseFactor pivoted_cholesky(Index k, const std::vector<Index>& rows,
-                                           const std::vector<Index>& cols,
-                                           const std::vector<double>& values);
 
 }  // namespace sankhya::conic

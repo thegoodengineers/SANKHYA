@@ -270,6 +270,7 @@ class Builder {
   std::vector<ColumnMap> col_map_;
   std::vector<Index> row_of_;
   std::vector<double> row_sign_;
+  std::vector<QuadraticRowMap> quadratic_rows_;
   double sigma_ = 1.0;
   double offset_ = 0.0;
   std::string problem_;
@@ -435,6 +436,9 @@ bool Builder::quadratic_row(const QuadraticRowClass& cls) {
   row_of_[u] = primary;
   row_sign_[u] = sign;
   entry(row(0.5), v, 1.0);
+  // The z rows are the next `rank` rows, in order (row() appends; finish() keeps row order).
+  quadratic_rows_.push_back(
+      {cls.row, sign, primary, static_cast<Index>(rhs_.size()), support, factor});
   for (Index col = 0; col < factor.rank; ++col) {
     const Index r = row(0.0);
     entry(r, Ref{z + col}, 1.0);
@@ -540,6 +544,7 @@ void Builder::finish(ConicForm* form) {
   form->col_map = std::move(col_map_);
   form->row_of = std::move(row_of_);
   form->row_sign = std::move(row_sign_);
+  form->quadratic_rows = std::move(quadratic_rows_);
   form->sigma = sigma_;
   form->offset = offset_;
 }
