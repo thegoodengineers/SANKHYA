@@ -12,7 +12,13 @@
 // 1e-5 on a column strictly inside its bounds fails complementarity at any reachable gap.
 //
 // WHAT. The point is accurate, so the active set can be read off it: every equality row, every
-// row and column bound within tol::kConicActiveShare of its slack scale. Stationarity at the
+// row and column bound within tol::kConicActiveShare of its slack scale, and every one whose
+// interior-point multiplier outweighs its slack, both scaled. The second test is Tapia's
+// indicator (El-Bakry, Tapia & Zhang, "A study of indicators for identifying zero variables in
+// interior-point methods", SIAM Review 36 (1994)): at an interior-point iterate an active
+// constraint has slack near mu / y and an inactive one a multiplier near mu / slack, so the
+// ratio separates them whatever the multiplier's size - where a fixed window misses an active
+// row whose multiplier is small and whose slack therefore sits above it. Stationarity at the
 // point, grad f(x) = sum_i y_i grad g_i(x) + d with d supported on the active bounds, is then
 // a linear least-squares problem in the active multipliers, min || r - M lambda ||, with r the
 // objective's gradient and M's columns the active rows' gradients a_i + 2 Q_i x and the unit
@@ -136,9 +142,18 @@ bool recover_duals(const QcqpModel& model, Solution* solution) {
   for (std::size_t j = 0; j < r.size(); ++j) r[j] = sigma * (r[j] + lin.col_cost[j]);
 
   // ---- the active set at the point --------------------------------------------------------
-  const auto tight = [](double value, double bound, double magnitude) {
-    return is_finite_bound(bound) &&
-           std::fabs(value - bound) <= tol::kConicActiveShare * std::max(1.0, magnitude);
+  // Multipliers are scaled by the objective gradient's size, slacks by the constraint's.
+  double multiplier_scale = 1.0;
+  for (const double e : r) multiplier_scale = std::max(multiplier_scale, std::fabs(e));
+  const auto active = [&](double value, double lower, double upper, double magnitude,
+                          double multiplier) {
+    const double scale = std::max(1.0, magnitude);
+    const double below = is_finite_bound(lower) ? value - lower : kInfinity;
+    const double above = is_finite_bound(upper) ? upper - value : kInfinity;
+    if (std::min(below, above) <= tol::kConicActiveShare * scale) return true;
+    // Tapia's indicator, on the side the multiplier prices (positive: the lower bound).
+    const double slack = multiplier > 0.0 ? below : multiplier < 0.0 ? above : kInfinity;
+    return std::isfinite(slack) && std::fabs(multiplier) / multiplier_scale > slack / scale;
   };
   std::vector<Index> active_rows;
   for (Index i = 0; i < m; ++i) {
@@ -147,16 +162,17 @@ bool recover_duals(const QcqpModel& model, Solution* solution) {
     for (const auto& [j, v] : gradients[u]) {
       magnitude = std::max(magnitude, std::fabs(v * x[static_cast<std::size_t>(j)]));
     }
-    if (tight(activity[u], lin.row_lower[u], magnitude) ||
-        tight(activity[u], lin.row_upper[u], magnitude)) {
+    if (active(activity[u], lin.row_lower[u], lin.row_upper[u], magnitude,
+               sigma * solution->row_dual[u])) {
       active_rows.push_back(i);
     }
   }
+  const bool have_reduced_costs = static_cast<Index>(solution->col_dual.size()) == n;
   std::vector<Index> active_cols;
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
-    if (tight(x[u], lin.col_lower[u], std::fabs(x[u])) ||
-        tight(x[u], lin.col_upper[u], std::fabs(x[u]))) {
+    if (active(x[u], lin.col_lower[u], lin.col_upper[u], std::fabs(x[u]),
+               have_reduced_costs ? sigma * solution->col_dual[u] : 0.0)) {
       active_cols.push_back(j);
     }
   }

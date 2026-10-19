@@ -95,7 +95,7 @@ void expect_kkt(const QcqpModel& m, const Solution& s) {
       const double slack =
           std::min(activity[u] - lin.row_lower[u], lin.row_upper[u] - activity[u]);
       if (std::isfinite(slack)) {
-        EXPECT_LE(std::fabs(y) * slack, 1e-5 * scale) << "row " << i;
+        EXPECT_LE(std::fabs(y) * slack, 1e-5 * scale) << "row " << i << ": " << s.message;
       }
     }
   }
@@ -119,7 +119,7 @@ void expect_kkt(const QcqpModel& m, const Solution& s) {
     if (lin.col_lower[u] != lin.col_upper[u]) {
       const double slack = std::min(x - lin.col_lower[u], lin.col_upper[u] - x);
       if (std::isfinite(slack)) {
-        EXPECT_LE(std::fabs(d) * slack, 1e-5) << "column " << j;
+        EXPECT_LE(std::fabs(d) * slack, 1e-5) << "column " << j << ": " << s.message;
       }
     }
   }
