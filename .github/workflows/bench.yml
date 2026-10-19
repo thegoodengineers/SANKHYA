@@ -38,6 +38,7 @@ on:
           - refinery
           - ab-netlib
           - ab-supernodal
+          - mittelmann
         required: true
       ref:
         description: commit, branch or tag to build and run (ab-* - the new arm)
@@ -129,6 +130,7 @@ jobs:
             kennington) python3 bench/runners/fetch_kennington.py ;;
             miplib-tier1) python3 bench/runners/fetch_miplib.py ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
+            mittelmann) python3 bench/runners/fetch_mittelmann.py --set small ;;
           esac
           # The stamp marks a modified tracked file -dirty; say so before the run, not after.
           git status --porcelain --untracked-files=no
@@ -164,6 +166,11 @@ jobs:
               # #470: scalar and supernodal IPM factorization, 1 and 4 threads, over two refs.
               ab-supernodal)
                 python3 bench/runners/supernodal_ab.py --base .base/build/sankhya                   --new build/sankhya --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
+              # The eight smallest Mittelmann LPs; `--instances irish-electricity` narrows it
+              # and `--no-highs` skips the HiGHS cross-check (highspy is not installed here).
+              mittelmann)
+                python3 bench/runners/mittelmann.py --binary build/sankhya \
+                  ${limit[@]+"${limit[@]}"} "$@" ;;
             esac
           } 2>&1 | tee "$out/run.log" || status=$?
           # Every result file the run wrote or rewrote goes into the artifact.
