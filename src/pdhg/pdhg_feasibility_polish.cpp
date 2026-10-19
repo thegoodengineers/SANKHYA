@@ -11,8 +11,8 @@
 //            the polished points close to them, so the gap of the polished pair stays near
 //            the gap of the iterate it came from.
 //   [PDLP]   Applegate, Diaz, Hinder, Lu, Lubin, O'Donoghue, Schudy, NeurIPS 2021, sections
-//            3.1 (adaptive step), 3.2 (primal weight), 4.3 (restarts): the rules each phase
-//            runs with, the same ones src/pdhg/pdhg.cpp applies to the main run.
+//            3.1 (adaptive step) and 4.3 (restarts), the rules each phase runs with; 3.2
+//            (primal weight) is NOT applied inside a phase, see run() (#1000).
 //
 // Written from the papers; per ENGINEERING_RULES.md the source of PDLP, OR-Tools, cuPDLP and
 // every other LP solver was NOT consulted.
@@ -105,6 +105,7 @@ FeasibilityPolisher::PhaseResult FeasibilityPolisher::run(
     const std::vector<double>& col_upper, const std::vector<double>& row_lower,
     const std::vector<double>& row_upper, const Problem& judged_on, std::vector<double> x,
     std::vector<double> y, Count budget, double omega, double eta,
+    const std::function<double(const Residuals&)>& progress,
     const std::function<bool(const Residuals&)>& done, const std::function<bool()>& stop) {
   const SparseMatrix& a = scaling_.matrix;
   const std::size_t n = x.size();
@@ -120,8 +121,6 @@ FeasibilityPolisher::PhaseResult FeasibilityPolisher::run(
   std::vector<double> a_x_next(m, 0.0);
   std::vector<double> x_sum(n, 0.0);
   std::vector<double> y_sum(m, 0.0);
-  std::vector<double> x_restart = x;
-  std::vector<double> y_restart = y;
   std::vector<double> xu(n, 0.0);
   std::vector<double> x_avg(n, 0.0);
   std::vector<double> y_avg(m, 0.0);
@@ -204,7 +203,8 @@ FeasibilityPolisher::PhaseResult FeasibilityPolisher::run(
     if (steps % kPolishEvaluationInterval != 0 && !last) continue;
 
     // The better of the current iterate and the average since the last restart, on this
-    // phase's own KKT error; the phase ends the moment either has what it came for.
+    // phase's own residual (`progress`); the phase ends the moment either has what it came
+    // for.
     const Residuals current = judge(x, y);
     Residuals average;
     bool average_better = false;
@@ -213,7 +213,7 @@ FeasibilityPolisher::PhaseResult FeasibilityPolisher::run(
       for (std::size_t j = 0; j < n; ++j) x_avg[j] = x_sum[j] / count;
       for (std::size_t i = 0; i < m; ++i) y_avg[i] = y_sum[i] / count;
       average = judge(x_avg, y_avg);
-      average_better = average.worst() < current.worst();
+      average_better = progress(average) < progress(current);
     }
     if (done(current)) {
       result.reached = true;
@@ -229,8 +229,28 @@ FeasibilityPolisher::PhaseResult FeasibilityPolisher::run(
     }
     if (last) break;
 
-    // [PDLP] section 4.3 restart to the better candidate, and 3.2 primal weight update.
-    const double kkt = average_better ? average.worst() : current.worst();
+    // [PDLP] section 4.3 restart to the better candidate, judged by `progress` (#1000).
+    //
+    // NOT ON worst() = max(primal, dual, gap), and NO [PDLP] section 3.2 primal-weight update
+    // inside a phase. On a feasibility problem two of worst()'s three terms say nothing about
+    // the phase's target. In the primal phase the cost is zero, so the relative dual residual
+    // (over 1 + ||c|| = 1) is an absolute quantity that follows y's drift, and with a zero
+    // primal objective the relative gap is |d| / (1 + |d|), near 1 for any sizeable dual
+    // objective d. The dual phase has the same defect by construction: its bounds are zero,
+    // so its relative primal residual is absolute. Restarting on that max meant restarting
+    // almost only artificially, and choosing between the average and the iterate by y's
+    // drift rather than by feasibility. The weight update estimates the distance to the
+    // solution set per side from a period's movement; here one side starts at an optimum
+    // (y = 0 for the zero-objective problem, x = 0 for the zero-bound one), so the estimate
+    // tracks the drift instead. Traced on share2b's primal phase from the point an iteration
+    // limit of 4,000 leaves (#1000): the dual residual ran to 190, the gap stayed in 0.54 to
+    // 0.999, and omega went from 0.66 to 26.6 (tau = eta / omega, the primal step, shrinking
+    // with it); from the 2,500 stop omega fell to 0.045 instead. The main run's weight, the
+    // one estimate made on the original problem, is kept. Over share2b stopped at 16 limits
+    // from 1,000 to 5,000 the primal phase reached 1e-8 from 4 of them before, from 13 after;
+    // the other 3 start further out (relative primal 3e-2 to 6e-2), converge steadily, and
+    // reach within twice the budget.
+    const double kkt = average_better ? progress(average) : progress(current);
     const Count since = steps - last_restart;
     const bool artificial =
         since >= std::max<Count>(kPolishEvaluationInterval,
@@ -241,21 +261,9 @@ FeasibilityPolisher::PhaseResult FeasibilityPolisher::run(
         y = y_avg;
         if (m > 0) a.multiply(x.data(), a_x.data());
       }
-      double dx2 = 0.0;
-      double dy2 = 0.0;
-      for (std::size_t j = 0; j < n; ++j) dx2 += (x[j] - x_restart[j]) * (x[j] - x_restart[j]);
-      for (std::size_t i = 0; i < m; ++i) dy2 += (y[i] - y_restart[i]) * (y[i] - y_restart[i]);
-      const double dx_norm = std::sqrt(dx2);
-      const double dy_norm = std::sqrt(dy2);
-      if (dx_norm > 1e-12 && dy_norm > 1e-12) {
-        omega = std::exp(0.5 * std::log(dy_norm / dx_norm) + 0.5 * std::log(omega));
-        omega = std::clamp(omega, 1e-6, 1e6);
-      }
       std::fill(x_sum.begin(), x_sum.end(), 0.0);
       std::fill(y_sum.begin(), y_sum.end(), 0.0);
       averaged = 0;
-      x_restart = x;
-      y_restart = y;
       restart_kkt = kkt;
       last_restart = steps;
     }
@@ -282,12 +290,14 @@ FeasibilityPolisher::Outcome FeasibilityPolisher::polish(const std::vector<doubl
   // Primal phase, from (x_k, 0) on the zero-objective problem. Done when x is feasible to
   // kPdhgTight relative AND the project's absolute primal tolerance, so the claim made of
   // the result is the one tools/verify_solution.py checks.
+  const auto primal_progress = [](const Residuals& r) { return r.primal; };
   const auto primal_done = [](const Residuals& r) {
     return r.primal <= tol::kPdhgTight && r.absolute_primal <= tol::kPrimalFeasibility;
   };
-  PhaseResult primal = run(zero_cost_, scaling_.col_lower, scaling_.col_upper,
-                           scaling_.row_lower, scaling_.row_upper, primal_problem_, xs,
-                           std::vector<double>(m, 0.0), budget, omega, eta, primal_done, stop);
+  PhaseResult primal =
+      run(zero_cost_, scaling_.col_lower, scaling_.col_upper, scaling_.row_lower,
+          scaling_.row_upper, primal_problem_, xs, std::vector<double>(m, 0.0), budget, omega,
+          eta, primal_progress, primal_done, stop);
   out.iterations += primal.iterations;
   std::vector<double> scratch_x(n, 0.0);
   std::vector<double> scratch_y(m, 0.0);
@@ -299,12 +309,13 @@ FeasibilityPolisher::Outcome FeasibilityPolisher::polish(const std::vector<doubl
   // Dual phase, from (0, y_k) on the homogenized problem. Its dual residual is measured
   // exactly as the original's would be: same matrix, same cost, same finite/infinite
   // pattern of bounds.
+  const auto dual_progress = [](const Residuals& r) { return r.dual; };
   const auto dual_done = [](const Residuals& r) {
     return r.dual <= tol::kPdhgTight && r.absolute_dual <= tol::kDualFeasibility;
   };
   PhaseResult dual =
       run(scaling_.cost, h_col_lower_, h_col_upper_, h_row_lower_, h_row_upper_, dual_problem_,
-          std::vector<double>(n, 0.0), ys, budget, omega, eta, dual_done, stop);
+          std::vector<double>(n, 0.0), ys, budget, omega, eta, dual_progress, dual_done, stop);
   out.iterations += dual.iterations;
   if (dual.reached) {
     out.dual_reached = true;

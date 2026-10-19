@@ -62,14 +62,16 @@ class FeasibilityPolisher {
     Count iterations = 0;
   };
 
-  /// Restarted PDHG ([PDLP] sections 3.1, 3.2, 4.3, the same rules as the main loop) on the
-  /// scaled problem with cost `cost` and bounds given, from scaled (x, y). `judge` measures
-  /// a scaled pair in original units; `done` decides when the phase has what it came for.
+  /// Restarted PDHG ([PDLP] sections 3.1 and 4.3) on the scaled problem with cost `cost` and
+  /// bounds given, from scaled (x, y), at the fixed primal weight `omega`. Restarts and the
+  /// choice of the average or the iterate follow `progress`, the phase's own residual (#1000);
+  /// `done` decides when the phase has what it came for.
   PhaseResult run(const std::vector<double>& cost, const std::vector<double>& col_lower,
                   const std::vector<double>& col_upper, const std::vector<double>& row_lower,
                   const std::vector<double>& row_upper, const Problem& judged_on,
                   std::vector<double> x, std::vector<double> y, Count budget, double omega,
-                  double eta, const std::function<bool(const Residuals&)>& done,
+                  double eta, const std::function<double(const Residuals&)>& progress,
+                  const std::function<bool(const Residuals&)>& done,
                   const std::function<bool()>& stop);
 
   void unscale(const std::vector<double>& xs, const std::vector<double>& ys,
