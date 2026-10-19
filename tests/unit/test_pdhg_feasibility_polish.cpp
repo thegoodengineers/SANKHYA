@@ -122,12 +122,13 @@ Recomputed recompute(const Model& model, const Solution& s) {
 /// restarted on max(primal, dual, gap) and re-derived the primal weight; on a feasibility
 /// problem that max follows y's drift, not feasibility, and the primal phase stalled at
 /// 1e-3 to 6e-2 from most stopped points, reaching only by the luck of one trajectory (the
-/// issue's table: GCC at 2000, MSVC at 1900, neither at 2500). With each phase restarting on
-/// its own residual at the main run's weight, the polish takes 1,143 iterations from 2000 and
-/// 1,181 from 2500, both phases together (g++ 11.4), inside the budget of one step per phase
-/// per main-run iteration. Not every stopped
-/// point is covered: from 1000, 1250 and 3000 the phase starts at relative primal 3e-2 to
-/// 6e-2 and needs up to twice that budget, which is why no limit outside these two is listed.
+/// issue's table: GCC at 2000, MSVC at 1900, neither at 2500). Now each phase restarts on its
+/// own residual at the main run's weight, and the last polish gets
+/// kPdhgFinalPolishBudgetMultiplier steps per phase per main-run iteration: from a point far
+/// out the phase converges, but can need more steps than the main run took. MSVC stopped at
+/// 2500 leaves such a point (relative primal 3.5e-2, where g++ 11.4 leaves 1.5e-3), and with
+/// one step per iteration it did not reach; g++ 11.4 at 16 limits from 1000 to 5000 reaches
+/// from all 16 with two, taking 1,083 to 3,921 polish iterations.
 struct Case {
   const char* name;
   std::int64_t iteration_limit;

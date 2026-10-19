@@ -946,19 +946,21 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   // provided its x reached the target. A run that had CONVERGED keeps its own point unless
   // the polished pair passes the same stopping test, so the switch cannot weaken a claim.
   //
-  // THIS LAST POLISH GETS AS MANY STEPS PER PHASE AS THE MAIN RUN TOOK, not iteration / 8.
-  // The periodic schedule is [AHLL25]'s and is aimed at ending a long run early; this one is
-  // the promise that the answer handed back is feasible, and on the committed Netlib
-  // instances stopped at 300 to 2,000 iterations the primal phase needed 100 to 6,600 steps
-  // to reach 1e-8 from the point the limit left (share2b the slowest), far beyond k / 8. It
-  // returns the moment it gets there, and the time limit still bounds it.
+  // THIS LAST POLISH GETS kPdhgFinalPolishBudgetMultiplier STEPS PER PHASE FOR EACH STEP THE
+  // MAIN RUN TOOK, not iteration / 8. The periodic schedule is [AHLL25]'s and is aimed at
+  // ending a long run early; this one is the promise that the answer handed back is
+  // feasible, and from a stopped point far out (share2b, #1000) the primal phase can need
+  // more steps than the main run took. It returns the moment it gets there, and the time
+  // limit still bounds it.
   if (feasibility_polish && !reported_polished && !certificate_found &&
       stop_status != SolveStatus::kInterrupted) {
     const Residuals at_best = evaluate(problem, best_x, best_y, activity, reduced);
     if (!primal_tight(at_best)) {
       if (!polish_should_stop()) {
-        keep_polished(polisher->polish(best_x, best_y, std::max<Count>(1, iteration), omega,
-                                       eta, polish_should_stop));
+        keep_polished(polisher->polish(
+            best_x, best_y,
+            tol::kPdhgFinalPolishBudgetMultiplier * std::max<Count>(1, iteration), omega, eta,
+            polish_should_stop));
       }
       if (have_polished) {
         const bool passes = passes_stopping_test(polished.residuals);

@@ -385,6 +385,14 @@ inline constexpr double kPdhgTight = 1e-8;
 inline constexpr Count kPdhgPolishFirstIteration = 100;
 inline constexpr double kPdhgPolishGap = 1e-2;
 inline constexpr Count kPdhgPolishBudgetDivisor = 8;
+/// The last polish, of the point a run stopped short is about to report, gets this many
+/// steps per phase for each main-run iteration (#1000). It is the promise that a stopped run
+/// hands back a feasible point, so it is not [AHLL25]'s fraction. On share2b stopped at 16
+/// limits from 1,000 to 5,000 (g++ 11.4) the primal phase needed more than one step per
+/// iteration from 3 of them - those whose stopped point was at relative primal 3e-2 to 6e-2 -
+/// and reached from all 16 at two; MSVC stopped at 2,500 leaves such a point too. The phase
+/// returns the moment it reaches, so the multiplier costs only where it fails.
+inline constexpr Count kPdhgFinalPolishBudgetMultiplier = 2;
 
 /// PDHG constant step (#482, option pdhg_constant_step): eta = kPdhgConstantStepShare / U,
 /// U the certified upper bound on ||A||_2 of src/la/operator_norm.hpp, so tau sigma ||A||^2 =
