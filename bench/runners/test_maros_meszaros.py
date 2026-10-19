@@ -330,6 +330,63 @@ def test_doc_section() -> None:
     check(chr(0x2014) not in text and chr(0x2013) not in text, "the section carries no em or en dash")
 
 
+def test_reference_errata() -> None:
+    """#980: the errata paragraph names the corrected references and does NOT re-score -
+    a row whose objective equals the exact optimum still counts as not matched."""
+    with tempfile.TemporaryDirectory() as tmp:
+        errata = Path(tmp) / "errata.json"
+        errata.write_text(json.dumps({"errata": {"huestis": {
+            "published": "3.4824690e+11", "exact_optimum": "348244638733.4522571976875",
+            "relative_difference": "6.4933e-06",
+            "script": "bench/runners/exact_diagonal_qp.py data/maros-meszaros/huestis.qps",
+            "reason": "test"}}}), encoding="utf-8")
+        rows = [{"instance": "huestis", "our_objective": "348244638733.45276",
+                 "matches_reference": "0"}]
+        lines = doc.errata_paragraph(rows, errata)
+        text = "\n".join(lines)
+        check("Reference errata" in text and "`huestis`" in text and "348244638733.4522571976875" in text,
+              "the errata paragraph names the instance and its exact optimum")
+        check("not matched" in text, "the paragraph says the published value still judges the row")
+        check(rows[0]["matches_reference"] == "0", "the row is not re-scored")
+        check(doc.errata_paragraph(rows, Path(tmp) / "absent.json") == [],
+              "no errata file, no paragraph")
+    committed = json.loads(doc.ERRATA.read_text(encoding="utf-8"))["errata"]
+    manifest = json.loads(doc.MANIFEST.read_text(encoding="utf-8"))["instances"]
+    for name, entry in committed.items():
+        check(name in manifest and entry["published"] == manifest[name]["reference_text"],
+              f"{name}: the erratum quotes the published value reference.json keeps")
+
+
+def test_exact_diagonal_qp() -> None:
+    """The exact checker on a QP solved by hand: min 0.5 (x1^2 + x2^2 + x3^2) - x3 s.t.
+    x1 + x2 = 2, x2 + x3 = 1, x >= 0. With x3 interior: x = (lam1, lam1 + lam2, lam2 + 1)
+    on the rows gives 2 lam1 + lam2 = 2 and lam1 + 2 lam2 = 0, so lam = (4/3, -2/3) and
+    x = (4/3, 2/3, 1/3), all positive: objective 0.5 (16 + 4 + 1)/9 - 1/3 = 5/6."""
+    import exact_diagonal_qp as exact
+    from fractions import Fraction
+    qps = "\n".join([
+        "NAME          HAND", "ROWS", " N  OBJ", " E  R1", " E  R2", "COLUMNS",
+        "    X1        R1        1", "    X2        R1        1   R2   1",
+        "    X3        R2        1   OBJ  -1", "RHS", "    RHS       R1        2   R2   1",
+        "QUADOBJ", "    X1        X1        1", "    X2        X2        1",
+        "    X3        X3        1", "ENDATA", ""])
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "hand.qps"
+        path.write_text(qps, encoding="utf-8")
+        result = exact.exact_optimum(path)
+        check(result["objective"] == Fraction(5, 6), "the hand-solved optimum, exactly 5/6",
+              str(result["objective"]))
+        check(all(result["checks"].values()), "every KKT condition holds exactly")
+        bounded = path.with_name("bounded.qps")
+        bounded.write_text(qps.replace("QUADOBJ", "BOUNDS\n UP BND       X1        1\nQUADOBJ"),
+                           encoding="utf-8")
+        try:
+            exact.exact_optimum(bounded)
+            check(False, "a BOUNDS entry is refused")
+        except exact.Unsupported:
+            check(True, "a BOUNDS entry is refused")
+
+
 def main() -> int:
     for name, test in list(globals().items()):
         if name.startswith("test_") and callable(test):

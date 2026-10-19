@@ -1,0 +1,19 @@
+{
+  "about": "Published Maros-Meszaros reference objectives shown to be off by an exact computation. reference.json keeps the published values and every benchmark is still judged against them (matches_reference is unchanged); this file only records what the exact optimum is, how it was computed, and why the published value cannot be met. #980.",
+  "errata": {
+    "huestis": {
+      "published": "3.4824690e+11",
+      "exact_optimum": "348244638733.4522571976875",
+      "relative_difference": "6.4933e-06",
+      "script": "bench/runners/exact_diagonal_qp.py data/maros-meszaros/huestis.qps",
+      "reason": "Diagonal Q, two equality rows, x >= 0: the optimum solved in exact rational arithmetic from the file's decimal strings, every KKT condition checked exactly; the published value is 6.49e-6 above it, more than eight printed digits can explain."
+    },
+    "hues-mod": {
+      "published": "3.4824690e+07",
+      "exact_optimum": "34824463.87334522571976875",
+      "relative_difference": "6.4933e-06",
+      "script": "bench/runners/exact_diagonal_qp.py data/maros-meszaros/hues-mod.qps",
+      "reason": "huestis with Q scaled by 1e-4, solved the same way; the published value is 6.49e-6 above the exact optimum, the same error scaled with the model."
+    }
+  }
+}

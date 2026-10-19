@@ -18,6 +18,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = REPO_ROOT / "data" / "maros-meszaros" / "reference.json"
+ERRATA = REPO_ROOT / "data" / "maros-meszaros" / "reference_errata.json"
 SHIFT_SECONDS = 10.0
 
 REPRODUCE = [
@@ -70,6 +71,31 @@ def failure_lists(rows: list[dict]) -> list[str]:
         if members:
             lines.append(f"- **{title}** ({len(members)}): {_names(members)}.")
     return lines
+
+
+def errata_paragraph(rows: list[dict], errata_path: Path = ERRATA) -> list[str]:
+    """The published references an exact computation shows to be off (#980). Informational
+    only: `matches_reference` is still judged against the published value, so nothing is
+    re-scored here."""
+    if not errata_path.exists():
+        return []
+    errata = json.loads(errata_path.read_text(encoding="utf-8")).get("errata", {})
+    if not errata:
+        return []
+    by_name = {row["instance"]: row for row in rows}
+    out = ["**Reference errata.** For these instances the published objective is not the "
+           "optimum: it was recomputed exactly (`data/maros-meszaros/reference_errata.json`). "
+           "The table above still judges them against the published value, so they count "
+           "as not matched.", "",
+           "| instance | published | exact optimum | relative difference | ours (this run) | how |",
+           "|---|---:|---:|---:|---:|---|"]
+    for name in sorted(errata):
+        e = errata[name]
+        ours = _float(by_name.get(name, {}), "our_objective")
+        out.append(f"| `{name}` | {e['published']} | {e['exact_optimum']} | "
+                   f"{e['relative_difference']} | {'-' if ours is None else format(ours, '.17g')} "
+                   f"| `{e['script']}` |")
+    return out + [""]
 
 
 def section(path: Path | None) -> str:
@@ -147,4 +173,5 @@ def section(path: Path | None) -> str:
     failures = failure_lists(rows)
     out += [""] + (["Every failure, named:", "", *failures] if failures
                    else ["Every instance run succeeded at both levels."]) + [""]
+    out += errata_paragraph(rows)
     return "\n".join(out)

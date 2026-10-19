@@ -2199,6 +2199,13 @@ Every failure, named:
 - **`optimal` but more than 1e-6 relative from the reference objective** (2): `hues-mod`, `liswet2`.
 - **`optimal` but not successful at 1e-9 relative** (10): `gouldqp3`, `hs268`, `hs35mod`, `liswet2`, `liswet3`, `liswet4`, `liswet5`, `liswet6`, `s268`, `ubh1`.
 
+**Reference errata.** For these instances the published objective is not the optimum: it was recomputed exactly (`data/maros-meszaros/reference_errata.json`). The table above still judges them against the published value, so they count as not matched.
+
+| instance | published | exact optimum | relative difference | ours (this run) | how |
+|---|---:|---:|---:|---:|---|
+| `hues-mod` | 3.4824690e+07 | 34824463.87334522571976875 | 6.4933e-06 | 34824463.873345532 | `bench/runners/exact_diagonal_qp.py data/maros-meszaros/hues-mod.qps` |
+| `huestis` | 3.4824690e+11 | 348244638733.4522571976875 | 6.4933e-06 | 348244638733.45276 | `bench/runners/exact_diagonal_qp.py data/maros-meszaros/huestis.qps` |
+
 ---
 
 ## 2c. The standard pooling instances, non-convex
