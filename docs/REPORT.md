@@ -112,7 +112,7 @@ the one stamped in the file's rows, the build that produced it.
 | Kennington LP, matched and verified: 16 of 16 | `bench/results/kennington-full-9463fd7.csv` | `9463fd7` |
 | Mittelmann LP, solved and verified inside the limit: 5 of 12 | `bench/results/mittelmann-72123ff.csv` | `72123ff` |
 | MIPLIB 2017 easy set: 14 of 30 reach the published optimum, 11 prove it | `bench/results/miplib-ad57c03.csv` | `ad57c03` |
-| Maros-Meszaros convex QP: 114 of 138 at the published objective, 121 verifier-accepted, 0 optimal answers rejected | `bench/results/maros-meszaros-dcbd32eb.csv` | `dcbd32eb` |
+| Maros-Meszaros convex QP: 117 of 138 at the published objective, 124 verifier-accepted, 0 optimal answers rejected | `bench/results/maros-meszaros-cad720c.csv` | `cad720c` |
 | Hock-Schittkowski NLP: 64 of 70 at the published objective, 70 accepted by the checker | `bench/results/nlp-hs-ad57c03.csv` | `ad57c03` |
 | Convex MINLPLib: 14 of 17 at the published objective, 16 accepted by the checker | `bench/results/nlp-minlplib-ad57c03.csv` | `ad57c03` |
 | Stress set, 126 badly scaled and adversarial LPs: SANKHYA 111 correct / 0 wrong / 15 declined; HiGHS on its defaults 29 / 90 / 7 | `bench/results/stress-d32b3847.csv` | `d32b3847` |
@@ -241,8 +241,8 @@ machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores
 - **MILP proofs.** 11 of 30 MIPLIB instances proved, 14
   at the published optimum (`bench/results/miplib-ad57c03.csv`, section 2).
 - **Declined instances.** Stress set: 15 of 126 declined,
-  0 wrong (`bench/results/stress-d32b3847.csv`, section 5b). Maros-Meszaros: 116
-  of 138 optimal (`bench/results/maros-meszaros-dcbd32eb.csv`, section 2b). Safe bounds: 2 of
+  0 wrong (`bench/results/stress-d32b3847.csv`, section 5b). Maros-Meszaros: 119
+  of 138 optimal (`bench/results/maros-meszaros-cad720c.csv`, section 2b). Safe bounds: 2 of
   94 with no finite bound (`bench/results/certified-gap-netlib-full-945cb4f.csv`).
 - **No real industrial model.** Every refinery number is from a generated model.
 - **The GPU, against the faster CPU arm of the same engine** (`bench/results/gpu-real-a100-fdd1f35.csv`, commit
@@ -355,9 +355,9 @@ On the Kennington set HiGHS is clearly ahead: SGM 9.430 s against 1.855 s, SANKH
 
 **Q7. How does the QP engine compare?**
 
-On the Maros-Meszaros convex QPs in the head-to-head run SANKHYA reports optimal on 107 of 138, at the published objective on 106, and the verifier accepts 106 of those; HiGHS reports optimal on 105, at the published objective on 99, and the verifier accepts 32, the rest failing its 1e-7 dual feasibility or 1e-6 gap conditions by small margins (each named in section 4a.3), so the SGM of 6.437 s against 35.781 s rests on the verifier's tolerances as much as on speed. In SANKHYA's own run 114 of 138 reach the published objective and 0 `optimal` answers are rejected by the verifier.
+On the Maros-Meszaros convex QPs in the head-to-head run SANKHYA reports optimal on 107 of 138, at the published objective on 106, and the verifier accepts 106 of those; HiGHS reports optimal on 105, at the published objective on 99, and the verifier accepts 32, the rest failing its 1e-7 dual feasibility or 1e-6 gap conditions by small margins (each named in section 4a.3), so the SGM of 6.437 s against 35.781 s rests on the verifier's tolerances as much as on speed. In SANKHYA's own run 117 of 138 reach the published objective and 0 `optimal` answers are rejected by the verifier.
 
-*Evidence: `bench/results/head-to-head-maros-meszaros-1860864.csv`, `docs/BENCHMARKS.md` section 4a.3; `bench/results/maros-meszaros-dcbd32eb.csv`, section 2b.*
+*Evidence: `bench/results/head-to-head-maros-meszaros-1860864.csv`, `docs/BENCHMARKS.md` section 4a.3; `bench/results/maros-meszaros-cad720c.csv`, section 2b.*
 
 **Q8. What does the GPU actually buy?**
 
@@ -415,9 +415,9 @@ On 126 scaled-Netlib and adversarial LPs SANKHYA is correct on 111, wrong on 0 a
 
 **Q17. What does the solver do when it cannot solve a model?**
 
-It declines: the status is a limit, `numerical_error` or `feasible`, never `optimal`. The 15 stress-set runs above and the Maros-Meszaros runs short of `optimal` (116 of 138 are optimal) are named instance by instance.
+It declines: the status is a limit, `numerical_error` or `feasible`, never `optimal`. The 15 stress-set runs above and the Maros-Meszaros runs short of `optimal` (119 of 138 are optimal) are named instance by instance.
 
-*Evidence: `bench/results/stress-d32b3847.csv`; `bench/results/maros-meszaros-dcbd32eb.csv`; `docs/ARCHITECTURE.md` section 8 (resource limits and what each one means).*
+*Evidence: `bench/results/stress-d32b3847.csv`; `bench/results/maros-meszaros-cad720c.csv`; `docs/ARCHITECTURE.md` section 8 (resource limits and what each one means).*
 
 **Q18. Does it handle non-convex QP?**
 

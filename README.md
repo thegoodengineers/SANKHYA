@@ -55,7 +55,7 @@ as regenerable backups.
 | Mittelmann | 12 | **5 of 12** (matches HiGHS's objective and verified, `passed`) | HiGHS (objective check) | `bench/results/mittelmann-72123ff.csv` | `72123ff` | 2026-09-24 |
 | MIPLIB 3 | 52 | **44 of 52** (matched the published optimum and verified, best of 3 seeds) | HiGHS (same host) | `bench/results/miplib3-300s-seeds3-f2cf240.csv` | `f2cf240` | 2026-10-03 |
 | MIPLIB 2017 | 30 | **14 of 30** (matched the published optimum and verified) | - | `bench/results/miplib-ad57c03.csv` | `ad57c03` | 2026-09-27 |
-| Maros-Meszaros (QP) | 138 | **114 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-dcbd32eb.csv` | `dcbd32eb` | 2026-10-17 |
+| Maros-Meszaros (QP) | 138 | **117 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-cad720c.csv` | `cad720c` | 2026-10-19 |
 | QPLIB (convex) | 16 | **9 of 16** (within relative 1e-6 of the published or best-known value and verified, `passed`) | - | `bench/results/qplib-5a39fb2.csv` | `5a39fb2` | 2026-10-01 |
 | Stress set | 126 | **111 of 126** (verdict `correct`) | - | `bench/results/stress-d32b3847.csv` | `d32b3847` | 2026-10-08 |
 | GPU, real instances (A100) | 3 | **2 of 3** (faster than the faster CPU arm on the same instance) | construction, highs | `bench/results/gpu-real-a100-fdd1f35.csv` | `fdd1f35` | 2026-09-27 |
@@ -297,21 +297,21 @@ at `60455ce`, after #559's certificates, **28 of 29** carry a Farkas certificate
 accepts; `cplex2` stays a `numerical_error`, since its elastic optimum is zero at the 1e-7
 tolerance and no certificate exists there (`bench/results/netlib-infeasible-60455ce.csv`, a
 laptop with desktop apps open; every instance ends in under 14 s of its 60 s limit). At `5a39fb2`, with `--iis` (#871), the 28 stay certified, and **12 of 29** also name an irreducible infeasible subsystem the verifier proves on its own arithmetic, infeasible using nothing outside the set and irreducible by one witness per member; 18 name one (`bench/results/netlib-infeasible-5a39fb2.csv`). Infeasibility repair (#523, `tools/repair_infeasibility.py`, elastic programming over rows and column bounds) on the same 29: the repair applied, the repaired model re-solved as a pure feasibility problem by the CLI and checked by `tools/verify_solution.py`, **28 of 29** accepted; `gran`'s elastic LP itself ends `numerical_error` (`bench/results/netlib-repair-5a39fb2.csv`, `bench/runners/netlib_repair.py`). Maros-Meszaros, all 138 convex QPs at 60 s with the proximal interior point the
-default QP engine (#740): **`optimal` on 116, within 1e-6 of the reference on 114,
-verifier-accepted on 121, and no `optimal` the verifier rejects** (`bench/results/maros-meszaros-dcbd32eb.csv`,
-`docs/BENCHMARKS.md` section 2b; Ubuntu 22.04 under WSL on the laptop, 4 vCPUs and 4 GB, where
-the two largest models, `boyd2` and `cont-300`, hit the 60 s limit at 37 and 11 iterations - the
-earlier `2a3e303d` run, 112 / 124 / 114, solved them natively on Windows with more memory and
-is superseded). Since the `9094e1c` run (106 / 106 / 120) the Newton step is refined against the
-unregularized KKT matrix (#1010: `powell20`, `primalc1`, `qcapri`, `qshare1b` gained), the stall
-hand-off and active-set finish are on by default after their A/B at `847042e3` (#1016: `ubh1`
-gained, `liswet2` verified through the first-order engine), and the finish is rank-revealing
-(#1029: `boyd1`, `qgrow15`, `qseba`, `qship12l`, `qship12s` gained, each now `optimal` at the
-reference; `boyd1`'s finish still runs 14 s past the limit, its one reduced solve on 93,261
-columns being indivisible); the 24 that remain are the eight LISWET stalls and `yao`, four
-verified `feasible` answers within 5.1e-8 of the reference that end one complementarity product
-short of the gate (`qfffff80`, `qforplan`, `qgfrdxpn`, `qshell`, #980), `cvxqp1l`, `cvxqp2l` and
-`cvxqp3l` at the 60 s limit on a dense factor, `qsierra`, `stadat1` and `qpilotno`, `huestis` and
+default QP engine (#740): **`optimal` on 119, within 1e-6 of the reference on 117,
+verifier-accepted on 124, and no `optimal` the verifier rejects** (`bench/results/maros-meszaros-cad720c.csv`,
+`docs/BENCHMARKS.md` section 2b; GitHub Actions `ubuntu-latest`, 4 vCPUs and 15 GB, through
+`bench.yml`'s `maros-meszaros` suite at the full commit hash, 60 s per instance - the earlier
+laptop runs under WSL, `dcbd32eb` among them, lost `boyd2`, `cont-300` and `cvxqp2l` to the clock
+on a shared VM, and are superseded). Since the `9094e1c` run (106 / 106 / 120) the Newton step is
+refined against the unregularized KKT matrix (#1010: `powell20`, `primalc1`, `qcapri`, `qshare1b`
+gained), the stall hand-off and active-set finish are on by default after their A/B at
+`847042e3` (#1016: `ubh1` gained, `liswet2` verified through the first-order engine), and the
+finish is rank-revealing and on the solve's clock (#1029, #1034: `boyd1`, `qgrow15`, `qseba`,
+`qship12l`, `qship12s` gained, each now `optimal` at the reference); the 21 that remain are the
+eight LISWET stalls and `yao`, four verified `feasible` answers within 5.1e-8 of the reference
+that end one complementarity product short of the gate (`qfffff80`, `qforplan`, `qgfrdxpn`,
+`qshell`, #980), `cvxqp1l` and `cvxqp3l` at the 60 s limit on a dense factor, `qsierra`,
+`stadat1` and `qpilotno`, `huestis` and
 `hues-mod` 6.5e-6 from the published value on both engines, and `values`, whose Hessian is
 not convex. The run before it, Condat-Vu at 300 s, read 45, 44 and 39 with
 six `optimal` answers the verifier rejected (`maros-meszaros-65eecbc.csv`, #590). QPLIB's convex continuous QPs, all 17 fetched (19 selected, 2 over the size cap, 16 with a
