@@ -129,6 +129,22 @@ Rounding, fractional diving, RENS and the diving family each behind `mip_heur_*`
 
 Re-run that would settle it: `bench/runners/miplib_heuristics_ab.py` at one `main` commit, all legs in one sitting.
 
+### An infeasibility neighbourhood for the QP interior point (#981, branch `qp-ipm-pmm`, not merged)
+
+The neighbourhood of the interior point-proximal method of multipliers (Pougkakiotis & Gondzio, Comput. Optim. Appl. 78, 2021; Wright 1997, ch. 6): the starting ratio mu / r is recorded and, whenever mu falls below a tenth of that ratio times the relative infeasibility left, the centring parameter is raised until the target sigma mu is not. The aim was the LISWET stalls, where the primal residual stays near 1e-7 while mu falls to 1e-33.
+
+Measured at `45f31f8c` (branch) under WSL on the laptop with other jobs running, 60 s, the eleven instances the interior point stalls on, judged by iteration counts and the stall test's own measure (load changes how many iterations fit in 60 s, not what an iteration does):
+
+| instance | off | on |
+|---|---|---|
+| liswet8 | stall at 210, worst measure 2.6e-3, gap 0.9965 | stall at 210, worst 3.8e-3, gap 0.9965 |
+| liswet12 | stall at 210, worst 1.0e-2, gap 0.984 | stall at 210, worst 3.4e-2, gap 0.979 |
+| yao | stall at 210, worst 0.21, gap 0.616 | stall at 210, worst 0.24, gap 0.578 |
+| qpilotno | stall at 210, worst 1.0 | stall at 210, worst 1.0 |
+| liswet1, 2, 7, 9, 10, 11 | gaps 0.30, 1.26e-6, 0.950, 0.987, 0.494, 0.487 | the same to three digits |
+
+Where both arms reached the same iteration the stalled measure was no better with the floor on, and no instance moved toward its reference: keeping mu up does not unfreeze the residual, so the barrier collapsing is not what holds LISWET. Not merged, because an off-by-default option with no measured benefit is code without a reason. The CSVs were not committed (the branch stamp is not on `main`).
+
 ---
 
 ## 3. Built opt-in, awaiting the measurement
