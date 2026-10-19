@@ -47,8 +47,6 @@ GENERATOR = REPO_ROOT / "bench" / "case_studies" / "refinery" / "generator.py"
 VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
 SIZES = ("small", "medium", "large")
 SEED = 1
-# The CSV's name per method: the Benders table of docs/BENCHMARKS.md reads decomposition-*.csv.
-PREFIX = {"benders": "decomposition", "dantzig-wolfe": "dantzig-wolfe"}
 
 FIELDS = ["instance", "sha256", "mode", "blocks", "rows", "columns", "nonzeros", "status",
           "algorithm", "our_objective", "reference_objective", "absolute_gap", "relative_gap",
@@ -115,7 +113,12 @@ def main() -> int:
     commit = stamp.stamp(args.binary)
     machine = args.machine or f"{platform.system()}-{platform.machine()}"
     now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-    out = args.out or (REPO_ROOT / "bench" / "results" / f"{PREFIX[args.method]}-{commit}.csv")
+    # The Benders table of docs/BENCHMARKS.md reads decomposition-*.csv; Dantzig-Wolfe's runs
+    # are named apart so it never picks them up. Spelled out in full: the doc scanner reads
+    # these names as globs.
+    name = (f"decomposition-{commit}.csv" if args.method == "benders"
+            else f"dantzig-wolfe-{commit}.csv")
+    out = args.out or (REPO_ROOT / "bench" / "results" / name)
 
     rows: list[dict] = []
     with tempfile.TemporaryDirectory() as tmp:
