@@ -623,6 +623,9 @@ def _worker_piqp(model_path: Path, time_limit: float, sol: Path) -> dict:
     solver.settings.eps_abs = QP_RELATIVE_TOLERANCE
     solver.settings.eps_rel = QP_RELATIVE_TOLERANCE
     solver.settings.verbose = False
+    # PIQP leaves info.run_time at 0 unless asked to time itself; without this every PIQP
+    # solve was charged 0 s in the head-to-head's shifted geometric mean.
+    solver.settings.compute_timings = True
     solver.setup(P.tocsc(), q, G=A_rows.tocsc(), h_l=l_rows, h_u=u_rows, x_l=x_l, x_u=x_u)
     status = solver.solve()
     mapped = {piqp.PIQP_SOLVED: "optimal", piqp.PIQP_PRIMAL_INFEASIBLE: "infeasible",
