@@ -1144,6 +1144,17 @@ inline constexpr double kBendersCutViolation = 1e-9;
 /// A block that the LP engine reports infeasible must also show a violation in its elastic LP
 /// above this; below it the verdicts disagree, which is a numerical failure and not a cut.
 inline constexpr double kBendersFeasibilityCut = 1e-9;
+/// Dantzig-Wolfe decomposition (#1048): the restricted master's value and the Lagrangian bound
+/// (that value plus every block's negative reduced cost) agree - and column generation has
+/// converged - when they differ by no more than this, relative to max(1, |value|). The same
+/// target as kBendersGap, for the same reason: the answer is then measured by solve() against
+/// kPrimalFeasibility and kDualFeasibility, which decides whether it is believed.
+inline constexpr double kDantzigWolfeGap = 1e-8;
+/// A block's column enters the restricted master only when its reduced cost is below minus
+/// this, relative to max(1, |master value|): a decade inside kDantzigWolfeGap, so that a round
+/// which has not converged always has a column to add, and no column enters whose reduced cost
+/// the master could not tell from rounding.
+inline constexpr double kDantzigWolfeReducedCost = 1e-9;
 /// Outer approximation (#528): a point of the master is cut off by the linearization of a
 /// nonlinear row only when the row is violated there by more than this, relative to
 /// max(1, |bound|). Ten times kPrimalFeasibility, the MILP master's own feasibility tolerance,

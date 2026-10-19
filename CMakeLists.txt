@@ -270,6 +270,7 @@ set(SANKHYA_CORE_SOURCES
   src/core/kkt_check.cpp
   src/core/prescale.cpp
   src/decomp/benders.cpp
+  src/decomp/dantzig_wolfe.cpp
   src/decomp/decomposition.cpp
   src/decomp/structure.cpp
   src/solver_engine/solver_engine.cpp

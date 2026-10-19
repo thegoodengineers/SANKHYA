@@ -1589,16 +1589,17 @@ const std::vector<OptionSpec>& Options::registry() {
          "strong - two or more blocks, a linking part under decomposition_max_linking, and no "
          "block holding most of the rows. benders: try any split into two blocks, however "
          "weak. "
+         "dantzig-wolfe (#1048): split the COLUMNS into blocks joined by linking ROWS (a "
+         "shared crude, a shared capacity) and solve by Dantzig-Wolfe (1960) column "
+         "generation, the restricted master by the dual simplex; `auto` never runs it. "
          "The master and the block LPs are the ordinary LP engines. Only a minimisation LP is "
-         "decomposed; an integer or quadratic model, a maximisation, linking ROWS (the form "
-         "for "
-         "Dantzig-Wolfe, detected but not built), weak structure, a method that declines or an "
-         "answer that fails the solver's own measurement all fall back to the monolithic "
-         "solve, "
-         "and the log says which. Off until measured against the monolithic solve on main.",
+         "decomposed; an integer or quadratic model, a maximisation, weak structure, a method "
+         "that declines or an answer that fails the solver's own measurement all fall back to "
+         "the monolithic solve, and the log says which. Off until measured against the "
+         "monolithic solve on main.",
          0.0,
          0.0,
-         {"off", "auto", "benders"}});
+         {"off", "auto", "benders", "dantzig-wolfe"}});
     s.push_back(
         {"decomposition_blocks",
          OptionType::Int,
@@ -1619,15 +1620,14 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          1.0,
          {}});
-    s.push_back(
-        {"decomposition_max_iterations",
-         OptionType::Int,
-         std::int64_t{1000},
-         "Decomposition (#525): the most master/block rounds before Benders gives up and "
-         "the LP is solved monolithically.",
-         1.0,
-         1e7,
-         {}});
+    s.push_back({"decomposition_max_iterations",
+                 OptionType::Int,
+                 std::int64_t{1000},
+                 "Decomposition (#525): the most master/block rounds before Benders (or "
+                 "Dantzig-Wolfe) gives up and the LP is solved monolithically.",
+                 1.0,
+                 1e7,
+                 {}});
     s.push_back({"decomposition_predict",
                  OptionType::Bool,
                  true,

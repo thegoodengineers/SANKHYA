@@ -357,7 +357,9 @@ Model build_master(const Model& model, const Setup& setup, const std::vector<cha
   return master;
 }
 
-Options sub_options(const Options& options, double seconds_left) {
+}  // namespace
+
+Options block_solve_options(const Options& options, double seconds_left) {
   Options sub = options;
   sub.set_string("decomposition", "off");
   sub.set_bool("log_to_console", false);
@@ -369,6 +371,8 @@ Options sub_options(const Options& options, double seconds_left) {
   sub.set_double("time_limit", seconds_left);
   return sub;
 }
+
+namespace {
 
 Solution limit_solution(LimitReason reason, Count iterations, double seconds) {
   Solution s;
@@ -441,7 +445,7 @@ BendersOutcome solve_benders(const Model& model, const BlockStructure& structure
     Model relaxed = setup.blocks[at(b)].sub;
     relaxed.row_lower = setup.blocks[at(b)].relaxed_lower;
     relaxed.row_upper = setup.blocks[at(b)].relaxed_upper;
-    const Solution s = solve(relaxed, sub_options(options, left()), control);
+    const Solution s = solve(relaxed, block_solve_options(options, left()), control);
     if (s.status == SolveStatus::kTimeLimit || s.status == SolveStatus::kInterrupted) {
       return stopped_outcome(
           s.status == SolveStatus::kTimeLimit ? LimitReason::kTime : LimitReason::kInterrupt,
@@ -468,7 +472,7 @@ BendersOutcome solve_benders(const Model& model, const BlockStructure& structure
     ++rounds;
 
     const Model master = build_master(model, setup, has_cut, theta_lower, cuts, free_theta);
-    const Solution ms = solve(master, sub_options(options, left()), control);
+    const Solution ms = solve(master, block_solve_options(options, left()), control);
     if (ms.status == SolveStatus::kTimeLimit || ms.status == SolveStatus::kInterrupted) {
       return stopped_outcome(
           ms.status == SolveStatus::kTimeLimit ? LimitReason::kTime : LimitReason::kInterrupt,
@@ -498,8 +502,8 @@ BendersOutcome solve_benders(const Model& model, const BlockStructure& structure
       // round would let each of them spend all of it.
       const auto work = [&] {
         for (Index b = next.fetch_add(1); b < blocks; b = next.fetch_add(1)) {
-          answers[at(b)] =
-              solve_block(setup.blocks[at(b)], y, sub_options(options, left()), control);
+          answers[at(b)] = solve_block(setup.blocks[at(b)], y,
+                                       block_solve_options(options, left()), control);
         }
       };
       if (threads <= 1) {
