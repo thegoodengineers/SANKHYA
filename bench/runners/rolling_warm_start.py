@@ -79,6 +79,8 @@ def main() -> int:
                         help="the solver's algorithm option: auto (simplex basis restart) "
                              "or pdhg (the previous iterate as the start)")
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--machine", default=None,
+                        help="machine tag for the CSV (default: OS-architecture)")
     args = parser.parse_args()
 
     import sankhya  # after sys.path is set up
@@ -191,7 +193,7 @@ def main() -> int:
         tag = "" if args.algorithm == "auto" else f"{args.algorithm}-"
         out = args.out or (RESULTS_DIR / f"rolling-warm-start-{tag}{commit}.csv")
         out.parent.mkdir(parents=True, exist_ok=True)
-        machine = f"{platform.system()}-{platform.machine()}"
+        machine = args.machine or f"{platform.system()}-{platform.machine()}"
         with open(out, "w", newline="", encoding="utf-8") as handle:
             fieldnames = list(rows[0].keys()) + ["git_commit", "machine", "instance_sha256"]
             writer = csv.DictWriter(handle, fieldnames=fieldnames)

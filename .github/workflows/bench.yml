@@ -46,6 +46,7 @@ on:
           - ab-supernodal
           - mittelmann
           - pdhg-step-weight-ab
+          - rolling-warm-start
         required: true
       ref:
         description: commit, branch or tag to build and run (ab-* - the new arm)
@@ -194,6 +195,10 @@ jobs:
               refinery)
                 python3 bench/runners/compare.py --suite refinery --sankhya-binary build/sankhya \
                   --machine-kind "github-actions ubuntu-latest" ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #913: options="--algorithm pdhg" for the PDHG warm start. Runs through the
+              # Python bindings, which load build/libsankhya; it takes no time limit.
+              rolling-warm-start)
+                python3 bench/runners/rolling_warm_start.py --machine "$machine" "$@" ;;
               ab-netlib)
                 base_sha="$(python3 -c 'import sys; sys.path.insert(0, "bench/runners"); import stamp; print(stamp.binary_commit(".base/build/sankhya"))')"
                 python3 bench/runners/netlib_ab.py --base .base/build/sankhya \
