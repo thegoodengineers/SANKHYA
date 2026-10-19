@@ -101,6 +101,22 @@ It takes fewer iterations and less time on many mid-size instances (`d2q06c`, `t
 Files: `bench/results/lu-ft-ab-netlib-{product-form,forrest-tomlin}-462fa39e-r{1,2,3}.csv` and `lu-ft-ab-netlib-462fa39e-summary.csv`.
 What would earn the default: `pilot` and `pilot87` optimal under it in every run — the accuracy of the row-eta file on the pilot family, not its speed.
 
+### The primal heuristics that never earned a default (#414)
+
+Each optional heuristic behind its own `mip_heur_*` switch, measured on alone against the defaults (rounding, the fractional dive, Feasibility Jump and parity): MIPLIB tier 1, 3 seeds, `node_limit=2000`, one thread, `main` at `729112d8`. Off by default (`auto`, which follows the `mip_heuristics` master switch, itself off); kept in the tree, since off they cost nothing.
+
+| leg | matched / 90 | proved / 90 | moved |
+|---|---:|---:|---|
+| defaults | 44 | 28 | - |
+| `mip_heur_lock_rounding`, `mip_heur_repair`, `mip_heur_pump`, `mip_heur_dive_coefficient`, `mip_heur_dive_vector_length`, `mip_heur_dive_guided`, `mip_heur_prop_dive` | 44 | 28 | nothing |
+| `mip_heur_rens` | 43 | 28 | `neos-3611689-kaihu` one matched seed lost |
+| `mip_heur_local_branching` | 43 | 28 | `neos-3611689-kaihu` one matched seed lost |
+
+No leg moves the proved count, every leg finds a point on the same 84 of 90 runs, and the node ratio is 1.000x for every leg but local branching (0.998x). The tenth leg, `mip_heur_rins`, matched 45 and proved 28 (`kaihu` one seed gained); whether that one seed is worth its sub-MIPs' wall clock is #1076's 60 s A/B, not this table.
+
+Files: `bench/results/miplib-414-n2000-<leg>-seeds3-729112d8.csv` and their `summary-` files, rendered under "every optional heuristic alone" in `docs/BENCHMARKS.md`.
+What would earn a default: a leg that gains a matched or proved seed and loses neither, on this harness and again under a time limit.
+
 ---
 
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
@@ -122,12 +138,6 @@ Landed in #381/#292: the search learns from every node it proves infeasible whic
 On the branch at `6c405f8` (#405), 30 MIPLIB instances at 60 s: the same 14 reached and 9 proved either way, no verdict moved. On the nine instances that finish, conflicts take the node count to 0.965× (2,204 against 2,285). On the 21 stopped by the limit the count is 0.938× in the same wall clock — nodes not reached, not search saved — with `enlight8` at 0.373× and 37.4 s of its 60 s budget spent inside the analysis.
 
 Re-run that would settle it: the same A/B at a `main` commit, with the analysis time per instance in the CSV.
-
-### The primal heuristics, one switch each (#414)
-
-Rounding, fractional diving, RENS and the diving family each behind `mip_heur_*`, with a counted budget. The master switch is off because, measured together, they cost proofs; the per-heuristic A/B that would say which one is not on `main` (`docs/BENCHMARKS.md` reports "not measured on this checkout").
-
-Re-run that would settle it: `bench/runners/miplib_heuristics_ab.py` at one `main` commit, all legs in one sitting.
 
 ### An infeasibility neighbourhood for the QP interior point (#981, branch `qp-ipm-pmm`, not merged)
 
