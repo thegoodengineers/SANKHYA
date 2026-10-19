@@ -41,7 +41,7 @@ on:
           - mittelmann
         required: true
       ref:
-        description: commit, branch or tag to build and run (ab-* - the new arm)
+        description: commit (short or full sha), branch or tag to build and run (ab-* - the new arm)
         default: main
         required: true
       base_ref:
@@ -72,16 +72,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
-      - name: Check out the base arm
-        if: startsWith(inputs.suite, 'ab-')
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.base_ref }}
-          path: .base
-          fetch-depth: 0
+      # actions/checkout takes a branch, a tag or a full sha, and fails on a short sha (four
+      # dispatched runs died that way). Every ref is resolved here, against the full history,
+      # so a short sha works too; the base arm is a worktree at its own resolved commit.
+      - name: Check out the ref, and the base arm
+        env:
+          REF: ${{ inputs.ref }}
+          BASE_REF: ${{ inputs.base_ref }}
+        run: |
+          set -euo pipefail
+          resolve() {
+            git rev-parse --verify --quiet "origin/$1^{commit}"               || git rev-parse --verify "$1^{commit}"
+          }
+          new="$(resolve "$REF")"
+          git checkout -q --detach "$new"
+          echo "ref      $REF -> $new"
+          if [[ "$SUITE" == ab-* ]]; then
+            base="$(resolve "$BASE_REF")"
+            git worktree add -q --detach .base "$base"
+            echo "base_ref $BASE_REF -> $base"
+          fi
 
       - name: Install toolchain
         run: |
