@@ -1234,5 +1234,17 @@ inline constexpr double kConicActiveShare = 1e-6;
 /// diagonal of M'M, which keeps them positive definite when the active gradients are linearly
 /// dependent (a degenerate optimum).
 inline constexpr double kConicRecoveryRegularization = 1e-12;
+/// Refinement passes of the recovery's normal equations on the residual r - M lambda; each
+/// gains roughly the factor the squared condition number cost.
+inline constexpr int kConicRecoveryRefinement = 3;
+/// Newton's method on the active set's KKT system (conic_duals.cpp): at most this many steps,
+/// stopping when the scaled residual is at or below kConicPolishResidual or stops falling.
+/// Convergence from the interior point's exit is quadratic, so a handful of steps is all a
+/// correct active set ever needs; the cap bounds what a wrong one can cost.
+inline constexpr int kConicPolishIterations = 8;
+inline constexpr double kConicPolishResidual = 1e-14;
+/// The regularization of that KKT system, [H_L + rho I, -M; -M', -rho I], relative to the
+/// largest gradient entry; refinement against the unregularized matrix takes it back out.
+inline constexpr double kConicPolishRegularization = 1e-10;
 
 }  // namespace sankhya::tol

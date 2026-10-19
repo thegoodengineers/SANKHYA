@@ -241,9 +241,9 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
     }
   }
   solution.col_dual = std::move(d);
-  // The row-by-row multipliers are only as accurate as the square root of the gap allows;
-  // recover them on the active set when that measures better (conic_duals.cpp).
-  const bool recovered = conic::recover_duals(model, &solution);
+  // The point and the row-by-row multipliers are only as accurate as the square root of the
+  // gap allows; finish them on the active set when that measures better (conic_duals.cpp).
+  const conic::Finish finish = conic::finish_on_active_set(model, &solution);
 
   // ---- quality, measured on the model with its products and cones -------------------------
   double primal = 0.0;
@@ -290,9 +290,12 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
   solution.relative_gap = 0.0;
   solution.message = fmt::format(
       "optimal: relative residuals {:.2e} primal, {:.2e} dual, {:.2e} gap on the conic form; "
-      "multipliers {}",
+      "{}",
       run.primal_residual, run.dual_residual, run.gap,
-      recovered ? "recovered on the active set" : "as the interior point left them");
+      finish == conic::Finish::kPolished
+          ? "point and multipliers polished by Newton on the active set"
+      : finish == conic::Finish::kDuals ? "multipliers recovered on the active set"
+                                        : "as the interior point left it");
   logger.info("conic interior point: {} iterations, {}", run.iterations, solution.message);
   return solution;
 }
