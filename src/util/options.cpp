@@ -1737,6 +1737,16 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.9,
                  {}});
+    s.push_back({"crossover_pivots_per_dimension",
+                 OptionType::Double,
+                 tol::kCrossoverPivotsPerDimension,
+                 "The crossover's pivot budget, per row and column of the model it runs on "
+                 "(#1072): past it the crossover stops and the interior point's answer stands, "
+                 "at the same pivot on every machine. 0 means no budget, only the time limit, "
+                 "which is how every version before #1072 ran.",
+                 0.0,
+                 1e9,
+                 {}});
     s.push_back(
         {"exact",
          OptionType::Bool,
