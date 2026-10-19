@@ -9,6 +9,7 @@
 // that runs out of memory, and the option being off by default.
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -212,6 +213,39 @@ TEST(EngineRace, MatchesTheRuleTablesAnswerOnTheNetlibSmallSet) {
           << name << ": a basis from " << race.algorithm;
     }
   }
+}
+
+TEST(EngineRace, APdhgWinCarriesNoBasis) {
+  // #1027: the small-set test above once saw, under load, a PDHG win on afiro whose answer
+  // came with col_status filled. There was no race in the recording: PDHG's Solution is
+  // allocate_for()'d, so its statuses were a full vector of kUnknown, and postsolve carried
+  // them through and labelled a few restored entries on top. A PDHG win carries no basis
+  // (Solution's contract), and that is forced here: the simplex and the interior point are
+  // held until the PDHG arm has finished, so PDHG's answer is the first one judged.
+  const Model model = netlib("afiro");
+  HooksGuard guard;
+  std::atomic<bool> pdhg_finished{false};
+  EngineRaceTestHooks& hooks = engine_race_hooks_for_testing();
+  hooks.before_engine = [&pdhg_finished](const std::string& engine) {
+    if (engine.rfind("pdhg", 0) == 0) return;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    while (!pdhg_finished.load() && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    // PDHG's answer is judged and recorded right after its after_engine hook; this arm still
+    // has a presolve and a solve ahead of it, and a little slack on top.
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  };
+  hooks.after_engine = [&pdhg_finished](const std::string& engine, Solution*) {
+    if (engine.rfind("pdhg", 0) == 0) pdhg_finished = true;
+  };
+  const Solution s = solve(model, racing());
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  ASSERT_EQ(s.algorithm.rfind("pdhg", 0), 0u) << s.algorithm << ": " << s.message;
+  EXPECT_NE(s.message.find("engine race (#476), pdhg"), std::string::npos) << s.message;
+  EXPECT_TRUE(s.col_status.empty()) << "a basis from " << s.algorithm;
+  EXPECT_TRUE(s.row_status.empty()) << "a basis from " << s.algorithm;
+  EXPECT_TRUE(check_lp_optimality(model, s).passed) << s.message;
 }
 
 TEST(EngineRace, DeterministicModeRunsAFixedOrderAndReproduces) {

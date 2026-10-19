@@ -20,6 +20,7 @@
 #include "api/c_api_internal.hpp"
 #include "nlp/nl_reader.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <map>
 #include <mutex>
@@ -621,14 +622,22 @@ sankhya_status sankhya_solution_col_values(const sankhya_solution* solution, dou
 }
 
 namespace {
-sankhya_status copy_statuses(const std::vector<sankhya::BasisStatus>& source, int* destination,
-                             int count, const char* what) {
+/// `entries` is how many the header's size contract expects (one per column or row): a
+/// solve without a basis has empty statuses in sankhya::Solution and reports UNKNOWN
+/// throughout here, as sankhya.h promises (#1027).
+sankhya_status copy_statuses(const std::vector<sankhya::BasisStatus>& source,
+                             std::size_t entries, int* destination, int count,
+                             const char* what) {
   if (destination == nullptr) return fail(SANKHYA_ERROR_ARGUMENT, "destination is null");
-  if (count < 0 || static_cast<std::size_t>(count) != source.size()) {
+  if (count < 0 || static_cast<std::size_t>(count) != entries) {
     return fail(SANKHYA_ERROR_ARGUMENT, std::string("wrong buffer size for ") + what +
-                                            ": the solution has " +
-                                            std::to_string(source.size()) + " entries, " +
-                                            std::to_string(count) + " were offered");
+                                            ": the solution has " + std::to_string(entries) +
+                                            " entries, " + std::to_string(count) +
+                                            " were offered");
+  }
+  if (source.empty()) {
+    std::fill(destination, destination + count, static_cast<int>(SANKHYA_BASIS_UNKNOWN));
+    return ok();
   }
   for (std::size_t i = 0; i < source.size(); ++i) {
     switch (source[i]) {
@@ -647,13 +656,15 @@ sankhya_status copy_statuses(const std::vector<sankhya::BasisStatus>& source, in
 sankhya_status sankhya_solution_col_statuses(const sankhya_solution* solution, int* statuses,
                                              int count) {
   if (solution == nullptr) return fail(SANKHYA_ERROR_ARGUMENT, "solution is null");
-  return copy_statuses(solution->solution.col_status, statuses, count, "column statuses");
+  return copy_statuses(solution->solution.col_status, solution->solution.col_value.size(),
+                       statuses, count, "column statuses");
 }
 
 sankhya_status sankhya_solution_row_statuses(const sankhya_solution* solution, int* statuses,
                                              int count) {
   if (solution == nullptr) return fail(SANKHYA_ERROR_ARGUMENT, "solution is null");
-  return copy_statuses(solution->solution.row_status, statuses, count, "row statuses");
+  return copy_statuses(solution->solution.row_status, solution->solution.row_dual.size(),
+                       statuses, count, "row statuses");
 }
 
 sankhya_status sankhya_solution_row_activities(const sankhya_solution* solution, double* values,

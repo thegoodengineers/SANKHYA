@@ -3058,6 +3058,16 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     }
   }
 
+  // AN ENGINE THAT PRODUCED NO BASIS HAS NONE AFTER POSTSOLVE EITHER (#1027). The passes
+  // above set a status for every entry they restore, which completes a basis the reduced
+  // solve brought and is no basis at all without one: first-order methods and the interior
+  // point without crossover report empty statuses (Solution's contract), and allocate_for()
+  // would otherwise have handed back a full vector of kUnknown labelled with their name.
+  if (reduced.col_status.empty()) {
+    solution.col_status.clear();
+    solution.row_status.clear();
+  }
+
   solution.recompute_quality(original);
 
   // A SOLVE THAT FOUND NO POINT STILL HAS NONE AFTER POSTSOLVE (#289). A branch and bound

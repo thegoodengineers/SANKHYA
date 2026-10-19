@@ -162,6 +162,8 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
   Timer timer;
   Solution solution;
   solution.allocate_for(model);
+  solution.col_status.clear();  // no basis from a first-order method (#1027)
+  solution.row_status.clear();
   solution.algorithm = "pdhg-cuda-multi";
 
   const std::string validation = model.validate();

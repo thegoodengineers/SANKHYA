@@ -436,6 +436,26 @@ TEST(CApi, EditsABoundAndResolvesFromThePreviousBasis) {
   ASSERT_EQ(sankhya_solution_status(again), SANKHYA_OPTIMAL) << sankhya_solution_message(again);
   EXPECT_EQ(sankhya_model_set_col_bounds(model, 7, 0.0, 1.0), SANKHYA_ERROR_ARGUMENT);
 
+  // #1027: a first-order answer carries no basis; the header's size contract still holds and
+  // every entry reads UNKNOWN.
+  sankhya_options* first_order = sankhya_options_create();
+  ASSERT_EQ(sankhya_options_set_bool(first_order, "log_to_console", 0), SANKHYA_OK);
+  ASSERT_EQ(sankhya_options_set_string(first_order, "algorithm", "pdhg"), SANKHYA_OK);
+  ASSERT_EQ(sankhya_options_set_bool(first_order, "pdhg_polish", 0), SANKHYA_OK);
+  sankhya_solution* pdhg = nullptr;
+  ASSERT_EQ(sankhya_solve(model, first_order, &pdhg), SANKHYA_OK) << sankhya_last_error();
+  sankhya_options_free(first_order);
+  int pdhg_cols[3] = {-1, -1, -1};
+  int pdhg_rows[3] = {-1, -1, -1};
+  ASSERT_EQ(sankhya_solution_col_statuses(pdhg, pdhg_cols, 3), SANKHYA_OK)
+      << sankhya_last_error();
+  ASSERT_EQ(sankhya_solution_row_statuses(pdhg, pdhg_rows, 3), SANKHYA_OK)
+      << sankhya_last_error();
+  for (int s : pdhg_cols) EXPECT_EQ(s, SANKHYA_BASIS_UNKNOWN);
+  for (int s : pdhg_rows) EXPECT_EQ(s, SANKHYA_BASIS_UNKNOWN);
+  EXPECT_EQ(sankhya_solution_col_statuses(pdhg, pdhg_cols, 2), SANKHYA_ERROR_ARGUMENT);
+  sankhya_solution_free(pdhg);
+
   sankhya_solution_free(again);
   sankhya_solution_free(warm);
   sankhya_solution_free(cold);

@@ -109,6 +109,11 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   Timer timer;
   Solution solution;
   solution.allocate_for(model);
+  // No basis from a first-order method (Solution's contract, sankhya/model.hpp): the
+  // statuses are empty, not a full vector of kUnknown, so a consumer that asks "is there a
+  // basis?" by their size gets the right answer (#1027).
+  solution.col_status.clear();
+  solution.row_status.clear();
   solution.algorithm = "pdhg-cpu";
 
   const std::string problem_text = model.validate();
