@@ -245,14 +245,24 @@ HsdResult solve_hsd(const ConicForm& f, const Options& options, Logger& logger,
       break;
     }
     // ---- certificates read off a ray (Andersen, Roos & Terlaky 2003, section 5) ----------
+    //
+    // A RAY IS A PROOF ONLY AT THE DATA'S SCALE (#1061 review). A dual ray (y, s), b'y = 1,
+    // with residual r = A'y + s proves infeasibility only if no feasible x has
+    // b'y = x'(A'y) = x'(r - s) <= x'r, i.e. only if |r| is small against 1 / |x| for every
+    // feasible x - and a feasible model with a large optimum has large x. Min t, t >= |x|,
+    // x = 1e9 produced a dual ray with |r| = 6e-9 at iteration 4, small against the ray's own
+    // terms and still no proof: x = 1e9 gives x'r of order 6. So the residual is weighed by
+    // max(1, |b|), the size the data lets a feasible point have, and the unboundedness ray's
+    // by max(1, |c|) the same way. kappa > tau stays: it is necessary, not sufficient.
     {
       const double by = dot(f.b, y);
       if (by > 0.0) {
-        // A'y + s = 0 on the normalized ray, relative to its own terms.
+        // A'y + s = 0 on the normalized ray, relative to its own terms and the data's scale.
         std::vector<double> r(n);
         for (std::size_t j = 0; j < n; ++j) r[j] = s[j] / by;
         f.a.transpose_multiply_add(y.data(), r.data(), 1.0 / by);
-        const double scale = 1.0 + a_max * inf_norm(y) / by + inf_norm(s) / by;
+        const double scale =
+            (1.0 + a_max * inf_norm(y) / by + inf_norm(s) / by) / std::max(1.0, b_norm);
         if (inf_norm(r) <= tol::kConicCertificateTolerance * scale && kappa > tau) {
           status = SolveStatus::kInfeasible;
           out.y.assign(m, 0.0);
@@ -270,7 +280,7 @@ HsdResult solve_hsd(const ConicForm& f, const Options& options, Logger& logger,
       if (cx < 0.0) {
         std::vector<double> r(m, 0.0);
         f.a.multiply_add(x.data(), r.data(), -1.0 / cx);
-        const double scale = 1.0 + a_max * inf_norm(x) / -cx;
+        const double scale = (1.0 + a_max * inf_norm(x) / -cx) / std::max(1.0, c_norm);
         if (inf_norm(r) <= tol::kConicCertificateTolerance * scale && kappa > tau) {
           status = SolveStatus::kUnbounded;
           out.x.assign(n, 0.0);
