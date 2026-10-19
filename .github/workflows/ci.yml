@@ -429,6 +429,12 @@ jobs:
         if: matrix.name == 'Release'
         run: python3 bench/runners/test_fetch_offline.py
 
+      - name: Netlib fetch leaves a tracked instance alone when only its line endings differ
+        # No network: a CRLF tracked copy and its LF re-decoding are the same model, so the
+        # file and its sha256 stay; a real content change still replaces it.
+        if: matrix.name == 'Release'
+        run: python3 bench/runners/test_fetch_line_endings.py
+
       - name: The relative-KKT crossing columns and their doc tables (#486)
         # Pure Python, no solve: blanks for a non-PDHG row, nan kept for a level never
         # reached, the ordering check, and the generated tables that label the 1e-6

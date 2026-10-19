@@ -391,6 +391,26 @@ def decompress(emps: Path, packed: Path, destination: Path) -> None:
         scratch.unlink(missing_ok=True)
 
 
+def lf(data: bytes) -> bytes:
+    return data.replace(b"\r\n", b"\n")
+
+
+def install(fresh: Path, target: Path) -> bool:
+    """Move a decoded instance into place unless the target already holds the same model.
+
+    The tracked .mps files are CRLF (decoded on Windows, stored -text), and emps writes LF
+    on Linux. Replacing an identical model with its LF spelling marked all 94 tracked
+    instances modified on a clean Linux checkout, so stamp.py stamped the run `-dirty`, and
+    it changed the instance sha256 a CSV records. Only a real content change replaces the
+    file; line endings alone do not. Returns whether the target was written.
+    """
+    if target.exists() and lf(target.read_bytes()) == lf(fresh.read_bytes()):
+        return False
+    # Copied beside the target and renamed, so a failure never leaves a truncated instance.
+    os.replace(shutil.copyfile(fresh, target.with_name(target.name + ".partial")), target)
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("instances", nargs="*", help="instance names (default: a small set)")
@@ -537,7 +557,9 @@ def main() -> int:
                 packed = work / name
                 packed.write_bytes(packed_bytes)
                 entry["packed_sha256"] = sha256(packed_bytes)
-                decompress(emps, packed, target)
+                fresh = work / f"{name}.mps"
+                decompress(emps, packed, fresh)
+                install(fresh, target)
             mps_bytes = target.read_bytes()
             entry["mps_sha256"] = sha256(mps_bytes)
             entry["mps_bytes"] = len(mps_bytes)
