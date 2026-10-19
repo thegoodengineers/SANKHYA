@@ -85,12 +85,18 @@ void expect_kkt(const QcqpModel& m, const Solution& s) {
     EXPECT_LE(lin.row_lower[u] - activity[u], 1e-6 * scale) << "row " << i;
     EXPECT_LE(activity[u] - lin.row_upper[u], 1e-6 * scale) << "row " << i;
     const double y = sigma * s.row_dual[u];
-    if (!is_finite_bound(lin.row_lower[u])) EXPECT_LE(y, 1e-6) << "row " << i;
-    if (!is_finite_bound(lin.row_upper[u])) EXPECT_GE(y, -1e-6) << "row " << i;
+    if (!is_finite_bound(lin.row_lower[u])) {
+      EXPECT_LE(y, 1e-6) << "row " << i;
+    }
+    if (!is_finite_bound(lin.row_upper[u])) {
+      EXPECT_GE(y, -1e-6) << "row " << i;
+    }
     if (lin.row_lower[u] != lin.row_upper[u]) {
       const double slack =
           std::min(activity[u] - lin.row_lower[u], lin.row_upper[u] - activity[u]);
-      if (std::isfinite(slack)) EXPECT_LE(std::fabs(y) * slack, 1e-5 * scale) << "row " << i;
+      if (std::isfinite(slack)) {
+        EXPECT_LE(std::fabs(y) * slack, 1e-5 * scale) << "row " << i;
+      }
     }
   }
   std::vector<char> in_cone(static_cast<std::size_t>(lin.num_cols()), 0);
@@ -104,11 +110,17 @@ void expect_kkt(const QcqpModel& m, const Solution& s) {
     EXPECT_LE(x - lin.col_upper[u], 1e-6) << "column " << j;
     if (in_cone[u]) continue;
     const double d = sigma * s.col_dual[u];
-    if (!is_finite_bound(lin.col_lower[u])) EXPECT_LE(d, 1e-6) << "column " << j;
-    if (!is_finite_bound(lin.col_upper[u])) EXPECT_GE(d, -1e-6) << "column " << j;
+    if (!is_finite_bound(lin.col_lower[u])) {
+      EXPECT_LE(d, 1e-6) << "column " << j;
+    }
+    if (!is_finite_bound(lin.col_upper[u])) {
+      EXPECT_GE(d, -1e-6) << "column " << j;
+    }
     if (lin.col_lower[u] != lin.col_upper[u]) {
       const double slack = std::min(x - lin.col_lower[u], lin.col_upper[u] - x);
-      if (std::isfinite(slack)) EXPECT_LE(std::fabs(d) * slack, 1e-5) << "column " << j;
+      if (std::isfinite(slack)) {
+        EXPECT_LE(std::fabs(d) * slack, 1e-5) << "column " << j;
+      }
     }
   }
   // Each cone: x in K, the reduced costs in K* (the same cone), and x's = 0.
