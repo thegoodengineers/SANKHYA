@@ -3063,7 +3063,11 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   // solve brought and is no basis at all without one: first-order methods and the interior
   // point without crossover report empty statuses (Solution's contract), and allocate_for()
   // would otherwise have handed back a full vector of kUnknown labelled with their name.
-  if (reduced.col_status.empty()) {
+  // A reduced model presolve emptied has no entries to carry a status, and then the passes
+  // above built the whole basis themselves: that one is kept.
+  const bool reduced_had_entries =
+      !result.col_to_original.empty() || !result.row_to_original.empty();
+  if (reduced_had_entries && reduced.col_status.empty() && reduced.row_status.empty()) {
     solution.col_status.clear();
     solution.row_status.clear();
   }

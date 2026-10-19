@@ -621,6 +621,61 @@ TEST(Presolve, PostsolvedStatusesAreABasisOfTheOriginalModel) {
   }
 }
 
+TEST(Presolve, AnEngineWithoutABasisHasNoneAfterPostsolveUnlessPresolveBuiltItAll) {
+  // #1027. PDHG and the interior point without crossover return no basis, and postsolve
+  // must not invent one by labelling the entries it restores: afiro used to come back with
+  // 2 basic, 2 fixed and 55 unknown under the PDHG name. But a model presolve reduces to
+  // nothing has no reduced entry to carry a status, and there postsolve builds the whole
+  // basis itself, whichever engine was asked for: that basis is kept.
+  Model afiro;
+  const std::string path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+       "data/netlib/afiro.mps")
+          .string();
+  ASSERT_TRUE(io::read_model(path, &afiro).ok) << path;
+  for (const char* algorithm : {"pdhg", "ipm"}) {
+    Options options = with_presolve(true);
+    options.set_string("algorithm", algorithm);
+    options.set_bool("crossover", false);
+    options.set_bool("pdhg_polish", false);
+    const Solution s = solve(afiro, options);
+    ASSERT_EQ(s.status, SolveStatus::kOptimal) << algorithm << ": " << s.message;
+    EXPECT_TRUE(s.col_status.empty()) << algorithm << " reported a basis";
+    EXPECT_TRUE(s.row_status.empty()) << algorithm << " reported a basis";
+  }
+
+  // min x + y, x >= 1 through a singleton row, y in [2, 3]: presolve leaves nothing.
+  Model whole;
+  whole.col_cost = {1.0, 1.0};
+  whole.col_lower = {0.0, 2.0};
+  whole.col_upper = {kInfinity, 3.0};
+  whole.col_type.assign(2, VarType::kContinuous);
+  whole.row_lower = {1.0};
+  whole.row_upper = {kInfinity};
+  whole.matrix.reset(1, 2);
+  whole.matrix.add_entry(0, 0, 1.0);
+  whole.matrix.finalize();
+  whole.hessian.reset(2, 2);
+  whole.hessian.finalize();
+  for (const char* algorithm : {"dual-simplex", "pdhg"}) {
+    Options options = with_presolve(true);
+    options.set_string("algorithm", algorithm);
+    const Solution s = solve(whole, options);
+    ASSERT_EQ(s.status, SolveStatus::kOptimal) << algorithm << ": " << s.message;
+    EXPECT_NEAR(s.objective, 3.0, 1e-9) << algorithm;
+    ASSERT_EQ(s.col_status.size(), 2u) << algorithm;
+    ASSERT_EQ(s.row_status.size(), 1u) << algorithm;
+    Index basic = 0;
+    for (const BasisStatus st : s.col_status) {
+      EXPECT_NE(st, BasisStatus::kUnknown) << algorithm;
+      basic += st == BasisStatus::kBasic ? 1 : 0;
+    }
+    EXPECT_NE(s.row_status[0], BasisStatus::kUnknown) << algorithm;
+    basic += s.row_status[0] == BasisStatus::kBasic ? 1 : 0;
+    EXPECT_EQ(basic, 1) << algorithm;
+  }
+}
+
 TEST(Presolve, AFillInRowFoldedAfterItsColumnWasFixedStillPricesThatColumn) {
   // pilot.ja. Doubleton MPSF03 eliminates PRPP03 and its fill-in adds NPSF03 to KRPR03;
   // NPSF03 is then fixed, and a LATER fold removes KRPR03, which NPSF03 - already gone -
