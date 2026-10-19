@@ -33,6 +33,9 @@ on:
           - netlib-full
           - netlib-certified
           - maros-meszaros
+          - head-to-head-maros-meszaros
+          - pooling
+          - pooling-certified
           - kennington
           - miplib-tier1
           - refinery
@@ -94,6 +97,16 @@ jobs:
         if: inputs.suite == 'refinery'
         run: pip install numpy highspy pyscipopt
 
+      # #983: the Maros-Meszaros head-to-head runs every rival compare_suite.py knows - HiGHS,
+      # SCIP, Clp and GLPK, and the convex QP solvers OSQP, Clarabel, PIQP and SCS (PROVENANCE
+      # judgement call 40) - each a separate process; nothing here is linked into SANKHYA.
+      - name: Install the Maros-Meszaros rivals
+        if: inputs.suite == 'head-to-head-maros-meszaros'
+        run: |
+          sudo apt-get install -y coinor-clp glpk-utils
+          pip install numpy scipy highspy pyscipopt osqp clarabel piqp scs
+          pip list 2>/dev/null | grep -iE 'highspy|pyscipopt|osqp|clarabel|piqp|scs'
+
       - name: Build
         run: |
           scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF
@@ -132,7 +145,8 @@ jobs:
               # every committed CSV's sha256 names, so they are put back and solved.
               python3 bench/runners/fetch_data.py --set full --offline-fallback
               git checkout -- 'data/netlib/*.mps' ;;
-            maros-meszaros) python3 bench/runners/fetch_maros_meszaros.py ;;
+            maros-meszaros|head-to-head-maros-meszaros)
+              python3 bench/runners/fetch_maros_meszaros.py ;;
             kennington) python3 bench/runners/fetch_kennington.py ;;
             miplib-tier1) python3 bench/runners/fetch_miplib.py ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
@@ -162,6 +176,14 @@ jobs:
               miplib-tier1)
                 python3 bench/runners/miplib.py --binary build/sankhya --tier 1 \
                   --machine-kind "github-actions ubuntu-latest" ${limit[@]+"${limit[@]}"} "$@" ;;
+              head-to-head-maros-meszaros)
+                python3 bench/runners/compare.py --suite maros-meszaros                   --sankhya-binary build/sankhya --machine-kind "github-actions ubuntu-latest"                   ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #514: the pooling set (committed in data/pooling), and the same 39 runs with
+              # every global bound certificate checked by tools/verify_global_certificate.py.
+              pooling)
+                python3 bench/runners/pooling.py --binary build/sankhya                   ${limit[@]+"${limit[@]}"} "$@" ;;
+              pooling-certified)
+                python3 bench/runners/pooling.py --binary build/sankhya --certificate                   ${limit[@]+"${limit[@]}"} "$@" ;;
               refinery)
                 python3 bench/runners/compare.py --suite refinery --sankhya-binary build/sankhya \
                   --machine-kind "github-actions ubuntu-latest" ${limit[@]+"${limit[@]}"} "$@" ;;
