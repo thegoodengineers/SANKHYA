@@ -85,6 +85,29 @@ std::unordered_map<std::string, Index> index_by_name(const std::vector<std::stri
   return index;
 }
 
+/// Where a reader is in the file. Shared by both readers below so the begin/end rule is one.
+enum class Section { kNone, kColumns, kRows, kOther };
+
+/// True when `tokens` is the line that closes the open section: "end columns" inside
+/// columns, "end rows" inside rows, any "end" inside a section neither reader parses. Outside
+/// a section nothing closes, and inside one a line that merely starts with the word end is a
+/// column or row of that name.
+bool closes_section(const std::vector<std::string_view>& tokens, Section section) {
+  if (tokens.empty() || tokens[0] != "end") return false;
+  const std::string_view what = tokens.size() > 1 ? tokens[1] : std::string_view();
+  switch (section) {
+    case Section::kNone:
+      return false;
+    case Section::kColumns:
+      return tokens.size() == 2 && what == "columns";
+    case Section::kRows:
+      return tokens.size() == 2 && what == "rows";
+    case Section::kOther:
+      return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 bool read_solution_basis(const std::string& path, const Model& model,
@@ -98,7 +121,7 @@ bool read_solution_basis(const std::string& path, const Model& model,
   std::vector<BasisStatus> file_cols;
   std::vector<BasisStatus> file_rows;
 
-  enum class Section { kNone, kColumns, kRows, kOther } section = Section::kNone;
+  Section section = Section::kNone;
   bool saw_columns = false;
   bool saw_rows = false;
   std::size_t unknown = 0;
@@ -108,7 +131,12 @@ bool read_solution_basis(const std::string& path, const Model& model,
     const std::string_view text = trim(line);
     if (text.empty() || text.front() == '#') continue;
     tokenize(text, &tokens);
-    if (tokens[0] == "begin") {
+    // "begin" opens a section only outside one, and "end" closes only the section that is
+    // open ("end columns" inside columns, "end rows" inside rows, any "end" inside a section
+    // this reader does not parse). A column or row named begin or end is an ordinary data
+    // line: before this test "end 0 0 at_lower" closed the columns section early and the
+    // solver refused its own freshly written file as a warm start.
+    if (section == Section::kNone && tokens[0] == "begin") {
       const std::string_view what = tokens.size() > 1 ? tokens[1] : std::string_view();
       section = what == "columns" ? Section::kColumns
                 : what == "rows"  ? Section::kRows
@@ -117,7 +145,7 @@ bool read_solution_basis(const std::string& path, const Model& model,
       saw_rows = saw_rows || section == Section::kRows;
       continue;
     }
-    if (tokens[0] == "end") {
+    if (closes_section(tokens, section)) {
       section = Section::kNone;
       continue;
     }
@@ -190,7 +218,7 @@ bool read_solution_point(const std::string& path, const Model& model,
   col_values->assign(static_cast<std::size_t>(model.num_cols()),
                      std::numeric_limits<double>::quiet_NaN());
 
-  enum class Section { kNone, kColumns, kOther } section = Section::kNone;
+  Section section = Section::kNone;
   bool saw_columns = false;
   std::string line;
   std::vector<std::string_view> tokens;
@@ -198,13 +226,14 @@ bool read_solution_point(const std::string& path, const Model& model,
     const std::string_view text = trim(line);
     if (text.empty() || text.front() == '#') continue;
     tokenize(text, &tokens);
-    if (tokens[0] == "begin") {
+    // The same begin/end rule as read_solution_basis(): see closes_section().
+    if (section == Section::kNone && tokens[0] == "begin") {
       const std::string_view what = tokens.size() > 1 ? tokens[1] : std::string_view();
       section = what == "columns" ? Section::kColumns : Section::kOther;
       saw_columns = saw_columns || section == Section::kColumns;
       continue;
     }
-    if (tokens[0] == "end") {
+    if (closes_section(tokens, section)) {
       section = Section::kNone;
       continue;
     }
