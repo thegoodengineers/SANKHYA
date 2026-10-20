@@ -713,8 +713,13 @@ class Model(NonlinearModelMixin):
         self.close()
 
     def close(self) -> None:
-        if self._handle and _lib is not None:
-            _lib.sankhya_model_free(self._handle)
+        # __init__ asks for the library before it has a handle. When the load fails it
+        # raises, rightly, and __del__ still runs on the half-built object: reading
+        # self._handle here raised AttributeError a second time, as an unraisable exception
+        # on stderr. A handle that never existed is nothing to free, as in Options.__del__.
+        handle = getattr(self, "_handle", None)
+        if handle and _lib is not None:
+            _lib.sankhya_model_free(handle)
             self._handle = None
 
     def __del__(self) -> None:

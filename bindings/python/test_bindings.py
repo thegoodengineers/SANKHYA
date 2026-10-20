@@ -413,6 +413,38 @@ def test_executable_discovery() -> None:
             os.environ.update(old_env)
 
 
+def test_a_model_whose_library_failed_to_load_does_not_raise_again_from_its_destructor() -> None:
+    """Model.__init__ asks for the library before it has a handle. When the load fails the
+    constructor raises SankhyaError, which is right, and the half-built object is then
+    collected: its __del__ called close(), which read self._handle and raised
+    AttributeError a second time, as an unraisable exception on stderr (a warning under
+    pytest). The destructor has to tolerate a handle that never existed, as
+    Options.__del__ already does. Runs with or without the library: the load is made to
+    fail either way, and restored afterwards."""
+    import gc
+
+    unraisable = []
+    saved_hook, saved_lib, saved_load = sys.unraisablehook, sankhya._lib, sankhya.load
+
+    def failing_load():
+        raise sankhya.SankhyaError("no library, by design of this test")
+
+    sys.unraisablehook = lambda args: unraisable.append(args)
+    sankhya._lib, sankhya.load = None, failing_load
+    try:
+        raised = False
+        try:
+            sankhya.Model()
+        except sankhya.SankhyaError:
+            raised = True
+        gc.collect()
+    finally:
+        sys.unraisablehook, sankhya._lib, sankhya.load = saved_hook, saved_lib, saved_load
+    check(raised, "a failed library load raises SankhyaError from the constructor")
+    check(not unraisable, "and nothing is raised again from the destructor",
+          "; ".join(f"{a.exc_type.__name__}: {a.exc_value}" for a in unraisable))
+
+
 def main() -> int:
     print(f"SANKHYA Python bindings, against solver version {sankhya.version()}\n")
     for name, function in sorted(globals().items()):
