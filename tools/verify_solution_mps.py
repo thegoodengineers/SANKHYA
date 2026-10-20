@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from verify_solution_io import INF, normalize_infinity, open_text
+from verify_solution_io import INF, normalize_infinity, open_text, parse_number
 from verify_solution_sos import SosReader
 
 # =========================================================================================
@@ -256,7 +256,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 while len(lower_set) < model.num_cols:
                     lower_set.append(False)
                 for k in range(1, len(fields) - 1, 2):
-                    row_name, value = fields[k], float(fields[k + 1])
+                    row_name, value = fields[k], parse_number(fields[k + 1])
                     if row_name == objective_row:
                         model.col_cost[col] += value
                     elif row_name in dropped_rows:
@@ -280,7 +280,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 if start == 1 and first_vector.setdefault(section, fields[0]) != fields[0]:
                     continue
                 for k in range(start, len(fields) - 1, 2):
-                    row_name, value = fields[k], float(fields[k + 1])
+                    row_name, value = fields[k], parse_number(fields[k + 1])
                     if row_name == objective_row:
                         if section == "RHS":
                             # An RHS on the objective row is the NEGATIVE of the constant.
@@ -312,7 +312,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 if key3 in model.qc_entries:
                     raise ValueError(f"{path}:{lineno}: duplicate QCMATRIX entry "
                                      f"{fields[0]} {fields[1]}")
-                model.qc_entries[key3] = float(fields[2])
+                model.qc_entries[key3] = parse_number(fields[2])
                 continue
 
             if section == "QUADOBJ":
@@ -330,7 +330,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 if key2 in model.hessian:
                     raise ValueError(f"{path}:{lineno}: duplicate Hessian entry "
                                      f"{fields[0]} {fields[1]}")
-                model.hessian[key2] = float(fields[2])
+                model.hessian[key2] = parse_number(fields[2])
                 continue
 
             if section == "BOUNDS":
@@ -354,7 +354,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                     raise ValueError(f"{path}:{lineno}: unknown column {col_name}")
                 j = model.col_index[col_name]
                 value = (
-                    float(fields[name_pos + 1]) if len(fields) > name_pos + 1 else 0.0
+                    parse_number(fields[name_pos + 1]) if len(fields) > name_pos + 1 else 0.0
                 )
                 if kind == "UP":
                     model.col_upper[j] = value

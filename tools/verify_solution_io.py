@@ -25,6 +25,26 @@ def normalize_infinity(value: float) -> float:
     return value
 
 
+def parse_number(text: str) -> float:
+    """A numeric field of a model file, read as the solver's parse_double reads one
+    (src/io/token.hpp, matched by behaviour and not by sharing code).
+
+    Fortran-era MPS writers spell an exponent with D, `1.5D+02`, which float() refuses; a
+    file the solver solves was one this script could not read at all, so `cannot read the
+    model` stood where VERIFIED or REJECTED belonged. And float() accepts "nan", which the
+    solver refuses in every field: a NaN bound, right-hand side or coefficient makes the
+    model meaningless rather than extreme, and it fails every comparison, so a check against
+    it passes without checking anything. Infinity is not refused here: a bound spelt 1e30 or
+    larger is legitimately infinite, and normalize_infinity() makes it one.
+
+    Raises ValueError, as float() does, so the fixed-format retry in parse_mps() still fires.
+    """
+    value = float(text.replace("D", "E").replace("d", "e"))
+    if math.isnan(value):
+        raise ValueError(f"{text!r} is not a number: NaN is refused in every field")
+    return value
+
+
 def open_text(path: Path):
     if path.suffix == ".gz":
         return gzip.open(path, "rt", errors="replace")

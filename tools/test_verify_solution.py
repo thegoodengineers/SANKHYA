@@ -99,6 +99,94 @@ def test_fixed_format_row_name_with_space() -> None:
 
 
 # =============================================================================================
+# Numeric fields are read the way the solver's parse_double reads them (src/io/token.hpp,
+# matched by behaviour, never by sharing code). Fortran-era MPS writers spell an exponent
+# with D, `1.5D+02`; float() refuses that, so a file the solver solves was one this script
+# could not read at all, and `cannot read the model` stood where VERIFIED or REJECTED
+# belonged. The other half is NaN: float() accepts "nan" and the solver refuses it in every
+# field, and a NaN bound or coefficient fails every comparison, so a check against it passes
+# without checking anything.
+# =============================================================================================
+
+FORTRAN_EXPONENT_MPS = """\
+NAME          DEXP
+ROWS
+ N  COST
+ G  R1
+ L  R2
+COLUMNS
+    X         COST      1.0D+00   R1        1.0D+00
+    X         R2        2.5d-1
+RHS
+    RHS       R1        2.5D+00   R2        1D1
+RANGES
+    RNG       R2        5.0D-01
+BOUNDS
+ UP BND       X         1.0D+02
+ENDATA
+"""
+
+
+def test_fortran_exponents_are_read_as_the_solver_reads_them() -> None:
+    """min X: X >= 2.5, 9.5 <= 0.25 X <= 10, 0 <= X <= 100. Optimum X = 38."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "dexp.mps"
+        path.write_text(FORTRAN_EXPONENT_MPS)
+        try:
+            model = vs.parse_mps(path)
+        except ValueError as error:
+            check(False, "a D exponent is an exponent", f"the reader refused the file: {error}")
+            return
+        x = model.col_index["X"]
+        r1, r2 = model.row_index["R1"], model.row_index["R2"]
+        entries = dict(model.entries[x])
+        check(model.col_cost[x] == 1.0, "1.0D+00 in COLUMNS", f"cost {model.col_cost[x]}")
+        check(entries.get(r2) == 0.25, "2.5d-1 in COLUMNS", f"entries {entries}")
+        check(model.row_lower[r1] == 2.5, "2.5D+00 in RHS", f"row_lower {model.row_lower}")
+        check((model.row_lower[r2], model.row_upper[r2]) == (9.5, 10.0),
+              "1D1 in RHS and 5.0D-01 in RANGES",
+              f"R2 in [{model.row_lower[r2]}, {model.row_upper[r2]}]")
+        check(model.col_upper[x] == 100.0, "1.0D+02 in BOUNDS", f"col_upper {model.col_upper[x]}")
+
+        solution = vs.Solution()
+        solution.header = {"status": "optimal", "objective": "38.0"}
+        solution.col_value = {"X": 38.0}
+        solution.col_dual = {"X": 0.0}
+        solution.row_activity = {"R1": 38.0, "R2": 9.5}
+        solution.row_dual = {"R1": 0.0, "R2": 4.0}
+        report = vs.verify(model, solution, vs.DEFAULT_PRIMAL_TOL, vs.DEFAULT_DUAL_TOL,
+                           vs.DEFAULT_INTEGER_TOL, vs.DEFAULT_DUALITY_TOL)
+        check(report.failures == 0, "the optimum of a file with D exponents verifies",
+              "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
+
+
+NAN_RHS_MPS = """\
+NAME          NANRHS
+ROWS
+ N  COST
+ G  R1
+COLUMNS
+    X         COST      1.0   R1        1.0
+RHS
+    RHS       R1        nan
+ENDATA
+"""
+
+
+def test_a_nan_field_is_refused() -> None:
+    """Nothing else in this file can fail to read, so a refusal is the NaN's."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "nan.mps"
+        path.write_text(NAN_RHS_MPS)
+        raised = False
+        try:
+            vs.parse_mps(path)
+        except ValueError:
+            raised = True
+        check(raised, "a NaN right-hand side is refused, as the solver refuses it")
+
+
+# =============================================================================================
 # Reading back the quoted names that src/io/writer.cpp emits (#86).
 #
 # A fixed-format MPS name may legally contain a space - Netlib forplan has a column
@@ -935,6 +1023,9 @@ def test_a_continuous_value_breaking_a_row_is_caught_only_with_every_column() ->
 def main() -> int:
     print("test_fixed_format_row_name_with_space")
     test_fixed_format_row_name_with_space()
+    print("numeric fields read as the solver's parse_double reads them")
+    test_fortran_exponents_are_read_as_the_solver_reads_them()
+    test_a_nan_field_is_refused()
     print("test_sol_reader_recovers_quoted_names")
     test_sol_reader_recovers_quoted_names()
     print("test_known_bad_solution_is_rejected")
