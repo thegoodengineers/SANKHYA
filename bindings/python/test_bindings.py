@@ -135,6 +135,32 @@ def test_bool_is_not_routed_to_the_int_setter() -> None:
     check(near(result.objective, 2.0), "solve honours a bool option", f"{result.objective}")
 
 
+def test_a_python_int_is_accepted_for_a_double_option() -> None:
+    # time_limit=60 and mip_relative_gap=0 are what a caller writes; the C API's integer
+    # setter refused them as the wrong type, and so did every adapter that forwards keyword
+    # arguments (problem.solve(method="SANKHYA", time_limit=60) raised). The integer is now
+    # passed as the double the registry declares, and an integral float for an int option
+    # goes the other way. A genuine mismatch (a float with a fraction for an int option) and
+    # an unknown name still raise, with the C API's own message.
+    options = sankhya.Options(time_limit=60, mip_relative_gap=0, threads=2.0)
+    check(True, "an int for a double option and an integral float for an int option are set",
+          "time_limit=60, mip_relative_gap=0, threads=2.0")
+    model = sankhya.Model()
+    x = model.add_column(cost=1.0, name="x")
+    model.add_row({x: 1.0}, lower=2.0)
+    result = model.solve(options)
+    check(near(result.objective, 2.0), "solve honours the coerced options", f"{result.objective}")
+
+    for kwargs, what in [({"threads": 2.5}, "a fractional float for an int option"),
+                         ({"no_such_option_at_all": 1}, "an unknown name given an int")]:
+        raised = False
+        try:
+            sankhya.Options(**kwargs)
+        except sankhya.SankhyaError as error:
+            raised = next(iter(kwargs)) in str(error)
+        check(raised, f"{what} still raises, naming the option", f"{kwargs}")
+
+
 def test_options_reject_a_typo_instead_of_aborting() -> None:
     # The C++ typed accessors call std::abort() on an unknown option name - correct for C++,
     # fatal for an FFI caller, since it would take the interpreter down with it. The C API
