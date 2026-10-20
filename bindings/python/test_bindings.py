@@ -148,6 +148,32 @@ def test_options_reject_a_typo_instead_of_aborting() -> None:
     check(raised, "an unknown option raises rather than aborting the process")
 
 
+def test_options_reject_a_value_outside_its_range() -> None:
+    # The binary setters used to store whatever arrived: threads=-1, a NaN tolerance, an
+    # engine name the dispatcher has never heard of. The command line refused all three as
+    # text, and the C API now applies the same range, NaN and choice checks.
+    cases = [
+        ({"threads": -1}, "a negative thread count"),
+        ({"primal_feasibility_tolerance": float("nan")}, "a NaN tolerance"),
+        ({"primal_feasibility_tolerance": 1.0}, "a tolerance above its declared maximum"),
+        ({"algorithm": "no_such_engine"}, "an engine name outside the choice list"),
+    ]
+    for kwargs, what in cases:
+        raised = False
+        try:
+            sankhya.Options(**kwargs)
+        except sankhya.SankhyaError as error:
+            raised = next(iter(kwargs)) in str(error)
+        check(raised, f"{what} raises, naming the option", f"{kwargs}")
+    options = sankhya.Options(threads=2, primal_feasibility_tolerance=1e-9, algorithm="simplex")
+    check(True, "in-range values are still accepted", "threads=2, tolerance=1e-9, simplex")
+    model = sankhya.Model()
+    x = model.add_column(cost=1.0, name="x")
+    model.add_row({x: 1.0}, lower=2.0)
+    result = model.solve(options)
+    check(near(result.objective, 2.0), "solve honours the accepted options", f"{result.objective}")
+
+
 def test_reads_a_file() -> None:
     text = ("NAME          TINY\n"
             "ROWS\n"

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -298,6 +299,41 @@ TEST(CApi, RejectsAnUnknownOption) {
   const sankhya_status status = sankhya_options_set_double(options, "no_such_option", 1.0);
   EXPECT_NE(status, SANKHYA_OK);
   EXPECT_FALSE(std::string(sankhya_last_error()).empty());
+  sankhya_options_free(options);
+}
+
+TEST(CApi, RejectsAnOptionValueOutsideItsDeclaredRange) {
+  // The binary setters used to bypass the range, NaN and choice checks the text path applies,
+  // so a C or Python caller could store threads = -1, a NaN tolerance or an engine name the
+  // dispatcher has never heard of. Each is refused at the call now, with the option named.
+  sankhya_options* options = sankhya_options_create();
+  ASSERT_NE(options, nullptr);
+
+  EXPECT_EQ(sankhya_options_set_int(options, "threads", -1), SANKHYA_ERROR_OPTION);
+  EXPECT_NE(std::string(sankhya_last_error()).find("threads"), std::string::npos);
+  EXPECT_EQ(sankhya_options_set_int(options, "threads", 2), SANKHYA_OK);
+
+  EXPECT_EQ(sankhya_options_set_double(options, "primal_feasibility_tolerance", 1.0),
+            SANKHYA_ERROR_OPTION);
+  EXPECT_EQ(sankhya_options_set_double(options, "primal_feasibility_tolerance",
+                                       std::numeric_limits<double>::quiet_NaN()),
+            SANKHYA_ERROR_OPTION);
+  EXPECT_NE(std::string(sankhya_last_error()).find("primal_feasibility_tolerance"),
+            std::string::npos);
+  EXPECT_EQ(sankhya_options_set_double(options, "primal_feasibility_tolerance", 1e-9),
+            SANKHYA_OK);
+
+  EXPECT_EQ(sankhya_options_set_string(options, "algorithm", "no_such_engine"),
+            SANKHYA_ERROR_OPTION);
+  EXPECT_NE(std::string(sankhya_last_error()).find("algorithm"), std::string::npos);
+  EXPECT_EQ(sankhya_options_set_string(options, "algorithm", "simplex"), SANKHYA_OK);
+
+  // The accepted values are the ones the solve sees.
+  ModelHandle model;
+  ASSERT_EQ(sankhya_model_add_column(model, 1.0, 2.0, 10.0, 0, "x", nullptr), SANKHYA_OK);
+  SolutionHandle solution;
+  ASSERT_EQ(sankhya_solve(model, options, &solution.handle), SANKHYA_OK);
+  EXPECT_NEAR(sankhya_solution_objective(solution.handle), 2.0, 1e-9);
   sankhya_options_free(options);
 }
 

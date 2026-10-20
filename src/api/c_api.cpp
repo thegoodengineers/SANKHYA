@@ -473,8 +473,14 @@ sankhya_status sankhya_options_set_int(sankhya_options* options, const char* nam
   }
   const sankhya_status check = check_option(name, sankhya::OptionType::Int);
   if (check != SANKHYA_OK) return check;
+  // The checked setter applies the registry's declared range, exactly as the CLI's text path
+  // does: a binary value outside it (threads = -1, a negative node limit) is refused here with
+  // the same message, not stored for the solver to trip over.
   return guarded([&]() -> sankhya_status {
-    options->options.set_int(name, static_cast<std::int64_t>(value));
+    std::string error;
+    if (!options->options.set_int_checked(name, static_cast<std::int64_t>(value), &error)) {
+      return fail(SANKHYA_ERROR_OPTION, error);
+    }
     return ok();
   });
 }
@@ -486,8 +492,13 @@ sankhya_status sankhya_options_set_double(sankhya_options* options, const char* 
   }
   const sankhya_status check = check_option(name, sankhya::OptionType::Double);
   if (check != SANKHYA_OK) return check;
+  // Range-checked, and NaN refused: a NaN tolerance compares false against everything and
+  // would silently disable every test that uses it.
   return guarded([&]() -> sankhya_status {
-    options->options.set_double(name, value);
+    std::string error;
+    if (!options->options.set_double_checked(name, value, &error)) {
+      return fail(SANKHYA_ERROR_OPTION, error);
+    }
     return ok();
   });
 }
@@ -499,8 +510,13 @@ sankhya_status sankhya_options_set_string(sankhya_options* options, const char* 
   }
   const sankhya_status check = check_option(name, sankhya::OptionType::String);
   if (check != SANKHYA_OK) return check;
+  // The choice list is enforced here as it is on the command line, so algorithm = "magic"
+  // fails at the call rather than at dispatch time.
   return guarded([&]() -> sankhya_status {
-    options->options.set_string(name, value);
+    std::string error;
+    if (!options->options.set_string_checked(name, value, &error)) {
+      return fail(SANKHYA_ERROR_OPTION, error);
+    }
     return ok();
   });
 }

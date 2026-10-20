@@ -72,6 +72,17 @@ class Options {
   /// Never throws and never partially assigns.
   bool set_from_string(const std::string& name, const std::string& text, std::string* error);
 
+  /// Checked typed setters for values that arrive from outside the core: the C API, and
+  /// through it the Python bindings. They apply exactly the checks set_from_string() applies
+  /// to text - the declared [min, max] for a number, NaN refused, the choice list for a
+  /// string - so a value the CLI would reject is not accepted when it arrives as a binary
+  /// value instead. Return false and fill `error` on an unknown name, a type mismatch or a
+  /// refused value, without assigning; never throw and never assert.
+  bool set_int_checked(const std::string& name, std::int64_t value, std::string* error);
+  bool set_double_checked(const std::string& name, double value, std::string* error);
+  bool set_string_checked(const std::string& name, const std::string& value,
+                          std::string* error);
+
   /// Typed setters. These assert on a name/type mismatch: a caller inside the solver core
   /// knows the type statically, so a mismatch is a bug rather than user input.
   void set_bool(const std::string& name, bool value);

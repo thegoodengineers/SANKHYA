@@ -7,6 +7,7 @@
 // build time rather than as a mystified user report.
 
 #include <algorithm>
+#include <limits>
 #include <set>
 #include <string>
 
@@ -126,6 +127,58 @@ TEST(Options, NumericRangeIsEnforced) {
   EXPECT_FALSE(options.set_from_string("primal_feasibility_tolerance", "1.0", &error));
   EXPECT_TRUE(options.set_from_string("primal_feasibility_tolerance", "1e-9", &error));
   EXPECT_DOUBLE_EQ(options.get_double("primal_feasibility_tolerance"), 1e-9);
+}
+
+TEST(Options, NanIsRefusedAsText) {
+  // strtod parses "nan" happily, and NaN compares false against both range bounds, so
+  // before the explicit test it sailed through the range check and was stored. A NaN
+  // tolerance then makes every comparison in the solver false.
+  Options options;
+  std::string error;
+  EXPECT_FALSE(options.set_from_string("primal_feasibility_tolerance", "nan", &error));
+  EXPECT_NE(error.find("primal_feasibility_tolerance"), std::string::npos);
+  EXPECT_FALSE(options.set_from_string("time_limit", "NaN", &error));
+  EXPECT_FALSE(options.set_from_string("time_limit", "-nan", &error));
+  EXPECT_FALSE(options.is_modified("time_limit"));
+}
+
+TEST(Options, CheckedSettersApplyTheSameRulesAsText) {
+  // The C API's binary setters go through these; a value the CLI refuses as text must be
+  // refused here too, with the message naming the option, and nothing assigned.
+  Options options;
+  std::string error;
+
+  EXPECT_FALSE(options.set_int_checked("threads", -1, &error));
+  EXPECT_NE(error.find("threads"), std::string::npos);
+  EXPECT_FALSE(options.is_modified("threads"));
+  EXPECT_TRUE(options.set_int_checked("threads", 2, &error)) << error;
+  EXPECT_EQ(options.get_int("threads"), 2);
+
+  EXPECT_FALSE(options.set_double_checked("primal_feasibility_tolerance", 1.0, &error));
+  EXPECT_FALSE(options.set_double_checked("primal_feasibility_tolerance",
+                                          std::numeric_limits<double>::quiet_NaN(), &error));
+  EXPECT_NE(error.find("primal_feasibility_tolerance"), std::string::npos);
+  EXPECT_FALSE(options.is_modified("primal_feasibility_tolerance"));
+  EXPECT_TRUE(options.set_double_checked("primal_feasibility_tolerance", 1e-9, &error))
+      << error;
+  EXPECT_DOUBLE_EQ(options.get_double("primal_feasibility_tolerance"), 1e-9);
+
+  EXPECT_FALSE(options.set_string_checked("algorithm", "no_such_engine", &error));
+  EXPECT_NE(error.find("algorithm"), std::string::npos);
+  EXPECT_FALSE(options.is_modified("algorithm"));
+  EXPECT_TRUE(options.set_string_checked("algorithm", "SIMPLEX", &error)) << error;
+  EXPECT_EQ(options.get_string("algorithm"), "simplex");
+
+  // A type mismatch is an error, not an assertion: the caller is outside the core.
+  EXPECT_FALSE(options.set_int_checked("time_limit", 1, &error));
+  EXPECT_FALSE(options.set_double_checked("threads", 1.0, &error));
+  EXPECT_FALSE(options.set_string_checked("threads", "1", &error));
+  EXPECT_FALSE(options.set_int_checked("no_such_option", 1, &error));
+  EXPECT_NE(error.find("no_such_option"), std::string::npos);
+
+  // Names are matched the way set_from_string matches them.
+  EXPECT_TRUE(options.set_int_checked(" Threads ", 3, &error)) << error;
+  EXPECT_EQ(options.get_int("threads"), 3);
 }
 
 TEST(Options, DoubleParsingAcceptsScientificNotation) {
