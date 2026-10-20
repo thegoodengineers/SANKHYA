@@ -288,6 +288,60 @@ def test_a_wrong_sign_is_judged_against_the_cost_not_against_one() -> None:
               f"failed: {failed}")
 
 
+# =============================================================================================
+# A negative UI bound implies a free lower bound, as a negative UP does (the solver's #298).
+# `UI BND X -1` with no LO entry read as [0, -1] here and as [-inf, -1] in the solver, so
+# the model's optimum, X = -3 for  min X : X >= -3, was REJECTED on column bounds by a
+# verifier reading a different model from the one solved. The MPS convention is documented
+# for UP; the solver applies it to UI as well, with a warning, and the two readers have to
+# agree deliberately rather than by luck (docs/PROVENANCE.md, judgement call 5).
+# =============================================================================================
+
+NEGATIVE_UI_MPS = """NAME          NEGUI
+ROWS
+ N  COST
+ G  R1
+COLUMNS
+    X         COST      1.0   R1        1.0
+RHS
+    RHS       R1        -3.0
+BOUNDS
+ UI BND       X         -1.0
+ENDATA
+"""
+
+
+def test_a_negative_ui_bound_frees_the_lower_bound_as_the_solver_does() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "negui.mps"
+        path.write_text(NEGATIVE_UI_MPS)
+        model = vs.parse_mps(path)
+        x = model.col_index["X"]
+        check(model.col_integer[x], "UI makes the column integer")
+        check(model.col_upper[x] == -1.0, "UI sets the upper bound", f"upper {model.col_upper[x]}")
+        check(model.col_lower[x] == -vs.INF, "a negative UI with no LO frees the lower bound",
+              f"lower {model.col_lower[x]}, expected -inf as src/io/mps_bounds.cpp reads it")
+
+        solution = vs.Solution()
+        solution.header = {"status": "optimal", "objective": "-3.0", "dual_bound": "-3.0"}
+        solution.col_value = {"X": -3.0}
+        solution.col_dual = {"X": 0.0}
+        solution.row_activity = {"R1": -3.0}
+        solution.row_dual = {"R1": 1.0}
+        report = vs.verify(model, solution, vs.DEFAULT_PRIMAL_TOL, vs.DEFAULT_DUAL_TOL,
+                           vs.DEFAULT_INTEGER_TOL, vs.DEFAULT_DUALITY_TOL)
+        check(report.failures == 0, "the model's optimum X = -3 verifies",
+              "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
+
+        # An explicit LO keeps its value: the convention is for the implicit 0 only.
+        path.write_text(NEGATIVE_UI_MPS.replace(" UI BND       X         -1.0\n",
+                                                " LO BND       X         -2.0\n"
+                                                " UI BND       X         -1.0\n"))
+        model = vs.parse_mps(path)
+        check(model.col_lower[model.col_index["X"]] == -2.0,
+              "an explicit LO before a negative UI is kept", f"lower {model.col_lower}")
+
+
 QPS_WITH_OFF_DIAGONAL = """NAME          QCONV
 ROWS
  N  COST
@@ -942,6 +996,8 @@ def main() -> int:
     test_strong_duality_still_rejects_a_reduced_cost_pricing_the_wrong_bound()
     test_strong_duality_accepts_a_gap_made_of_accepted_per_item_violations()
     test_a_wrong_sign_is_judged_against_the_cost_not_against_one()
+    print("a negative UI bound frees the lower bound, as the solver reads it")
+    test_a_negative_ui_bound_frees_the_lower_bound_as_the_solver_does()
     print("test_qps_convention_is_read_as_qps_means_it")
     test_qps_convention_is_read_as_qps_means_it()
     print("test_qp_optimum_verifies_and_a_wrong_one_does_not")

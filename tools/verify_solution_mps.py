@@ -393,6 +393,14 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 elif kind == "UI":
                     model.col_integer[j] = True
                     model.col_upper[j] = value
+                    # The same convention as UP, one spelling over, which the solver applies
+                    # since its #298: a negative UI on a column whose lower bound is still
+                    # the implicit 0 means a negative variable, so the lower bound is
+                    # -infinity. Without this the box read [0, -5] here and [-inf, -5] in
+                    # src/io/mps_bounds.cpp, and a correct negative integer answer was
+                    # REJECTED on column bounds by a reader of a different model.
+                    if value < 0.0 and not lower_set[j]:
+                        model.col_lower[j] = -INF
                 elif kind == "SC":
                     # Semi-continuous (#754): the value is the upper end of the run range, and
                     # the column may also be 0. Its lower end is the lower bound as LO (or the
