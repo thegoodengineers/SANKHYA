@@ -672,6 +672,50 @@ TEST(MpsReader, FixedFormatNamesMayContainBlanks) {
   EXPECT_DOUBLE_EQ(model.row_upper[0], 10.0);
 }
 
+TEST(MpsReader, FixedFormatValueLessBoundWithABlankVectorNameAndADummyValue) {
+  // IBM's layout lets the bound-vector name (field 2) be blank and ignores field 4 for the
+  // value-less types MI, PL, FR and BV. The fixed tokenizer drops the blank field, so the
+  // record arrives as (MI, column, dummy) and looked exactly like (MI, vector, column):
+  // the reader bound "0" as the column and refused a valid file.
+  const std::string text =
+      "NAME          BLANKVEC\n"
+      "ROWS\n" +
+      fixed_line("N", "COST", "", "") + fixed_line("G", "R1", "", "") + "COLUMNS\n" +
+      fixed_line("", "X", "COST", "1.0", "R1", "1.0") + "RHS\n" +
+      fixed_line("", "RHS", "R1", "-3.0") + "BOUNDS\n" + fixed_line("MI", "", "X", "0") +
+      fixed_line("PL", "", "X", "0") + "ENDATA\n";
+  const TempFile file(text);
+  Model model;
+  const io::ReadResult result = io::read_mps(file.path(), &model, io::MpsFormat::kFixed);
+  ASSERT_TRUE(result.ok) << result.error;
+  const Index x = col_of(model, "X");
+  ASSERT_GE(x, 0);
+  EXPECT_EQ(model.col_lower[static_cast<std::size_t>(x)], -kInfinity);
+  EXPECT_EQ(model.col_upper[static_cast<std::size_t>(x)], kInfinity);
+
+  // The named-vector shape still reads as before, with and without the dummy value, and a
+  // second vector's bounds are still skipped.
+  const std::string named =
+      "NAME          NAMEDVEC\n"
+      "ROWS\n" +
+      fixed_line("N", "COST", "", "") + fixed_line("G", "R1", "", "") + "COLUMNS\n" +
+      fixed_line("", "X", "COST", "1.0", "R1", "1.0") +
+      fixed_line("", "Y", "COST", "1.0", "R1", "1.0") + "RHS\n" +
+      fixed_line("", "RHS", "R1", "-3.0") + "BOUNDS\n" + fixed_line("MI", "BND", "X", "0") +
+      fixed_line("FR", "BND", "Y") + fixed_line("UP", "OTHER", "Y", "7.0") + "ENDATA\n";
+  const TempFile named_file(named);
+  Model named_model;
+  const io::ReadResult named_result =
+      io::read_mps(named_file.path(), &named_model, io::MpsFormat::kFixed);
+  ASSERT_TRUE(named_result.ok) << named_result.error;
+  const Index nx = col_of(named_model, "X");
+  const Index ny = col_of(named_model, "Y");
+  EXPECT_EQ(named_model.col_lower[static_cast<std::size_t>(nx)], -kInfinity);
+  EXPECT_EQ(named_model.col_upper[static_cast<std::size_t>(nx)], kInfinity);
+  EXPECT_EQ(named_model.col_lower[static_cast<std::size_t>(ny)], -kInfinity);
+  EXPECT_EQ(named_model.col_upper[static_cast<std::size_t>(ny)], kInfinity);
+}
+
 TEST(MpsReader, AutoDetectionPrefersTheFreeDialect) {
   const TempFile file(
       "NAME          FREE\n"
