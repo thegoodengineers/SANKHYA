@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <fmt/format.h>
@@ -117,6 +118,27 @@ constexpr FixedField kFixedFields[6] = {{1, 2}, {4, 8}, {14, 8}, {24, 12}, {39, 
     return true;
   }
   return false;
+}
+
+/// The OBJSENSE value, in the spellings the LP reader also accepts. Anything else is
+/// refused: before this test every word that was not MAX or MAXIMIZE (MAXIMISE, MAXIMUM, a
+/// typo) silently minimised, the one misreading that solves cleanly and reports a confident
+/// wrong optimum.
+[[nodiscard]] bool objsense_of(std::string_view token, ObjSense* out) {
+  const std::string k = to_upper(token);
+  if (k == "MAX" || k == "MAXIMIZE" || k == "MAXIMISE" || k == "MAXIMUM") {
+    *out = ObjSense::kMaximize;
+    return true;
+  }
+  if (k == "MIN" || k == "MINIMIZE" || k == "MINIMISE" || k == "MINIMUM") {
+    *out = ObjSense::kMinimize;
+    return true;
+  }
+  return false;
+}
+
+[[nodiscard]] std::string objsense_message(std::string_view token) {
+  return fmt::format("OBJSENSE value '{}' is not MIN, MINIMIZE, MAX or MAXIMIZE", token);
 }
 
 }  // namespace
@@ -554,9 +576,9 @@ ReadResult MpsParser::parse(const std::string& path) {
           // Both spellings occur: "OBJSENSE MAX" on one line, or OBJSENSE as a section
           // header with MAX indented beneath it.
           if (tok_.size() >= 2) {
-            const std::string value = to_upper(tok_[1]);
-            model_->sense = (value == "MAX" || value == "MAXIMIZE") ? ObjSense::kMaximize
-                                                                    : ObjSense::kMinimize;
+            if (!objsense_of(tok_[1], &model_->sense)) {
+              return ReadResult::failure(reader_.error_at(objsense_message(tok_[1])));
+            }
             section = Section::kNone;
           } else {
             section = Section::kObjsenseValue;
@@ -573,9 +595,9 @@ ReadResult MpsParser::parse(const std::string& path) {
 
     switch (section) {
       case Section::kObjsenseValue: {
-        const std::string value = to_upper(tok_[0]);
-        model_->sense =
-            (value == "MAX" || value == "MAXIMIZE") ? ObjSense::kMaximize : ObjSense::kMinimize;
+        if (!objsense_of(tok_[0], &model_->sense)) {
+          return ReadResult::failure(reader_.error_at(objsense_message(tok_[0])));
+        }
         section = Section::kNone;
         break;
       }
