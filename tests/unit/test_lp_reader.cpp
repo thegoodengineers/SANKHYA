@@ -264,6 +264,33 @@ TEST(LpReader, UnnamedConstraintsGetGeneratedNames) {
   EXPECT_EQ(model.row_names[1], "R2");
 }
 
+TEST(LpReader, RowNamesAreUniqueAsTheMpsReaderRequires) {
+  // Two rows of one name wrote a .sol the warm start could only half match ("1 row(s) of
+  // the file are gone"). A repeated explicit name is refused, as in MPS, and a generated
+  // name skips the names the file has already taken.
+  const std::string error = parse_expecting_failure(
+      "Minimize\n"
+      " obj: x + y\n"
+      "Subject To\n"
+      " c1: x >= 1\n"
+      " c1: y >= 2\n"
+      "End\n");
+  EXPECT_NE(error.find("c1"), std::string::npos) << error;
+  EXPECT_NE(error.find("twice"), std::string::npos) << error;
+
+  const Model model = parse_or_fail(
+      "Minimize\n"
+      " obj: x + y\n"
+      "Subject To\n"
+      " R1: x >= 1\n"
+      " y >= 2\n"
+      " R3: x + y >= 3\n"
+      " x - y <= 4\n"
+      "End\n");
+  ASSERT_EQ(model.num_rows(), 4);
+  EXPECT_EQ(model.row_names, (std::vector<std::string>{"R1", "R2", "R3", "R4"}));
+}
+
 TEST(LpReader, StatementsMayWrapAcrossLines) {
   const Model model = parse_or_fail(
       "Minimize\n"

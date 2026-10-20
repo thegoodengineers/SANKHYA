@@ -106,6 +106,7 @@ class LpParser {
   std::vector<double> col_upper_;
   std::vector<VarType> col_type_;
 
+  std::unordered_map<std::string, Index> row_index_;  ///< every row name taken so far
   std::vector<std::string> row_names_;
   std::vector<double> row_lower_;
   std::vector<double> row_upper_;

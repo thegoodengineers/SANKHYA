@@ -287,13 +287,22 @@ bool LpParser::parse_constraints(const SectionSpan& span, std::string* error) {
   std::size_t i = span.begin;
 
   while (i < span.end) {
+    // Row names are unique, as the MPS reader already requires: a .sol written with two rows
+    // of one name seeds a warm start by name, and only one of the two can come back. A
+    // repeated explicit name is refused; a generated name skips any name the file took.
     std::string name;
     if (i + 1 < span.end && tokens_[i].kind == TokKind::kIdent &&
         tokens_[i + 1].kind == TokKind::kOp && tokens_[i + 1].text == ":") {
       name = tokens_[i].text;
+      if (row_index_.count(name) != 0) {
+        *error = at(i, fmt::format("constraint name '{}' is used twice", name));
+        return false;
+      }
       i += 2;
     } else {
-      name = fmt::format("R{}", ++unnamed_rows_);
+      do {
+        name = fmt::format("R{}", ++unnamed_rows_);
+      } while (row_index_.count(name) != 0);
     }
 
     // A range constraint opens with "constant relop": -3 <= x - y <= 5. The sign is a
@@ -375,6 +384,7 @@ bool LpParser::parse_constraints(const SectionSpan& span, std::string* error) {
     }
 
     const auto row = static_cast<Index>(row_names_.size());
+    row_index_.emplace(name, row);
     row_names_.push_back(name);
     row_lower_.push_back(lo);
     row_upper_.push_back(hi);
