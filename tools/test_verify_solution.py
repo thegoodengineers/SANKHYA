@@ -976,6 +976,7 @@ def main() -> int:
     print("a vector name that is also a row or column name (#590)")
     test_verify_solution_names.run(check)
     test_verify_solution_names.run_first_vector(check)
+    test_verify_solution_names.run_begin_end_names(check)
     print("semi-continuous columns and special ordered sets (#754)")
     test_verify_solution_sos.run(check)
     print("quadratic rows, QCMATRIX (#514)")
