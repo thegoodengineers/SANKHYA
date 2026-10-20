@@ -464,6 +464,65 @@ def test_quadratic_maximization_keeps_its_sign() -> None:
               f"{report.failures} check(s) failed, as expected")
 
 
+# =============================================================================================
+# A free-format '$' comment ends the record, as it does for the solver (src/io/mps_reader.cpp,
+# split()): it opens at the first field after the record's first that begins with '$', and a
+# line whose first field begins with '$' is a comment line. The verifier tokenised the
+# comment's words as fields, so `X COST 1.0 $ note` read "$" as a row name, raised, failed
+# the fixed-column retry too, and `cannot read the model` stood where VERIFIED belonged. The
+# first field of a data record is a name and keeps a leading '$': Netlib pang has a column
+# $0AICCB, which both readers keep (#475).
+# =============================================================================================
+
+DOLLAR_COMMENT_MPS = """NAME          DOLLAR
+$ a whole-line comment, free format
+ROWS
+ N  COST
+ G  R1
+COLUMNS
+    $0AICCB   COST      1.0   R1        1.0   $ a name may begin with $
+    Y         COST      2.0   R1        1.0   $ the dearer column
+RHS
+    RHS       R1        2.5   $ demand
+BOUNDS
+ UP BND       Y         10.0  $ capacity
+ENDATA
+"""
+
+
+def test_a_free_format_dollar_comment_ends_the_record() -> None:
+    """min $0AICCB + 2 Y : $0AICCB + Y >= 2.5, Y <= 10. Optimum $0AICCB = 2.5, Y = 0."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "dollar.mps"
+        path.write_text(DOLLAR_COMMENT_MPS)
+        try:
+            model = vs.parse_mps(path)
+        except ValueError as error:
+            check(False, "a $ comment is not a field", f"the reader refused the file: {error}")
+            return
+        check(model.col_names == ["$0AICCB", "Y"], "a name beginning with $ is a name",
+              f"columns {model.col_names}")
+        x, y = model.col_index["$0AICCB"], model.col_index["Y"]
+        r1 = model.row_index["R1"]
+        check(model.col_cost[x] == 1.0 and dict(model.entries[x]) == {r1: 1.0},
+              "the fields before a comment are read", f"cost {model.col_cost[x]}")
+        check(model.row_lower[r1] == 2.5, "the RHS before its comment is read",
+              f"row_lower {model.row_lower}")
+        check(model.col_upper[y] == 10.0, "the bound before its comment is read",
+              f"col_upper {model.col_upper[y]}")
+
+        solution = vs.Solution()
+        solution.header = {"status": "optimal", "objective": "2.5"}
+        solution.col_value = {"$0AICCB": 2.5, "Y": 0.0}
+        solution.col_dual = {"$0AICCB": 0.0, "Y": 1.0}
+        solution.row_activity = {"R1": 2.5}
+        solution.row_dual = {"R1": 1.0}
+        report = vs.verify(model, solution, vs.DEFAULT_PRIMAL_TOL, vs.DEFAULT_DUAL_TOL,
+                           vs.DEFAULT_INTEGER_TOL, vs.DEFAULT_DUALITY_TOL)
+        check(report.failures == 0, "the optimum of a file with $ comments verifies",
+              "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
+
+
 # =========================================================================================
 # The two verdicts that have no point of their own (#191)
 # =========================================================================================
@@ -948,6 +1007,8 @@ def main() -> int:
     test_qp_optimum_verifies_and_a_wrong_one_does_not()
     print("test_quadratic_maximization_keeps_its_sign")
     test_quadratic_maximization_keeps_its_sign()
+    print("a free-format $ comment ends the record, as it does for the solver")
+    test_a_free_format_dollar_comment_ends_the_record()
     print("the two verdicts with no point (#191)")
     test_a_valid_farkas_certificate_verifies()
     test_a_tiny_farkas_vector_on_a_feasible_model_is_rejected()
