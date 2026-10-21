@@ -302,7 +302,7 @@ bool LpParser::parse_constraints(const SectionSpan& span, std::string* error) {
     } else {
       do {
         name = fmt::format("R{}", ++unnamed_rows_);
-      } while (row_index_.count(name) != 0);
+      } while (row_index_.count(name) != 0 || explicit_row_names_.count(name) != 0);
     }
 
     // A range constraint opens with "constant relop": -3 <= x - y <= 5. The sign is a
@@ -536,6 +536,18 @@ ReadResult LpParser::parse(const std::string& path) {
   std::string error;
   if (!lex(path, &error)) return ReadResult::failure(error);
   if (!split_sections(&error)) return ReadResult::failure(error);
+
+  // Explicit names win: a generated name skips every "name:" in the file, including those
+  // still ahead, so "x + y >= 1" then "R1: x <= 5" names the first row R2, not a clash.
+  for (const SectionSpan& span : sections_) {
+    if (span.kind != LpSection::kConstraints) continue;
+    for (std::size_t k = span.begin; k + 1 < span.end; ++k) {
+      if (tokens_[k].kind == TokKind::kIdent && tokens_[k + 1].kind == TokKind::kOp &&
+          tokens_[k + 1].text == ":") {
+        explicit_row_names_.insert(tokens_[k].text);
+      }
+    }
+  }
 
   for (const SectionSpan& span : sections_) {
     bool ok = true;

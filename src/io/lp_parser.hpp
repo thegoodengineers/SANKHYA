@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "sankhya/io.hpp"
@@ -106,7 +107,8 @@ class LpParser {
   std::vector<double> col_upper_;
   std::vector<VarType> col_type_;
 
-  std::unordered_map<std::string, Index> row_index_;  ///< every row name taken so far
+  std::unordered_map<std::string, Index> row_index_;    ///< every row name taken so far
+  std::unordered_set<std::string> explicit_row_names_;  ///< every "name:" in the file
   std::vector<std::string> row_names_;
   std::vector<double> row_lower_;
   std::vector<double> row_upper_;

@@ -291,6 +291,33 @@ TEST(LpReader, RowNamesAreUniqueAsTheMpsReaderRequires) {
   EXPECT_EQ(model.row_names, (std::vector<std::string>{"R1", "R2", "R3", "R4"}));
 }
 
+TEST(LpReader, AnExplicitNameLaterInTheFileWinsOverAGeneratedOne) {
+  // The unnamed row comes first and would have been R1; the file names a later row R1, so
+  // the generated name skips it instead of the file being refused for a clash it never wrote.
+  const Model model = parse_or_fail(
+      "Minimize\n"
+      " obj: x + y\n"
+      "Subject To\n"
+      " x + y >= 1\n"
+      " R1: x <= 5\n"
+      " y <= 7\n"
+      " R2: x - y <= 4\n"
+      "End\n");
+  EXPECT_EQ(model.row_names, (std::vector<std::string>{"R3", "R1", "R4", "R2"}));
+
+  // A name the file itself repeats is still refused, whichever rows sit between.
+  const std::string error = parse_expecting_failure(
+      "Minimize\n"
+      " obj: x + y\n"
+      "Subject To\n"
+      " R1: x >= 1\n"
+      " x + y >= 2\n"
+      " R1: y >= 2\n"
+      "End\n");
+  EXPECT_NE(error.find("R1"), std::string::npos) << error;
+  EXPECT_NE(error.find("twice"), std::string::npos) << error;
+}
+
 TEST(LpReader, StatementsMayWrapAcrossLines) {
   const Model model = parse_or_fail(
       "Minimize\n"
