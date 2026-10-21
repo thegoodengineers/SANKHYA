@@ -108,7 +108,7 @@ void BranchAndBound::append_pool_rows(const std::vector<std::size_t>& pool) {
       }
     }
   }
-  new_matrix.finalize();
+  new_matrix.finalize(0.0);
   working_.matrix = std::move(new_matrix);
   working_.resize_rows(new_rows);
   for (std::size_t i = 0; i < pool.size(); ++i) {

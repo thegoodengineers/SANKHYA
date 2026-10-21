@@ -1720,7 +1720,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       reduced.hessian.add_entry(mapped_row, mapped_col, column.values[k]);
     }
   }
-  reduced.hessian.finalize();
+  reduced.hessian.finalize(0.0);
 
   // The protection above should make this unreachable: every column carrying a Hessian entry
   // is refused to every reduction that removes one. If a future reduction forgets that, the

@@ -177,9 +177,9 @@ void BranchAndBound::append_objective_row() {
     const ColumnView view = working_.matrix.column(j);
     for (Index k = 0; k < view.size; ++k) matrix.add_entry(view.rows[k], j, view.values[k]);
     const double cost = original_.col_cost[static_cast<std::size_t>(j)];
-    if (std::fabs(cost) > tol::kZeroDrop) matrix.add_entry(old_rows, j, cost);
+    if (cost != 0.0) matrix.add_entry(old_rows, j, cost);
   }
-  matrix.finalize();
+  matrix.finalize(0.0);
   working_.matrix = std::move(matrix);
   working_.resize_rows(old_rows + 1);
   working_.row_lower[static_cast<std::size_t>(old_rows)] = -kInfinity;

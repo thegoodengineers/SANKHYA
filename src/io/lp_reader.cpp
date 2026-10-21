@@ -558,7 +558,7 @@ ReadResult LpParser::parse(const std::string& path) {
   for (std::size_t k = 0; k < tri_row_.size(); ++k) {
     model_->matrix.add_entry(tri_row_[k], tri_col_[k], tri_value_[k]);
   }
-  model_->matrix.finalize();
+  model_->matrix.finalize(0.0);
   model_->hessian.reset(n, n);
   model_->hessian.finalize();
   finish_sc_sos();  // #754, lp_sos.cpp

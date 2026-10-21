@@ -450,7 +450,7 @@ void append_ordering_rows(Model* model, const std::vector<std::pair<Index, Index
     matrix.add_entry(old_rows + k, pairs[static_cast<std::size_t>(k)].first, 1.0);
     matrix.add_entry(old_rows + k, pairs[static_cast<std::size_t>(k)].second, -1.0);
   }
-  matrix.finalize();
+  matrix.finalize(0.0);
   model->matrix = std::move(matrix);
   model->resize_rows(old_rows + added);
   for (Index k = 0; k < added; ++k) {

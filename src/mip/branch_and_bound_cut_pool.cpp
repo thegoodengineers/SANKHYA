@@ -128,7 +128,7 @@ void BranchAndBound::remove_cut_rows(const std::vector<std::size_t>& positions,
       if (to >= 0) matrix.add_entry(to, j, view.values[k]);
     }
   }
-  matrix.finalize();
+  matrix.finalize(0.0);
   // Every row-indexed vector of the same length loses the same entries.
   const auto compact = [&](auto& values) {
     if (values.size() != rows_u) return;

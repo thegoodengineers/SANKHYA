@@ -218,7 +218,7 @@ Model NonlinearModel::solution_frame() const {
     for (Index k = 0; k < column.size; ++k)
       matrix.add_entry(column.rows[k], j, column.values[k]);
   }
-  matrix.finalize();
+  matrix.finalize(0.0);
   frame.matrix = std::move(matrix);
   return frame;
 }

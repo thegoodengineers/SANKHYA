@@ -80,7 +80,7 @@ constexpr std::size_t kSharpenCoordinates = 4;
       lower.add_entry(std::max(i, j), std::min(i, j), sense * column.values[k]);
     }
   }
-  lower.finalize();
+  lower.finalize(0.0);
   return lower;
 }
 

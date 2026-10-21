@@ -55,11 +55,11 @@ Model add_cutoff_row(const Model& model, double incumbent) {
   for (Index j = 0; j < cols; ++j) {
     const ColumnView view = m.matrix.column(j);
     for (Index k = 0; k < view.size; ++k) mat.add_entry(view.rows[k], j, view.values[k]);
-    if (std::fabs(m.col_cost[static_cast<std::size_t>(j)]) > tol::kZeroDrop) {
+    if (m.col_cost[static_cast<std::size_t>(j)] != 0.0) {
       mat.add_entry(old_rows, j, m.col_cost[static_cast<std::size_t>(j)]);
     }
   }
-  mat.finalize();
+  mat.finalize(0.0);
   m.matrix = std::move(mat);
   m.resize_rows(old_rows + 1);
   const auto row = static_cast<std::size_t>(old_rows);
