@@ -461,6 +461,13 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
       inner.set_bool("certified_gap", false);  // no recursion
       inner.set_bool("log_to_console", false);
       inner.set_string("algorithm", "dual-simplex");
+      // pilot87 (#1082): at the default tolerance the dual simplex finds the basis primal
+      // feasible at once (0 iterations) while its exact duals still fall 5.4e-06 short - the
+      // infeasibility is inside 1e-7. At kSafeBoundDualPhasePrimalTolerance it pivots on and
+      // the exact duals certify. Only the candidate basis moves; the bound stays exact.
+      inner.set_double("primal_feasibility_tolerance",
+                       std::min(options.get_double("primal_feasibility_tolerance"),
+                                tol::kSafeBoundDualPhasePrimalTolerance));
       inner.set_double("time_limit", budget.remaining());
       SolveControl control;
       control.start_col_status = current.col_status;

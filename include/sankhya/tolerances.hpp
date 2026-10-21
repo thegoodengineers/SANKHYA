@@ -865,6 +865,11 @@ inline constexpr int kSafeBoundPivotRounds = 8;
 /// duals are dual feasible but whose bound is above the target, each followed by its exact
 /// duals and more pivot rounds. An effort cap, like the rounds.
 inline constexpr int kSafeBoundDualPhases = 2;
+/// The primal feasibility tolerance of the dual phase's warm-started dual simplex (#1082):
+/// tighter than kPrimalFeasibility so that a basis feasible only to 1e-7 is pivoted on. It
+/// selects the candidate basis, never the bound, which is exact; the solve the user sees
+/// keeps primal_feasibility_tolerance. 1e-12 is the option's own lower limit.
+inline constexpr double kSafeBoundDualPhasePrimalTolerance = 1e-12;
 /// Bits the exact-dual refinement must have gained before its running approximation is
 /// handed back as a polished floating-point y (ExactDualBound::refined, #1082): a double
 /// carries 53, and the margin covers the error estimate's slack.
