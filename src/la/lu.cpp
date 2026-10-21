@@ -429,6 +429,7 @@ void SparseLu::solve_base(double* b, bool try_hyper) const {
     apply_etas(b);
     return;
   }
+  if (try_hyper && ft_active_ && ft_solve_hyper(b)) return;
   forward_l(b);
 
   if (ft_active_) {
@@ -587,6 +588,7 @@ void SparseLu::apply_transposed_l() const {
 void SparseLu::solve_transpose_base(double* b, bool try_hyper) const {
   if (m_ == 0) return;
 
+  if (ft_active_ && try_hyper && ft_solve_transpose_hyper(b)) return;
   if (ft_active_) {
     // Gather via pivot_col_ exactly as below, run the Forrest-Tomlin forward substitution in
     // place of forward_u_transposed(), then the row-eta file NEWEST first (the reverse of

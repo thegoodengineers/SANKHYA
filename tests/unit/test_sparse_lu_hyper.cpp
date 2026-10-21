@@ -206,6 +206,64 @@ TEST(SparseLuHyper, SolvesAreTheFullLoopsToTheBitOnFreshAndUpdatedFactors) {
   EXPECT_GT(hyper_btrans, 500);
 }
 
+TEST(SparseLuHyper, ForrestTomlinSolvesAreTheFullLoopsToTheBit) {
+  // The same claim over an active Forrest-Tomlin factorization (#1042): L, the row etas and
+  // the folded U, run over the reach, give the full loops' answers to the bit, after every
+  // update of a sequence. Both copies take the same updates through the full loops' alpha.
+  std::mt19937 rng(1042);
+  std::int64_t hyper_ftrans = 0;
+  std::int64_t hyper_btrans = 0;
+  for (int trial = 0; trial < 30; ++trial) {
+    std::uniform_int_distribution<Index> size(80, 600);
+    const Index m = size(rng);
+    const Basis basis = random_basis(&rng, m, trial % 3 == 0 ? 1 : 3);
+    SparseLu full;
+    SparseLu hyper;
+    full.use_forrest_tomlin(true);
+    hyper.use_forrest_tomlin(true);
+    hyper.use_hyper_sparse(true);
+    const std::vector<LuColumn> columns = basis.columns();
+    ASSERT_TRUE(full.factorize(columns, m, tol::kPivotTolerance, tol::kMarkowitzThreshold));
+    ASSERT_TRUE(hyper.factorize(columns, m, tol::kPivotTolerance, tol::kMarkowitzThreshold));
+    const std::string tag = "trial " + std::to_string(trial) + ", m " + std::to_string(m);
+    for (int update = 0; update < 24; ++update) {
+      const std::vector<double> entering = sparse_vector(&rng, m, 4);
+      std::vector<double> alpha = entering;
+      full.solve(alpha.data());
+      // Leave on alpha's largest entry, as a ratio test would allow: a random row of a
+      // sparse alpha is usually zero there, and the update would refuse it.
+      Index leaving = 0;
+      for (Index i = 1; i < m; ++i) {
+        if (std::fabs(alpha[static_cast<std::size_t>(i)]) >
+            std::fabs(alpha[static_cast<std::size_t>(leaving)])) {
+          leaving = i;
+        }
+      }
+      const bool a = full.update(leaving, alpha.data());
+      const bool b = hyper.update(leaving, alpha.data());
+      ASSERT_EQ(a, b) << tag;
+      if (!a) break;
+      ASSERT_TRUE(hyper.using_forrest_tomlin()) << tag;
+      for (int k = 0; k < 4; ++k) {
+        std::vector<double> unit(static_cast<std::size_t>(m), 0.0);
+        unit[static_cast<std::size_t>(sample_rows(&rng, m, 1)[0])] = 1.0;
+        expect_same_solves(full, hyper, unit, nullptr, tag + " unit after updates");
+        expect_same_solves(full, hyper, sparse_vector(&rng, m, 3), nullptr,
+                           tag + " sparse after updates");
+      }
+      expect_same_solves(full, hyper, sparse_vector(&rng, m, m / 2), nullptr,
+                         tag + " dense after updates");
+    }
+    hyper_ftrans += hyper.solve_stats().ftran_hyper;
+    hyper_btrans += hyper.solve_stats().btran_hyper;
+    EXPECT_EQ(full.solve_stats().ftran_hyper, 0);
+  }
+  std::cout << "[ hyper ] Forrest-Tomlin symbolic-reach solves: " << hyper_ftrans << " FTRAN, "
+            << hyper_btrans << " BTRAN\n";
+  EXPECT_GT(hyper_ftrans, 500);
+  EXPECT_GT(hyper_btrans, 500);
+}
+
 TEST(SparseLuHyper, UpdateOverTheSupportIsTheFullUpdateToTheBit) {
   // The dual loop hands update() alpha's support (#1006, finding 4). The eta it records
   // must be the one the pass over all m positions records, so the solves through the two
