@@ -320,11 +320,6 @@ TEST(CApiStructuralWarm, ManyRandomEditsThroughTheCApiGiveTheVerifiedColdAnswer)
                         warm.message.find("#883") == std::string::npos
                     ? 1
                     : 0;
-      if (warm.iterations >= cold.iterations && compared < 12) {
-        std::printf("DIAG %s step %d warm %lld cold %lld: %s\n", name, step,
-                    static_cast<long long>(warm.iterations),
-                    static_cast<long long>(cold.iterations), warm.message.c_str());
-      }
       warm_fewer += warm.iterations < cold.iterations ? 1 : 0;
       warm_pivots += warm.iterations;
       cold_pivots += cold.iterations;
@@ -352,7 +347,10 @@ TEST(CApiStructuralWarm, ManyRandomEditsThroughTheCApiGiveTheVerifiedColdAnswer)
   EXPECT_GE(optimal_pairs, 50);
   EXPECT_GE(std::min({added_cols, added_rows, removed_cols, removed_rows}), 10);
   EXPECT_GE(4 * mapped, 3 * optimal_pairs) << "the warm start should seldom fall back";
-  EXPECT_LT(warm_pivots, cold_pivots);
+  // A basis that loses its names on a removal still re-solves to the right answer, from
+  // half a basis: only the pivot counts catch it (it took more pivots than cold, #913).
+  EXPECT_GT(2 * warm_fewer, optimal_pairs) << "warm should take fewer pivots on most edits";
+  EXPECT_LT(2 * warm_pivots, cold_pivots);
 }
 
 TEST(CApiStructuralWarm, DeletingRowsAndColumnsKeepsTheRestOfAReadModel) {

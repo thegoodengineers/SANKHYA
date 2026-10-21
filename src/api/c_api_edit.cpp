@@ -67,11 +67,15 @@ std::vector<int> renumbering(int size, const std::vector<int>& removed) {
 
 template <typename T>
 void erase_positions(std::vector<T>* values, const std::vector<int>& map) {
-  std::size_t out = 0;
+  // The new position is map[i] itself. Nothing moves before the first removed entry, and
+  // nothing may: a std::string moved onto itself is left empty, which once cost every name
+  // ahead of a removed row and with it the name-mapped warm start.
   for (std::size_t i = 0; i < values->size(); ++i) {
-    if (map[i] >= 0) (*values)[out++] = std::move((*values)[i]);
+    const auto to = static_cast<std::size_t>(map[i]);
+    if (map[i] >= 0 && to != i) (*values)[to] = std::move((*values)[i]);
   }
-  values->resize(out);
+  values->resize(static_cast<std::size_t>(
+      std::count_if(map.begin(), map.end(), [](int k) { return k >= 0; })));
 }
 
 /// Re-key `entries` through `first_map` on the first index and `second_map` on the second
