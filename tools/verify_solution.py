@@ -36,6 +36,7 @@ from verify_solution_mps import Model, parse_mps
 from verify_solution_safe_bound import verify_safe_bound
 from verify_solution_sol import Solution, parse_sol
 import verify_solution_sos
+import verify_solution_conic
 from verify_solution_exact_farkas import check_exact_repair_farkas
 from verify_solution_sensitivity import check_certified as check_certified_sensitivity
 
@@ -275,6 +276,10 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
     report.check(worst_activity_gap <= 1e-6, "activity agreement",
                  f"max |ours - solver's| = {worst_activity_gap:.3e}")
 
+    # ---- Second-order cones (#755), exactly ------------------------------------------------
+    if model.cones:
+        verify_solution_conic.check_primal(model, x, report, primal_tol)
+
     # ---- The ray, when the verdict was unbounded -------------------------------------------
     # Reached only after the point above has been checked feasible, which is the other half
     # of the claim: a ray from an infeasible point proves nothing at all.
@@ -310,7 +315,11 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         return report
 
     combinatorial = bool(model.semicontinuous or model.sos)
-    if integer_columns or combinatorial or model.qc_entries:
+    # The conic interior point (#755) reports the multipliers of its quadratic rows and the
+    # duals of its cones, so its answer is held to the KKT conditions below; the global
+    # method's (#514) is judged by the bound it proved.
+    conic = solution.header.get("algorithm", "").startswith("conic")
+    if integer_columns or combinatorial or ((model.qc_entries or model.cones) and not conic):
         # LP duality does not apply to a MILP: any reported duals belong to some node
         # relaxation, not to the integer problem. Nor to a model with quadratic rows, whose
         # optimality the global method proves by a bound (#514). What CAN be checked is the
@@ -362,7 +371,7 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         return report
 
     # The Neumaier-Shcherbina bound behind an optimal LP, re-derived exactly (#763).
-    if not model.hessian:
+    if not model.hessian and not model.qc_entries and not model.cones:
         verify_safe_bound(model, solution, objective, report)
 
     # ---- Dual feasibility ----------------------------------------------------------------
@@ -396,15 +405,34 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         if 0.0 < largest_cost < 1.0:
             dual_floor = largest_cost
 
-    if model.hessian:
+    if model.hessian or conic:
         # The QP engine is a first-order method that carries no basis and reports no reduced
         # costs, so there is nothing of the solver's to cross-check here. d is DERIVED from
         # (model, x, y) instead - which is strictly the stronger test, since the sign and
         # complementarity checks below then price against a vector the solver never chose.
-        d = [cost[j] - sum(value * y[i] for i, value in model.entries[j])
-             for j in range(model.num_cols)]
-        report.note("reduced costs",
-                    "derived from c + Qx - A^T y; the QP engine reports none to compare")
+        # A quadratic row (#755) prices through its gradient a + 2 Q x: the extra term is
+        # sum_i y_i * 2 Q_i x, from the QCMATRIX entries themselves.
+        row_gradient = (verify_solution_conic.row_gradients(model, x, y) if model.qc_entries
+                        else [0.0] * model.num_cols)
+        derived = [cost[j] - sum(value * y[i] for i, value in model.entries[j]) - row_gradient[j]
+                   for j in range(model.num_cols)]
+        if conic:
+            # The conic engine does report reduced costs (a cone's dual variables), and they
+            # must be the derived ones.
+            worst, where = 0.0, ""
+            for j, name in enumerate(model.col_names):
+                scale = max(dual_floor, abs(cost[j]), abs(row_gradient[j]),
+                            max((abs(value * y[i]) for i, value in model.entries[j]), default=0.0))
+                difference = abs(derived[j] - d[j]) / scale
+                if difference > worst:
+                    worst, where = difference, name
+            report.check(worst <= 1e-6, "reduced costs",
+                         f"max |c + Qx - A^T y - sum y_i grad_i - d| = {worst:.3e} relative to "
+                         "its terms" + (f" on {where}" if where else ""))
+        else:
+            report.note("reduced costs",
+                        "derived from c + Qx - A^T y; the QP engine reports none to compare")
+        d = derived
     else:
         # Reduced costs must satisfy d = c - A^T y. Recomputing catches a solver that reports
         # a dual vector inconsistent with the reduced costs it also reports.
@@ -451,8 +479,12 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
 
     # Scaled like the reduced costs above: a sign violation of 6 on a reduced cost whose
     # terms are of order 1e+07 is the precision floor, not a wrong sign.
+    # A cone's columns are priced by the cone, not by their bounds: checked apart, below.
+    in_cone = verify_solution_conic.cone_columns(model)
     worst, where, worst_abs = 0.0, "", 0.0
     for j, name in enumerate(model.col_names):
+        if j in in_cone:
+            continue
         violation = sign_violation(d[j], x[j], model.col_lower[j], model.col_upper[j])
         scale = max(dual_floor, abs(cost[j]),
                     max((abs(value * y[i]) for i, value in model.entries[j]), default=0.0))
@@ -524,7 +556,7 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         if product > worst:
             worst, where = product, name
     for j, name in enumerate(model.col_names):
-        if model.col_lower[j] == model.col_upper[j]:
+        if model.col_lower[j] == model.col_upper[j] or j in in_cone:
             continue
         product = relative(d[j], x[j], model.col_lower[j], model.col_upper[j], abs(x[j]))
         if product > worst:
@@ -532,6 +564,13 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
     report.check(worst <= 1e-6, "complementary slackness",
                  f"worst |multiplier| * slack = {worst:.3e} relative to its magnitudes"
                  + (f" on {where}" if where else ""))
+    # A cone's columns are priced by the cone's dual and their own bounds' multipliers,
+    # which the decomposition separates; their split feeds strong duality below.
+    cone_mu: dict[int, float] = {}
+    cone_complementarity = 0.0
+    if model.cones:
+        cone_mu, cone_complementarity = verify_solution_conic.check_dual(
+            model, x, d, report, dual_tol, primal_tol)
 
     # ---- The basis (#218) -----------------------------------------------------------------
     # A simplex answer carries a status per column and per row. When it does, it has to be a
@@ -591,8 +630,10 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
         dual_objective_min_space += bound_contribution(
             y[i], model.row_lower[i], model.row_upper[i])
     for j in range(model.num_cols):
+        # A cone column contributes only its bound multiplier: the cone's own share of the
+        # Lagrangian is -s_K'x_K, zero at a complementary point and accounted for below.
         dual_objective_min_space += bound_contribution(
-            d[j], model.col_lower[j], model.col_upper[j])
+            cone_mu.get(j, d[j]), model.col_lower[j], model.col_upper[j])
 
     # THE GAP IS AN IDENTITY, NOT A MEASUREMENT OF ITS OWN. With d = c - A^T y and the
     # activities recomputed from x, primal - dual is exactly the sum over every column and
@@ -630,15 +671,25 @@ def verify(model: Model, solution: Solution, primal_tol: float, dual_tol: float,
     for j in range(model.num_cols):
         scale_j = max(dual_floor, abs(cost[j]),
                       max((abs(value * y[i]) for i, value in model.entries[j]), default=0.0))
-        accounted += share(d[j], x[j], model.col_lower[j], model.col_upper[j], scale_j)
+        # A cone column's bound multiplier explains its share like any column's; the cone part
+        # explains only the complementarity product the cone checks accepted, nothing more.
+        accounted += share(cone_mu.get(j, d[j]), x[j], model.col_lower[j], model.col_upper[j],
+                           scale_j)
+    accounted += cone_complementarity
     for i in range(model.num_rows):
         accounted += share(y[i], activity[i], model.row_lower[i], model.row_upper[i], dual_norm)
     # For a QP the bound contributions sum, at a KKT point, to (c + Qx)'x = c'x + x'Qx, which
     # overshoots the primal objective c'x + 0.5 x'Qx by exactly 0.5 x'Qx. Subtracting it is
     # the Dorn dual of a convex QP, and it makes the gap below a real optimality test rather
     # than an identity that would fail by a fixed amount on every quadratic instance.
-    dual_objective = (sigma * dual_objective_min_space + model.objective_offset
-                      - model.quadratic_objective(x))
+    # A quadratic row (#755) prices through its gradient a + 2 Q_r x, so its bound
+    # contribution y_r * bound_r carries y_r (a'x + 2 x'Q_r x) = y_r (bound_r + x'Q_r x) at a
+    # tight row, one x'Q_r x too many: it is added back, in minimization space.
+    quadratic_rows = 0.0
+    for (i, a, b), value in model.qc_entries.items():
+        quadratic_rows += y[i] * value * x[a] * x[b]
+    dual_objective = (sigma * (dual_objective_min_space + quadratic_rows)
+                      + model.objective_offset - model.quadratic_objective(x))
 
     gap = abs(objective - dual_objective)
     scale = max(1.0, abs(objective))

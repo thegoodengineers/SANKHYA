@@ -5,7 +5,8 @@
 Two bench.yml runs of the same suite land on whatever CPU the pool hands out (an EPYC 9V45
 for one leg and a 7763 for the other, on the RINS A/B), and the time comparison is spoiled.
 This runs both arms in the same process on the same machine: for every instance, the runner
-(netlib.py, kennington.py, maros_meszaros.py, mittelmann.py, miplib.py or pooling.py) is
+(netlib.py, kennington.py, maros_meszaros.py, mittelmann.py, miplib.py, pooling.py or
+refinery_lp.py) is
 called once for the `off` arm (the shared --solver-option only) and once for the `on` arm
 (plus --option), the order flipping from one instance to the next so a drift in the machine
 lands on both arms.
@@ -42,12 +43,17 @@ MANIFESTS = {
     "mittelmann.py": "data/mittelmann/reference.json",
     "miplib.py": "data/miplib/reference.json",
     "pooling.py": "data/pooling/reference.json",
+    "refinery_lp.py": "data/refinery/manifest.json",
 }
 
 
 def instances_of(runner: str) -> list[str]:
     path = REPO_ROOT / MANIFESTS[runner]
-    return sorted(json.loads(path.read_text(encoding="utf-8"))["instances"])
+    instances = json.loads(path.read_text(encoding="utf-8"))["instances"]
+    if runner == "refinery_lp.py":  # the refinery manifest lists its MILPs too
+        instances = {name: entry for name, entry in instances.items()
+                     if entry.get("kind") == "lp"}
+    return sorted(instances)
 
 
 def main() -> int:
@@ -64,6 +70,8 @@ def main() -> int:
     parser.add_argument("--instances", nargs="*")
     parser.add_argument("--time-limit", type=float, default=None)
     parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument("--seeds", type=int, default=None,
+                        help="miplib.py only: its --seeds, the seeds each arm runs per instance")
     parser.add_argument("--machine", required=True)
     parser.add_argument("--out-prefix", required=True)
     args = parser.parse_args()
@@ -88,6 +96,8 @@ def main() -> int:
                         else ["--machine", args.machine])
                 if args.time_limit is not None:
                     cmd += ["--time-limit", f"{args.time_limit:g}"]
+                if args.seeds is not None and args.runner == "miplib.py":
+                    cmd += ["--seeds", str(args.seeds)]
                 for option in arms[arm]:
                     cmd += ["--solver-option", option]
                 print(f"== r{repeat} {name} {arm}", flush=True)

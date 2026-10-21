@@ -16,6 +16,7 @@
 #include "nlp/nlp_problem.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
+#include "util/threads.hpp"
 
 namespace sankhya::nlp {
 namespace {
@@ -213,6 +214,7 @@ Solution solve_nlp(const NonlinearModel& model, const Options& options, SolveCon
   Logger logger(options.get_bool("log_to_console") ? stdout : nullptr);
   LogLevel level = LogLevel::kInfo;
   if (parse_log_level(options.get_string("log_level"), &level)) logger.set_level(level);
+  apply_thread_option(options, logger);  // this path bypasses solve() (#514)
   const std::string problem = model.validate();
   if (!problem.empty()) {
     Solution out;

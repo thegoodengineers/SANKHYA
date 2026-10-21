@@ -37,6 +37,9 @@ class MpsParser {
   /// Read QCMATRIX sections into `sink` instead of refusing them (#514). Without a sink a
   /// QCMATRIX section is refused by name, which is what read_mps() wants.
   void collect_quadratic_rows(std::vector<QuadraticTerm>* sink) noexcept { qc_sink_ = sink; }
+  /// Read CSECTION sections (the MOSEK MPS cone extension, #755) into `sink` instead of
+  /// refusing them.
+  void collect_cones(std::vector<Cone>* sink) noexcept { cone_sink_ = sink; }
 
  private:
   // ---- tokenization -------------------------------------------------------------------
@@ -51,6 +54,8 @@ class MpsParser {
   [[nodiscard]] bool do_quadratic(std::string* error);  // mps_quadratic.cpp
   [[nodiscard]] bool begin_qcmatrix(std::string* error);
   [[nodiscard]] bool do_qcmatrix(std::string* error);
+  [[nodiscard]] bool begin_csection(std::string* error);  // mps_quadratic.cpp
+  [[nodiscard]] bool do_csection(std::string* error);
   // Special ordered sets and semi-continuous columns (#754), in mps_sos.cpp.
   [[nodiscard]] bool do_sos(std::string* error);
   /// A COLUMNS MARKER record that opens ('SOSORG') or closes ('SOSEND') a set in the marker
@@ -117,6 +122,8 @@ class MpsParser {
   std::vector<QuadraticTerm> qc_entries_;
   std::set<std::tuple<Index, Index, Index>> qc_seen_entries_;
   std::unordered_set<Index> qc_rows_seen_;
+  // CSECTION (#755): the cones, the one being filled is cone_sink_->back().
+  std::vector<Cone>* cone_sink_ = nullptr;
 
   // Semi-continuous columns (the SC bound) and special ordered sets (#754). sos_open_ is the
   // set the SOS / SETS section is filling, or the marker form's open set; -1 when none.

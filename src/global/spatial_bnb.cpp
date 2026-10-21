@@ -48,6 +48,7 @@
 #include "sankhya/solve_control.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
+#include "util/threads.hpp"
 
 namespace sankhya {
 namespace global {
@@ -541,6 +542,13 @@ Solution Search::finish(LimitReason stopped_by) {
 }  // namespace global
 
 Solution solve_global(const QcqpModel& model, const Options& options, SolveControl* control) {
+  // This path reaches the simplex without solve(), so the `threads` option is applied here:
+  // before it was not, and every node LP ran its column loops on a team of one thread per
+  // core whatever the option said (#514).
+  {
+    Logger silent(nullptr);
+    apply_thread_option(options, silent);
+  }
   const std::string problem = model.validate();
   if (!problem.empty()) {
     Solution solution;

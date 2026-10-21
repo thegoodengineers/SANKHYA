@@ -84,6 +84,7 @@
 #include "../util/profiler.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
+#include "util/threads.hpp"
 
 namespace sankhya::detail {
 
@@ -460,9 +461,11 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
     return;
   }
 
-  // Otherwise a gather per column, deterministic at any thread count (#57).
+  // Otherwise a gather per column, deterministic at any thread count (#57), on a team only
+  // when the loop is worth one (#514).
 #ifdef SANKHYA_HAVE_OPENMP
-#pragma omp parallel for schedule(static)
+  const bool team = omp_worth_it(model_.num_nonzeros() + total_);
+#pragma omp parallel for schedule(static) if (team)
 #endif
   for (Index k = 0; k < total_; ++k) {
     const auto u = static_cast<std::size_t>(k);
@@ -553,7 +556,10 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   dual_row_rejected_.assign(static_cast<std::size_t>(m_), 0);
   dual_rows_rejected_now_ = 0;
   by_row_.build(model_.matrix);  // once per solve; the pattern never changes (#243)
-  pivot_row_single_thread_ = options_.get_int("threads") == 1;
+  // Serial also when the gather would not get a team (#514): at threads > 1 a small model
+  // otherwise kept the column gather, which reads all of A, for a team it never forks.
+  pivot_row_single_thread_ =
+      options_.get_int("threads") == 1 || !omp_worth_it(model_.num_nonzeros() + total_);
 #ifndef SANKHYA_HAVE_OPENMP
   pivot_row_single_thread_ = true;  // no thread pool: the gather is serial whatever was asked
 #endif

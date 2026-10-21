@@ -18,6 +18,7 @@
 #include "sankhya/logging.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
+#include "util/threads.hpp"
 
 namespace sankhya::nlp {
 namespace {
@@ -96,6 +97,7 @@ Solution solve_minlp(const NonlinearModel& model, const Options& options,
                      SolveControl* control) {
   const Timer timer;
   Logger logger(options.get_bool("log_to_console") ? stdout : nullptr);
+  apply_thread_option(options, logger);  // this path bypasses solve() (#514)
   LogLevel level = LogLevel::kInfo;
   if (parse_log_level(options.get_string("log_level"), &level)) logger.set_level(level);
   Solution out;

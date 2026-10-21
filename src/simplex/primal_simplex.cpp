@@ -68,6 +68,7 @@
 
 #include "../la/lu.hpp"
 #include "../la/scaling.hpp"
+#include "util/threads.hpp"
 
 namespace sankhya {
 
@@ -736,9 +737,10 @@ void Simplex::compute_reduced_costs(bool phase_one) {
   lu_.solve_transpose(y_.data());
 
   // One reduced cost per column, each written by one thread and read by none: a gather,
-  // deterministic at any thread count (#57).
+  // deterministic at any thread count (#57). A team only when the loop is worth one (#514).
 #ifdef SANKHYA_HAVE_OPENMP
-#pragma omp parallel for schedule(static)
+  const bool team = omp_worth_it(model_.num_nonzeros() + total_);
+#pragma omp parallel for schedule(static) if (team)
 #endif
   for (Index k = 0; k < total_; ++k) {
     if (basis_position_[static_cast<std::size_t>(k)] >= 0) {

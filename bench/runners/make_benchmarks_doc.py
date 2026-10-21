@@ -39,6 +39,7 @@ import pooling_doc  # the non-convex pooling section (#516), kept in its own fil
 import miplib_ab_doc  # #504 tier 2 over seeds, and the #501 and #506 A/Bs
 import miplib3_doc  # section 2a, the classic MIPLIB 3 set beside MIPLIB 2017 (#761)
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
+import qplib_qcqp_doc  # the convex QCQP section (#755), kept in its own file
 import qplib_all_doc  # every QPLIB instance through the reader and dispatcher (#835)
 import stress_doc  # the stress set, badly scaled Netlib and adversarial LPs (#762)
 import gpu_ab_doc  # 1g.8 and 1g.9, the device A/Bs of #508 and #478
@@ -2942,6 +2943,8 @@ def main() -> int:
                  or newest("qplib-small-*.csv", prefix="qplib-small"))
     # Every QPLIB instance (#835): qplib-all-<sha>.csv; a subset is qplib-all-partial-<sha>.csv.
     qplib_all_csv = newest("qplib-all-*.csv", prefix="qplib-all")
+    # The convex QCQPs (#755): qplib-qcqp-<sha>.csv; a subset is qplib-qcqp-partial-<sha>.csv.
+    qplib_qcqp_csv = newest("qplib-qcqp-*.csv", prefix="qplib-qcqp")
     gpu_pdlp_csv = newest("gpu-pdlp-*.csv")
     # The nonlinear sets (NLP stages 2-3): nlp_bench.py names its CSV after the data
     # directory, nlp-<set>-<sha>[-<host>].csv, so each set has its own pattern.
@@ -3410,6 +3413,16 @@ quadratically constrained instances too, fetched and converted to QPS (integer m
 QPLIB's published point, then solved by `bench/runners/qplib_all.py` under the CLI's defaults.
 
 {qplib_all_doc.section(qplib_all_csv)}
+### The convex QCQPs - the conic interior point against the global method (#755)
+
+QPLIB's convex continuous instances with convex quadratic constraints (PROBTYPE `?CD`),
+selected from the listing by `bench/runners/fetch_qplib.py --qcqp` into
+`data/qplib/reference_qcqp.json`. Each is solved twice by `bench/runners/qplib_qcqp.py`: by the
+default path, which classifies every quadratic row convex by the LDL^T test and solves the
+model as a second-order cone program (`src/conic`), and by `nonconvex=global`, the spatial
+branch and bound of #514.
+
+{qplib_qcqp_doc.section(qplib_qcqp_csv)}
 ---
 
 ## 2e. Nonlinear programs - Hock-Schittkowski, and convex MINLPLib

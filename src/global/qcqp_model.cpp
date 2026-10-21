@@ -42,6 +42,24 @@ std::string QcqpModel::validate() const {
                          term.row);
     }
   }
+  std::vector<char> in_cone(static_cast<std::size_t>(n), 0);
+  for (std::size_t k = 0; k < cones.size(); ++k) {
+    const Cone& cone = cones[k];
+    const std::size_t least = cone.kind == Cone::Kind::kRotated ? 3 : 2;
+    if (cone.columns.size() < least) {
+      return fmt::format("cone {} has {} column(s); a {} cone needs at least {}", k,
+                         cone.columns.size(),
+                         cone.kind == Cone::Kind::kRotated ? "rotated" : "quadratic", least);
+    }
+    for (const Index j : cone.columns) {
+      if (j < 0 || j >= n)
+        return fmt::format("cone {} names column {}, outside [0, {})", k, j, n);
+      if (in_cone[static_cast<std::size_t>(j)]) {
+        return fmt::format("column {} is in two cones (or twice in cone {})", j, k);
+      }
+      in_cone[static_cast<std::size_t>(j)] = 1;
+    }
+  }
   return {};
 }
 
