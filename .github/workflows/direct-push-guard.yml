@@ -29,7 +29,7 @@ permissions:
 jobs:
   came-from-a-pull-request:
     name: main only advances through a PR
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check this commit belongs to a merged pull request
         env:

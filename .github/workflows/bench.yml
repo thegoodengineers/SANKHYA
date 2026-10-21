@@ -74,7 +74,7 @@ permissions:
 jobs:
   bench:
     name: ${{ inputs.suite }} at ${{ inputs.ref }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     env:
       SUITE: ${{ inputs.suite }}
@@ -148,7 +148,7 @@ jobs:
           mkdir -p "$out/results"
           cpu="$(lscpu | sed -n 's/^Model name: *//p' | head -1)"
           ram="$(free -g | awk '/^Mem:/ {print $2}')"
-          machine="github-actions ubuntu-latest $(nproc) vCPU ${cpu} ${ram} GiB RAM"
+          machine="github-actions ubuntu-24.04 $(nproc) vCPU ${cpu} ${ram} GiB RAM"
           sha="$(python3 -c 'import sys; sys.path.insert(0, "bench/runners"); import stamp; print(stamp.binary_commit("build/sankhya"))')"
           echo "machine $machine"
           echo "binary  $sha"
@@ -207,9 +207,9 @@ jobs:
               # the kind given here.
               miplib-tier1)
                 python3 bench/runners/miplib.py --binary build/sankhya --tier 1 \
-                  --machine-kind "github-actions ubuntu-latest" ${limit[@]+"${limit[@]}"} "$@" ;;
+                  --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} "$@" ;;
               head-to-head-maros-meszaros)
-                python3 bench/runners/compare.py --suite maros-meszaros                   --sankhya-binary build/sankhya --machine-kind "github-actions ubuntu-latest"                   ${limit[@]+"${limit[@]}"} "$@" ;;
+                python3 bench/runners/compare.py --suite maros-meszaros                   --sankhya-binary build/sankhya --machine-kind "github-actions ubuntu-24.04"                   ${limit[@]+"${limit[@]}"} "$@" ;;
               # #514: the pooling set (committed in data/pooling), and the same 39 runs with
               # every global bound certificate checked by tools/verify_global_certificate.py.
               pooling)
@@ -218,7 +218,7 @@ jobs:
                 python3 bench/runners/pooling.py --binary build/sankhya --certificate                   ${limit[@]+"${limit[@]}"} "$@" ;;
               refinery)
                 python3 bench/runners/compare.py --suite refinery --sankhya-binary build/sankhya \
-                  --machine-kind "github-actions ubuntu-latest" ${limit[@]+"${limit[@]}"} "$@" ;;
+                  --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} "$@" ;;
               # #913: options="--algorithm pdhg" for the PDHG warm start. Runs through the
               # Python bindings, which load build/libsankhya; it takes no time limit.
               # One job, one machine, one binary: both arms of an option A/B interleaved
