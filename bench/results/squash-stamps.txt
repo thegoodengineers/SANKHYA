@@ -25,3 +25,4 @@ ebafccf 0bbcb68 miplib-419-aggregation-baseline.csv and miplib-419-aggregation-o
 bc54839 1adbf77 ipm-dense-ab-{mittelmann,netlib-full}-{off,on}-bc54839.csv, run on the #467 branch (#936); 1adbf77 is its squash merge
 bcf2e42 37f4c56 engine-selection-bcf2e42.csv, the #477 training grid, run on the branch (#941); 37f4c56 is its squash merge
 ab04612 37f4c56 engine-tree-ab-netlib-full-{rules,learned}-ab04612.csv, run on the #477 branch (#941); 37f4c56 is its squash merge
+5e1111b 2fabc9de option-ab-{netlib,kennington,refinery}-crossover-budget-5e1111b.csv, the crossover pivot budget A/B (#1072), run on the #1080 branch; 2fabc9de is its squash merge
