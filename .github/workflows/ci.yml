@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SANKHYA - continuous integration.
 #
-# ubuntu-latest is the authority on -Werror cleanliness and on the sanitizer runs. The MinGW
+# ubuntu-24.04 is the authority on -Werror cleanliness and on the sanitizer runs. It is pinned:
+# ubuntu-latest moved to 26.04 (GCC 15) on 20 Oct 2026, which our tests do not yet pass. The MinGW
 # Windows build is a developer convenience and is not gated here; the MSVC leg is, because
 # nvcc on Windows takes MSVC as its host compiler and the Windows CUDA archive needs it.
 #
@@ -38,7 +39,7 @@ jobs:
     # reductions at four threads (PdhgParallelSpmv.TheVectorUpdates*) are in it. About 26
     # minutes at d09dd057; shard it before it passes 40.
     name: TSan (MILP tree)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +75,7 @@ jobs:
     # GCC equivalent, so this job installs clang rather than adding it to every build - the
     # other jobs stay on GCC, which is what ENGINEERING_RULES.md holds to -Werror cleanliness.
     name: Fuzz the model readers
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -147,7 +148,7 @@ jobs:
 
   build-and-test:
     name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The suites that start their own threads, or assert on how threads shared work, and
     # RunOrderDeterminism, which sets a time limit from a solve it just timed (#909). They run
     # after the parallel set, one at a time (see the Test step for why). Named once here
@@ -861,7 +862,7 @@ jobs:
 
   benchmarks:
     name: netlib benchmark
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -937,7 +938,7 @@ jobs:
     # shares no code with the solver and re-derives the answer from the original file, so its
     # rejection means the solution does not hold together on its own terms.
     name: netlib medium (verifier gate)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -976,7 +977,7 @@ jobs:
 
   provenance:
     name: provenance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -1034,7 +1035,7 @@ jobs:
 
   reproduce:
     name: fresh-machine reproduction
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # THE POINT OF THIS JOB (#73). The acceptance list asks for the evidence chain to be
       # verified "on a machine that has never built this project". A hosted runner is exactly
@@ -1171,7 +1172,7 @@ jobs:
     # The CPU-only jobs above are the authoritative correctness gate; this job is the
     # authoritative "the CUDA code compiles" gate.
     name: CUDA build (compile only, no GPU runner)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
       image: nvidia/cuda:12.6.0-devel-ubuntu22.04
     steps:
@@ -1208,7 +1209,7 @@ jobs:
 
   format:
     name: clang-format
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       # Pinned via pip rather than apt: clang-format's output changes between major versions,
@@ -1229,7 +1230,7 @@ jobs:
     # a renderer's layout can change between versions and the comparison is exact. The
     # fresh render is also uploaded, and release.yml attaches the committed files.
     name: jury report PDF and deck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
