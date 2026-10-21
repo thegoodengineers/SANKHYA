@@ -337,6 +337,31 @@ TEST(CApi, RejectsAnOptionValueOutsideItsDeclaredRange) {
   sankhya_options_free(options);
 }
 
+TEST(CApi, EverySetterFoldsTheNameAndNeverAborts) {
+  // The existence check folds a name's case and trims it, so every setter must too: the bool
+  // setter used to hand "Log_To_Console" to the asserting set_bool() and abort the process.
+  sankhya_options* options = sankhya_options_create();
+  ASSERT_NE(options, nullptr);
+  EXPECT_EQ(sankhya_options_set_bool(options, "Log_To_Console", 0), SANKHYA_OK)
+      << sankhya_last_error();
+  EXPECT_EQ(sankhya_options_set_int(options, " Threads ", 2), SANKHYA_OK)
+      << sankhya_last_error();
+  EXPECT_EQ(sankhya_options_set_double(options, "Primal_Feasibility_Tolerance", 1e-9),
+            SANKHYA_OK)
+      << sankhya_last_error();
+  EXPECT_EQ(sankhya_options_set_string(options, "ALGORITHM", "simplex"), SANKHYA_OK)
+      << sankhya_last_error();
+
+  // A refused value under a mixed-case name is an error code, not an abort.
+  EXPECT_EQ(sankhya_options_set_int(options, "THREADS", -1), SANKHYA_ERROR_OPTION);
+  EXPECT_EQ(sankhya_options_set_double(options, "Primal_Feasibility_Tolerance", 1.0),
+            SANKHYA_ERROR_OPTION);
+  EXPECT_EQ(sankhya_options_set_string(options, "Algorithm", "no_such_engine"),
+            SANKHYA_ERROR_OPTION);
+  EXPECT_EQ(sankhya_options_set_bool(options, "Threads", 1), SANKHYA_ERROR_OPTION);
+  sankhya_options_free(options);
+}
+
 TEST(CApi, SolvesAMilpAndReportsIntegrality) {
   //   maximise x + y   s.t.  2x + 2y <= 3,  x, y in {0, 1}
   // The relaxation gives x = y = 0.75 for 1.5; the integer optimum is any single unit, 1.

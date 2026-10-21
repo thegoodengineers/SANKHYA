@@ -460,8 +460,13 @@ sankhya_status sankhya_options_set_bool(sankhya_options* options, const char* na
   }
   const sankhya_status check = check_option(name, sankhya::OptionType::Bool);
   if (check != SANKHYA_OK) return check;
+  // Through the text path, which folds the name's case and trims it as check_option() does;
+  // the asserting set_bool() takes the registry spelling only and aborts on "Log_To_Console".
   return guarded([&]() -> sankhya_status {
-    options->options.set_bool(name, value != 0);
+    std::string error;
+    if (!options->options.set_from_string(name, value != 0 ? "true" : "false", &error)) {
+      return fail(SANKHYA_ERROR_OPTION, error);
+    }
     return ok();
   });
 }
