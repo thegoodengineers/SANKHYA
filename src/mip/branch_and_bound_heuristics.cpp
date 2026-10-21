@@ -540,9 +540,9 @@ void BranchAndBound::run_feasibility_jump(const std::vector<double>* from) {
   const Count completion_budget =
       schedule_.fj_completion_iterations <= 0
           ? std::numeric_limits<Count>::max()
-          : std::max<Count>(tol::kFeasibilityJumpCompletionIterationsFloor,
-                            schedule_.fj_completion_iterations *
-                                static_cast<Count>(original_.num_rows()));
+          : std::max<Count>(
+                tol::kFeasibilityJumpCompletionIterationsFloor,
+                schedule_.fj_completion_iterations * static_cast<Count>(original_.num_rows()));
   // An interrupt always stops it; the time limit only when the schedule counts seconds, so
   // a deterministic (work-budgeted) run stays independent of the clock.
   settings.should_stop = [this, &completion_iterations, completion_budget]() {

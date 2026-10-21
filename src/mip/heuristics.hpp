@@ -162,7 +162,7 @@ struct HeuristicSchedule {
   int pump_rounds = 0;
   Count fj_work = 0;
   Count fj_completion_iterations = 0;  ///< per model row; 0 is no limit (#1030)
-  bool seconds_budgets = true;  ///< false under deterministic=true (#288's rule)
+  bool seconds_budgets = true;         ///< false under deterministic=true (#288's rule)
 
   [[nodiscard]] static HeuristicSchedule from(const Options& options);
   /// True when anything beyond rounding and the fractional root dive - the two every
