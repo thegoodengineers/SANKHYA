@@ -702,7 +702,7 @@ TEST(MpsReader, FixedFormatValueLessBoundWithABlankVectorNameAndADummyValue) {
       fixed_line("", "X", "COST", "1.0", "R1", "1.0") +
       fixed_line("", "Y", "COST", "1.0", "R1", "1.0") + "RHS\n" +
       fixed_line("", "RHS", "R1", "-3.0") + "BOUNDS\n" + fixed_line("MI", "BND", "X", "0") +
-      fixed_line("FR", "BND", "Y") + fixed_line("UP", "OTHER", "Y", "7.0") + "ENDATA\n";
+      fixed_line("FR", "BND", "Y", "") + fixed_line("UP", "OTHER", "Y", "7.0") + "ENDATA\n";
   const TempFile named_file(named);
   Model named_model;
   const io::ReadResult named_result =

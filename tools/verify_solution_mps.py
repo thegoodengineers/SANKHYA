@@ -345,8 +345,16 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                     raise ValueError(f"{path}:{lineno}: malformed {kind} bound")
                 if takes_value:
                     name_pos = 2 if len(fields) == 4 else 1
+                elif len(fields) >= 3:
+                    # (vector, column[, dummy]) or, with the vector name blank and a dummy
+                    # value in field 4 as IBM allows for MI/PL/FR/BV, (column, dummy). The
+                    # blank field is dropped, so the two look alike; as in
+                    # src/io/mps_bounds.cpp, the shape that names a column decides.
+                    second_is_column = fields[1] in model.col_index
+                    third_is_column = fields[2] in model.col_index
+                    name_pos = 1 if second_is_column and not third_is_column else 2
                 else:
-                    name_pos = 2 if len(fields) >= 3 else 1
+                    name_pos = 1
                 if name_pos == 2 and first_vector.setdefault("BOUNDS", fields[1]) != fields[1]:
                     continue
                 col_name = fields[name_pos]
