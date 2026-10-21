@@ -642,6 +642,13 @@ inline constexpr int kQpIpmFinishEquilibrationPasses = 10;
 /// active-set rule, one change per step). 10 covers qgrow15 (one release), chosen by hand.
 inline constexpr int kQpIpmFinishRounds = 10;
 
+/// ...or this share of the columns, whichever is larger (#1079). With one change per round, a
+/// working set that is short k bounds needs k rounds: qforplan (462 columns) pinned one more
+/// column in each of its 10 rounds, never repeating one, and still had more to pin. 0.05
+/// gives qforplan 24 rounds and qfffff80 (993 columns) 50; the cycle guard and the solve's
+/// clock still stop a finish that does not converge. Chosen by hand, not tuned.
+inline constexpr double kQpIpmFinishRoundsPerColumn = 0.05;
+
 /// #893: a certificate candidate read off the QP interior point's iterates is offered to the
 /// checker first with every entry at or below this share of its largest set to zero, then
 /// as it came. The step that runs away along a ray still carries the part of the iterate

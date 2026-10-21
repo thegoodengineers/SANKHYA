@@ -350,7 +350,10 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
   Candidate c;
   bool settled = false;
   std::vector<int> changes(nc, 0);
-  for (int round = 0; round < tol::kQpIpmFinishRounds && !settled; ++round) {
+  const int rounds = std::max(
+      tol::kQpIpmFinishRounds,
+      static_cast<int>(std::ceil(tol::kQpIpmFinishRoundsPerColumn * static_cast<double>(nc))));
+  for (int round = 0; round < rounds && !settled; ++round) {
     // On the solve's own clock, between rounds and inside the sparse factorization (the
     // dense path is bounded by kDenseKktLimit): boyd1 (93,261 columns) spent 55 s in these
     // rounds past a 60 s limit the interior point had already used 30 s of, and with the
