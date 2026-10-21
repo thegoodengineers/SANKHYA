@@ -3015,12 +3015,72 @@ default path, which classifies every quadratic row convex by the LDL^T test and 
 model as a second-order cone program (`src/conic`), and by `nonconvex=global`, the spatial
 branch and bound of #514.
 
-Not yet run on `main`. Reproduce with:
+Source CSV: `bench/results/qplib-qcqp-8a463fb.csv`  
+Commit `8a463fb` · machine `github-actions ubuntu-24.04 4 vCPU INTEL(R) XEON(R) PLATINUM 8573C 15 GiB RAM` · time limit 300 s per instance
 
-```
-python bench/runners/fetch_qplib.py --qcqp
-python bench/runners/qplib_qcqp.py --time-limit 300   # engines conic and global
-```
+- `conic`: **passed 1 of 13**; `optimal` on 13 of 13, verified on 1; not passed: `QPLIB_2456`, `QPLIB_2468`, `QPLIB_2482`, `QPLIB_2519`, `QPLIB_2626`, `QPLIB_2676`, `QPLIB_2784`, `QPLIB_2862`, `QPLIB_3029`, `QPLIB_3105`, `QPLIB_3185`, `QPLIB_3312`.
+- `global`: **passed 0 of 13**; `optimal` on 0 of 13, verified on 0; not passed: `QPLIB_2456`, `QPLIB_2468`, `QPLIB_2482`, `QPLIB_2519`, `QPLIB_2626`, `QPLIB_2676`, `QPLIB_2784`, `QPLIB_2862`, `QPLIB_3029`, `QPLIB_3088`, `QPLIB_3105`, `QPLIB_3185`, `QPLIB_3312`.
+
+No instance was finished `optimal` by both engines, so agreement is not measured.
+
+A pass is `optimal`, within 1e-6 relative of QPLIB's value (qplib.solu, a best known point, not a proof), and accepted by `tools/verify_solution.py`: for the conic engine stationarity through every quadratic row's gradient `a + 2Qx`, the multipliers' signs and complementarity; for the global method the bound it proved.
+
+| instance | engine | status | our objective | QPLIB value | rel. gap | iters | solver time (s) | verified | passed |
+|---|---|---|---:|---:|---:|---:|---:|:--:|:--:|
+| `QPLIB_2456` | conic | optimal | -0.9449638748 | -0.9449662766 | 2.4e-06 | 16 | 0.97 | **no** | **no** |
+| `QPLIB_2456` | global | time_limit | - | -0.9449662766 | - | 39820 | 300.01 | - | **no** |
+| `QPLIB_2468` | conic | optimal | -0.9364006927 | -0.9364048895 | 4.2e-06 | 17 | 6.01 | **no** | **no** |
+| `QPLIB_2468` | global | time_limit | - | -0.9364048895 | - | 27187 | 300.02 | - | **no** |
+| `QPLIB_2482` | conic | optimal | -0.9681983787 | -0.9681989608 | 5.8e-07 | 13 | 0.18 | **no** | **no** |
+| `QPLIB_2482` | global | time_limit | - | -0.9681989608 | - | 297027 | 300.00 | - | **no** |
+| `QPLIB_2519` | conic | optimal | -0.9511076691 | -0.9511095024 | 1.8e-06 | 16 | 1.10 | **no** | **no** |
+| `QPLIB_2519` | global | time_limit | - | -0.9511095024 | - | 112921 | 303.72 | - | **no** |
+| `QPLIB_2626` | conic | optimal | -6.38208681 | -6.382103498 | 2.6e-06 | 17 | 6.13 | **no** | **no** |
+| `QPLIB_2626` | global | time_limit | - | -6.382103498 | - | 44272 | 300.04 | - | **no** |
+| `QPLIB_2676` | conic | optimal | -0.9670760889 | -0.9670769923 | 9.0e-07 | 13 | 0.11 | **no** | **no** |
+| `QPLIB_2676` | global | time_limit | - | -0.9670769923 | - | 442938 | 300.00 | - | **no** |
+| `QPLIB_2784` | conic | optimal | -0.9460274247 | -0.9460284722 | 1.0e-06 | 13 | 0.52 | **no** | **no** |
+| `QPLIB_2784` | global | time_limit | - | -0.9460284722 | - | 532339 | 300.58 | - | **no** |
+| `QPLIB_2862` | conic | optimal | -0.931379866 | -0.931383145 | 3.3e-06 | 15 | 29.31 | **no** | **no** |
+| `QPLIB_2862` | global | time_limit | - | -0.931383145 | - | 21441 | 300.05 | - | **no** |
+| `QPLIB_3029` | conic | optimal | -6.295311076 | -6.295315542 | 7.1e-07 | 14 | 0.48 | **no** | **no** |
+| `QPLIB_3029` | global | time_limit | - | -6.295315542 | - | 80513 | 300.01 | - | **no** |
+| `QPLIB_3088` | conic | optimal | -0.946027594 | -0.9460285027 | 9.1e-07 | 15 | 0.48 | yes | yes |
+| `QPLIB_3088` | global | time_limit | - | -0.9460285027 | - | 737882 | 300.01 | - | **no** |
+| `QPLIB_3105` | conic | optimal | -0.9377900297 | -0.9378032911 | 1.3e-05 | 19 | 14.49 | **no** | **no** |
+| `QPLIB_3105` | global | time_limit | - | -0.9378032911 | - | 16480 | 300.02 | - | **no** |
+| `QPLIB_3185` | conic | optimal | -0.9350512072 | -0.9350528778 | 1.7e-06 | 13 | 5.64 | **no** | **no** |
+| `QPLIB_3185` | global | time_limit | - | -0.9350528778 | - | 75498 | 300.03 | - | **no** |
+| `QPLIB_3312` | conic | optimal | -0.9332333747 | -0.9332596231 | 2.6e-05 | 23 | 71.53 | **no** | **no** |
+| `QPLIB_3312` | global | time_limit | - | -0.9332596231 | - | 16072 | 300.07 | - | **no** |
+
+Why the rows that did not pass stopped where they did:
+
+- `QPLIB_2456` (conic): optimal: relative residuals 1.64e-09 primal, 5.96e-09 dual, 1.72e-09 gap on the conic form; as the interior point left it; Wolfe dual gap inf relative
+- `QPLIB_2456` (global): no feasible point found before the time_limit; 1 nodes, 10954 FBBT tightenings, 0 alternating-LP calls
+- `QPLIB_2468` (conic): optimal: relative residuals 1.60e-09 primal, 5.81e-09 dual, 1.73e-09 gap on the conic form; as the interior point left it; Wolfe dual gap inf relative
+- `QPLIB_2468` (global): no feasible point found before the time_limit; 1 nodes, 29770 FBBT tightenings, 0 alternating-LP calls
+- `QPLIB_2482` (conic): optimal: relative residuals 8.68e-10 primal, 3.14e-09 dual, 9.14e-10 gap on the conic form; as the interior point left it; Wolfe dual gap inf relative
+- `QPLIB_2482` (global): no feasible point found before the time_limit; 250 nodes, 2638 FBBT tightenings, 32 alternating-LP calls, 6 node LPs failed (parent bound kept), 243 node LPs whose multipliers proved no bound (parent 
+- `QPLIB_2519` (conic): optimal: relative residuals 9.57e-10 primal, 3.46e-09 dual, 9.43e-10 gap on the conic form; as the interior point left it; Wolfe dual gap inf relative
+- `QPLIB_2519` (global): no feasible point found before the time_limit; 6 nodes, 5775 FBBT tightenings, 6 alternating-LP calls, 6 node LPs whose multipliers proved no bound (parent bound kept)
+- `QPLIB_2626` (conic): optimal: relative residuals 1.89e-09 primal, 6.86e-09 dual, 5.40e-10 gap on the conic form; multipliers recovered on the active set; Wolfe dual gap inf relative
+- `QPLIB_2626` (global): no feasible point found before the time_limit; 1 nodes, 44654 FBBT tightenings, 0 alternating-LP calls
+- `QPLIB_2676` (conic): optimal: relative residuals 1.45e-09 primal, 5.24e-09 dual, 1.38e-09 gap on the conic form; as the interior point left it; Wolfe dual gap inf relative
+- `QPLIB_2676` (global): no feasible point found before the time_limit; 1509 nodes, 7250 FBBT tightenings, 159 alternating-LP calls
+- `QPLIB_2784` (conic): optimal: relative residuals 1.88e-09 primal, 6.79e-09 dual, 2.03e-09 gap on the conic form; as the interior point left it; Wolfe dual gap inf relative
+- `QPLIB_2784` (global): no feasible point found before the time_limit; 530 nodes, 104256 FBBT tightenings, 62 alternating-LP calls, 2 node LPs whose multipliers proved no bound (parent bound kept)
+- `QPLIB_2862` (conic): optimal: relative residuals 1.22e-09 primal, 4.41e-09 dual, 1.34e-09 gap on the conic form; as the interior point left it; Wolfe dual gap inf relative
+- `QPLIB_2862` (global): no feasible point found before the time_limit; 1 nodes, 80678 FBBT tightenings, 0 alternating-LP calls
+- `QPLIB_3029` (conic): optimal: relative residuals 1.95e-09 primal, 7.07e-09 dual, 5.23e-10 gap on the conic form; multipliers recovered on the active set; Wolfe dual gap inf relative
+- `QPLIB_3029` (global): no feasible point found before the time_limit; 1 nodes, 11534 FBBT tightenings, 0 alternating-LP calls
+- `QPLIB_3088` (global): no feasible point found before the time_limit; 1213 nodes, 201835 FBBT tightenings, 130 alternating-LP calls, 3 node LPs whose multipliers proved no bound (parent bound kept)
+- `QPLIB_3105` (conic): optimal: relative residuals 2.07e-09 primal, 7.50e-09 dual, 2.15e-09 gap on the conic form; as the interior point left it; Wolfe dual gap inf relative
+- `QPLIB_3105` (global): no feasible point found before the time_limit; 1 nodes, 22326 FBBT tightenings, 0 alternating-LP calls
+- `QPLIB_3185` (conic): optimal: relative residuals 1.07e-09 primal, 3.88e-09 dual, 1.02e-09 gap on the conic form; as the interior point left it; Wolfe dual gap inf relative
+- `QPLIB_3185` (global): no feasible point found before the time_limit; 1 nodes, 43508 FBBT tightenings, 0 alternating-LP calls
+- `QPLIB_3312` (conic): optimal: relative residuals 2.25e-09 primal, 8.17e-09 dual, 2.27e-09 gap on the conic form; as the interior point left it; Wolfe dual gap inf relative
+- `QPLIB_3312` (global): no feasible point found before the time_limit; 1 nodes, 49686 FBBT tightenings, 0 alternating-LP calls
 
 ---
 
