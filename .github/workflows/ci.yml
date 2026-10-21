@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SANKHYA - continuous integration.
 #
-# ubuntu-24.04 is the authority on -Werror cleanliness and on the sanitizer runs. It is pinned:
-# ubuntu-latest moved to 26.04 (GCC 15) on 20 Oct 2026, which our tests do not yet pass. The MinGW
+# ubuntu-24.04 is the authority on -Werror cleanliness and on the sanitizer runs, and the evidence
+# toolchain for benchmarks. It is pinned: ubuntu-latest moved to 26.04 (GCC 15)
+# on 20 Oct 2026. A Release leg runs every test on ubuntu-26.04 as well, and gates (#1100). The MinGW
 # Windows build is a developer convenience and is not gated here; the MSVC leg is, because
 # nvcc on Windows takes MSVC as its host compiler and the Windows CUDA archive needs it.
 #
@@ -149,7 +150,6 @@ jobs:
   build-and-test:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os || 'ubuntu-24.04' }}
-    continue-on-error: ${{ matrix.experimental || false }}
     # The suites that start their own threads, or assert on how threads shared work, and
     # RunOrderDeterminism, which sets a time limit from a solve it just timed (#909). They run
     # after the parallel set, one at a time (see the Test step for why). Named once here
@@ -179,11 +179,11 @@ jobs:
             serial_tests: true
             after_tests: true
           # The same Release build and every test under the current toolchain, GCC 15 on
-          # ubuntu-26.04 (#1100): a judge may well build with it. ubuntu-24.04 (GCC 13) stays
-          # the evidence toolchain; every benchmark CSV is produced there.
+          # ubuntu-26.04 (#1100): a judge may well build with it, and it targets x86-64-v3, so
+          # it is also the leg that has FMA to contract into (CMakeLists.txt turns that off).
+          # ubuntu-24.04 (GCC 13) stays the evidence toolchain for benchmarks.
           - name: Release (GCC 15, ubuntu-26.04)
             os: ubuntu-26.04
-            experimental: true
             build_type: Release
             sanitize: OFF
             debug_flags: ""

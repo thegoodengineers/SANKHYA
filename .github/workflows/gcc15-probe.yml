@@ -19,8 +19,8 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/netlib
-          key: netlib-v1-${{ hashFiles('bench/runners/fetch_data.py') }}
-      - run: python3 bench/runners/fetch_data.py --offline-fallback
+          key: netlib-full-v1-${{ hashFiles('bench/runners/fetch_data.py') }}
+      - run: python3 bench/runners/fetch_data.py --set full --offline-fallback
       - name: build both arms
         run: |
           set -euxo pipefail
@@ -41,8 +41,8 @@ jobs:
           c=$(git rev-parse --short=8 HEAD)
           python3 bench/runners/netlib.py --binary build-off/sankhya --time-limit 120 --machine gh-ubuntu-26.04-gcc15 --out bench/results/gcc15-contract-ab-netlib-off-$c.csv || true
           python3 bench/runners/netlib.py --binary build-fast/sankhya --time-limit 120 --machine gh-ubuntu-26.04-gcc15 --out bench/results/gcc15-contract-ab-netlib-fast-$c.csv || true
-          python3 bench/runners/netlib.py --binary build-off/sankhya --time-limit 60 --solver-option algorithm=pdhg --machine gh-ubuntu-26.04-gcc15 --out bench/results/gcc15-contract-ab-netlib-pdhg-off-$c.csv || true
-          python3 bench/runners/netlib.py --binary build-fast/sankhya --time-limit 60 --solver-option algorithm=pdhg --machine gh-ubuntu-26.04-gcc15 --out bench/results/gcc15-contract-ab-netlib-pdhg-fast-$c.csv || true
+          python3 bench/runners/netlib.py --binary build-off/sankhya --time-limit 30 --solver-option algorithm=pdhg --machine gh-ubuntu-26.04-gcc15 --out bench/results/gcc15-contract-ab-netlib-pdhg-off-$c.csv || true
+          python3 bench/runners/netlib.py --binary build-fast/sankhya --time-limit 30 --solver-option algorithm=pdhg --machine gh-ubuntu-26.04-gcc15 --out bench/results/gcc15-contract-ab-netlib-pdhg-fast-$c.csv || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -64,8 +64,8 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/netlib
-          key: netlib-v1-${{ hashFiles('bench/runners/fetch_data.py') }}
-      - run: python3 bench/runners/fetch_data.py --offline-fallback
+          key: netlib-full-v1-${{ hashFiles('bench/runners/fetch_data.py') }}
+      - run: python3 bench/runners/fetch_data.py --set full --offline-fallback
       - name: build three arms
         run: |
           set -euxo pipefail
@@ -95,40 +95,10 @@ jobs:
           c=$(git rev-parse --short=8 HEAD)
           python3 bench/runners/netlib.py --binary build-main/sankhya --time-limit 120 --machine gh-ubuntu-24.04-gcc13 --out bench/results/moreau-ab-netlib-main-$c.csv || true
           python3 bench/runners/netlib.py --binary build-new/sankhya --time-limit 120 --machine gh-ubuntu-24.04-gcc13 --out bench/results/moreau-ab-netlib-new-$c.csv || true
-          python3 bench/runners/netlib.py --binary build-main/sankhya --time-limit 60 --solver-option algorithm=pdhg --machine gh-ubuntu-24.04-gcc13 --out bench/results/moreau-ab-netlib-pdhg-main-$c.csv || true
-          python3 bench/runners/netlib.py --binary build-new/sankhya --time-limit 60 --solver-option algorithm=pdhg --machine gh-ubuntu-24.04-gcc13 --out bench/results/moreau-ab-netlib-pdhg-new-$c.csv || true
+          python3 bench/runners/netlib.py --binary build-main/sankhya --time-limit 30 --solver-option algorithm=pdhg --machine gh-ubuntu-24.04-gcc13 --out bench/results/moreau-ab-netlib-pdhg-main-$c.csv || true
+          python3 bench/runners/netlib.py --binary build-new/sankhya --time-limit 30 --solver-option algorithm=pdhg --machine gh-ubuntu-24.04-gcc13 --out bench/results/moreau-ab-netlib-pdhg-new-$c.csv || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ab-moreau
           path: bench/results/moreau-*.csv
-
-  # The four tests and their neighbours under TSan on GCC 15, as the TSan job runs them.
-  tsan-gcc15:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev
-      - run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSANKHYA_TSAN=ON -DSANKHYA_WITH_OPENMP=OFF -DSANKHYA_BUILD_TESTS=ON
-          cmake --build build -j --target sankhya_tests
-      - env:
-          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
-        run: >-
-          ./build/tests/sankhya_tests
-          --gtest_filter='ParallelTree.*:BranchAndBound*.*:SolutionPool*.*:NodeSelection*.*:ResourceLimits.*:EngineConcurrency.*:EngineRace.*:KktCheck.*:PdhgParallelSpmv.*:SupernodalLdl.TheFactorIsTheSameUnderOneAndFourThreads:SupernodalLdl.ADeadlineStopsEveryThread:Decomposition.TheThreadCount*:Decomposition.AProgressCallback*:MipLimitReporting.EjStoppedInTheParallelSearch*:ObjectiveBranching.TheParallelTreeDeclinesTheRow:Restarts.AParallelTreeDoesNotRestart:Symmetry.TheParallelSearch*'
-
-  # The reader fuzzers build with the clang ubuntu-26.04 ships (fmt 10.2.1 did not).
-  fuzz-build-clang21:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev clang
-          clang++ --version | head -1
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ -DSANKHYA_ENABLE_FUZZING=ON -DSANKHYA_BUILD_TESTS=OFF
-          cmake --build build -j --target fuzz_mps_fixed fuzz_mps_free fuzz_lp fuzz_qps
-          for d in mps_fixed mps_free lp qps; do ./build/fuzz_$d -max_total_time=20 fuzz/corpus/$d; done
