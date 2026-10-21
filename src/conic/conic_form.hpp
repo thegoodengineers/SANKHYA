@@ -101,6 +101,11 @@ struct ConicForm {
   [[nodiscard]] bool in_cone(Index j) const noexcept { return j >= free_n + nonneg_n; }
 };
 
+/// The model's quadratic terms grouped by row, built once (#1086): entry i lists row i's terms,
+/// so code that handles one row reads its own terms instead of scanning every term.
+using TermsByRow = std::vector<std::vector<const QuadraticTerm*>>;
+[[nodiscard]] TermsByRow index_terms_by_row(const QcqpModel& model);
+
 /// Build the form. `classes` is classify_quadratic_rows(model) and every verdict in it must
 /// be kConvex; the caller has checked the objective's Hessian is convex in the model's sense.
 [[nodiscard]] ConicForm build_conic_form(const QcqpModel& model,

@@ -382,6 +382,7 @@ set(SANKHYA_CORE_SOURCES
   src/conic/conic_form.cpp
   src/conic/conic_ipm.cpp
   src/conic/conic_solve.cpp
+  src/conic/quadratic_rows.cpp
   src/presolve/coef_tightening.cpp
   src/presolve/implied_bounds.cpp
   src/presolve/presolve.cpp

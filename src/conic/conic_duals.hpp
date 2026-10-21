@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 
 #include "sankhya/model.hpp"
 #include "sankhya/qcqp.hpp"
@@ -21,6 +22,10 @@ enum class Finish : std::uint8_t {
 /// set read off its point: Newton's method on the KKT system restricted to it, else
 /// least-squares multipliers at the given point. A result replaces the interior point's only
 /// when it measures better: model KKT error smaller and primal feasibility no worse.
-[[nodiscard]] Finish finish_on_active_set(const QcqpModel& model, Solution* solution);
+/// `should_stop` is the caller's deadline and interrupt (#1086), asked before every Newton
+/// step and inside each analysis and factorization; when it fires the best answer measured
+/// so far stands, which may be the interior point's own.
+[[nodiscard]] Finish finish_on_active_set(const QcqpModel& model, Solution* solution,
+                                          const std::function<bool()>& should_stop = {});
 
 }  // namespace sankhya::conic

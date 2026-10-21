@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include "conic/conic_duals.hpp"
 #include "conic/conic_form.hpp"
 #include "nlp/nlp_solve.hpp"
 #include "nlp/nonlinear_model.hpp"
@@ -396,6 +397,26 @@ QcqpModel blending() {
   m.quadratic = {{r, 0, 0, 9.0}, {r, 0, 1, 6.0}, {r, 1, 1, 1.0},
                  {r, 2, 2, 9.0}, {r, 2, 3, 6.0}, {r, 3, 3, 1.0}};
   return m;
+}
+
+// #1086: the active-set finish answers to the caller's deadline. Its multipliers degraded,
+// the blending answer is one the finish improves when it may run, and leaves exactly as it
+// was when the deadline has already passed.
+TEST(Conic, TheActiveSetFinishStopsOnTheDeadline) {
+  const QcqpModel m = blending();
+  Solution degraded = solve_conic(m, quiet());
+  ASSERT_EQ(degraded.status, SolveStatus::kOptimal) << degraded.message;
+  for (double& y : degraded.row_dual) y *= 0.9;
+
+  Solution stopped = degraded;
+  const conic::Finish none = conic::finish_on_active_set(m, &stopped, [] { return true; });
+  EXPECT_EQ(none, conic::Finish::kNone);
+  EXPECT_EQ(stopped.row_dual, degraded.row_dual);
+  EXPECT_EQ(stopped.col_value, degraded.col_value);
+
+  Solution finished = degraded;
+  EXPECT_NE(conic::finish_on_active_set(m, &finished), conic::Finish::kNone);
+  EXPECT_NE(finished.row_dual, degraded.row_dual);
 }
 
 TEST(Conic, BlendingModelConicAndGlobalAgree) {

@@ -43,8 +43,11 @@
 
 #include "conic/conic_duals.hpp"
 
+#include "conic/conic_form.hpp"
+
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <utility>
 #include <vector>
@@ -223,7 +226,8 @@ std::vector<Gradient> columns_of(Index n, const std::vector<Constraint>& active,
 
 /// min || r - M lambda || by the refined normal equations; false when they cannot be factored.
 bool least_squares(const std::vector<Gradient>& by_column, Index k,
-                   const std::vector<double>& r, std::vector<double>* lambda) {
+                   const std::vector<double>& r, const std::function<bool()>& should_stop,
+                   std::vector<double>* lambda) {
   lambda->assign(static_cast<std::size_t>(k), 0.0);
   if (k == 0) return true;
   SparseMatrix normal(k, k);
@@ -241,7 +245,9 @@ bool least_squares(const std::vector<Gradient>& by_column, Index k,
   for (Index t = 0; t < k; ++t) normal.add_entry(t, t, eps);
   normal.finalize(0.0);
   SparseLdl ldl;
-  if (!ldl.analyze(normal) || !ldl.factorize(normal, eps)) return false;
+  if (!ldl.analyze(normal, should_stop) || !ldl.factorize(normal, eps, should_stop)) {
+    return false;
+  }
   std::vector<double> residual = r;
   std::vector<double> step(static_cast<std::size_t>(k));
   for (int pass = 0; pass < tol::kConicRecoveryRefinement; ++pass) {
@@ -264,7 +270,8 @@ bool least_squares(const std::vector<Gradient>& by_column, Index k,
 
 /// Newton's method on the KKT system of `active` taken as equalities, from (x, lambda).
 /// False when a step cannot be computed; x and lambda are then left where the last step was.
-bool newton(const QcqpModel& model, const std::vector<Constraint>& active,
+bool newton(const QcqpModel& model, const TermsByRow& terms,
+            const std::vector<Constraint>& active, const std::function<bool()>& should_stop,
             std::vector<double>* x, std::vector<double>* lambda) {
   const Model& lin = model.linear;
   const Index n = lin.num_cols();
@@ -273,8 +280,16 @@ bool newton(const QcqpModel& model, const std::vector<Constraint>& active,
   const double sigma = lin.sense_multiplier();
   std::vector<signed char> signs(static_cast<std::size_t>(dim), 1);
   for (Index t = 0; t < k; ++t) signs[static_cast<std::size_t>(n + t)] = -1;
+  // The active set is fixed, so the KKT pattern is too: every entry is added on every
+  // assembly, explicit zeros included (finalize(0.0) keeps them), and one analysis serves
+  // every step (#1086).
+  SparseLdl ldl;
+  bool analyzed = false;
   double previous = kInfinity;
   for (int iteration = 0; iteration < tol::kConicPolishIterations; ++iteration) {
+    // The finish runs after the interior point has returned, so it answers to the caller's
+    // deadline and interrupt itself (#1086); stopping keeps the best answer measured so far.
+    if (should_stop && should_stop()) return false;
     const std::vector<double> activity = model.row_activity(*x);
     const std::vector<Gradient> gradients = row_gradients(model, *x);
     const std::vector<Gradient> by_column = columns_of(n, active, gradients);
@@ -318,11 +333,10 @@ bool newton(const QcqpModel& model, const std::vector<Constraint>& active,
         const Constraint& c = active[static_cast<std::size_t>(t)];
         if (c.row < 0) continue;
         const double l = (*lambda)[static_cast<std::size_t>(t)];
-        for (const QuadraticTerm& q : model.quadratic) {
-          if (q.row != c.row) continue;
+        for (const QuadraticTerm* q : terms[static_cast<std::size_t>(c.row)]) {
           // -lambda * Hessian of v x_a x_b: v off the diagonal (lower), 2 v on it.
-          k_matrix.add_entry(q.second, q.first,
-                             (q.first == q.second ? -2.0 : -1.0) * l * q.value);
+          k_matrix.add_entry(q->second, q->first,
+                             (q->first == q->second ? -2.0 : -1.0) * l * q->value);
         }
       }
       for (std::size_t j = 0; j < by_column.size(); ++j) {
@@ -338,8 +352,11 @@ bool newton(const QcqpModel& model, const std::vector<Constraint>& active,
     const SparseMatrix k0 = assemble(0.0);
     const double rho = tol::kConicPolishRegularization * largest;
     const SparseMatrix k_reg = assemble(rho);
-    SparseLdl ldl;
-    if (!ldl.analyze(k_reg) || !ldl.factorize_quasidefinite(k_reg, signs, rho)) return false;
+    if (!analyzed) {
+      if (!ldl.analyze(k_reg, should_stop)) return false;
+      analyzed = true;
+    }
+    if (!ldl.factorize_quasidefinite(k_reg, signs, rho, should_stop)) return false;
     std::vector<double> step;
     qp::ipm_detail::solve_refined(ldl, k_reg, rhs, &step);
     qp::ipm_detail::refine_unregularized(ldl, k0, rhs, &step);
@@ -357,7 +374,8 @@ bool newton(const QcqpModel& model, const std::vector<Constraint>& active,
 
 }  // namespace
 
-Finish finish_on_active_set(const QcqpModel& model, Solution* solution) {
+Finish finish_on_active_set(const QcqpModel& model, Solution* solution,
+                            const std::function<bool()>& should_stop) {
   const Model& lin = model.linear;
   const Index n = lin.num_cols();
   const Index m = lin.num_rows();
@@ -383,7 +401,9 @@ Finish finish_on_active_set(const QcqpModel& model, Solution* solution) {
   const std::vector<Constraint> active = active_set(lin, x0, activity0, gradients0, r0, y0, d0);
   const auto k = static_cast<Index>(active.size());
   std::vector<double> lambda;
-  if (!least_squares(columns_of(n, active, gradients0), k, r0, &lambda)) return Finish::kNone;
+  if (!least_squares(columns_of(n, active, gradients0), k, r0, should_stop, &lambda)) {
+    return Finish::kNone;
+  }
 
   // A candidate (x, lambda) measured on the model; kept when it beats the best so far.
   struct Candidate {
@@ -419,7 +439,7 @@ Finish finish_on_active_set(const QcqpModel& model, Solution* solution) {
   }
   std::vector<double> x = x0;
   std::vector<double> l = lambda;
-  if (newton(model, active, &x, &l)) {
+  if (newton(model, index_terms_by_row(model), active, should_stop, &x, &l)) {
     const Candidate polished = measure(x, l);
     if (better(polished, best.kkt)) {
       best = polished;
