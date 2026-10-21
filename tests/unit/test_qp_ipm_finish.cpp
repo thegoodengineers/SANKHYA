@@ -372,8 +372,9 @@ TEST(QpIpmFinish, ActiveSetFinishKeepsCoefficientsBelowTheStructuralZeroThreshol
   ASSERT_EQ(s.m.num_nonzeros(), 2);  // the premise: standardize keeps them
   const Bounds b = finite_bounds(s);
   // As an interior point leaves it: a little off the optimum in both x and y.
-  std::vector<double> v = {2e11 * (1.0 + 1e-6), 4e11 * (1.0 - 1e-6)},
-                      y = {2e23 * (1.0 + 1e-6)}, zl(2, 0.0), zu(2, 0.0);
+  std::vector<double> v = {2e11 * (1.0 + 1e-6), 4e11 * (1.0 - 1e-6)};
+  std::vector<double> y = {2e23 * (1.0 + 1e-6)};
+  std::vector<double> zl(2, 0.0), zu(2, 0.0);
   const Options options;
   const double primal_tolerance = options.get_double("primal_feasibility_tolerance");
   ASSERT_TRUE(qp::ipm_detail::active_set_finish(
