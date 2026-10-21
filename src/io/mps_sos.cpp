@@ -59,12 +59,17 @@ void MpsParser::mark_semicontinuous(Index col) {
 
 bool MpsParser::do_sos(std::string* error) {
   const std::uint8_t type = sos_type_of(tok_[0]);
-  // A set may be named S1 or S2 itself; a line that starts with an existing set's name is a
-  // member line unless the word SOS follows.
+  // A set may be named S1 or S2 itself, and so may a column: S1 and S2 are the commonest
+  // slack names there are, and the member spelling "column weight" (set name omitted) puts
+  // the column first. COLUMNS is complete by the time SOS is read, so a line that starts
+  // with an existing set's name or an existing column's name is a member line unless the
+  // word SOS follows. Before the column test a member named S1 opened a new, empty set and
+  // the declared set silently lost that member.
   const bool names_a_set =
       std::any_of(sos_.begin(), sos_.end(), [&](const SosSet& s) { return s.name == tok_[0]; });
+  const bool names_a_column = find_column(tok_[0]) >= 0;
   const bool says_sos = tok_.size() >= 2 && to_upper(tok_[1]) == "SOS";
-  const bool header = type != 0 && (says_sos || !names_a_set);
+  const bool header = type != 0 && (says_sos || (!names_a_set && !names_a_column));
   if (header) {
     // S1|S2 [SOS] [name] [priority]
     std::size_t k = 1;

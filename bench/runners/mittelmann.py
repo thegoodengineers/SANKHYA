@@ -167,6 +167,8 @@ def main() -> int:
     parser.add_argument("--no-highs", action="store_true", help="skip the HiGHS cross-check")
     parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--machine", default=None,
+                        help="machine tag for the CSV (default: the OS and architecture)")
     args = parser.parse_args()
 
     manifest_path = DATA_DIR / "reference.json"
@@ -176,7 +178,8 @@ def main() -> int:
     instances = manifest["instances"]
     names = args.instances or sorted(instances)
     binary = args.binary or default_binary()
-    commit, machine = git_commit(args.binary), f"{platform.system()}-{platform.machine()}"
+    commit = git_commit(args.binary)
+    machine = args.machine or f"{platform.system()}-{platform.machine()}"
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     solver_options = " ".join(args.solver_option)
     have_highs = False
