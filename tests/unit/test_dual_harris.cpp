@@ -236,10 +236,11 @@ TEST(DualHarris, OffIsBitForBitTheTextbookPath) {
   // comparing the default (Harris) against textbook bit for bit: two different rules, which
   // agree only while no two breakpoints fall within Harris's relaxation band of each other.
   // Whether one does depends on the last bits of the reduced costs, so the agreement was a
-  // property of one compiler's rounding: it broke under dual steepest edge first (#411, 117
-  // against 106 iterations on share2b, which pinned Devex), then under Devex with GCC 15 (151
-  // against 116, the same optimum, #1100). Harris reaching the same optima is
-  // ReachesThePublishedNetlibOptima's claim, with a tolerance; this one is about "off".
+  // property of one build's rounding: it broke under dual steepest edge first (#411, 117
+  // against 106 iterations on share2b, which pinned Devex), then under Devex once GCC 15's
+  // x86-64-v3 default contracted products into FMAs (151 against 116 on share2b, the same
+  // optimum, #1100). Harris reaching the published optima is ReachesThePublishedNetlibOptima's
+  // claim, with a tolerance; this one is about "off".
   const auto netlib =
       std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "data/netlib";
   int compared = 0;
