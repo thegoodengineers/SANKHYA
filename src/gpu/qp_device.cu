@@ -66,7 +66,14 @@ __global__ void k_dual(int m, const double* __restrict__ y, const double* __rest
   const int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= m) return;
   const double v = y[i] + sigma * ax[i];
-  yn[i] = v - sigma * d_project(v / sigma, lo[i], hi[i]);
+  // la::moreau_dual_prox (src/la/moreau.hpp, #1100): exactly 0 inside the scaled box.
+  double next = 0.0;
+  if (!isinf(lo[i]) && v < sigma * lo[i]) {
+    next = v - sigma * lo[i];
+  } else if (!isinf(hi[i]) && v > sigma * hi[i]) {
+    next = v - sigma * hi[i];
+  }
+  yn[i] = next;
 }
 
 // z <- w ((1 + rho) tz - rho z) + (1 - w) anchor, w = (k + 1) / (k + 2): halpern_blend.

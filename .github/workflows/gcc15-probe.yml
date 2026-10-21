@@ -4,40 +4,131 @@ on:
     branches: [fix/gcc15-1100]
   workflow_dispatch:
 jobs:
-  probe:
-    name: probe ${{ matrix.v }}
+  # Netlib, both arms in one job on one machine: the tree as it stands (-ffp-contract=off)
+  # against the same tree with that one line removed (GCC's default, contraction on).
+  ab-contract:
     runs-on: ubuntu-26.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { v: base, cxx: g++, bt: Release, flags: "", extra: "" }
-          - { v: nocontract, cxx: g++, bt: Release, flags: "-ffp-contract=off", extra: "" }
-          - { v: pattern, cxx: g++, bt: Release, flags: "-ftrivial-auto-var-init=pattern", extra: "" }
-          - { v: ubsan, cxx: g++, bt: Release, flags: "-fsanitize=undefined -fno-sanitize-recover=all", extra: "" }
-          - { v: O2, cxx: g++, bt: Release, flags: "", extra: "", rel: "-O2 -DNDEBUG" }
-          - { v: gcc14, cxx: g++-14, bt: Release, flags: "", extra: "" }
-          - { v: clang, cxx: clang++, bt: Release, flags: "", extra: "" }
-          - { v: tsan, cxx: g++, bt: RelWithDebInfo, flags: "", extra: "-DSANKHYA_TSAN=ON -DSANKHYA_WITH_OPENMP=OFF" }
-          - { v: tsan-nocontract, cxx: g++, bt: RelWithDebInfo, flags: "-ffp-contract=off", extra: "-DSANKHYA_TSAN=ON -DSANKHYA_WITH_OPENMP=OFF" }
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build zlib1g-dev
+      - uses: actions/cache@v4
+        with:
+          path: data/netlib
+          key: netlib-v1-${{ hashFiles('bench/runners/fetch_data.py') }}
+      - run: python3 bench/runners/fetch_data.py --offline-fallback
+      - name: build both arms
+        run: |
+          set -euxo pipefail
+          g++ --version | head -1
+          rm -rf /tmp/arm-fast && mkdir /tmp/arm-fast && git archive HEAD | tar -x -C /tmp/arm-fast
+          grep -c 'ffp-contract=off>' /tmp/arm-fast/CMakeLists.txt
+          sed -i '/ffp-contract=off>/d' /tmp/arm-fast/CMakeLists.txt
+          ! grep -q 'ffp-contract=off>' /tmp/arm-fast/CMakeLists.txt
+          cmake -G Ninja -S . -B build-off -DCMAKE_BUILD_TYPE=Release -DSANKHYA_BUILD_TESTS=OFF
+          cmake --build build-off -j --target sankhya-cli
+          cmake -G Ninja -S /tmp/arm-fast -B build-fast -DCMAKE_BUILD_TYPE=Release -DSANKHYA_BUILD_TESTS=OFF
+          cmake --build build-fast -j --target sankhya-cli
+          objdump -d build-off/sankhya | grep -c vfmadd || true
+          objdump -d build-fast/sankhya | grep -c vfmadd || true
+      - name: netlib, both arms
+        run: |
+          set -x
+          c=$(git rev-parse --short=8 HEAD)
+          python3 bench/runners/netlib.py --binary build-off/sankhya --time-limit 120 --machine gh-ubuntu-26.04-gcc15 --out bench/results/gcc15-contract-ab-netlib-off-$c.csv || true
+          python3 bench/runners/netlib.py --binary build-fast/sankhya --time-limit 120 --machine gh-ubuntu-26.04-gcc15 --out bench/results/gcc15-contract-ab-netlib-fast-$c.csv || true
+          python3 bench/runners/netlib.py --binary build-off/sankhya --time-limit 60 --solver-option algorithm=pdhg --machine gh-ubuntu-26.04-gcc15 --out bench/results/gcc15-contract-ab-netlib-pdhg-off-$c.csv || true
+          python3 bench/runners/netlib.py --binary build-fast/sankhya --time-limit 60 --solver-option algorithm=pdhg --machine gh-ubuntu-26.04-gcc15 --out bench/results/gcc15-contract-ab-netlib-pdhg-fast-$c.csv || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ab-contract
+          path: bench/results/gcc15-*.csv
+
+  # The exact dual prox against main on the evidence toolchain (GCC 13, ubuntu-24.04), both
+  # arms in one job; plus the proof that -ffp-contract=off changes no instruction there.
+  ab-moreau:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build zlib1g-dev
+      - uses: actions/cache@v4
+        with:
+          path: data/netlib
+          key: netlib-v1-${{ hashFiles('bench/runners/fetch_data.py') }}
+      - run: python3 bench/runners/fetch_data.py --offline-fallback
+      - name: build three arms
+        run: |
+          set -euxo pipefail
+          g++ --version | head -1
+          base=$(git merge-base HEAD origin/main)
+          echo "base $base"
+          rm -rf /tmp/arm-main /tmp/arm-nocflag && mkdir /tmp/arm-main /tmp/arm-nocflag
+          git archive "$base" | tar -x -C /tmp/arm-main
+          git archive HEAD | tar -x -C /tmp/arm-nocflag
+          sed -i '/ffp-contract=off>/d' /tmp/arm-nocflag/CMakeLists.txt
+          cmake -G Ninja -S . -B build-new -DCMAKE_BUILD_TYPE=Release -DSANKHYA_BUILD_TESTS=OFF
+          cmake --build build-new -j --target sankhya-cli
+          cmake -G Ninja -S /tmp/arm-main -B build-main -DCMAKE_BUILD_TYPE=Release -DSANKHYA_BUILD_TESTS=OFF
+          cmake --build build-main -j --target sankhya-cli
+          cmake -G Ninja -S /tmp/arm-nocflag -B build-nocflag -DCMAKE_BUILD_TYPE=Release -DSANKHYA_BUILD_TESTS=OFF
+          cmake --build build-nocflag -j --target sankhya-cli
+          echo "--- -ffp-contract=off on x86-64 baseline: disassembly of every core object, with against without"
+          n=0; d=0
+          for o in $(cd build-new && find CMakeFiles/sankhya_objects.dir -name '*.o' | sort); do
+            n=$((n+1))
+            if ! cmp -s <(objdump -d --no-show-raw-insn build-new/$o | tail -n +3) <(objdump -d --no-show-raw-insn build-nocflag/$o | tail -n +3); then d=$((d+1)); echo "differs: $o"; fi
+          done
+          echo "objects compared: $n, differing: $d"
+      - name: netlib, main against this branch
+        run: |
+          set -x
+          c=$(git rev-parse --short=8 HEAD)
+          python3 bench/runners/netlib.py --binary build-main/sankhya --time-limit 120 --machine gh-ubuntu-24.04-gcc13 --out bench/results/moreau-ab-netlib-main-$c.csv || true
+          python3 bench/runners/netlib.py --binary build-new/sankhya --time-limit 120 --machine gh-ubuntu-24.04-gcc13 --out bench/results/moreau-ab-netlib-new-$c.csv || true
+          python3 bench/runners/netlib.py --binary build-main/sankhya --time-limit 60 --solver-option algorithm=pdhg --machine gh-ubuntu-24.04-gcc13 --out bench/results/moreau-ab-netlib-pdhg-main-$c.csv || true
+          python3 bench/runners/netlib.py --binary build-new/sankhya --time-limit 60 --solver-option algorithm=pdhg --machine gh-ubuntu-24.04-gcc13 --out bench/results/moreau-ab-netlib-pdhg-new-$c.csv || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ab-moreau
+          path: bench/results/moreau-*.csv
+
+  # The four tests and their neighbours under TSan on GCC 15, as the TSan job runs them.
+  tsan-gcc15:
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev clang g++-14 || sudo apt-get install -y ninja-build zlib1g-dev clang
+          sudo apt-get install -y ninja-build zlib1g-dev
       - run: |
-          ${{ matrix.cxx }} --version
-          ${{ matrix.cxx }} -Q --help=target 2>/dev/null | grep -E '^\s+-march=|^\s+-mfma |^\s+-mavx2 ' || true
-          echo | ${{ matrix.cxx }} -dM -E - | grep -iE '__FMA__|__AVX2__|__x86_64__|FP_FAST_FMA' || true
-          ldd --version | head -1
-      - run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=${{ matrix.bt }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-            -DCMAKE_CXX_FLAGS="${{ matrix.flags }}" ${{ matrix.extra }} -DCMAKE_CXX_FLAGS_RELEASE="${{ matrix.rel || '-O3 -DNDEBUG' }}" -DSANKHYA_BUILD_TESTS=ON
-      - run: cmake --build build -j --target sankhya_tests
-      - name: tests
-        env:
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-          TSAN_OPTIONS: halt_on_error=1
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSANKHYA_TSAN=ON -DSANKHYA_WITH_OPENMP=OFF -DSANKHYA_BUILD_TESTS=ON
+          cmake --build build -j --target sankhya_tests
+      - env:
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
         run: >-
           ./build/tests/sankhya_tests
-          --gtest_filter='DualHarris.*:InteriorPoint.TheBarrierExhausted*:Pdhg.OffTickEvaluationIsGeometricallyScheduled:ConvexNlp.*:MinlpOa.*:PdhgParallelSpmv.*'
+          --gtest_filter='ParallelTree.*:BranchAndBound*.*:SolutionPool*.*:NodeSelection*.*:ResourceLimits.*:EngineConcurrency.*:EngineRace.*:KktCheck.*:PdhgParallelSpmv.*:SupernodalLdl.TheFactorIsTheSameUnderOneAndFourThreads:SupernodalLdl.ADeadlineStopsEveryThread:Decomposition.TheThreadCount*:Decomposition.AProgressCallback*:MipLimitReporting.EjStoppedInTheParallelSearch*:ObjectiveBranching.TheParallelTreeDeclinesTheRow:Restarts.AParallelTreeDoesNotRestart:Symmetry.TheParallelSearch*'
+
+  # The reader fuzzers build with the clang ubuntu-26.04 ships (fmt 10.2.1 did not).
+  fuzz-build-clang21:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build zlib1g-dev clang
+          clang++ --version | head -1
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ -DSANKHYA_ENABLE_FUZZING=ON -DSANKHYA_BUILD_TESTS=OFF
+          cmake --build build -j --target fuzz_mps_fixed fuzz_mps_free fuzz_lp fuzz_qps
+          for d in mps_fixed mps_free lp qps; do ./build/fuzz_$d -max_total_time=20 fuzz/corpus/$d; done

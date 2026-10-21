@@ -28,6 +28,7 @@
 #include <limits>
 #include <utility>
 
+#include "../la/moreau.hpp"
 #include "sankhya/tolerances.hpp"
 
 namespace sankhya::pdhg {
@@ -161,7 +162,7 @@ FeasibilityPolisher::PhaseResult FeasibilityPolisher::run(
     for (std::size_t i = 0; i < m; ++i) {
       // A xbar = 2 A x' - A x by linearity, then the prox of sigma_C through Moreau.
       const double v = y[i] + sigma * (2.0 * a_x_next[i] - a_x[i]);
-      y_next[i] = v - sigma * project(v / sigma, row_lower[i], row_upper[i]);
+      y_next[i] = la::moreau_dual_prox(v, sigma, row_lower[i], row_upper[i]);
     }
 
     double movement = 0.0;

@@ -12,6 +12,7 @@
 
 #include <fmt/format.h>
 
+#include "la/moreau.hpp"
 #include "sankhya/timer.hpp"
 
 namespace sankhya::nlp {
@@ -326,7 +327,7 @@ Solution solve_convex_nlp(const NonlinearModel& model, const Options& options, L
       m.matrix.multiply_add(extrapolated.data(), ax.data());
       for (std::size_t i = 0; i < rows; ++i) {
         const double v = y[i] + sigma * ax[i];
-        const double next = v - sigma * project(v / sigma, m.row_lower[i], m.row_upper[i]);
+        const double next = la::moreau_dual_prox(v, sigma, m.row_lower[i], m.row_upper[i]);
         dual_move = std::max(dual_move, std::fabs(next - y[i]));
         y[i] = next;
       }

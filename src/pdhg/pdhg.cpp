@@ -73,6 +73,7 @@
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
+#include "../la/moreau.hpp"
 #include "../la/operator_norm.hpp"
 #include "../la/scaling.hpp"
 #include "../qp/qp_first_order_accel.hpp"
@@ -559,7 +560,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
           const auto u = static_cast<std::size_t>(i);
           const double v = y[u] + sigma * a_x[u];
           y_next[u] =
-              v - sigma * project(v / sigma, scaling.row_lower[u], scaling.row_upper[u]);
+              la::moreau_dual_prox(v, sigma, scaling.row_lower[u], scaling.row_upper[u]);
         }
       }
     }

@@ -65,10 +65,14 @@ __global__ void k_dual(const double* __restrict__ y, const double* __restrict__ 
   double mv = 0.0;
   if (i < m) {
     const double v = y[i] + sigma * a_x[i];
-    double pv = v / sigma;
-    if (!isinf(row_lo[i]) && pv < row_lo[i]) pv = row_lo[i];
-    if (!isinf(row_hi[i]) && pv > row_hi[i]) pv = row_hi[i];
-    const double yni = v - sigma * pv;
+    // la::moreau_dual_prox (src/la/moreau.hpp, #1100): v - proj_[sigma lo, sigma hi](v), so
+    // a row inside its scaled box gets exactly 0 rather than the division's rounding error.
+    double yni = 0.0;
+    if (!isinf(row_lo[i]) && v < sigma * row_lo[i]) {
+      yni = v - sigma * row_lo[i];
+    } else if (!isinf(row_hi[i]) && v > sigma * row_hi[i]) {
+      yni = v - sigma * row_hi[i];
+    }
     y_next[i] = yni;
     const double dyi = yni - y[i];
     dy[i] = dyi;

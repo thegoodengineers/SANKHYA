@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "../la/moreau.hpp"
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
 #include "util/threads.hpp"
@@ -82,7 +83,7 @@ double parallel_dual_step(const Scaling& scaling, const std::vector<double>& y,
     double movement = 0.0;
     for (std::size_t u = begin; u < end; ++u) {
       const double v = y[u] + sigma * a_x[u];
-      y_next[u] = v - sigma * project(v / sigma, scaling.row_lower[u], scaling.row_upper[u]);
+      y_next[u] = la::moreau_dual_prox(v, sigma, scaling.row_lower[u], scaling.row_upper[u]);
       const double d = y_next[u] - y[u];
       movement += 0.5 * d * d / omega;
     }

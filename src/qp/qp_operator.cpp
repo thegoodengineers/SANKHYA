@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "../la/moreau.hpp"
 #include "qp_first_order_accel.hpp"
 #include "sankhya/types.hpp"
 
@@ -83,7 +84,7 @@ class HostOperator final : public QpOperator {
       for (Index i = 0; i < m_; ++i) {
         const auto u = static_cast<std::size_t>(i);
         const double v = y_[u] + sigma * ax_[u];
-        y_next_[u] = v - sigma * project(v / sigma, model_.row_lower[u], model_.row_upper[u]);
+        y_next_[u] = la::moreau_dual_prox(v, sigma, model_.row_lower[u], model_.row_upper[u]);
       }
     }
     return true;

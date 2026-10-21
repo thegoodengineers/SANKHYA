@@ -72,7 +72,7 @@ set(FETCHCONTENT_QUIET OFF)
 
 FetchContent_Declare(fmt
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG        10.2.1
+  GIT_TAG        12.2.0
   GIT_SHALLOW    TRUE)
 
 FetchContent_Declare(cli11
@@ -88,31 +88,8 @@ FetchContent_Declare(nlohmann_json
 
 FetchContent_MakeAvailable(fmt cli11 nlohmann_json)
 
-# fmt 10.2.1 encodes a lookup table as a char32_t string literal with code points above
-# U+10FFFF (e.g. U"\x9999999a"), which nvcc's tokenizer rejects even for host-only code.
-# Patch fractional_part_rounding_thresholds to use a constexpr array instead.  Only done
-# when building with MSVC+CUDA because that is the only toolchain affected.
-if(MSVC AND SANKHYA_ENABLE_CUDA)
-  FetchContent_GetProperties(fmt SOURCE_DIR fmt_SOURCE_DIR)
-  set(_fmt_header "${fmt_SOURCE_DIR}/include/fmt/format.h")
-  if(EXISTS "${_fmt_header}")
-    file(READ "${_fmt_header}" _fmt_src)
-    string(FIND "${_fmt_src}" "0x9999999au" _already_patched)
-    if(_already_patched EQUAL -1)
-      string(REPLACE
-        [=[return U"\x9999999a\x828f5c29\x80418938\x80068db9\x8000a7c6\x800010c7"
-         U"\x800001ae\x8000002b"[index];]=]
-        [=[constexpr uint32_t _t[] = {0x9999999au,0x828f5c29u,0x80418938u,0x80068db9u,
-    0x8000a7c6u,0x800010c7u,0x800001aeu,0x8000002bu}; return _t[index];]=]
-        _fmt_src "${_fmt_src}")
-      file(WRITE "${_fmt_header}" "${_fmt_src}")
-      message(STATUS "Patched fmt/format.h: replaced char32_t string literal with uint32_t array (nvcc workaround)")
-    endif()
-  endif()
-endif()
-
 # Dependency headers are pulled into our translation units, so our -Werror set is applied to
-# their code as well as ours - fmt 10.2.1's ranges.h trips -Wtautological-compare on GCC 16,
+# their code as well as ours - fmt 10.2.1's ranges.h tripped -Wtautological-compare on GCC 16,
 # for instance. Re-export each dependency's include directories as SYSTEM so the compiler
 # suppresses diagnostics originating inside them while still policing every line we write.
 function(sankhya_mark_include_dirs_system)
@@ -184,6 +161,18 @@ else()
     -Wdouble-promotion -Wnon-virtual-dtor -Woverloaded-virtual -Wnull-dereference)
   target_compile_options(sankhya_flags INTERFACE
     "$<$<COMPILE_LANGUAGE:CXX>:${SANKHYA_GCC_WARNINGS}>")
+  # NO FUSED MULTIPLY-ADD CONTRACTION, anywhere (#1100). GCC contracts a * b + c into one FMA
+  # whenever the target has the instruction (-ffp-contract=fast is its default outside ISO
+  # mode), and GCC 15 on ubuntu-26.04 targets x86-64-v3 by default, which has it. The same
+  # source then rounds differently on that box than on x86-64 baseline (GCC 13 on 24.04, which
+  # has no FMA to contract into), and differently between two loops the optimizer happens to
+  # treat differently: the serial and row-parallel PDHG, written term for term alike, took
+  # different iteration counts. With contraction off every product and sum rounds on its own,
+  # as the source says, so a build's answers do not depend on -march or on the compiler's
+  # choices. On a baseline target this changes no instruction; the batched PDHG's CPU
+  # reference (#520), which must match the CUDA kernels' explicit intrinsics bit for bit,
+  # was the one file that already had it.
+  target_compile_options(sankhya_flags INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:-ffp-contract=off>")
   if(SANKHYA_ENABLE_CUDA)
     # nvcc treats -W* as its own options; hand them to the host compiler instead.
     target_compile_options(sankhya_flags INTERFACE
@@ -449,14 +438,6 @@ set_property(SOURCE src/util/version.cpp PROPERTY COMPILE_DEFINITIONS
   SANKHYA_GIT_COMMIT="${SANKHYA_GIT_COMMIT}"
   SANKHYA_BUILD_TYPE="$<CONFIG>"
   SANKHYA_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
-
-# The batched PDHG's CPU reference (#520) must round every product and sum on its own, as
-# the CUDA kernels do with explicit intrinsics, for the two to agree bit for bit: no fused
-# multiply-add contraction in that file, whatever -march a build adds.
-if(NOT MSVC)
-  set_source_files_properties(src/pdhg/batch_pdhg_cpu.cpp PROPERTIES COMPILE_OPTIONS
-    "-ffp-contract=off")
-endif()
 
 if(SANKHYA_ENABLE_CUDA)
   # Must be set before enable_language(CUDA): CMake reads CMAKE_CUDA_ARCHITECTURES

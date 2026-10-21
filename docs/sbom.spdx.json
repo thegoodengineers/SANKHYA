@@ -2,7 +2,7 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "creationInfo": {
     "comment": "Generated from the FetchContent_Declare blocks of CMakeLists.txt and the dependency table of docs/PROVENANCE.md. Not a binary scan: it states what the build declares, which is the thing a reader can check against the source. `ldd` output for the built binary is printed by the provenance job of .github/workflows/ci.yml and is the complementary check.",
-    "created": "2026-09-30T09:27:35Z",
+    "created": "2026-10-21T04:48:18Z",
     "creators": [
       "Tool: tools/make_sbom.py",
       "Organization: SANKHYA (SIH 2026 PS26119)"
@@ -26,14 +26,14 @@
     },
     {
       "SPDXID": "SPDXRef-Package-fmt",
-      "comment": "linked: yes, static; pinned in CMakeLists.txt at 10.2.1",
+      "comment": "linked: yes, static; pinned in CMakeLists.txt at 12.2.0",
       "copyrightText": "NOASSERTION",
-      "description": "String formatting. Produces text from values.",
+      "description": "String formatting. Produces text from values. 12.2.0 (was 10.2.1) because 10.2.1's `os.cc` does not compile under the clang that ubuntu-26.04 ships, the reader fuzzer's compiler (consteval format strings, #1100); the licence file is the same MIT text.",
       "downloadLocation": "https://github.com/fmtlib/fmt.git",
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
-          "referenceLocator": "pkg:github/fmtlib/fmt@10.2.1",
+          "referenceLocator": "pkg:github/fmtlib/fmt@12.2.0",
           "referenceType": "purl"
         }
       ],
@@ -42,7 +42,7 @@
       "licenseDeclared": "MIT",
       "name": "fmt",
       "supplier": "NOASSERTION",
-      "versionInfo": "10.2.1"
+      "versionInfo": "12.2.0"
     },
     {
       "SPDXID": "SPDXRef-Package-CLI11",

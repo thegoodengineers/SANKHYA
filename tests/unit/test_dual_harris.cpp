@@ -228,9 +228,18 @@ TEST(DualHarris, PerturbationAtTheStartIsGatedOnDistinctCostsAndUndoneByThePrima
 }
 
 TEST(DualHarris, OffIsBitForBitTheTextbookPath) {
-  // With both options at their defaults the dual simplex must be exactly the old path
-  // (review of #653): same iterations, objective, point and duals as naming the old
-  // settings explicitly, on instances with degenerate ties.
+  // With Harris off and the start perturbation at its default (off) the dual simplex must be
+  // exactly the old path (review of #653): same iterations, objective, point and duals as
+  // naming the old settings explicitly, on instances with degenerate ties.
+  //
+  // Harris is OFF here by name. Since #712 the LP default is Harris, and this test went on
+  // comparing the default (Harris) against textbook bit for bit: two different rules, which
+  // agree only while no two breakpoints fall within Harris's relaxation band of each other.
+  // Whether one does depends on the last bits of the reduced costs, so the agreement was a
+  // property of one compiler's rounding: it broke under dual steepest edge first (#411, 117
+  // against 106 iterations on share2b, which pinned Devex), then under Devex with GCC 15 (151
+  // against 116, the same optimum, #1100). Harris reaching the same optima is
+  // ReachesThePublishedNetlibOptima's claim, with a tolerance; this one is about "off".
   const auto netlib =
       std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "data/netlib";
   int compared = 0;
@@ -241,12 +250,9 @@ TEST(DualHarris, OffIsBitForBitTheTextbookPath) {
     defaults.set_bool("log_to_console", false);
     defaults.set_bool("presolve", false);
     defaults.set_string("algorithm", "dual-simplex");
-    // Pinned to Devex (#411): under dual steepest edge the Harris default breaks a tie on
-    // share2b differently from the textbook rule (117 against 106 iterations, the same
-    // optimum), and this test is about the ratio test, not the pricing.
     defaults.set_string("pricing", "devex");
+    defaults.set_string("dual_ratio_test", "textbook");
     Options named = defaults;
-    named.set_string("dual_ratio_test", "textbook");
     named.set_bool("dual_perturb_costs_at_start", false);
     const Solution a = solve(model, defaults);
     const Solution b = solve(model, named);

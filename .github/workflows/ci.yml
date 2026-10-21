@@ -148,7 +148,8 @@ jobs:
 
   build-and-test:
     name: ${{ matrix.name }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os || 'ubuntu-24.04' }}
+    continue-on-error: ${{ matrix.experimental || false }}
     # The suites that start their own threads, or assert on how threads shared work, and
     # RunOrderDeterminism, which sets a time limit from a solve it just timed (#909). They run
     # after the parallel set, one at a time (see the Test step for why). Named once here
@@ -177,6 +178,20 @@ jobs:
             parallel_tests: true
             serial_tests: true
             after_tests: true
+          # The same Release build and every test under the current toolchain, GCC 15 on
+          # ubuntu-26.04 (#1100): a judge may well build with it. ubuntu-24.04 (GCC 13) stays
+          # the evidence toolchain; every benchmark CSV is produced there.
+          - name: Release (GCC 15, ubuntu-26.04)
+            os: ubuntu-26.04
+            experimental: true
+            build_type: Release
+            sanitize: OFF
+            debug_flags: ""
+            cache_key: Release-gcc15
+            save_cache: true
+            parallel_tests: true
+            serial_tests: true
+            after_tests: false
           # -O1 rather than the Debug default -O0: the AddressSanitizer documentation
           # recommends it for reasonable performance, every check still runs, and the build
           # stays Debug so assert() is still compiled in. At -O0 this leg took 15 to 20
