@@ -1,0 +1,43 @@
+name: gcc15-probe
+on:
+  push:
+    branches: [fix/gcc15-1100]
+  workflow_dispatch:
+jobs:
+  probe:
+    name: probe ${{ matrix.v }}
+    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { v: base, cxx: g++, bt: Release, flags: "", extra: "" }
+          - { v: nocontract, cxx: g++, bt: Release, flags: "-ffp-contract=off", extra: "" }
+          - { v: pattern, cxx: g++, bt: Release, flags: "-ftrivial-auto-var-init=pattern", extra: "" }
+          - { v: ubsan, cxx: g++, bt: Release, flags: "-fsanitize=undefined -fno-sanitize-recover=all", extra: "" }
+          - { v: O2, cxx: g++, bt: Release, flags: "", extra: "", rel: "-O2 -DNDEBUG" }
+          - { v: gcc14, cxx: g++-14, bt: Release, flags: "", extra: "" }
+          - { v: clang, cxx: clang++, bt: Release, flags: "", extra: "" }
+          - { v: tsan, cxx: g++, bt: RelWithDebInfo, flags: "", extra: "-DSANKHYA_TSAN=ON -DSANKHYA_WITH_OPENMP=OFF" }
+          - { v: tsan-nocontract, cxx: g++, bt: RelWithDebInfo, flags: "-ffp-contract=off", extra: "-DSANKHYA_TSAN=ON -DSANKHYA_WITH_OPENMP=OFF" }
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build zlib1g-dev clang g++-14 || sudo apt-get install -y ninja-build zlib1g-dev clang
+      - run: |
+          ${{ matrix.cxx }} --version
+          ${{ matrix.cxx }} -Q --help=target 2>/dev/null | grep -E '^\s+-march=|^\s+-mfma |^\s+-mavx2 ' || true
+          echo | ${{ matrix.cxx }} -dM -E - | grep -iE '__FMA__|__AVX2__|__x86_64__|FP_FAST_FMA' || true
+          ldd --version | head -1
+      - run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=${{ matrix.bt }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_CXX_FLAGS="${{ matrix.flags }}" ${{ matrix.extra }} -DCMAKE_CXX_FLAGS_RELEASE="${{ matrix.rel || '-O3 -DNDEBUG' }}" -DSANKHYA_BUILD_TESTS=ON
+      - run: cmake --build build -j --target sankhya_tests
+      - name: tests
+        env:
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+          TSAN_OPTIONS: halt_on_error=1
+        run: >-
+          ./build/tests/sankhya_tests
+          --gtest_filter='DualHarris.*:InteriorPoint.TheBarrierExhausted*:Pdhg.OffTickEvaluationIsGeometricallyScheduled:ConvexNlp.*:MinlpOa.*:PdhgParallelSpmv.*'
