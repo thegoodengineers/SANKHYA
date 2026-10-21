@@ -95,11 +95,37 @@ def test_different_commits_ordering() -> None:
             latest_result.RESULTS_DIR = old_results_dir
 
 
+def test_allowed_options() -> None:
+    """#1082: an option the tier states as its configuration does not disqualify its run;
+    any other option still does, alone or beside the allowed one."""
+    with tempfile.TemporaryDirectory() as td:
+        head = "instance,git_commit,solver_options\n"
+        cases = {"plain": "", "allowed": "certified_gap_seconds=120",
+                 "other": "algorithm=ipm",
+                 "both": "certified_gap_seconds=120 algorithm=ipm"}
+        paths = {}
+        for name, options in cases.items():
+            paths[name] = Path(td) / f"{name}.csv"
+            paths[name].write_text(head + f"afiro,abc1234,{options}\n")
+        allowed = latest_result.CERTIFIED_TIER_OPTIONS
+        check(latest_result.is_default_run(paths["plain"]), "no options is a default run")
+        check(not latest_result.is_default_run(paths["allowed"]),
+              "an option disqualifies a run by default")
+        check(latest_result.is_default_run(paths["allowed"], allowed),
+              "an allowed option does not")
+        check(not latest_result.is_default_run(paths["other"], allowed),
+              "an option outside the allowed ones still does")
+        check(not latest_result.is_default_run(paths["both"], allowed),
+              "an allowed option beside another still does")
+
+
 def main() -> int:
     print("test_deterministic_tie_break")
     test_deterministic_tie_break()
     print("test_different_commits_ordering")
     test_different_commits_ordering()
+    print("test_allowed_options")
+    test_allowed_options()
 
     print()
     if FAILURES == 0:

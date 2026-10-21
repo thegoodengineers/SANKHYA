@@ -58,7 +58,12 @@ def commit_of(path: Path) -> str:
     return (first_row(path).get("git_commit") or "").strip()
 
 
-def is_default_run(path: Path) -> bool:
+#: Options the Netlib certified tier states as its configuration, not as an experiment
+#: (#1082): it runs with certified_gap_seconds=120, while the solver's default is 30 s.
+CERTIFIED_TIER_OPTIONS = ("certified_gap_seconds",)
+
+
+def is_default_run(path: Path, allowed_options: tuple[str, ...] = ()) -> bool:
     """False when the run was made with a non-default solver option.
 
     netlib.py records --solver-option values in a `solver_options` column. Such a run is a
@@ -66,8 +71,13 @@ def is_default_run(path: Path) -> bool:
     medium-tier CSVs at one commit, three with an option set, and they would otherwise tie
     on git position and be ordered by mtime - which on a fresh clone is the checkout order.
     A CSV without the column predates the option and counts as a default run.
+
+    `allowed_options` names option keys that are part of a tier's stated configuration
+    rather than an experiment: the certified tier runs with certified_gap_seconds=120
+    (#1082), and its documents print that setting beside the count.
     """
-    return not (first_row(path).get("solver_options") or "").strip()
+    options = (first_row(path).get("solver_options") or "").split()
+    return all(option.split("=", 1)[0] in allowed_options for option in options)
 
 
 _DEFAULT_NAME = re.compile(r"^[0-9a-f]{7,40}(-[A-Za-z0-9]+)*$")
@@ -102,14 +112,16 @@ def timestamp_of(path: Path) -> float:
         return 0.0
 
 
-def latest(pattern: str, *, prefix: str | None = None) -> Path | None:
+def latest(pattern: str, *, prefix: str | None = None,
+           allowed_options: tuple[str, ...] = ()) -> Path | None:
     """The most recent CSV matching `pattern`, most-recent by git history then by the
     timestamp each CSV itself records. `prefix`, when given, additionally excludes any
     match whose name is not `PREFIX-<sha>[-word].csv` (see is_default_named(); #263) -
     pass it whenever `pattern` could also match a named A/B experiment committed beside the
     tier's own runs.
     """
-    candidates = [path for path in RESULTS_DIR.glob(pattern) if is_default_run(path)]
+    candidates = [path for path in RESULTS_DIR.glob(pattern)
+                  if is_default_run(path, allowed_options)]
     if prefix is not None:
         candidates = [path for path in candidates if is_default_named(path, prefix)]
     if not candidates:

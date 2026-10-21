@@ -126,10 +126,13 @@ def netlib_certified_row() -> Row | None:
     """Optimal Netlib answers whose Neumaier-Shcherbina bound is within 1e-6 relative of the
     objective (#763): the bound holds by construction and the verifier re-derives it."""
     path = latest_result.latest("certified-gap-netlib-full-*.csv",
-                                prefix="certified-gap-netlib-full")
+                                prefix="certified-gap-netlib-full",
+                                allowed_options=latest_result.CERTIFIED_TIER_OPTIONS)
     if path is None:
         return None
-    optimal = [r for r in read_csv(path) if r.get("status") == "optimal"]
+    rows = read_csv(path)
+    optimal = [r for r in rows if r.get("status") == "optimal"]
+    options = ((rows[0].get("solver_options") or "").strip() if rows else "")
 
     def certified(row: dict) -> bool:
         try:
@@ -139,7 +142,8 @@ def netlib_certified_row() -> Row | None:
 
     passed, total = passed_predicate(optimal, certified)
     return Row("Netlib certified bounds", path, passed, total,
-               "optimal answer within 1e-6 of a rigorous bound the verifier re-derives", "-")
+               "optimal answer within 1e-6 of a rigorous bound the verifier re-derives"
+               + (f", with `{options}`" if options else ""), "-")
 
 
 def kennington_row() -> Row | None:

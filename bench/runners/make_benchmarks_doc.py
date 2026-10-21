@@ -509,9 +509,11 @@ def certified_gap_section(path: Path | None) -> str:
     verified = sum(row.get("independently_verified") == "1" for row in optimal)
     first = rows[0] if rows else {}
     worst = max((abs(finite[name]) for name in certified), default=0.0)
+    options = (first.get("solver_options") or "").strip()
     lines = [
         f"Run at `{first.get('git_commit', '?')}` on `{first.get('machine', '?')}` "
-        f"(`{path.name}`).",
+        f"(`{path.name}`), "
+        + (f"with `{options}`" if options else "with the default options") + ".",
         "",
         "| optimal answers | certified to 1e-6 relative | finite bound, looser | no finite "
         "bound | stated bound re-derived exactly by the verifier |",
@@ -2833,7 +2835,9 @@ def main() -> int:
     medium_csv = newest("netlib-medium-*.csv")
     full_csv = newest("netlib-full-*.csv")
     # #763: filed under its own name so it never replaces full_csv as the tier's evidence.
-    certified_gap_csv = newest("certified-gap-netlib-full-*.csv")
+    # #1082: the tier runs with certified_gap_seconds raised, stated beside the count.
+    certified_gap_csv = latest_result.latest("certified-gap-netlib-full-*.csv",
+                                             allowed_options=latest_result.CERTIFIED_TIER_OPTIONS)
     # The full sixteen when there is such a run, else the small set (#530). Option runs carry
     # `algorithm=` in solver_options: latest() skips them and newest_option_run() picks them.
     kennington_csv = newest("kennington-full-*.csv") or newest("kennington-small-*.csv")
