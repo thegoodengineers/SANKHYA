@@ -96,14 +96,10 @@ bool closes_section(const std::vector<std::string_view>& tokens, Section section
   if (tokens.empty() || tokens[0] != "end") return false;
   const std::string_view what = tokens.size() > 1 ? tokens[1] : std::string_view();
   switch (section) {
-    case Section::kNone:
-      return false;
-    case Section::kColumns:
-      return tokens.size() == 2 && what == "columns";
-    case Section::kRows:
-      return tokens.size() == 2 && what == "rows";
-    case Section::kOther:
-      return true;
+    case Section::kNone: return false;
+    case Section::kColumns: return tokens.size() == 2 && what == "columns";
+    case Section::kRows: return tokens.size() == 2 && what == "rows";
+    case Section::kOther: return true;
   }
   return false;
 }
