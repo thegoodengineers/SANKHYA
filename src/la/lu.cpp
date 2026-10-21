@@ -113,6 +113,8 @@ bool SparseLu::factorize(const std::vector<LuColumn>& columns, Index m, double p
                          double markowitz_threshold, const ShouldStop& should_stop) {
   m_ = m;
   stopped_early_ = false;
+  ++generation_;
+  kept_spike_valid_ = false;
   pivot_row_.clear();
   pivot_col_.clear();
   pivot_value_.clear();
@@ -387,6 +389,34 @@ void SparseLu::solve(double* b, DensityHistory* history) const {
   remember(history);
 }
 
+void SparseLu::solve_entering(double* b, DensityHistory* history) const {
+  if (!forrest_tomlin_) {
+    solve(b, history);
+    return;
+  }
+  // The full passes, so that the spike is there to keep: the hyper-sparse path never
+  // gathers it, and under an active Forrest-Tomlin factorization it is not taken anyway.
+  keep_spike_ = true;
+  kept_spike_valid_ = false;
+  solve_base(b, false);
+  keep_spike_ = false;
+  remember(history);
+}
+
+void SparseLu::keep_spike() const {
+  kept_spike_steps_.clear();
+  kept_spike_values_.clear();
+  for (Index s = 0; s < m_; ++s) {
+    const double value = work_[static_cast<std::size_t>(s)];
+    if (value == 0.0) continue;
+    kept_spike_steps_.push_back(s);
+    kept_spike_values_.push_back(value);
+  }
+  kept_spike_valid_ = true;
+  kept_generation_ = generation_;
+  kept_updates_ = eta_count();
+}
+
 void SparseLu::solve_transpose(double* b, DensityHistory* history) const {
   solve_transpose_base(b, attempt_hyper(history));
   remember(history);
@@ -412,6 +442,7 @@ void SparseLu::solve_base(double* b, bool try_hyper) const {
           b[static_cast<std::size_t>(pivot_row_[static_cast<std::size_t>(k)])];
     }
     ft_apply_retas(work_.data());
+    if (keep_spike_) keep_spike();
     // No zero-fill: ft_back_substitute() visits every position exactly once and writes
     // ft_scratch_ at every one, so a prior call's contents are fully overwritten regardless.
     ft_back_substitute(work_.data(), ft_scratch_.data());
@@ -434,6 +465,7 @@ void SparseLu::solve_base(double* b, bool try_hyper) const {
     work_[static_cast<std::size_t>(k)] =
         b[static_cast<std::size_t>(pivot_row_[static_cast<std::size_t>(k)])];
   }
+  if (keep_spike_) keep_spike();
   for (Index k = m_ - 1; k >= 0; --k) {
     const auto uk = static_cast<std::size_t>(k);
     const double value = work_[uk] / pivot_value_[uk];
@@ -862,15 +894,26 @@ bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha
   // It costs nothing extra to collect that pattern into ft_work_nz_ while scanning, though -
   // issue #279's follow-up ("a sparse spike... walk ft_row_/ft_col_ from the nonzeros of
   // alpha") is what everything from here on reads instead of a second 0..m sweep.
+  // THE KEPT SPIKE, WHEN THERE IS ONE FOR THIS FACTOR STATE (solve_entering(); Forrest &
+  // Tomlin 1972, Suhl & Suhl 1993). The FTRAN of the entering column already passed through
+  // L and the row etas, and what it held just before U is the spike U * alpha by step; the
+  // rebuild below multiplies U back into the solved alpha to recover it, which costs the
+  // nonzeros of every column alpha touches. The two agree to rounding, not to the bit: the
+  // kept one is the forward solve's own value, the rebuilt one U times the back-solved one.
+  // Only a spike kept on this very factorization with no update since is taken; anything
+  // else - a caller that used solve(), a refactorization in between - rebuilds it.
+  const bool use_kept =
+      kept_spike_valid_ && kept_generation_ == generation_ && kept_updates_ == eta_count();
+  kept_spike_valid_ = false;
   ft_work_nz_.clear();
-  if (support == nullptr) {
+  if (!use_kept && support == nullptr) {
     for (Index s = 0; s < m; ++s) {
       const auto us = static_cast<std::size_t>(s);
       const double value = alpha[static_cast<std::size_t>(pivot_col_[us])];
       work_[us] = value;
       if (value != 0.0) ft_work_nz_.push_back(s);
     }
-  } else {
+  } else if (!use_kept) {
     // The same steps from the support, each the step whose pivot column is that position,
     // then sorted: the spike below accumulates each entry's terms in increasing step order,
     // as the full scan lists them, so the sums are the same to the bit. work_ is read only
@@ -908,6 +951,9 @@ bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha
       spike[ui] += delta;
     }
   };
+  for (std::size_t t = 0; use_kept && t < kept_spike_steps_.size(); ++t) {
+    spike_add(kept_spike_steps_[t], kept_spike_values_[t]);
+  }
   for (Index s : ft_work_nz_) {
     const auto us = static_cast<std::size_t>(s);
     const double w = work_[us];

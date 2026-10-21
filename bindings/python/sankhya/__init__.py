@@ -73,6 +73,16 @@ def _check(status: int, what: str) -> None:
     raise SankhyaError(f"{what}: {detail}" if detail else what)
 
 
+def _is_type_refusal() -> bool:
+    """True when the last C API error was a setter refusing an option of another type.
+
+    The C API checks the registry's declared type before writing (c_api.cpp,
+    check_option) and names that case in its message; Options.set reads it to route a
+    Python number to the setter the option's type wants.
+    """
+    return "not of the type" in _library().sankhya_last_error().decode()
+
+
 class _Infinity(float):
     """The C API's infinity, as a float that repr()s recognisably."""
 
@@ -156,11 +166,22 @@ class Options:
             _check(lib.sankhya_options_set_bool(self._handle, encoded, 1 if value else 0),
                    f"setting option {name!r}")
         elif isinstance(value, int):
-            _check(lib.sankhya_options_set_int(self._handle, encoded, value),
-                   f"setting option {name!r}")
+            # A Python int for a double option (time_limit=60, mip_relative_gap=0) is the
+            # value the caller meant, not a type error: when the registry says the option
+            # holds a double, the integer is passed as one. The C API has no type query, so
+            # the integer setter is tried first and its type refusal is what routes the
+            # value to the double setter; any other refusal (unknown name, out of range)
+            # is reported as it is.
+            status = lib.sankhya_options_set_int(self._handle, encoded, value)
+            if status != 0 and _is_type_refusal():
+                status = lib.sankhya_options_set_double(self._handle, encoded, float(value))
+            _check(status, f"setting option {name!r}")
         elif isinstance(value, float):
-            _check(lib.sankhya_options_set_double(self._handle, encoded, value),
-                   f"setting option {name!r}")
+            # The mirror image: 2.0 for an int option (threads=2.0) is an integer value.
+            status = lib.sankhya_options_set_double(self._handle, encoded, value)
+            if status != 0 and value.is_integer() and _is_type_refusal():
+                status = lib.sankhya_options_set_int(self._handle, encoded, int(value))
+            _check(status, f"setting option {name!r}")
         elif isinstance(value, str):
             _check(lib.sankhya_options_set_string(self._handle, encoded, value.encode()),
                    f"setting option {name!r}")
@@ -713,8 +734,13 @@ class Model(NonlinearModelMixin):
         self.close()
 
     def close(self) -> None:
-        if self._handle and _lib is not None:
-            _lib.sankhya_model_free(self._handle)
+        # __init__ asks for the library before it has a handle. When the load fails it
+        # raises, rightly, and __del__ still runs on the half-built object: reading
+        # self._handle here raised AttributeError a second time, as an unraisable exception
+        # on stderr. A handle that never existed is nothing to free, as in Options.__del__.
+        handle = getattr(self, "_handle", None)
+        if handle and _lib is not None:
+            _lib.sankhya_model_free(handle)
             self._handle = None
 
     def __del__(self) -> None:

@@ -119,12 +119,17 @@ def parse_sol(path: Path) -> Solution:
             if not line or line.startswith("#"):
                 continue
             fields = split_record(line)
-            if fields[0] == "begin":
+            # "begin" opens a block only outside one, and "end" closes only the block that
+            # is open ("end columns" inside columns). A column or row named begin or end is
+            # an ordinary record: the writer does not quote those names, and before this
+            # test "end 0 0 unknown" closed the columns block early, so every column after
+            # it was missing and a correct solution was rejected as incomplete.
+            if not block and fields[0] == "begin" and len(fields) >= 2:
                 block = fields[1]
                 if block == "iis_witness" and len(fields) >= 4:
                     solution.iis_witnesses.append((fields[2], fields[3], {}))
                 continue
-            if fields[0] == "end":
+            if block and fields[0] == "end" and (len(fields) == 1 or fields[1] == block):
                 block = ""
                 continue
             if block == "columns" and len(fields) >= 3:

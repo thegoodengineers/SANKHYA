@@ -4,11 +4,12 @@
 // `decomposition=off` (the default) never reaches this file. With `auto` the model is looked at
 // for block-angular structure (structure.hpp) and decomposed only when the structure is strong;
 // with `benders` any structure with two blocks is tried. What is decomposed is an LP that is a
-// minimisation with linking COLUMNS, by Benders (benders.hpp). Everything else - an integer or
-// quadratic model, a maximisation, a structure that is too weak, linking ROWS (the form
-// Dantzig-Wolfe is for, which is detected and said so in the log but not solved), or a
-// decomposition that declines or whose answer fails solve()'s measurement - is solved by the
-// ordinary engines, as if the option were off. The log says which, and why.
+// minimisation with linking COLUMNS, by Benders (benders.hpp), or - only with `dantzig-wolfe`,
+// which tries any split of the columns into two or more blocks - with linking ROWS, by
+// Dantzig-Wolfe (dantzig_wolfe.hpp, #1048). Everything else - an integer or quadratic model, a
+// maximisation, a structure that is too weak, linking rows under `auto`, or a decomposition
+// that declines or whose answer fails solve()'s measurement - is solved by the ordinary
+// engines, as if the option were off. The log says which, and why.
 #pragma once
 
 #include <optional>

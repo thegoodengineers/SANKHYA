@@ -904,7 +904,9 @@ void Simplex::ftran_entering_column(Index entering) {
   for_each_entry(entering, [&](Index row, double value) {
     alpha_[static_cast<std::size_t>(row)] += value;
   });
-  lu_.solve(alpha_.data(), &column_history_);
+  // The entering column: under the Forrest-Tomlin update its partial transform is kept for
+  // the update that follows (SparseLu::solve_entering); under the product form, solve().
+  lu_.solve_entering(alpha_.data(), &column_history_);
 }
 
 double Simplex::ftran_residual(Index entering) const {
