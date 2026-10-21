@@ -379,6 +379,16 @@ inline constexpr double kPdhgLoose = 1e-4;
 /// simplex starts: the vertex it returns is judged at kPrimalFeasibility and
 /// kDualFeasibility like any other.
 inline constexpr double kCrossoverStartInfeasibility = 1e-4;
+
+/// The crossover's pivot budget, per row and column of the model it runs on (#1072): its
+/// simplex stops with the interior point's answer standing after this many pivots times
+/// rows + columns, whatever the clock says, so where it gives up is the same on every
+/// machine. Over every successful crossover recorded in bench/results on 19 Oct 2026 (99
+/// Netlib and Kennington instances, push pivots included, per row and column of the
+/// original model) the largest was grow7's 1,179 pivots on 441, 2.67; Kennington's largest
+/// was cre-a's 0.27. 10 leaves almost four times the worst. cycle's failing push (221,027
+/// pivots, 57 per row and column of its presolved model) is stopped at 38,920.
+inline constexpr double kCrossoverPivotsPerDimension = 10.0;
 inline constexpr double kPdhgTight = 1e-8;
 
 /// PDHG feasibility polishing (#483, option pdhg_feasibility_polish; Applegate, Hinder, Lu &
@@ -1144,6 +1154,17 @@ inline constexpr double kBendersCutViolation = 1e-9;
 /// A block that the LP engine reports infeasible must also show a violation in its elastic LP
 /// above this; below it the verdicts disagree, which is a numerical failure and not a cut.
 inline constexpr double kBendersFeasibilityCut = 1e-9;
+/// Dantzig-Wolfe decomposition (#1048): the restricted master's value and the Lagrangian bound
+/// (that value plus every block's negative reduced cost) agree - and column generation has
+/// converged - when they differ by no more than this, relative to max(1, |value|). The same
+/// target as kBendersGap, for the same reason: the answer is then measured by solve() against
+/// kPrimalFeasibility and kDualFeasibility, which decides whether it is believed.
+inline constexpr double kDantzigWolfeGap = 1e-8;
+/// A block's column enters the restricted master only when its reduced cost is below minus
+/// this, relative to max(1, |master value|): a decade inside kDantzigWolfeGap, so that a round
+/// which has not converged always has a column to add, and no column enters whose reduced cost
+/// the master could not tell from rounding.
+inline constexpr double kDantzigWolfeReducedCost = 1e-9;
 /// Outer approximation (#528): a point of the master is cut off by the linearization of a
 /// nonlinear row only when the row is violated there by more than this, relative to
 /// max(1, |bound|). Ten times kPrimalFeasibility, the MILP master's own feasibility tolerance,

@@ -166,6 +166,7 @@ add_executable(sankhya_tests
   unit/test_nlp_ipm.cpp
   unit/test_nlp_hock_schittkowski.cpp
   unit/test_minlp.cpp
+  unit/test_dantzig_wolfe.cpp
   unit/test_decomposition.cpp
   unit/test_minlp_oa.cpp
   unit/test_minlp_minlplib.cpp

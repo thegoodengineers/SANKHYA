@@ -88,6 +88,46 @@ TEST(SolReader, QuotedNamesRoundTrip) {
   EXPECT_EQ(rows, cold.row_status);
 }
 
+TEST(SolReader, AColumnOrRowNamedBeginOrEndIsDataNotASectionMark) {
+  // "end" and "begin" are legitimate names, and writer.cpp does not quote them. Before the
+  // reader asked whether a line closes the OPEN section, "end 0 0 at_lower" ended the
+  // columns block early, the file lost every column after it, and the solver refused its
+  // own freshly written file as a warm start of the model it had just solved.
+  Model model = netlib("afiro");
+  model.col_names[0] = "end";
+  model.col_names[1] = "begin";
+  model.row_names[0] = "end";
+  model.row_names[1] = "begin";
+  const Solution cold = solve(model, quiet());
+  ASSERT_EQ(cold.status, SolveStatus::kOptimal) << cold.message;
+  const TempFile file("", ".sol");
+  std::string error;
+  ASSERT_TRUE(io::write_solution(file.path(), model, cold, &error)) << error;
+
+  std::vector<BasisStatus> cols;
+  std::vector<BasisStatus> rows;
+  ASSERT_TRUE(io::read_solution_basis(file.path(), model, &cols, &rows, &error)) << error;
+  EXPECT_EQ(cols, cold.col_status);
+  EXPECT_EQ(rows, cold.row_status);
+
+  std::vector<double> values;
+  ASSERT_TRUE(io::read_solution_point(file.path(), model, &values, &error)) << error;
+  ASSERT_EQ(values.size(), cold.col_value.size());
+  for (std::size_t j = 0; j < values.size(); ++j) {
+    EXPECT_DOUBLE_EQ(values[j], cold.col_value[j]) << model.col_names[j];
+  }
+
+  // The real section marks still work, with or without the count, and a stray "end" outside
+  // any section is ignored rather than consumed.
+  const TempFile hand(
+      "end\nbegin columns\nend 1 0 basic\n" + model.col_names[2] +
+          " 2 0 at_lower\nend columns\nbegin rows\nend 0 0 at_lower\nend rows\n",
+      ".sol");
+  ASSERT_TRUE(io::read_solution_point(hand.path(), model, &values, &error)) << error;
+  EXPECT_DOUBLE_EQ(values[0], 1.0);
+  EXPECT_DOUBLE_EQ(values[2], 2.0);
+}
+
 TEST(SolReader, AFileOfAnotherModelOrWithoutABasisIsRefused) {
   Model afiro = netlib("afiro");
   const Solution cold = solve(afiro, quiet());

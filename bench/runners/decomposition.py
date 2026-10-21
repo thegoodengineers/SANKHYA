@@ -4,12 +4,16 @@
 
     python bench/runners/decomposition.py [--binary build/sankhya] [--sizes small medium large]
                                           [--blocks 2 4 8] [--time-limit 300] [--out CSV]
+                                          [--method benders|dantzig-wolfe]
 
 For each size of the refinery ladder (bench/case_studies/refinery/generator.py - T periods, each
 joined to the next by the stocks it carries) the LP is generated, its exact analytic optimum is
 read from the generator (it verifies every KKT condition in rational arithmetic before it writes
 the file, so that number is the reference and shares nothing with the solver), and it is solved
-once monolithically and once per block count with `--option decomposition=benders`. Every answer
+once monolithically and once per block count with `--option decomposition=<method>`: Benders over
+the stocks as linking columns (#525), or Dantzig-Wolfe over the balance rows that carry them as
+linking rows (#1048, written to dantzig-wolfe-<commit>.csv so that the Benders table in
+docs/BENCHMARKS.md never picks it up). Every answer
 is checked by tools/verify_solution.py, the independent verifier, and one CSV row per solve
 carries the columns ENGINEERING_RULES.md asks for: the instance, the sha256 of the file solved,
 our objective, the reference objective, the absolute and relative gap, status, wall time,
@@ -17,7 +21,7 @@ iterations, git commit (from the binary, stamp.py) and machine - plus what decom
 which method actually ran, whether it matched the monolithic objective, and the speed-up.
 
 A decomposition that declined or whose answer was discarded falls back to the monolithic engines
-inside solve(); the row's `algorithm` says so (it is not `benders`), and that is what is
+inside solve(); the row's `algorithm` says so (it is not the method's), and that is what is
 reported - never the option that was asked for.
 """
 from __future__ import annotations
@@ -99,6 +103,7 @@ def main() -> int:
     parser.add_argument("--time-limit", type=float, default=300.0)
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--machine", default=None, help="machine tag (default: OS-arch)")
+    parser.add_argument("--method", default="benders", choices=("benders", "dantzig-wolfe"))
     args = parser.parse_args()
 
     sys.path.insert(0, str(REPO_ROOT / "bindings" / "python"))
@@ -108,7 +113,12 @@ def main() -> int:
     commit = stamp.stamp(args.binary)
     machine = args.machine or f"{platform.system()}-{platform.machine()}"
     now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-    out = args.out or (REPO_ROOT / "bench" / "results" / f"decomposition-{commit}.csv")
+    # The Benders table of docs/BENCHMARKS.md reads decomposition-*.csv; Dantzig-Wolfe's runs
+    # are named apart so it never picks them up. Spelled out in full: the doc scanner reads
+    # these names as globs.
+    name = (f"decomposition-{commit}.csv" if args.method == "benders"
+            else f"dantzig-wolfe-{commit}.csv")
+    out = args.out or (REPO_ROOT / "bench" / "results" / name)
 
     rows: list[dict] = []
     with tempfile.TemporaryDirectory() as tmp:
@@ -122,7 +132,8 @@ def main() -> int:
             reference = parse_optimum(made.stdout)
             digest = hashlib.sha256(mps.read_bytes()).hexdigest()
             modes = [("monolithic", 0, [])] + [
-                (f"benders-{k}", k, ["decomposition=benders", f"decomposition_blocks={k}"])
+                (f"{args.method}-{k}", k,
+                 [f"decomposition={args.method}", f"decomposition_blocks={k}"])
                 for k in args.blocks]
             monolithic_objective = None
             monolithic_wall = None
@@ -166,8 +177,9 @@ def main() -> int:
         writer.writerows(rows)
     rejected = [r for r in rows if r["verified"] == "REJECTED"]
     mismatched = [r for r in rows if r["matches_monolithic"] == "NO"]
-    decomposed = [r for r in rows if r["algorithm"] == "benders"]
-    print(f"\n{len(decomposed)} of {len(rows) - len(args.sizes)} decomposed solves ran Benders; "
+    decomposed = [r for r in rows if r["algorithm"] == args.method]
+    print(f"\n{len(decomposed)} of {len(rows) - len(args.sizes)} decomposed solves ran "
+          f"{args.method}; "
           f"{len(rejected)} rejected by the verifier; {len(mismatched)} disagree with the "
           f"monolithic objective; wrote {out}")
     return 1 if rejected or mismatched else 0

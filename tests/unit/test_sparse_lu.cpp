@@ -795,6 +795,103 @@ TEST(SparseLuForrestTomlin, TheUpdateOverAlphasSupportIsTheSameToTheBit) {
   EXPECT_GE(applied, 10) << "too few updates accepted to compare";
 }
 
+TEST(SparseLuForrestTomlin, TheKeptSpikeGivesTheFactorsTheRebuiltOneGives) {
+  // solve_entering() keeps the entering column's partial transform, and the next update
+  // installs it instead of rebuilding the spike as U times alpha (#1042). The two are the
+  // same vector up to rounding, so two copies of one factorization - one updating from the
+  // kept spike, one from the rebuilt one - must agree to rounding after every update, and
+  // both must agree with a fresh factorization of the updated basis.
+  std::mt19937 rng(20261020);
+  std::uniform_real_distribution<double> value(-3.0, 3.0);
+  std::uniform_real_distribution<double> unit(0.0, 1.0);
+
+  constexpr Index m = 30;
+  TestMatrix current = random_basis(rng, m, 0.15);
+  SparseLu kept;
+  SparseLu rebuilt;
+  kept.use_forrest_tomlin(true);
+  rebuilt.use_forrest_tomlin(true);
+  ASSERT_TRUE(kept.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
+  ASSERT_TRUE(rebuilt.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
+
+  int applied = 0;
+  double worst_between = 0.0;
+  double worst_fresh = 0.0;
+  for (int step = 0; step < 40; ++step) {
+    const Index leaving = static_cast<Index>((7 * step) % m);
+    std::vector<double> entering(static_cast<std::size_t>(m), 0.0);
+    for (Index i = 0; i < m; ++i) {
+      if (unit(rng) < 0.12) entering[static_cast<std::size_t>(i)] = value(rng);
+    }
+    entering[static_cast<std::size_t>(leaving)] = value(rng) + 6.0;
+    std::vector<double> alpha_kept = entering;
+    kept.solve_entering(alpha_kept.data());
+    std::vector<double> alpha_rebuilt = entering;
+    rebuilt.solve(alpha_rebuilt.data());
+    const bool a = kept.update(leaving, alpha_kept.data());
+    const bool b = rebuilt.update(leaving, alpha_rebuilt.data());
+    if (!a || !b) break;
+    ++applied;
+    current = with_column_replaced(current, m, leaving, entering);
+    SparseLu fresh;
+    ASSERT_TRUE(fresh.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
+
+    std::vector<double> rhs(static_cast<std::size_t>(m));
+    for (double& v : rhs) v = value(rng);
+    std::vector<double> x = rhs;
+    std::vector<double> y = rhs;
+    std::vector<double> z = rhs;
+    kept.solve(x.data());
+    rebuilt.solve(y.data());
+    fresh.solve(z.data());
+    worst_between = std::max(worst_between, max_difference(x, y));
+    worst_fresh = std::max(worst_fresh, max_difference(x, z));
+    std::vector<double> xt = rhs;
+    std::vector<double> zt = rhs;
+    kept.solve_transpose(xt.data());
+    fresh.solve_transpose(zt.data());
+    worst_fresh = std::max(worst_fresh, max_difference(xt, zt));
+  }
+  EXPECT_GE(applied, 10) << "too few updates accepted to compare";
+  EXPECT_LT(worst_between, 1e-9) << "kept and rebuilt spikes part by " << worst_between;
+  EXPECT_LT(worst_fresh, 1e-7) << "the kept-spike factors drift from a fresh one by "
+                               << worst_fresh;
+}
+
+TEST(SparseLuForrestTomlin, AKeptSpikeIsNotUsedAcrossARefactorization) {
+  // A spike kept on one factorization must not be installed into another: the update
+  // after a refactorization rebuilds it, and the factors match a fresh factorization.
+  std::mt19937 rng(20261021);
+  std::uniform_real_distribution<double> value(-3.0, 3.0);
+  constexpr Index m = 12;
+  TestMatrix current = random_basis(rng, m, 0.4);
+  SparseLu lu;
+  lu.use_forrest_tomlin(true);
+  ASSERT_TRUE(lu.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
+  std::vector<double> unrelated(static_cast<std::size_t>(m));
+  for (double& v : unrelated) v = value(rng);
+  lu.solve_entering(unrelated.data());  // kept, then made stale by the refactorization
+  ASSERT_TRUE(lu.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
+  const Index leaving = 3;
+  std::vector<double> entering(static_cast<std::size_t>(m));
+  for (Index i = 0; i < m; ++i) {
+    entering[static_cast<std::size_t>(i)] = value(rng) + (i == leaving ? 6.0 : 0.0);
+  }
+  std::vector<double> alpha = entering;
+  lu.solve(alpha.data());
+  ASSERT_TRUE(lu.update(leaving, alpha.data()));
+  current = with_column_replaced(current, m, leaving, entering);
+  SparseLu fresh;
+  ASSERT_TRUE(fresh.factorize(current.columns(), m, tol::kPivotTolerance, kThreshold));
+  std::vector<double> rhs(static_cast<std::size_t>(m));
+  for (double& v : rhs) v = value(rng);
+  std::vector<double> x = rhs;
+  std::vector<double> z = rhs;
+  lu.solve(x.data());
+  fresh.solve(z.data());
+  EXPECT_LT(max_difference(x, z), 1e-9);
+}
+
 TEST(SparseLuForrestTomlin, SparseEnteringColumnsStackLikeDenseOnes) {
   // The stacking test above replaces columns with DENSE entering vectors, so every entry of
   // alpha is nonzero and the sparse spike, the partial BTRAN started at the leaving
