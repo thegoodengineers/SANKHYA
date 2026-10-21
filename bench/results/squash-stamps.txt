@@ -26,3 +26,5 @@ bc54839 1adbf77 ipm-dense-ab-{mittelmann,netlib-full}-{off,on}-bc54839.csv, run 
 bcf2e42 37f4c56 engine-selection-bcf2e42.csv, the #477 training grid, run on the branch (#941); 37f4c56 is its squash merge
 ab04612 37f4c56 engine-tree-ab-netlib-full-{rules,learned}-ab04612.csv, run on the #477 branch (#941); 37f4c56 is its squash merge
 5e1111b 2fabc9de option-ab-{netlib,kennington,refinery}-crossover-budget-5e1111b.csv, the crossover pivot budget A/B (#1072), run on the #1080 branch; 2fabc9de is its squash merge
+0c9355f ce5c5596 option-ab-{pooling,miplib,netlib}-omp-gate-0c9355f.csv, the OpenMP team-gate A/B (runs 39543002814, 39542982271, 39546567456), run on the #1103 branch; ce5c5596 is its squash merge
+50bfe65 ce5c5596 option-ab-cycle-ipm-{omp-gate,threads}-50bfe65.csv, Netlib cycle under algorithm=ipm, gate and threads A/Bs (runs 39553788700, 39557122172), run on the #1103 branch; ce5c5596 is its squash merge
