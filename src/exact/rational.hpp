@@ -53,6 +53,11 @@ class Deadline {
   void check() const {
     if (!unlimited_ && std::chrono::steady_clock::now() > end_) throw ExactBudgetExceeded();
   }
+  /// Seconds left before the deadline, negative once it has passed, +inf when unlimited.
+  [[nodiscard]] double remaining() const {
+    if (unlimited_) return std::numeric_limits<double>::infinity();
+    return std::chrono::duration<double>(end_ - std::chrono::steady_clock::now()).count();
+  }
 
  private:
   bool unlimited_;

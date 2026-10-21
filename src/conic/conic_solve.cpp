@@ -26,6 +26,7 @@
 
 #include <fmt/format.h>
 
+#include "../core/resource_limits.hpp"
 #include "conic/conic_duals.hpp"
 #include "conic/conic_form.hpp"
 #include "conic/conic_ipm.hpp"
@@ -85,39 +86,52 @@ std::string describe_refusal(const QcqpModel& model, const QuadraticRowClass& c)
 /// row's contribution to c - A'y on model column j, and the model writes it -y_r g_j with
 /// g = a + 2 Q x; y_r is the least-squares scalar. With g = 0 (a row whose gradient vanishes)
 /// there is nothing to fit and the primary row's own multiplier, sign * y_primary, stands.
-double row_multiplier(const QcqpModel& model, const conic::QuadraticRowMap& map,
+///
+/// Cost is the row's own size (#1086): its terms come from `terms` (index_terms_by_row), and
+/// g and t are model-width scratch vectors, zero on entry, of which only the row's columns are
+/// touched and reset - not allocated and summed at full width once per row.
+double row_multiplier(const conic::QuadraticRowMap& map, const conic::TermsByRow& terms,
                       const std::vector<double>& x, const std::vector<double>& y,
-                      const CsrView& rows) {
-  const auto n = static_cast<std::size_t>(model.linear.num_cols());
-  std::vector<double> g(n, 0.0);
-  std::vector<double> t(n, 0.0);
+                      const CsrView& rows, std::vector<double>* g, std::vector<double>* t,
+                      std::vector<std::size_t>* touched) {
+  touched->clear();
+  const auto touch = [&](std::size_t j) {
+    if ((*g)[j] == 0.0 && (*t)[j] == 0.0) touched->push_back(j);
+  };
   const double y_primary = y[static_cast<std::size_t>(map.primary)];
   const ColumnView linear = rows.row(map.row);
   for (Index p = 0; p < linear.size; ++p) {
     const auto j = static_cast<std::size_t>(linear.rows[p]);
-    g[j] += linear.values[p];
-    t[j] -= map.sign * linear.values[p] * y_primary;
+    touch(j);
+    (*g)[j] += linear.values[p];
+    (*t)[j] -= map.sign * linear.values[p] * y_primary;
   }
-  for (const QuadraticTerm& term : model.quadratic) {
-    if (term.row != map.row) continue;
-    const auto a = static_cast<std::size_t>(term.first);
-    const auto b = static_cast<std::size_t>(term.second);
+  for (const QuadraticTerm* term : terms[static_cast<std::size_t>(map.row)]) {
+    const auto a = static_cast<std::size_t>(term->first);
+    const auto b = static_cast<std::size_t>(term->second);
     // d(v x_a x_b) = v x_b on a and v x_a on b (2 v x_a on a square).
-    g[a] += term.value * x[b];
-    g[b] += term.value * x[a];
+    touch(a);
+    (*g)[a] += term->value * x[b];
+    touch(b);
+    (*g)[b] += term->value * x[a];
   }
   for (std::size_t i = 0; i < map.support.size(); ++i) {
     const auto j = static_cast<std::size_t>(map.support[i]);
+    touch(j);
     for (Index col = 0; col < map.factor.rank; ++col) {
-      t[j] += map.factor.at(static_cast<Index>(i), col) *
-              y[static_cast<std::size_t>(map.first_z_row + col)];
+      (*t)[j] += map.factor.at(static_cast<Index>(i), col) *
+                 y[static_cast<std::size_t>(map.first_z_row + col)];
     }
   }
+  // A column may be listed twice in `touched` (touched while both values were still zero);
+  // summing it once is what matters, so duplicates are skipped by zeroing as we go.
   double gg = 0.0;
   double gt = 0.0;
-  for (std::size_t j = 0; j < n; ++j) {
-    gg += g[j] * g[j];
-    gt += g[j] * t[j];
+  for (const std::size_t j : *touched) {
+    gg += (*g)[j] * (*g)[j];
+    gt += (*g)[j] * (*t)[j];
+    (*g)[j] = 0.0;
+    (*t)[j] = 0.0;
   }
   return gg > 0.0 ? -gt / gg : map.sign * y_primary;
 }
@@ -228,9 +242,13 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
   }
   {
     const CsrView rows(lin.matrix);
+    const conic::TermsByRow terms = conic::index_terms_by_row(model);
+    std::vector<double> g(static_cast<std::size_t>(n), 0.0);
+    std::vector<double> t(static_cast<std::size_t>(n), 0.0);
+    std::vector<std::size_t> touched;
     for (const conic::QuadraticRowMap& map : form.quadratic_rows) {
       solution.row_dual[static_cast<std::size_t>(map.row)] =
-          sigma * row_multiplier(model, map, x, run.y, rows);
+          sigma * row_multiplier(map, terms, x, run.y, rows, &g, &t, &touched);
     }
   }
   // c + Hx - A'y - sum over quadratic rows of y_r grad(x'Q_r x), the model's own sense.
@@ -253,7 +271,11 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
   solution.col_dual = std::move(d);
   // The point and the row-by-row multipliers are only as accurate as the square root of the
   // gap allows; finish them on the active set when that measures better (conic_duals.cpp).
-  const conic::Finish finish = conic::finish_on_active_set(model, &solution);
+  // The time limit and the interrupt reach the finish too (#1086): it runs after the interior
+  // point has returned, on the solve's own clock.
+  const ResourceLimits limits(options, logger);
+  const conic::Finish finish = conic::finish_on_active_set(
+      model, &solution, qp::convexity_deadline(limits, timer, control));
 
   // ---- quality, measured on the model with its products and cones -------------------------
   double primal = 0.0;

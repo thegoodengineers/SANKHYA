@@ -16,6 +16,8 @@
 #include <cassert>
 #include <cctype>
 #include <cerrno>
+#include <cmath>
+#include <cstddef>
 #include <cstdlib>
 #include <limits>
 #include <string_view>
@@ -2772,7 +2774,9 @@ Options::Options() {
 }
 
 const OptionSpec* Options::find_spec(const std::string& name) {
-  const auto it = name_index().find(name);
+  // The same name matching as set_from_string(), so the C API's existence check and its
+  // setters agree with the command line on " Threads " and "threads".
+  const auto it = name_index().find(to_lower(trim(name)));
   if (it == name_index().end()) return nullptr;
   return &registry()[it->second];
 }
@@ -2789,26 +2793,82 @@ OptionValue& Options::mutable_value_of(const std::string& name) {
   return values_[require_index(name)];
 }
 
-bool Options::set_from_string(const std::string& raw_name, const std::string& raw_text,
-                              std::string* error) {
-  const std::string name = to_lower(trim(raw_name));
-  const std::string text = trim(raw_text);
-  const auto it = name_index().find(name);
+namespace {
+
+/// The one range test every numeric entry point shares, so a value refused as text on the
+/// command line is refused as a binary value through the C API too. `shown` is the value as
+/// the caller wrote it, for the message. NaN is refused outright: it compares false against
+/// both bounds, so without this test it would pass the range check and then make every
+/// tolerance comparison in the solver false.
+bool check_numeric_range(const OptionSpec& spec, double value, const std::string& shown,
+                         std::string* error) {
+  if (std::isnan(value)) {
+    if (error != nullptr) {
+      *error = fmt::format("option '{}' expects a number, got {}", spec.name, shown);
+    }
+    return false;
+  }
+  if (value < spec.min_value || value > spec.max_value) {
+    if (error != nullptr) {
+      *error = fmt::format("option '{}' must be in [{:g}, {:g}], got {}", spec.name,
+                           spec.min_value, spec.max_value, shown);
+    }
+    return false;
+  }
+  return true;
+}
+
+/// The choice-list test for a string option, on the value already folded to the spec's case.
+bool check_string_choice(const OptionSpec& spec, const std::string& folded,
+                         const std::string& shown, std::string* error) {
+  if (!spec.choices.empty() &&
+      std::find(spec.choices.begin(), spec.choices.end(), folded) == spec.choices.end()) {
+    if (error != nullptr) {
+      *error = fmt::format("option '{}' must be one of [{}], got '{}'", spec.name,
+                           fmt::join(spec.choices, ", "), shown);
+    }
+    return false;
+  }
+  return true;
+}
+
+/// Resolve a caller-supplied name to its registry index, or report it unknown.
+bool resolve_option(const std::string& raw_name, std::size_t* index, std::string* error) {
+  const auto it = name_index().find(to_lower(trim(raw_name)));
   if (it == name_index().end()) {
     if (error != nullptr) *error = fmt::format("unknown option '{}'", raw_name);
     return false;
   }
-  const OptionSpec& spec = registry()[it->second];
+  *index = it->second;
+  return true;
+}
+
+bool report_type_mismatch(const OptionSpec& spec, const char* wanted, std::string* error) {
+  if (error != nullptr) {
+    *error = fmt::format("option '{}' is not {} option", spec.name, wanted);
+  }
+  return false;
+}
+
+}  // namespace
+
+bool Options::set_from_string(const std::string& raw_name, const std::string& raw_text,
+                              std::string* error) {
+  const std::string text = trim(raw_text);
+  std::size_t index = 0;
+  if (!resolve_option(raw_name, &index, error)) return false;
+  const OptionSpec& spec = registry()[index];
+  const std::string& name = spec.name;
 
   switch (spec.type) {
     case OptionType::Bool: {
       const std::string v = to_lower(text);
       if (v == "1" || v == "true" || v == "on" || v == "yes") {
-        values_[it->second] = true;
+        values_[index] = true;
         return true;
       }
       if (v == "0" || v == "false" || v == "off" || v == "no") {
-        values_[it->second] = false;
+        values_[index] = false;
         return true;
       }
       if (error != nullptr) {
@@ -2826,15 +2886,11 @@ bool Options::set_from_string(const std::string& raw_name, const std::string& ra
         }
         return false;
       }
-      const auto v = static_cast<double>(parsed);
-      if (v < spec.min_value || v > spec.max_value) {
-        if (error != nullptr) {
-          *error = fmt::format("option '{}' must be in [{:g}, {:g}], got {}", name,
-                               spec.min_value, spec.max_value, parsed);
-        }
+      if (!check_numeric_range(spec, static_cast<double>(parsed), fmt::format("{}", parsed),
+                               error)) {
         return false;
       }
-      values_[it->second] = static_cast<std::int64_t>(parsed);
+      values_[index] = static_cast<std::int64_t>(parsed);
       return true;
     }
     case OptionType::Double: {
@@ -2847,32 +2903,55 @@ bool Options::set_from_string(const std::string& raw_name, const std::string& ra
         }
         return false;
       }
-      if (parsed < spec.min_value || parsed > spec.max_value) {
-        if (error != nullptr) {
-          *error = fmt::format("option '{}' must be in [{:g}, {:g}], got {:g}", name,
-                               spec.min_value, spec.max_value, parsed);
-        }
-        return false;
-      }
-      values_[it->second] = parsed;
+      if (!check_numeric_range(spec, parsed, fmt::format("{:g}", parsed), error)) return false;
+      values_[index] = parsed;
       return true;
     }
     case OptionType::String: {
       const std::string v = spec.case_sensitive ? text : to_lower(text);
-      if (!spec.choices.empty() &&
-          std::find(spec.choices.begin(), spec.choices.end(), v) == spec.choices.end()) {
-        if (error != nullptr) {
-          *error = fmt::format("option '{}' must be one of [{}], got '{}'", name,
-                               fmt::join(spec.choices, ", "), raw_text);
-        }
-        return false;
-      }
-      values_[it->second] = v;
+      if (!check_string_choice(spec, v, raw_text, error)) return false;
+      values_[index] = v;
       return true;
     }
   }
   if (error != nullptr) *error = "unreachable option type";
   return false;
+}
+
+bool Options::set_int_checked(const std::string& raw_name, std::int64_t value,
+                              std::string* error) {
+  std::size_t index = 0;
+  if (!resolve_option(raw_name, &index, error)) return false;
+  const OptionSpec& spec = registry()[index];
+  if (spec.type != OptionType::Int) return report_type_mismatch(spec, "an integer", error);
+  if (!check_numeric_range(spec, static_cast<double>(value), fmt::format("{}", value), error)) {
+    return false;
+  }
+  values_[index] = value;
+  return true;
+}
+
+bool Options::set_double_checked(const std::string& raw_name, double value,
+                                 std::string* error) {
+  std::size_t index = 0;
+  if (!resolve_option(raw_name, &index, error)) return false;
+  const OptionSpec& spec = registry()[index];
+  if (spec.type != OptionType::Double) return report_type_mismatch(spec, "a number", error);
+  if (!check_numeric_range(spec, value, fmt::format("{:g}", value), error)) return false;
+  values_[index] = value;
+  return true;
+}
+
+bool Options::set_string_checked(const std::string& raw_name, const std::string& value,
+                                 std::string* error) {
+  std::size_t index = 0;
+  if (!resolve_option(raw_name, &index, error)) return false;
+  const OptionSpec& spec = registry()[index];
+  if (spec.type != OptionType::String) return report_type_mismatch(spec, "a string", error);
+  const std::string v = spec.case_sensitive ? value : to_lower(value);
+  if (!check_string_choice(spec, v, value, error)) return false;
+  values_[index] = v;
+  return true;
 }
 
 void Options::set_bool(const std::string& name, bool value) {

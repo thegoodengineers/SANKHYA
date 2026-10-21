@@ -384,8 +384,69 @@ class BigInt {
     }
     return r;
   }
+  /// Below this many limbs in the shorter operand the schoolbook product is faster.
+  static constexpr std::size_t kKaratsubaLimbs = 48;
+
+  /// |a| * |b|. Karatsuba's method (Karatsuba and Ofman, Soviet Physics Doklady 7, 1963;
+  /// Knuth, TAOCP vol. 2, 3rd ed., section 4.3.3): with a = a1 B^k + a0 and b likewise,
+  /// a b = z2 B^2k + z1 B^k + z0 for z0 = a0 b0, z2 = a1 b1 and
+  /// z1 = (a0 + a1)(b0 + b1) - z0 - z2, three half-size products instead of four. Exact
+  /// integer arithmetic throughout, so the result is the schoolbook one (#1082: the exact
+  /// duals multiply thousands-of-limb numerators by their denominator, quadratic before).
   static Limbs mul_mag(const Limbs& a, const Limbs& b) {
     if (a.empty() || b.empty()) return {};
+    const Limbs& big = a.size() >= b.size() ? a : b;
+    const Limbs& small = a.size() >= b.size() ? b : a;
+    if (small.size() < kKaratsubaLimbs) return mul_schoolbook(a, b);
+    const std::size_t k = big.size() / 2;
+    Limbs r(a.size() + b.size(), 0);
+    if (small.size() <= k) {
+      // Unbalanced: big = big1 B^k + big0, and each half takes small on its own.
+      add_shifted(&r, mul_mag(slice(big, 0, k), small), 0);
+      add_shifted(&r, mul_mag(slice(big, k, big.size()), small), k);
+      return r;
+    }
+    const Limbs a0 = slice(big, 0, k);
+    const Limbs a1 = slice(big, k, big.size());
+    const Limbs b0 = slice(small, 0, k);
+    const Limbs b1 = slice(small, k, small.size());
+    Limbs z0 = mul_mag(a0, b0);
+    Limbs z2 = mul_mag(a1, b1);
+    Limbs sum_a = add_mag(a0, a1);
+    Limbs sum_b = add_mag(b0, b1);
+    trim(&sum_a);
+    trim(&sum_b);
+    Limbs z1 = mul_mag(sum_a, sum_b);
+    trim(&z0);
+    trim(&z1);
+    trim(&z2);
+    z1 = sub_mag(z1, z0);  // (a0 + a1)(b0 + b1) >= z0 + z2, so both stay nonnegative
+    trim(&z1);
+    z1 = sub_mag(z1, z2);
+    add_shifted(&r, z0, 0);
+    add_shifted(&r, z1, k);
+    add_shifted(&r, z2, 2 * k);
+    return r;
+  }
+  /// The limbs [from, to) of v, trimmed.
+  static Limbs slice(const Limbs& v, std::size_t from, std::size_t to) {
+    Limbs s(v.begin() + static_cast<std::ptrdiff_t>(from),
+            v.begin() + static_cast<std::ptrdiff_t>(std::min(to, v.size())));
+    trim(&s);
+    return s;
+  }
+  /// *r += x B^offset; *r is wide enough for the sum, as every product above is.
+  static void add_shifted(Limbs* r, const Limbs& x, std::size_t offset) {
+    std::uint64_t carry = 0;
+    std::size_t i = 0;
+    for (; i < x.size() || carry != 0; ++i) {
+      const std::uint64_t s =
+          static_cast<std::uint64_t>((*r)[offset + i]) + (i < x.size() ? x[i] : 0U) + carry;
+      (*r)[offset + i] = static_cast<std::uint32_t>(s);
+      carry = s >> 32;
+    }
+  }
+  static Limbs mul_schoolbook(const Limbs& a, const Limbs& b) {
     Limbs r(a.size() + b.size(), 0);
     for (std::size_t i = 0; i < a.size(); ++i) {
       std::uint64_t carry = 0;

@@ -32,6 +32,16 @@ struct ExactDualBound {
   /// The budget ran out before the duals were exact: a larger basis or budget, not a
   /// different basis, is what would change that.
   bool timed_out = false;
+  /// When no bound was proved because the basis is not exactly dual feasible: every
+  /// structural column whose exact reduced cost has the sign of a bound it does not have, in
+  /// increasing order. These are the columns a different basis must price (#1082).
+  std::vector<Index> dual_infeasible;
+  /// When no exact duals were reached but the refinement had gone past double precision:
+  /// its approximation of them, rounded to doubles, minimise space. Not exact, and not
+  /// claimed to be - but any y gives a valid bound, and this is the most accurate double y
+  /// of the basis, for the floating-point stages to evaluate with their own outward
+  /// rounding (#1082). Empty otherwise.
+  std::vector<double> refined;
 };
 
 /// The exact duals of the basis `basis` carries (col_status / row_status, one basic variable
