@@ -978,6 +978,7 @@ def main() -> int:
     test_verify_solution_names.run_first_vector(check)
     print("semi-continuous columns and special ordered sets (#754)")
     test_verify_solution_sos.run(check)
+    test_verify_solution_sos.run_member_named_like_a_type(check)
     print("quadratic rows, QCMATRIX (#514)")
     test_verify_solution_qcqp.run(check)
     print("nonlinear models, .nl (NLP stage 2)")
