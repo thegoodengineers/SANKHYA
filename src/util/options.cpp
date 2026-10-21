@@ -160,11 +160,14 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::String,
                  std::string("refuse"),
                  "Models with products of columns in their rows (MPS QCMATRIX sections): "
-                 "refuse (default; the reader refuses them, as a local method would return a "
-                 "local point) or global (#514: read them and solve by spatial branch and "
-                 "bound over McCormick relaxations; `optimal` only when the proven bound "
-                 "closes mip_relative_gap / mip_absolute_gap, otherwise `feasible` with the "
-                 "bound; continuous models, every column of a product bounded).",
+                 "refuse (default; a row whose matrix is not semidefinite on the right side "
+                 "is refused with the LDL^T certificate, as a local method would return a "
+                 "local point, while a CONVEX row and an explicit cone (CSECTION) go to the "
+                 "conic interior point, #755) or global (#514: every quadratic row solved by "
+                 "spatial branch and bound over McCormick relaxations; `optimal` only when "
+                 "the proven bound closes mip_relative_gap / mip_absolute_gap, otherwise "
+                 "`feasible` with the bound; continuous models, every column of a product "
+                 "bounded).",
                  0.0,
                  0.0,
                  {"refuse", "global"}});
@@ -1659,6 +1662,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  "log, in a build without OpenMP.",
                  0.0,
                  1024.0,
+                 {}});
+    s.push_back({"omp_min_work",
+                 OptionType::Int,
+                 std::int64_t{tol::kOmpMinParallelWork},
+                 "The least work (nonzeros plus columns read) for which one of the column "
+                 "loops `threads` sizes forks an OpenMP team (#514); a smaller loop runs on "
+                 "the calling thread, where the team's fork and join would cost more than the "
+                 "loop. The loop computes the same numbers either way. 0 forks a team on "
+                 "every loop, the behaviour before this option.",
+                 0.0,
+                 1e12,
                  {}});
     // Registered as planned since Phase 7 and implemented in #288. Its default was `true`
     // while nothing read it; it is `false` now that something does, because the mode REFUSES

@@ -872,6 +872,15 @@ inline constexpr double kRootCutRowShare = 1.0;
 /// and the evaluation stride less often; 32 is under the evaluation interval of 40.
 inline constexpr Count kPdhgDeviceLoopBlock = 32;
 
+/// The least work, in nonzeros plus columns read, for which a column loop of the simplex
+/// (reduced costs, the dual's pivot row), the sparse transpose product or a PDHG vector update
+/// forks an OpenMP team (#514). Below it the loop runs on the calling thread: the fork and
+/// join of a team cost microseconds on an idle machine and far more on a loaded one, where
+/// every barrier waits for the scheduler, and a node LP of a few hundred nonzeros does its
+/// whole loop in less. Default of the `omp_min_work` option; 0 restores a team on every loop.
+/// A choice, set by the A/B in the PR that introduced it, not a measured crossover.
+inline constexpr Count kOmpMinParallelWork = 50'000;
+
 /// CPU PDHG parallel vector updates (#487): the fixed chunk the movement and interaction
 /// sums are taken in. A constant, not a function of the thread count, which is what makes
 /// the sums the same bits at any thread count. The chunk is also the unit of work a thread
@@ -1215,5 +1224,57 @@ inline constexpr double kIpmDeviceStartSeconds = 2.0;
 /// 86 s) and Linf_520c (4.7e8, 1.0e9, 158 s), where the CPU ordering declines at the share
 /// (bench runs in #489). The largest system the device solved was rmine15's, 7.8e6.
 inline constexpr double kIpmDeviceSystemCeiling = 1e8;
+
+// ---- The conic interior point: second-order cones and convex quadratic rows (#755) ---------
+
+/// Convergence of the homogeneous self-dual embedding to an optimum, measured on the point
+/// x/tau, y/tau, s/tau: relative primal residual, relative dual residual and relative gap each
+/// at or below this. The LP embedding's kIpmHsdTolerance, so the two converge alike.
+inline constexpr double kConicTolerance = 1e-8;
+/// A certificate (a dual ray y, s with A'y + s = 0, s in the dual cone, b'y = 1; or a primal
+/// ray x with A x = 0, x in the cone, c'x = -1) is accepted when its defining equation holds
+/// to this, relative to the terms it is made of.
+inline constexpr double kConicCertificateTolerance = 1e-8;
+/// The step keeps this fraction of the distance to the cone's boundary (Mehrotra 1992).
+inline constexpr double kConicFractionToBoundary = 0.99;
+/// The iteration stops without a verdict once mu has fallen this far below its starting
+/// value while tau and kappa still have not decided, as kIpmHsdMuFloor does for the LP.
+inline constexpr double kConicMuFloor = 1e-15;
+/// The primal (rho, on the cone block) and dual (delta, on the rows) regularization that
+/// keeps the augmented system quasi-definite with free columns in it (Altman & Gondzio 1999);
+/// iterative refinement against the unregularized matrix takes it back out of the step.
+inline constexpr double kConicRegularization = 1e-9;
+/// Iterations after which the embedding is taken not to converge.
+inline constexpr int kConicIterationCeiling = 200;
+/// A convex quadratic row's matrix Q_r, and the objective's Hessian, are factored as F F'
+/// by a dense pivoted Cholesky on their support (Higham 1990), which needs the support's
+/// square in memory; a support wider than this is refused rather than factored.
+inline constexpr Index kConicDenseFactorLimit = 4000;
+/// The pivoted Cholesky stops at a pivot below this share of the largest diagonal: the rest
+/// of the matrix is rounding of a rank-deficient but positive semidefinite Q (the convexity
+/// test already accepted it at kCurvatureTolerance, 1e-12, of the same scale).
+inline constexpr double kConicCholeskyPivotShare = 1e-12;
+/// Dual recovery at the conic optimum (conic_duals.cpp): a row or a column bound is taken as
+/// active when its slack is at most this share of max(1, the magnitude of its terms). The
+/// interior point's point is right to about kConicTolerance relative, so a window a hundred
+/// times wider identifies every tight row while staying far below any slack that is genuinely
+/// open; a misidentified row only costs the recovery, which is kept when it measures better.
+inline constexpr double kConicActiveShare = 1e-6;
+/// The Tikhonov term of the recovery's normal equations (M'M + eps I), relative to the largest
+/// diagonal of M'M, which keeps them positive definite when the active gradients are linearly
+/// dependent (a degenerate optimum).
+inline constexpr double kConicRecoveryRegularization = 1e-12;
+/// Refinement passes of the recovery's normal equations on the residual r - M lambda; each
+/// gains roughly the factor the squared condition number cost.
+inline constexpr int kConicRecoveryRefinement = 3;
+/// Newton's method on the active set's KKT system (conic_duals.cpp): at most this many steps,
+/// stopping when the scaled residual is at or below kConicPolishResidual or stops falling.
+/// Convergence from the interior point's exit is quadratic, so a handful of steps is all a
+/// correct active set ever needs; the cap bounds what a wrong one can cost.
+inline constexpr int kConicPolishIterations = 8;
+inline constexpr double kConicPolishResidual = 1e-14;
+/// The regularization of that KKT system, [H_L + rho I, -M; -M', -rho I], relative to the
+/// largest gradient entry; refinement against the unregularized matrix takes it back out.
+inline constexpr double kConicPolishRegularization = 1e-10;
 
 }  // namespace sankhya::tol

@@ -76,6 +76,10 @@ CITATION = ("F. Furini, E. Traversi, P. Belotti, A. Frangioni, A. Gleixner, N. G
             "Programming Computation 11 (2019), DOI 10.1007/s12532-018-0147-4")
 SELECTION_RULE = ("instances.html: Cvx ticked, O in {C, D}, V = C, C in {N, B, L} "
                   "(doc.html PROBTYPE and CONVEX)")
+# --qcqp (#755): the convex continuous instances with convex quadratic CONSTRAINTS, C = D,
+# written to reference_qcqp.json for the conic interior point's benchmark.
+QCQP_SELECTION_RULE = ("instances.html: Cvx ticked, O in {L, C, D}, V = C, C = D "
+                       "(doc.html PROBTYPE and CONVEX)")
 SMALL_COEFFICIENTS = 100_000
 DEFAULT_MAX_COEFFICIENTS = 2_000_000
 OBJECTIVE_CHECK = 1e-9  # relative, converted QPS at QPLIB's point vs the point's objvar
@@ -128,6 +132,10 @@ def selected(row: dict) -> bool:
         "N", "B", "L")
 
 
+def selected_qcqp(row: dict) -> bool:
+    return row["convex"] and row["o"] in ("L", "C", "D") and row["v"] == "C" and row["c"] == "D"
+
+
 def parse_instance_page(page: str) -> dict:
     """The page's identifier -> value table (the identifiers are doc.html's anchors), plus
     the link to the solution point file."""
@@ -177,9 +185,13 @@ def page_consistent(row: dict, fields: dict) -> list[str]:
         problems.append(f"probtype {fields.get('probtype')} vs listing "
                         f"{row['o'] + row['v'] + row['c']}")
     sense, curvature = fields.get("objsense"), fields.get("objcurvature")
-    if (sense, curvature) not in (("min", "convex"), ("max", "concave")):
+    # A linear objective (O = L, the QCQP selection of --qcqp) is convex either way.
+    if (sense, curvature) not in (("min", "convex"), ("max", "concave")) and not (
+            row["o"] == "L" and curvature == "linear"):
         problems.append(f"objective {sense} {curvature} is not convex")
-    if fields.get("conscurvature") != "linear":
+    # Constraint type D is "convex" on the page (the --qcqp selection), the others "linear".
+    expected = {"D": ("convex",)}.get(row["c"], ("linear",))
+    if fields.get("conscurvature") not in expected:
         problems.append(f"constraints {fields.get('conscurvature')}")
     for key, listed in (("nvars", row["nvars"]), ("ncons", row["ncons"])):
         if _integer(fields.get(key, "")) != listed:
@@ -345,7 +357,13 @@ def main() -> int:
     parser.add_argument("--force", action="store_true", help="re-download present files")
     parser.add_argument("--max-coefficients", type=int, default=DEFAULT_MAX_COEFFICIENTS,
                         help="skip instances with more stored coefficients; 0 for no cap")
+    parser.add_argument("--qcqp", action="store_true",
+                        help="select the convex QCQPs (constraint type D) instead, into "
+                             "reference_qcqp.json (#755)")
     args = parser.parse_args()
+    rule = QCQP_SELECTION_RULE if args.qcqp else SELECTION_RULE
+    manifest_name = "reference_qcqp.json" if args.qcqp else "reference.json"
+    pick = selected_qcqp if args.qcqp else selected
 
     files = {}
     for name in SITE_FILES:
@@ -367,7 +385,7 @@ def main() -> int:
         if row["convex"]:
             code = row["o"] + row["v"] + row["c"]
             classes[code] = classes.get(code, 0) + 1
-    picked = [row for row in rows if selected(row)]
+    picked = [row for row in rows if pick(row)]
     instances, problems = {}, []
     for row in picked:
         name = row["name"]
@@ -429,7 +447,7 @@ def main() -> int:
     manifest = {
         "source": BASE_URL, "citation": CITATION,
         "licence": {key: home[key] for key in ("licence", "licence_url", "licence_statement")},
-        "selection_rule": SELECTION_RULE,
+        "selection_rule": rule,
         "convex_continuous_classes": dict(sorted(classes.items())),
         "listing_counts": {"rows": len(rows), "continuous": len(continuous),
                            "selected": len(picked)},
@@ -439,11 +457,11 @@ def main() -> int:
                                  ".qplib file lists it (doc.html); see qplib_format.py"),
         "files": files, "instances": dict(sorted(instances.items())),
     }
-    (DATA_DIR / "reference.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                                            encoding="utf-8", newline="\n")
+    (DATA_DIR / manifest_name).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                                          encoding="utf-8", newline="\n")
     fetched = [e for e in instances.values() if "skipped" not in e]
     failed = [e["name"] for e in fetched if e["converter_check"].get("passed") is False]
-    print(f"wrote data/qplib/reference.json: {len(picked)} selected ({SELECTION_RULE}); "
+    print(f"wrote data/qplib/{manifest_name}: {len(picked)} selected ({rule}); "
           f"{len(fetched)} fetched, {sum(e['tier'] == 'small' for e in fetched)} in the small "
           f"tier, {len(instances) - len(fetched)} over the size cap; converter check failed on "
           f"{len(failed)}" + (f": {', '.join(failed)}" if failed else ""))

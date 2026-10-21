@@ -146,6 +146,45 @@ def run_first_vector(check) -> None:
               "a second-vector LO does not move a first-vector FX",
               f"Y in [{model.col_lower[y]}, {model.col_upper[y]}], expected [2, 2]")
 
+# A value-less bound with the vector name left blank and a dummy value in field 4, as IBM's
+# fixed layout allows for MI/PL/FR/BV (#1089). The blank field is dropped, so "MI X 0" looked
+# like (vector X, column 0) and the reader refused a valid file; the solver reads it as
+# (column X, dummy 0), and so must this reader.
+BLANK_VECTOR = """NAME          BLANKVEC
+ROWS
+ N  COST
+ G  R1
+COLUMNS
+    X         COST               1.0   R1                 1.0
+    Y         COST               1.0   R1                 1.0
+RHS
+    RHS       R1                -3.0
+BOUNDS
+ MI           X         0
+ PL           X         0
+ FR BND       Y         0
+ENDATA
+"""
+
+
+def run_blank_vector(check) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "blank_vector.mps"
+        path.write_text(BLANK_VECTOR)
+        try:
+            model = vs.parse_mps(path)
+        except ValueError as exc:
+            check(False, "a value-less bound with a blank vector name and a dummy value reads",
+                  str(exc))
+            return
+        x, y = model.col_index["X"], model.col_index["Y"]
+        check((model.col_lower[x], model.col_upper[x]) == (-vs.INF, vs.INF),
+              "MI and PL with a blank vector name and a dummy value bind the column",
+              f"X in [{model.col_lower[x]}, {model.col_upper[x]}]")
+        check((model.col_lower[y], model.col_upper[y]) == (-vs.INF, vs.INF),
+              "FR with a named vector and a dummy value still binds the named column",
+              f"Y in [{model.col_lower[y]}, {model.col_upper[y]}]")
+
 
 # A column or row named "begin" or "end". The solver's writer does not quote either, and the
 # .sol parser used to treat any record starting with "end" as the end of the open block, so

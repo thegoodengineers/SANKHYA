@@ -184,10 +184,56 @@ void MpsParser::finish_quadratic_rows() {
   }
 }
 
+// CSECTION (#755) is MOSEK's MPS extension for a cone (MOSEK Optimizer API reference, "The
+// MPS file format", section "CSECTION"): a header `CSECTION <name> <parameter> <type>` with
+// type QUAD (x_0 >= ||x_1..||) or RQUAD (2 x_0 x_1 >= ||x_2..||^2), followed by one column
+// name per line, in cone order. The parameter is for the power and exponential cones, which
+// this reader does not take; it is accepted and ignored for QUAD and RQUAD.
+bool MpsParser::begin_csection(std::string* error) {
+  if (tok_.size() < 4) {
+    *error = reader_.error_at(fmt::format(
+        "CSECTION header has {} field(s), expected 4 (CSECTION name parameter type)",
+        tok_.size()));
+    return false;
+  }
+  const std::string type = to_upper(tok_[3]);
+  Cone cone;
+  cone.name = std::string(tok_[1]);
+  if (type == "QUAD") {
+    cone.kind = Cone::Kind::kQuadratic;
+  } else if (type == "RQUAD") {
+    cone.kind = Cone::Kind::kRotated;
+  } else {
+    *error = reader_.error_at(fmt::format(
+        "CSECTION type '{}' is not supported; this reader takes QUAD and RQUAD", tok_[3]));
+    return false;
+  }
+  cone_sink_->push_back(std::move(cone));
+  return true;
+}
+
+bool MpsParser::do_csection(std::string* error) {
+  if (tok_.size() != 1) {
+    *error = reader_.error_at(
+        fmt::format("CSECTION entry has {} field(s), expected 1 (a column name)", tok_.size()));
+    return false;
+  }
+  const Index column = find_column(tok_[0]);
+  if (column < 0) {
+    *error = reader_.error_at(
+        fmt::format("CSECTION names column '{}' which never appeared in COLUMNS", tok_[0]));
+    return false;
+  }
+  cone_sink_->back().columns.push_back(column);
+  return true;
+}
+
 ReadResult read_qcqp_mps(const std::string& path, QcqpModel* model, MpsFormat format) {
   const auto parse_with = [&](MpsFormat dialect) {
     MpsParser parser(&model->linear, dialect);
     parser.collect_quadratic_rows(&model->quadratic);
+    model->cones.clear();
+    parser.collect_cones(&model->cones);
     return parser.parse(path);
   };
   model->quadratic.clear();
@@ -223,6 +269,7 @@ ReadResult read_qcqp_model(const std::string& path, QcqpModel* model) {
   };
   if (ends_with(".lp") || ends_with(".LP") || ends_with(".lp.gz") || ends_with(".LP.gz")) {
     model->quadratic.clear();
+    model->cones.clear();
     return read_lp(path, &model->linear);
   }
   return read_qcqp_mps(path, model);

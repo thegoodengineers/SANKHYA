@@ -25,6 +25,7 @@
 #include "sankhya/qcqp.hpp"
 
 #include "support/temp_file.hpp"
+#include "util/threads.hpp"
 
 namespace sankhya {
 namespace {
@@ -256,6 +257,35 @@ TEST(SpatialBranchAndBound, HaverlyOneReachesAndProvesTheGlobalOptimum) {
     EXPECT_NEAR(solution.row_activity[u], activity[u], 1e-9);
   }
   EXPECT_LE(solution.primal_infeasibility, 1e-7);
+}
+
+TEST(SpatialBranchAndBound, AppliesTheThreadsOptionAndTheTeamGateChangesNoNumber) {
+  // solve_global() reaches the simplex without solve(), and before #514 it never applied
+  // `threads`: every node LP ran its column loops on one thread per core. It applies it now,
+  // and a node LP below omp_min_work runs on the calling thread with the same numbers.
+  const QcqpModel model = read_or_fail(kHaverly1);
+  Options gated = quiet();
+  gated.set_int("threads", 2);
+  const Solution a = solve_global(model, gated);
+#ifdef SANKHYA_HAVE_OPENMP
+  EXPECT_EQ(omp_get_max_threads(), 2);
+#endif
+  EXPECT_EQ(detail::omp_min_work_value, tol::kOmpMinParallelWork);
+  Options always = gated;
+  always.set_int("omp_min_work", 0);
+  const Solution b = solve_global(model, always);
+  EXPECT_EQ(detail::omp_min_work_value, 0);
+  ASSERT_EQ(a.status, SolveStatus::kOptimal) << a.message;
+  EXPECT_EQ(a.status, b.status);
+  EXPECT_EQ(a.objective, b.objective);  // bit for bit: each loop entry has one writer
+  EXPECT_EQ(a.col_value, b.col_value);
+  EXPECT_EQ(a.iterations, b.iterations);
+  Options one = quiet();
+  one.set_int("threads", 1);
+  (void)solve_global(model, one);
+#ifdef SANKHYA_HAVE_OPENMP
+  EXPECT_EQ(omp_get_max_threads(), 1);
+#endif
 }
 
 TEST(SpatialBranchAndBound, BeatsTheLocalOptimumTheRecursionGetsStuckIn) {

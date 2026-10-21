@@ -10,6 +10,7 @@
 
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
+#include "util/threads.hpp"
 
 namespace sankhya::pdhg {
 namespace {
@@ -31,7 +32,8 @@ double fixed_order_sum(std::size_t count, const Chunk& chunk) {
   std::vector<double> partial(chunks, 0.0);
   const auto last = static_cast<std::int64_t>(chunks);
 #ifdef SANKHYA_HAVE_OPENMP
-#pragma omp parallel for schedule(static)
+  const bool team = chunks > 1 && omp_worth_it(static_cast<std::int64_t>(count));
+#pragma omp parallel for schedule(static) if (team)
 #endif
   for (std::int64_t c = 0; c < last; ++c) {
     const std::size_t begin = static_cast<std::size_t>(c) * size;
@@ -47,7 +49,8 @@ template <class Body>
 void for_each_index(std::size_t count, const Body& body) {
   const auto last = static_cast<std::int64_t>(count);
 #ifdef SANKHYA_HAVE_OPENMP
-#pragma omp parallel for schedule(static)
+  const bool team = omp_worth_it(static_cast<std::int64_t>(count));
+#pragma omp parallel for schedule(static) if (team)
 #endif
   for (std::int64_t k = 0; k < last; ++k) body(static_cast<std::size_t>(k));
 }

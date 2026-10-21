@@ -8,6 +8,7 @@
 // once per model read and once per presolve round on matrices with millions of entries.
 
 #include "sankhya/sparse.hpp"
+#include "util/threads.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -276,9 +277,10 @@ void SparseMatrix::multiply_add(const double* x, double* y, double alpha) const 
 void SparseMatrix::transpose_multiply_add(const double* x, double* y, double alpha) const {
   ensure_frozen();
   // A gather per column: y[j] is written by exactly one thread, so the result is the same
-  // at any thread count (#57).
+  // at any thread count (#57). A team only when the product is worth one (#514).
 #ifdef SANKHYA_HAVE_OPENMP
-#pragma omp parallel for schedule(static)
+  const bool team = omp_worth_it(static_cast<std::int64_t>(num_nonzeros()) + num_cols_);
+#pragma omp parallel for schedule(static) if (team)
 #endif
   for (Index j = 0; j < num_cols_; ++j) {
     const ColumnView c = column(j);

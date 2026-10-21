@@ -99,7 +99,14 @@ bool MpsParser::do_bounds(std::string* error) {
     }
   } else {
     if (tok_.size() >= 3) {
-      column_field = 2;  // a dummy value in field 4 is tolerated and ignored
+      // Either (name, column[, dummy value]) or, with the bound-vector name left blank and a
+      // dummy value in field 4 as IBM's layout allows for MI/PL/FR/BV, (column, value). The
+      // fixed-format tokenizer drops the blank field, so the two look alike; COLUMNS is
+      // complete by now, so the shape that names a column decides. Before this test the
+      // second shape bound the dummy value as the column and refused a valid file.
+      const bool second_is_column = find_column(tok_[1]) >= 0;
+      const bool third_is_column = find_column(tok_[2]) >= 0;
+      column_field = (second_is_column && !third_is_column) ? 1 : 2;
     } else {
       column_field = 1;
     }
