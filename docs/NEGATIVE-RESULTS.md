@@ -175,6 +175,26 @@ Measured at `6a31c05` (branch) in CI, `bench.yml`'s `maros-meszaros` suite on Gi
 
 Nothing in the stall set improved: liswet2 lost its verified optimum (reached through the hand-off when off) to the 210-iteration stall, yao's gap went from 0.616 to 0.918, and the other LISWET instances ended where they were. Five controls that were optimal were lost - qseba, qship12s, qgrow15, powell20 and qcapri - most of them handed to the first-order engine after the interior point gave up. Holding the dual centre makes the step worse on well-posed models and does not help the degenerate ones. Not merged. The CSVs were not committed (the branch stamp is not on `main`).
 
+### A derived reduced cost within the rounding of its own terms read as zero (#1079, #1130, branch `qp-rounding-reduced-cost`, not merged)
+
+A QP's derived reduced cost c + Qx - A'y is a sum whose computed value carries rounding up to gamma_n * sum |terms| (Higham, Accuracy and Stability of Numerical Algorithms, 2nd ed., eq. 3.5). The change read one at or below 1000 * eps * sum |terms| as zero, in the in-process gate and in the QP finish's complementarity product. The aim was qgfrdxpn and qshell, refused on such a reduced cost times a slack of thousands.
+
+Measured on GitHub Actions with `bench.yml`'s `ab-option` suite and `--base-binary`, both arms interleaved per instance on one machine: base `76d880c`, new `524db7a`. The CSVs are `bench/results/option-ab-maros-meszaros-reduced-cost-rounding-524db7a.csv` (run 39637860103, 60 s) and `option-ab-netlib-reduced-cost-rounding-524db7a.csv` (run 39637869165).
+
+| Maros-Meszaros 138 | optimal | matched | verified |
+|---|---:|---:|---:|
+| base | 119 | 117 | 124 |
+| new | 122 | 119 | 123 |
+
+Netlib was identical on all 94 instances in both arms (83 matched, 94 verified).
+
+On Maros-Meszaros:
+- **qgfrdxpn** became optimal, matched and verified. This is the gain.
+- **qshell** became optimal and matched, but `tools/verify_solution.py` refuses it: "complementary slackness worst |multiplier| * slack = 1.986e-05 relative to its magnitudes on C11760". A false optimal.
+- **huestis** became optimal and verified, still unmatched against the published value (the #1078 erratum).
+
+The verifier is the independent judge and stays as it is. On qshell a 2e-5 relative product is a real defect in the point, not rounding. A rule that lets the gate pass it claims an optimum the judge rejects. Not merged.
+
 ---
 
 ## 3. Built opt-in, awaiting the measurement
