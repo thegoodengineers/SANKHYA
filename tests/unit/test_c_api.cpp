@@ -136,21 +136,21 @@ TEST(CApi, SettingACoefficientTwiceReplacesItRatherThanSummingIt) {
 }
 
 TEST(CApi, KeepsACoefficientBelowTheStructuralZeroThreshold) {
-  //   minimise x  s.t.  1e-12 x >= 6e-12,  x >= 0   ->   x = 6.
-  // A coefficient the caller set is model data however small it is (#1079). Dropping it at
-  // the 1e-11 fill threshold left an empty row reading 0 >= 6e-12, which is infeasible.
+  //   minimise -x  s.t.  1e-12 x <= 1,  x >= 0   ->   x = 1e12.
+  // A coefficient the caller set is model data however small it is (#1079). Dropped at the
+  // 1e-11 fill threshold, the row is empty and the problem is unbounded.
   ModelHandle model;
   int x = -1;
   int row = -1;
-  ASSERT_EQ(sankhya_model_add_column(model, 1.0, 0.0, sankhya_infinity(), 0, "x", &x),
+  ASSERT_EQ(sankhya_model_add_column(model, -1.0, 0.0, sankhya_infinity(), 0, "x", &x),
             SANKHYA_OK);
-  ASSERT_EQ(sankhya_model_add_row(model, 6e-12, sankhya_infinity(), "c", &row), SANKHYA_OK);
+  ASSERT_EQ(sankhya_model_add_row(model, -sankhya_infinity(), 1.0, "c", &row), SANKHYA_OK);
   ASSERT_EQ(sankhya_model_set_coefficient(model, row, x, 1e-12), SANKHYA_OK);
 
   SolutionHandle solution;
   ASSERT_EQ(sankhya_solve(model, nullptr, &solution.handle), SANKHYA_OK);
   ASSERT_EQ(sankhya_solution_status(solution.handle), SANKHYA_OPTIMAL);
-  EXPECT_NEAR(sankhya_solution_objective(solution.handle), 6.0, 1e-9);
+  EXPECT_NEAR(sankhya_solution_objective(solution.handle) / -1e12, 1.0, 1e-9);
 }
 
 TEST(CApi, SolvesAQpAndTakesTheHessianInEitherTriangle) {
