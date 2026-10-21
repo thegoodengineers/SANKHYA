@@ -166,3 +166,56 @@ ENDATA
     except ValueError:
         refused = True
     check(refused, "two members with one weight are refused: their order is undefined")
+
+
+# #1091: S1 and S2 are the commonest slack names, and the member spelling "column weight" puts
+# the column first, so "S1 1" is a member line, not a header for a set named "1". The old
+# reading left set1 empty, the S1 constraint vanished, and -10 came back for a true -4.
+SLACKS = """\
+NAME          SLACKS
+ROWS
+ N  COST
+ L  CAP
+COLUMNS
+    S1        COST        -1.0   CAP          1.0
+    S2        COST        -1.0   CAP          1.0
+    Z         COST        -1.0   CAP          1.0
+RHS
+    RHS       CAP          10.0
+BOUNDS
+ UP BND       S1           4.0
+ UP BND       S2           4.0
+ UP BND       Z            4.0
+SOS
+ S1 SOS       set1         1
+    S1        1
+    S2        2
+    Z         3
+ENDATA
+"""
+
+
+def _slacks_sol(x: list[float]) -> str:
+    objective = -sum(x)
+    lines = ["model SLACKS", "sense minimize", "status optimal", "algorithm branch-and-bound",
+             f"objective {objective!r}", f"dual_bound {objective!r}",
+             "mip_relative_gap 0.0001", "mip_absolute_gap 1e-06", "objective_offset 0",
+             "certificate none", "", "begin columns 3"]
+    lines += [f"{n} {v!r} 0 unknown" for n, v in zip(["S1", "S2", "Z"], x)]
+    lines += ["end columns", "", "begin rows 1", f"CAP {sum(x)!r} 0 unknown", "end rows"]
+    return "\n".join(lines) + "\n"
+
+
+def run_member_named_like_a_type(check) -> None:
+    model = _parse(SLACKS)
+    check(model.sos == [(1, "set1", [0, 1, 2], [1.0, 2.0, 3.0])],
+          "a member column named S1 or S2 is a member, not a new set header", str(model.sos))
+    with tempfile.TemporaryDirectory() as tmp:
+        mps = Path(tmp) / "slacks.mps"
+        mps.write_text(SLACKS)
+        for x, want, what in (([4.0, 0.0, 0.0], True, "the true optimum -4 verifies"),
+                              ([4.0, 4.0, 2.0], False, "the old wrong answer -10 is rejected")):
+            sol = Path(tmp) / "slacks.sol"
+            sol.write_text(_slacks_sol(x))
+            report = vs.verify(vs.parse_mps(mps), vs.parse_sol(sol), 1e-7, 1e-7, 1e-6, 1e-6)
+            check((report.failures == 0) == want, what, str(_failed(report)))

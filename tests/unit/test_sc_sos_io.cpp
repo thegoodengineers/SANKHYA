@@ -14,6 +14,7 @@
 
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
+#include "sankhya/options.hpp"
 
 #include "support/temp_file.hpp"
 
@@ -215,6 +216,63 @@ TEST(ScSosMps, AMemberThatIsNotAColumnIsRefused) {
                                                        "ENDATA\n",
                                                    ".mps");
   EXPECT_NE(error.find("NOPE"), std::string::npos) << error;
+}
+
+TEST(ScSosMps, AMemberColumnNamedS1OrS2IsAMemberNotAHeader) {
+  // S1 and S2 are the commonest slack names in the world, and the "column weight" member
+  // spelling puts the column first. Before the reader checked COLUMNS, a member line
+  // starting with S1 opened a second, empty set and the declared set silently lost it: the
+  // file declared one set of three and the solver saw three sets, two of them empty, so the
+  // S1 constraint evaporated and the optimum came back at 2.5 times the true value.
+  const Model model = read_or_fail(
+      "NAME          SLACKS\n"
+      "ROWS\n"
+      " N  COST\n"
+      " L  CAP\n"
+      "COLUMNS\n"
+      "    S1        COST        -1.0   CAP          1.0\n"
+      "    S2        COST        -1.0   CAP          1.0\n"
+      "    Z         COST        -1.0   CAP          1.0\n"
+      "RHS\n"
+      "    RHS       CAP          10.0\n"
+      "BOUNDS\n"
+      " UP BND       S1           4.0\n"
+      " UP BND       S2           4.0\n"
+      " UP BND       Z            4.0\n"
+      "SOS\n"
+      " S1 SOS       set1         1\n"
+      "    S1        1\n"
+      "    S2        2\n"
+      "    Z         3\n"
+      "ENDATA\n",
+      ".mps");
+  ASSERT_EQ(model.sos.size(), 1u);
+  EXPECT_EQ(model.sos[0].name, "set1");
+  EXPECT_EQ(model.sos[0].type, 1);
+  EXPECT_EQ(members(model, model.sos[0]), (std::vector<std::string>{"S1", "S2", "Z"}));
+  EXPECT_EQ(model.sos[0].weights, (std::vector<double>{1.0, 2.0, 3.0}));
+
+  // One nonzero among the three, each capped at 4: the optimum is -4, not -10.
+  Options options;
+  options.set_bool("log_to_console", false);
+  const Solution solution = solve(model, options);
+  ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
+  EXPECT_NEAR(solution.objective, -4.0, 1e-9);
+
+  // The word SOS still opens a set whatever the name, and a set named S1 is still a set.
+  const Model named = read_or_fail(std::string(kMpsHead) +
+                                       "SOS\n"
+                                       " S1 SOS       S1           1\n"
+                                       "    S1        X1           1\n"
+                                       "    S1        X2           2\n"
+                                       " S2 SOS       S2\n"
+                                       "    S2        X3           1\n"
+                                       "    S2        X4           2\n"
+                                       "ENDATA\n",
+                                   ".mps");
+  ASSERT_EQ(named.sos.size(), 2u);
+  EXPECT_EQ(members(named, named.sos[0]), (std::vector<std::string>{"X1", "X2"}));
+  EXPECT_EQ(members(named, named.sos[1]), (std::vector<std::string>{"X3", "X4"}));
 }
 
 // ---- MPS: the S1 / S2 marker form ---------------------------------------------------------
