@@ -992,6 +992,19 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  {}});
     s.push_back(
+        {"certified_gap_seconds",
+         OptionType::Double,
+         120.0,
+         "LP (#1082): wall-clock budget, in seconds, for stage 4 of certified_gap - the "
+         "exact duals of the reported basis, the pivot rounds on the columns they leave "
+         "dual infeasible, and the warm-started dual simplex with the exact duals of its "
+         "basis. Spent only when the floating-point duals prove no bound within 1e-6; "
+         "past it no bound is claimed from that stage. greenbea is certified exactly in "
+         "34 s of CPU time this way. The exact repair keeps exact_seconds.",
+         0.0,
+         kNoLimit,
+         {}});
+    s.push_back(
         {"sos_reformulate",
          OptionType::Bool,
          false,

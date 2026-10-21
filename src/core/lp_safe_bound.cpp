@@ -32,7 +32,8 @@
 //  4. The exact rational duals of the reported basis (lp_exact_dual.hpp): every basic reduced
 //     cost exactly zero, so no basic column needs a bound, and the bound, evaluated
 //     exactly, is finite whenever the basis is exactly dual feasible over the box. The
-//     multipliers are reported as exact fractions. Within option exact_seconds. The duals
+//     multipliers are reported as exact fractions. Within option certified_gap_seconds
+//     (#1082; with 4b below), the exact repair within exact_seconds. The duals
 //     come from numeric-symbolic refinement, or, where the basis is too ill-conditioned for
 //     that to converge, from the exact rational LU (lp_exact_dual.cpp). When the reported
 //     basis is not exactly dual feasible, the exact repair of #757 pivots to one that is
@@ -78,6 +79,7 @@
 #include "exact/rational.hpp"
 #include "la/lu.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/solve_control.hpp"
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
 
@@ -394,7 +396,7 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
              ? fmt::format("float duals: {:.17g} ({:.3e} relative), above the target",
                            best.value, relative_gap(best.value))
              : "float duals: no finite bound");
-    const exact::Deadline budget(options.get_double("exact_seconds"));
+    const exact::Deadline budget(options.get_double("certified_gap_seconds"));
     ExactDualBound reported =
         try_exact(cost, *solution, "the reported basis", budget.remaining());
     // When the exact duals were out of reach, the refinement's approximation of them is
@@ -418,7 +420,7 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
     // which the reduced costs of every y sum to zero, so no floating-point y prices it, and
     // stage 5's cost move makes the LP unbounded. The columns themselves say which way to
     // go: each is brought into the basis by one floating-point primal step (pivot_in), and
-    // the exact duals of the new basis are tried, within the same exact_seconds as the
+    // the exact duals of the new basis are tried, within the same certified_gap_seconds as the
     // reported basis's. The pivots need not be exact - only the bound is, and it is
     // evaluated exactly on whatever basis they reach - so a wrong pivot costs a round.
     // This is the exact repair's primal phase (#757) with its pivots taken in floating
@@ -428,17 +430,48 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
     // its own: only the reported basis's own timeout says the exact duals are out of reach.
     const bool reported_timed_out = exact_timed_out;
     Solution current = *solution;
-    for (int round = 0;
-         round < tol::kSafeBoundPivotRounds && !good_enough() && !exact_timed_out &&
-         !reported.dual_infeasible.empty() && budget.remaining() > 0.0;
-         ++round) {
-      std::optional<Solution> next = pivot_in(model, current, reported.dual_infeasible);
-      if (!next) break;
-      current = std::move(*next);
-      reported = try_exact(cost, current,
-                           fmt::format("the basis after pivot round {} ({} column(s) in)",
-                                       round + 1, reported.dual_infeasible.size()),
-                           budget.remaining());
+    int round = 0;
+    const auto pivot_rounds = [&] {
+      for (; round < tol::kSafeBoundPivotRounds && !good_enough() && !exact_timed_out &&
+             !reported.dual_infeasible.empty() && budget.remaining() > 0.0;
+           ++round) {
+        std::optional<Solution> next = pivot_in(model, current, reported.dual_infeasible);
+        if (!next) break;
+        current = std::move(*next);
+        reported = try_exact(cost, current,
+                             fmt::format("the basis after pivot round {} ({} column(s) in)",
+                                         round + 1, reported.dual_infeasible.size()),
+                             budget.remaining());
+      }
+    };
+    pivot_rounds();
+    // 4b, the dual phase (#1082). The rounds can end on a basis that is exactly dual
+    // feasible - its exact duals prove a bound - but not primal feasible, and then the bound
+    // is the dual objective of a non-optimal basis: greenbea's second round proved 9.99e-05.
+    // The dual simplex, warm-started from that basis (SolveControl::start_col_status; a warm
+    // start bypasses presolve, so the basis is the model's own), keeps dual feasibility while
+    // it restores primal feasibility, and the exact duals of the basis it ends on are tried;
+    // if they are dual infeasible again by a rounding residue, the pivot rounds resume from
+    // it. All of it inside the same certified_gap_seconds; any y it reaches gives a valid
+    // bound.
+    for (int phase = 0; phase < tol::kSafeBoundDualPhases && !good_enough() &&
+                        !exact_timed_out && reported.proved && budget.remaining() > 0.0;
+         ++phase) {
+      Options inner = options;
+      inner.set_bool("certified_gap", false);  // no recursion
+      inner.set_bool("log_to_console", false);
+      inner.set_string("algorithm", "dual-simplex");
+      inner.set_double("time_limit", budget.remaining());
+      SolveControl control;
+      control.start_col_status = current.col_status;
+      control.start_row_status = current.row_status;
+      Solution resolved = solve(model, inner, &control);
+      note(fmt::format("dual simplex from the dual feasible basis: {} after {} iteration(s)",
+                       to_string(resolved.status), resolved.iterations));
+      if (resolved.status != SolveStatus::kOptimal) break;
+      current = std::move(resolved);
+      reported = try_exact(cost, current, "the dual simplex's basis", budget.remaining());
+      pivot_rounds();
     }
     exact_timed_out = reported_timed_out;
   }

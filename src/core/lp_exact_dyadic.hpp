@@ -79,8 +79,9 @@ inline BigInt nearest(const Dyadic& a) {
 /// thousands of bits, on every iteration: on greenbeb that phase took 13 s of wall time on a
 /// loaded machine, and the whole refinement now takes about 2 s of CPU time. The sum is the
 /// same exact dyadic number either way, so nothing downstream sees a difference.
-// ponytail: one int64 per row per iteration, under 65 MB at kExactDualMaxIterations on a
-// 2,000-row basis; keep only the nonzero steps if a larger basis needs it.
+// ponytail: one int64 per row per iteration - about 86 MB for pilot87's 5,297 iterations
+// on its 2,030 rows, at most about 320 MB at kExactDualMaxIterations on a 2,000-row
+// basis; fold old steps into a running BigInt if a larger basis needs it.
 class StepHistory {
  public:
   void add(std::vector<long long> steps, int exponent) {

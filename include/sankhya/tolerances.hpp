@@ -861,6 +861,10 @@ inline constexpr double kSafeBoundCostPerturbationGrowth = 10.0;
 /// duals of the new basis, all inside one exact_seconds. An effort cap, not a tolerance:
 /// every round's bound is exact or absent, whatever the count.
 inline constexpr int kSafeBoundPivotRounds = 8;
+/// Stage 4b's dual phase (#1082): warm-started dual simplex solves from a basis whose exact
+/// duals are dual feasible but whose bound is above the target, each followed by its exact
+/// duals and more pivot rounds. An effort cap, like the rounds.
+inline constexpr int kSafeBoundDualPhases = 2;
 /// Bits the exact-dual refinement must have gained before its running approximation is
 /// handed back as a polished floating-point y (ExactDualBound::refined, #1082): a double
 /// carries 53, and the margin covers the error estimate's slack.
@@ -873,7 +877,9 @@ inline constexpr int kExactDualRefinedBits = 80;
 /// the bits of slack allowed on the estimate |x - y| <~ |z| 2^top(r).
 inline constexpr int kExactDualStepBits = 50;
 inline constexpr int kExactDualFirstAttemptBits = 128;
-inline constexpr int kExactDualMaxIterations = 4000;
+// 20,000 since #1082: a step now costs the same at 20,000 as at 1 (StepHistory), and
+// pilot87 needs 5,297 at about 20 bits each; the wall-clock budget is the real limit.
+inline constexpr int kExactDualMaxIterations = 20000;
 inline constexpr int kExactDualMinProgress = 4;
 inline constexpr int kExactDualMaxStalls = 5;
 inline constexpr int kExactDualErrorMargin = 16;
