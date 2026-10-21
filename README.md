@@ -63,6 +63,17 @@ as regenerable backups.
 | GPU, real instances (L4) | 3 | **2 of 3** (faster than the faster CPU arm on the same instance) | construction, highs | `bench/results/gpu-real-l4-58a8374.csv` | `58a8374` | 2026-09-25 |
 <!-- scoreboard:end -->
 
+## Since 19 October
+
+- **Netlib certified, 92 of 94.** The optimal answer lies within 1e-6 of a rigorous bound the verifier re-derives on its own (#1119, #1123, `bench/results/certified-gap-netlib-full-92ef682.csv`).
+- **Conic solver.** A second-order cone interior point handles SOCP and convex quadratically constrained QPs (#1061, #1121).
+- **Decomposition, honestly.** Dantzig-Wolfe over linking rows sits behind `decomposition=dantzig-wolfe` (#1068). On the refinery LPs it reaches the monolithic optimum, and the verifier accepts all 9 decomposed runs. It is slower than the monolithic solve on every one of them (`bench/results/dantzig-wolfe-1bcb251.csv`). Benders now forecasts its work from the model's structure, and when the forecast says decomposition will not pay, it gives up at once and solves monolithically (#1066, `bench/results/decomposition-b54f4b53.csv`).
+- **Warm start after edits.** Rows and columns can now be removed through the C API and Python. A warm re-solve after any structural edit maps the earlier basis by name (#1117). PDHG warm start over 52 rolling re-plans: all 52 answers agree with the cold solve, using 40,876,092 iterations against 48,580,415 cold (`bench/results/rolling-warm-start-pdhg-f6740af.csv`, #1102).
+- **OpenMP gate.** A column loop starts an OpenMP team only when its work exceeds `omp_min_work`. `threads` is now applied on the global and nonlinear paths too (#1103). The A/B CSVs are `bench/results/option-ab-*-omp-gate-*.csv` (#1120).
+- **GCC 15.** The project builds and passes its tests under GCC 15 on ubuntu-26.04 (#1109).
+- **Maros-Meszaros head-to-head: PIQP is ahead.** All 138 QPs at 60 s, one thread, with every solver graded the same way. PIQP matches 130 references and has 128 both matched and verified. SANKHYA has 117 matched and verified. Clarabel has 90 and SCS 71 (`bench/results/head-to-head-maros-meszaros-d0eb672.csv`, #1084).
+- **Reference errata.** The published optima for `huestis` and `hues-mod` are recorded beside their exact optima in `data/maros-meszaros/reference_errata.json` (#1078).
+
 ## Status
 
 | Phase | Scope | State |
@@ -413,7 +424,7 @@ prints the fix for each.
 
 ## Build
 
-Requires CMake 3.20+, Ninja, and a C++20 compiler: GCC 10+ or Clang 12+ (MinGW-w64 GCC on
+Requires CMake 3.20+, Ninja, and a C++20 compiler: GCC 10+ (tested through GCC 15) or Clang 12+ (MinGW-w64 GCC on
 Windows). MSVC 19.44 (Visual Studio 2022) builds it too, and CI builds and tests it there on
 every pull request.
 
