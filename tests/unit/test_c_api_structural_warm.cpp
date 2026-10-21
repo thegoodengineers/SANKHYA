@@ -320,6 +320,11 @@ TEST(CApiStructuralWarm, ManyRandomEditsThroughTheCApiGiveTheVerifiedColdAnswer)
                         warm.message.find("#883") == std::string::npos
                     ? 1
                     : 0;
+      if (warm.iterations >= cold.iterations && compared < 12) {
+        std::printf("DIAG %s step %d warm %lld cold %lld: %s\n", name, step,
+                    static_cast<long long>(warm.iterations),
+                    static_cast<long long>(cold.iterations), warm.message.c_str());
+      }
       warm_fewer += warm.iterations < cold.iterations ? 1 : 0;
       warm_pivots += warm.iterations;
       cold_pivots += cold.iterations;
