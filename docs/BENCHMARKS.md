@@ -456,15 +456,13 @@ file in exact rational arithmetic. A certified relative gap at or under 1e-6 mea
 reported objective is within 1e-6 of a proven bound on the true optimum, so that closeness
 rests on a proof and not on a solver tolerance. The timings of this run are not used anywhere.
 
-Run at `945cb4f` on `github-actions ubuntu-latest 4 vCPU AMD EPYC 7763 64-Core Processor 15 GiB RAM` (`certified-gap-netlib-full-945cb4f.csv`).
+Run at `92ef682` on `github-actions ubuntu-24.04 4 vCPU INTEL(R) XEON(R) PLATINUM 8573C 15 GiB RAM` (`certified-gap-netlib-full-92ef682.csv`).
 
 | optimal answers | certified to 1e-6 relative | finite bound, looser | no finite bound | stated bound re-derived exactly by the verifier |
 |---:|---:|---:|---:|---:|
-| 94 | **91** (worst 5.1e-08) | 1 | 2 | 94 of 94 |
+| 94 | **92** (worst 5.1e-08) | 2 | 0 | 94 of 94 |
 
-Finite but looser than 1e-6: pilot87 (6.26e-06).
-
-No finite bound, even after bound propagation, the basis shift and the exact basis duals (the file says `safe_lower_bound -inf` and claims nothing): greenbea, greenbeb.
+Finite but looser than 1e-6: greenbea (9.99e-05), pilot87 (6.26e-06).
 
 ### 1d. Beyond Netlib — Mittelmann's LP set
 
@@ -3006,6 +3004,22 @@ Reproduce with
 ```
 python bench/runners/fetch_qplib_all.py
 python bench/runners/qplib_all.py --time-limit 60
+```
+
+### The convex QCQPs - the conic interior point against the global method (#755)
+
+QPLIB's convex continuous instances with convex quadratic constraints (PROBTYPE `?CD`),
+selected from the listing by `bench/runners/fetch_qplib.py --qcqp` into
+`data/qplib/reference_qcqp.json`. Each is solved twice by `bench/runners/qplib_qcqp.py`: by the
+default path, which classifies every quadratic row convex by the LDL^T test and solves the
+model as a second-order cone program (`src/conic`), and by `nonconvex=global`, the spatial
+branch and bound of #514.
+
+Not yet run on `main`. Reproduce with:
+
+```
+python bench/runners/fetch_qplib.py --qcqp
+python bench/runners/qplib_qcqp.py --time-limit 300   # engines conic and global
 ```
 
 ---

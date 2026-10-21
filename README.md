@@ -49,7 +49,7 @@ as regenerable backups.
 | set | instances | our count, under the set's stated grading | reference solver on the same host | CSV | commit | date |
 |---|---:|---|---|---|---|---|
 | Netlib | 94 | **83 of 94** (exact optimum and verified, `passed`) | - | `bench/results/netlib-full-945cb4f.csv` | `945cb4f` | 2026-10-19 |
-| Netlib certified bounds | 94 | **91 of 94** (optimal answer within 1e-6 of a rigorous bound the verifier re-derives) | - | `bench/results/certified-gap-netlib-full-945cb4f.csv` | `945cb4f` | 2026-10-19 |
+| Netlib certified bounds | 94 | **92 of 94** (optimal answer within 1e-6 of a rigorous bound the verifier re-derives) | - | `bench/results/certified-gap-netlib-full-92ef682.csv` | `92ef682` | 2026-10-21 |
 | Netlib infeasible | 29 | **28 of 29** (certified infeasible, `passed`) | - | `bench/results/netlib-infeasible-5a39fb2.csv` | `5a39fb2` | 2026-10-01 |
 | Kennington | 16 | **16 of 16** (matches published optimum and verified, `passed`) | - | `bench/results/kennington-full-9463fd7.csv` | `9463fd7` | 2026-10-02 |
 | Mittelmann | 12 | **5 of 12** (matches HiGHS's objective and verified, `passed`) | HiGHS (objective check) | `bench/results/mittelmann-72123ff.csv` | `72123ff` | 2026-09-24 |
