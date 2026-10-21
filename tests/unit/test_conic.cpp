@@ -268,7 +268,7 @@ TEST(Conic, IndefiniteRowRefusedWithWitness) {
   const double z2 = classes[0].witness[1];
   EXPECT_LT(z1 * z2, 0.0);
   const Solution s = solve_conic(m, quiet());
-  EXPECT_EQ(s.status, SolveStatus::kNotSolved);
+  EXPECT_EQ(s.status, SolveStatus::kModelError);
   EXPECT_NE(s.message.find("not convex"), std::string::npos) << s.message;
   EXPECT_NE(s.message.find("witness"), std::string::npos) << s.message;
 }
@@ -282,7 +282,7 @@ TEST(Conic, RangedConvexRowRefused) {
   ASSERT_EQ(classes.size(), 1u);
   EXPECT_EQ(classes[0].verdict, QuadraticRowClass::Verdict::kNonConvex);
   EXPECT_NE(classes[0].detail.find("LOWER"), std::string::npos) << classes[0].detail;
-  EXPECT_EQ(solve_conic(m, quiet()).status, SolveStatus::kNotSolved);
+  EXPECT_EQ(solve_conic(m, quiet()).status, SolveStatus::kModelError);
 }
 
 // ||x|| <= 1 and x1 >= 2 cannot both hold.

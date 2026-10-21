@@ -40,9 +40,14 @@
 namespace sankhya {
 namespace {
 
-Solution refused(const std::string& why, const Timer& timer) {
+/// A model this engine will not solve. `status` is kModelError when the model is outside the
+/// class the method is sound for - a non-convex row or objective, as the QP engine reports a
+/// non-convex Hessian - and kNotSolved when it is merely outside what is built (integer
+/// columns, a factor past its size limit).
+Solution refused(const std::string& why, const Timer& timer,
+                 SolveStatus status = SolveStatus::kNotSolved) {
   Solution s;
-  s.status = SolveStatus::kNotSolved;
+  s.status = status;
   s.message = why;
   s.algorithm = "conic-ipm";
   s.solve_seconds = timer.elapsed_seconds();
@@ -151,13 +156,19 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
   const std::vector<QuadraticRowClass> classes = classify_quadratic_rows(model);
   for (const QuadraticRowClass& c : classes) {
     if (c.verdict != QuadraticRowClass::Verdict::kConvex) {
-      return refused(describe_refusal(model, c), timer);
+      // An undecided test (a deadline) proves nothing about the row: not solved, not refused.
+      return refused(describe_refusal(model, c), timer,
+                     c.verdict == QuadraticRowClass::Verdict::kNonConvex
+                         ? SolveStatus::kModelError
+                         : SolveStatus::kNotSolved);
     }
   }
   if (lin.has_quadratic_objective()) {
     const qp::ConvexityResult objective = qp::check_convexity(lin);
     if (objective.verdict != qp::Convexity::kConvex) {
-      return refused("the quadratic objective is not convex: " + objective.detail, timer);
+      return refused("the quadratic objective is not convex: " + objective.detail, timer,
+                     objective.verdict == qp::Convexity::kIndefinite ? SolveStatus::kModelError
+                                                                     : SolveStatus::kNotSolved);
     }
   }
   const conic::ConicForm form = conic::build_conic_form(model, classes);

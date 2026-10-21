@@ -371,17 +371,20 @@ echo
 cat <<"POOLING"
     The pooling problem itself - Haverly (1978), demo/pooling_haverly.mps, where the pool
     quality is a variable and the sulphur it carries into a product is quality TIMES flow -
-    is bilinear in its CONSTRAINTS. By default the solver does not read that class at all:
-    its QCMATRIX sections are refused at read time, by name, rather than read with the
-    bilinear terms dropped, which would solve a linear model and report it as this one:
+    is bilinear in its CONSTRAINTS. Every QCMATRIX row is classified when the model is read
+    (#755): a CONVEX one goes to the conic interior point, and a row whose matrix is
+    indefinite, as a bilinear pool balance is, is refused with the LDL^T direction along
+    which its curvature is negative - never solved with the products dropped, and never
+    handed to a local method that would report a local point as the optimum:
 POOLING
 echo
 rc=0
 "$BIN" solve demo/pooling_haverly.mps --option log_to_console=false >"$WORK/pooling.out" 2>&1 || rc=$?
 sed "s|$REPO/||" "$WORK/pooling.out" | fold -s -w 84 | sed "s/^/        /"
 echo "        (exit code $rc)"
-if [ "$rc" -ne 3 ] || ! grep -q "QCMATRIX" "$WORK/pooling.out"; then
-  echo "    THE REFUSAL DID NOT HAPPEN - a pooling model was read. See src/io/mps_reader.cpp."
+if [ "$rc" -ne 5 ] || ! grep -q "^status  *model_error" "$WORK/pooling.out" \
+    || ! grep -q "not convex" "$WORK/pooling.out"; then
+  echo "    THE REFUSAL DID NOT HAPPEN - a pooling model was solved. See src/conic/conic_solve.cpp."
   exit 1
 fi
 echo
@@ -777,8 +780,10 @@ cat <<'GAPS' | fill_gaps
                         incumbents found, optimality proved on fewer.
     Non-convex QP       REFUSED BY DEFAULT, deliberately. src/qp/convexity.cpp decides
                         semidefiniteness of sense * Q by LDL^T before any arithmetic starts,
-                        and returns a negative pivot as a certificate; a file with bilinear
-                        rows is refused at read time. A local optimum reported as a global
+                        and returns a negative pivot as a certificate; a quadratic row is
+                        classified the same way when it is read - a convex one is solved by
+                        the conic interior point (#755), an indefinite one such as a bilinear
+                        pool balance is refused with its witness. A local optimum reported as a global
                         one is the failure mode we will not ship. The GLOBAL method exists
                         behind --option nonconvex=global (#514): spatial branch and bound
                         over McCormick relaxations for bilinear and quadratic rows, which
