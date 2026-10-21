@@ -100,6 +100,38 @@ struct Candidate {
   std::vector<double> v, y, zl, zu, residual;  // residual = H v + g - M^T y
 };
 
+/// The power of two nearest 1 / sqrt(size): a scaling that adds no rounding of its own.
+double unit_scale(double size) {
+  return size > 0.0 ? std::exp2(std::round(-0.5 * std::log2(size))) : 1.0;
+}
+
+/// Symmetric Ruiz equilibration of the dense symmetric n x n matrix `a`, in place: returns
+/// D with every row of D A D near unit largest magnitude (Ruiz, "A scaling algorithm to
+/// equilibrate both rows and columns norms in matrices", RAL-TR-2001-034). The QR's rank
+/// test is relative to its first pivot, and unscaled, a row of 1e-12 coefficients beside a
+/// Hessian of order 1 reads as dependent and drops out of the solve (#1079).
+std::vector<double> equilibrate(std::vector<double>* a, std::size_t n) {
+  std::vector<double> d(n, 1.0), r(n);
+  for (int pass = 0; pass < tol::kQpIpmFinishEquilibrationPasses; ++pass) {
+    std::fill(r.begin(), r.end(), 0.0);
+    for (std::size_t c = 0; c < n; ++c) {
+      for (std::size_t i = 0; i < n; ++i) r[c] = std::max(r[c], std::fabs((*a)[c * n + i]));
+    }
+    for (std::size_t i = 0; i < n; ++i) r[i] = unit_scale(r[i]);
+    for (std::size_t c = 0; c < n; ++c) {
+      for (std::size_t i = 0; i < n; ++i) (*a)[c * n + i] *= r[i] * r[c];
+    }
+    for (std::size_t i = 0; i < n; ++i) d[i] *= r[i];
+  }
+  return d;
+}
+
+/// x scaled entrywise by d.
+std::vector<double> scaled(const std::vector<double>& d, std::vector<double> x) {
+  for (std::size_t i = 0; i < x.size(); ++i) x[i] *= d[i];
+  return x;
+}
+
 /// One reduced solve for a fixed working set. Returns false when the system is too large or
 /// will not factor.
 bool solve_reduced(const Standard& s, const std::vector<Pin>& pin,
@@ -130,6 +162,15 @@ bool solve_reduced(const Standard& s, const std::vector<Pin>& pin,
       b[static_cast<std::size_t>(a.rows[p]) * unf + static_cast<std::size_t>(new_col[j])] =
           a.values[p];
     }
+  }
+  // Each row to unit norm before the rank decision, which is relative to the largest row: a
+  // row of 1e-12 coefficients is not dependent on one of order 1 (#1079). w undoes it below.
+  std::vector<double> w(nr, 1.0);
+  for (std::size_t r = 0; r < nr; ++r) {
+    double sum = 0.0;
+    for (std::size_t j = 0; j < unf; ++j) sum += b[r * unf + j] * b[r * unf + j];
+    w[r] = unit_scale(sum);
+    for (std::size_t j = 0; j < unf; ++j) b[r * unf + j] *= w[r];
   }
   DenseQr qr;
   qr.factor(b, nf, s.rows, tol::kQpIpmFinishRankTolerance);
@@ -218,14 +259,16 @@ bool solve_reduced(const Standard& s, const std::vector<Pin>& pin,
         dense[r * udim + c] = e.values[p];
       }
     }
+    // Solved as (D K D) z = D rhs, d = D z: the rank decision on the equilibrated matrix.
+    const std::vector<double> e = equilibrate(&dense, udim);
     DenseQr kqr;
     kqr.factor(dense, dim, dim, tol::kQpIpmFinishRankTolerance);
-    d = kqr.min_norm_least_squares(rhs);
+    d = scaled(e, kqr.min_norm_least_squares(scaled(e, rhs)));
     std::vector<double> kd(udim), r(udim);
     for (int pass = 0; pass < 2; ++pass) {  // refinement in working precision
       KktMatrix::multiply(exact, d, &kd);
       for (std::size_t i = 0; i < udim; ++i) r[i] = rhs[i] - kd[i];
-      const std::vector<double> dd = kqr.min_norm_least_squares(r);
+      const std::vector<double> dd = scaled(e, kqr.min_norm_least_squares(scaled(e, r)));
       for (std::size_t i = 0; i < udim; ++i) d[i] += dd[i];
     }
   } else {
@@ -263,7 +306,7 @@ bool solve_reduced(const Standard& s, const std::vector<Pin>& pin,
     if (pass == 1 || rank == 0) break;
     // The least-norm correction over every row, dependent ones included: on a degenerate dual
     // the correction on the chosen rows alone is larger and flips signs (qgrow15).
-    const std::vector<double> dy = qr.min_norm_least_squares(rf);
+    const std::vector<double> dy = scaled(w, qr.min_norm_least_squares(rf));
     for (std::size_t r = 0; r < nr; ++r) out->y[r] += dy[r];
   }
   out->zl.assign(nc, 0.0);

@@ -599,6 +599,12 @@ inline constexpr double kQpIpmFinishActiveDistance = 1e-4;
 /// should have been dropped only costs a rejected finish.
 inline constexpr double kQpIpmFinishRankTolerance = 1e-10;
 
+/// Passes of symmetric Ruiz equilibration on the finish's dense reduced KKT matrix before
+/// its rank decision (#1079). Each pass halves every row's distance from unit size in
+/// orders of magnitude, so 10 bring a row of 1e-21 coefficients (huestis) to within a
+/// factor 1.05 of 1. Chosen from that arithmetic, not tuned on a benchmark.
+inline constexpr int kQpIpmFinishEquilibrationPasses = 10;
+
 /// At most this many re-solves of the finish, each after one change to the active set - a
 /// free column moved onto the bound it violates or whose reduced cost it cannot zero, or a
 /// pinned bound whose multiplier came out with the wrong sign released (the primal
