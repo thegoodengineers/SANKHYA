@@ -175,7 +175,30 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
         round, reported(bounds.back()), found, describe_cut_filter(filtered), accepted.size(),
         by_family(accepted), relaxation->iterations);
   }
+  // ONLY THE TIGHT ROWS STAY (#956's follow-up): a cut row whose logical is basic at the
+  // final root LP is slack there, and every node LP would carry it for nothing until it
+  // ages out. With the cut pool removing rows, it goes to the pool now; the point and the
+  // duals do not change (remove_cut_rows), and a node whose point violates it gets it back.
+  // Without removal it stays: a row freed in place still costs its place in the LP.
+  Count pooled = 0;
+  if (cut_removal_ && first_cut_row_ >= 0 &&
+      relaxation->row_status.size() == static_cast<std::size_t>(working_.num_rows())) {
+    std::vector<std::size_t> slack;
+    for (std::size_t p = 0; p < cut_lp_rows_.size(); ++p) {
+      const std::size_t k = cut_lp_rows_[p];
+      const auto row = static_cast<std::size_t>(first_cut_row_) + p;
+      if (cut_row_free_[k] || relaxation->row_status[row] != BasisStatus::kBasic) continue;
+      cut_row_free_[k] = true;
+      slack.push_back(p);
+    }
+    if (!slack.empty()) remove_cut_rows(slack, relaxation);
+    pooled = static_cast<Count>(slack.size());
+  }
   current_warm_ = basis_of(*relaxation);
+  if (pooled > 0) {
+    logger_.info("Root cut loop: {} slack cut row(s) moved to the pool, {} kept in the LP",
+                 pooled, cut_lp_rows_.size());
+  }
   if (root_cuts_applied_ >= row_budget)
     why = "the row budget";  // e.g. the last round filled it
   logger_.info(
