@@ -26,10 +26,33 @@
 // carry nothing and b' is b plus the N- \ L- flows, the right side exactly. Separation
 // picks C+ from the arcs whose indicator is at least a half at the LP point, extends it by
 // the next-best arcs until it is a cover, and puts each outflow on the right in the form
-// that is smaller at the LP point. The lifted coefficients of Gu, Nemhauser and Savelsbergh,
-// "Lifted flow cover inequalities for mixed 0-1 integer programs", Math. Programming 85
-// (1999), for the arcs left out of the cover are not built here: the arcs outside C+ get a
-// zero coefficient, which is valid and weaker.
+// that is smaller at the LP point.
+//
+// LIFTING. Gu, Nemhauser and Savelsbergh, "Lifted flow cover inequalities for mixed 0-1
+// integer programs", Math. Programming 85 (1999), lift the inflows left out of the cover by
+// a superadditive function, so the coefficients do not depend on the lifting order. Let the
+// cover arcs with capacity above lambda be u_1 >= ... >= u_r and M_h = u_1 + ... + u_h. Put
+// every outflow on the right as its own flow (the L- form is not used), and let z units of
+// inflow enter through arcs outside the cover. The cover's left side can then reach at most
+// b - f(z), with
+//
+//     f(z) = min_{h=1..r} [ (h - 1) lambda + max(0, z - M_h + lambda) ]
+//
+// (zero up to M_1 - lambda, then h lambda on [M_h, M_{h+1} - lambda] with slope-1 ramps
+// between: switching the largest arcs off frees their capacity beyond lambda at no cost).
+// f is not superadditive in general; its minorant used here is
+//
+//     g(z) = lambda floor(z / u_1) + max(0, (z mod u_1) - (u_1 - lambda)),
+//
+// the same staircase with every period u_1. g <= f because M_h <= h u_1, and g is
+// superadditive (a convex ramp inside a period; across periods the ramps add to at most one
+// step), nondecreasing and 1-Lipschitz. Then an arc k outside the cover with capacity u_k
+// enters as x'_k - (u_k - g(u_k)) y_k, which is at most g(x'_k) on its whole range, and the
+// lifted inflows together contribute at most g(Z) <= f(Z - O) + O when Z flows in through
+// them against O flowing out, which is what the cover's side leaves room for. An arc is
+// lifted only when its term is positive at the LP point; a zero is valid either way. The
+// cut is built both ways, unlifted with the cheaper outflow form and lifted, and the more
+// violated is kept.
 //
 // VALIDITY IS BY CONSTRUCTION AND CHECKED IN EXACT ARITHMETIC. tests/unit/test_flow_cover_cuts
 // fixes every indicator assignment of small random fixed-charge models and maximises each
@@ -50,15 +73,15 @@ struct FlowCoverStats {
   int flow_rows = 0;  ///< row sides with at least one switched inflow, tried
   int covers = 0;     ///< of those, where a cover with lambda > 0 was found
   int cuts = 0;       ///< violated cuts returned
+  int lifted = 0;     ///< of those, the lifted form (LIFTING)
 };
 
 /// Flow cover cuts violated at `solution.col_value`, from the rows whose inflows carry an
 /// indicator. `col_lower` / `col_upper` are the bounds the structure is read under: the
-/// GLOBAL ones, so a cut is valid at every node.
-[[nodiscard]] std::vector<Cut> generate_flow_cover_cuts(const Model& model,
-                                                        const Solution& solution,
-                                                        const std::vector<double>& col_lower,
-                                                        const std::vector<double>& col_upper,
-                                                        FlowCoverStats* stats = nullptr);
+/// GLOBAL ones, so a cut is valid at every node. `lift` builds the LIFTING form beside the
+/// unlifted one and keeps the more violated.
+[[nodiscard]] std::vector<Cut> generate_flow_cover_cuts(
+    const Model& model, const Solution& solution, const std::vector<double>& col_lower,
+    const std::vector<double>& col_upper, FlowCoverStats* stats = nullptr, bool lift = true);
 
 }  // namespace sankhya::mip

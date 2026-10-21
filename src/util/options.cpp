@@ -1281,6 +1281,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"flow_cover_lifting",
+                 OptionType::Bool,
+                 true,
+                 "Lift the flow cover cuts (Gu, Nemhauser and Savelsbergh, Math. Programming "
+                 "85, 1999): the inflows left out of the cover enter by a superadditive "
+                 "staircase lifting function, every outflow on the right as its own flow, and "
+                 "the lifted cut replaces the unlifted one when it is more violated. Only "
+                 "read when enable_flow_cover_cuts is set, which is off by default.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back(
         {"enable_root_cuts",
          OptionType::Bool,

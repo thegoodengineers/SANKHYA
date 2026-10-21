@@ -85,6 +85,14 @@ std::vector<Vub> find_vubs(const Model& model, const std::vector<double>& col_lo
   return vub;
 }
 
+/// The superadditive lifting function (flow_cover_cuts.hpp, LIFTING): a staircase of period
+/// `u1`, flat at h lambda then rising with slope 1 over the last lambda of each period.
+double staircase(double z, double u1, double lambda) {
+  const double periods = std::floor(z / u1);
+  const double within = z - periods * u1;
+  return lambda * periods + std::max(0.0, within - (u1 - lambda));
+}
+
 /// Add `sign` times the arc's flow x' to the LEFT side of `cut`, the constant of the
 /// shift going to the right.
 void add_flow(const Arc& arc, double sign, Cut* cut, double* rhs) {
@@ -105,7 +113,7 @@ void add_flow(const Arc& arc, double sign, Cut* cut, double* rhs) {
 std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& solution,
                                           const std::vector<double>& col_lower,
                                           const std::vector<double>& col_upper,
-                                          FlowCoverStats* stats) {
+                                          FlowCoverStats* stats, bool lift) {
   std::vector<Cut> cuts;
   const Index n = model.num_cols();
   const Index m = model.num_rows();
@@ -217,53 +225,102 @@ std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& so
       if (lambda <= margin) continue;
       ++s.covers;
 
-      // THE INEQUALITY, in the model's own columns, and its two sides at the LP point.
-      Cut cut;
-      cut.family = CutFamily::kFlowCover;
-      cut.coeff.assign(static_cast<std::size_t>(n), 0.0);
-      double rhs = b;
-      double lhs_star = 0.0;
-      double rhs_star = b;
+      // u1, the largest capacity of a cover arc above lambda, is the lifting function's
+      // period; with none the function is z itself and lifting adds nothing over leaving the
+      // arcs out.
+      double u1 = 0.0;
       for (std::size_t k = 0; k < arcs.size(); ++k) {
-        const Arc& arc = arcs[k];
-        if (arc.inflow) {
-          if (!in_cover[k]) continue;  // outside the cover: zero, the unlifted coefficient
-          add_flow(arc, 1.0, &cut, &rhs);
-          lhs_star += arc.flow;
-          const double extra = std::max(0.0, arc.capacity - lambda);
-          if (extra > tol::kZeroDrop && arc.indicator >= 0) {
-            // (u_j - lambda)^+ (1 - y_j): the constant to the right, -y_j on the left.
-            cut.coeff[static_cast<std::size_t>(arc.indicator)] -= extra;
-            rhs -= extra;
-            lhs_star += extra * (1.0 - arc.y_star);
-          }
-        } else if (lambda * arc.y_star < arc.flow) {
-          // An outflow on the right as lambda times its switch, the smaller form here.
-          if (arc.indicator >= 0) {
-            cut.coeff[static_cast<std::size_t>(arc.indicator)] -= lambda;
+        if (in_cover[k] && arcs[k].capacity > lambda) u1 = std::max(u1, arcs[k].capacity);
+      }
+
+      // THE INEQUALITY, in the model's own columns, and its violation at the LP point
+      // relative to its right-hand side (NaN when it fails the filter). Lifted, the arcs
+      // outside the cover get the LIFTING coefficients, and every outflow sits on the right
+      // as its own flow, which the lifting's validity argument needs.
+      const auto build = [&](bool lifting, Cut* cut, int* lifted) {
+        cut->family = CutFamily::kFlowCover;
+        cut->coeff.assign(static_cast<std::size_t>(n), 0.0);
+        double rhs = b;
+        double lhs_star = 0.0;
+        double rhs_star = b;
+        *lifted = 0;
+        for (std::size_t k = 0; k < arcs.size(); ++k) {
+          const Arc& arc = arcs[k];
+          if (arc.inflow) {
+            if (!in_cover[k]) {
+              // Outside the cover: zero unlifted; lifted, x' - (u - g(u)) y, kept only when
+              // it is positive at the LP point (zero is valid too, so the choice is free).
+              if (!lifting || !std::isfinite(arc.capacity)) continue;
+              const double beta = arc.capacity - staircase(arc.capacity, u1, lambda);
+              if (arc.flow - beta * arc.y_star <= tol::kZeroDrop) continue;
+              add_flow(arc, 1.0, cut, &rhs);
+              if (arc.indicator >= 0) {
+                cut->coeff[static_cast<std::size_t>(arc.indicator)] -= beta;
+              } else {
+                rhs += beta;  // always on: the switch is the constant 1
+              }
+              lhs_star += arc.flow - beta * arc.y_star;
+              ++*lifted;
+              continue;
+            }
+            add_flow(arc, 1.0, cut, &rhs);
+            lhs_star += arc.flow;
+            const double extra = std::max(0.0, arc.capacity - lambda);
+            if (extra > tol::kZeroDrop && arc.indicator >= 0) {
+              // (u_j - lambda)^+ (1 - y_j): the constant to the right, -y_j on the left.
+              cut->coeff[static_cast<std::size_t>(arc.indicator)] -= extra;
+              rhs -= extra;
+              lhs_star += extra * (1.0 - arc.y_star);
+            }
+          } else if (!lifting && lambda * arc.y_star < arc.flow) {
+            // An outflow on the right as lambda times its switch, the smaller form here.
+            if (arc.indicator >= 0) {
+              cut->coeff[static_cast<std::size_t>(arc.indicator)] -= lambda;
+            } else {
+              rhs += lambda;
+            }
+            rhs_star += lambda * arc.y_star;
           } else {
-            rhs += lambda;
+            // An outflow on the right as the flow itself.
+            add_flow(arc, -1.0, cut, &rhs);
+            rhs_star += arc.flow;
           }
-          rhs_star += lambda * arc.y_star;
-        } else {
-          // An outflow on the right as the flow itself.
-          add_flow(arc, -1.0, &cut, &rhs);
-          rhs_star += arc.flow;
         }
+        cut->rhs = rhs;
+        const double violation = (lhs_star - rhs_star) / std::max(1.0, std::fabs(rhs_star));
+        if (violation <= kMinViolation) return std::numeric_limits<double>::quiet_NaN();
+        double largest = 0.0;
+        double smallest = kInf;
+        for (const double c : cut->coeff) {
+          const double magnitude = std::fabs(c);
+          if (magnitude <= tol::kZeroDrop) continue;
+          largest = std::max(largest, magnitude);
+          smallest = std::min(smallest, magnitude);
+        }
+        if (largest == 0.0 || largest / smallest > kMaxDynamism) {
+          return std::numeric_limits<double>::quiet_NaN();
+        }
+        return violation;
+      };
+
+      Cut plain;
+      int unused = 0;
+      const double plain_violation = build(false, &plain, &unused);
+      Cut lifted_cut;
+      int lifted = 0;
+      const double lifted_violation = lift && u1 > 0.0
+                                          ? build(true, &lifted_cut, &lifted)
+                                          : std::numeric_limits<double>::quiet_NaN();
+      // The lifted cut when it lifted something and is the more violated; NaN compares false.
+      if (lifted > 0 && !(lifted_violation <= plain_violation)) {
+        if (std::isnan(lifted_violation)) continue;
+        cuts.push_back(std::move(lifted_cut));
+        ++s.lifted;
+        ++s.cuts;
+        continue;
       }
-      const double violation = (lhs_star - rhs_star) / std::max(1.0, std::fabs(rhs_star));
-      if (violation <= kMinViolation) continue;
-      double largest = 0.0;
-      double smallest = kInf;
-      for (const double c : cut.coeff) {
-        const double magnitude = std::fabs(c);
-        if (magnitude <= tol::kZeroDrop) continue;
-        largest = std::max(largest, magnitude);
-        smallest = std::min(smallest, magnitude);
-      }
-      if (largest == 0.0 || largest / smallest > kMaxDynamism) continue;
-      cut.rhs = rhs;
-      cuts.push_back(std::move(cut));
+      if (std::isnan(plain_violation)) continue;
+      cuts.push_back(std::move(plain));
       ++s.cuts;
     }
   }

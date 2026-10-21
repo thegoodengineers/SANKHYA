@@ -267,12 +267,17 @@ TEST(FlowCoverCuts, NoCutRemovesAnyFlowOfRandomModelsExactly) {
   int cuts_checked = 0;
   int assignments = 0;
   int skipped = 0;
+  int lifted = 0;  // the LIFTING form (flow_cover_cuts.hpp), checked by the same gate
   for (int trial = 0; trial < 1500; ++trial) {
     const FixedCharge fc = random_fixed_charge(rng, trial);
     const Model m = build(fc);
     for (int probe = 0; probe < 2; ++probe) {
       const std::vector<double> x = random_point(rng, fc);
-      for (const Cut& cut : generate_flow_cover_cuts(m, at(x), m.col_lower, m.col_upper)) {
+      FlowCoverStats stats;
+      const std::vector<Cut> cuts =
+          generate_flow_cover_cuts(m, at(x), m.col_lower, m.col_upper, &stats);
+      lifted += stats.lifted;
+      for (const Cut& cut : cuts) {
         std::string why;
         assignments += exact_gate(fc, cut, &skipped, &why);
         ASSERT_TRUE(why.empty()) << "trial " << trial << ": " << why;
@@ -281,6 +286,7 @@ TEST(FlowCoverCuts, NoCutRemovesAnyFlowOfRandomModelsExactly) {
     }
   }
   EXPECT_GT(cuts_checked, 100) << "the sweep should exercise the separator";
+  EXPECT_GT(lifted, 20) << "the sweep should exercise the lifted form";
   EXPECT_GT(assignments, 500);
   EXPECT_LT(skipped, assignments / 10)
       << "too many oracle overflows for the sweep to mean much";

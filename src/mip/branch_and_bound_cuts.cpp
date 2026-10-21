@@ -210,10 +210,12 @@ void BranchAndBound::add_combinatorial_cuts(const Solution& relaxation,
   if (options_.get_bool("enable_flow_cover_cuts") && !certify) {
     FlowCoverStats flow;
     std::vector<Cut> covers =
-        generate_flow_cover_cuts(working_, relaxation, global_lower_, global_upper_, &flow);
+        generate_flow_cover_cuts(working_, relaxation, global_lower_, global_upper_, &flow,
+                                 options_.get_bool("flow_cover_lifting"));
     if (flow.flow_rows > 0) {
-      logger_.verbose("flow cover cuts: {} switched row side(s), {} cover(s), {} cut(s)",
-                      flow.flow_rows, flow.covers, flow.cuts);
+      logger_.verbose(
+          "flow cover cuts: {} switched row side(s), {} cover(s), {} cut(s), {} lifted",
+          flow.flow_rows, flow.covers, flow.cuts, flow.lifted);
     }
     candidates->insert(candidates->end(), covers.begin(), covers.end());
   }
