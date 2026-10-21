@@ -64,8 +64,10 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
@@ -73,6 +75,7 @@
 #include "core/lp_exact_dual.hpp"
 #include "core/safe_bound.hpp"
 #include "exact/exact_repair.hpp"
+#include "exact/rational.hpp"
 #include "la/lu.hpp"
 #include "sankhya/options.hpp"
 #include "sankhya/tolerances.hpp"
@@ -135,6 +138,125 @@ std::vector<double> sign_fixing_direction(const Model& model, const Solution& so
     if (!std::isfinite(v)) return {};
   }
   return sign;
+}
+
+/// The basis `from` carries with each column of `entering` brought in by one floating-point
+/// primal simplex step (#1082): alpha = B^-1 a_q from the float LU, the textbook ratio test
+/// over the basic variables' bounds at the solution's values, the smallest ratio leaving
+/// (the larger |alpha| on a tie), or a bound flip when a boxed column reaches its other
+/// bound first. A column no basic variable blocks is left out. Nothing here needs to be
+/// exact: the basis is only a candidate, and its exact duals are what get evaluated, so a
+/// pivot that rounding sends the wrong way costs a round, never a wrong bound. nullopt when
+/// the basis cannot be factorized or no column was brought in.
+std::optional<Solution> pivot_in(const Model& model, const Solution& from,
+                                 const std::vector<Index>& entering) {
+  const Index n = model.num_cols();
+  const Index m = model.num_rows();
+  if (from.col_status.size() != static_cast<Sz>(n) ||
+      from.row_status.size() != static_cast<Sz>(m) ||
+      from.col_value.size() != static_cast<Sz>(n) ||
+      from.row_activity.size() != static_cast<Sz>(m)) {
+    return std::nullopt;
+  }
+  Solution next;
+  next.col_status = from.col_status;
+  next.row_status = from.row_status;
+  next.col_value = from.col_value;
+  next.row_activity = from.row_activity;
+  // Variable k < n is structural column k; k >= n is row k - n's logical, s = A x.
+  const auto status = [&](Index k) -> BasisStatus& {
+    return k < n ? next.col_status[static_cast<Sz>(k)]
+                 : next.row_status[static_cast<Sz>(k - n)];
+  };
+  const auto value = [&](Index k) -> double& {
+    return k < n ? next.col_value[static_cast<Sz>(k)]
+                 : next.row_activity[static_cast<Sz>(k - n)];
+  };
+  const auto lower = [&](Index k) {
+    return k < n ? model.col_lower[static_cast<Sz>(k)]
+                 : model.row_lower[static_cast<Sz>(k - n)];
+  };
+  const auto upper = [&](Index k) {
+    return k < n ? model.col_upper[static_cast<Sz>(k)]
+                 : model.row_upper[static_cast<Sz>(k - n)];
+  };
+  static const double kMinusOne = -1.0;
+  bool moved = false;
+  for (const Index q : entering) {
+    if (q < 0 || q >= n || status(q) == BasisStatus::kBasic) continue;
+    // The basis in position order, [A | -I] as in sign_fixing_direction.
+    std::vector<Index> basic;
+    std::vector<LuColumn> columns;
+    std::vector<Index> logical_row;
+    logical_row.reserve(static_cast<Sz>(m));  // the columns point into it
+    for (Index k = 0; k < n + m; ++k) {
+      if (status(k) != BasisStatus::kBasic) continue;
+      basic.push_back(k);
+      if (k < n) {
+        const ColumnView col = model.matrix.column(k);
+        columns.push_back({col.rows, col.values, col.size});
+      } else {
+        logical_row.push_back(k - n);
+        columns.push_back({&logical_row.back(), &kMinusOne, 1});
+      }
+    }
+    if (columns.size() != static_cast<Sz>(m)) return std::nullopt;
+    SparseLu lu;
+    if (!lu.factorize(columns, m, tol::kPivotTolerance, tol::kMarkowitzThreshold)) {
+      return moved ? std::optional<Solution>(std::move(next)) : std::nullopt;
+    }
+    std::vector<double> alpha(static_cast<Sz>(m), 0.0);
+    const ColumnView aq = model.matrix.column(q);
+    for (Index e = 0; e < aq.size; ++e) alpha[static_cast<Sz>(aq.rows[e])] = aq.values[e];
+    lu.solve(alpha.data());
+    // Raising x_q by t moves the basic variable at position p by -alpha_p t; at its upper
+    // bound x_q falls instead.
+    const double direction = status(q) == BasisStatus::kAtUpper ? -1.0 : 1.0;
+    double best = kInf;
+    Sz leave = alpha.size();
+    BasisStatus leave_to = BasisStatus::kAtLower;
+    for (Sz p = 0; p < alpha.size(); ++p) {
+      const double a = alpha[p];
+      if (!(std::fabs(a) > tol::kPivotTolerance)) continue;
+      const Index k = basic[p];
+      const double rate = -direction * a;
+      double ratio = kInf;
+      BasisStatus to = BasisStatus::kAtLower;
+      if (rate < 0.0 && is_finite_bound(lower(k))) {
+        ratio = std::max(0.0, (value(k) - lower(k)) / std::fabs(a));
+      } else if (rate > 0.0 && is_finite_bound(upper(k))) {
+        ratio = std::max(0.0, (upper(k) - value(k)) / std::fabs(a));
+        to = BasisStatus::kAtUpper;
+      }
+      if (!std::isfinite(ratio)) continue;
+      const bool tie = leave < alpha.size() && std::fabs(ratio - best) <= tol::kPivotTolerance;
+      if (ratio < best && !tie) {
+        best = ratio;
+        leave = p;
+        leave_to = to;
+      } else if (tie && std::fabs(a) > std::fabs(alpha[leave])) {
+        leave = p;
+        leave_to = to;
+      }
+    }
+    const bool boxed = is_finite_bound(lower(q)) && is_finite_bound(upper(q));
+    if (boxed && upper(q) - lower(q) < best) {
+      status(q) = direction > 0.0 ? BasisStatus::kAtUpper : BasisStatus::kAtLower;
+      value(q) = direction > 0.0 ? upper(q) : lower(q);
+      moved = true;
+      continue;
+    }
+    if (leave == alpha.size()) continue;  // nothing blocks: this column cannot be pivoted in
+    for (Sz p = 0; p < alpha.size(); ++p) value(basic[p]) -= direction * alpha[p] * best;
+    value(q) += direction * best;
+    const Index k = basic[leave];
+    status(k) = lower(k) == upper(k) ? BasisStatus::kFixed : leave_to;
+    value(k) = leave_to == BasisStatus::kAtUpper ? upper(k) : lower(k);
+    status(q) = BasisStatus::kBasic;
+    moved = true;
+  }
+  if (!moved) return std::nullopt;
+  return next;
 }
 
 }  // namespace
@@ -249,10 +371,10 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
   // 4. The exact duals of a basis, over the box stage 2 left: the reported one here, and in
   // stage 5 the re-solve's, for the costs it was optimal for.
   const auto try_exact = [&](std::span<const double> dual_cost, const Solution& source,
-                             const char* what) {
-    if (exact_timed_out) return;
-    ExactDualBound exact_bound = exact_dual_bound(model, dual_cost, cost, lower, upper, source,
-                                                  options.get_double("exact_seconds"));
+                             const std::string& what, double seconds) {
+    if (exact_timed_out) return ExactDualBound{};
+    ExactDualBound exact_bound =
+        exact_dual_bound(model, dual_cost, cost, lower, upper, source, seconds);
     exact_timed_out = exact_bound.timed_out;
     if (exact_bound.proved) {
       note(fmt::format("exact duals of {}: {:.17g} ({:.3e} relative)", what, exact_bound.value,
@@ -263,15 +385,62 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
     if (exact_bound.proved && (!std::isfinite(best.value) || exact_bound.value > best.value)) {
       best.value = exact_bound.value;
       best_uses_propagation = !propagated.empty();
-      exact_multipliers = std::move(exact_bound.multipliers);
+      exact_multipliers = exact_bound.multipliers;
     }
+    return exact_bound;
   };
   if (!good_enough()) {
     note(std::isfinite(best.value)
              ? fmt::format("float duals: {:.17g} ({:.3e} relative), above the target",
                            best.value, relative_gap(best.value))
              : "float duals: no finite bound");
-    try_exact(cost, *solution, "the reported basis");
+    const exact::Deadline budget(options.get_double("exact_seconds"));
+    ExactDualBound reported =
+        try_exact(cost, *solution, "the reported basis", budget.remaining());
+    // When the exact duals were out of reach, the refinement's approximation of them is
+    // still the most accurate double y the basis has (pilot87: the simplex's own duals give
+    // 6.3e-6; the refined ones have kExactDualRefinedBits or more). Stages 1-3 evaluate it with
+    // their own outward rounding, so it needs no accuracy guarantee of its own (#1082).
+    if (!good_enough() && !reported.refined.empty()) {
+      const double before = best.value;
+      try_duals(reported.refined, *solution);
+      if (best.value > before || !std::isfinite(before)) {
+        note(std::isfinite(best.value)
+                 ? fmt::format("refined float duals: {:.17g} ({:.3e} relative)", best.value,
+                               relative_gap(best.value))
+                 : "refined float duals: no finite bound");
+      }
+    }
+    // 4b (#1082). The reported basis is optimal to tolerance, and exactly some nonbasic
+    // reduced cost can have the wrong sign by a rounding residue: greenbea and greenbeb
+    // have seven and nine such columns, each with cost 0, only x >= 0 and an exact reduced
+    // cost of -1e-14 or less. A column like that lies on a zero-cost recession ray, along
+    // which the reduced costs of every y sum to zero, so no floating-point y prices it, and
+    // stage 5's cost move makes the LP unbounded. The columns themselves say which way to
+    // go: each is brought into the basis by one floating-point primal step (pivot_in), and
+    // the exact duals of the new basis are tried, within the same exact_seconds as the
+    // reported basis's. The pivots need not be exact - only the bound is, and it is
+    // evaluated exactly on whatever basis they reach - so a wrong pivot costs a round.
+    // This is the exact repair's primal phase (#757) with its pivots taken in floating
+    // point and its optimality test made exactly, once per round, instead of after every
+    // pivot in rational arithmetic, which ran past 900 s on both instances.
+    // A round that runs out of this budget does not stop the exact repair below, which has
+    // its own: only the reported basis's own timeout says the exact duals are out of reach.
+    const bool reported_timed_out = exact_timed_out;
+    Solution current = *solution;
+    for (int round = 0;
+         round < tol::kSafeBoundPivotRounds && !good_enough() && !exact_timed_out &&
+         !reported.dual_infeasible.empty() && budget.remaining() > 0.0;
+         ++round) {
+      std::optional<Solution> next = pivot_in(model, current, reported.dual_infeasible);
+      if (!next) break;
+      current = std::move(*next);
+      reported = try_exact(cost, current,
+                           fmt::format("the basis after pivot round {} ({} column(s) in)",
+                                       round + 1, reported.dual_infeasible.size()),
+                           budget.remaining());
+    }
+    exact_timed_out = reported_timed_out;
   }
   // The reported basis is often optimal only to tolerance: exactly, a nonbasic reduced cost
   // of -1e-14 on a column with no upper bound, and then its exact duals prove nothing. The
@@ -290,7 +459,8 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
       repaired.row_status = repair.row_status;
       repaired.col_value = repair.col_value;  // load_basis resolves a status by the value
       repaired.row_activity.assign(static_cast<Sz>(model.num_rows()), 0.0);
-      try_exact(cost, repaired, "the repaired basis");
+      (void)try_exact(cost, repaired, "the repaired basis",
+                      options.get_double("exact_seconds"));
     } else if (repair.verdict == exact::ExactVerdict::kVerified) {
       note("exact repair: the reported basis is already exactly optimal");
     } else {
@@ -350,7 +520,8 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
       if (!good_enough()) {
         std::vector<double> moved_cost(cost.size());
         for (Sz j = 0; j < cost.size(); ++j) moved_cost[j] = sense * perturbed.col_cost[j];
-        try_exact(moved_cost, resolved, "the perturbed re-solve's basis");
+        (void)try_exact(moved_cost, resolved, "the perturbed re-solve's basis",
+                        options.get_double("exact_seconds"));
       }
     }
   }

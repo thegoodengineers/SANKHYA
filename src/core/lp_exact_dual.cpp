@@ -36,6 +36,7 @@
 // to a double at the end, checked exactly.
 
 #include "core/lp_exact_dual.hpp"
+#include "core/lp_exact_dyadic.hpp"
 
 #include <algorithm>
 #include <climits>
@@ -61,62 +62,8 @@
 namespace sankhya {
 namespace {
 
-using exact::BigInt;
 using exact::Rational;
-using Sz = std::size_t;
-constexpr int kZero = INT_MIN;  // top() of zero
-
-/// m * 2^e, exactly.
-struct Dyadic {
-  BigInt m;
-  int e = 0;
-};
-
-Dyadic dyadic(double v) {
-  if (v == 0.0) return {};
-  int exponent = 0;
-  const double mantissa = std::frexp(v, &exponent);
-  return {BigInt(static_cast<long long>(std::ldexp(mantissa, 53))), exponent - 53};
-}
-Dyadic operator*(const Dyadic& a, const Dyadic& b) {
-  if (a.m.is_zero() || b.m.is_zero()) return {};
-  return {a.m * b.m, a.e + b.e};
-}
-Dyadic operator+(const Dyadic& a, const Dyadic& b) {
-  if (a.m.is_zero()) return b;
-  if (b.m.is_zero()) return a;
-  if (a.e == b.e) return {a.m + b.m, a.e};
-  if (a.e > b.e) return {a.m.shifted_left(a.e - b.e) + b.m, b.e};
-  return {a.m + b.m.shifted_left(b.e - a.e), a.e};
-}
-Dyadic operator-(const Dyadic& a, const Dyadic& b) {
-  return a + Dyadic{-b.m, b.e};
-}
-/// |value| < 2^top(value); kZero for zero.
-int top(const Dyadic& a) {
-  return a.m.is_zero() ? kZero : a.m.bits() + a.e;
-}
-/// value / 2^shift, to double precision or so.
-double scaled(const Dyadic& a, int shift) {
-  if (a.m.is_zero()) return 0.0;
-  std::uint64_t lead = 0;
-  int ex = 0;
-  a.m.leading_bits(&lead, &ex);
-  const double magnitude = std::ldexp(static_cast<double>(lead), ex + a.e - shift);
-  return a.m.sign() < 0 ? -magnitude : magnitude;
-}
-/// a with every bit below 2^position dropped (towards zero): an error under 2^position.
-Dyadic truncated_below(const Dyadic& a, int position) {
-  if (a.m.is_zero() || a.e >= position) return a;
-  return {a.m.shifted_right(position - a.e), position};
-}
-/// The integer nearest to a (halves away from zero).
-BigInt nearest(const Dyadic& a) {
-  if (a.e >= 0) return a.m.shifted_left(a.e);
-  // (|m| + 2^(-e-1)) >> -e: a shift, not a division, since the divisor is a power of two.
-  const BigInt q = (a.m.abs() + BigInt(1).shifted_left(-a.e - 1)).shifted_right(-a.e);
-  return a.m.sign() < 0 ? -q : q;
-}
+using namespace dyadic_arith;  // Dyadic, its arithmetic, StepHistory (lp_exact_dyadic.hpp)
 
 /// The last convergent h/k of the continued fraction of t with k < 2^k_bits.
 std::optional<std::pair<BigInt, BigInt>> convergent(const Dyadic& t, int k_bits) {
@@ -185,10 +132,15 @@ std::optional<RationalVector> reconstruct(const std::vector<Dyadic>& x, int erro
   constexpr int kFixupBits = 64;
   constexpr int kMaxFixups = 4;  // more than that and the denominator was never right
   int fixups = 0;
-  for (const Dyadic& xi : x) {
+  // The nearest integers found on the way are the numerators, unless a fix-up changes q.
+  std::vector<BigInt> numerators(x.size());
+  bool q_changed = false;
+  for (Sz i = 0; i < x.size(); ++i) {
+    const Dyadic& xi = x[i];
     if (xi.m.is_zero()) continue;
     const Dyadic t_i = scaled(xi, q);
-    const Dyadic away = t_i - Dyadic{nearest(t_i), 0};
+    numerators[i] = nearest(t_i);
+    const Dyadic away = t_i - Dyadic{numerators[i], 0};
     if (away.m.is_zero() || top(away) < -kSlack / 2) continue;
     if (++fixups > kMaxFixups) return std::nullopt;
     const int room = std::min(kFixupBits, q_bits - q.bits());
@@ -197,10 +149,15 @@ std::optional<RationalVector> reconstruct(const std::vector<Dyadic>& x, int erro
     const auto extra = convergent(precise, room);
     if (!extra) return std::nullopt;
     q = q * extra->second;
+    q_changed = true;
   }
   RationalVector out;
-  out.p.reserve(x.size());
-  for (const Dyadic& xi : x) out.p.push_back(nearest(scaled(xi, q)));
+  if (q_changed) {
+    out.p.reserve(x.size());
+    for (const Dyadic& xi : x) out.p.push_back(nearest(scaled(xi, q)));
+  } else {
+    out.p = std::move(numerators);  // the same nearest(scaled(x_i, q)), computed once
+  }
   out.q = std::move(q);
   return out;
 }
@@ -301,13 +258,20 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
   };
 
   exact::Deadline deadline(seconds);
+  // Outside the try: when the exact duals are not reached, x is still the most accurate
+  // y this basis has, and goes back as `refined` (see the header).
+  StepHistory x;
+  int gained = 0;
+  const auto keep_refined = [&] {
+    if (gained < tol::kExactDualRefinedBits) return;
+    out.refined.assign(sm, 0.0);
+    for (Sz i = 0; i < sm; ++i) out.refined[i] = scaled(x.value(i), 0);
+  };
   try {
-    std::vector<Dyadic> x(sm);
     std::vector<Dyadic> r(sm);
     for (Sz p = 0; p < sm; ++p) r[p] = rhs(p);
     std::vector<double> work(sm);
     std::optional<RationalVector> y;
-    int gained = 0;
     int next_attempt = tol::kExactDualFirstAttemptBits;
     std::mt19937_64 rng(763);  // fixed: the same run gives the same answer
     int stalls = 0;
@@ -336,7 +300,6 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
           if (step == 0) continue;
           steps[i] = step;
           dx[i] = Dyadic{BigInt(step), step_exponent};
-          x[i] = x[i] + dx[i];
         }
         // r -= B' dx, exactly. Every dx_i is step_i 2^step_exponent, so a structural
         // column's sum is sum_k mantissa_k step_i 2^shift_k times 2^(exponent + step
@@ -401,6 +364,7 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
           }
           r[p] = r[p] - apply(p, dx);
         }
+        x.add(std::move(steps), step_exponent);
         int new_t = kZero;
         for (const Dyadic& rp : r) new_t = std::max(new_t, top(rp));
         const int progress = new_t == kZero ? tol::kExactDualStepBits : t - new_t;
@@ -418,17 +382,20 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
       }
       if (error_exponent == kZero) {
         // x is exact: its common denominator is a power of two.
+        const std::vector<Dyadic> exact_values = x.values(sm);
         int low = 0;
-        for (const Dyadic& xi : x) {
+        for (const Dyadic& xi : exact_values) {
           if (!xi.m.is_zero()) low = std::min(low, xi.e);
         }
         RationalVector exact_x;
         exact_x.q = BigInt(1).shifted_left(-low);
-        for (const Dyadic& xi : x) exact_x.p.push_back(nearest(xi * Dyadic{exact_x.q, 0}));
+        for (const Dyadic& xi : exact_values) {
+          exact_x.p.push_back(nearest(xi * Dyadic{exact_x.q, 0}));
+        }
         y = std::move(exact_x);
       } else if (gained >= next_attempt) {
         next_attempt = gained + gained / 4;
-        y = reconstruct(x, error_exponent, rng);
+        y = reconstruct(x.values(sm), error_exponent, rng);
       } else {
         continue;
       }
@@ -450,6 +417,7 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
       if (out.message.empty()) {
         out.message = "the refinement did not reach the exact duals within its iteration cap";
       }
+      keep_refined();  // in case the exact factorisation below gives no answer either
       exact::Problem problem(model);
       for (Index j = 0; j < n; ++j) {
         problem.cost[static_cast<Sz>(j)] = Rational::from_double(dual_cost[static_cast<Sz>(j)]);
@@ -465,6 +433,7 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
       solved.q = exact::common_denominator(exact_basis.y, &solved.p);
       y = std::move(solved);
       out.message.clear();
+      out.refined.clear();  // exact after all
     }
 
     // ---- The bound, exactly, times q: sum_i p_i side_i + sum_j S_j bound_j, with
@@ -519,10 +488,16 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
       if (s.m.is_zero()) continue;
       const double bound = s.m.sign() > 0 ? lower[uj] : upper[uj];
       if (!is_finite_bound(bound)) {
-        out.message = fmt::format("the exact basis is not dual feasible for column {}", j);
-        return out;
+        out.dual_infeasible.push_back(j);  // all of them, for the caller's next basis
+        continue;
       }
-      total = total + s * dyadic(bound);
+      if (out.dual_infeasible.empty()) total = total + s * dyadic(bound);
+    }
+    if (!out.dual_infeasible.empty()) {
+      out.message =
+          fmt::format("the exact basis is not dual feasible for {} column(s), the first {}",
+                      out.dual_infeasible.size(), out.dual_infeasible.front());
+      return out;
     }
     const Rational value = total.e >= 0 ? Rational(total.m.shifted_left(total.e), y->q)
                                         : Rational(total.m, y->q.shifted_left(-total.e));
@@ -542,6 +517,7 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
   } catch (const exact::ExactBudgetExceeded&) {
     out.message = "the exact duals ran past their time budget";
     out.timed_out = true;
+    if (out.refined.empty()) keep_refined();
   } catch (const exact::RationalOverflow&) {
     out.message = "a non-finite value reached the exact arithmetic";
   }

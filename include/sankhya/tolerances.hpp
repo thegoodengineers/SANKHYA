@@ -809,6 +809,15 @@ inline constexpr int kSafeBoundPropagationPasses = 10;
 inline constexpr double kSafeBoundCostPerturbationFirst = 1e-9;
 inline constexpr double kSafeBoundCostPerturbationLast = 1e-6;
 inline constexpr double kSafeBoundCostPerturbationGrowth = 10.0;
+/// Stage 4b of the safe bound (#1082, src/core/lp_safe_bound.cpp): rounds of floating-point
+/// pivots on the columns the exact duals leave dual infeasible, each followed by the exact
+/// duals of the new basis, all inside one exact_seconds. An effort cap, not a tolerance:
+/// every round's bound is exact or absent, whatever the count.
+inline constexpr int kSafeBoundPivotRounds = 8;
+/// Bits the exact-dual refinement must have gained before its running approximation is
+/// handed back as a polished floating-point y (ExactDualBound::refined, #1082): a double
+/// carries 53, and the margin covers the error estimate's slack.
+inline constexpr int kExactDualRefinedBits = 80;
 /// The exact basis duals of the certified-gap bound (src/core/lp_exact_dual.cpp): leading bits
 /// of each floating-point correction kept exactly (at most 62, so it fits a long long);
 /// residual bits gained before the first rational reconstruction is tried (each later try

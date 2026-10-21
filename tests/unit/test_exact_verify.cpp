@@ -6,6 +6,7 @@
 // so ExactVerify.ARejectedBasisFailsNotVerifies hand-builds a basis that is not actually
 // optimal and confirms verify_basis_exact() says so rather than rubber-stamping it.
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -126,6 +127,49 @@ TEST(ExactBigInt, DivisionSatisfiesItsDefinitionOnRandomLargeNumbers) {
             "21267647932558653966460912964485513216");
   EXPECT_EQ(BigInt(-1000000000000LL).to_string(), "-1000000000000");
   EXPECT_EQ(BigInt::gcd(BigInt(-84), BigInt(36)), BigInt(12));
+}
+
+// Karatsuba (#1082) against independent arithmetic: Algorithm D's division, held to its own
+// definition above, must undo every product exactly, and the product must commute and
+// distribute. Operands from below the schoolbook cutoff to well past it, balanced and as
+// unbalanced as one limb against two thousand, with the signs mixed and runs of zero limbs.
+TEST(ExactBigInt, KaratsubaProductsAreExactPastTheSchoolbookCutoff) {
+  std::uint64_t state = 1082;
+  const auto next = [&state]() {
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    return static_cast<long long>(state >> 33);
+  };
+  // About 31 bits per step; every fifth step adds a zero limb, as a dyadic value has.
+  const auto random_big = [&](int steps) {
+    BigInt v(next() % 2 == 0 ? 1 : -1);
+    for (int k = 0; k < steps; ++k) v = v * BigInt(1LL << 31) + BigInt(k % 5 == 4 ? 0 : next());
+    return v;
+  };
+  const int sizes[] = {1, 30, 47, 60, 97, 160, 400, 1100, 2100};
+  std::vector<BigInt> first;
+  std::vector<BigInt> second;
+  for (const int s : sizes) {
+    first.push_back(random_big(s));
+    second.push_back(random_big(s));
+  }
+  for (std::size_t i = 0; i < first.size(); ++i) {
+    for (std::size_t j = 0; j < second.size(); ++j) {
+      const BigInt& a = first[i];
+      const BigInt& b = second[j];
+      const BigInt& c = second[(i + j) % second.size()];
+      const BigInt ab = a * b;
+      ASSERT_EQ(ab, b * a) << sizes[i] << " x " << sizes[j];
+      ASSERT_EQ(ab / b, a) << sizes[i] << " x " << sizes[j];
+      ASSERT_TRUE((ab % b).is_zero()) << sizes[i] << " x " << sizes[j];
+      ASSERT_EQ((a + c) * b, ab + c * b) << sizes[i] << " x " << sizes[j];
+      ASSERT_EQ(ab.sign(), a.sign() * b.sign()) << sizes[i] << " x " << sizes[j];
+    }
+  }
+  // A square, whose two halves are the same limbs, and an exact power of two times itself.
+  const BigInt& big = first[7];
+  EXPECT_EQ((big * big) / big, big);
+  EXPECT_EQ(BigInt::power_of_two(40000) * BigInt::power_of_two(40000),
+            BigInt::power_of_two(80000));
 }
 
 // Lehmer's gcd (#757) against the definition: Euclid by remainders, which the division test
