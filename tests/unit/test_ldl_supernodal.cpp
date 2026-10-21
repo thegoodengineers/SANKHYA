@@ -17,6 +17,7 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -213,6 +214,74 @@ TEST(SupernodalLdl, MatchesTheScalarFactorOnNetlibNormalEquations) {
     // 1e-9 normwise: eleven of the twelve agree to 1e-10, israel's L to 1.5e-10 - its
     // normal equations span eight decades, and two orders of summation differ by that much.
     expect_same_factor(netlib_normal_equations(name), 1e-10, name, 1e-9);
+  }
+}
+
+// The supernodal solve against the dense LU on the same Netlib normal equations. The dense LU
+// (right-looking, partial pivoting, no ordering, no elimination tree) shares no code and no
+// algorithm with either LDL^T, so this is the independent check on Netlib systems that the
+// random-SPD test above is on random ones. The comparison is backward: the dense LU's
+// solution x_d is backward stable, so the supernodal x_s must leave a residual
+// ||M x_s - r||_inf of the same order as ||M x_d - r||_inf, relative to ||M||_inf ||x||_inf.
+TEST(SupernodalLdl, AgreesWithTheDenseLuOnNetlibNormalEquations) {
+  for (const char* name : {"afiro", "adlittle", "blend", "share2b", "scagr7", "stocfor1",
+                           "israel", "bandm", "brandy", "ship04s", "scsd1", "25fv47"}) {
+    const SparseMatrix lower = netlib_normal_equations(name);
+    const Index n = lower.num_rows();
+    const auto N = static_cast<std::size_t>(n);
+    std::vector<double> dense(N * N, 0.0);
+    const std::vector<Index>& starts = lower.column_starts();
+    const std::vector<Index>& rows = lower.row_indices();
+    const std::vector<double>& values = lower.values();
+    for (std::size_t j = 0; j < N; ++j) {
+      for (auto p = static_cast<std::size_t>(starts[j]);
+           p < static_cast<std::size_t>(starts[j + 1]); ++p) {
+        const auto i = static_cast<std::size_t>(rows[p]);
+        dense[i + j * N] = values[p];
+        dense[j + i * N] = values[p];
+      }
+    }
+    double norm_m = 0.0;  // ||M||_inf
+    for (std::size_t i = 0; i < N; ++i) {
+      double row = 0.0;
+      for (std::size_t j = 0; j < N; ++j) row += std::fabs(dense[i + j * N]);
+      norm_m = std::max(norm_m, row);
+    }
+    const std::vector<double> matrix = dense;
+    SparseLdl ldl;
+    ldl.set_supernodal(true);
+    ASSERT_TRUE(ldl.analyze(lower)) << name;
+    ASSERT_TRUE(ldl.factorize(lower, 1e-10)) << name;
+    EXPECT_EQ(ldl.regularized_pivots(), 0) << name;
+    DenseLu lu;
+    ASSERT_TRUE(lu.factorize(std::move(dense), n, 1e-14)) << name;
+    std::mt19937_64 rng(static_cast<std::uint64_t>(n) + 470);
+    std::uniform_real_distribution<double> value(-1.0, 1.0);
+    std::vector<double> rhs(N);
+    for (double& v : rhs) v = value(rng);
+    std::vector<double> xs = rhs;
+    std::vector<double> xd = rhs;
+    ldl.solve(xs.data());
+    lu.solve(xd.data());
+    const auto scaled_residual = [&](const std::vector<double>& x) {
+      double worst = 0.0;
+      double size = 0.0;
+      for (std::size_t i = 0; i < N; ++i) {
+        double r = -rhs[i];
+        for (std::size_t j = 0; j < N; ++j) r += matrix[i + j * N] * x[j];
+        worst = std::max(worst, std::fabs(r));
+        size = std::max(size, std::fabs(x[i]));
+      }
+      return worst / (norm_m * std::max(1.0, size));
+    };
+    const double rs = scaled_residual(xs);
+    const double rd = scaled_residual(xd);
+    std::cout << "ldl " << name << ": n " << n << ", scaled residual supernodal " << rs
+              << ", dense LU " << rd << "\n";
+    // Measured (GCC 11, Release): supernodal at most 3.5e-17 over the twelve, dense LU at
+    // most 4.3e-17. 1e-15 is about 4.5 eps: a backward-stable solve, with room for another
+    // compiler's order of summation, and far below any wrong factor.
+    EXPECT_LE(rs, 1e-15) << name;
   }
 }
 
