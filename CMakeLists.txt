@@ -386,6 +386,8 @@ set(SANKHYA_CORE_SOURCES
   src/presolve/implied_bounds.cpp
   src/presolve/presolve.cpp
   src/presolve/probing.cpp
+  src/presolve/substitute.cpp
+  src/presolve/substitute_postsolve.cpp
   src/ipm/dense_columns.cpp
   src/ipm/column_side.cpp
   src/ipm/centrality.cpp

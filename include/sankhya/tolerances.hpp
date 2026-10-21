@@ -250,6 +250,19 @@ inline constexpr double kFillInCancellation = 1e-11;
 /// 0.01 is the standard simplex compromise between sparsity and stability (Suhl & Suhl).
 inline constexpr double kMarkowitzThreshold = 0.01;
 
+/// Column substitution from equality rows (presolve_substitution, src/presolve/
+/// substitute.cpp). The eliminated column's coefficient must be at least this fraction of
+/// the largest entry of its row and of its column: the same stability argument as a
+/// Markowitz pivot, since the substitution IS one elimination step, and it bounds the
+/// multipliers a_ie / a_re that fill-in applies by 1 / threshold.
+inline constexpr double kSubstitutionPivotThreshold = kMarkowitzThreshold;
+/// Fill-in limits on one substitution (Gondzio 1997): the row may hold at most this many
+/// entries and the column at most this many, and their Markowitz count (len - 1)(count - 1),
+/// the most entries the elimination can create, at most kSubstitutionMaxFill.
+inline constexpr Index kSubstitutionMaxRowLength = 16;
+inline constexpr Index kSubstitutionMaxColumnCount = 16;
+inline constexpr Index kSubstitutionMaxFill = 32;
+
 /// Hyper-sparse FTRAN and BTRAN (#464, lu_hyper_sparse): the symbolic reach is tried when
 /// the right-hand side has at most this fraction of m nonzeros, and abandoned for the full
 /// loops once the steps it reaches pass the same fraction. Hall & McKinnon, "Hyper-sparsity
