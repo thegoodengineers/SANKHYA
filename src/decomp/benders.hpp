@@ -59,6 +59,11 @@ struct BendersOutcome {
   std::string declined;
 };
 
+/// The options a block, master or pricing LP is solved with: the caller's, with decomposition
+/// off, the log quiet, one thread and `seconds_left` as the time limit. Shared with
+/// Dantzig-Wolfe (dantzig_wolfe.hpp).
+[[nodiscard]] Options block_solve_options(const Options& options, double seconds_left);
+
 /// Solve `model` by Benders decomposition over `structure` (kind = linking columns).
 [[nodiscard]] BendersOutcome solve_benders(const Model& model, const BlockStructure& structure,
                                            const Options& options, SolveControl* control,

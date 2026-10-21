@@ -99,6 +99,94 @@ def test_fixed_format_row_name_with_space() -> None:
 
 
 # =============================================================================================
+# Numeric fields are read the way the solver's parse_double reads them (src/io/token.hpp,
+# matched by behaviour, never by sharing code). Fortran-era MPS writers spell an exponent
+# with D, `1.5D+02`; float() refuses that, so a file the solver solves was one this script
+# could not read at all, and `cannot read the model` stood where VERIFIED or REJECTED
+# belonged. The other half is NaN: float() accepts "nan" and the solver refuses it in every
+# field, and a NaN bound or coefficient fails every comparison, so a check against it passes
+# without checking anything.
+# =============================================================================================
+
+FORTRAN_EXPONENT_MPS = """\
+NAME          DEXP
+ROWS
+ N  COST
+ G  R1
+ L  R2
+COLUMNS
+    X         COST      1.0D+00   R1        1.0D+00
+    X         R2        2.5d-1
+RHS
+    RHS       R1        2.5D+00   R2        1D1
+RANGES
+    RNG       R2        5.0D-01
+BOUNDS
+ UP BND       X         1.0D+02
+ENDATA
+"""
+
+
+def test_fortran_exponents_are_read_as_the_solver_reads_them() -> None:
+    """min X: X >= 2.5, 9.5 <= 0.25 X <= 10, 0 <= X <= 100. Optimum X = 38."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "dexp.mps"
+        path.write_text(FORTRAN_EXPONENT_MPS)
+        try:
+            model = vs.parse_mps(path)
+        except ValueError as error:
+            check(False, "a D exponent is an exponent", f"the reader refused the file: {error}")
+            return
+        x = model.col_index["X"]
+        r1, r2 = model.row_index["R1"], model.row_index["R2"]
+        entries = dict(model.entries[x])
+        check(model.col_cost[x] == 1.0, "1.0D+00 in COLUMNS", f"cost {model.col_cost[x]}")
+        check(entries.get(r2) == 0.25, "2.5d-1 in COLUMNS", f"entries {entries}")
+        check(model.row_lower[r1] == 2.5, "2.5D+00 in RHS", f"row_lower {model.row_lower}")
+        check((model.row_lower[r2], model.row_upper[r2]) == (9.5, 10.0),
+              "1D1 in RHS and 5.0D-01 in RANGES",
+              f"R2 in [{model.row_lower[r2]}, {model.row_upper[r2]}]")
+        check(model.col_upper[x] == 100.0, "1.0D+02 in BOUNDS", f"col_upper {model.col_upper[x]}")
+
+        solution = vs.Solution()
+        solution.header = {"status": "optimal", "objective": "38.0"}
+        solution.col_value = {"X": 38.0}
+        solution.col_dual = {"X": 0.0}
+        solution.row_activity = {"R1": 38.0, "R2": 9.5}
+        solution.row_dual = {"R1": 0.0, "R2": 4.0}
+        report = vs.verify(model, solution, vs.DEFAULT_PRIMAL_TOL, vs.DEFAULT_DUAL_TOL,
+                           vs.DEFAULT_INTEGER_TOL, vs.DEFAULT_DUALITY_TOL)
+        check(report.failures == 0, "the optimum of a file with D exponents verifies",
+              "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
+
+
+NAN_RHS_MPS = """\
+NAME          NANRHS
+ROWS
+ N  COST
+ G  R1
+COLUMNS
+    X         COST      1.0   R1        1.0
+RHS
+    RHS       R1        nan
+ENDATA
+"""
+
+
+def test_a_nan_field_is_refused() -> None:
+    """Nothing else in this file can fail to read, so a refusal is the NaN's."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "nan.mps"
+        path.write_text(NAN_RHS_MPS)
+        raised = False
+        try:
+            vs.parse_mps(path)
+        except ValueError:
+            raised = True
+        check(raised, "a NaN right-hand side is refused, as the solver refuses it")
+
+
+# =============================================================================================
 # Reading back the quoted names that src/io/writer.cpp emits (#86).
 #
 # A fixed-format MPS name may legally contain a space - Netlib forplan has a column
@@ -288,6 +376,60 @@ def test_a_wrong_sign_is_judged_against_the_cost_not_against_one() -> None:
               f"failed: {failed}")
 
 
+# =============================================================================================
+# A negative UI bound implies a free lower bound, as a negative UP does (the solver's #298).
+# `UI BND X -1` with no LO entry read as [0, -1] here and as [-inf, -1] in the solver, so
+# the model's optimum, X = -3 for  min X : X >= -3, was REJECTED on column bounds by a
+# verifier reading a different model from the one solved. The MPS convention is documented
+# for UP; the solver applies it to UI as well, with a warning, and the two readers have to
+# agree deliberately rather than by luck (docs/PROVENANCE.md, judgement call 5).
+# =============================================================================================
+
+NEGATIVE_UI_MPS = """NAME          NEGUI
+ROWS
+ N  COST
+ G  R1
+COLUMNS
+    X         COST      1.0   R1        1.0
+RHS
+    RHS       R1        -3.0
+BOUNDS
+ UI BND       X         -1.0
+ENDATA
+"""
+
+
+def test_a_negative_ui_bound_frees_the_lower_bound_as_the_solver_does() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "negui.mps"
+        path.write_text(NEGATIVE_UI_MPS)
+        model = vs.parse_mps(path)
+        x = model.col_index["X"]
+        check(model.col_integer[x], "UI makes the column integer")
+        check(model.col_upper[x] == -1.0, "UI sets the upper bound", f"upper {model.col_upper[x]}")
+        check(model.col_lower[x] == -vs.INF, "a negative UI with no LO frees the lower bound",
+              f"lower {model.col_lower[x]}, expected -inf as src/io/mps_bounds.cpp reads it")
+
+        solution = vs.Solution()
+        solution.header = {"status": "optimal", "objective": "-3.0", "dual_bound": "-3.0"}
+        solution.col_value = {"X": -3.0}
+        solution.col_dual = {"X": 0.0}
+        solution.row_activity = {"R1": -3.0}
+        solution.row_dual = {"R1": 1.0}
+        report = vs.verify(model, solution, vs.DEFAULT_PRIMAL_TOL, vs.DEFAULT_DUAL_TOL,
+                           vs.DEFAULT_INTEGER_TOL, vs.DEFAULT_DUALITY_TOL)
+        check(report.failures == 0, "the model's optimum X = -3 verifies",
+              "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
+
+        # An explicit LO keeps its value: the convention is for the implicit 0 only.
+        path.write_text(NEGATIVE_UI_MPS.replace(" UI BND       X         -1.0\n",
+                                                " LO BND       X         -2.0\n"
+                                                " UI BND       X         -1.0\n"))
+        model = vs.parse_mps(path)
+        check(model.col_lower[model.col_index["X"]] == -2.0,
+              "an explicit LO before a negative UI is kept", f"lower {model.col_lower}")
+
+
 QPS_WITH_OFF_DIAGONAL = """NAME          QCONV
 ROWS
  N  COST
@@ -462,6 +604,65 @@ def test_quadratic_maximization_keeps_its_sign() -> None:
                            vs.DEFAULT_INTEGER_TOL, vs.DEFAULT_DUALITY_TOL)
         check(report.failures > 0, "a feasible non-maximal point is rejected",
               f"{report.failures} check(s) failed, as expected")
+
+
+# =============================================================================================
+# A free-format '$' comment ends the record, as it does for the solver (src/io/mps_reader.cpp,
+# split()): it opens at the first field after the record's first that begins with '$', and a
+# line whose first field begins with '$' is a comment line. The verifier tokenised the
+# comment's words as fields, so `X COST 1.0 $ note` read "$" as a row name, raised, failed
+# the fixed-column retry too, and `cannot read the model` stood where VERIFIED belonged. The
+# first field of a data record is a name and keeps a leading '$': Netlib pang has a column
+# $0AICCB, which both readers keep (#475).
+# =============================================================================================
+
+DOLLAR_COMMENT_MPS = """NAME          DOLLAR
+$ a whole-line comment, free format
+ROWS
+ N  COST
+ G  R1
+COLUMNS
+    $0AICCB   COST      1.0   R1        1.0   $ a name may begin with $
+    Y         COST      2.0   R1        1.0   $ the dearer column
+RHS
+    RHS       R1        2.5   $ demand
+BOUNDS
+ UP BND       Y         10.0  $ capacity
+ENDATA
+"""
+
+
+def test_a_free_format_dollar_comment_ends_the_record() -> None:
+    """min $0AICCB + 2 Y : $0AICCB + Y >= 2.5, Y <= 10. Optimum $0AICCB = 2.5, Y = 0."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "dollar.mps"
+        path.write_text(DOLLAR_COMMENT_MPS)
+        try:
+            model = vs.parse_mps(path)
+        except ValueError as error:
+            check(False, "a $ comment is not a field", f"the reader refused the file: {error}")
+            return
+        check(model.col_names == ["$0AICCB", "Y"], "a name beginning with $ is a name",
+              f"columns {model.col_names}")
+        x, y = model.col_index["$0AICCB"], model.col_index["Y"]
+        r1 = model.row_index["R1"]
+        check(model.col_cost[x] == 1.0 and dict(model.entries[x]) == {r1: 1.0},
+              "the fields before a comment are read", f"cost {model.col_cost[x]}")
+        check(model.row_lower[r1] == 2.5, "the RHS before its comment is read",
+              f"row_lower {model.row_lower}")
+        check(model.col_upper[y] == 10.0, "the bound before its comment is read",
+              f"col_upper {model.col_upper[y]}")
+
+        solution = vs.Solution()
+        solution.header = {"status": "optimal", "objective": "2.5"}
+        solution.col_value = {"$0AICCB": 2.5, "Y": 0.0}
+        solution.col_dual = {"$0AICCB": 0.0, "Y": 1.0}
+        solution.row_activity = {"R1": 2.5}
+        solution.row_dual = {"R1": 1.0}
+        report = vs.verify(model, solution, vs.DEFAULT_PRIMAL_TOL, vs.DEFAULT_DUAL_TOL,
+                           vs.DEFAULT_INTEGER_TOL, vs.DEFAULT_DUALITY_TOL)
+        check(report.failures == 0, "the optimum of a file with $ comments verifies",
+              "; ".join(f"{n}: {d}" for ok, n, d in report.lines if not ok))
 
 
 # =========================================================================================
@@ -935,6 +1136,9 @@ def test_a_continuous_value_breaking_a_row_is_caught_only_with_every_column() ->
 def main() -> int:
     print("test_fixed_format_row_name_with_space")
     test_fixed_format_row_name_with_space()
+    print("numeric fields read as the solver's parse_double reads them")
+    test_fortran_exponents_are_read_as_the_solver_reads_them()
+    test_a_nan_field_is_refused()
     print("test_sol_reader_recovers_quoted_names")
     test_sol_reader_recovers_quoted_names()
     print("test_known_bad_solution_is_rejected")
@@ -942,12 +1146,16 @@ def main() -> int:
     test_strong_duality_still_rejects_a_reduced_cost_pricing_the_wrong_bound()
     test_strong_duality_accepts_a_gap_made_of_accepted_per_item_violations()
     test_a_wrong_sign_is_judged_against_the_cost_not_against_one()
+    print("a negative UI bound frees the lower bound, as the solver reads it")
+    test_a_negative_ui_bound_frees_the_lower_bound_as_the_solver_does()
     print("test_qps_convention_is_read_as_qps_means_it")
     test_qps_convention_is_read_as_qps_means_it()
     print("test_qp_optimum_verifies_and_a_wrong_one_does_not")
     test_qp_optimum_verifies_and_a_wrong_one_does_not()
     print("test_quadratic_maximization_keeps_its_sign")
     test_quadratic_maximization_keeps_its_sign()
+    print("a free-format $ comment ends the record, as it does for the solver")
+    test_a_free_format_dollar_comment_ends_the_record()
     print("the two verdicts with no point (#191)")
     test_a_valid_farkas_certificate_verifies()
     test_a_tiny_farkas_vector_on_a_feasible_model_is_rejected()
@@ -977,6 +1185,7 @@ def main() -> int:
     test_verify_solution_names.run(check)
     test_verify_solution_names.run_first_vector(check)
     test_verify_solution_names.run_blank_vector(check)
+    test_verify_solution_names.run_begin_end_names(check)
     print("semi-continuous columns and special ordered sets (#754)")
     test_verify_solution_sos.run(check)
     print("quadratic rows, QCMATRIX (#514)")

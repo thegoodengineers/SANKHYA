@@ -184,3 +184,73 @@ def run_blank_vector(check) -> None:
         check((model.col_lower[y], model.col_upper[y]) == (-vs.INF, vs.INF),
               "FR with a named vector and a dummy value still binds the named column",
               f"Y in [{model.col_lower[y]}, {model.col_upper[y]}]")
+
+
+# A column or row named "begin" or "end". The solver's writer does not quote either, and the
+# .sol parser used to treat any record starting with "end" as the end of the open block, so
+# "end 0 0 at_lower" closed the columns block early, every column after it went missing, and
+# the true optimum of the model came back rejected as an incomplete point.
+BEGIN_END_MODEL = """NAME          BEGIN-END
+ROWS
+ N  COST
+ L  end
+ G  begin
+COLUMNS
+    end       COST          -1.0   end            1.0
+    end       begin          1.0
+    begin     COST          -1.0   end            1.0
+    x         COST          -1.0   end            1.0
+    x         begin          1.0
+RHS
+    RHS       end            4.0   begin          1.0
+BOUNDS
+ UP BND       end            3.0
+ UP BND       begin          3.0
+ UP BND       x              3.0
+ENDATA
+"""
+
+# Optimum: all three columns share the capacity 4 at cost -1 each; one of the bound-3 columns
+# fills to 3 and another takes the last unit. Point (3, 1, 0): the "end" row is tight with
+# multiplier -1 (a <= row at its upper bound), "begin" is slack (3 >= 1), column "end" sits on
+# its upper bound 3 with reduced cost 0 (cost -1 against the row price -1), and "begin" and x
+# price 0 too, so basic "begin" at 1 and x at 0 at its lower bound are consistent.
+BEGIN_END_SOL = """\
+model BEGIN-END
+sense minimize
+status optimal
+algorithm simplex
+objective -4
+objective_offset 0
+certificate none
+
+begin columns 3
+end 3 0 at_upper
+begin 1 0 basic
+x 0 0 at_lower
+end columns
+
+begin rows 2
+end 4 -1 at_upper
+begin 3 0 basic
+end rows
+"""
+
+
+def run_begin_end_names(check) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        mps = Path(tmp) / "begin_end.mps"
+        mps.write_text(BEGIN_END_MODEL)
+        model = vs.parse_mps(mps)
+        sol = Path(tmp) / "begin_end.sol"
+        sol.write_text(BEGIN_END_SOL)
+        solution = vs.parse_sol(sol)
+        check(sorted(solution.col_value) == ["begin", "end", "x"],
+              "a column named end does not close the columns block",
+              f"columns read: {sorted(solution.col_value)}")
+        check(sorted(solution.row_activity) == ["begin", "end"],
+              "a row named begin or end is read as a row",
+              f"rows read: {sorted(solution.row_activity)}")
+        report = vs.verify(model, solution, 1e-7, 1e-7, 1e-6, 1e-6)
+        failed = [name for ok, name, _ in report.lines if not ok]
+        check(report.failures == 0, "the optimum of the begin/end model verifies", str(failed))

@@ -135,6 +135,32 @@ def test_bool_is_not_routed_to_the_int_setter() -> None:
     check(near(result.objective, 2.0), "solve honours a bool option", f"{result.objective}")
 
 
+def test_a_python_int_is_accepted_for_a_double_option() -> None:
+    # time_limit=60 and mip_relative_gap=0 are what a caller writes; the C API's integer
+    # setter refused them as the wrong type, and so did every adapter that forwards keyword
+    # arguments (problem.solve(method="SANKHYA", time_limit=60) raised). The integer is now
+    # passed as the double the registry declares, and an integral float for an int option
+    # goes the other way. A genuine mismatch (a float with a fraction for an int option) and
+    # an unknown name still raise, with the C API's own message.
+    options = sankhya.Options(time_limit=60, mip_relative_gap=0, threads=2.0)
+    check(True, "an int for a double option and an integral float for an int option are set",
+          "time_limit=60, mip_relative_gap=0, threads=2.0")
+    model = sankhya.Model()
+    x = model.add_column(cost=1.0, name="x")
+    model.add_row({x: 1.0}, lower=2.0)
+    result = model.solve(options)
+    check(near(result.objective, 2.0), "solve honours the coerced options", f"{result.objective}")
+
+    for kwargs, what in [({"threads": 2.5}, "a fractional float for an int option"),
+                         ({"no_such_option_at_all": 1}, "an unknown name given an int")]:
+        raised = False
+        try:
+            sankhya.Options(**kwargs)
+        except sankhya.SankhyaError as error:
+            raised = next(iter(kwargs)) in str(error)
+        check(raised, f"{what} still raises, naming the option", f"{kwargs}")
+
+
 def test_options_reject_a_typo_instead_of_aborting() -> None:
     # The C++ typed accessors call std::abort() on an unknown option name - correct for C++,
     # fatal for an FFI caller, since it would take the interpreter down with it. The C API
@@ -411,6 +437,38 @@ def test_executable_discovery() -> None:
             sys.platform = original_platform
             os.environ.clear()
             os.environ.update(old_env)
+
+
+def test_a_model_whose_library_failed_to_load_does_not_raise_again_from_its_destructor() -> None:
+    """Model.__init__ asks for the library before it has a handle. When the load fails the
+    constructor raises SankhyaError, which is right, and the half-built object is then
+    collected: its __del__ called close(), which read self._handle and raised
+    AttributeError a second time, as an unraisable exception on stderr (a warning under
+    pytest). The destructor has to tolerate a handle that never existed, as
+    Options.__del__ already does. Runs with or without the library: the load is made to
+    fail either way, and restored afterwards."""
+    import gc
+
+    unraisable = []
+    saved_hook, saved_lib, saved_load = sys.unraisablehook, sankhya._lib, sankhya.load
+
+    def failing_load():
+        raise sankhya.SankhyaError("no library, by design of this test")
+
+    sys.unraisablehook = lambda args: unraisable.append(args)
+    sankhya._lib, sankhya.load = None, failing_load
+    try:
+        raised = False
+        try:
+            sankhya.Model()
+        except sankhya.SankhyaError:
+            raised = True
+        gc.collect()
+    finally:
+        sys.unraisablehook, sankhya._lib, sankhya.load = saved_hook, saved_lib, saved_load
+    check(raised, "a failed library load raises SankhyaError from the constructor")
+    check(not unraisable, "and nothing is raised again from the destructor",
+          "; ".join(f"{a.exc_type.__name__}: {a.exc_value}" for a in unraisable))
 
 
 def main() -> int:

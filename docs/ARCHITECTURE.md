@@ -231,8 +231,10 @@ the number of linking columns (#1048) sends a model on which it cannot win strai
 solve. `solve()` holds the decomposed answer to the same measurement as any engine's
 and falls back to the ordinary engines, saying why in the log, when the structure is weak, the
 method declines (an integer, quadratic or maximisation model; an unbounded block) or the answer
-does not pass. Linking rows, the form Dantzig-Wolfe decomposition is for, are detected and
-reported but not solved.
+does not pass. Linking rows are the form for Dantzig-Wolfe decomposition (`dantzig_wolfe.cpp`,
+`--option decomposition=dantzig-wolfe` only; `auto` reports them and does not run it): column
+generation over the blocks' points and rays, a restricted master over them solved by the dual
+simplex in two phases, and the same measurement of the answer.
 - **Cutting planes** — already present, and off by default. Root GMI and lifted cover cuts
   landed in #159 (`src/mip/cuts.cpp`) and single-row MIR cuts in #221
   (`src/mip/mir_cuts.cpp`), appended as rows of the working model before the search

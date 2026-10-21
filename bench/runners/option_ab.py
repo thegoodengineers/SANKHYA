@@ -12,6 +12,11 @@ Each call writes the runner's own CSV, verifier and all; the rows are then put i
 `<prefix>.csv` with an `arm` column, so every row keeps the runner's machine column (which
 names the CPU model) and its git_commit.
 
+With --base-binary the `off` arm runs that binary instead, so a CODE change (two commits, no
+option between them) is measured the same way: bench.yml's ab-option suite builds base_ref in
+.base, and options="--runner maros_meszaros.py --base-binary .base/build/sankhya" compares
+the two builds; each row's git_commit then names its own arm's commit.
+
 Usage:
     python bench/runners/option_ab.py --runner kennington.py --binary build/sankhya \\
         --option ipm_supernodal=true --instances cre-a pds-02 --time-limit 600 \\
@@ -48,8 +53,10 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--runner", required=True, choices=sorted(MANIFESTS))
     parser.add_argument("--binary", required=True, type=Path)
-    parser.add_argument("--option", action="append", required=True, metavar="KEY=VALUE",
+    parser.add_argument("--option", action="append", default=[], metavar="KEY=VALUE",
                         help="the `on` arm's extra solver option; repeatable")
+    parser.add_argument("--base-binary", type=Path, default=None,
+                        help="the `off` arm's binary (default --binary)")
     parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE",
                         help="for both arms")
     parser.add_argument("--instances", nargs="*")
@@ -58,9 +65,12 @@ def main() -> int:
     parser.add_argument("--machine", required=True)
     parser.add_argument("--out-prefix", required=True)
     args = parser.parse_args()
+    if not args.option and args.base_binary is None:
+        parser.error("nothing differs between the arms: give --option or --base-binary")
 
     names = args.instances or instances_of(args.runner)
     arms = {"off": args.solver_option, "on": args.solver_option + args.option}
+    binaries = {"off": args.base_binary or args.binary, "on": args.binary}
     work = Path(tempfile.mkdtemp(prefix="option-ab-"))
     rows: list[dict] = []
     fields: list[str] = []
@@ -70,7 +80,7 @@ def main() -> int:
             for arm in order:
                 out = work / f"{arm}-{repeat}-{name}.csv"
                 cmd = [sys.executable, f"bench/runners/{args.runner}", "--binary",
-                       str(args.binary), "--instances", name, "--out", str(out)]
+                       str(binaries[arm]), "--instances", name, "--out", str(out)]
                 # miplib.py builds its own tag (CPU model included) around a machine kind.
                 cmd += (["--machine-kind", args.machine] if args.runner == "miplib.py"
                         else ["--machine", args.machine])
@@ -99,7 +109,8 @@ def main() -> int:
                                 extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
-    print(f"on arm: {' '.join(args.option)}; {len(names)} instances x {args.repeats} "
+    print(f"on arm: {args.binary} {' '.join(args.option)}; off arm: {binaries['off']}; "
+          f"{len(names)} instances x {args.repeats} "
           f"repeat(s); wrote {path}")
     return 0
 

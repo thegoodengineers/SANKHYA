@@ -133,6 +133,14 @@ class SparseLu {
 
   /// Solve B z = b in place. FTRAN.
   void solve(double* b, DensityHistory* history = nullptr) const;
+  /// solve() for the ENTERING COLUMN of a simplex pivot, the alpha the next update will be
+  /// given. Under the Forrest-Tomlin update it keeps the partially transformed column - the
+  /// right-hand side after L and the row etas, before U - which is exactly the spike the
+  /// update installs (Forrest & Tomlin 1972; Suhl & Suhl 1993), so the update need not
+  /// rebuild it as U times alpha. The kept spike is used by the next update only if no
+  /// factorization or update has happened in between; otherwise the update rebuilds it as
+  /// before. Under the product form this is solve(), to the bit.
+  void solve_entering(double* b, DensityHistory* history = nullptr) const;
 
   /// HYPER-SPARSE SOLVES (#464; Gilbert & Peierls 1988, Hall & McKinnon 2005). When on,
   /// solve() and solve_transpose() on product-form factors first find, by a search over
@@ -524,6 +532,17 @@ class SparseLu {
   /// dense-array field names (spike, ft_diag_, ...) did not all need to change shape.
   std::vector<double> ft_spike_;
   mutable std::vector<char> ft_spike_marked_;
+  /// solve_entering()'s spike, by step (nonzero entries only), and the factor state it was
+  /// taken in: kept_generation_ is factorize()'s count, kept_updates_ the update count.
+  mutable std::vector<Index> kept_spike_steps_;
+  mutable std::vector<double> kept_spike_values_;
+  mutable bool kept_spike_valid_ = false;
+  mutable bool keep_spike_ = false;  ///< set by solve_entering() for the one solve_base call
+  mutable std::uint64_t kept_generation_ = 0;
+  mutable Index kept_updates_ = 0;
+  std::uint64_t generation_ = 0;  ///< factorize() calls; tags the kept spike
+  /// Copy work_ (by step, after L and the row etas, before U) into the kept spike.
+  void keep_spike() const;
   mutable std::vector<Index> ft_spike_touched_;
   /// Nonzero steps of the CURRENT call's alpha-by-step vector (work_), collected for free
   /// while work_ is gathered from the caller's dense `alpha` (that gather is the one place
