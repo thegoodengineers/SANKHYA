@@ -20,6 +20,7 @@
 
 #include <gtest/gtest.h>
 
+#include "decomp/decomposition.hpp"
 #include "decomp/structure.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
@@ -306,9 +307,12 @@ TEST(DecompositionDetection, EveryStructureItReturnsIsValidAndTheSameOnARerun) {
 // Benders, against the ordinary solve
 // =========================================================================================
 
+/// Benders forced, with the early give-up off: these tests are about the method's own answers,
+/// on models far too small for its forecast to matter. The forecast is tested on its own below.
 Options forced(int blocks) {
   Options o = quiet("benders");
   o.set_int("decomposition_blocks", blocks);
+  o.set_bool("decomposition_predict", false);
   return o;
 }
 
@@ -528,6 +532,82 @@ TEST(Decomposition, AProgressCallbackIsOnlyEverCalledOnTheCallersThread) {
   EXPECT_EQ(s.algorithm, "benders") << s.message;
   EXPECT_GT(calls, 0);
   EXPECT_EQ(elsewhere, 0) << "of " << calls << " calls";
+}
+
+// =========================================================================================
+// The early give-up (#1048)
+// =========================================================================================
+
+TEST(DecompositionForecast, ManyLinkingColumnsOverTwoBlocksDoNotPayAndTheAnswerIsUnchanged) {
+  // Two dense blocks of six rows and six columns, joined by four linking columns that each
+  // enter one row of both: five rounds of even one block alone outweigh the whole model, so the
+  // forecast gives up before any LP is solved - and the user gets the monolithic answer.
+  const Index n = 16;
+  const Index m = 12;
+  Model model;
+  model.resize_columns(n);
+  model.resize_rows(m);
+  model.matrix.reset(m, n);
+  for (Index j = 0; j < n; ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    model.col_lower[u] = 0.0;
+    model.col_upper[u] = 5.0;
+    model.col_cost[u] = j < 12 ? 1.0 + 0.05 * static_cast<double>(j % 6) : 1.2;
+  }
+  for (Index b = 0; b < 2; ++b) {
+    for (Index i = 0; i < 6; ++i) {
+      for (Index j = 0; j < 6; ++j) {
+        model.matrix.add_entry(6 * b + i, 6 * b + j,
+                               1.0 + 0.1 * static_cast<double>((i + j) % 3));
+      }
+      if (i < 4) model.matrix.add_entry(6 * b + i, 12 + i, 1.0);
+      model.row_lower[static_cast<std::size_t>(6 * b + i)] = 2.0;
+    }
+  }
+  model.matrix.finalize();
+  DetectionOptions detect;
+  detect.blocks = 2;
+  detect.max_linking_fraction = 1.0;
+  detect.max_largest_share = 1.0;
+  const Detection d = decomp::detect_block_structure(model, Linking::kColumns, detect);
+  ASSERT_TRUE(d.accepted) << d.description;
+  ASSERT_GE(d.structure.linking_columns, 3) << d.description;
+  const decomp::BendersForecast f = decomp::forecast_benders(model, d.structure);
+  EXPECT_FALSE(f.pays()) << f.decomposed << " against " << f.monolithic;
+  EXPECT_EQ(f.rounds, static_cast<double>(d.structure.linking_columns) + 1.0);
+
+  const Solution reference = solve(model, quiet("off"));
+  ASSERT_EQ(reference.status, SolveStatus::kOptimal);
+  Options predicted = quiet("benders");
+  predicted.set_int("decomposition_blocks", 2);
+  EXPECT_TRUE(predicted.get_bool("decomposition_predict")) << "the give-up is on by default";
+  const Solution s = solve(model, predicted);
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_NE(s.algorithm, "benders");
+  EXPECT_EQ(s.objective, reference.objective);
+  EXPECT_EQ(s.col_value, reference.col_value);
+}
+
+TEST(DecompositionForecast, AStaircaseInFourBlocksPaysAndIsDecomposed) {
+  // A 24-period staircase in four blocks has one stock per cut: four rounds of a quarter of
+  // the model are well under the whole, so the forecast lets Benders run.
+  const Model model = staircase(24);
+  Options o = quiet("benders");
+  o.set_int("decomposition_blocks", 4);
+  DetectionOptions detect;
+  detect.blocks = 4;
+  detect.max_linking_fraction = 1.0;
+  detect.max_largest_share = 1.0;
+  const Detection d = decomp::detect_block_structure(model, Linking::kColumns, detect);
+  ASSERT_TRUE(d.accepted) << d.description;
+  const decomp::BendersForecast f = decomp::forecast_benders(model, d.structure);
+  EXPECT_TRUE(f.pays()) << f.decomposed << " against " << f.monolithic << ", " << d.description;
+  const Solution reference = solve(model, quiet("off"));
+  const Solution s = solve(model, o);
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_EQ(s.algorithm, "benders") << s.message;
+  EXPECT_NEAR(s.objective, reference.objective,
+              1e-6 * std::max(1.0, std::fabs(reference.objective)));
 }
 
 }  // namespace
