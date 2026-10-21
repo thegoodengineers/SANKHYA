@@ -39,6 +39,9 @@
 #include "sankhya/tolerances.hpp"
 
 namespace sankhya {
+namespace conic {
+Solution solve_miqcp(const QcqpModel& model, const Options& options, SolveControl* control);
+}  // namespace conic
 namespace {
 
 /// A model this engine will not solve. `status` is kModelError when the model is outside the
@@ -161,12 +164,12 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
   const std::string problem = model.validate();
   if (!problem.empty()) return refused("model failed validation: " + problem, timer);
   const Model& lin = model.linear;
-  if (lin.has_integrality()) {
+  if (lin.has_semicontinuous_or_sos()) {
     return refused(
-        "integer columns with quadratic rows or cones: the conic interior point solves the "
-        "continuous problem only (MIQCP nodes are not built yet, #755)",
+        "semi-continuous columns or SOS with quadratic rows or cones are not built (#755)",
         timer);
   }
+  if (lin.has_integrality()) return conic::solve_miqcp(model, options, control);
   const std::vector<QuadraticRowClass> classes = classify_quadratic_rows(model);
   for (const QuadraticRowClass& c : classes) {
     if (c.verdict != QuadraticRowClass::Verdict::kConvex) {
