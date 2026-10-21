@@ -5,9 +5,10 @@
 Two bench.yml runs of the same suite land on whatever CPU the pool hands out (an EPYC 9V45
 for one leg and a 7763 for the other, on the RINS A/B), and the time comparison is spoiled.
 This runs both arms in the same process on the same machine: for every instance, the runner
-(netlib.py, kennington.py, maros_meszaros.py, miplib.py or pooling.py) is called once for the
-`off` arm (the shared --solver-option only) and once for the `on` arm (plus --option), the
-order flipping from one instance to the next so a drift in the machine lands on both arms.
+(netlib.py, kennington.py, maros_meszaros.py, mittelmann.py, miplib.py or pooling.py) is
+called once for the `off` arm (the shared --solver-option only) and once for the `on` arm
+(plus --option), the order flipping from one instance to the next so a drift in the machine
+lands on both arms.
 Each call writes the runner's own CSV, verifier and all; the rows are then put in one CSV
 `<prefix>.csv` with an `arm` column, so every row keeps the runner's machine column (which
 names the CPU model) and its git_commit.
@@ -38,6 +39,7 @@ MANIFESTS = {
     "netlib.py": "data/netlib/reference.json",
     "kennington.py": "data/kennington/reference.json",
     "maros_meszaros.py": "data/maros-meszaros/reference.json",
+    "mittelmann.py": "data/mittelmann/reference.json",
     "miplib.py": "data/miplib/reference.json",
     "pooling.py": "data/pooling/reference.json",
 }

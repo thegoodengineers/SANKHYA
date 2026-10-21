@@ -181,6 +181,7 @@ jobs:
                   git checkout -- 'data/netlib/*.mps' ;;
                 *kennington.py*) python3 bench/runners/fetch_kennington.py ;;
                 *maros_meszaros.py*) python3 bench/runners/fetch_maros_meszaros.py ;;
+                *mittelmann.py*) python3 bench/runners/fetch_mittelmann.py --set small ;;
                 *miplib.py*) python3 bench/runners/fetch_miplib.py ;;
               esac ;;
           esac

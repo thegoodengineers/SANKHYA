@@ -42,8 +42,13 @@ class SosReader:
     def section_line(self, fields: list[str], col_index: dict[str, int], where: str) -> None:
         kind = fields[0].upper()
         is_type = kind in ("S1", "S2")
+        # A column may be named S1 or S2 too (the commonest slack names), and the member
+        # spelling "column weight" puts it first; COLUMNS is complete by now, so a line that
+        # starts with a set's or a column's name is a member unless the word SOS follows.
         names_a_set = self._find(fields[0]) is not None
-        if is_type and ((len(fields) >= 2 and fields[1].upper() == "SOS") or not names_a_set):
+        names_a_column = fields[0] in col_index
+        says_sos = len(fields) >= 2 and fields[1].upper() == "SOS"
+        if is_type and (says_sos or not (names_a_set or names_a_column)):
             rest = fields[1:]
             if rest and rest[0].upper() == "SOS":
                 rest = rest[1:]
