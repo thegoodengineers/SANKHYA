@@ -231,6 +231,10 @@ SubstitutionResult substitute(const Model& model, const Options& options, Logger
   const bool applies = !model.has_integrality() && !model.has_quadratic_objective() &&
                        !model.has_semicontinuous_or_sos();
   const double feasibility = options.get_double("primal_feasibility_tolerance");
+  // Without an equality row there is nothing to substitute from: no work, no model copy.
+  bool any_equality = false;
+  for (Index i = 0; i < m && !any_equality; ++i) any_equality = model.is_equality_row(i);
+  if (!applies || !any_equality) return out;
 
   Work w;
   w.rows.resize(static_cast<std::size_t>(m));
@@ -275,6 +279,20 @@ SubstitutionResult substitute(const Model& model, const Options& options, Logger
       if (equality && try_row(&w, r, &out)) changed = true;
     }
     if (!changed) break;
+  }
+
+  // Too little removed to be worth a different path (tol::kSubstitutionMinRowFraction): the
+  // records are dropped before any model is built, so the declined stage costs one pass.
+  if (!out.reduced_anything()) return out;
+  const auto removed = std::count(w.row_dead.begin(), w.row_dead.end(), char{1});
+  if (static_cast<double>(removed) <
+      tol::kSubstitutionMinRowFraction * static_cast<double>(m)) {
+    logger.info(
+        "Substitution: {} of {} rows removable, under {:.0f}%; not applied (the model goes on "
+        "as presolve left it)",
+        removed, m, 100.0 * tol::kSubstitutionMinRowFraction);
+    out.records.clear();
+    return out;
   }
 
   // The reduced model, live rows and columns in their input order.
@@ -325,15 +343,6 @@ SubstitutionResult substitute(const Model& model, const Options& options, Logger
   }
   reduced.matrix.finalize(0.0);
 
-  if (out.reduced_anything() &&
-      static_cast<double>(m - mm) < tol::kSubstitutionMinRowFraction * static_cast<double>(m)) {
-    logger.info(
-        "Substitution: {} of {} rows removable, under {:.0f}%; not applied (the model goes on "
-        "as presolve left it)",
-        m - mm, m, 100.0 * tol::kSubstitutionMinRowFraction);
-    out.records.clear();
-    return out;
-  }
   if (out.reduced_anything()) {
     logger.info(
         "Substitution: {} rows -> {}, {} columns -> {}, {} nonzeros -> {} ({} implied free, "
