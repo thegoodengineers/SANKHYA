@@ -131,6 +131,9 @@ def _declare(lib: ctypes.CDLL) -> None:
         model_p, ctypes.c_double, ctypes.c_double, ctypes.c_char_p, c_int_p,
     ]
     lib.sankhya_model_add_row.restype = ctypes.c_int
+    for _delete in (lib.sankhya_model_delete_rows, lib.sankhya_model_delete_cols):
+        _delete.argtypes = [model_p, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
+        _delete.restype = ctypes.c_int
     lib.sankhya_model_set_col_bounds.argtypes = [model_p, ctypes.c_int, ctypes.c_double,
                                                  ctypes.c_double]
     lib.sankhya_model_set_col_bounds.restype = ctypes.c_int

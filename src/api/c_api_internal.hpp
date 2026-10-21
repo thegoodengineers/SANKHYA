@@ -97,4 +97,9 @@ sankhya_status read_nl_into(sankhya_model* model, const char* path);
 bool solve_nonlinear(sankhya_model* model, const sankhya::Model& built, const Options& options,
                      SolveControl* control, Solution* out);
 
+/// Move a matrix and a Hessian the reader froze into the handle's pending triplets, so a
+/// structural edit of a model read from a file works on one representation (#913,
+/// c_api_edit.cpp). A no-op on a handle built call by call.
+void thaw(sankhya_model* handle);
+
 }  // namespace sankhya::capi

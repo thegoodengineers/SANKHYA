@@ -187,6 +187,17 @@ sankhya_status sankhya_model_set_row_bounds(sankhya_model* model, int row, doubl
 sankhya_status sankhya_model_set_objective_coefficient(sankhya_model* model, int col,
                                                        double cost);
 
+/**
+ * Remove rows or columns (#913). `indices` holds `count` positions in any order, repeats
+ * allowed; the rows or columns after a removed one move down to close the gap, keeping their
+ * order, and their coefficients and names go with them. An index outside the model is
+ * SANKHYA_ERROR_ARGUMENT and removes nothing; so is a model with nonlinear parts,
+ * semi-continuous columns or special ordered sets. A previous solution still restarts the
+ * edited model through sankhya_solve_from(), which places its basis on it by name.
+ */
+sankhya_status sankhya_model_delete_rows(sankhya_model* model, int count, const int* indices);
+sankhya_status sankhya_model_delete_cols(sankhya_model* model, int count, const int* indices);
+
 int sankhya_model_num_cols(const sankhya_model* model);
 int sankhya_model_num_rows(const sankhya_model* model);
 int sankhya_model_num_nonzeros(const sankhya_model* model);
@@ -269,9 +280,13 @@ sankhya_status sankhya_solve(sankhya_model* model, const sankhya_options* option
  * (option algorithm=simplex) after cost edits - and finish in a handful of pivots where a
  * cold solve takes thousands; the pivot count is sankhya_solution_iterations(). Presolve is
  * bypassed on a warm solve, since the basis names the caller's rows and columns, and the
- * message says so. A `start` whose basis does not fit the model (columns or rows added or
- * removed since) is ignored with a warning in the log and the solve runs cold; a `start` from
- * the interior point carries no basis and is likewise ignored. With option algorithm=pdhg
+ * message says so. After rows or columns were added or removed since (add_row, add_column,
+ * delete_rows, delete_cols), the basis of `start` is placed on the model by name (#913): a
+ * kept row or column keeps its status, a new row enters basic on its slack, a new column
+ * nonbasic at a bound, and a basis the removals left short or long is completed with row
+ * logicals before the dual simplex starts from it. A `start` whose basis cannot be placed is
+ * ignored with a warning in the log and the solve runs cold; a `start` from the interior
+ * point carries no basis and is likewise ignored. With option algorithm=pdhg
  * the first-order engine starts from the point and the row duals of `start` instead (#913),
  * presolve bypassed so they apply to the caller's columns; sankhya_solution_iterations()
  * is then the PDHG iteration count. `start` may be NULL, which is sankhya_solve().

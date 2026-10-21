@@ -511,9 +511,6 @@ def main() -> int:
     return 1
 
 
-if __name__ == "__main__":
-    sys.exit(main())
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -551,3 +548,41 @@ def test_warm_start_after_an_edit() -> None:
     again = model.solve(log_to_console=False, start=warm, algorithm="simplex")
     check(again.status == "optimal", "warm start: a cost edit re-solves through the primal",
           again.message)
+
+
+def test_warm_start_after_rows_and_columns_change() -> None:
+    """#913: rows and columns removed and added, then a re-solve from the earlier result.
+
+    The earlier basis is placed on the edited model by name, so the warm re-solve takes
+    fewer pivots than a cold one and reaches the same objective.
+    """
+    model = sankhya.Model.read(str(REPO_ROOT / "data" / "netlib" / "adlittle.mps"))
+    first = model.solve(log_to_console=False)
+    check(first.status == "optimal", "structural warm start: first solve", first.message)
+    rows, cols = model.num_rows, model.num_cols
+    model.delete_rows([rows - 1, 3])
+    model.delete_cols([0])
+    j = model.add_column(cost=1.0, upper=10.0, name="NEWC")
+    model.add_row({j: 1.0, 1: 1.0}, upper=50.0, name="NEWR")
+    check((model.num_rows, model.num_cols) == (rows - 1, cols),
+          "structural warm start: two rows and a column out, one of each in",
+          f"{model.num_rows} rows, {model.num_cols} columns")
+    try:
+        model.delete_cols([cols + 5])
+        check(False, "structural warm start: an index outside the model raises")
+    except sankhya.SankhyaError:
+        pass
+    cold = model.solve(log_to_console=False)
+    warm = model.solve(log_to_console=False, start=first)
+    check(warm.status == cold.status == "optimal", "structural warm start: both optimal",
+          f"cold {cold.status}, warm {warm.status}: {warm.message}")
+    check(abs(warm.objective - cold.objective) <= 1e-9 * max(1.0, abs(cold.objective)),
+          "structural warm start: same objective as cold",
+          f"warm {warm.objective} cold {cold.objective}")
+    check("presolve bypassed" in warm.message, "structural warm start: ran warm", warm.message)
+    check(warm.iterations < cold.iterations, "structural warm start: fewer pivots than cold",
+          f"warm {warm.iterations}, cold {cold.iterations}")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -49,6 +49,7 @@ on:
           - mittelmann
           - pdhg-step-weight-ab
           - rolling-warm-start
+          - structural-warm-start
           - ab-option
           - decomposition
           - fj-share-refinery
@@ -250,6 +251,10 @@ jobs:
                   --set "${SUITE#fj-share-}" --machine-kind "github-actions ubuntu-latest" \
                   --out "bench/results/${SUITE}-${sha}.csv" \
                   ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #913: random row and column additions and removals on Netlib models, warm
+              # against cold dual-simplex pivots, through the Python bindings.
+              structural-warm-start)
+                python3 bench/runners/structural_warm_start.py --machine "$machine" "$@" ;;
               ab-netlib)
                 base_sha="$(python3 -c 'import sys; sys.path.insert(0, "bench/runners"); import stamp; print(stamp.binary_commit(".base/build/sankhya"))')"
                 python3 bench/runners/netlib_ab.py --base .base/build/sankhya \

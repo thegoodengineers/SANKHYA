@@ -577,6 +577,23 @@ class Model(NonlinearModelMixin):
             self.set_coefficient(index.value, column, value)
         return index.value
 
+    def delete_rows(self, rows: Iterable[int]) -> None:
+        """Remove rows; those after a removed one move down, keeping their order (#913).
+
+        ``solve(start=result)`` with a result from before the removal still restarts warm:
+        the basis is placed on the edited model by name.
+        """
+        self._delete(_library().sankhya_model_delete_rows, rows, "deleting rows")
+
+    def delete_cols(self, columns: Iterable[int]) -> None:
+        """Remove columns; those after a removed one move down, keeping their order (#913)."""
+        self._delete(_library().sankhya_model_delete_cols, columns, "deleting columns")
+
+    def _delete(self, function, indices: Iterable[int], what: str) -> None:
+        values = [int(i) for i in indices]
+        array = (ctypes.c_int * len(values))(*values)
+        _check(function(self._handle, len(values), array), what)
+
     def set_col_bounds(self, column: int, lower: float, upper: float | None = None) -> None:
         """Replace one column's bounds in place; ``upper=None`` means no upper bound.
 

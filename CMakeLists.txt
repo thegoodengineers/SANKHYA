@@ -243,6 +243,7 @@ endif()
 
 set(SANKHYA_CORE_SOURCES
   src/api/c_api.cpp
+  src/api/c_api_edit.cpp
   src/api/c_api_nlp.cpp
   src/core/certificate.cpp
   src/core/elastic_certificate.cpp

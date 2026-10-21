@@ -14,6 +14,7 @@ add_executable(sankhya_tests
   unit/test_c_api.cpp
   unit/test_c_api_certificates.cpp
   unit/test_c_api_ranging_iis_pool.cpp
+  unit/test_c_api_structural_warm.cpp
   unit/test_certificate.cpp
   unit/test_elastic_certificate.cpp
   unit/test_exact_lu.cpp

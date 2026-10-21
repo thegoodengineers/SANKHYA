@@ -112,6 +112,10 @@ struct sankhya_options {
 
 struct sankhya_solution {
   sankhya::Solution solution;
+  // The names of the model this solution is for, so sankhya_solve_from() can place its
+  // basis on a model whose rows and columns were added or removed since (#913).
+  std::vector<std::string> col_names;
+  std::vector<std::string> row_names;
 };
 
 // fail() and ok() write this file's thread-local error; declared in c_api_internal.hpp.
@@ -203,6 +207,7 @@ sankhya_status sankhya_model_add_column(sankhya_model* model, double cost, doubl
                                         int* index) {
   if (model == nullptr) return fail(SANKHYA_ERROR_ARGUMENT, "model is null");
   return guarded([&]() -> sankhya_status {
+    sankhya::capi::thaw(model);
     sankhya::Model& m = model->model;
     const int position = static_cast<int>(m.col_cost.size());
     m.col_cost.push_back(cost);
@@ -224,6 +229,7 @@ sankhya_status sankhya_model_add_row(sankhya_model* model, double lower, double 
                                      const char* name, int* index) {
   if (model == nullptr) return fail(SANKHYA_ERROR_ARGUMENT, "model is null");
   return guarded([&]() -> sankhya_status {
+    sankhya::capi::thaw(model);
     sankhya::Model& m = model->model;
     const int position = static_cast<int>(m.row_lower.size());
     m.row_lower.push_back(lower);
@@ -291,6 +297,7 @@ sankhya_status sankhya_model_set_coefficient(sankhya_model* model, int row, int 
                                             std::to_string(m.col_cost.size()) + " column(s)");
   }
   return guarded([&]() -> sankhya_status {
+    sankhya::capi::thaw(model);
     if (value == 0.0) {
       model->entries.erase({row, col});
     } else {
@@ -314,6 +321,7 @@ sankhya_status sankhya_model_set_quadratic_coefficient(sankhya_model* model, int
     // Normalised to the lower triangle, so (i, j) and (j, i) name one entry of the symmetric
     // Q rather than two. A caller giving both would otherwise set the same coefficient twice
     // and, on a naive implementation, double it.
+    sankhya::capi::thaw(model);
     const int lower_row = row > col ? row : col;
     const int lower_col = row > col ? col : row;
     if (value == 0.0) {
@@ -557,6 +565,16 @@ sankhya_status sankhya_solve_from(sankhya_model* model, const sankhya_options* o
     if (start != nullptr) {
       control->start_col_status = start->solution.col_status;
       control->start_row_status = start->solution.row_status;
+      // #913: rows or columns added or removed since `start` was solved. Its basis is
+      // placed on this model by name - a new row basic on its slack, a new column at a
+      // bound - and solve() completes what the removals left short or long.
+      if (!control->start_col_status.empty() &&
+          (start->col_names != built.col_names || start->row_names != built.row_names)) {
+        sankhya::map_basis_by_name(start->col_names, start->row_names,
+                                   start->solution.col_status, start->solution.row_status,
+                                   built, &control->start_col_status,
+                                   &control->start_row_status);
+      }
     }
     if (start != nullptr && !start->solution.col_value.empty()) {
       control->start_solution = start->solution.col_value;
@@ -579,6 +597,8 @@ sankhya_status sankhya_solve_from(sankhya_model* model, const sankhya_options* o
                                         &result->solution)) {
       result->solution = sankhya::solve(built, effective, control.get());
     }
+    result->col_names = std::move(built.col_names);
+    result->row_names = std::move(built.row_names);
     *solution = result;
     return ok();
   });
