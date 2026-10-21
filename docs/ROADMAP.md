@@ -1,6 +1,6 @@
 # The finale roadmap, as it stands
 
-The plan from issue #540, restated against `main` at bc3cc5ee (21 October 2026). Each
+The plan from issue #540, restated against `main` at bc5f7053 (21 October 2026). Each
 line is an issue with the measurement that motivates it, the paper it comes from and its
 acceptance checklist; the estimate is days for one person as planned. A ticked line is
 an issue closed with its acceptance met and its evidence on `main` (a merged PR, and a
@@ -8,9 +8,9 @@ CSV in `bench/results/` where a number was promised). An unticked line is open, 
 reason is in the table at the end. This file is the record; the issue tracker is the
 authority if they differ.
 
-**Where it stands:** of the 77 planned items, 70 are closed and 7 open. Of the 18 items
-that were already open when the plan was written, 15 are closed and 3 open. Every P0 item
-but #470 is closed.
+**Where it stands:** of the 77 planned items, 72 are closed and 5 open. Of the 18 items
+that were already open when the plan was written, 15 are closed and 3 open. Every P0 item is
+closed.
 
 ## Order of work
 
@@ -19,8 +19,8 @@ but #470 is closed.
 **Week 1, cheap and high payoff:** #463, #468, #474, #476, #496, #495, #479, #480, #505,
 #529, #530, #491, #532 - all closed.
 
-**Weeks 2 and 3, the big levers:** #467, #490, #478, #481, #498, #506, #519, #518 closed;
-#470 (the multithreaded supernodal Cholesky) open.
+**Weeks 2 and 3, the big levers:** #467, #470, #490, #478, #481, #498, #506, #519,
+#518 - all closed.
 
 **Week 4, the freeze:** #488 closed; `docs/BENCHMARKS.md` is generated from the CSVs; the
 A/Bs of the off-by-default features are recorded per issue, not as one pass.
@@ -37,7 +37,7 @@ A/Bs of the off-by-default features are recorded per issue, not as one pass.
 - [x] #468 P0, 1d
 - [x] #467 P0, 3d
 - [x] #474 P0, 1d
-- [ ] #470 P0, 7d
+- [x] #470 P0, 7d
 - [x] #469 P1, 2d
 - [x] #471 P1, 2d (re-scoped: the AMD supervariables landed in #979; METIS dropped)
 - [x] #472 P1, 2d
@@ -57,7 +57,7 @@ A/Bs of the off-by-default features are recorded per issue, not as one pass.
 - [x] #481 P0, 4d
 - [x] #486 P0, 1d
 - [x] #488 P0, 2d
-- [ ] #482 P1, 3d
+- [x] #482 P1, 3d (the GPU leg of its A/B moved to #1110)
 - [x] #483 P1, 3d
 - [x] #484 P1, 3d
 - [x] #485 P1, 4d
@@ -153,10 +153,8 @@ Closed: #411, #412, #413, #415, #417, #419, #221, #358, #446, #447, #448, #456, 
 
 | issue | what landed | what keeps it open |
 |---|---|---|
-| #470 | the supernodal Cholesky (`src/la/ldl_supernodal.cpp`), multithreaded over the elimination tree (#1035), and its four-arm A/B (`supernodal-ab-945cb4f-vs-945cb4f.csv`) | bdry2 per-iteration time and Netlib full under `ipm_supernodal=true` on `main`; the Eigen comparison |
 | #473 | proximal regularization behind `ipm_proximal_regularization` (#657), its A/B on `main` (#1060, #1067) | pilot.ja is lost on Netlib with the option on; irish-electricity unsolved either way |
 | #477 | the learned tree behind `algorithm_selection=learned` (#941), worse than the rules on Netlib | a person's review of the four branches |
-| #482 | the constant step and PID primal weight, off by default (#963, #966); the CPU A/B on Netlib, the case-study LPs and Kennington (#1081) | the refinery ladder and Mittelmann legs of the A/B; the GPU leg |
 | #508 | Feasibility Jump on the device, off by default (#679), measured on a V100 (#734) | the A/B that would earn it a default |
 | #514 | spatial branch and bound (#637) and its bound certificate (#978); 32 of 39 pooling runs optimal and verified | 7 runs end `feasible`; no pooling CSV after #978 records a checked certificate |
 | #535 | the TSan job covers the race, the KKT check, the SpMV and the decomposition (#659) and the threaded Cholesky (#1035), green on `main` | no required check is enforced |
