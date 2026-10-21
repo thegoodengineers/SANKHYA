@@ -21,6 +21,8 @@ src/io/mps_sos.cpp or src/core/sc_sos.cpp - the verifier shares no code with the
 """
 from __future__ import annotations
 
+from verify_solution_io import parse_number
+
 
 class SosReader:
     """Collects the sets of one MPS file while _parse_mps reads it."""
@@ -48,7 +50,7 @@ class SosReader:
             if len(rest) > 2:
                 raise ValueError(f"{where}: SOS header has too many fields")
             name = rest[0] if rest else f"SOS{len(self.sets) + 1}"
-            priority = float(rest[1]) if len(rest) == 2 else 0.0
+            priority = parse_number(rest[1]) if len(rest) == 2 else 0.0
             if self._find(name) is not None:
                 raise ValueError(f"{where}: duplicate SOS name {name}")
             self.sets.append([1 if kind == "S1" else 2, name, priority, [], []])
@@ -73,7 +75,7 @@ class SosReader:
             raise ValueError(f"{where}: SOS member {column} is not a column")
         entry = self.sets[self.current]
         entry[3].append(col_index[column])
-        entry[4].append(float(weight))
+        entry[4].append(parse_number(weight))
 
     def marker_line(self, fields: list[str], where: str) -> bool:
         """A COLUMNS MARKER record: True when it opened or closed a set."""

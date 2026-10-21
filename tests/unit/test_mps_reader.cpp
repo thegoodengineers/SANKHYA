@@ -503,6 +503,43 @@ TEST(MpsReader, ObjsenseAsItsOwnSection) {
   EXPECT_EQ(model.sense, ObjSense::kMaximize);
 }
 
+TEST(MpsReader, ObjsenseAcceptsTheLpReadersSpellingsAndRefusesAnythingElse) {
+  // Before the explicit test, any word that was not MAX or MAXIMIZE minimised silently: a
+  // file saying MAXIMISE (the LP reader's spelling too) solved the wrong problem and
+  // reported a confident optimum of 0 where the maximum was 5.
+  const auto body =
+      "ROWS\n"
+      " N  COST\n"
+      " L  R1\n"
+      "COLUMNS\n"
+      "    X         COST         1.0   R1           1.0\n"
+      "RHS\n"
+      "    RHS       R1           5.0\n"
+      "ENDATA\n";
+  for (const char* word : {"MAX", "MAXIMIZE", "MAXIMISE", "MAXIMUM", "maximise"}) {
+    const Model same_line =
+        parse_or_fail(std::string("NAME T\nOBJSENSE  ") + word + "\n" + body);
+    EXPECT_EQ(same_line.sense, ObjSense::kMaximize) << word;
+    const Model own_section =
+        parse_or_fail(std::string("NAME T\nOBJSENSE\n    ") + word + "\n" + body);
+    EXPECT_EQ(own_section.sense, ObjSense::kMaximize) << word;
+  }
+  for (const char* word : {"MIN", "MINIMIZE", "MINIMISE", "MINIMUM"}) {
+    const Model model =
+        parse_or_fail(std::string("NAME T\nOBJSENSE\n    ") + word + "\n" + body);
+    EXPECT_EQ(model.sense, ObjSense::kMinimize) << word;
+  }
+  for (const char* word : {"MAXIMIZ", "LARGEST", "MAXX"}) {
+    const std::string same_line =
+        parse_expecting_failure(std::string("NAME T\nOBJSENSE  ") + word + "\n" + body);
+    EXPECT_NE(same_line.find("OBJSENSE"), std::string::npos) << same_line;
+    EXPECT_NE(same_line.find(word), std::string::npos) << same_line;
+    const std::string own_section =
+        parse_expecting_failure(std::string("NAME T\nOBJSENSE\n    ") + word + "\n" + body);
+    EXPECT_NE(own_section.find("OBJSENSE"), std::string::npos) << own_section;
+  }
+}
+
 TEST(MpsReader, RhsOnTheObjectiveRowIsNegatedIntoTheOffset) {
   // The MPS convention: the RHS entry on the objective row is the NEGATIVE of the constant
   // term. A reader that copies it through shifts every reported objective by 2c.

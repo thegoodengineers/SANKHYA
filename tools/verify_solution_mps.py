@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from verify_solution_io import INF, normalize_infinity, open_text
+from verify_solution_io import INF, normalize_infinity, open_text, parse_number
 from verify_solution_sos import SosReader
 
 # =========================================================================================
@@ -110,6 +110,20 @@ class Model:
 FIXED_FIELDS = [(1, 2), (4, 8), (14, 8), (24, 12), (39, 8), (49, 12)]
 
 
+def _without_comment(tokens: list[str], first: int) -> list[str]:
+    """Drop a free-format '$' comment: it opens at the first field, from `first` on, that
+    begins with '$', and runs to the end of the line. The first field of a data record is a
+    name and keeps a leading '$' - Netlib pang has a column $0AICCB, and reading it as a
+    comment dropped the column (#475, in the solver) - so data lines pass 1 and section
+    headers 0, where an emptied line is a comment line. Fixed format has no such marker: a
+    record there ends at column 61, which the field windows enforce."""
+    for k in range(first, len(tokens)):
+        if tokens[k].startswith("$"):
+            del tokens[k:]
+            break
+    return tokens
+
+
 def _tokenize(line: str, fixed: bool) -> list[str]:
     """Split one data line into fields.
 
@@ -117,8 +131,8 @@ def _tokenize(line: str, fixed: bool) -> list[str]:
     they start in column 1 and are read as plain words by the caller before this is reached.
     This only ever sees an indented data line, so `fixed` alone decides the tokenisation."""
     if not fixed:
-        return line.split()
-    tokens: list[str] = []
+        return _without_comment(line.split(), 1)
+    tokens = []
     for offset, width in FIXED_FIELDS:
         if offset >= len(line):
             break
@@ -173,7 +187,9 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
             if not line or line.startswith("*"):
                 continue
             if not line[0].isspace():
-                head = line.split()
+                head = line.split() if fixed else _without_comment(line.split(), 0)
+                if not head:
+                    continue
                 key = head[0].upper()
                 if key == "NAME":
                     model.name = head[1] if len(head) > 1 else ""
@@ -256,7 +272,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 while len(lower_set) < model.num_cols:
                     lower_set.append(False)
                 for k in range(1, len(fields) - 1, 2):
-                    row_name, value = fields[k], float(fields[k + 1])
+                    row_name, value = fields[k], parse_number(fields[k + 1])
                     if row_name == objective_row:
                         model.col_cost[col] += value
                     elif row_name in dropped_rows:
@@ -280,7 +296,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 if start == 1 and first_vector.setdefault(section, fields[0]) != fields[0]:
                     continue
                 for k in range(start, len(fields) - 1, 2):
-                    row_name, value = fields[k], float(fields[k + 1])
+                    row_name, value = fields[k], parse_number(fields[k + 1])
                     if row_name == objective_row:
                         if section == "RHS":
                             # An RHS on the objective row is the NEGATIVE of the constant.
@@ -312,7 +328,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 if key3 in model.qc_entries:
                     raise ValueError(f"{path}:{lineno}: duplicate QCMATRIX entry "
                                      f"{fields[0]} {fields[1]}")
-                model.qc_entries[key3] = float(fields[2])
+                model.qc_entries[key3] = parse_number(fields[2])
                 continue
 
             if section == "QUADOBJ":
@@ -330,7 +346,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 if key2 in model.hessian:
                     raise ValueError(f"{path}:{lineno}: duplicate Hessian entry "
                                      f"{fields[0]} {fields[1]}")
-                model.hessian[key2] = float(fields[2])
+                model.hessian[key2] = parse_number(fields[2])
                 continue
 
             if section == "BOUNDS":
@@ -354,7 +370,7 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                     raise ValueError(f"{path}:{lineno}: unknown column {col_name}")
                 j = model.col_index[col_name]
                 value = (
-                    float(fields[name_pos + 1]) if len(fields) > name_pos + 1 else 0.0
+                    parse_number(fields[name_pos + 1]) if len(fields) > name_pos + 1 else 0.0
                 )
                 if kind == "UP":
                     model.col_upper[j] = value
@@ -393,6 +409,14 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 elif kind == "UI":
                     model.col_integer[j] = True
                     model.col_upper[j] = value
+                    # The same convention as UP, one spelling over, which the solver applies
+                    # since its #298: a negative UI on a column whose lower bound is still
+                    # the implicit 0 means a negative variable, so the lower bound is
+                    # -infinity. Without this the box read [0, -5] here and [-inf, -5] in
+                    # src/io/mps_bounds.cpp, and a correct negative integer answer was
+                    # REJECTED on column bounds by a reader of a different model.
+                    if value < 0.0 and not lower_set[j]:
+                        model.col_lower[j] = -INF
                 elif kind == "SC":
                     # Semi-continuous (#754): the value is the upper end of the run range, and
                     # the column may also be 0. Its lower end is the lower bound as LO (or the

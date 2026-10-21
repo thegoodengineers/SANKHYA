@@ -624,7 +624,11 @@ TEST(ParallelTree, RepeatedGenIp016SolvesUnderLoadNeverEndInNumericalError) {
   const BackgroundLoad load(cores * 3);
 
   const int kThreads = 4;
-  const int kTrials = 40;
+  // 40 trials by default; SANKHYA_STRESS_TRIALS=N runs N (the 200-trial TSan hunt of #733
+  // under a shared box's own load), always from the same first seed, so a failing seed is
+  // one a plain 40-trial run of the same build visits too when N <= 40.
+  const char* trials_env = std::getenv("SANKHYA_STRESS_TRIALS");
+  const int kTrials = trials_env != nullptr ? std::max(1, std::atoi(trials_env)) : 40;
   for (int trial = 0; trial < kTrials; ++trial) {
     const std::uint32_t seed = 733100u + static_cast<std::uint32_t>(trial);
     Options options = on_threads(kThreads);

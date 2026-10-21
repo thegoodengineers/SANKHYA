@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "decomp/benders.hpp"
+#include "decomp/dantzig_wolfe.hpp"
 #include "decomp/structure.hpp"
 
 namespace sankhya::decomp {
@@ -67,18 +68,36 @@ std::optional<Solution> solve_by_decomposition(const Model& model, const Options
     detect.max_linking_fraction = 1.0;
     detect.max_largest_share = 1.0;
   }
+  if (mode == "dantzig-wolfe") {
+    // Forced, like `benders`, over linking ROWS (#1048).
+    detect.max_linking_fraction = 1.0;
+    detect.max_largest_share = 1.0;
+    const Detection rows = detect_block_structure(model, Linking::kRows, detect);
+    if (!rows.accepted) {
+      logger.info("Decomposition: no linking-row structure ({})", rows.description);
+      return std::nullopt;
+    }
+    logger.info("Decomposition: {} - {}", to_string(Linking::kRows), rows.description);
+    BendersOutcome dw = solve_dantzig_wolfe(model, rows.structure, options, control, logger);
+    if (!dw.solution.has_value()) {
+      logger.info("Decomposition: Dantzig-Wolfe declined ({}); solving monolithically",
+                  dw.declined);
+      return std::nullopt;
+    }
+    return std::move(dw.solution);
+  }
   const Detection columns = detect_block_structure(model, Linking::kColumns, detect);
   if (!columns.accepted) {
     logger.info("Decomposition: no linking-column structure strong enough ({})",
                 columns.description);
-    // Linking rows are what Dantzig-Wolfe would use. Looked for so the log can say so; not
-    // built.
+    // Linking rows are what Dantzig-Wolfe uses. `auto` does not run it (it is off until
+    // measured on main, #1048); looked for so the log can say so.
     const Detection rows = detect_block_structure(model, Linking::kRows, detect);
     if (rows.accepted) {
       logger.info(
           "Decomposition: the model has linking-row structure ({}); that is the form for "
-          "Dantzig-Wolfe decomposition, which is not implemented, so it is solved "
-          "monolithically",
+          "Dantzig-Wolfe decomposition, which `auto` does not run "
+          "(decomposition=dantzig-wolfe does), so it is solved monolithically",
           rows.description);
     }
     return std::nullopt;
