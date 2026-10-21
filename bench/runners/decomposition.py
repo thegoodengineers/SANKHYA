@@ -98,6 +98,7 @@ def main() -> int:
     parser.add_argument("--blocks", nargs="*", type=int, default=[2, 4, 8])
     parser.add_argument("--time-limit", type=float, default=300.0)
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--machine", default=None, help="machine tag (default: OS-arch)")
     args = parser.parse_args()
 
     sys.path.insert(0, str(REPO_ROOT / "bindings" / "python"))
@@ -105,7 +106,7 @@ def main() -> int:
         import sankhya
         args.binary = Path(sankhya.locate_executable())
     commit = stamp.stamp(args.binary)
-    machine = f"{platform.system()}-{platform.machine()}"
+    machine = args.machine or f"{platform.system()}-{platform.machine()}"
     now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     out = args.out or (REPO_ROOT / "bench" / "results" / f"decomposition-{commit}.csv")
 
