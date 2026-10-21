@@ -1,6 +1,6 @@
 # The finale roadmap, as it stands
 
-The plan from issue #540, restated against `main` at d09dd057 (17 October 2026). Each
+The plan from issue #540, restated against `main` at bc3cc5ee (21 October 2026). Each
 line is an issue with the measurement that motivates it, the paper it comes from and its
 acceptance checklist; the estimate is days for one person as planned. A ticked line is
 an issue closed with its acceptance met and its evidence on `main` (a merged PR, and a
@@ -8,7 +8,7 @@ CSV in `bench/results/` where a number was promised). An unticked line is open, 
 reason is in the table at the end. This file is the record; the issue tracker is the
 authority if they differ.
 
-**Where it stands:** of the 77 planned items, 69 are closed and 8 open. Of the 18 items
+**Where it stands:** of the 77 planned items, 70 are closed and 7 open. Of the 18 items
 that were already open when the plan was written, 15 are closed and 3 open. Every P0 item
 but #470 is closed.
 
@@ -126,7 +126,7 @@ A/Bs of the off-by-default features are recorded per issue, not as one pass.
 - [x] #526 P1, 2d (novel)
 - [x] #536 P1, 3d
 - [x] #537 P2, 1d
-- [ ] #525 P2, 8d (novel)
+- [x] #525 P2, 8d (novel) (Dantzig-Wolfe and the early give-up moved to #1048)
 - [x] #528 P2, 5d
 
 ## Evidence and documentation
@@ -153,14 +153,13 @@ Closed: #411, #412, #413, #415, #417, #419, #221, #358, #446, #447, #448, #456, 
 
 | issue | what landed | what keeps it open |
 |---|---|---|
-| #470 | the sequential supernodal Cholesky (`src/la/ldl_supernodal.cpp`) | the multithreaded factorization |
-| #473 | proximal regularization behind `ipm_proximal_regularization` (#657) | the A/B on `main`; irish-electricity still ends in `numerical_error` |
+| #470 | the supernodal Cholesky (`src/la/ldl_supernodal.cpp`), multithreaded over the elimination tree (#1035), and its four-arm A/B (`supernodal-ab-945cb4f-vs-945cb4f.csv`) | bdry2 per-iteration time and Netlib full under `ipm_supernodal=true` on `main`; the Eigen comparison |
+| #473 | proximal regularization behind `ipm_proximal_regularization` (#657), its A/B on `main` (#1060, #1067) | pilot.ja is lost on Netlib with the option on; irish-electricity unsolved either way |
 | #477 | the learned tree behind `algorithm_selection=learned` (#941), worse than the rules on Netlib | a person's review of the four branches |
-| #482 | the constant step and PID primal weight, off by default (#963, #966) | the A/B on `main` |
+| #482 | the constant step and PID primal weight, off by default (#963, #966); the CPU A/B on Netlib, the case-study LPs and Kennington (#1081) | the refinery ladder and Mittelmann legs of the A/B; the GPU leg |
 | #508 | Feasibility Jump on the device, off by default (#679), measured on a V100 (#734) | the A/B that would earn it a default |
 | #514 | spatial branch and bound (#637) and its bound certificate (#978); 32 of 39 pooling runs optimal and verified | 7 runs end `feasible`; no pooling CSV after #978 records a checked certificate |
-| #525 | Benders decomposition behind `decomposition=benders` (#977) | the ladder run; Dantzig-Wolfe |
-| #535 | the TSan job covers the race, the KKT check, the SpMV and the decomposition (#659), green on `main` | the Cholesky waits on #470; no required check is enforced |
+| #535 | the TSan job covers the race, the KKT check, the SpMV and the decomposition (#659) and the threaded Cholesky (#1035), green on `main` | no required check is enforced |
 | #414 | a switch and a counted budget per heuristic (#425); FJ and parity on by default after their A/Bs | the per-heuristic A/B of the #378 four and the dives; 0 of the 5 named instances at the optimum |
 | #418 | restarts and objective branching, off, with their A/Bs (#970) | no bound moved on b-ball, opt1217, rlp1 or noswot |
 | #295 | multi-GPU PDHG with a fixed-order exchange (#684, #713) | the measurement on more than one card |
