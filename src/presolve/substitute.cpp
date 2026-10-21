@@ -325,6 +325,15 @@ SubstitutionResult substitute(const Model& model, const Options& options, Logger
   }
   reduced.matrix.finalize(0.0);
 
+  if (out.reduced_anything() &&
+      static_cast<double>(m - mm) < tol::kSubstitutionMinRowFraction * static_cast<double>(m)) {
+    logger.info(
+        "Substitution: {} of {} rows removable, under {:.0f}%; not applied (the model goes on "
+        "as presolve left it)",
+        m - mm, m, 100.0 * tol::kSubstitutionMinRowFraction);
+    out.records.clear();
+    return out;
+  }
   if (out.reduced_anything()) {
     logger.info(
         "Substitution: {} rows -> {}, {} columns -> {}, {} nonzeros -> {} ({} implied free, "

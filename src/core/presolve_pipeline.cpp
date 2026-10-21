@@ -140,11 +140,12 @@ PresolveOutcome run_with_presolve(const Model& model, const Options& options, Lo
   // Column substitution from equality rows (presolve_substitution, LP only): a stage of its
   // own on presolve's reduced model, undone before presolve's own postsolve.
   Solution inner;
+  presolve::SubstitutionResult substituted;
   if (options.get_bool("presolve_substitution") && problem_class == engine::ProblemClass::kLp) {
-    const presolve::SubstitutionResult substituted = [&] {
-      ProfileScope timed(logger.profiler(), "presolve");
-      return presolve::substitute(reduced.model, options, logger);
-    }();
+    ProfileScope timed(logger.profiler(), "presolve");
+    substituted = presolve::substitute(reduced.model, options, logger);
+  }
+  if (substituted.reduced_anything()) {
     const Solution deeper = [&] {
       ProfileScope timed(logger.profiler(), "engine");
       return run_engine(substituted.model);
