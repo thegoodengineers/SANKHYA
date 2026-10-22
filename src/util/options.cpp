@@ -2193,7 +2193,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  "tol::kQpIpmStepPrimalShare of the primal residual in place, cut the floor of "
                  "the dual regularization delta by tol::kQpIpmDualFloorCut (to at least "
                  "tol::kQpIpmDualFloorMin); rho keeps qp_ipm_regularization. Aimed at "
-                 "degenerate models (LISWET), where delta |dy| outgrows the residual.",
+                 "degenerate models (LISWET), where delta |dy| outgrows the residual. From the "
+                 "first cut on, each step is also refined as qp_ipm_krylov_refinement does.",
                  0.0,
                  0.0,
                  {}});
