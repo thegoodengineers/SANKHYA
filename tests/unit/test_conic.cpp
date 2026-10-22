@@ -20,6 +20,7 @@
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 #include "sankhya/qcqp.hpp"
+#include "sankhya/tolerances.hpp"
 
 #include "support/temp_file.hpp"
 
@@ -561,6 +562,28 @@ TEST(Conic, CsectionIsReadAndSolved) {
   const io::ReadResult refused = io::read_mps(file.path(), &plain);
   EXPECT_FALSE(refused.ok);
   EXPECT_NE(refused.error.find("CSECTION"), std::string::npos) << refused.error;
+}
+
+// The cone part of the KKT gate (#1146). On the textbook SOCP the fixed head x0 = 1 carries
+// its bound's multiplier in its reduced cost, so plain dual-cone membership of d fails; the
+// verifier's split (cone dual plus bound multipliers) accepts it, and the solve is optimal.
+// Spoiling one free member's reduced cost by 1e-4 must then fail the split, and a model
+// whose reported cone duals are that inaccurate is not claimed optimal.
+TEST(Conic, ConeGateSplitsBoundMultipliersAndCatchesBadDuals) {
+  QcqpModel m = blank(3);
+  m.linear.col_cost = {0.0, -1.0, -1.0};
+  fix(&m, 0, 1.0);
+  m.cones.push_back({Cone::Kind::kQuadratic, "disc", {0, 1, 2}});
+  const Solution s = solve_conic(m, quiet());
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_LE(conic::cone_dual_violation(m, s.col_value, s.col_dual), tol::kDualFeasibility);
+  std::vector<double> spoiled = s.col_dual;
+  spoiled[1] += 1e-4;
+  EXPECT_GT(conic::cone_dual_violation(m, s.col_value, spoiled), tol::kDualFeasibility);
+  // A wrong-signed cone dual (s = -beta R(x)) is caught as well.
+  std::vector<double> flipped = s.col_dual;
+  for (std::size_t j = 1; j < 3; ++j) flipped[j] = -flipped[j];
+  EXPECT_GT(conic::cone_dual_violation(m, s.col_value, flipped), tol::kDualFeasibility);
 }
 
 }  // namespace

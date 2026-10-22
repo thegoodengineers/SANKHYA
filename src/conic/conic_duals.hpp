@@ -28,4 +28,10 @@ enum class Finish : std::uint8_t {
 [[nodiscard]] Finish finish_on_active_set(const QcqpModel& model, Solution* solution,
                                           const std::function<bool()>& should_stop = {});
 
+/// The cone part of solve_conic()'s KKT gate (conic_solve.cpp): the worst relative violation
+/// of the cones' dual conditions at x with reduced costs d (minimization space), split as
+/// tools/verify_solution_conic.py splits them. Above tol::kDualFeasibility is not optimal.
+[[nodiscard]] double cone_dual_violation(const QcqpModel& model, const std::vector<double>& x,
+                                         const std::vector<double>& d);
+
 }  // namespace sankhya::conic

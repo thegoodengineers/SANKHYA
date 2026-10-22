@@ -135,5 +135,49 @@ TEST(Miqcp, MatchesBruteForceOnRandomInstances) {
   EXPECT_GT(infeasible, 0);
 }
 
+// The search ends within time_limit: each node is given only what is left of it, so neither
+// the tree nor its last node runs past the limit. 16 integers in [-5, 5] under one ball, far
+// more tree than 50 ms allows; the slack is for one interior point iteration and the clock.
+TEST(Miqcp, TimeLimitBoundsTheWholeSearch) {
+  constexpr Index n = 16;
+  QcqpModel m;
+  Model& lin = m.linear;
+  lin.resize_columns(n);
+  std::mt19937 rng(1146);
+  std::uniform_real_distribution<double> u01(0.0, 1.0);
+  SparseMatrix a(1, n);
+  double constant = 0.0;
+  for (Index j = 0; j < n; ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    lin.col_lower[u] = -5.0;
+    lin.col_upper[u] = 5.0;
+    lin.col_type[u] = VarType::kInteger;
+    lin.col_cost[u] = -1.0 + 2.0 * u01(rng);
+    const double p = -0.5 + u01(rng);
+    a.add_entry(0, j, -2.0 * p);
+    m.quadratic.push_back({0, j, j, 1.0});
+    constant += p * p;
+  }
+  a.finalize();
+  lin.resize_rows(1);
+  lin.matrix = std::move(a);
+  lin.row_lower = {-kInfinity};
+  lin.row_upper = {7.3 - constant};
+  Options options;
+  options.set_bool("log_to_console", false);
+  constexpr double kLimit = 0.05;
+  options.set_double("time_limit", kLimit);
+  const Solution s = solve_conic(m, options);
+  EXPECT_LE(s.solve_seconds, kLimit + 0.25) << s.message;
+  if (s.status != SolveStatus::kOptimal) {
+    EXPECT_TRUE(s.status == SolveStatus::kFeasible || s.status == SolveStatus::kTimeLimit)
+        << s.message;
+  }
+  if (!s.col_value.empty()) {
+    for (const double v : s.col_value) EXPECT_NEAR(v, std::round(v), 1e-6);
+    EXPECT_LE(m.row_activity(s.col_value)[0], lin.row_upper[0] + 1e-7);
+  }
+}
+
 }  // namespace
 }  // namespace sankhya
