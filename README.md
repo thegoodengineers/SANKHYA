@@ -65,7 +65,7 @@ as regenerable backups.
 
 ## Since 19 October
 
-- **Netlib certified, 92 of 94.** The optimal answer lies within 1e-6 of a rigorous bound the verifier re-derives on its own (#1119, #1123, `bench/results/certified-gap-netlib-full-92ef682.csv`).
+- **Netlib certified, 93 of 94.** The optimal answer lies within 1e-6 of a rigorous bound the verifier re-derives on its own. This uses `certified_gap_seconds=120` (#1137, `bench/results/certified-gap-netlib-full-81b812c.csv`). Without that setting the count is 92 of 94 (#1123, `bench/results/certified-gap-netlib-full-92ef682.csv`).
 - **Conic solver.** A second-order cone interior point handles SOCP and convex quadratically constrained QPs (#1061, #1121).
 - **Decomposition, honestly.** Dantzig-Wolfe over linking rows sits behind `decomposition=dantzig-wolfe` (#1068). On the refinery LPs it reaches the monolithic optimum, and the verifier accepts all 9 decomposed runs. It is slower than the monolithic solve on every one of them (`bench/results/dantzig-wolfe-1bcb251.csv`). Benders now forecasts its work from the model's structure, and when the forecast says decomposition will not pay, it gives up at once and solves monolithically (#1066, `bench/results/decomposition-10ed998.csv`).
 - **Warm start after edits.** Rows and columns can now be removed through the C API and Python. A warm re-solve after any structural edit maps the earlier basis by name (#1117). PDHG warm start over 52 rolling re-plans: all 52 answers agree with the cold solve, using 40,876,092 iterations against 48,580,415 cold (`bench/results/rolling-warm-start-pdhg-f6740af.csv`, #1102).
