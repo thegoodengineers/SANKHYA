@@ -207,6 +207,7 @@ void Simplex::make_dual_feasible() {
       case BasisStatus::kUnknown: break;
     }
   }
+  m_boxed_ = boxed;
   if (flipped > 0) {
     logger_.verbose(
         "dual simplex: {} column(s) moved to their other bound and {} given an "
@@ -675,6 +676,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       dual_phase_seconds_[phase] += phase_clock.elapsed_seconds();
       phase_clock.reset();
     };
+    if (m_boxed_ > 0 && any_artificial_bound_active()) ++m_artificial_iters_;
     const Index leaving_slot = choose_leaving_row();
     charge(0);
     if (leaving_slot < 0) {
@@ -820,6 +822,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     // values by B^-1 of the flipped columns times their changes: one FTRAN of a vector with
     // a few columns' worth of entries, against a pass over every nonzero of the model plus
     // the same FTRAN. The recomputation returns at the next refactorization, below.
+    if (!ratio.flips.empty()) ++m_flip_iters_;
     if (!ratio.flips.empty()) flip_rhs_.assign(static_cast<std::size_t>(m_), 0.0);
     for (const Index k : ratio.flips) {
       const auto u = static_cast<std::size_t>(k);
@@ -953,6 +956,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     };
     if (residual <= primal_tolerance_ || ratio.entering < 0) {
       // The flips alone brought the row inside its bounds; no basis change this iteration.
+      ++m_flip_only_;
       if (std::optional<Solution> stopped = count_iteration()) return stopped;
       continue;
     }
@@ -1033,6 +1037,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     // reads it here.
     const double dual_step = reduced_cost_[e] / pivot_by_row;
     if (std::fabs(dual_step) <= tol::kRatioTestFeasibility) {
+      ++m_degenerate_;
       ++degenerate_run;
       // PERTURB BEFORE HANDING OVER. The primal loop is the last resort, and on dfl001 it
       // cost 15,000 phase-1 iterations; breaking the ties costs one pass over the costs.
@@ -1171,6 +1176,8 @@ Solution Simplex::run_dual(const WarmStart* warm) {
         dual_iterations_, bound_flips_, dual_weight_resets_, cost_perturbations_, cost_shifts_,
         dual_row_rejections_);
   }
+  logger_.info("MEASURE dual_iters={} flips={} flip_iters={} flip_only={} degenerate={} artificial_iters={} boxed={} resets={} perturb={} shifts={} rejected_rows={} refactor={} handover={}",
+               dual_iterations_, bound_flips_, m_flip_iters_, m_flip_only_, m_degenerate_, m_artificial_iters_, m_boxed_, dual_weight_resets_, cost_perturbations_, cost_shifts_, dual_row_rejections_, refactorizations_, done ? 0 : 1);
   if (done) return *done;
   algorithm_name_ = "simplex-dual+primal";
   return primal_loop(timer, &iterations);

@@ -755,6 +755,7 @@ class Simplex {
   Count dual_rows_rejected_now_ = 0;  ///< how many are set, since the last refactorization
   Count dual_row_rejections_ = 0;     ///< over the whole solve, for the log
   Count dual_weight_resets_ = 0;
+  Count m_degenerate_ = 0, m_flip_only_ = 0, m_flip_iters_ = 0, m_artificial_iters_ = 0, m_boxed_ = 0;
 };
 
 /// The scaled solve with its unscaled retry, for either engine. Defined in

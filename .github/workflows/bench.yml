@@ -52,6 +52,7 @@ on:
           - rolling-warm-start
           - structural-warm-start
           - ab-option
+          - a527-measure
           - decomposition
           - fj-share-refinery
           - fj-share-miplib
@@ -160,7 +161,14 @@ jobs:
           cmake --build build -j
           build/sankhya version
 
+      - name: Measure
+        if: inputs.suite == 'a527-measure'
+        run: |
+          pip install highspy
+          python3 bench/runners/a527_measure.py build/sankhya $OPTIONS 2>&1 | tee measure.log
+
       - name: Run
+        if: inputs.suite != 'a527-measure'
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/out"
