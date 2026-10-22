@@ -2372,14 +2372,17 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back(
         {"ipm_proximal_regularization",
          OptionType::Bool,
-         false,
+         true,
          "Proximal primal-dual regularization of the LP interior point (#473; Altman and "
          "Gondzio 1999, Friedlander and Orban 2012): factor the regularized augmented "
          "system [-(Theta^-1 + rho I), A'; A, delta I], quasi-definite for any rho, delta > "
          "0, by the signed LDL^T the QP interior point uses, with rho = delta following mu "
          "down to 1e-8 and raised when a pivot comes out wrong, and solve the UNREGULARIZED "
-         "Newton system from its factors by iterative refinement. Replaces the normal "
-         "equations and their fixed 1e-10 floor. Default OFF.",
+         "Newton system from its factors by iterative refinement, then GMRES on the same "
+         "factors when the refinement stalls. Replaces the normal equations and their fixed "
+         "1e-10 floor. Default ON (#473: nothing lost on Netlib, Kennington or "
+         "Maros-Meszaros); it yields to ipm_linear_solver=cudss, ipm_dense_columns, "
+         "ipm_normal_side other than rows, and to CUDA builds.",
          0.0,
          0.0,
          {}});

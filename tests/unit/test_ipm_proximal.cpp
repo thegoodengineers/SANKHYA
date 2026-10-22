@@ -563,12 +563,12 @@ TEST(InteriorPointProximal, ARankDeficientLpWithAFreeColumnNeedsNoLiftedPivot) {
   }
 }
 
-TEST(InteriorPointProximal, OffByDefaultAndTheDefaultPathIsTheExplicitlyOffPath) {
+TEST(InteriorPointProximal, OnByDefaultAndTheDefaultPathIsTheExplicitlyOnPath) {
   Options defaults;
-  EXPECT_FALSE(defaults.get_bool("ipm_proximal_regularization"));
-  // The default path, pinned against the same solve with the option set false explicitly:
+  EXPECT_TRUE(defaults.get_bool("ipm_proximal_regularization"));
+  // The default path, pinned against the same solve with the option set true explicitly (#473):
   // the same iterations, the same objective and the same point, bit for bit. Afiro's
-  // default-path count is its own; the proximal one is only held to the same optimum.
+  // normal-equations path is only held to the same optimum.
   const Model model = netlib("afiro");
   Options unset;
   unset.set_bool("log_to_console", false);
@@ -579,15 +579,15 @@ TEST(InteriorPointProximal, OffByDefaultAndTheDefaultPathIsTheExplicitlyOffPath)
   ASSERT_EQ(by_default.status, SolveStatus::kOptimal) << by_default.message;
   ASSERT_EQ(plain.status, SolveStatus::kOptimal) << plain.message;
   ASSERT_EQ(proximal.status, SolveStatus::kOptimal) << proximal.message;
-  EXPECT_EQ(by_default.iterations, plain.iterations);
-  EXPECT_EQ(by_default.objective, plain.objective);
-  EXPECT_EQ(by_default.col_value, plain.col_value);
+  EXPECT_EQ(by_default.iterations, proximal.iterations);
+  EXPECT_EQ(by_default.objective, proximal.objective);
+  EXPECT_EQ(by_default.col_value, proximal.col_value);
   // The message is compared with its wall-clock readings blanked: crossover reports "in
   // 0.01s", which is a measurement of the machine, not of the path taken. Comparing it raw
   // failed whenever the two solves straddled a hundredth of a second (the sanitizer CI job).
   const std::regex seconds(R"([0-9]+\.[0-9]+s\b)");
   EXPECT_EQ(std::regex_replace(by_default.message, seconds, "<t>s"),
-            std::regex_replace(plain.message, seconds, "<t>s"));
+            std::regex_replace(proximal.message, seconds, "<t>s"));
   EXPECT_NEAR(plain.objective, proximal.objective, 1e-6 * std::fabs(plain.objective));
 }
 

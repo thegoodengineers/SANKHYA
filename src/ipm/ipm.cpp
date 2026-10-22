@@ -399,7 +399,7 @@ class InteriorPoint {
     return device_factored_ ? device_->regularized_pivots() : ldl_.regularized_pivots();
   }
 
-  // THE PROXIMAL PATH (#473, ipm_proximal_regularization, off by default): the regularized
+  // THE PROXIMAL PATH (#473, ipm_proximal_regularization, on by default): the regularized
   // augmented system of ipm/proximal_system.hpp in place of the normal equations. ldl_ then
   // holds ITS factors, so the reporting below reads the same object on either path; the
   // dual purification, which needs the normal equations, gets its own factorization.
@@ -2214,7 +2214,20 @@ Solution InteriorPoint::run() {
     }
   }
   build();
-  if (options_.get_bool("ipm_proximal_regularization")) {
+  // ON BY DEFAULT since #473's A/B (nothing lost on Netlib, Kennington, Maros-Meszaros). It
+  // yields to a request it would otherwise override - the device factor, the dense-column
+  // path, the column side - and to any CUDA build, whose auto device factor takes the normal
+  // equations only; those keep the normal-equations path exactly as before.
+  const bool yields = options_.get_string("ipm_linear_solver") == "cudss" ||
+                      options_.get_bool("ipm_dense_columns") ||
+                      options_.get_string("ipm_normal_side") != "rows" ||
+                      gpu::CudssFactor::compiled();
+  if (options_.get_bool("ipm_proximal_regularization") && yields) {
+    logger_.verbose(
+        "interior point: ipm_proximal_regularization yields to the device factor, "
+        "ipm_dense_columns or ipm_normal_side; the normal equations are factored");
+  }
+  if (options_.get_bool("ipm_proximal_regularization") && !yields) {
     proximal_ = std::make_unique<ProximalSystem>(model_.matrix, fixed_);
     // A dense row of A is a dense node of the augmented system; ordered last (#473, osa-60).
     ldl_.set_postpone_dense(true);
