@@ -26,6 +26,7 @@ Options pdhg_options(double tolerance, bool presolve, bool polish) {
   options.set_bool("presolve", presolve);
   options.set_string("algorithm", "pdhg");
   options.set_bool("pdhg_polish", polish);
+  options.set_bool("pdhg_relative_stop", false);  // the engine alone, to the standard (#1163)
   options.set_double("pdhg_tolerance", tolerance);
   options.set_int("iteration_limit", 200000);
   return options;

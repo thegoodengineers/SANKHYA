@@ -521,6 +521,7 @@ TEST(CApi, EditsABoundAndResolvesFromThePreviousBasis) {
   ASSERT_EQ(sankhya_options_set_bool(first_order, "log_to_console", 0), SANKHYA_OK);
   ASSERT_EQ(sankhya_options_set_string(first_order, "algorithm", "pdhg"), SANKHYA_OK);
   ASSERT_EQ(sankhya_options_set_bool(first_order, "pdhg_polish", 0), SANKHYA_OK);
+  ASSERT_EQ(sankhya_options_set_bool(first_order, "pdhg_relative_stop", 0), SANKHYA_OK);
   sankhya_solution* pdhg = nullptr;
   ASSERT_EQ(sankhya_solve(model, first_order, &pdhg), SANKHYA_OK) << sankhya_last_error();
   sankhya_options_free(first_order);
@@ -554,6 +555,7 @@ TEST(CApi, APdhgSolveFromThePreviousSolutionResolvesInFewerIterationsThanCold) {
   sankhya_options* options = sankhya_options_create();
   ASSERT_EQ(sankhya_options_set_string(options, "algorithm", "pdhg"), SANKHYA_OK);
   ASSERT_EQ(sankhya_options_set_bool(options, "pdhg_polish", 0), SANKHYA_OK);
+  ASSERT_EQ(sankhya_options_set_bool(options, "pdhg_relative_stop", 0), SANKHYA_OK);
   ASSERT_EQ(sankhya_options_set_bool(options, "log_to_console", 0), SANKHYA_OK);
 
   SolutionHandle first;

@@ -52,6 +52,9 @@ Options quiet(const char* algorithm) {
 Options racing() {
   Options options = quiet("auto");
   options.set_bool("engine_race", true);
+  // The PDHG lane runs to the standard here: under the relative stop (#1163, on by default)
+  // it stops at a feasible point the check cannot accept, and the simplex lanes win.
+  options.set_bool("pdhg_relative_stop", false);
   return options;
 }
 
