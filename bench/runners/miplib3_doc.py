@@ -86,13 +86,35 @@ def references(manifest: dict) -> list[str]:
         groups.setdefault(key, []).append(name)
     overrides = {n: e for n, e in instances.items() if e.get("reference_source") == "override"}
     confirmed = {n: e for n, e in instances.items()
-                 if e.get("reference_source") != "override" and e.get("reference_note")}
+                 if "confirmed by" in e.get("reference_note", "")}
+    later = {n: e for n, e in instances.items() if e.get("reference_source") == "later_proven"}
+    status_only = {n: e for n, e in instances.items() if e.get("reference_source") == "none"}
+    loosened = {n: e for n, e in instances.items()
+                if "stated loosening" in e.get("reference_note", "")}
+    with_reference = len(instances) - len(status_only)
     lines = [
         f"The archive holds {manifest.get('models_in_archive', '?')} models; **{len(instances)}** "
-        f"carry a reference and are the instances below. Excluded, with no reference: "
-        + "; ".join(f"{_names(names)} ({key})" for key, names in groups.items()) + ".",
+        f"are the instances below, **{with_reference}** with a reference"
+        + (f" and {_names(sorted(status_only))} scored on status alone (no proven optimum "
+           "exists: " + "; ".join(e.get("reference_note", "") for e in status_only.values())
+           + "), so it never counts as REACHED and PROVED there is the solver's own claim"
+           if status_only else "")
+        + ". "
+        + (f"Excluded, with no reference: "
+           + "; ".join(f"{_names(names)} ({key})" for key, names in groups.items()) + "."
+           if groups else "Nothing is excluded."),
         "",
     ]
+    if later:
+        lines += ["**References the catalogue does not give** (`reference_source: "
+                  "later_proven`), each a later PROVEN optimum of the same model: "
+                  + "; ".join(f"`{n}` {e['published_text']}: {e['reference_note']}"
+                              for n, e in sorted(later.items())) + ".", ""]
+    if loosened:
+        lines += ["**Integer prints graded with a tolerance of one unit** (a stated loosening "
+                  "of the 1e-6 rule; `published_tolerance: 1` in the manifest): "
+                  + "; ".join(f"`{n}` {e['published_text']}" for n, e in sorted(loosened.items()))
+                  + ". " + next(iter(loosened.values()))["reference_note"] + ".", ""]
     if overrides:
         lines += ["**References that override the catalogue** (`reference_source: override` in "
                   "the manifest), each a later PROVEN optimum of the same model: "
@@ -229,7 +251,8 @@ def limit_section(limit: int, sankhya: Path | None, highs: Path | None,
         s = summary.get(n)
         mine = by_instance.get(n, [])
         published = reference.get(n, {}).get("published_text") or (
-            mine[0].get("published_objective") if mine else "?")
+            "status only" if n in reference
+            else mine[0].get("published_objective") if mine else "?")
         if s is None:
             cells = ["no run", "-", "-", "-"]
         else:

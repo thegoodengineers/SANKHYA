@@ -113,6 +113,8 @@ CSV_COLUMNS = [
     "verification", "independently_verified", "verifier_message", "counted_for_time",
     "solver_seconds", "wall_seconds", "iterations", "time_limit", "threads",
     "git_commit", "machine", "timestamp_utc", "solver_options",
+    # MIP only, HiGHS only so far (#1158): its node count, final dual bound and root bound.
+    "nodes", "dual_bound", "root_bound",
 ]
 
 
@@ -244,7 +246,9 @@ def grade(solver: str, suite: dict, model, model_path: Path, sol: Path, out: dic
 
     `published_tolerance` is the manifest entry's, when it has one (MIPLIB 3, #761): the
     reference then matches within max(MATCH_TOLERANCE * max(1, |reference|), it), the rule
-    miplib.py applies to SANKHYA on the same set. 0 leaves the relative rule alone."""
+    miplib.py applies to SANKHYA on the same set. 0 leaves the relative rule alone. A
+    `reference` of None (MIPLIB 3's dano3mip, #1158: no proven optimum) is status-only
+    scoring: the gaps are blank and nothing counts as matched."""
     status = out["status"]
     row = {"status": status, "objective": out.get("objective"), "point_objective": None,
            "verification": "not-run" if status != "unsupported" else "unsupported",
@@ -261,6 +265,8 @@ def grade(solver: str, suite: dict, model, model_path: Path, sol: Path, out: dic
         row["verifier_message"] = "optimal, but no solution file was produced"
         row["independently_verified"] = False
     ours = row["point_objective"]
+    if reference is None:
+        ours = None
     gap = None if ours is None else abs(ours - reference) / max(1.0, abs(reference))
     row["absolute_gap"] = None if ours is None else abs(ours - reference)
     row["relative_gap"] = gap
@@ -349,12 +355,14 @@ def run_suite(args) -> int:
         todo = [s for s in solvers if (name, s) not in done]
         if not todo:
             continue
-        if manifest[name].get(suite["reference"]) is None:
+        if suite["reference"] not in manifest[name]:
             print(f"{name}: no reference in the manifest, skipped")
             continue
         model = parse_mps(path)
         digest = sha256_file(path)
-        reference = float(manifest[name][suite["reference"]])
+        # None: the manifest says there is no proven optimum (status-only scoring, #1158).
+        reference = (None if manifest[name][suite["reference"]] is None
+                     else float(manifest[name][suite["reference"]]))
         # The refinery suite mixes LPs and MILPs: the instance's kind wins (#1004).
         kind_suite = {**suite, "kind": manifest[name].get("kind", suite["kind"])}
         exact_text = exact.get(name, {}).get("exact_objective")
@@ -376,7 +384,9 @@ def run_suite(args) -> int:
                    "solver_seconds": out.get("seconds"), "wall_seconds": out.get("wall_seconds"),
                    "iterations": out.get("iterations", ""), "time_limit": time_limit,
                    "threads": 1, "git_commit": commit, "machine": machine,
-                   "timestamp_utc": timestamp, "solver_options": out.get("solver_options", "")}
+                   "timestamp_utc": timestamp, "solver_options": out.get("solver_options", ""),
+                   "nodes": out.get("nodes"), "dual_bound": out.get("dual_bound"),
+                   "root_bound": out.get("root_bound")}
             rows.append({key: text(row.get(key)) for key in CSV_COLUMNS})
             # The exact grade where the suite has one, as counted_for_time uses it.
             correct = (verdict["matches_exact"] if verdict["matches_exact"] is not None
@@ -384,6 +394,7 @@ def run_suite(args) -> int:
             mark = ("ok" if verdict["counted_for_time"] else
                     "REJ" if verdict["independently_verified"] is False
                     else "WRONG" if verdict["status"] == "optimal" and not correct
+                    and reference is not None
                     else verdict["status"])
             seconds = out.get("seconds")
             line.append(f"{solver}={mark}" + (f"/{seconds:.2f}s" if seconds is not None

@@ -4,123 +4,7 @@
   "catalogue": "miplib.cat",
   "catalogue_sha256": "85989548406f056d18ca29d90aa34aaa15d4cab2530aa4fd6ac2fe374d863246",
   "citation": "Bixby, Ceria, McZeal and Savelsbergh, \"An updated mixed integer programming library: MIPLIB 3.0\", Optima 58 (1998)",
-  "excluded": {
-    "arki001": {
-      "bytes": 749775,
-      "catalogue_int_soln": "7580813.0459",
-      "file": "arki001.mps",
-      "name": "arki001",
-      "reason": "INT SOLN marked (not opt) in miplib.cat",
-      "sha256": "597eb014a6f34d870f3b2060eb74f16cb7bb0289b2971bc848fcb3809ac42ca7",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/arki001"
-    },
-    "dano3mip": {
-      "bytes": 2610469,
-      "catalogue_int_soln": "728.1111",
-      "file": "dano3mip.mps",
-      "name": "dano3mip",
-      "reason": "INT SOLN marked (not opt) in miplib.cat",
-      "sha256": "0a35b68b11aedd4ed9076aef4564a8661e6ebae81a53e56a480c212badbb7c9e",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/dano3mip"
-    },
-    "fixnet6": {
-      "bytes": 144348,
-      "catalogue_int_soln": "3983",
-      "file": "fixnet6.mps",
-      "name": "fixnet6",
-      "objective_integral": false,
-      "reason": "the catalogue prints an integer and the objective can be fractional, so a rounding of up to one unit is more than the 1e-6 rule allows at this size; no proven value with more digits in https://miplib.zib.de/downloads/miplib2017-v28.solu or https://miplib2010.zib.de/download/miplib2010_all.solu",
-      "sha256": "e090a2103b8f4906095fd9931d8b608f41c35421f1ea267711e0297aeeb3af08",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/fixnet6"
-    },
-    "markshare1": {
-      "bytes": 12536,
-      "file": "markshare1.mps",
-      "name": "markshare1",
-      "reason": "no row in miplib.cat INDEX PART A",
-      "sha256": "7c3668bde9f1c80f1a4ba10baa99a0bcbaead027325d471c6661d814a2c17fe9",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/markshare1"
-    },
-    "markshare2": {
-      "bytes": 17197,
-      "file": "markshare2.mps",
-      "name": "markshare2",
-      "reason": "no row in miplib.cat INDEX PART A",
-      "sha256": "112c91eaa2c00c8fabe355407ec8ed0264a069ee8d937f855e5a4165fabb13f3",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/markshare2"
-    },
-    "mas74": {
-      "bytes": 64553,
-      "file": "mas74.mps",
-      "name": "mas74",
-      "reason": "no row in miplib.cat INDEX PART A",
-      "sha256": "ff885f2669e7003c5b9e16d477c92476debbb73e547d09eea230043ae52bbea5",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mas74"
-    },
-    "mas76": {
-      "bytes": 62913,
-      "file": "mas76.mps",
-      "name": "mas76",
-      "reason": "no row in miplib.cat INDEX PART A",
-      "sha256": "329d1d2d6b4bbd06a212ccc6f9dd8985036b021c882464f484ba4bcfb1fd2270",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mas76"
-    },
-    "misc03": {
-      "bytes": 73967,
-      "catalogue_int_soln": "3360",
-      "file": "misc03.mps",
-      "name": "misc03",
-      "objective_integral": false,
-      "reason": "the catalogue prints an integer and the objective can be fractional, so a rounding of up to one unit is more than the 1e-6 rule allows at this size; no proven value with more digits in https://miplib.zib.de/downloads/miplib2017-v28.solu or https://miplib2010.zib.de/download/miplib2010_all.solu",
-      "sha256": "caba4f42b1827e41cdd62c6548435cc786b9f9092f984f170cab8df939a84acb",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/misc03"
-    },
-    "mkc": {
-      "bytes": 895235,
-      "file": "mkc.mps",
-      "name": "mkc",
-      "reason": "no row in miplib.cat INDEX PART A",
-      "sha256": "ca676a5cad5b01d946038e2063a3b79c838b333fa4dcaa6ef3447cc7f9e17873",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mkc"
-    },
-    "pp08a": {
-      "bytes": 26970,
-      "catalogue_int_soln": "7350.0",
-      "file": "pp08a.mps",
-      "name": "pp08a",
-      "objective_integral": false,
-      "reason": "the catalogue prints an integer and the objective can be fractional, so a rounding of up to one unit is more than the 1e-6 rule allows at this size; no proven value with more digits in https://miplib.zib.de/downloads/miplib2017-v28.solu or https://miplib2010.zib.de/download/miplib2010_all.solu",
-      "sha256": "8f83650434dd18f7d459b2d188cf640aa67bfbab6b02fd052f9796cd311cf1ce",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/pp08a"
-    },
-    "pp08aCUTS": {
-      "bytes": 44047,
-      "catalogue_int_soln": "7350.0",
-      "file": "pp08aCUTS.mps",
-      "name": "pp08aCUTS",
-      "objective_integral": false,
-      "reason": "the catalogue prints an integer and the objective can be fractional, so a rounding of up to one unit is more than the 1e-6 rule allows at this size; no proven value with more digits in https://miplib.zib.de/downloads/miplib2017-v28.solu or https://miplib2010.zib.de/download/miplib2010_all.solu",
-      "sha256": "66176a6da44a032d9040a7c206c87ed88e55eb2069531da3211eb99205f29790",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/pp08aCUTS"
-    },
-    "seymour": {
-      "bytes": 1355245,
-      "catalogue_int_soln": "423",
-      "file": "seymour.mps",
-      "name": "seymour",
-      "reason": "INT SOLN marked (not opt) in miplib.cat",
-      "sha256": "48bcd17a805be73c68e0af115d7fcbc520a5e52da2fb81dde51beaa4d396aa69",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/seymour"
-    },
-    "swath": {
-      "bytes": 1762355,
-      "file": "swath.mps",
-      "name": "swath",
-      "reason": "no row in miplib.cat INDEX PART A",
-      "sha256": "eb8d979a2e89d9dc7a1d5dea23954f56dab60eb2828127aa8266f391abc1e45d",
-      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/swath"
-    }
-  },
+  "excluded": {},
   "instances": {
     "10teams": {
       "bytes": 537124,
@@ -171,6 +55,20 @@
       "sha256": "1ca185a7d8d6eaa48d959a8b4c00e3b0d6faf0f9e4ec4411c3228224dca074e3",
       "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/air05"
     },
+    "arki001": {
+      "bytes": 749775,
+      "catalogue_int_soln": "7580813.0459",
+      "file": "arki001.mps",
+      "name": "arki001",
+      "objective_integral": false,
+      "published_optimal": 7580813.0459,
+      "published_text": "7580813.0459",
+      "published_tolerance": 0.0001,
+      "reference_note": "the catalogue prints 7580813.0459 (not opt); MIPLIB 2017 proves it; https://miplib.zib.de/downloads/miplib2017-v28.solu line 163: =opt= arki001 7580813.0459; same model: 1048x1388, 538 integer, identical up to names (26699 entries, 0 differ)",
+      "reference_source": "later_proven",
+      "sha256": "597eb014a6f34d870f3b2060eb74f16cb7bb0289b2971bc848fcb3809ac42ca7",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/arki001"
+    },
     "bell3a": {
       "bytes": 20196,
       "file": "bell3a.mps",
@@ -218,6 +116,20 @@
       "reference_source": "miplib.cat",
       "sha256": "b9fb72f2d0354c1609457f4e1e4c69c83879a1601dfba4c6894c0b6d5357fddc",
       "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/cap6000"
+    },
+    "dano3mip": {
+      "bytes": 2610469,
+      "catalogue_int_soln": "728.1111",
+      "file": "dano3mip.mps",
+      "name": "dano3mip",
+      "objective_integral": false,
+      "published_optimal": null,
+      "published_text": "",
+      "published_tolerance": 0.0,
+      "reference_note": "the catalogue prints 728.1111 (not opt) and no later MIPLIB proves an optimum (https://miplib.zib.de/downloads/miplib2017-v28.solu line 757: =best= 664.0208333333334; https://miplib2010.zib.de/download/miplib2010_all.solu line 41: =unkn=); scored on status alone, never counted as matched (#1158)",
+      "reference_source": "none",
+      "sha256": "0a35b68b11aedd4ed9076aef4564a8661e6ebae81a53e56a480c212badbb7c9e",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/dano3mip"
     },
     "danoint": {
       "bytes": 116964,
@@ -303,6 +215,20 @@
       "reference_source": "miplib.cat",
       "sha256": "67c87e4a5b19f8a8903b37286e9f38ad206cb8daabfd0399bea41acd93ed04bf",
       "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/fiber"
+    },
+    "fixnet6": {
+      "bytes": 144348,
+      "catalogue_int_soln": "3983",
+      "file": "fixnet6.mps",
+      "name": "fixnet6",
+      "objective_integral": false,
+      "published_optimal": 3983.0,
+      "published_text": "3983",
+      "published_tolerance": 1.0,
+      "reference_note": "the catalogue prints an integer and the objective can be fractional, so a rounding of up to one unit is more than the 1e-6 rule allows at this size; no proven value with more digits in https://miplib.zib.de/downloads/miplib2017-v28.solu or https://miplib2010.zib.de/download/miplib2010_all.solu (neither has a row); graded with published_tolerance 1, one unit in the last printed place, a stated loosening of the 1e-6 rule (#1158)",
+      "reference_source": "miplib.cat",
+      "sha256": "e090a2103b8f4906095fd9931d8b608f41c35421f1ea267711e0297aeeb3af08",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/fixnet6"
     },
     "flugpl": {
       "bytes": 4161,
@@ -438,6 +364,76 @@
       "sha256": "00416576ed4adac15b62b1982cb7be9d7dcb2d6505067dd8396183ff1eac3dab",
       "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/lseu"
     },
+    "markshare1": {
+      "bytes": 12536,
+      "catalogue_int_soln": null,
+      "file": "markshare1.mps",
+      "name": "markshare1",
+      "objective_integral": false,
+      "published_optimal": 0.9999999999990905,
+      "published_text": "0.9999999999990905",
+      "published_tolerance": 1e-16,
+      "reference_note": "no catalogue row; https://miplib.zib.de/downloads/miplib2017-v28.solu line 132: =opt= markshare1 0.9999999999990905; same model: 6x62, 50 integer, identical up to names (510 entries, 0 differ)",
+      "reference_source": "later_proven",
+      "sha256": "7c3668bde9f1c80f1a4ba10baa99a0bcbaead027325d471c6661d814a2c17fe9",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/markshare1"
+    },
+    "markshare2": {
+      "bytes": 17197,
+      "catalogue_int_soln": null,
+      "file": "markshare2.mps",
+      "name": "markshare2",
+      "objective_integral": false,
+      "published_optimal": 1.0,
+      "published_text": "1",
+      "published_tolerance": 0.0,
+      "reference_note": "no catalogue row; https://miplib.zib.de/downloads/miplib2017-v28.solu line 148: =opt= markshare2 1; same model: 7x74, 60 integer, identical up to names (670 entries, 0 differ)",
+      "reference_source": "later_proven",
+      "sha256": "112c91eaa2c00c8fabe355407ec8ed0264a069ee8d937f855e5a4165fabb13f3",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/markshare2"
+    },
+    "mas74": {
+      "bytes": 64553,
+      "catalogue_int_soln": null,
+      "file": "mas74.mps",
+      "name": "mas74",
+      "objective_integral": false,
+      "published_optimal": 11801.18572,
+      "published_text": "11801.18572",
+      "published_tolerance": 1e-05,
+      "reference_note": "no catalogue row; https://miplib.zib.de/downloads/miplib2017-v28.solu line 156: =opt= mas74 11801.18572; same model: 13x151, 150 integer, identical up to names (2185 entries, 0 differ)",
+      "reference_source": "later_proven",
+      "sha256": "ff885f2669e7003c5b9e16d477c92476debbb73e547d09eea230043ae52bbea5",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mas74"
+    },
+    "mas76": {
+      "bytes": 62913,
+      "catalogue_int_soln": null,
+      "file": "mas76.mps",
+      "name": "mas76",
+      "objective_integral": false,
+      "published_optimal": 40005.05398999999,
+      "published_text": "40005.05398999999",
+      "published_tolerance": 1e-11,
+      "reference_note": "no catalogue row; https://miplib.zib.de/downloads/miplib2017-v28.solu line 197: =opt= mas76 40005.05398999999; same model: 12x151, 150 integer, identical up to names (2117 entries, 0 differ)",
+      "reference_source": "later_proven",
+      "sha256": "329d1d2d6b4bbd06a212ccc6f9dd8985036b021c882464f484ba4bcfb1fd2270",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mas76"
+    },
+    "misc03": {
+      "bytes": 73967,
+      "catalogue_int_soln": "3360",
+      "file": "misc03.mps",
+      "name": "misc03",
+      "objective_integral": false,
+      "published_optimal": 3360.0,
+      "published_text": "3360",
+      "published_tolerance": 1.0,
+      "reference_note": "the catalogue prints an integer and the objective can be fractional, so a rounding of up to one unit is more than the 1e-6 rule allows at this size; no proven value with more digits in https://miplib.zib.de/downloads/miplib2017-v28.solu or https://miplib2010.zib.de/download/miplib2010_all.solu (neither has a row); graded with published_tolerance 1, one unit in the last printed place, a stated loosening of the 1e-6 rule (#1158)",
+      "reference_source": "miplib.cat",
+      "sha256": "caba4f42b1827e41cdd62c6548435cc786b9f9092f984f170cab8df939a84acb",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/misc03"
+    },
     "misc06": {
       "bytes": 208228,
       "file": "misc06.mps",
@@ -474,6 +470,20 @@
       "reference_source": "miplib.cat",
       "sha256": "8fa9e44b18b34e4a91f53c451730fad0a76e713a7f51151f9a506c728978bb30",
       "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mitre"
+    },
+    "mkc": {
+      "bytes": 895235,
+      "catalogue_int_soln": null,
+      "file": "mkc.mps",
+      "name": "mkc",
+      "objective_integral": false,
+      "published_optimal": -563.8460100132,
+      "published_text": "-563.8460100132",
+      "published_tolerance": 1e-10,
+      "reference_note": "no catalogue row (https://miplib2010.zib.de/download/miplib2010_all.solu line 110 says =opt= -563.846); https://miplib.zib.de/downloads/miplib2017-v28.solu line 342: =opt= mkc -563.8460100132; same model: 3411x5325, 5323 integer, identical up to names (39835 entries, 0 differ)",
+      "reference_source": "later_proven",
+      "sha256": "ca676a5cad5b01d946038e2063a3b79c838b333fa4dcaa6ef3447cc7f9e17873",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/mkc"
     },
     "mod008": {
       "bytes": 61979,
@@ -622,6 +632,34 @@
       "sha256": "f0a362be150a52baa650130b752e44ed0921d4c8a98af74c4a1f7a9bb3c65983",
       "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/pk1"
     },
+    "pp08a": {
+      "bytes": 26970,
+      "catalogue_int_soln": "7350.0",
+      "file": "pp08a.mps",
+      "name": "pp08a",
+      "objective_integral": false,
+      "published_optimal": 7350.0,
+      "published_text": "7350.0",
+      "published_tolerance": 1.0,
+      "reference_note": "the catalogue prints an integer and the objective can be fractional, so a rounding of up to one unit is more than the 1e-6 rule allows at this size; no proven value with more digits in https://miplib.zib.de/downloads/miplib2017-v28.solu or https://miplib2010.zib.de/download/miplib2010_all.solu (neither has a row); graded with published_tolerance 1, one unit in the last printed place, a stated loosening of the 1e-6 rule (#1158)",
+      "reference_source": "miplib.cat",
+      "sha256": "8f83650434dd18f7d459b2d188cf640aa67bfbab6b02fd052f9796cd311cf1ce",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/pp08a"
+    },
+    "pp08aCUTS": {
+      "bytes": 44047,
+      "catalogue_int_soln": "7350.0",
+      "file": "pp08aCUTS.mps",
+      "name": "pp08aCUTS",
+      "objective_integral": false,
+      "published_optimal": 7350.0,
+      "published_text": "7350.0",
+      "published_tolerance": 1.0,
+      "reference_note": "the catalogue prints an integer and the objective can be fractional, so a rounding of up to one unit is more than the 1e-6 rule allows at this size; no proven value with more digits in https://miplib.zib.de/downloads/miplib2017-v28.solu or https://miplib2010.zib.de/download/miplib2010_all.solu (neither has a row); graded with published_tolerance 1, one unit in the last printed place, a stated loosening of the 1e-6 rule (#1158)",
+      "reference_source": "miplib.cat",
+      "sha256": "66176a6da44a032d9040a7c206c87ed88e55eb2069531da3211eb99205f29790",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/pp08aCUTS"
+    },
     "qiu": {
       "bytes": 138091,
       "file": "qiu.mps",
@@ -706,6 +744,20 @@
       "sha256": "d001258f10bf0970215fe857b4bd0a425a736cc018ce763a4ec533f924bf2867",
       "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/set1ch"
     },
+    "seymour": {
+      "bytes": 1355245,
+      "catalogue_int_soln": "423",
+      "file": "seymour.mps",
+      "name": "seymour",
+      "objective_integral": true,
+      "published_optimal": 423.0,
+      "published_text": "423",
+      "published_tolerance": 0.0,
+      "reference_note": "the catalogue prints 423 (not opt); MIPLIB 2017 proves it; https://miplib.zib.de/downloads/miplib2017-v28.solu line 867: =opt= seymour 423; same model: 4944x1372, 1372 integer, identical up to names (47553 entries, 0 differ)",
+      "reference_source": "later_proven",
+      "sha256": "48bcd17a805be73c68e0af115d7fcbc520a5e52da2fb81dde51beaa4d396aa69",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/seymour"
+    },
     "stein27": {
       "bytes": 19465,
       "file": "stein27.mps",
@@ -729,6 +781,20 @@
       "reference_source": "miplib.cat",
       "sha256": "0b119c8a2426cd9701a954127748bf8ae2bbe0fd669577ecb4715d8ffb81c85a",
       "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/stein45"
+    },
+    "swath": {
+      "bytes": 1762355,
+      "catalogue_int_soln": null,
+      "file": "swath.mps",
+      "name": "swath",
+      "objective_integral": false,
+      "published_optimal": 467.407491,
+      "published_text": "467.407491",
+      "published_tolerance": 1e-06,
+      "reference_note": "no catalogue row (https://miplib2010.zib.de/download/miplib2010_all.solu line 336 says =opt= 467.407491); https://miplib.zib.de/downloads/miplib2017-v28.solu line 597: =opt= swath 467.407491; same model: 884x6805, 6724 integer, identical up to names (57148 entries, 0 differ)",
+      "reference_source": "later_proven",
+      "sha256": "eb8d979a2e89d9dc7a1d5dea23954f56dab60eb2828127aa8266f391abc1e45d",
+      "url": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz#miplib3/swath"
     },
     "vpm1": {
       "bytes": 50111,
@@ -760,7 +826,7 @@
     "https://miplib2010.zib.de/download/miplib2010_all.solu": "f874684e6bdeb4820b955e3030611839ed0face8cdf39c066b6c15cf3a43fd57"
   },
   "models_in_archive": 65,
-  "selection": "miplib3: every model whose INT SOLN in INDEX PART A is not marked (not opt), less those whose integer print may be a rounding past the match rule with no proven value to confirm it; catalogue errata replaced by the proven optimum of the same model (fetch_miplib3.py, point 4)",
+  "selection": "miplib3: every model in the archive (#1158). The reference is INDEX PART A's INT SOLN where it is not marked (not opt); a later proven optimum of the same model where the catalogue has none or an erratum (reference_source later_proven / override); the integer print with published_tolerance 1 where it may be a rounding and nothing confirms it; none (reference_source none, status-only scoring) where no optimum is proven (fetch_miplib3.py, points 2 and 4)",
   "source": "https://miplib2010.zib.de/miplib3/miplib3.tar.gz",
   "tolerance_rule": "published_tolerance is one unit in the last decimal place of the catalogue's printed INT SOLN after trailing zeros are stripped (0 for a value that is then an integer); an objective matches when |ours - published| <= max(1e-6 * max(1, |published|), published_tolerance)."
 }

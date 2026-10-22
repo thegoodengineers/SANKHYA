@@ -110,8 +110,9 @@ def match_tolerance(published: float, entry: dict) -> float:
     return rule if extra in (None, "") else max(rule, float(extra))
 
 
-def matches_published(ours, published: float, entry: dict) -> bool:
-    return (ours is not None and math.isfinite(ours)
+def matches_published(ours, published: float | None, entry: dict) -> bool:
+    # None: no proven optimum (MIPLIB 3's dano3mip, #1158); nothing ever matches.
+    return (ours is not None and published is not None and math.isfinite(ours)
             and abs(ours - published) <= match_tolerance(published, entry))
 
 
@@ -573,7 +574,9 @@ def main() -> int:
             if entry is None or not instance.exists():
                 print(f"{name:<24}{'':>4} {'MISSING':<14}", flush=True)
                 continue
-            published = float(entry["published_optimal"])
+            # None (MIPLIB 3's dano3mip, #1158): status-only scoring, see make_row.
+            published = (None if entry.get("published_optimal") is None
+                         else float(entry["published_optimal"]))
             for seed in range(args.seeds):
                 try:
                     blob, digest, metrics = run_seed(binary, instance, seed, scratch, args,
@@ -590,7 +593,8 @@ def main() -> int:
                     "seed": seed,
                     "permuted_sha256": digest,
                     "time_to_first_feasible": "" if first is None else f"{first:.6f}",
-                    "primal_integral": f"{metrics['primal_integral']:.6f}",
+                    "primal_integral": ("" if metrics["primal_integral"] is None
+                                        else f"{metrics['primal_integral']:.6f}"),
                     "incumbents": metrics["incumbents"],
                     "incumbent_trace_recorded": int(metrics["trace_recorded"]),
                 })
@@ -649,8 +653,10 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
     # PROVED means the solver closed the bound itself - to within the gap target (1e-4
     # relative, 1e-6 absolute; since #188 that is reported optimal) or by exhausting the
     # tree - not that the number happens to be right. Only kOptimal asserts that, and
-    # #29's guard has already re-measured it.
-    proved = status == "optimal" and matched
+    # #29's guard has already re-measured it. With no published optimum (status-only
+    # scoring, #1158) PROVED is the solver's own claim of optimality, and MATCHED is never
+    # set: the row says so through its blank published_objective.
+    proved = status == "optimal" and (matched or published is None)
     relative = blob.get("relative_gap")
     closed = root_gap_closed(blob.get("root_bound"), blob.get("root_bound_after_cuts"), ours)
     return {
@@ -664,7 +670,7 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
         "status": status,
         "message": blob.get("message", ""),
         "our_objective": "" if ours is None else repr(ours),
-        "published_objective": repr(published),
+        "published_objective": "" if published is None else repr(published),
         "dual_bound": "" if blob.get("dual_bound") is None else repr(blob["dual_bound"]),
         "absolute_gap": "" if blob.get("absolute_gap") is None else repr(blob["absolute_gap"]),
         "relative_gap": "" if relative is None else repr(relative),
@@ -701,16 +707,17 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
     }
 
 
-def print_row(row: dict, blob: dict, published: float, first: float | None) -> None:
+def print_row(row: dict, blob: dict, published: float | None, first: float | None) -> None:
     relative = blob.get("relative_gap")
     ours = blob.get("objective")
     gap_text = "-" if relative is None or not math.isfinite(relative) else f"{relative:.2e}"
     ours_text = "-" if ours is None else f"{ours:.10g}"
+    published = "(status only)" if published is None else f"{published:.10g}"
     first_text = "-" if first is None else f"{first:.2f}s"
     mark = lambda flag: " yes " if flag else " NO  "  # noqa: E731
     ver = blob["verified"]
     print(f"{row['instance']:<24}{row['seed']:>4} {row['status']:<14}{ours_text:>18}"
-          f"{published:>18.10g}{gap_text:>10}{str(blob.get('nodes', '')):>9}"
+          f"{published:>18}{gap_text:>10}{str(blob.get('nodes', '')):>9}"
           f"{blob['wall_seconds']:>8.1f}s{first_text:>8}"
           f" {mark(row['matched_published'])}{mark(row['proved_optimal'])}"
           f"{'  -  ' if ver is None else mark(ver)}", flush=True)

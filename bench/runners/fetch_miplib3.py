@@ -16,14 +16,21 @@ FIVE THINGS THIS IS DELIBERATE ABOUT.
     as fetched on 3 Oct 2026 are written below, and any other bytes are refused: a
     reference optimum is only a reference for the model it was published with.
 
-2.  ONLY OPTIMA THE CATALOGUE DOES NOT QUALIFY. INDEX PART A of `miplib.cat` gives each
-    model's INT SOLN, and marks three of them "(not opt)": arki001, dano3mip and seymour.
-    Those get no reference, for the reason fetch_miplib.py keeps only `=opt=`: a run could
-    "beat" a value that is not an optimum and look like a triumph while being wrong. Six
-    models in the archive have no catalogue row at all (markshare1, markshare2, mas74, mas76,
-    mkc, swath, added after the catalogue was written) and get no reference either. Both
-    kinds are listed in the manifest under `excluded`, each with its reason, and fetched
-    anyway, so the files are there and the denominator is stated.
+2.  ALL 65 MODELS ARE RUN, AND ONLY A PROVEN OPTIMUM IS A REFERENCE. INDEX PART A of
+    `miplib.cat` gives each model's INT SOLN, and marks three of them "(not opt)": arki001,
+    dano3mip and seymour. A value that is not an optimum is never graded against, for the
+    reason fetch_miplib.py keeps only `=opt=`: a run could "beat" it and look like a triumph
+    while being wrong. Six models in the archive have no catalogue row at all (markshare1,
+    markshare2, mas74, mas76, mkc, swath, added after the catalogue was written). The set
+    the published record reports on is the whole archive, 65 models, so every model gets a
+    manifest row and a run (#1158): for eight of those nine the later MIPLIB 2017 proves the
+    optimum of the SAME model (LATER_PROVEN below, pinned like the errata in point 4, same-
+    model check included); dano3mip has no proven optimum anywhere (miplib2017-v28.solu
+    line 757 says =best= 664.0208333333334, miplib2010_all.solu line 41 =unkn=), so it is
+    run and scored on STATUS ALONE (`published_optimal` null, `reference_source` "none"):
+    it never counts as matched, and a run that reports optimal counts as proved only in the
+    sense that the solver closed its own gap. `excluded` is kept in the manifest and is
+    empty.
 
 3.  THE TOLERANCE THE CATALOGUE'S OWN PRINTING ALLOWS. The catalogue prints optima to the
     precision its authors chose, and at least one is truncated, not rounded: rgn is printed
@@ -60,9 +67,16 @@ FIVE THINGS THIS IS DELIBERATE ABOUT.
     manifest). Of the at-risk instances, 10teams, dcmulti, misc07 and pk1 are CONFIRMED by
     a proven value of the same model in miplib2017-v28.solu (CONFIRMED below) and keep the
     catalogue's value; fixnet6, misc03, pp08a and pp08aCUTS have no proven value with more
-    digits in miplib2017-v28.solu or miplib2010_all.solu (the MIPLIB 2003 table prints six
-    significant figures only) and are EXCLUDED rather than graded against a possibly
-    rounded number. gen is at risk too, and overridden above.
+    digits in miplib2017-v28.solu or miplib2010_all.solu (neither file has a row for them;
+    the MIPLIB 2003 table prints six significant figures only). They were excluded until
+    #1158; now they are graded against the catalogue's value with `published_tolerance`
+    INTEGER_PRINT_TOLERANCE = 1, one unit in the last printed place, which is exactly the
+    rule of point 3 applied to an integer print, and the most a rounding or truncation to an
+    integer can be off. THIS IS A LOOSENING, STATED: on 3983, 3360 and 7350 one unit is
+    2.5e-4, 3.0e-4 and 1.4e-4 relative, the scale of the 1e-4 relative gap at which a MILP
+    proof already stops, and far looser than the 1e-6 rule; each such row carries
+    `reference_note` saying so, and docs/BENCHMARKS.md names them. gen is at risk too, and
+    overridden above.
 
     SAME MODEL, checked on 3 Oct 2026 for every override and confirmation: both files read
     in order with every row and column name replaced by the order of its first appearance,
@@ -70,7 +84,11 @@ FIVE THINGS THIS IS DELIBERATE ABOUT.
     gen, 10teams, dcmulti, misc07 and pk1 are identical up to names (780x870, 230x2025,
     290x548, 212x260 and 45x86); noswot (182x128, 100 integer) is identical up to names
     except 50 coefficient lines that differ by at most 6e-9 relative (-0.6667 in MIPLIB
-    2017 against -0.666700006 here, and the like).
+    2017 against -0.666700006 here, and the like). The eight LATER_PROVEN models were
+    checked the same way on 22 Oct 2026 against miplib.zib.de/WebData/instances/<name>.mps.gz
+    (both files through tools/verify_solution_mps.py's reader, names replaced by index,
+    costs, bounds, row ranges, integrality and every entry compared): all eight are identical
+    up to names, 0 differing entries; the entry counts are in each pin.
 
 5.  THE BYTES WE SOLVE ARE THE BYTES IN THE ARCHIVE. Each model file opens with a block of
     `*` comment lines (name, sizes, source, the best solution) before the MPS. The solver's
@@ -156,10 +174,55 @@ CONFIRMED = {
     "misc07": _pinned("misc07", "2810", 79, "212x260, 259 integer, identical up to names"),
     "pk1": _pinned("pk1", "11", 73, "45x86, 55 integer, identical up to names"),
 }
-ROUNDING_EXCLUSION = (
+# Point 4, ROUNDING: an integer print of a possibly fractional objective with no proven value
+# anywhere is graded with one unit of tolerance, the most the print can be off. A stated
+# loosening of the 1e-6 rule (2.5e-4, 3.0e-4 and 1.4e-4 relative on fixnet6, misc03 and
+# pp08a/pp08aCUTS), at the scale of the 1e-4 relative gap a proof already allows.
+INTEGER_PRINT_TOLERANCE = 1.0
+INTEGER_PRINT_NOTE = (
     "the catalogue prints an integer and the objective can be fractional, so a rounding of up "
     "to one unit is more than the 1e-6 rule allows at this size; no proven value with more "
-    f"digits in {SOLU_2017} or {SOLU_2010}")
+    f"digits in {SOLU_2017} or {SOLU_2010} (neither has a row); graded with published_tolerance "
+    f"{INTEGER_PRINT_TOLERANCE:g}, one unit in the last printed place, a stated loosening of "
+    "the 1e-6 rule (#1158)")
+
+# Point 2: models the catalogue does not grade (no row, or "(not opt)") whose optimum
+# miplib2017-v28.solu PROVES for the same model, pinned exactly as OVERRIDES are. The
+# same-model check is the one described in point 4, run on 22 Oct 2026.
+LATER_PROVEN = {
+    "arki001": _pinned("arki001", "7580813.0459", 163,
+                       "1048x1388, 538 integer, identical up to names (26699 entries, 0 differ)",
+                       "the catalogue prints 7580813.0459 (not opt); MIPLIB 2017 proves it"),
+    "seymour": _pinned("seymour", "423", 867,
+                       "4944x1372, 1372 integer, identical up to names (47553 entries, 0 differ)",
+                       "the catalogue prints 423 (not opt); MIPLIB 2017 proves it"),
+    "markshare1": _pinned("markshare1", "0.9999999999990905", 132,
+                          "6x62, 50 integer, identical up to names (510 entries, 0 differ)",
+                          "no catalogue row"),
+    "markshare2": _pinned("markshare2", "1", 148,
+                          "7x74, 60 integer, identical up to names (670 entries, 0 differ)",
+                          "no catalogue row"),
+    "mas74": _pinned("mas74", "11801.18572", 156,
+                     "13x151, 150 integer, identical up to names (2185 entries, 0 differ)",
+                     "no catalogue row"),
+    "mas76": _pinned("mas76", "40005.05398999999", 197,
+                     "12x151, 150 integer, identical up to names (2117 entries, 0 differ)",
+                     "no catalogue row"),
+    "mkc": _pinned("mkc", "-563.8460100132", 342,
+                   "3411x5325, 5323 integer, identical up to names (39835 entries, 0 differ)",
+                   f"no catalogue row ({SOLU_2010} line 110 says =opt= -563.846)"),
+    "swath": _pinned("swath", "467.407491", 597,
+                     "884x6805, 6724 integer, identical up to names (57148 entries, 0 differ)",
+                     f"no catalogue row ({SOLU_2010} line 336 says =opt= 467.407491)"),
+}
+LATER_PROVEN_SOURCE = "later_proven"
+# Point 2: run and scored on status alone; no proven optimum exists.
+STATUS_ONLY = {
+    "dano3mip": ("the catalogue prints 728.1111 (not opt) and no later MIPLIB proves an "
+                 f"optimum ({SOLU_2017} line 757: =best= 664.0208333333334; {SOLU_2010} line "
+                 "41: =unkn=); scored on status alone, never counted as matched (#1158)"),
+}
+STATUS_ONLY_SOURCE = "none"
 
 
 def objective_integral(costs, integer, offset: float = 0.0) -> bool:
@@ -232,9 +295,11 @@ def build_manifest(models: dict[str, bytes], catalogue: dict[str, dict],
     """The manifest from the archive's models, its parsed catalogue and, per model with a
     usable catalogue row, whether its objective is integral (objective_integral). Pure.
 
-    `instances` is what miplib.py and compare_suite.py run against: the models with a
-    catalogue row not marked "(not opt)", less those at rounding risk with no confirmation,
-    with OVERRIDES applied. `excluded` is every other model, with its reason. The shape
+    `instances` is what miplib.py and compare_suite.py run against: every model (#1158), its
+    reference the catalogue's where that is an optimum, a LATER_PROVEN or OVERRIDES pin
+    where a later MIPLIB proves the same model, INTEGER_PRINT_TOLERANCE on an unconfirmed
+    integer print, and none at all (STATUS_ONLY) where no optimum is proven. `excluded` is
+    every other model, with its reason, and is empty for the pinned archive. The shape
     follows data/miplib/reference.json (name, url, published_optimal), with the sha256 of
     the uncompressed bytes in place of the .gz digest."""
     missing = sorted(set(catalogue) - set(models))
@@ -247,7 +312,23 @@ def build_manifest(models: dict[str, bytes], catalogue: dict[str, dict],
         row = catalogue.get(name)
         record = {"name": name, "file": f"{name}.mps", "url": f"{ARCHIVE_URL}#miplib3/{name}",
                   "bytes": len(blob), "sha256": hashlib.sha256(blob).hexdigest()}
-        if row is None:
+        if name in STATUS_ONLY:
+            instances[name] = {
+                **record, "published_optimal": None, "published_text": "",
+                "published_tolerance": 0.0, "objective_integral": integral.get(name),
+                "catalogue_int_soln": None if row is None else row["int_soln"],
+                "reference_source": STATUS_ONLY_SOURCE, "reference_note": STATUS_ONLY[name]}
+        elif name in LATER_PROVEN:
+            pin = LATER_PROVEN[name]
+            instances[name] = {
+                **record, "published_optimal": float(pin["text"]), "published_text": pin["text"],
+                "published_tolerance": published_tolerance(pin["text"]),
+                "objective_integral": integral.get(name),
+                "catalogue_int_soln": None if row is None else row["int_soln"],
+                "reference_source": LATER_PROVEN_SOURCE,
+                "reference_note": (f"{pin['why']}; {pin['source']} line {pin['line']}: "
+                                   f"{pin['record']}; same model: {pin['same_model']}")}
+        elif row is None:
             excluded[name] = {**record, "reason": "no row in miplib.cat INDEX PART A"}
         elif row["not_opt"]:
             excluded[name] = {**record, "reason": "INT SOLN marked (not opt) in miplib.cat",
@@ -263,9 +344,12 @@ def build_manifest(models: dict[str, bytes], catalogue: dict[str, dict],
                                    f"{pin['record']}; same model: {pin['same_model']}")}
         elif rounding_risk(row["int_soln"], float(row["int_soln"]), integral[name]):
             if name not in CONFIRMED:
-                excluded[name] = {**record, "reason": ROUNDING_EXCLUSION,
-                                  "catalogue_int_soln": row["int_soln"],
-                                  "objective_integral": False}
+                instances[name] = {
+                    **record, "published_optimal": float(row["int_soln"]),
+                    "published_text": row["int_soln"],
+                    "published_tolerance": INTEGER_PRINT_TOLERANCE,
+                    "objective_integral": False, "catalogue_int_soln": row["int_soln"],
+                    "reference_source": CATALOGUE_SOURCE, "reference_note": INTEGER_PRINT_NOTE}
                 continue
             pin = CONFIRMED[name]
             printed, proven = float(row["int_soln"]), float(pin["text"])
@@ -292,10 +376,13 @@ def build_manifest(models: dict[str, bytes], catalogue: dict[str, dict],
         "catalogue": CATALOGUE,
         "catalogue_sha256": hashlib.sha256(catalogue_bytes).hexdigest(),
         "citation": CITATION,
-        "selection": "miplib3: every model whose INT SOLN in INDEX PART A is not marked "
-                     "(not opt), less those whose integer print may be a rounding past the "
-                     "match rule with no proven value to confirm it; catalogue errata replaced "
-                     "by the proven optimum of the same model (fetch_miplib3.py, point 4)",
+        "selection": "miplib3: every model in the archive (#1158). The reference is INDEX "
+                     "PART A's INT SOLN where it is not marked (not opt); a later proven "
+                     "optimum of the same model where the catalogue has none or an erratum "
+                     "(reference_source later_proven / override); the integer print with "
+                     "published_tolerance 1 where it may be a rounding and nothing confirms "
+                     "it; none (reference_source none, status-only scoring) where no optimum "
+                     "is proven (fetch_miplib3.py, points 2 and 4)",
         "later_optima": {SOLU_2017: SOLU_2017_SHA256, SOLU_2010: SOLU_2010_SHA256},
         "tolerance_rule": TOLERANCE_RULE,
         "models_in_archive": len(models),
@@ -372,18 +459,18 @@ def main() -> int:
     sys.path.insert(0, str(REPO_ROOT / "tools"))
     from verify_solution_mps import parse_mps  # noqa: PLC0415
     integral = {}
-    for name, row in catalogue.items():
-        if not row["not_opt"]:
-            model = parse_mps(DATA_DIR / f"{name}.mps")
-            integral[name] = objective_integral(model.col_cost, model.col_integer,
-                                                model.objective_offset)
+    for name in models:
+        model = parse_mps(DATA_DIR / f"{name}.mps")
+        integral[name] = objective_integral(model.col_cost, model.col_integer,
+                                            model.objective_offset)
     manifest = build_manifest(models, catalogue, catalogue_bytes, integral)
 
     print()
     print(f"  {'instance':<12}{'bytes':>10}  {'published':<16}{'tolerance':>10}")
     for name, entry in manifest["instances"].items():
         tolerance = entry["published_tolerance"]
-        print(f"  {name:<12}{entry['bytes']:>10}  {entry['published_text']:<16}"
+        print(f"  {name:<12}{entry['bytes']:>10}  "
+              f"{entry['published_text'] or '(status only)':<16}"
               f"{(f'{tolerance:g}' if tolerance else '-'):>10}")
     print()
     for name, entry in manifest["excluded"].items():
@@ -395,8 +482,11 @@ def main() -> int:
                         encoding="utf-8", newline="\n")
     print()
     print(f"wrote {len(models)} models and {CATALOGUE} to {DATA_DIR.relative_to(REPO_ROOT)}")
-    print(f"wrote {MANIFEST.relative_to(REPO_ROOT)}: {len(manifest['instances'])} with a "
-          f"published optimum, {len(manifest['excluded'])} excluded")
+    status_only = sum(1 for e in manifest["instances"].values()
+                      if e["published_optimal"] is None)
+    print(f"wrote {MANIFEST.relative_to(REPO_ROOT)}: {len(manifest['instances'])} instances, "
+          f"{len(manifest['instances']) - status_only} with a published optimum, "
+          f"{status_only} scored on status alone, {len(manifest['excluded'])} excluded")
     return 0
 
 
