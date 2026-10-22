@@ -389,6 +389,10 @@ class SparseLu {
   [[nodiscard]] bool solve_hyper(double* b) const;
   /// The BTRAN after the etas, over the reached steps; false, touching nothing, as above.
   [[nodiscard]] bool solve_transpose_hyper(double* b) const;
+  /// The same two, over an active Forrest-Tomlin factorization (#1042): L, the row etas and
+  /// the folded U, over the steps the right-hand side reaches through them.
+  [[nodiscard]] bool ft_solve_hyper(double* b) const;
+  [[nodiscard]] bool ft_solve_transpose_hyper(double* b) const;
   /// Record one result's density in `bins`, and as last_density_.
   void record_density(std::array<std::int64_t, 5>& bins, Index nonzeros, Index m) const;
   mutable double last_density_ = 0.0;
