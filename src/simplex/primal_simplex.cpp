@@ -1561,7 +1561,11 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
     }
 
     int direction = 0;
-    Index entering = price(bland, &direction);
+    Index entering = -1;
+    {
+      const ProfileScope timed(logger_.profiler(), "primal pricing", ProfileMode::kDetailed);
+      entering = price(bland, &direction);
+    }
 
     if (entering < 0) {
       if (phase_one) {
@@ -1662,7 +1666,10 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       }
     }
 
-    ftran_entering_column(entering);
+    {
+      const ProfileScope timed(logger_.profiler(), "primal ftran", ProfileMode::kDetailed);
+      ftran_entering_column(entering);
+    }
 
     // DOES THE WEIGHT STILL APPROXIMATE ANYTHING? alpha is B^-1 a_q, so the exact
     // steepest-edge norm of the column just chosen is one dot product away, and devex
@@ -1695,7 +1702,10 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       }
     }
 
-    RatioResult ratio = ratio_test(entering, direction, phase_one);
+    RatioResult ratio = [&] {
+      const ProfileScope timed(logger_.profiler(), "primal ratio test", ProfileMode::kDetailed);
+      return ratio_test(entering, direction, phase_one);
+    }();
 
     // A CATASTROPHIC CLAIM IS CHECKED AGAINST FRESH FACTORS BEFORE IT IS MADE. "No blocking
     // variable" is the ratio test saying the entering column can move forever: unbounded in
@@ -1899,7 +1909,11 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       // flagged as poorly conditioned, which is where its benefit is least reliable and where
       // this behaviour shows up. It is containment, not a fix, and is described as such.
       const bool trust_update = !basis_needed_stricter_threshold_;
-      const bool updated = trust_update && lu_.update(ratio.leaving_position, alpha_.data());
+      const bool updated = [&] {
+        const ProfileScope timed(logger_.profiler(), "primal basis update",
+                                 ProfileMode::kDetailed);
+        return trust_update && lu_.update(ratio.leaving_position, alpha_.data());
+      }();
       if (trust_update && !updated) ++rejected_updates_;
       // REFACTORIZE AT THE MEASURED BREAK-EVEN. The eta file makes every solve a little
       // slower, and a fresh factorization removes that cost at a price of its own. The old
@@ -1932,10 +1946,16 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
           eta_work_since_refactor_ >
           refactor_work_ratio_ * std::max(1.0, static_cast<double>(lu_.factor_nonzeros()));
       if (!updated || past_break_even || lu_.should_refactorize()) {
+        const ProfileScope timed(logger_.profiler(), "primal refactorization",
+                                 ProfileMode::kDetailed);
         if (!refactorize()) return factorization_failed(iterations, timer);
         ++refactorizations_;
       }
-      compute_basic_values();
+      {
+        const ProfileScope timed(logger_.profiler(), "primal basic values",
+                                 ProfileMode::kDetailed);
+        compute_basic_values();
+      }
     }
 
     ++iterations;

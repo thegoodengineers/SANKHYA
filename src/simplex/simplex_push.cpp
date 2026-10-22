@@ -131,7 +131,6 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
   Count pivots = 0;
   Count arrived = 0;
   Count refactorizations = 0;
-  Count since_refactor = 0;
   bool deadline_hit = false;
   for (const Index k : superbasic) {
     if (deadline_ && (pivots & 63) == 0 && deadline_()) {
@@ -233,12 +232,21 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
     x_basic_[slot] = value + static_cast<double>(direction) * step;
     nonbasic_value_[u] = x_basic_[slot];
     ++pivots;
-    ++since_refactor;
     const bool updated = [&] {
       const ProfileScope timed(logger_.profiler(), "push basis update", ProfileMode::kDetailed);
       return lu_.update(leaving_slot, alpha_.data());
     }();
-    if (!updated || since_refactor >= 100) {
+    // The same refactorization rule as the primal and dual loops (primal_simplex.cpp): in
+    // operation counts, when the eta file's solves have cost refactor_work_ratio_ times the
+    // base factors, or when the LU itself asks. A flat 100 pivots refactorized the T = 365
+    // refinery's near-slack basis 409 times in the push, 25.3 of its 44 s (profile=detailed,
+    // #888); the break-even rule is what the loops were calibrated on and is deterministic
+    // for the same reason they are.
+    eta_work_since_refactor_ += static_cast<double>(lu_.eta_nonzeros());
+    const bool past_break_even =
+        eta_work_since_refactor_ >
+        refactor_work_ratio_ * std::max(1.0, static_cast<double>(lu_.factor_nonzeros()));
+    if (!updated || past_break_even || lu_.should_refactorize()) {
       const ProfileScope timed(logger_.profiler(), "push refactorization",
                                ProfileMode::kDetailed);
       if (!refactorize()) {
@@ -248,7 +256,7 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
                       timer.elapsed_seconds());
       }
       ++refactorizations;
-      since_refactor = 0;
+      eta_work_since_refactor_ = 0.0;
       compute_basic_values();
     }
   }
