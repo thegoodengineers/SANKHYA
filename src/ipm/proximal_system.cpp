@@ -268,21 +268,9 @@ double ProximalSystem::gmres(const SparseLdl& ldl, const std::vector<double>& g,
     for (std::size_t i = 0; i < nx; ++i) sx[i] += y[c] * z[c][i];
     for (std::size_t i = 0; i < ny; ++i) sy[i] += y[c] * z[c][nx + i];
   }
-  // Measured in the infinity norm the target is on; kept only if it is better, and only if
-  // the correction is no larger than the direction it corrects: on a nearly singular K_0 a
-  // lower residual can come from a large step along a near-null vector, which is not a
-  // better direction (Netlib share2b stalled at 193 iterations without this guard).
-  double size = 0.0;
-  double moved = 0.0;
-  for (std::size_t i = 0; i < nx; ++i) {
-    size = std::max(size, std::fabs((*dx)[i]));
-    moved = std::max(moved, std::fabs(sx[i] - (*dx)[i]));
-  }
-  for (std::size_t i = 0; i < ny; ++i) {
-    size = std::max(size, std::fabs((*dy)[i]));
-    moved = std::max(moved, std::fabs(sy[i] - (*dy)[i]));
-  }
-  if (!(moved <= size)) return best;
+  // Measured in the infinity norm the target is on; kept only if it is better. A guard that
+  // also refused a correction larger than the direction rescued share2b without presolve but
+  // lost pilot.ja again on the Netlib A/B (run 39760203738), so it is not here.
   const double next = residual(g, r_b, sx, sy, &tp, &tq);
   if (!(next < best)) return best;
   std::swap(*dx, sx);

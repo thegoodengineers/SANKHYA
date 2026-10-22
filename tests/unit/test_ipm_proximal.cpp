@@ -303,12 +303,11 @@ TEST(ProximalSystem, TheResidualIsReportedRelativeToTheRightHandSide) {
       << "absolute " << refined.final_residual;
 }
 
-TEST(ProximalSystem, GmresRefusesACorrectionAlongANearNullVector) {
-  // One more variable with Theta^-1 << rho than there are rows: K_0 is nearly singular, the
-  // refinement stalls far above the target, and the residual GMRES could reach is reached only
-  // by a step far larger than the direction. That correction is refused (share2b without
-  // presolve stalled when it was kept, #473), and the solve is left as the refinement had it.
-  // GMRES's gain where it is kept is pilot.ja's, measured by the Netlib A/B.
+TEST(ProximalSystem, GmresNeverRaisesTheRefinedResidual) {
+  // One more variable with Theta^-1 << rho than there are rows: K_0 is nearly singular and the
+  // refinement stalls far above the target (#473). GMRES runs, and what it hands back never has
+  // a larger unregularized residual than the refinement's. Its gain on a real run is
+  // pilot.ja's, measured by the Netlib A/B.
   std::mt19937_64 rng(1473);
   std::uniform_real_distribution<double> value(-2.0, 2.0);
   const Index m = 5;
@@ -342,8 +341,7 @@ TEST(ProximalSystem, GmresRefusesACorrectionAlongANearNullVector) {
   EXPECT_GT(stationary.relative_residual(), tol::kIpmProximalRefinementTarget);
   const ipm::ProximalSystem::Refinement krylov = system.solve(
       ldl, g, r_b, tol::kIpmProximalRefinementSteps, &dx, &dy, tol::kIpmProximalKrylovSteps);
-  EXPECT_EQ(krylov.krylov_steps, 0);
-  EXPECT_EQ(krylov.final_residual, stationary.final_residual);
+  EXPECT_LE(krylov.final_residual, stationary.final_residual);
 }
 
 TEST(SparseLdl, ADenseNodeIsPostponedToTheEndOfTheOrdering) {
