@@ -367,6 +367,23 @@ void polish_with_the_interior_point(Solution* first, const Model& model, const O
   *first = std::move(polished);
 }
 
+/// #888, `pdhg_crossover` (off by default): PDHG's point pushed to a vertex by the crossover,
+/// through the gate the interior point's answer goes through (#474, crossover_to_vertex): an
+/// optimal point is always a start, a feasible or stopped one only when its scaled
+/// infeasibility is at most tol::kCrossoverStartInfeasibility, and only the simplex's own
+/// vertex can be reported optimal. Runs after the interior-point polish, so a polish that
+/// declined (the refinery year: a factor past its budget) still leaves a route to a basis.
+/// Bixby, "Solving real-world linear programs: a decade and more of progress", Operations
+/// Research 50 (2002), sec. 4, for the crossover itself.
+void crossover_after_pdhg(Solution* first, const Model& model, const Options& options,
+                          Logger& logger, SolveControl* control, const Timer& timer) {
+  if (!options.get_bool("pdhg_crossover") || !claims_a_point(*first)) return;
+  Options wanted = options;
+  wanted.set_bool("crossover", true);
+  wanted.set_bool("crossover_from_nonoptimal", true);
+  *first = crossover_to_vertex(model, std::move(*first), wanted, logger, control, timer);
+}
+
 /// A copy of `Options` narrowed to whatever is left of a finite time_limit (or the options
 /// unchanged, with none); the signature of the `with_the_time_that_is_left` lambda every
 /// engine call in solve() already uses, named so the #981 handoffs below can take it as a
@@ -1045,11 +1062,13 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
             first = gpu::solve_pdhg_gpu(target, first_pass, logger, control, pdhg_warm_ptr);
           }
           polish_with_the_interior_point(&first, target, options, logger, control, timer);
+          crossover_after_pdhg(&first, target, options, logger, control, timer);
           return first;
         }
 #endif
         Solution first = pdhg::solve_pdhg(target, first_pass, logger, control, pdhg_warm_ptr);
         polish_with_the_interior_point(&first, target, engine_options, logger, control, timer);
+        crossover_after_pdhg(&first, target, options, logger, control, timer);
         return first;
       }
       if (want_ipm) {
