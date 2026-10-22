@@ -57,7 +57,7 @@ as regenerable backups.
 | Mittelmann | 12 | **5 of 12** (matches HiGHS's objective and verified, `passed`) | HiGHS (objective check) | `bench/results/mittelmann-72123ff.csv` | `72123ff` | 2026-09-24 |
 | MIPLIB 3 | 52 | **44 of 52** (matched the published optimum and verified, best of 3 seeds) | HiGHS (same host) | `bench/results/miplib3-300s-seeds3-f2cf240.csv` | `f2cf240` | 2026-10-03 |
 | MIPLIB 2017 | 30 | **14 of 30** (matched the published optimum and verified) | - | `bench/results/miplib-ad57c03.csv` | `ad57c03` | 2026-09-27 |
-| Maros-Meszaros (QP) | 138 | **117 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-cad720c.csv` | `cad720c` | 2026-10-19 |
+| Maros-Meszaros (QP) | 138 | **127 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-c766eae.csv` | `c766eae` | 2026-10-22 |
 | Maros-Meszaros head-to-head (QP) | 138 | **117 of 138** (matched within 1e-6 and verified, every solver graded the same, 60 s) | PIQP 128 of 138, Clarabel 90 of 138, SCS 71 of 138, OSQP 46 of 138 | `bench/results/head-to-head-maros-meszaros-d0eb672.csv` | `d0eb672` | 2026-10-19 |
 | QPLIB (convex) | 16 | **9 of 16** (within relative 1e-6 of the published or best-known value and verified, `passed`) | - | `bench/results/qplib-5a39fb2.csv` | `5a39fb2` | 2026-10-01 |
 | Stress set | 126 | **111 of 126** (verdict `correct`) | - | `bench/results/stress-d32b3847.csv` | `d32b3847` | 2026-10-08 |
@@ -313,8 +313,11 @@ at `60455ce`, after #559's certificates, **28 of 29** carry a Farkas certificate
 accepts; `cplex2` stays a `numerical_error`, since its elastic optimum is zero at the 1e-7
 tolerance and no certificate exists there (`bench/results/netlib-infeasible-60455ce.csv`, a
 laptop with desktop apps open; every instance ends in under 14 s of its 60 s limit). At `5a39fb2`, with `--iis` (#871), the 28 stay certified, and **12 of 29** also name an irreducible infeasible subsystem the verifier proves on its own arithmetic, infeasible using nothing outside the set and irreducible by one witness per member; 18 name one (`bench/results/netlib-infeasible-5a39fb2.csv`). Infeasibility repair (#523, `tools/repair_infeasibility.py`, elastic programming over rows and column bounds) on the same 29: the repair applied, the repaired model re-solved as a pure feasibility problem by the CLI and checked by `tools/verify_solution.py`, **28 of 29** accepted; `gran`'s elastic LP itself ends `numerical_error` (`bench/results/netlib-repair-5a39fb2.csv`, `bench/runners/netlib_repair.py`). Maros-Meszaros, all 138 convex QPs at 60 s with the proximal interior point the
-default QP engine (#740): **`optimal` on 119, within 1e-6 of the reference on 117,
-verifier-accepted on 124, and no `optimal` the verifier rejects** (`bench/results/maros-meszaros-cad720c.csv`,
+default QP engine (#740): **`optimal` on 128, within 1e-6 of the reference on 127,
+verifier-accepted on 132, and no `optimal` the verifier rejects** (`bench/results/maros-meszaros-c766eae.csv`;
+119 / 117 / 124 at `cad720c` before #1156, whose adaptive dual regularization floor unfroze
+`liswet1`, `liswet7`, `liswet10`, `liswet11` and `yao`, and took `qfffff80`, `qsierra`,
+`cvxqp1l` and `cvxqp3l` to `optimal`, #981;
 `docs/BENCHMARKS.md` section 2b; GitHub Actions `ubuntu-latest`, 4 vCPUs and 15 GB, through
 `bench.yml`'s `maros-meszaros` suite at the full commit hash, 60 s per instance - the earlier
 laptop runs under WSL, `dcbd32eb` among them, lost `boyd2`, `cont-300` and `cvxqp2l` to the clock

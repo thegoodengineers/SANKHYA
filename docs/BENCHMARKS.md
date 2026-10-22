@@ -2124,60 +2124,60 @@ Condat-Vu `qp-condat-vu` before it and as the interior point's fallback on a num
 error) and judged the way the published QP benchmark judges it, on primal residual, dual residual and duality gap at 1e-6
 and at 1e-9, as well as against the published objective and by the independent verifier.
 
-Source CSV: `bench/results/maros-meszaros-cad720c.csv`  
-Commit `cad720c` · machine `github-actions ubuntu-latest 4 vCPU INTEL(R) XEON(R) PLATINUM 8573C 15 GiB RAM` · time limit 60 s per instance · solver defaults
+Source CSV: `bench/results/maros-meszaros-c766eae.csv`  
+Commit `c766eae` · machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 7763 64-Core Processor 15 GiB RAM` · time limit 60 s per instance · solver defaults
 
-**138 of 138 instances** run. `optimal` on **119**; within 1e-6 relative of the published objective on **117**; accepted by the independent verifier on **124**.
+**138 of 138 instances** run. `optimal` on **128**; within 1e-6 relative of the published objective on **127**; accepted by the independent verifier on **132**.
 
 | level | success, relative measures (#491) | success, absolute measures (the published report's criterion) |
 |---|---:|---:|
-| 1e-6 | 119 / 138 | 104 / 138 |
-| 1e-9 | 109 / 138 | 40 / 138 |
+| 1e-6 | 128 / 138 | 110 / 138 |
+| 1e-9 | 116 / 138 | 40 / 138 |
 
 Success at a level means the status is `optimal` and the primal residual, the dual residual and the duality gap are all within it, each recomputed from the QPS file and the written `.sol` by `bench/runners/qp_residuals.py` through the verifier's own MPS reader. The reference objectives are the readme's OPT column (BPMPD at default settings, eight significant digits), parsed by `bench/runners/fetch_maros_meszaros.py` into `data/maros-meszaros/reference.json` with every file's sha256.
 
-Shifted geometric mean of solver time, shift 10 s, an instance not successful at 1e-6 charged the full limit as the published report does: **3.85 s**.
+Shifted geometric mean of solver time, shift 10 s, an instance not successful at 1e-6 charged the full limit as the published report does: **2.97 s**.
 
 | instance | rows | cols | status | our objective | reference | rel. gap | primal rel. | dual rel. | gap rel. | iters | solver time (s) | verified | 1e-6 | 1e-9 |
 |---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|:--:|:--:|:--:|
-| `aug2d` | 10000 | 20200 | optimal | 1687411.753 | 1687411.8 | 2.8e-08 | 4.1e-16 | 4.6e-15 | 2.8e-16 | 1 | 0.04 | yes | yes | yes |
-| `aug2dc` | 10000 | 20200 | optimal | 1818368.066 | 1818368.1 | 1.9e-08 | 4.1e-16 | 4.6e-15 | 1.3e-16 | 1 | 0.04 | yes | yes | yes |
-| `aug2dcqp` | 10000 | 20200 | optimal | 6498134.739 | 6498134.8 | 9.3e-09 | 4.4e-16 | 1.5e-16 | 1.4e-14 | 16 | 0.24 | yes | yes | yes |
-| `aug2dqp` | 10000 | 20200 | optimal | 6237012.026 | 6237012.1 | 1.2e-08 | 2.8e-16 | 0.0e+00 | 7.0e-13 | 18 | 0.26 | yes | yes | yes |
+| `aug2d` | 10000 | 20200 | optimal | 1687411.753 | 1687411.8 | 2.8e-08 | 4.1e-16 | 4.6e-15 | 2.8e-16 | 1 | 0.05 | yes | yes | yes |
+| `aug2dc` | 10000 | 20200 | optimal | 1818368.066 | 1818368.1 | 1.9e-08 | 4.1e-16 | 4.6e-15 | 1.3e-16 | 1 | 0.06 | yes | yes | yes |
+| `aug2dcqp` | 10000 | 20200 | optimal | 6498134.739 | 6498134.8 | 9.3e-09 | 4.4e-16 | 1.5e-16 | 1.4e-14 | 16 | 0.30 | yes | yes | yes |
+| `aug2dqp` | 10000 | 20200 | optimal | 6237012.026 | 6237012.1 | 1.2e-08 | 2.8e-16 | 0.0e+00 | 7.0e-13 | 18 | 0.34 | yes | yes | yes |
 | `aug3d` | 1000 | 3873 | optimal | 554.0677258 | 554.06773 | 7.6e-09 | 2.8e-16 | 4.4e-16 | 0.0e+00 | 1 | 0.00 | yes | yes | yes |
 | `aug3dc` | 1000 | 3873 | optimal | 771.2624387 | 771.26244 | 1.7e-09 | 4.8e-16 | 4.0e-16 | 0.0e+00 | 1 | 0.01 | yes | yes | yes |
-| `aug3dcqp` | 1000 | 3873 | optimal | 993.3621467 | 993.36215 | 3.4e-09 | 5.4e-16 | 0.0e+00 | 1.7e-10 | 11 | 0.03 | yes | yes | yes |
-| `aug3dqp` | 1000 | 3873 | optimal | 675.2376715 | 675.23767 | 2.2e-09 | 5.2e-16 | 0.0e+00 | 6.4e-10 | 13 | 0.03 | yes | yes | yes |
-| `boyd1` | 18 | 93261 | optimal | -61735219.64 | -61735220 | 5.8e-09 | 1.8e-14 | 1.3e-15 | 1.4e-12 | 35 | 25.75 | yes | yes | yes |
-| `boyd2` | 186531 | 93263 | optimal | 21.256767 | 21.256767 | 2.2e-10 | 1.3e-14 | 3.9e-15 | 8.1e-10 | 69 | 30.66 | yes | yes | yes |
-| `cont-050` | 2401 | 2597 | optimal | -4.563850904 | -4.5638509 | 9.5e-10 | 6.4e-16 | 0.0e+00 | 9.5e-12 | 11 | 0.08 | yes | yes | yes |
-| `cont-100` | 9801 | 10197 | optimal | -4.644397869 | -4.6443979 | 6.7e-09 | 7.0e-16 | 0.0e+00 | 2.4e-11 | 12 | 0.69 | yes | yes | yes |
-| `cont-101` | 10098 | 10197 | optimal | 0.1955273247 | 0.19552733 | 5.3e-09 | 9.4e-16 | 0.0e+00 | 8.2e-11 | 11 | 0.65 | yes | yes | yes |
-| `cont-200` | 39601 | 40397 | optimal | -4.68487592 | -4.6848759 | 4.3e-09 | 7.1e-16 | 0.0e+00 | 1.8e-11 | 13 | 5.78 | yes | yes | yes |
-| `cont-201` | 40198 | 40397 | optimal | 0.192483373 | 0.19248337 | 3.0e-09 | 9.5e-16 | 0.0e+00 | 5.8e-12 | 12 | 5.53 | yes | yes | yes |
-| `cont-300` | 90298 | 90597 | optimal | 0.1915122861 | 0.19151232 | 3.4e-08 | 9.5e-16 | 0.0e+00 | 1.7e-11 | 13 | 21.23 | yes | yes | yes |
-| `cvxqp1l` | 5000 | 10000 | time_limit | 108660294.7 | 1.087048e+08 | 4.1e-04 | 1.3e-04 | 0.0e+00 | 2.2e-04 | 38 | 60.00 | - | **no** | **no** |
-| `cvxqp1m` | 500 | 1000 | optimal | 1087511.567 | 1087511.6 | 3.0e-08 | 3.8e-14 | 0.0e+00 | 1.3e-13 | 14 | 0.11 | yes | yes | yes |
-| `cvxqp1s` | 50 | 100 | optimal | 11590.71812 | 11590.718 | 1.0e-08 | 9.8e-15 | 0.0e+00 | 1.9e-12 | 10 | 0.00 | yes | yes | yes |
-| `cvxqp2l` | 2500 | 10000 | optimal | 81842458.26 | 81842458 | 3.2e-09 | 7.5e-13 | 0.0e+00 | 7.3e-16 | 18 | 23.01 | yes | yes | yes |
-| `cvxqp2m` | 250 | 1000 | optimal | 820155.431 | 820155.43 | 1.2e-09 | 1.0e-13 | 0.0e+00 | 7.7e-14 | 13 | 0.05 | yes | yes | yes |
-| `cvxqp2s` | 25 | 100 | optimal | 8120.940477 | 8120.9405 | 2.8e-09 | 3.0e-16 | 0.0e+00 | 6.4e-12 | 12 | 0.00 | yes | yes | yes |
-| `cvxqp3l` | 7500 | 10000 | time_limit | 115709171.2 | 1.157111e+08 | 1.7e-05 | 1.6e-05 | 0.0e+00 | 1.6e-05 | 27 | 60.00 | - | **no** | **no** |
-| `cvxqp3m` | 750 | 1000 | optimal | 1362828.742 | 1362828.7 | 3.1e-08 | 5.7e-13 | 0.0e+00 | 9.6e-13 | 14 | 0.12 | yes | yes | yes |
-| `cvxqp3s` | 75 | 100 | optimal | 11943.4322 | 11943.432 | 1.7e-08 | 7.7e-15 | 0.0e+00 | 1.6e-12 | 10 | 0.00 | yes | yes | yes |
+| `aug3dcqp` | 1000 | 3873 | optimal | 993.3621467 | 993.36215 | 3.4e-09 | 5.4e-16 | 0.0e+00 | 1.7e-10 | 11 | 0.04 | yes | yes | yes |
+| `aug3dqp` | 1000 | 3873 | optimal | 675.2376715 | 675.23767 | 2.2e-09 | 5.2e-16 | 0.0e+00 | 6.4e-10 | 13 | 0.04 | yes | yes | yes |
+| `boyd1` | 18 | 93261 | optimal | -61735219.64 | -61735220 | 5.8e-09 | 1.8e-14 | 1.3e-15 | 1.4e-12 | 35 | 29.39 | yes | yes | yes |
+| `boyd2` | 186531 | 93263 | optimal | 21.256767 | 21.256767 | 2.2e-10 | 1.3e-14 | 3.9e-15 | 8.1e-10 | 69 | 35.50 | yes | yes | yes |
+| `cont-050` | 2401 | 2597 | optimal | -4.563850904 | -4.5638509 | 9.5e-10 | 6.4e-16 | 0.0e+00 | 9.5e-12 | 11 | 0.09 | yes | yes | yes |
+| `cont-100` | 9801 | 10197 | optimal | -4.644397869 | -4.6443979 | 6.7e-09 | 7.0e-16 | 0.0e+00 | 2.4e-11 | 12 | 0.80 | yes | yes | yes |
+| `cont-101` | 10098 | 10197 | optimal | 0.1955273247 | 0.19552733 | 5.3e-09 | 9.4e-16 | 0.0e+00 | 8.2e-11 | 11 | 0.77 | yes | yes | yes |
+| `cont-200` | 39601 | 40397 | optimal | -4.68487592 | -4.6848759 | 4.3e-09 | 7.1e-16 | 0.0e+00 | 1.8e-11 | 13 | 6.94 | yes | yes | yes |
+| `cont-201` | 40198 | 40397 | optimal | 0.192483373 | 0.19248337 | 3.0e-09 | 9.5e-16 | 0.0e+00 | 5.8e-12 | 12 | 6.59 | yes | yes | yes |
+| `cont-300` | 90298 | 90597 | optimal | 0.1915122861 | 0.19151232 | 3.4e-08 | 9.5e-16 | 0.0e+00 | 3.1e-10 | 13 | 39.96 | yes | yes | yes |
+| `cvxqp1l` | 5000 | 10000 | optimal | 108704799.9 | 1.087048e+08 | 7.8e-10 | 1.2e-15 | 0.0e+00 | 8.8e-15 | 15 | 40.44 | yes | yes | yes |
+| `cvxqp1m` | 500 | 1000 | optimal | 1087511.567 | 1087511.6 | 3.0e-08 | 4.4e-15 | 0.0e+00 | 1.9e-14 | 14 | 0.17 | yes | yes | yes |
+| `cvxqp1s` | 50 | 100 | optimal | 11590.71812 | 11590.718 | 1.0e-08 | 5.9e-16 | 0.0e+00 | 1.9e-12 | 10 | 0.00 | yes | yes | yes |
+| `cvxqp2l` | 2500 | 10000 | optimal | 81842458.26 | 81842458 | 3.2e-09 | 5.0e-15 | 0.0e+00 | 7.3e-16 | 18 | 30.62 | yes | yes | yes |
+| `cvxqp2m` | 250 | 1000 | optimal | 820155.431 | 820155.43 | 1.2e-09 | 1.0e-13 | 0.0e+00 | 7.7e-14 | 13 | 0.07 | yes | yes | yes |
+| `cvxqp2s` | 25 | 100 | optimal | 8120.940477 | 8120.9405 | 2.8e-09 | 1.5e-16 | 0.0e+00 | 6.4e-12 | 12 | 0.00 | yes | yes | yes |
+| `cvxqp3l` | 7500 | 10000 | optimal | 115711104.5 | 1.157111e+08 | 3.9e-08 | 3.0e-16 | 0.0e+00 | 1.1e-14 | 13 | 50.58 | yes | yes | yes |
+| `cvxqp3m` | 750 | 1000 | optimal | 1362828.742 | 1362828.7 | 3.1e-08 | 3.0e-16 | 0.0e+00 | 2.4e-13 | 14 | 0.25 | yes | yes | yes |
+| `cvxqp3s` | 75 | 100 | optimal | 11943.4322 | 11943.432 | 1.7e-08 | 1.5e-16 | 0.0e+00 | 1.6e-12 | 10 | 0.00 | yes | yes | yes |
 | `dpklo1` | 77 | 133 | optimal | 0.3700962171 | 0.37009622 | 2.9e-09 | 1.9e-16 | 2.2e-15 | 3.2e-15 | 1 | 0.00 | yes | yes | yes |
-| `dtoc3` | 9998 | 14999 | optimal | 235.262481 | 235.26248 | 4.4e-09 | 2.3e-16 | 7.4e-13 | 4.9e-12 | 1 | 0.02 | yes | yes | yes |
+| `dtoc3` | 9998 | 14999 | optimal | 235.262481 | 235.26248 | 4.4e-09 | 2.3e-16 | 7.4e-13 | 4.9e-12 | 1 | 0.03 | yes | yes | yes |
 | `dual1` | 1 | 85 | optimal | 0.03501296614 | 0.035012966 | 1.4e-10 | 6.7e-16 | 0.0e+00 | 4.3e-10 | 16 | 0.01 | yes | yes | yes |
 | `dual2` | 1 | 96 | optimal | 0.03373367613 | 0.033733676 | 1.3e-10 | 8.9e-16 | 0.0e+00 | 1.4e-10 | 14 | 0.01 | yes | yes | yes |
 | `dual3` | 1 | 111 | optimal | 0.1357558371 | 0.13575584 | 2.9e-09 | 0.0e+00 | 0.0e+00 | 4.5e-10 | 18 | 0.01 | yes | yes | yes |
-| `dual4` | 1 | 75 | optimal | 0.7460908418 | 0.74609084 | 1.8e-09 | 2.2e-16 | 0.0e+00 | 1.1e-11 | 16 | 0.00 | yes | yes | yes |
+| `dual4` | 1 | 75 | optimal | 0.7460908418 | 0.74609084 | 1.8e-09 | 2.2e-16 | 0.0e+00 | 1.1e-11 | 16 | 0.01 | yes | yes | yes |
 | `dualc1` | 215 | 9 | optimal | 6155.250829 | 6155.2508 | 4.8e-09 | 2.6e-17 | 0.0e+00 | 1.2e-11 | 14 | 0.00 | yes | yes | yes |
 | `dualc2` | 229 | 7 | optimal | 3551.307693 | 3551.3077 | 2.1e-09 | 3.8e-18 | 0.0e+00 | 1.7e-13 | 11 | 0.00 | yes | yes | yes |
 | `dualc5` | 278 | 8 | optimal | 427.2323268 | 427.23233 | 7.4e-09 | 1.1e-16 | 0.0e+00 | 1.4e-10 | 9 | 0.00 | yes | yes | yes |
 | `dualc8` | 503 | 8 | optimal | 18309.35883 | 18309.359 | 9.1e-09 | 3.0e-16 | 0.0e+00 | 3.3e-11 | 10 | 0.00 | yes | yes | yes |
-| `exdata` | 3001 | 3000 | optimal | -141.8434322 | -141.84343 | 1.5e-08 | 6.4e-15 | 0.0e+00 | 1.6e-10 | 14 | 7.65 | yes | yes | yes |
+| `exdata` | 3001 | 3000 | optimal | -141.8434322 | -141.84343 | 1.5e-08 | 6.4e-15 | 0.0e+00 | 1.6e-10 | 14 | 8.28 | yes | yes | yes |
 | `genhs28` | 8 | 10 | optimal | 0.9271736938 | 0.92717369 | 3.8e-09 | 0.0e+00 | 3.0e-16 | 0.0e+00 | 1 | 0.00 | yes | yes | yes |
-| `gouldqp2` | 349 | 699 | optimal | 0.0001842745318 | 0.00018427534 | 8.1e-10 | 1.0e-16 | 0.0e+00 | 1.2e-10 | 13 | 0.00 | yes | yes | yes |
+| `gouldqp2` | 349 | 699 | optimal | 0.0001842745318 | 0.00018427534 | 8.1e-10 | 1.0e-16 | 0.0e+00 | 1.2e-10 | 13 | 0.01 | yes | yes | yes |
 | `gouldqp3` | 349 | 699 | optimal | 2.062784038 | 2.062784 | 1.8e-08 | 1.4e-15 | 0.0e+00 | 8.6e-07 | 7 | 0.00 | yes | yes | **no** |
 | `hs118` | 17 | 15 | optimal | 664.82045 | 664.82045 | 1.9e-12 | 0.0e+00 | 0.0e+00 | 3.1e-12 | 10 | 0.00 | yes | yes | yes |
 | `hs21` | 1 | 2 | optimal | -99.96 | -99.96 | 4.0e-13 | 0.0e+00 | 0.0e+00 | 4.2e-13 | 9 | 0.00 | yes | yes | yes |
@@ -2188,109 +2188,109 @@ Shifted geometric mean of solver time, shift 10 s, an instance not successful at
 | `hs52` | 3 | 5 | optimal | 5.326647564 | 5.3266476 | 6.7e-09 | 5.6e-17 | 1.1e-16 | 0.0e+00 | 1 | 0.00 | yes | yes | yes |
 | `hs53` | 3 | 5 | optimal | 4.093023256 | 4.0930233 | 1.1e-08 | 1.1e-16 | 0.0e+00 | 2.5e-11 | 5 | 0.00 | yes | yes | yes |
 | `hs76` | 3 | 4 | optimal | -4.681818182 | -4.6818182 | 3.9e-09 | 0.0e+00 | 0.0e+00 | 3.3e-11 | 7 | 0.00 | yes | yes | yes |
-| `hues-mod` | 2 | 10000 | optimal | 34824463.87 | 34824690 | 6.5e-06 | 6.2e-16 | 5.8e-16 | 3.2e-14 | 15 | 0.12 | yes | yes | yes |
-| `huestis` | 2 | 10000 | feasible | 3.482446387e+11 | 3.482469e+11 | 6.5e-06 | 1.7e-16 | 1.0e-15 | 3.2e-15 | 14 | 0.29 | yes | **no** | **no** |
-| `ksip` | 1001 | 20 | optimal | 0.5757979412 | 0.57579794 | 1.2e-09 | 0.0e+00 | 1.9e-13 | 4.4e-11 | 16 | 0.04 | yes | yes | yes |
-| `laser` | 1000 | 1002 | optimal | 2409601.346 | 2409601.4 | 2.3e-08 | 2.4e-16 | 5.2e-14 | 5.8e-14 | 17 | 0.01 | yes | yes | yes |
-| `liswet1` | 10000 | 10002 | iteration_limit | 25.21051465 | 36.122402 | 3.0e-01 | 7.7e-08 | 9.0e-13 | 1.2e-02 | 210 | 1.43 | - | **no** | **no** |
-| `liswet10` | 10000 | 10002 | iteration_limit | 25.02610456 | 49.485785 | 4.9e-01 | 8.6e-08 | 1.9e-12 | 1.7e-02 | 210 | 1.49 | - | **no** | **no** |
-| `liswet11` | 10000 | 10002 | iteration_limit | 25.46431534 | 49.523957 | 4.9e-01 | 2.6e-07 | 2.3e-12 | 1.1e-01 | 210 | 1.39 | - | **no** | **no** |
-| `liswet12` | 10000 | 10002 | iteration_limit | 27.56262946 | 1736.9274 | 9.8e-01 | 1.4e-06 | 8.7e-12 | 4.8e-01 | 210 | 1.39 | - | **no** | **no** |
-| `liswet2` | 10000 | 10002 | optimal | 24.99804486 | 24.998076 | 1.2e-06 | 4.0e-10 | 3.9e-11 | 3.9e-07 | 260 | 0.01 | yes | yes | **no** |
-| `liswet3` | 10000 | 10002 | optimal | 25.00122063 | 25.00122 | 2.5e-08 | 0.0e+00 | 2.6e-13 | 2.8e-08 | 14 | 0.14 | yes | yes | **no** |
-| `liswet4` | 10000 | 10002 | optimal | 25.00011207 | 25.000112 | 2.9e-09 | 5.1e-10 | 5.9e-12 | 1.6e-08 | 15 | 0.15 | yes | yes | **no** |
-| `liswet5` | 10000 | 10002 | optimal | 25.03426085 | 25.034253 | 3.1e-07 | 5.5e-11 | 1.3e-10 | 2.2e-07 | 12 | 0.12 | yes | yes | **no** |
-| `liswet6` | 10000 | 10002 | optimal | 24.99574776 | 24.995748 | 9.7e-09 | 2.8e-10 | 2.9e-12 | 2.1e-08 | 15 | 0.15 | yes | yes | **no** |
-| `liswet7` | 10000 | 10002 | time_limit | 25.00283548 | 498.84089 | 9.5e-01 | 9.9e-08 | 2.6e-03 | 1.1e-03 | 431387 | 59.06 | - | **no** | **no** |
-| `liswet8` | 10000 | 10002 | iteration_limit | 25.04880595 | 7144.7006 | 1.0e+00 | 3.9e-07 | 1.7e-12 | 2.0e-01 | 210 | 1.42 | - | **no** | **no** |
-| `liswet9` | 10000 | 10002 | iteration_limit | 26.1313632 | 1963.2513 | 9.9e-01 | 1.6e-06 | 7.5e-12 | 6.2e-01 | 210 | 1.42 | - | **no** | **no** |
+| `hues-mod` | 2 | 10000 | optimal | 34824463.87 | 34824690 | 6.5e-06 | 6.2e-16 | 5.8e-16 | 3.2e-14 | 15 | 0.14 | yes | yes | yes |
+| `huestis` | 2 | 10000 | feasible | 3.482446387e+11 | 3.482469e+11 | 6.5e-06 | 7.2e-17 | 6.7e-16 | 3.9e-15 | 14 | 0.23 | yes | **no** | **no** |
+| `ksip` | 1001 | 20 | optimal | 0.5757979412 | 0.57579794 | 1.2e-09 | 0.0e+00 | 1.9e-13 | 4.4e-11 | 16 | 0.05 | yes | yes | yes |
+| `laser` | 1000 | 1002 | optimal | 2409601.346 | 2409601.4 | 2.3e-08 | 1.6e-16 | 2.2e-16 | 1.9e-14 | 17 | 0.02 | yes | yes | yes |
+| `liswet1` | 10000 | 10002 | optimal | 36.12239976 | 36.122402 | 6.2e-08 | 5.7e-15 | 9.9e-11 | 6.4e-08 | 63 | 4.15 | yes | yes | **no** |
+| `liswet10` | 10000 | 10002 | optimal | 49.48578394 | 49.485785 | 2.1e-08 | 6.7e-16 | 8.4e-11 | 1.5e-08 | 166 | 13.53 | yes | yes | **no** |
+| `liswet11` | 10000 | 10002 | optimal | 49.52395936 | 49.523957 | 4.8e-08 | 1.8e-16 | 2.2e-11 | 4.5e-08 | 65 | 4.92 | yes | yes | **no** |
+| `liswet12` | 10000 | 10002 | iteration_limit | 1654.174082 | 1736.9274 | 4.8e-02 | 1.5e-08 | 3.4e-10 | 4.7e-02 | 210 | 17.48 | - | **no** | **no** |
+| `liswet2` | 10000 | 10002 | optimal | 24.99807596 | 24.998076 | 1.8e-09 | 2.9e-13 | 4.0e-12 | 5.9e-09 | 24 | 1.35 | yes | yes | **no** |
+| `liswet3` | 10000 | 10002 | optimal | 25.00122064 | 25.00122 | 2.5e-08 | 0.0e+00 | 2.6e-13 | 2.8e-08 | 14 | 0.25 | yes | yes | **no** |
+| `liswet4` | 10000 | 10002 | optimal | 25.00011267 | 25.000112 | 2.7e-08 | 0.0e+00 | 1.6e-12 | 2.7e-08 | 16 | 0.48 | yes | yes | **no** |
+| `liswet5` | 10000 | 10002 | optimal | 25.03426084 | 25.034253 | 3.1e-07 | 5.6e-11 | 1.3e-10 | 2.2e-07 | 12 | 0.23 | yes | yes | **no** |
+| `liswet6` | 10000 | 10002 | optimal | 24.99574864 | 24.995748 | 2.6e-08 | 2.3e-11 | 5.2e-12 | 6.3e-08 | 15 | 0.44 | yes | yes | **no** |
+| `liswet7` | 10000 | 10002 | optimal | 498.8408903 | 498.84089 | 6.4e-10 | 2.2e-16 | 7.9e-10 | 9.4e-10 | 62 | 4.66 | yes | yes | yes |
+| `liswet8` | 10000 | 10002 | iteration_limit | 653.9165061 | 7144.7006 | 9.1e-01 | 1.3e-08 | 1.1e-09 | 8.2e-02 | 210 | 17.39 | - | **no** | **no** |
+| `liswet9` | 10000 | 10002 | iteration_limit | 1914.18689 | 1963.2513 | 2.5e-02 | 1.1e-08 | 1.0e-09 | 2.5e-02 | 210 | 17.35 | - | **no** | **no** |
 | `lotschd` | 7 | 12 | optimal | 2398.415891 | 2398.4159 | 3.6e-09 | 4.5e-13 | 2.6e-13 | 1.4e-12 | 8 | 0.00 | yes | yes | yes |
-| `mosarqp1` | 700 | 2500 | optimal | -952.875443 | -952.87544 | 3.2e-09 | 0.0e+00 | 0.0e+00 | 9.1e-12 | 10 | 0.01 | yes | yes | yes |
+| `mosarqp1` | 700 | 2500 | optimal | -952.875443 | -952.87544 | 3.2e-09 | 0.0e+00 | 0.0e+00 | 9.1e-12 | 10 | 0.02 | yes | yes | yes |
 | `mosarqp2` | 600 | 900 | optimal | -1597.482118 | -1597.4821 | 1.1e-08 | 0.0e+00 | 0.0e+00 | 5.6e-12 | 10 | 0.01 | yes | yes | yes |
-| `powell20` | 10000 | 10000 | optimal | 5.208958281e+10 | 5.2089583e+10 | 3.6e-09 | 4.0e-15 | 1.2e-13 | 9.6e-12 | 47 | 0.41 | yes | yes | yes |
+| `powell20` | 10000 | 10000 | optimal | 5.208958281e+10 | 5.2089583e+10 | 3.6e-09 | 4.0e-15 | 1.2e-13 | 9.6e-12 | 47 | 0.48 | yes | yes | yes |
 | `primal1` | 85 | 325 | optimal | -0.03501296558 | -0.035012965 | 5.8e-10 | 0.0e+00 | 4.6e-17 | 7.7e-10 | 13 | 0.01 | yes | yes | yes |
 | `primal2` | 96 | 649 | optimal | -0.0337336761 | -0.033733676 | 1.0e-10 | 0.0e+00 | 2.6e-17 | 2.0e-11 | 12 | 0.02 | yes | yes | yes |
-| `primal3` | 111 | 745 | optimal | -0.1357558365 | -0.13575584 | 3.5e-09 | 0.0e+00 | 3.4e-17 | 6.0e-10 | 13 | 0.04 | yes | yes | yes |
-| `primal4` | 75 | 1489 | optimal | -0.7460908417 | -0.74609083 | 1.2e-08 | 0.0e+00 | 2.8e-17 | 5.9e-11 | 11 | 0.03 | yes | yes | yes |
+| `primal3` | 111 | 745 | optimal | -0.1357558365 | -0.13575584 | 3.5e-09 | 0.0e+00 | 3.4e-17 | 6.0e-10 | 13 | 0.05 | yes | yes | yes |
+| `primal4` | 75 | 1489 | optimal | -0.7460908417 | -0.74609083 | 1.2e-08 | 0.0e+00 | 2.8e-17 | 5.9e-11 | 11 | 0.04 | yes | yes | yes |
 | `primalc1` | 9 | 230 | optimal | -6155.250829 | -6155.2508 | 4.8e-09 | 1.3e-17 | 7.0e-18 | 2.1e-12 | 17 | 0.00 | yes | yes | yes |
 | `primalc2` | 7 | 231 | optimal | -3551.307693 | -3551.3077 | 2.1e-09 | 1.5e-16 | 4.8e-18 | 2.4e-14 | 14 | 0.00 | yes | yes | yes |
-| `primalc5` | 8 | 287 | optimal | -427.2323268 | -427.23233 | 7.6e-09 | 0.0e+00 | 2.8e-18 | 1.1e-11 | 20 | 0.00 | yes | yes | yes |
+| `primalc5` | 8 | 287 | optimal | -427.2323268 | -427.23233 | 7.6e-09 | 0.0e+00 | 2.8e-18 | 1.1e-11 | 20 | 0.01 | yes | yes | yes |
 | `primalc8` | 8 | 520 | optimal | -18309.42979 | -18309.43 | 1.2e-08 | 4.6e-15 | 1.1e-17 | 7.2e-15 | 19 | 0.01 | yes | yes | yes |
-| `q25fv47` | 820 | 1571 | optimal | 13744447.89 | 13744448 | 7.6e-09 | 5.8e-17 | 5.8e-14 | 1.9e-12 | 34 | 0.53 | yes | yes | yes |
+| `q25fv47` | 820 | 1571 | optimal | 13744447.89 | 13744448 | 7.6e-09 | 1.2e-16 | 5.8e-14 | 1.9e-12 | 34 | 0.98 | yes | yes | yes |
 | `qadlittl` | 56 | 97 | optimal | 480318.8585 | 480318.86 | 3.0e-09 | 9.6e-17 | 3.4e-13 | 2.5e-13 | 15 | 0.00 | yes | yes | yes |
 | `qafiro` | 27 | 32 | optimal | -1.590781794 | -1.5907818 | 3.9e-09 | 7.9e-17 | 1.8e-19 | 2.3e-10 | 11 | 0.00 | yes | yes | yes |
-| `qbandm` | 305 | 472 | optimal | 16352.34204 | 16352.342 | 2.2e-09 | 7.1e-14 | 1.1e-11 | 1.2e-11 | 21 | 0.01 | yes | yes | yes |
+| `qbandm` | 305 | 472 | optimal | 16352.34204 | 16352.342 | 2.2e-09 | 6.7e-14 | 1.1e-11 | 1.3e-11 | 21 | 0.01 | yes | yes | yes |
 | `qbeaconf` | 173 | 262 | optimal | 164712.0601 | 164712.06 | 9.1e-10 | 7.9e-16 | 5.3e-17 | 4.5e-13 | 17 | 0.01 | yes | yes | yes |
-| `qbore3d` | 233 | 315 | optimal | 3100.200802 | 3100.2008 | 5.7e-10 | 5.3e-15 | 7.1e-17 | 1.8e-11 | 20 | 0.00 | yes | yes | yes |
+| `qbore3d` | 233 | 315 | optimal | 3100.200802 | 3100.2008 | 5.7e-10 | 5.3e-15 | 7.1e-17 | 1.8e-11 | 20 | 0.01 | yes | yes | yes |
 | `qbrandy` | 220 | 249 | optimal | 28375.11486 | 28375.115 | 5.1e-09 | 1.4e-14 | 2.6e-18 | 1.5e-12 | 19 | 0.01 | yes | yes | yes |
-| `qcapri` | 271 | 353 | optimal | 66793293.27 | 66793293 | 4.0e-09 | 2.1e-17 | 2.6e-17 | 6.7e-16 | 37 | 0.21 | yes | yes | yes |
-| `qe226` | 223 | 282 | optimal | 212.6534329 | 212.65343 | 1.4e-08 | 4.6e-18 | 1.1e-13 | 3.3e-10 | 23 | 0.01 | yes | yes | yes |
-| `qetamacr` | 400 | 688 | optimal | 86760.36963 | 86760.37 | 4.3e-09 | 1.3e-14 | 4.6e-18 | 6.9e-11 | 34 | 0.04 | yes | yes | yes |
-| `qfffff80` | 524 | 854 | feasible | 873147.4605 | 873147.47 | 1.1e-08 | 9.3e-17 | 3.4e-17 | 4.9e-11 | 176 | 15.69 | yes | **no** | **no** |
-| `qforplan` | 161 | 421 | feasible | 7456631461 | 7.4566315e+09 | 5.3e-09 | 1.3e-16 | 0.0e+00 | 4.2e-14 | 30 | 0.31 | yes | **no** | **no** |
-| `qgfrdxpn` | 616 | 1092 | feasible | 1.007905849e+11 | 1.0079059e+11 | 5.1e-08 | 3.0e-15 | 3.9e-23 | 7.1e-15 | 36 | 0.82 | yes | **no** | **no** |
-| `qgrow15` | 300 | 645 | optimal | -101693640.5 | -1.0169364e+08 | 4.6e-09 | 2.7e-16 | 2.2e-17 | 1.5e-16 | 28 | 1.55 | yes | yes | yes |
-| `qgrow22` | 440 | 946 | optimal | -149628953.5 | -1.4962895e+08 | 2.3e-08 | 3.1e-16 | 1.5e-17 | 6.0e-16 | 33 | 0.04 | yes | yes | yes |
-| `qgrow7` | 140 | 301 | optimal | -42798713.87 | -42798714 | 3.0e-09 | 2.6e-16 | 1.2e-16 | 1.7e-14 | 27 | 0.01 | yes | yes | yes |
+| `qcapri` | 271 | 353 | optimal | 66793293.27 | 66793293 | 4.0e-09 | 3.3e-17 | 1.7e-17 | 2.2e-16 | 38 | 0.39 | yes | yes | yes |
+| `qe226` | 223 | 282 | optimal | 212.6534329 | 212.65343 | 1.4e-08 | 4.6e-18 | 1.1e-13 | 3.3e-10 | 23 | 0.02 | yes | yes | yes |
+| `qetamacr` | 400 | 688 | optimal | 86760.36963 | 86760.37 | 4.3e-09 | 3.2e-15 | 0.0e+00 | 7.5e-11 | 34 | 0.07 | yes | yes | yes |
+| `qfffff80` | 524 | 854 | optimal | 873147.4605 | 873147.47 | 1.1e-08 | 6.2e-17 | 4.0e-12 | 1.6e-15 | 176 | 3.90 | yes | yes | yes |
+| `qforplan` | 161 | 421 | feasible | 7456631461 | 7.4566315e+09 | 5.3e-09 | 1.3e-16 | 0.0e+00 | 4.2e-14 | 30 | 0.55 | yes | **no** | **no** |
+| `qgfrdxpn` | 616 | 1092 | feasible | 1.007905849e+11 | 1.0079059e+11 | 5.1e-08 | 3.1e-15 | 1.5e-23 | 7.6e-15 | 36 | 1.39 | yes | **no** | **no** |
+| `qgrow15` | 300 | 645 | optimal | -101693640.5 | -1.0169364e+08 | 4.6e-09 | 2.7e-16 | 2.2e-17 | 1.5e-16 | 28 | 2.52 | yes | yes | yes |
+| `qgrow22` | 440 | 946 | optimal | -149628953.5 | -1.4962895e+08 | 2.3e-08 | 3.1e-16 | 1.5e-17 | 6.0e-16 | 33 | 0.06 | yes | yes | yes |
+| `qgrow7` | 140 | 301 | optimal | -42798713.87 | -42798714 | 3.0e-09 | 2.6e-16 | 1.2e-16 | 1.7e-14 | 27 | 0.02 | yes | yes | yes |
 | `qisrael` | 174 | 142 | optimal | 25347837.79 | 25347838 | 8.3e-09 | 0.0e+00 | 1.6e-17 | 1.6e-14 | 29 | 0.01 | yes | yes | yes |
-| `qpcblend` | 74 | 83 | optimal | -0.007842542988 | -0.0078425409 | 2.1e-09 | 8.8e-15 | 0.0e+00 | 1.0e-10 | 16 | 0.00 | yes | yes | yes |
-| `qpcboei1` | 351 | 384 | optimal | 11503914.01 | 11503914 | 8.5e-10 | 1.3e-17 | 6.3e-19 | 1.6e-16 | 30 | 0.67 | yes | yes | yes |
-| `qpcboei2` | 166 | 143 | optimal | 8171962.244 | 8171962.3 | 6.8e-09 | 1.9e-16 | 6.9e-20 | 4.6e-16 | 30 | 0.04 | yes | yes | yes |
-| `qpcstair` | 356 | 467 | optimal | 6204387.476 | 6204387.5 | 3.9e-09 | 1.1e-16 | 3.9e-17 | 2.0e-13 | 25 | 0.02 | yes | yes | yes |
-| `qpilotno` | 975 | 2172 | iteration_limit | 6522805.128 | 4728586.9 | 3.8e-01 | 9.8e-06 | 6.9e-06 | 1.0e+00 | 210 | 0.87 | - | **no** | **no** |
+| `qpcblend` | 74 | 83 | optimal | -0.007842542988 | -0.0078425409 | 2.1e-09 | 1.4e-17 | 0.0e+00 | 1.0e-10 | 16 | 0.00 | yes | yes | yes |
+| `qpcboei1` | 351 | 384 | optimal | 11503914.01 | 11503914 | 8.5e-10 | 1.3e-17 | 1.7e-19 | 1.6e-16 | 30 | 1.09 | yes | yes | yes |
+| `qpcboei2` | 166 | 143 | optimal | 8171962.244 | 8171962.3 | 6.8e-09 | 3.9e-16 | 8.0e-20 | 6.8e-16 | 30 | 0.07 | yes | yes | yes |
+| `qpcstair` | 356 | 467 | optimal | 6204387.476 | 6204387.5 | 3.9e-09 | 1.1e-16 | 3.7e-17 | 2.0e-13 | 25 | 0.05 | yes | yes | yes |
+| `qpilotno` | 975 | 2172 | iteration_limit | 4755887.979 | 4728586.9 | 5.8e-03 | 1.4e-06 | 4.3e-07 | 1.0e+00 | 210 | 2.91 | - | **no** | **no** |
 | `qptest` | 2 | 2 | optimal | 4.371875 | 4.371875 | 3.1e-12 | 0.0e+00 | 0.0e+00 | 9.1e-12 | 8 | 0.00 | yes | yes | yes |
-| `qrecipe` | 91 | 180 | optimal | -266.6159999 | -266.616 | 2.5e-10 | 7.3e-16 | 1.9e-15 | 4.9e-10 | 18 | 0.00 | yes | yes | yes |
+| `qrecipe` | 91 | 180 | optimal | -266.6159999 | -266.616 | 2.5e-10 | 9.7e-16 | 1.9e-15 | 4.9e-10 | 18 | 0.01 | yes | yes | yes |
 | `qsc205` | 205 | 203 | optimal | -0.00581395345 | -0.0058139518 | 1.6e-09 | 1.4e-16 | 1.5e-15 | 4.0e-11 | 14 | 0.00 | yes | yes | yes |
-| `qscagr25` | 471 | 500 | optimal | 201737938.4 | 2.0173794e+08 | 8.1e-09 | 2.4e-16 | 3.2e-15 | 2.1e-15 | 20 | 0.00 | yes | yes | yes |
-| `qscagr7` | 129 | 140 | optimal | 26865948.59 | 26865949 | 1.5e-08 | 2.6e-16 | 9.1e-16 | 1.6e-14 | 21 | 0.00 | yes | yes | yes |
-| `qscfxm1` | 330 | 457 | optimal | 16882691.64 | 16882692 | 2.1e-08 | 2.2e-18 | 3.9e-16 | 1.2e-14 | 29 | 0.02 | yes | yes | yes |
-| `qscfxm2` | 660 | 914 | optimal | 27776161.58 | 27776162 | 1.5e-08 | 1.0e-17 | 3.0e-16 | 1.6e-15 | 37 | 0.04 | yes | yes | yes |
-| `qscfxm3` | 990 | 1371 | optimal | 30816354.47 | 30816355 | 1.7e-08 | 1.5e-17 | 4.0e-13 | 1.1e-12 | 39 | 0.06 | yes | yes | yes |
-| `qscorpio` | 388 | 358 | optimal | 1880.509553 | 1880.5096 | 2.5e-08 | 1.3e-12 | 7.6e-17 | 6.4e-11 | 17 | 0.00 | yes | yes | yes |
-| `qscrs8` | 490 | 1169 | optimal | 904.5600139 | 904.56001 | 4.3e-09 | 6.7e-16 | 4.5e-16 | 1.2e-10 | 31 | 0.02 | yes | yes | yes |
-| `qscsd1` | 77 | 760 | optimal | 8.666666675 | 8.6666667 | 2.9e-09 | 3.3e-16 | 0.0e+00 | 1.1e-10 | 13 | 0.01 | yes | yes | yes |
-| `qscsd6` | 147 | 1350 | optimal | 50.80821391 | 50.808214 | 1.7e-09 | 1.4e-15 | 0.0e+00 | 3.5e-10 | 16 | 0.01 | yes | yes | yes |
-| `qscsd8` | 397 | 2750 | optimal | 940.7635742 | 940.76357 | 4.5e-09 | 5.6e-15 | 0.0e+00 | 6.2e-11 | 14 | 0.02 | yes | yes | yes |
+| `qscagr25` | 471 | 500 | optimal | 201737938.4 | 2.0173794e+08 | 8.1e-09 | 2.4e-16 | 3.2e-15 | 2.1e-15 | 20 | 0.01 | yes | yes | yes |
+| `qscagr7` | 129 | 140 | optimal | 26865948.59 | 26865949 | 1.5e-08 | 2.0e-16 | 9.1e-16 | 1.6e-14 | 21 | 0.00 | yes | yes | yes |
+| `qscfxm1` | 330 | 457 | optimal | 16882691.64 | 16882692 | 2.1e-08 | 1.2e-17 | 1.5e-16 | 1.3e-14 | 29 | 0.04 | yes | yes | yes |
+| `qscfxm2` | 660 | 914 | optimal | 27776161.58 | 27776162 | 1.5e-08 | 2.8e-18 | 7.5e-17 | 1.6e-15 | 37 | 0.11 | yes | yes | yes |
+| `qscfxm3` | 990 | 1371 | optimal | 30816354.47 | 30816355 | 1.7e-08 | 7.3e-18 | 1.4e-17 | 3.6e-16 | 41 | 13.42 | yes | yes | yes |
+| `qscorpio` | 388 | 358 | optimal | 1880.509553 | 1880.5096 | 2.5e-08 | 1.4e-14 | 6.3e-17 | 6.8e-11 | 17 | 0.01 | yes | yes | yes |
+| `qscrs8` | 490 | 1169 | optimal | 904.5600139 | 904.56001 | 4.3e-09 | 6.7e-16 | 4.5e-16 | 1.2e-10 | 31 | 0.03 | yes | yes | yes |
+| `qscsd1` | 77 | 760 | optimal | 8.666666675 | 8.6666667 | 2.9e-09 | 2.8e-16 | 0.0e+00 | 1.1e-10 | 13 | 0.01 | yes | yes | yes |
+| `qscsd6` | 147 | 1350 | optimal | 50.80821391 | 50.808214 | 1.7e-09 | 8.7e-16 | 0.0e+00 | 3.5e-10 | 16 | 0.02 | yes | yes | yes |
+| `qscsd8` | 397 | 2750 | optimal | 940.7635742 | 940.76357 | 4.5e-09 | 5.6e-15 | 0.0e+00 | 6.2e-11 | 14 | 0.03 | yes | yes | yes |
 | `qsctap1` | 300 | 480 | optimal | 1415.861111 | 1415.8611 | 7.9e-09 | 4.7e-17 | 0.0e+00 | 1.3e-11 | 23 | 0.01 | yes | yes | yes |
-| `qsctap2` | 1090 | 1880 | optimal | 1735.026498 | 1735.0265 | 9.7e-10 | 1.3e-17 | 0.0e+00 | 6.0e-10 | 21 | 0.03 | yes | yes | yes |
-| `qsctap3` | 1480 | 2480 | optimal | 1438.754681 | 1438.7547 | 1.3e-08 | 8.9e-18 | 0.0e+00 | 5.4e-12 | 23 | 0.05 | yes | yes | yes |
-| `qseba` | 515 | 1028 | optimal | 81481800.36 | 81481801 | 7.9e-09 | 1.4e-16 | 2.9e-15 | 3.7e-16 | 37 | 1.51 | yes | yes | yes |
-| `qshare1b` | 117 | 225 | optimal | 720078.3182 | 720078.32 | 2.6e-09 | 2.0e-16 | 9.6e-17 | 6.5e-15 | 31 | 0.01 | yes | yes | yes |
+| `qsctap2` | 1090 | 1880 | optimal | 1735.026498 | 1735.0265 | 9.7e-10 | 1.3e-17 | 0.0e+00 | 6.0e-10 | 21 | 0.04 | yes | yes | yes |
+| `qsctap3` | 1480 | 2480 | optimal | 1438.754681 | 1438.7547 | 1.3e-08 | 8.9e-18 | 0.0e+00 | 5.4e-12 | 23 | 0.06 | yes | yes | yes |
+| `qseba` | 515 | 1028 | optimal | 81481800.36 | 81481801 | 7.9e-09 | 1.4e-16 | 2.9e-15 | 3.7e-16 | 37 | 2.44 | yes | yes | yes |
+| `qshare1b` | 117 | 225 | optimal | 720078.3182 | 720078.32 | 2.6e-09 | 2.0e-16 | 1.9e-16 | 6.1e-15 | 31 | 0.01 | yes | yes | yes |
 | `qshare2b` | 96 | 79 | optimal | 11703.69172 | 11703.692 | 2.4e-08 | 2.1e-15 | 3.7e-13 | 5.7e-12 | 19 | 0.00 | yes | yes | yes |
-| `qshell` | 536 | 1775 | feasible | 1.572636843e+12 | 1.5726368e+12 | 2.7e-08 | 4.1e-16 | 8.7e-17 | 4.7e-16 | 35 | 1.77 | yes | **no** | **no** |
+| `qshell` | 536 | 1775 | feasible | 1.572636843e+12 | 1.5726368e+12 | 2.7e-08 | 4.1e-16 | 8.7e-17 | 4.7e-16 | 35 | 2.79 | yes | **no** | **no** |
 | `qship04l` | 402 | 2118 | optimal | 2420015.534 | 2420015.5 | 1.4e-08 | 1.8e-14 | 2.4e-17 | 4.2e-14 | 18 | 0.02 | yes | yes | yes |
 | `qship04s` | 402 | 1458 | optimal | 2424993.673 | 2424993.7 | 1.1e-08 | 9.0e-14 | 1.0e-16 | 1.4e-11 | 17 | 0.01 | yes | yes | yes |
-| `qship08l` | 778 | 4283 | optimal | 2376040.617 | 2376040.6 | 7.0e-09 | 5.3e-16 | 3.7e-18 | 1.1e-13 | 22 | 0.33 | yes | yes | yes |
-| `qship08s` | 778 | 2387 | optimal | 2385728.851 | 2385728.9 | 2.0e-08 | 1.2e-15 | 9.0e-18 | 2.0e-16 | 22 | 0.06 | yes | yes | yes |
-| `qship12l` | 1151 | 5427 | optimal | 3018876.577 | 3018876.6 | 7.6e-09 | 6.5e-16 | 5.7e-18 | 0.0e+00 | 26 | 4.55 | yes | yes | yes |
-| `qship12s` | 1151 | 2763 | optimal | 3056962.249 | 3056962.3 | 1.7e-08 | 2.6e-16 | 4.6e-18 | 0.0e+00 | 26 | 0.64 | yes | yes | yes |
-| `qsierra` | 1227 | 2036 | iteration_limit | 122699497.3 | 23750458 | 4.2e+00 | 4.1e-02 | 0.0e+00 | 1.0e+00 | 1000000 | 23.79 | - | **no** | **no** |
-| `qstair` | 356 | 467 | optimal | 7985452.756 | 7985452.8 | 5.5e-09 | 6.9e-18 | 2.4e-16 | 1.0e-13 | 28 | 0.02 | yes | yes | yes |
-| `qstandat` | 359 | 1075 | optimal | 6411.83839 | 6411.8384 | 1.6e-09 | 5.6e-16 | 2.8e-16 | 1.1e-10 | 24 | 0.01 | yes | yes | yes |
+| `qship08l` | 778 | 4283 | optimal | 2376040.617 | 2376040.6 | 7.0e-09 | 5.3e-15 | 1.2e-18 | 9.4e-15 | 23 | 0.69 | yes | yes | yes |
+| `qship08s` | 778 | 2387 | optimal | 2385728.851 | 2385728.9 | 2.0e-08 | 3.4e-16 | 4.7e-18 | 6.8e-15 | 22 | 0.17 | yes | yes | yes |
+| `qship12l` | 1151 | 5427 | optimal | 3018876.577 | 3018876.6 | 7.6e-09 | 8.0e-16 | 2.6e-18 | 1.5e-16 | 26 | 7.43 | yes | yes | yes |
+| `qship12s` | 1151 | 2763 | optimal | 3056962.249 | 3056962.3 | 1.7e-08 | 1.3e-16 | 1.2e-18 | 1.5e-16 | 26 | 1.14 | yes | yes | yes |
+| `qsierra` | 1227 | 2036 | optimal | 23750458.18 | 23750458 | 7.5e-09 | 2.1e-16 | 7.6e-20 | 7.3e-13 | 24 | 0.09 | yes | yes | yes |
+| `qstair` | 356 | 467 | optimal | 7985452.756 | 7985452.8 | 5.5e-09 | 6.9e-18 | 2.4e-16 | 1.0e-13 | 28 | 0.03 | yes | yes | yes |
+| `qstandat` | 359 | 1075 | optimal | 6411.83839 | 6411.8384 | 1.6e-09 | 5.6e-16 | 2.8e-16 | 1.1e-10 | 24 | 0.02 | yes | yes | yes |
 | `s268` | 5 | 5 | optimal | 2.704291546e-08 | 5.7310705e-07 | 5.5e-07 | 0.0e+00 | 4.0e-16 | 5.8e-08 | 11 | 0.00 | yes | yes | **no** |
-| `stadat1` | 3999 | 2001 | iteration_limit | -28707058.45 | -28526864 | 6.3e-03 | 1.9e-04 | 5.7e-05 | 2.0e-04 | 1000000 | 39.87 | - | **no** | **no** |
-| `stadat2` | 3999 | 2001 | optimal | -32.62666486 | -32.626665 | 4.2e-09 | 0.0e+00 | 4.9e-14 | 3.9e-10 | 17 | 0.05 | yes | yes | yes |
-| `stadat3` | 7999 | 4001 | optimal | -35.77945295 | -35.779453 | 1.5e-09 | 0.0e+00 | 4.7e-14 | 1.8e-10 | 19 | 0.11 | yes | yes | yes |
-| `stcqp1` | 2052 | 4097 | optimal | 155143.5547 | 155143.56 | 3.4e-08 | 1.5e-16 | 0.0e+00 | 3.9e-14 | 10 | 0.05 | yes | yes | yes |
-| `stcqp2` | 2052 | 4097 | optimal | 22327.31327 | 22327.313 | 1.2e-08 | 0.0e+00 | 0.0e+00 | 6.8e-13 | 10 | 0.18 | yes | yes | yes |
+| `stadat1` | 3999 | 2001 | iteration_limit | -28707058.45 | -28526864 | 6.3e-03 | 1.9e-04 | 5.7e-05 | 2.0e-04 | 1000000 | 50.57 | - | **no** | **no** |
+| `stadat2` | 3999 | 2001 | optimal | -32.62666486 | -32.626665 | 4.2e-09 | 0.0e+00 | 4.9e-14 | 3.9e-10 | 17 | 0.07 | yes | yes | yes |
+| `stadat3` | 7999 | 4001 | optimal | -35.77945295 | -35.779453 | 1.5e-09 | 0.0e+00 | 4.7e-14 | 1.8e-10 | 19 | 0.15 | yes | yes | yes |
+| `stcqp1` | 2052 | 4097 | optimal | 155143.5547 | 155143.56 | 3.4e-08 | 1.5e-16 | 0.0e+00 | 3.9e-14 | 10 | 0.06 | yes | yes | yes |
+| `stcqp2` | 2052 | 4097 | optimal | 22327.31327 | 22327.313 | 1.2e-08 | 0.0e+00 | 0.0e+00 | 6.8e-13 | 10 | 0.22 | yes | yes | yes |
 | `tame` | 1 | 2 | optimal | 0 | 0 | 0.0e+00 | 3.1e-12 | 0.0e+00 | 1.6e-10 | 5 | 0.00 | yes | yes | yes |
-| `ubh1` | 12000 | 18009 | optimal | 1.116000816 | 1.1160008 | 1.4e-08 | 2.0e-16 | 1.0e-15 | 1.9e-09 | 209 | 1.49 | yes | yes | **no** |
+| `ubh1` | 12000 | 18009 | optimal | 1.116000816 | 1.1160008 | 1.4e-08 | 1.9e-16 | 2.1e-16 | 3.9e-10 | 11 | 0.44 | yes | yes | yes |
 | `values` | 1 | 202 | model_error | 0 | -1.3966211 | 1.0e+00 | - | - | - | 0 | 0.00 | - | **no** | **no** |
-| `yao` | 2000 | 2002 | iteration_limit | 75.91947942 | 197.70426 | 6.2e-01 | 1.9e-06 | 1.2e-13 | 3.6e-01 | 210 | 0.29 | - | **no** | **no** |
+| `yao` | 2000 | 2002 | optimal | 197.7042559 | 197.70426 | 2.1e-08 | 5.6e-17 | 1.2e-13 | 1.1e-11 | 69 | 0.52 | yes | yes | yes |
 | `zecevic2` | 2 | 2 | optimal | -4.125 | -4.125 | 1.1e-11 | 8.0e-12 | 0.0e+00 | 8.4e-10 | 6 | 0.00 | yes | yes | yes |
 
 Every failure, named:
 
-- **Did not reach `optimal`** (19): `cvxqp1l`, `cvxqp3l`, `huestis`, `liswet1`, `liswet10`, `liswet11`, `liswet12`, `liswet7`, `liswet8`, `liswet9`, `qfffff80`, `qforplan`, `qgfrdxpn`, `qpilotno`, `qshell`, `qsierra`, `stadat1`, `values`, `yao`.
-- **`optimal` but more than 1e-6 relative from the reference objective** (2): `hues-mod`, `liswet2`.
-- **`optimal` but not successful at 1e-9 relative** (10): `gouldqp3`, `hs268`, `hs35mod`, `liswet2`, `liswet3`, `liswet4`, `liswet5`, `liswet6`, `s268`, `ubh1`.
+- **Did not reach `optimal`** (10): `huestis`, `liswet12`, `liswet8`, `liswet9`, `qforplan`, `qgfrdxpn`, `qpilotno`, `qshell`, `stadat1`, `values`.
+- **`optimal` but more than 1e-6 relative from the reference objective** (1): `hues-mod`.
+- **`optimal` but not successful at 1e-9 relative** (12): `gouldqp3`, `hs268`, `hs35mod`, `liswet1`, `liswet10`, `liswet11`, `liswet2`, `liswet3`, `liswet4`, `liswet5`, `liswet6`, `s268`.
 
 **Reference errata.** For these instances the published objective is not the optimum: it was recomputed exactly (`data/maros-meszaros/reference_errata.json`). The table above still judges them against the published value, so they count as not matched.
 
 | instance | published | exact optimum | relative difference | ours (this run) | how |
 |---|---:|---:|---:|---:|---|
 | `hues-mod` | 3.4824690e+07 | 34824463.87334522571976875 | 6.4933e-06 | 34824463.873345532 | `bench/runners/exact_diagonal_qp.py data/maros-meszaros/hues-mod.qps` |
-| `huestis` | 3.4824690e+11 | 348244638733.4522571976875 | 6.4933e-06 | 348244638733.45276 | `bench/runners/exact_diagonal_qp.py data/maros-meszaros/huestis.qps` |
+| `huestis` | 3.4824690e+11 | 348244638733.4522571976875 | 6.4933e-06 | 348244638733.45282 | `bench/runners/exact_diagonal_qp.py data/maros-meszaros/huestis.qps` |
 
 ---
 
