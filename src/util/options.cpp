@@ -446,6 +446,22 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"presolve_dual_reductions",
+         OptionType::Bool,
+         false,
+         "LP only, simplex only: forcing rows (every column of a row whose activity "
+         "bound meets the row bound fixed at the bound attaining it, the row's dual "
+         "recovered from the fixed columns' reduced costs) and dominated columns by "
+         "implied dual bounds (a box on the duals from the row types, the column "
+         "singletons and the free columns; a column whose reduced cost keeps one "
+         "sign over the box is fixed at the bound that sign asks for), with the "
+         "redundant rows that follow (src/presolve/dual_reduce.cpp; Andersen and "
+         "Andersen 1995, sec. 4 and 7; Gondzio 1997). Runs before "
+         "presolve_substitution on presolve's reduced model. OFF until its A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"presolve_substitution",
                  OptionType::Bool,
                  true,
