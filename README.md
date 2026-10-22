@@ -30,6 +30,8 @@ Petrochemicals Limited.
 
 Project site: [sankhya-solver.vercel.app](https://sankhya-solver.vercel.app) — the problem
 statement, what is different, the evidence, how to use it, and the team, on one page.
+Demo video: [sankhya-film.mp4](https://sankhya-solver.vercel.app/media/sankhya-film.mp4) (hosted on the
+site). Jury report: [`docs/REPORT.pdf`](docs/REPORT.pdf). Deck: [`docs/SANKHYA-deck.pptx`](docs/SANKHYA-deck.pptx).
 
 For the jury, [`docs/REPORT.pdf`](docs/REPORT.pdf), the report generated from the same CSVs as
 this readme and attached to every release, with a 25-question Q&A whose every answer names its
@@ -435,20 +437,20 @@ ctest --test-dir build --output-on-failure
 ```
 
 **Without a build.** Download the pre-release
-[v1.0.0-rc2](https://github.com/thegoodengineers/SANKHYA/releases/tag/v1.0.0-rc2): Linux
+[v1.0.0-rc5](https://github.com/thegoodengineers/SANKHYA/releases/tag/v1.0.0-rc5): Linux
 x86-64 CPU, Linux x86-64 CUDA (the CUDA runtime and cuSPARSE linked statically, so a host
-needs only the NVIDIA driver), Windows x64 CPU and the two pip wheels, built by `.github/workflows/release.yml`
+needs only the NVIDIA driver), Windows x64 CPU, Windows x64 CUDA, the two pip wheels, the
+container image, the jury report and the deck, built by `.github/workflows/release.yml`
 (#748) on clean runners, each unpacked on a machine with no compiler and checked there (solve,
 verifier, Python bindings) before it was attached. Each archive keeps this repository's layout
 (`build/sankhya`, the library, the Python package, `tools/`, `demo/`), so every command in
 this README works from the unpacked directory, and carries `MANIFEST.txt` (the `sankhya
 version` banner and the link dependencies of the shipped files, grepped for solver libraries)
-and its own `SHA256SUMS`; the release's `SHA256SUMS` covers the archives and the wheels. This
-pre-release has no Windows CUDA archive. The workflow now builds one, Windows x64 CUDA: MSVC (the
-host compiler nvcc requires on Windows) with the CUDA 12.6 toolkit on a `windows-2022` runner,
-compiled without a card, the CUDA runtime, cuSPARSE and MSVC runtime DLLs beside the binary,
-unpacked and run on a runner with no compiler and no card (the `--gpu` solve falls back to the
-CPU and verifies). The next tag's release carries it.
+and its own `SHA256SUMS`; the release's `SHA256SUMS` covers the archives and the wheels. The
+Windows x64 CUDA archive is built with MSVC (the host compiler nvcc requires on Windows) and
+the CUDA 12.6 toolkit on a `windows-2022` runner, compiled without a card, the CUDA runtime,
+cuSPARSE and MSVC runtime DLLs beside the binary, unpacked and run on a runner with no
+compiler and no card (the `--gpu` solve falls back to the CPU and verifies).
 
 ```bash
 tar -xzf sankhya-1.0.0-linux-x86_64-cpu.tar.gz && cd sankhya-1.0.0-linux-x86_64-cpu
@@ -461,23 +463,23 @@ demo/finale.sh                        # Windows: unzip, then demo\finale.cmd
 **From pip.** The bindings are ctypes over the C API, so one wheel per platform, with the
 library and the CLI inside it, serves CPython 3.9 to 3.13: `manylinux_2_35_x86_64` (glibc 2.35
 or later) and `win_amd64`. CI installs each into a clean venv of every one of those versions
-and solves and verifies the demo there. The `v1.0.0-rc2` release carries them; install
+and solves and verifies the demo there. The `v1.0.0-rc5` release carries them; install
 straight from the release:
 
 ```bash
-pip install https://github.com/thegoodengineers/SANKHYA/releases/download/v1.0.0-rc2/sankhya-1.0.0-py3-none-manylinux_2_35_x86_64.whl
-# Windows: pip install https://github.com/thegoodengineers/SANKHYA/releases/download/v1.0.0-rc2/sankhya-1.0.0-py3-none-win_amd64.whl
+pip install https://github.com/thegoodengineers/SANKHYA/releases/download/v1.0.0-rc5/sankhya-1.0.0-py3-none-manylinux_2_35_x86_64.whl
+# Windows: pip install https://github.com/thegoodengineers/SANKHYA/releases/download/v1.0.0-rc5/sankhya-1.0.0-py3-none-win_amd64.whl
 python -c "import sankhya; print(sankhya.version())"
 ```
 
 Nothing is on PyPI.
 
 The container image (the CUDA build, the verifier and the demo models) is public at
-`ghcr.io/thegoodengineers/sankhya:v1.0.0-rc2`:
+`ghcr.io/thegoodengineers/sankhya:v1.0.0-rc5`:
 
 ```bash
-docker pull ghcr.io/thegoodengineers/sankhya:v1.0.0-rc2
-docker run --rm --gpus all ghcr.io/thegoodengineers/sankhya:v1.0.0-rc2 sankhya solve demo/crude_blend.mps --gpu
+docker pull ghcr.io/thegoodengineers/sankhya:v1.0.0-rc5
+docker run --rm --gpus all ghcr.io/thegoodengineers/sankhya:v1.0.0-rc5 sankhya solve demo/crude_blend.mps --gpu
 # offline: docker load < sankhya-image.tar.gz (a release asset), then run it as sankhya:ci
 # or build it:  docker build -t sankhya . && docker run --rm --gpus all sankhya sankhya version
 ```
