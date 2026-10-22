@@ -73,6 +73,7 @@ Solution undo_dual_reduce(const DualReduceResult& result, const Model& input,
   const bool has_x = !x.empty();
   const bool has_y = !y.empty();
   const bool has_basis = !cs.empty() && !rs.empty();
+  const double sense = input.sense_multiplier();
 
   for (auto it = result.records.rbegin(); it != result.records.rend(); ++it) {
     const DualReduction& rec = *it;
@@ -112,13 +113,16 @@ Solution undo_dual_reduce(const DualReduceResult& result, const Model& input,
             if (view.rows[q] == rec.row) continue;
             rest += view.values[q] * y[static_cast<std::size_t>(view.rows[q])];
           }
-          const double t = (input.col_cost[u] - rest) / rec.coefficients[p];
+          // In the minimisation sense (dual_reduce.hpp): the sign conditions and the zero
+          // in the running are those of sense * c and sense * y; the dual goes back out
+          // through the sense below.
+          const double t = sense * (input.col_cost[u] - rest) / rec.coefficients[p];
           if (take_max ? t > best : t < best) {
             best = t;
             winner = static_cast<std::ptrdiff_t>(p);
           }
         }
-        y[ur] = best;
+        y[ur] = sense * best;
         if (has_basis) {
           if (winner < 0) {
             rs[ur] = BasisStatus::kBasic;

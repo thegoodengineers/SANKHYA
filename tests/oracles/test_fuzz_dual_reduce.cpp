@@ -84,6 +84,52 @@ TEST(FuzzDualReduce, AForcingRowFixesItsColumnsAndPricesItself) {
   EXPECT_TRUE(basis_counts(on, model));
 }
 
+TEST(FuzzDualReduce, AMaximisationIsReducedInTheMinimisationSense) {
+  // max 3 x0 + 2 x1 + 5 s.t. x0 + x1 <= 4, x0 + 3 x1 <= 6, 0 <= x0 <= 3, x1 >= 0: optimum
+  // (3, 1), objective 16, both rows tight. The first CI run of the default flip (#1164)
+  // reported this `feasible`: the stage read the costs in the model's own sense, so under
+  // maximisation its dual box and the forcing row's dual had the wrong sign.
+  Model model;
+  model.sense = ObjSense::kMaximize;
+  model.objective_offset = 5.0;
+  model.resize_columns(2);
+  model.col_cost = {3.0, 2.0};
+  model.col_upper = {3.0, kInfinity};
+  model.resize_rows(2);
+  model.row_upper = {4.0, 6.0};
+  model.matrix.reset(2, 2);
+  model.matrix.add_entry(0, 0, 1.0);
+  model.matrix.add_entry(0, 1, 1.0);
+  model.matrix.add_entry(1, 0, 1.0);
+  model.matrix.add_entry(1, 1, 3.0);
+  model.matrix.finalize();
+  const Solution on = solve_with(model, true);
+  ASSERT_EQ(on.status, SolveStatus::kOptimal) << on.message;
+  EXPECT_NEAR(on.objective, 16.0, 1e-9);
+  EXPECT_LE(on.dual_infeasibility, 1e-9);
+  EXPECT_TRUE(basis_counts(on, model));
+  // And the forcing case under maximisation: max -x0 - 3 x1 - x2, x0 + x1 >= 2 with
+  // x0, x1 in [0, 1], x2 - x0 >= 0: the minimisation twin of the forcing test, objective -5.
+  Model forcing;
+  forcing.sense = ObjSense::kMaximize;
+  forcing.resize_columns(3);
+  forcing.resize_rows(2);
+  forcing.col_cost = {-1.0, -3.0, -1.0};
+  forcing.col_upper = {1.0, 1.0, kInfinity};
+  forcing.row_lower = {2.0, 0.0};
+  forcing.matrix.reset(2, 3);
+  forcing.matrix.add_entry(0, 0, 1.0);
+  forcing.matrix.add_entry(0, 1, 1.0);
+  forcing.matrix.add_entry(1, 2, 1.0);
+  forcing.matrix.add_entry(1, 0, -1.0);
+  forcing.matrix.finalize();
+  const Solution forced = solve_with(forcing, true);
+  ASSERT_EQ(forced.status, SolveStatus::kOptimal) << forced.message;
+  EXPECT_NEAR(forced.objective, -5.0, 1e-9);
+  EXPECT_LE(forced.dual_infeasibility, 1e-9);
+  EXPECT_TRUE(basis_counts(forced, forcing));
+}
+
 TEST(FuzzDualReduce, ADominatedColumnIsFixedAtItsLowerBound) {
   // Row 0: x0 + x1 = 1 (equality, y_0 free). x1 is a column singleton with cost 1 and no
   // upper bound: y_0 <= 1. x0 has cost 3 and the same entry: d_0 = 3 - y_0 >= 2 > 0, so

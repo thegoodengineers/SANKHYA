@@ -32,6 +32,7 @@ struct Work {
   std::vector<double> col_lower, col_upper, cost, row_lower, row_upper;
   std::vector<char> row_dead, col_dead;
   double offset = 0.0;
+  double sense = 1.0;  ///< costs are held in the minimisation sense: sense * col_cost
 
   /// Fix column j at v: its contribution becomes a constant in every live row and the
   /// objective, and the column goes.
@@ -50,7 +51,7 @@ struct Work {
         }
       }
     }
-    offset += cost[u] * v;
+    offset += sense * cost[u] * v;
     col_lower[u] = col_upper[u] = v;
     col_dead[u] = 1;
     col_count[u] = 0;
@@ -303,7 +304,9 @@ DualReduceResult dual_reduce(const Model& model, const Options& options, Logger&
   w.col_count.assign(static_cast<std::size_t>(n), 0);
   w.col_lower = model.col_lower;
   w.col_upper = model.col_upper;
+  w.sense = model.sense_multiplier();
   w.cost = model.col_cost;
+  for (double& c : w.cost) c *= w.sense;
   w.row_lower = model.row_lower;
   w.row_upper = model.row_upper;
   w.row_dead.assign(static_cast<std::size_t>(m), 0);
@@ -351,7 +354,7 @@ DualReduceResult dual_reduce(const Model& model, const Options& options, Logger&
   for (Index j = 0; j < nn; ++j) {
     const auto u = static_cast<std::size_t>(j);
     const auto from = static_cast<std::size_t>(out.col_to_input[u]);
-    reduced.col_cost[u] = w.cost[from];
+    reduced.col_cost[u] = w.sense * w.cost[from];
     reduced.col_lower[u] = w.col_lower[from];
     reduced.col_upper[u] = w.col_upper[from];
     reduced.col_type[u] = VarType::kContinuous;
