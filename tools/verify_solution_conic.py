@@ -109,6 +109,11 @@ def _margin(kind: str, v: list[float]) -> float:
 
 
 def _at_bound(value: float, lower: float, upper: float, tol: float) -> str | None:
+    # A fixed member is an equality: its multiplier may take either sign, as the LP checks'
+    # sign_violation has it for lower == upper. Reading it as "lower" rejected the true
+    # answer to the textbook disc (fixed head t = 1, multiplier -sqrt 2).
+    if lower == upper:
+        return "fixed"
     scale = max(1.0, abs(value))
     if math.isfinite(lower) and abs(value - lower) <= tol * scale:
         return "lower"
@@ -124,7 +129,9 @@ def _apex_dual(kind: str, d: list[float], sides: list[str | None]) -> list[float
     heads = 2 if kind == "RQUAD" else 1
     s = list(d)
     for i in range(heads, len(d)):
-        if sides[i] == "lower":
+        if sides[i] == "fixed":
+            s[i] = 0.0
+        elif sides[i] == "lower":
             s[i] = min(d[i], 0.0)
         elif sides[i] == "upper":
             s[i] = max(d[i], 0.0)
@@ -133,6 +140,8 @@ def _apex_dual(kind: str, d: list[float], sides: list[str | None]) -> list[float
     for i in range(heads):
         if sides[i] == "upper":
             s[i] = max(d[i], need)
+        elif sides[i] == "fixed":
+            s[i] = need
     return s
 
 
@@ -176,7 +185,7 @@ def check_dual(model: Model, x: list[float], d: list[float], report, dual_tol: f
             if sides[i] is None:
                 if abs(m) / dscale > worst_free:
                     worst_free, where_free = abs(m) / dscale, name
-            else:
+            elif sides[i] != "fixed":  # a fixed member's multiplier may take either sign
                 wrong = -m if sides[i] == "lower" else m  # lower prices m >= 0, upper m <= 0
                 if wrong / dscale > worst_sign:
                     worst_sign, where_sign = wrong / dscale, name
