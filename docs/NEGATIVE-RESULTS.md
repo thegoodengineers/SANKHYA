@@ -214,6 +214,21 @@ On Maros-Meszaros:
 
 The verifier is the independent judge and stays as it is. On qshell a 2e-5 relative product is a real defect in the point, not rounding. A rule that lets the gate pass it claims an optimum the judge rejects. Not merged.
 
+### A size-scaled round budget for the QP active-set finish (#1079, #1140, branch `qp-finish-round-budget`, not merged)
+
+The finish makes one working-set change per round, at most 10 rounds. A diagnostic build on CI (run 39642658047) logged qforplan pinning one new column in each of its 10 rounds without repeating one, and qfffff80 doing the same with violations up to 3.1e4. The change raised the budget to max(10, ceil(0.05 * columns)), giving qforplan 24 rounds and qfffff80 50.
+
+Measured on GitHub Actions with `bench.yml`'s `ab-option` suite and `--base-binary`, both arms interleaved per instance on one machine: base `81b812c`, new `fc28df5`. The CSVs are `bench/results/option-ab-maros-meszaros-finish-round-budget-fc28df5.csv` (run 39647578284, 60 s) and `option-ab-netlib-finish-round-budget-fc28df5.csv` (run 39647586270).
+
+- **Maros-Meszaros 138:** 119 optimal, 117 matched and 124 verified in both arms. The only row that differs is stadat1, iteration_limit -> time_limit, unsolved in both.
+- **Netlib:** identical on all 94 instances.
+
+The targets did not move:
+- **qforplan:** still feasible with the same gap, 0.59 s -> 1.25 s.
+- **qfffff80:** still feasible with the same gap, 26.8 s -> 61.5 s (now at the time limit).
+
+More one-at-a-time rounds do not finish these working sets; they start too far from the optimal one. The interior point has to hand the finish a better point. Not merged: no gain and a measured cost.
+
 ---
 
 ## 3. Built opt-in, awaiting the measurement
