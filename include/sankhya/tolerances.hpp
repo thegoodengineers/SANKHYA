@@ -422,6 +422,17 @@ inline constexpr double kCrossoverStartInfeasibility = 1e-4;
 inline constexpr double kCrossoverPivotsPerDimension = 10.0;
 inline constexpr double kPdhgTight = 1e-8;
 
+/// The LP PDHG's restart criteria on the relative KKT error of the restart candidate
+/// (src/pdhg/pdhg.cpp; Applegate et al., PDLP, NeurIPS 2021, section 3.3): the candidate
+/// at or under kPdhgRestartSufficient times the error at the last restart restarts at once;
+/// at or under kPdhgRestartNecessary times it, having grown since the previous check (the
+/// "no local progress" clause), restarts under option pdhg_restart_necessary; and a period
+/// that reaches kPdhgRestartArtificial of all iterations so far restarts regardless. The
+/// same three numbers the batch engine uses (kBatchPdhgRestart*).
+inline constexpr double kPdhgRestartSufficient = 0.2;
+inline constexpr double kPdhgRestartNecessary = 0.8;
+inline constexpr double kPdhgRestartArtificial = 0.36;
+
 /// PDHG feasibility polishing (#483, option pdhg_feasibility_polish; Applegate, Hinder, Lu &
 /// Lubin, arXiv:2501.07018, the feasibility polishing section). Tried at the first
 /// convergence evaluation at or after kPdhgPolishFirstIteration and again each time the

@@ -218,6 +218,13 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
                                     ? Count{1000000}
                                     : static_cast<Count>(limits.iteration_limit());
   const bool use_restarts = options.get_bool("pdhg_restart");
+  // [PDLP] section 3.3's second criterion, off by default until an A/B on main: restart when
+  // the candidate's KKT error has fallen to kPdhgRestartNecessary of the last restart's and
+  // just grew from one check to the next. Without it the only restarts between the 0.2
+  // threshold and the artificial one are the artificial ones, and those space out
+  // geometrically (the next comes at 1 / (1 - 0.36) times the iteration of the last), so a
+  // long run makes ever fewer of them.
+  const bool restart_necessary = options.get_bool("pdhg_restart_necessary");
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
   const bool geometric_evaluation = options.get_bool("pdhg_geometric_evaluation");
   const bool use_halpern = options.get_bool("pdhg_halpern");
@@ -258,8 +265,10 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
 
   logger.info("Solving LP with restarted PDHG: {} rows, {} columns, {} nonzeros", rows, cols,
               model.num_nonzeros());
-  logger.info("Scaled matrix entries in [{:.3e}, {:.3e}], estimated ||A||_2 = {:.4e}",
-              scaling.min_abs, scaling.max_abs, spectral_norm);
+  logger.info(
+      "Scaled matrix entries in [{:.3e}, {:.3e}] after {} Ruiz passes and one "
+      "Pock-Chambolle pass (alpha = 1), estimated ||A||_2 = {:.4e}",
+      scaling.min_abs, scaling.max_abs, kRuizIterations, spectral_norm);
   logger.info("Target relative tolerance {:.1e}, restarts {}, A x {}", tolerance,
               use_halpern ? "halpern-fp" : (use_restarts ? "on" : "off"),
               parallel_spmv ? "row-parallel over the thread pool (#487)" : "serial");
@@ -409,6 +418,8 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   Count restarts = 0;
   Count last_restart = 0;
   double restart_kkt = std::numeric_limits<double>::infinity();
+  // The candidate's KKT error at the previous check of this period (pdhg_restart_necessary).
+  double previous_candidate_kkt = std::numeric_limits<double>::infinity();
 
   Residuals best;
   // FIRST CROSSINGS OF THE RELATIVE KKT ERROR (#486), at the levels published PDLP figures
@@ -893,11 +904,16 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       // theoretical criterion.
       const double kkt = better.worst();
       const Count since = iteration - last_restart;
-      const bool sufficient = kkt <= 0.2 * restart_kkt;
+      const bool sufficient = kkt <= tol::kPdhgRestartSufficient * restart_kkt;
+      const bool necessary = restart_necessary &&
+                             kkt <= tol::kPdhgRestartNecessary * restart_kkt &&
+                             kkt > previous_candidate_kkt;
       const bool artificial =
           since >= std::max<Count>(kEvaluationInterval,
-                                   static_cast<Count>(0.36 * static_cast<double>(iteration)));
-      if (sufficient || artificial) {
+                                   static_cast<Count>(tol::kPdhgRestartArtificial *
+                                                      static_cast<double>(iteration)));
+      previous_candidate_kkt = kkt;
+      if (sufficient || necessary || artificial) {
         // Restart at the better candidate, and move the primal weight towards the observed
         // ratio of dual to primal movement ([PDLP] section 3.2, theta = 0.5).
         std::vector<double> dx(n);
@@ -931,11 +947,17 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
           a_times(x.data(), a_x_cached.data());
         }
         restart_kkt = kkt;
+        previous_candidate_kkt = std::numeric_limits<double>::infinity();
         last_restart = iteration;
         ++restarts;
         if (logger.profiler() != nullptr) logger.profiler()->count("pdhg restarts");
-        logger.verbose("restart {} at iteration {}: KKT {:.3e}, primal weight {:.3e}", restarts,
-                       iteration, kkt, omega);
+        logger.verbose(
+            "restart {} at iteration {} ({}): KKT {:.3e} (primal {:.3e}, dual {:.3e}, gap "
+            "{:.3e}; from the {}), primal weight {:.3e}, step {:.3e}",
+            restarts, iteration,
+            sufficient ? "sufficient" : (necessary ? "necessary" : "artificial"), kkt,
+            better.primal, better.dual, better.gap,
+            chosen == &current ? "current iterate" : "average", omega, eta);
       }
     }
   }

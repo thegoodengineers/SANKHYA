@@ -2056,6 +2056,20 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  {}});
     s.push_back(
+        {"pdhg_restart_necessary",
+         OptionType::Bool,
+         false,
+         "Add the second of PDLP's three restart criteria to the CPU LP PDHG (Applegate et "
+         "al., 'Practical large-scale linear programming using primal-dual hybrid "
+         "gradient', NeurIPS 2021, section 3.3): restart when the candidate's relative KKT "
+         "error is at or under 0.8 of the error at the last restart and has grown since the "
+         "previous check. The sufficient (0.2) and artificial (a period of 0.36 of all "
+         "iterations so far) criteria run either way. CPU engine only; the CUDA engines "
+         "keep their two. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
         {"pdhg_detect_infeasibility",
          OptionType::Bool,
          false,
