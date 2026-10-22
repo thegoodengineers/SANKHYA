@@ -2503,10 +2503,13 @@ const std::vector<OptionSpec>& Options::registry() {
          {}});
     s.push_back({"pdhg_tolerance",
                  OptionType::Double,
-                 tol::kPdhgLoose,
-                 "PDHG relative KKT termination tolerance. By default the loop also runs on "
-                 "until the point meets the project's ABSOLUTE tolerances, so a request looser "
-                 "than those changes nothing (#180); see pdhg_stop_at_request.",
+                 tol::kPdhgTight,
+                 "PDHG relative KKT termination tolerance: the point PDHG hands to the "
+                 "interior-point polish under pdhg_relative_stop (on by default). 1e-4 is "
+                 "the explicit loose request (the GPU demo path); with pdhg_relative_stop "
+                 "off the loop runs on until the point meets the project's ABSOLUTE "
+                 "tolerances, so a request looser than those then changes nothing (#180); "
+                 "see pdhg_stop_at_request.",
                  1e-14,
                  1e-1,
                  {}});
@@ -2557,17 +2560,21 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back(
         {"pdhg_relative_stop",
          OptionType::Bool,
-         false,
+         true,
          "Stop the CPU LP PDHG on the relative KKT request alone - primal, dual and gap "
          "residuals all at or under pdhg_tolerance - which is PDLP's own termination "
          "(Applegate et al., NeurIPS 2021, section 2), and leave the verdict to the "
          "report and to the interior-point polish (pdhg_polish) that takes any non-optimal "
          "point. `optimal` still needs the project's absolute standard; a point that meets "
          "the request and is primal feasible to the absolute tolerance is `feasible`; one "
-         "that is not is reported as stopped, the request met noted in its message. By "
-         "default the loop runs on to the absolute standard, which on a model with large "
-         "row bounds or multipliers costs most of the iterations after the relative "
-         "request is met. Off by default until an A/B on main.",
+         "that is not is reported as stopped, the request met noted in its message. Off, "
+         "the loop runs on to the absolute standard, which on a model with large row "
+         "bounds or multipliers costs most of the iterations after the relative request "
+         "is met. On by default at the 1e-8 hand-off: the A/B on the branch of #1163 "
+         "(option-ab-057e19b.csv) lost nothing verified on Netlib (86 of 94 both arms) "
+         "or the refinery LPs (18 of 18) and cut the shifted geometric mean of iterations "
+         "from 71,389 to 62,251 and 8,678 to 6,486; at a 1e-4 hand-off the 50-iteration "
+         "polish fell short on agg and dfl001, so 1e-4 stays an explicit request.",
          0.0,
          0.0,
          {}});

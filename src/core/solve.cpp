@@ -129,7 +129,7 @@ std::vector<std::string> registered_lp_algorithms() {
 /// Every engine calls Solution::recompute_quality() before returning, so primal_infeasibility
 /// and dual_infeasibility are MEASURED from the returned vectors rather than asserted by the
 /// engine about itself. Nothing was checking that the status agreed with them, and the two
-/// drifted apart: PDHG terminates on a RELATIVE KKT criterion at pdhg_tolerance (1e-4 by
+/// drifted apart: PDHG terminates on a RELATIVE KKT criterion at pdhg_tolerance (1e-8 by
 /// default), and that was being translated straight into kOptimal. A relative KKT residual of
 /// 1e-4 is not the same claim as "primal feasible to 1e-7", and on all eight Netlib instances
 /// the gap between those two statements was three to five orders of magnitude. sc50b, whose
