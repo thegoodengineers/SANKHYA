@@ -65,6 +65,7 @@
 #include "core/iis.hpp"
 #include "core/kkt_check.hpp"
 #include "core/lp_safe_bound.hpp"
+#include "core/pdhg_fix_and_solve.hpp"
 #include "core/prescale.hpp"
 #include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
@@ -365,6 +366,65 @@ void polish_with_the_interior_point(Solution* first, const Model& model, const O
                   polished.polish_iterations,
                   polished.message.empty() ? std::string() : " (" + polished.message + ")");
   *first = std::move(polished);
+}
+
+/// #888, `pdhg_crossover` (off by default): PDHG's point pushed to a vertex by the crossover,
+/// through the gate the interior point's answer goes through (#474, crossover_to_vertex): an
+/// optimal point is always a start, a feasible or stopped one only when its scaled
+/// infeasibility is at most tol::kCrossoverStartInfeasibility, and only the simplex's own
+/// vertex can be reported optimal. Runs after the interior-point polish, so a polish that
+/// declined (the refinery year: a factor past its budget) still leaves a route to a basis.
+/// Bixby, "Solving real-world linear programs: a decade and more of progress", Operations
+/// Research 50 (2002), sec. 4, for the crossover itself.
+void crossover_after_pdhg(Solution* first, const Model& model, const Options& options,
+                          Logger& logger, SolveControl* control, const Timer& timer) {
+  if (!options.get_bool("pdhg_crossover") || !claims_a_point(*first)) return;
+  if (options.get_bool("pdhg_crossover_fix_and_solve")) {
+    Solution routed =
+        fix_and_solve_then_crossover(model, *first, options, logger, control, timer);
+    if (routed.status == SolveStatus::kOptimal) {
+      *first = std::move(routed);
+      return;
+    }
+    first->message = routed.message;  // what the route tried, for the record
+  }
+  Options wanted = options;
+  wanted.set_bool("crossover", true);
+  wanted.set_bool("crossover_from_nonoptimal", true);
+  if (options.get_bool("pdhg_crossover_slack_push") &&
+      crossover_start_is_usable(model, *first)) {
+    // The push from the SLACK basis (Bixby 1994, sec. 4): no basis guessed off the point,
+    // so no rank repair; every entry the point holds inside its bounds is superbasic and
+    // walked to a bound through the slack basis, one ratio test each.
+    logger.info("Crossover (#888): the push from the slack basis, no basis guess");
+    Solution pushed =
+        crossover_push_from_basis(model, *first, WarmStart{}, wanted, logger, control, timer);
+    if (pushed.status == SolveStatus::kOptimal) {
+      *first = std::move(pushed);
+    } else {
+      // The guessed basis is still the better start from a CENTRED point (the polish's
+      // interior point, pilot.we in the Netlib A/B at c2e84e2: the slack push ended at the
+      // pivot budget where the guess reached a verified vertex), so a push that did not
+      // finish hands the same point to the guess route rather than giving up.
+      first->message +=
+          "; " + pushed.message.substr(pushed.message.rfind("crossover") == std::string::npos
+                                           ? 0
+                                           : pushed.message.rfind("crossover"));
+      *first = crossover_to_vertex(model, std::move(*first), wanted, logger, control, timer);
+    }
+  } else {
+    *first = crossover_to_vertex(model, std::move(*first), wanted, logger, control, timer);
+  }
+  // PDHG stopped on the relative request alone for this route, so its `feasible` is not
+  // the promise that word makes: when the crossover did not reach a vertex, the claim is
+  // withdrawn and the point stands as a stopped iterate.
+  if (first->status == SolveStatus::kFeasible &&
+      first->primal_infeasibility > tol::kPrimalFeasibility) {
+    first->status = SolveStatus::kIterationLimit;
+    first->message +=
+        "; PDHG stopped at the relative request as a crossover start and the crossover did "
+        "not reach a vertex, so no feasible point is claimed";
+  }
 }
 
 /// A copy of `Options` narrowed to whatever is left of a finite time_limit (or the options
@@ -1045,11 +1105,13 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
             first = gpu::solve_pdhg_gpu(target, first_pass, logger, control, pdhg_warm_ptr);
           }
           polish_with_the_interior_point(&first, target, options, logger, control, timer);
+          crossover_after_pdhg(&first, target, options, logger, control, timer);
           return first;
         }
 #endif
         Solution first = pdhg::solve_pdhg(target, first_pass, logger, control, pdhg_warm_ptr);
         polish_with_the_interior_point(&first, target, engine_options, logger, control, timer);
+        crossover_after_pdhg(&first, target, options, logger, control, timer);
         return first;
       }
       if (want_ipm) {

@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include "core/pdhg_fix_and_solve.hpp"
 #include "sankhya/io.hpp"
 #include "sankhya/ipm.hpp"
 #include "sankhya/logging.hpp"
@@ -27,6 +28,7 @@
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 #include "simplex/crossover.hpp"
+#include "staircase_model.hpp"
 
 namespace sankhya {
 namespace {
@@ -167,6 +169,57 @@ TEST(CrossoverFromNonoptimal, ThroughSolveAStoppedInteriorPointEndsOptimal) {
   EXPECT_EQ(alone.algorithm.find("crossover"), std::string::npos) << alone.algorithm;
 }
 
+TEST(CrossoverFromNonoptimal, ThroughSolveAPdhgPointEndsOptimalAtAVertexUnderPdhgCrossover) {
+  // #888: the route a first-order answer takes to a basis. PDHG stops on its request
+  // (pdhg_stop_at_request, feasible and not optimal), the crossover finishes from that
+  // point, and the vertex passes the same checks as the interior point's. The same solve
+  // without the option keeps PDHG's own answer.
+  const Model model = netlib("afiro");
+  Options on;
+  on.set_bool("log_to_console", false);
+  on.set_string("algorithm", "pdhg");
+  on.set_bool("pdhg_polish", false);
+  on.set_bool("pdhg_stop_at_request", true);
+  on.set_double("pdhg_tolerance", 1e-6);
+  Options off = on;
+  on.set_bool("pdhg_crossover", true);
+  const Solution crossed = solve(model, on);
+  ASSERT_EQ(crossed.status, SolveStatus::kOptimal) << crossed.message;
+  EXPECT_NEAR(crossed.objective, -464.75314286, 1e-6 * 464.75314286);
+  EXPECT_NE(crossed.algorithm.find("crossover"), std::string::npos) << crossed.algorithm;
+  expect_a_verified_vertex(model, crossed, "afiro, PDHG then crossover through solve()");
+
+  const Solution alone = solve(model, off);
+  EXPECT_NE(alone.status, SolveStatus::kNotSolved) << alone.message;
+  EXPECT_EQ(alone.algorithm.find("crossover"), std::string::npos) << alone.algorithm;
+}
+
+TEST(CrossoverFromNonoptimal, FixAndSolveRouteEndsOptimalAtAVertexAndFixesSomething) {
+  // #888: the restricted LP route. The point PDHG stops at holds columns at bounds; those
+  // are fixed, the rest solved exactly, and the crossover finishes from that vertex.
+  const Model model = netlib("afiro");
+  Options on;
+  on.set_bool("log_to_console", false);
+  on.set_string("algorithm", "pdhg");
+  on.set_bool("pdhg_polish", false);
+  on.set_bool("pdhg_stop_at_request", true);
+  on.set_double("pdhg_tolerance", 1e-6);
+  on.set_bool("pdhg_crossover", true);
+  on.set_bool("pdhg_crossover_fix_and_solve", true);
+  const Solution crossed = solve(model, on);
+  ASSERT_EQ(crossed.status, SolveStatus::kOptimal) << crossed.message;
+  EXPECT_NEAR(crossed.objective, -464.75314286, 1e-6 * 464.75314286);
+  EXPECT_NE(crossed.message.find("fix-and-solve"), std::string::npos) << crossed.message;
+  expect_a_verified_vertex(model, crossed, "afiro, PDHG then fix-and-solve then crossover");
+
+  // The classification fixes something on a real point: the optimal vertex itself holds
+  // every nonbasic column at a bound with an agreeing reduced cost.
+  const FixAndSolveClassification c =
+      classify_for_fix_and_solve(model, crossed, tol::kFixAndSolveAtBound);
+  EXPECT_GT(c.cols_fixed, 0);
+  EXPECT_GT(c.cols_fixed + c.rows_snapped, model.num_rows());
+}
+
 TEST(CrossoverFromNonoptimal, TheGateRefusesWhatIsNotAUsablePoint) {
   const Model model = netlib("afiro");
   Logger quiet(nullptr);
@@ -254,6 +307,43 @@ TEST(CrossoverFromNonoptimal, TheTimeReserveAppliesOnlyWhenTheOptionIsOnAndTheLi
   const Options no_limit = ipm_options(true);
   EXPECT_EQ(interior_point_options_before_crossover(no_limit).get_double("time_limit"),
             no_limit.get_double("time_limit"));
+}
+
+TEST(CrossoverFromNonoptimal, FixAndSolveOnAMidSizeStaircaseMatchesTheColdSolve) {
+  // #888 on a multi-period model of the refinery's shape (6,000 rows): the vertex the route
+  // reaches verifies at the project tolerances and sits at the cold dual simplex's objective,
+  // and it came through the restricted LP, not through the plain crossover's fallback.
+  const Model model = staircase(2000);
+  Options cold;
+  cold.set_bool("log_to_console", false);
+  cold.set_string("algorithm", "dual-simplex");
+  const Solution reference = solve(model, cold);
+  ASSERT_EQ(reference.status, SolveStatus::kOptimal) << reference.message;
+
+  Options on;
+  on.set_bool("log_to_console", false);
+  on.set_string("algorithm", "pdhg");
+  on.set_bool("pdhg_polish", false);
+  on.set_double("pdhg_tolerance", 1e-6);
+  on.set_bool("pdhg_crossover", true);
+  on.set_bool("pdhg_crossover_fix_and_solve", true);
+  const Solution crossed = solve(model, on);
+  ASSERT_EQ(crossed.status, SolveStatus::kOptimal) << crossed.message;
+  EXPECT_EQ(crossed.message.rfind("fix-and-solve (#888)", 0), 0U) << crossed.message;
+  EXPECT_NEAR(crossed.objective, reference.objective,
+              1e-9 * std::max(1.0, std::fabs(reference.objective)));
+  expect_a_verified_vertex(model, crossed, "staircase(2000), PDHG then fix-and-solve");
+
+  // The push from the slack basis (pdhg_crossover_slack_push), the route that won the
+  // T = 365 refinery A/B: no basis guess, every interior entry walked to a bound.
+  Options slack = on;
+  slack.set_bool("pdhg_crossover_fix_and_solve", false);
+  slack.set_bool("pdhg_crossover_slack_push", true);
+  const Solution pushed = solve(model, slack);
+  ASSERT_EQ(pushed.status, SolveStatus::kOptimal) << pushed.message;
+  EXPECT_NEAR(pushed.objective, reference.objective,
+              1e-9 * std::max(1.0, std::fabs(reference.objective)));
+  expect_a_verified_vertex(model, pushed, "staircase(2000), PDHG then the slack-basis push");
 }
 
 }  // namespace

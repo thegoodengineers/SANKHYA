@@ -1838,6 +1838,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.9,
                  {}});
+    s.push_back({"crossover_triangular_guess",
+                 OptionType::Bool,
+                 false,
+                 "Build the crossover's basis guess by a triangular crash over the entries the "
+                 "point holds inside their bounds (#888; Bixby 1992): nonsingular by "
+                 "construction in one pass over the nonzeros, so the rank repair's "
+                 "factorization rounds never run. Off by default: the guess from a barrier "
+                 "point is taken by slack and repaired, as before.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"crossover_pivots_per_dimension",
                  OptionType::Double,
                  tol::kCrossoverPivotsPerDimension,
@@ -2573,6 +2584,59 @@ const std::vector<OptionSpec>& Options::registry() {
          "unless it meets the full standard anyway; the switch cannot manufacture an "
          "`optimal`. Opt-in, because the default has to be the answer that can be verified "
          "(#180).",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
+        {"pdhg_crossover",
+         OptionType::Bool,
+         false,
+         "After PDHG (CPU or CUDA) returns, push its point to a vertex with the crossover "
+         "(#888): the same gate the interior point's answer goes through (#474) - an optimal "
+         "point is always a start, a feasible or stopped one only when its scaled primal and "
+         "dual infeasibility are at most 1e-4 - and only the simplex's own vertex, measured "
+         "by the status guard, can be reported optimal; a start the pivots cannot finish in "
+         "the time left leaves PDHG's answer as it was. The route a first-order answer on the "
+         "card takes to an exact, basis-carrying answer. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
+        {"pdhg_crossover_fix_and_solve",
+         OptionType::Bool,
+         false,
+         "With pdhg_crossover: before the plain crossover, fix every column the first-order "
+         "point holds at a bound (with the reduced cost agreeing) at that bound and snap every "
+         "row whose activity sits on a bound to an equality there (within "
+         "pdhg_crossover_fix_tolerance), solve the restricted LP with the dual simplex under "
+         "presolve, release the fixed entries and run the crossover's push and primal loop "
+         "from the restricted vertex's basis (#888; Bixby & Saltzman 1994). The restricted LP "
+         "is a fraction of the model, so this skips the rank repair of a basis guessed off a "
+         "point that is not a vertex (409 s with no pivot on the 779,640-row refinery year). "
+         "A restricted LP that is infeasible, or a push that does not finish, falls back to "
+         "the plain crossover. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
+        {"pdhg_crossover_fix_tolerance",
+         OptionType::Double,
+         tol::kFixAndSolveAtBound,
+         "pdhg_crossover_fix_and_solve: how close to a bound, relative to its own size, an "
+         "entry of the first-order point must be to be fixed (a column) or snapped to an "
+         "equality (a row) there before the restricted LP is solved (#888).",
+         0.0,
+         1.0,
+         {}});
+    s.push_back(
+        {"pdhg_crossover_slack_push",
+         OptionType::Bool,
+         false,
+         "With pdhg_crossover, when the fix-and-solve route is off or fell back: run the "
+         "crossover's push from the slack basis instead of from a basis guessed off the "
+         "first-order point (#888; Bixby 1994): no guess, so no rank repair rounds; every "
+         "entry the point holds inside its bounds is pushed to one through the slack basis. "
+         "Off by default.",
          0.0,
          0.0,
          {}});
