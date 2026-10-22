@@ -8,6 +8,8 @@
 // points, so a disagreement cannot be blamed on the encoding.
 
 #include <cmath>
+#include <cstdint>
+#include <filesystem>
 #include <iostream>
 #include <random>
 #include <string>
@@ -19,6 +21,7 @@
 #include "sankhya/options.hpp"
 
 #include "presolve/substitute.hpp"
+#include "sankhya/io.hpp"
 #include "sankhya/logging.hpp"
 
 #include "oracles/lp_generator.hpp"
@@ -111,6 +114,37 @@ TEST(FuzzSubstitution, AChainOfDoubletonsIsSubstitutedAndUndone) {
   for (std::size_t i = 0; i < 4; ++i) EXPECT_NEAR(on.row_dual[i], off.row_dual[i], 1e-9);
   EXPECT_LE(on.dual_infeasibility, 1e-9);
   EXPECT_TRUE(basis_counts(on, model));
+}
+
+TEST(FuzzSubstitution, OnlyTheSimplexEverSeesASubstitutedModel) {
+  // #1125: under the interior point the crossover on cycle stopped short of a vertex and
+  // capri's dense-column directions lost accuracy on a substituted model, so the stage runs
+  // where a cold simplex solve starts and nowhere else: an explicit interior point or PDHG
+  // never reaches it, and in the race (deterministic: every engine runs, in order) only the
+  // dual simplex racer does. scorpion is a model the stage reduces by three quarters.
+  Model model;
+  const std::string path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+       "data/netlib/scorpion.mps")
+          .string();
+  ASSERT_TRUE(io::read_model(path, &model).ok) << path;
+  const auto run = [&](const std::vector<std::pair<std::string, std::string>>& extra) {
+    Options options;
+    options.set_bool("log_to_console", false);
+    std::string error;
+    for (const auto& [key, value] : extra) {
+      EXPECT_TRUE(options.set_from_string(key, value, &error)) << error;
+    }
+    const std::int64_t before = presolve::substitutions_applied_for_testing();
+    const Solution s = solve(model, options);
+    EXPECT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+    return presolve::substitutions_applied_for_testing() - before;
+  };
+  EXPECT_GE(run({{"algorithm", "dual-simplex"}}), 1);
+  EXPECT_EQ(run({{"algorithm", "ipm"}}), 0);
+  EXPECT_EQ(run({{"algorithm", "pdhg"}}), 0);
+  EXPECT_LE(run({{"engine_race", "true"}, {"deterministic", "true"}}), 1);
+  EXPECT_LE(run({{"algorithm", "auto"}}), 1);
 }
 
 TEST(FuzzSubstitution, KktInstancesWithEqualitiesKeepTheirOptimum) {

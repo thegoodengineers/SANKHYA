@@ -41,6 +41,8 @@
 // special ordered sets is returned unchanged.
 #pragma once
 
+#include <cstdint>
+#include <functional>
 #include <vector>
 
 #include "sankhya/logging.hpp"
@@ -93,5 +95,19 @@ struct SubstitutionResult {
 /// result.model, replaying the records in reverse.
 [[nodiscard]] Solution undo_substitution(const SubstitutionResult& result, const Model& input,
                                          const Solution& reduced);
+
+/// The stage around one simplex solve: `simplex` runs on the substituted model when
+/// presolve_substitution is on and the stage removed enough, else on `model` itself, and the
+/// answer comes back for `model`. Called where a cold LP simplex solve starts (src/core/
+/// solve.cpp, the dual simplex engine), so neither the interior point nor PDHG ever sees a
+/// substituted model, whichever way they were chosen (#1125: under them the crossover on
+/// cycle stopped short of a vertex and capri's dense-column directions lost accuracy).
+[[nodiscard]] Solution solve_substituted(const Model& model, const Options& options,
+                                         Logger& logger,
+                                         const std::function<Solution(const Model&)>& simplex);
+
+/// How many solves solve_substituted() has run on a substituted model, process-wide: the
+/// test that holds the interior point and PDHG off the stage reads it.
+[[nodiscard]] std::int64_t substitutions_applied_for_testing();
 
 }  // namespace sankhya::presolve

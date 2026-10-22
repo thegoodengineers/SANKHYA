@@ -75,6 +75,7 @@
 #include "exact/exact_verify.hpp"
 #include "mip/components.hpp"
 #include "mip/sos_reformulate.hpp"
+#include "presolve/substitute.hpp"
 #include "sankhya/certificate.hpp"
 #include "sankhya/ipm.hpp"
 #include "sankhya/logging.hpp"
@@ -1113,8 +1114,11 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
             polish_with_the_interior_point(&fallback, target, remaining, logger, control,
                                            timer);
           } else {
-            fallback = solve_dual_simplex(target, with_the_time_that_is_left(options), logger,
-                                          control);
+            const Options remaining = with_the_time_that_is_left(options);
+            fallback =
+                presolve::solve_substituted(target, remaining, logger, [&](const Model& lp) {
+                  return solve_dual_simplex(lp, remaining, logger, control);
+                });
           }
           const std::string note =
               fmt::format("the interior point declined ({}) and the solve fell back to {}",
@@ -1126,8 +1130,11 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         }
         return interior;
       }
-      return want_dual ? solve_dual_simplex(target, engine_options, logger, control)
-                       : solve_primal_simplex(target, engine_options, logger, control);
+      // The simplex, and only the simplex, runs on the substituted model (#1125).
+      return presolve::solve_substituted(target, engine_options, logger, [&](const Model& lp) {
+        return want_dual ? solve_dual_simplex(lp, engine_options, logger, control)
+                         : solve_primal_simplex(lp, engine_options, logger, control);
+      });
     };
 
     if (options.get_bool("gpu") && !want_pdhg) {

@@ -8,7 +8,9 @@
 // each step reads only values the steps before it have already restored, and a chain of
 // substitutions needs nothing beyond what one substitution needs.
 
+#include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -198,6 +200,25 @@ Solution undo_substitution(const SubstitutionResult& result, const Model& input,
   }
   out.recompute_quality(input);
   return out;
+}
+
+namespace {
+std::atomic<std::int64_t> applied_count{0};
+}  // namespace
+
+std::int64_t substitutions_applied_for_testing() {
+  return applied_count.load(std::memory_order_relaxed);
+}
+
+Solution solve_substituted(const Model& model, const Options& options, Logger& logger,
+                           const std::function<Solution(const Model&)>& simplex) {
+  if (!options.get_bool("presolve") || !options.get_bool("presolve_substitution")) {
+    return simplex(model);
+  }
+  const SubstitutionResult substituted = substitute(model, options, logger);
+  if (!substituted.reduced_anything()) return simplex(model);
+  applied_count.fetch_add(1, std::memory_order_relaxed);
+  return undo_substitution(substituted, model, simplex(substituted.model));
 }
 
 }  // namespace sankhya::presolve

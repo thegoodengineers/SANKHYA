@@ -25,6 +25,7 @@
 
 #include "core/deterministic_mode.hpp"
 #include "mip/components.hpp"
+#include "presolve/substitute.hpp"
 #include "simplex/crossover.hpp"
 #include "simplex/primal_simplex.hpp"
 
@@ -119,7 +120,10 @@ class DualSimplexEngine final : public SolverEngine {
       warm.row_status = control->start_row_status;
       solution = solve_dual_simplex(model, effective, logger, control, &warm);
     } else {
-      solution = solve_dual_simplex(model, effective, logger, control);
+      // A cold solve: the substitution stage applies here, to the simplex only (#1125).
+      solution = presolve::solve_substituted(model, effective, logger, [&](const Model& lp) {
+        return solve_dual_simplex(lp, effective, logger, control);
+      });
     }
     verify_and_keep_certificate(&solution, model, logger);
     return solution;
