@@ -170,9 +170,16 @@ def cuopt_worker(mps: Path, tolerance: float, time_limit: float, method: str,
                    for v in problem.getVariables()}
         rows = {c.ConstraintName: (0.0, float(getattr(c, "DualValue", 0.0)))
                 for c in problem.getConstraints()}
-        rivals.write_sol(sol, solver="cuopt", status=status, objective=out["objective"],
+        # PRIMAL ONLY, like SCIP in rivals.py: on afiro at 1e-4 cuOpt's DualValue and
+        # ReducedCost vectors close neither the reduced-cost identity nor strong duality in
+        # our convention under any sign choice (22 Oct 2026, the four combinations tried),
+        # so the file is written `feasible` and the verifier judges the point, its bounds,
+        # its rows and its objective, and skips the dual conditions. The duals are kept in
+        # the file as cuOpt gave them, for the record.
+        rivals.write_sol(sol, solver="cuopt", status="feasible", objective=out["objective"],
                          columns=columns, rows=rows,
-                         message=f"cuOpt {status_name}; row activities recomputed as A x")
+                         message=f"cuOpt {status_name}; primal only (its duals are not in "
+                                 "our convention); row activities recomputed as A x")
     return out
 
 
