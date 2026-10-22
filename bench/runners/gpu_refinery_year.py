@@ -294,6 +294,8 @@ def main() -> int:
                         help="solves per SANKHYA arm (median, min, max); HiGHS runs once")
     parser.add_argument("--no-gpu", action="store_true", help="CPU and HiGHS arms only")
     parser.add_argument("--no-highs", action="store_true")
+    parser.add_argument("--arms", nargs="+", default=None,
+                        help="only these arm labels (default: every arm)")
     parser.add_argument("--host-label", default="")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
@@ -341,6 +343,8 @@ def main() -> int:
         for arm in arms(args.cpu_threads, not args.no_gpu):
             label, engine, options = arm
             if (name, label) in done_keys or (engine == "highs" and args.no_highs):
+                continue
+            if args.arms and label not in args.arms:
                 continue
             if engine == "sankhya":
                 result = repeated(lambda: run_sankhya(args.binary, mps, options,
