@@ -303,10 +303,12 @@ TEST(ProximalSystem, TheResidualIsReportedRelativeToTheRightHandSide) {
       << "absolute " << refined.final_residual;
 }
 
-TEST(ProximalSystem, GmresCutsTheResidualWhereTheStationaryRefinementStalls) {
-  // pilot.ja under the option (#473): late in a run Theta^-1 << rho on the basic variables, the
-  // stationary refinement contracts by nearly 1 there and stalls above the target. GMRES on the
-  // same factors does not need a contraction.
+TEST(ProximalSystem, GmresRefusesACorrectionAlongANearNullVector) {
+  // One more variable with Theta^-1 << rho than there are rows: K_0 is nearly singular, the
+  // refinement stalls far above the target, and the residual GMRES could reach is reached only
+  // by a step far larger than the direction. That correction is refused (share2b without
+  // presolve stalled when it was kept, #473), and the solve is left as the refinement had it.
+  // GMRES's gain where it is kept is pilot.ja's, measured by the Netlib A/B.
   std::mt19937_64 rng(1473);
   std::uniform_real_distribution<double> value(-2.0, 2.0);
   const Index m = 5;
@@ -322,16 +324,16 @@ TEST(ProximalSystem, GmresCutsTheResidualWhereTheStationaryRefinementStalls) {
   const std::vector<bool> fixed(static_cast<std::size_t>(total), false);
   std::vector<double> theta_inverse(static_cast<std::size_t>(total));
   for (Index k = 0; k < total; ++k) {
-    theta_inverse[static_cast<std::size_t>(k)] = k % 2 == 0 ? 1e-10 : 1e4;
+    theta_inverse[static_cast<std::size_t>(k)] = k < m + 1 ? 1e-9 : 1e2;
   }
   std::vector<double> g(static_cast<std::size_t>(total)), r_b(static_cast<std::size_t>(m));
   for (double& v : g) v = value(rng);
   for (double& v : r_b) v = value(rng);
   ipm::ProximalSystem system(a, fixed);
   SparseLdl ldl;
-  system.assemble(theta_inverse, 1e-4, 1e-4);
+  system.assemble(theta_inverse, 1e-6, 1e-6);
   ASSERT_TRUE(ldl.analyze(system.matrix()));
-  double reg = 1e-4;
+  double reg = 1e-6;
   int attempts = 0;
   ASSERT_TRUE(system.factorize(ldl, theta_inverse, &reg, {}, &attempts));
   std::vector<double> dx(static_cast<std::size_t>(total)), dy(static_cast<std::size_t>(m));
@@ -340,10 +342,8 @@ TEST(ProximalSystem, GmresCutsTheResidualWhereTheStationaryRefinementStalls) {
   EXPECT_GT(stationary.relative_residual(), tol::kIpmProximalRefinementTarget);
   const ipm::ProximalSystem::Refinement krylov = system.solve(
       ldl, g, r_b, tol::kIpmProximalRefinementSteps, &dx, &dy, tol::kIpmProximalKrylovSteps);
-  EXPECT_GT(krylov.krylov_steps, 0);
-  // Theta^-1 spans fourteen decades here, so K_0 itself is that ill-conditioned: GMRES is
-  // held to a cut of four orders below the stalled refinement, not to the 1e-8 target.
-  EXPECT_LE(krylov.relative_residual(), 1e-4 * stationary.relative_residual());
+  EXPECT_EQ(krylov.krylov_steps, 0);
+  EXPECT_EQ(krylov.final_residual, stationary.final_residual);
 }
 
 TEST(SparseLdl, ADenseNodeIsPostponedToTheEndOfTheOrdering) {
