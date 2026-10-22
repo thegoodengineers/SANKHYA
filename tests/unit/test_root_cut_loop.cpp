@@ -295,6 +295,35 @@ TEST(RootCutLoop, ARoundIsOnlyTakenAfterOneThatGainedMoreThanTheTailingOffShare)
               checked, tailed);
 }
 
+TEST(RootCutLoop, SlackRowsGoToThePoolAndTheSearchStillReachesTheExactOptimum) {
+  // With the cut pool removing rows, the loop's slack rows leave the LP at the end of the
+  // root (a node that violates one gets it back). Every answer is held to the exact
+  // rational branch and bound, and some loop must actually have moved rows.
+  std::mt19937_64 rng(20261022);
+  Options options = root_cuts(true);
+  options.set_bool("mip_cut_pooling", true);
+  int solved = 0;
+  int moved = 0;
+  for (int trial = 0; trial < 120; ++trial) {
+    const oracle::GeneratedLp lp = binary_instance(rng, 14);
+    const oracle::OracleResult exact = oracle::solve_exact_milp(lp, 20000);
+    if (exact.status != oracle::OracleStatus::kOptimal) continue;
+    Solution s;
+    const std::string log = solve_logged(integer_model(lp), options, &s);
+    const double expected = exact.objective.to_double();
+    ASSERT_EQ(s.status, SolveStatus::kOptimal) << lp.to_text();
+    EXPECT_NEAR(s.objective, expected, 1e-6 * std::max(1.0, std::fabs(expected)))
+        << lp.to_text();
+    if (log.find("moved to the pool") != std::string::npos) ++moved;
+    ++solved;
+  }
+  EXPECT_GE(solved, 60);
+  EXPECT_GT(moved, 0) << "no loop moved a slack row to the pool";
+  std::printf(
+      "[  INFO    ] root cut loop with the pool: %d at the exact optimum, %d moved rows\n",
+      solved, moved);
+}
+
 TEST(RootCutLoop, ASearchWithTheLoopOnReachesTheExactOptimum) {
   // Pure-binary instances of 8 to 12 columns and random mixed-integer ones of 3 to 6: the
   // later rounds' Gomory cuts come from tableau rows that contain earlier cut rows, which is
