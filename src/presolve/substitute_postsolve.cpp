@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "presolve/dual_reduce.hpp"
 #include "presolve/substitute.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -212,13 +213,20 @@ std::int64_t substitutions_applied_for_testing() {
 
 Solution solve_substituted(const Model& model, const Options& options, Logger& logger,
                            const std::function<Solution(const Model&)>& simplex) {
-  if (!options.get_bool("presolve") || !options.get_bool("presolve_substitution")) {
-    return simplex(model);
-  }
-  const SubstitutionResult substituted = substitute(model, options, logger);
-  if (!substituted.reduced_anything()) return simplex(model);
-  applied_count.fetch_add(1, std::memory_order_relaxed);
-  return undo_substitution(substituted, model, simplex(substituted.model));
+  if (!options.get_bool("presolve")) return simplex(model);
+  const auto with_substitution = [&](const Model& lp) -> Solution {
+    if (!options.get_bool("presolve_substitution")) return simplex(lp);
+    const SubstitutionResult substituted = substitute(lp, options, logger);
+    if (!substituted.reduced_anything()) return simplex(lp);
+    applied_count.fetch_add(1, std::memory_order_relaxed);
+    return undo_substitution(substituted, lp, simplex(substituted.model));
+  };
+  // The forcing-row and dominated-column stage first (dual_reduce.hpp): it only removes,
+  // so the substitution sees a smaller model; undone last.
+  if (!options.get_bool("presolve_dual_reductions")) return with_substitution(model);
+  const DualReduceResult reduced = dual_reduce(model, options, logger);
+  if (!reduced.reduced_anything()) return with_substitution(model);
+  return undo_dual_reduce(reduced, model, with_substitution(reduced.model));
 }
 
 }  // namespace sankhya::presolve

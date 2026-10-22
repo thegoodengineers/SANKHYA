@@ -194,6 +194,7 @@ add_executable(sankhya_tests
   oracles/test_int128.cpp
   oracles/test_fuzz_against_oracle.cpp
   oracles/test_fuzz_substitution.cpp
+  oracles/test_fuzz_dual_reduce.cpp
   oracles/test_safe_bound.cpp
   oracles/test_batch_pdhg.cpp
   oracles/test_batch_bounds.cpp
