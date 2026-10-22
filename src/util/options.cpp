@@ -458,7 +458,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  "redundant rows that follow (src/presolve/dual_reduce.cpp; Andersen and "
                  "Andersen 1995, sec. 4 and 7; Gondzio 1997). Runs before "
                  "presolve_substitution on presolve's reduced model. ON since its A/B on "
-                 "5e05d71 (bench/results/option-ab-*-dual-reductions-5e05d71.csv): nothing "
+                 "be58c86 (bench/results/option-ab-*-dual-reductions-off-be58c86.csv, arms "
+                 "inverted): nothing "
                  "lost, SGM iterations -5% Netlib, -1% Kennington, -2% refinery.",
                  0.0,
                  0.0,
