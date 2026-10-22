@@ -1553,7 +1553,11 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
     was_phase_one = phase_one;
 
     iterations_seen_ = iterations;
-    compute_reduced_costs(phase_one);
+    {
+      const ProfileScope timed(logger_.profiler(), "primal reduced costs",
+                               ProfileMode::kDetailed);
+      compute_reduced_costs(phase_one);
+    }
 
     if (iterations % 20 == 0) {
       logger_.iteration(iterations, minimization_objective(), infeasibility, -1.0,
