@@ -38,6 +38,7 @@ Options pdhg_options(bool parallel, int threads) {
   options.set_bool("presolve", false);
   options.set_string("algorithm", "pdhg");
   options.set_bool("pdhg_polish", false);
+  options.set_bool("pdhg_relative_stop", false);  // the engine alone, to the standard (#1163)
   options.set_double("pdhg_tolerance", 1e-6);
   options.set_int("iteration_limit", 20000);
   options.set_bool("pdhg_parallel_spmv", parallel);

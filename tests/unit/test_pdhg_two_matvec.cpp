@@ -38,6 +38,7 @@ Options pdhg_options(bool two_matvec) {
   options.set_bool("presolve", false);
   options.set_string("algorithm", "pdhg");
   options.set_bool("pdhg_polish", false);
+  options.set_bool("pdhg_relative_stop", false);  // the engine alone, to the standard (#1163)
   options.set_double("pdhg_tolerance", 1e-8);
   options.set_string("pdhg_two_matvec", two_matvec ? "true" : "false");
   return options;

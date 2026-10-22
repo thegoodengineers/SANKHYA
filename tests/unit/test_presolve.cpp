@@ -638,6 +638,7 @@ TEST(Presolve, AnEngineWithoutABasisHasNoneAfterPostsolveUnlessPresolveBuiltItAl
     options.set_string("algorithm", algorithm);
     options.set_bool("crossover", false);
     options.set_bool("pdhg_polish", false);
+    options.set_bool("pdhg_relative_stop", false);  // the engine alone, to the standard (#1163)
     const Solution s = solve(afiro, options);
     ASSERT_EQ(s.status, SolveStatus::kOptimal) << algorithm << ": " << s.message;
     EXPECT_TRUE(s.col_status.empty()) << algorithm << " reported a basis";
