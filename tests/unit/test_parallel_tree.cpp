@@ -623,16 +623,22 @@ TEST(ParallelTree, RepeatedGenIp016SolvesUnderLoadNeverEndInNumericalError) {
   const unsigned cores = std::max(1u, std::thread::hardware_concurrency());
   const BackgroundLoad load(cores * 3);
 
-  const int kThreads = 4;
-  // 40 trials by default; SANKHYA_STRESS_TRIALS=N runs N (the 200-trial TSan hunt of #733
-  // under a shared box's own load), always from the same first seed, so a failing seed is
-  // one a plain 40-trial run of the same build visits too when N <= 40.
-  const char* trials_env = std::getenv("SANKHYA_STRESS_TRIALS");
-  const int kTrials = trials_env != nullptr ? std::max(1, std::atoi(trials_env)) : 40;
+  // Defaults: 4 threads, 40 trials of 2 s from seed 733100. The env knobs serve the
+  // tsan-stress workflow (#733): SANKHYA_STRESS_TRIALS, SANKHYA_STRESS_THREADS,
+  // SANKHYA_STRESS_SECONDS (60 as in the original failure) and SANKHYA_STRESS_SEED0 (a
+  // shard's first seed). A failing seed is reproducible from the failure message alone.
+  const auto env_int = [](const char* name, int fallback) {
+    const char* value = std::getenv(name);
+    return value != nullptr ? std::max(1, std::atoi(value)) : fallback;
+  };
+  const int kThreads = env_int("SANKHYA_STRESS_THREADS", 4);
+  const int kTrials = env_int("SANKHYA_STRESS_TRIALS", 40);
+  const double kSeconds = env_int("SANKHYA_STRESS_SECONDS", 2);
+  const auto seed0 = static_cast<std::uint32_t>(env_int("SANKHYA_STRESS_SEED0", 733100));
   for (int trial = 0; trial < kTrials; ++trial) {
-    const std::uint32_t seed = 733100u + static_cast<std::uint32_t>(trial);
+    const std::uint32_t seed = seed0 + static_cast<std::uint32_t>(trial);
     Options options = on_threads(kThreads);
-    options.set_double("time_limit", 2.0);
+    options.set_double("time_limit", kSeconds);
     options.set_int("random_seed", static_cast<int>(seed));
     const Solution solved = solve(model, options);
     ASSERT_NE(solved.status, SolveStatus::kNumericalError)

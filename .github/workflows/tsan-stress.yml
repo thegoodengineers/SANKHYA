@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: Apache-2.0
+# SANKHYA - the #733 hunt: gen-ip016 under clang ThreadSanitizer, 60 s trials, oversubscribed.
+#
+# #733 is one numerical_error on gen-ip016 at mip_threads=4 on a loaded box with a 60 s limit.
+# Every local hunt was negative, and GCC 11's libtsan does not intercept
+# pthread_cond_clockwait (what libstdc++'s condition_variable::wait_for calls), so it reported
+# false races on the queue mutex. clang's libtsan intercepts it.
+#
+# Each job runs ParallelTree.RepeatedGenIp016SolvesUnderLoadNeverEndInNumericalError: the test
+# itself starts 3 x nproc busy spinners, and stress-ng adds nproc CPU hogs plus a memory hog
+# beside it. TSan halts on its first report, and the test fails on the first numerical_error,
+# with the seed in the message. Shards take disjoint seed ranges.
+#
+# Dispatch only: a 4 h hunt is not a pull-request gate.
+
+name: tsan-stress
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: commit, branch or tag to build
+        default: main
+        required: true
+      trials:
+        description: trials per job (60 s each; keep under ~300 for the 6 h job limit)
+        default: "240"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    name: gen-ip016 mip_threads=${{ matrix.threads }} shard ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        threads: [4, 8]
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build zlib1g-dev clang stress-ng
+          clang++ --version
+
+      # -Werror is held on GCC (the other jobs); clang's extra warnings in the tests (an unused
+      # const, for one) are not this job's question, so a wrapper appends -Wno-error after
+      # the project's flags, where it wins.
+      - name: Build under clang TSan
+        run: |
+          printf '#!/bin/sh\nexec clang++ "$@" -Wno-error\n' > "$RUNNER_TEMP/clang++"
+          chmod +x "$RUNNER_TEMP/clang++"
+          cmake -G Ninja -B build \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER="$RUNNER_TEMP/clang++" \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSANKHYA_TSAN=ON -DSANKHYA_WITH_OPENMP=OFF -DSANKHYA_BUILD_TESTS=ON
+          cmake --build build -j --target sankhya_tests
+
+      - name: Stress run
+        env:
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+          SANKHYA_STRESS: "1"
+          SANKHYA_STRESS_THREADS: ${{ matrix.threads }}
+          SANKHYA_STRESS_SECONDS: "60"
+          SANKHYA_STRESS_TRIALS: ${{ inputs.trials || '240' }}
+        run: |
+          set -u
+          export SANKHYA_STRESS_SEED0=$((733100 + 10000 * ${{ matrix.threads }} + 1000 * ${{ matrix.shard }}))
+          echo "machine $(nproc) vCPU $(lscpu | sed -n 's/^Model name: *//p' | head -1)"
+          echo "commit $(git rev-parse HEAD) seeds from $SANKHYA_STRESS_SEED0, $SANKHYA_STRESS_TRIALS trials"
+          stress-ng --cpu "$(nproc)" --vm 1 --vm-bytes 20% --timeout 0 --quiet &
+          hog=$!
+          set +e
+          ./build/tests/sankhya_tests \
+            --gtest_filter=ParallelTree.RepeatedGenIp016SolvesUnderLoadNeverEndInNumericalError \
+            2>&1 | tee "$RUNNER_TEMP/run.log"
+          status=${PIPESTATUS[0]}
+          kill "$hog" || true
+          exit "$status"
+
+      - name: Upload the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsan-stress-${{ matrix.threads }}-${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/run.log
