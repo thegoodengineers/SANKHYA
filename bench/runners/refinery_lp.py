@@ -84,7 +84,8 @@ def main() -> int:
             "wall_seconds": round(blob.get("wall_seconds", 0.0), 6),
             "solver_seconds": blob.get("solver_seconds", ""),
             "iterations": blob.get("iterations", ""), "algorithm": blob.get("algorithm", ""),
-            **kkt_crossings.crossings(blob),  # #486: blank for an engine other than PDHG
+            # #486: run_one flattened the crossings already; blank for an engine other than PDHG.
+            **{k: blob.get(k, "") for k in kkt_crossings.ALL_COLUMNS},
             "git_commit": commit, "solver_options": options, "machine": machine,
             "timestamp_utc": timestamp,
         })
