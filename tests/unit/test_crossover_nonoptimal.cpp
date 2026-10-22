@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include "core/pdhg_fix_and_solve.hpp"
 #include "sankhya/io.hpp"
 #include "sankhya/ipm.hpp"
 #include "sankhya/logging.hpp"
@@ -26,8 +27,8 @@
 #include "sankhya/options.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
-#include "core/pdhg_fix_and_solve.hpp"
 #include "simplex/crossover.hpp"
+#include "staircase_model.hpp"
 
 namespace sankhya {
 namespace {
@@ -213,7 +214,10 @@ TEST(CrossoverFromNonoptimal, FixAndSolveRouteEndsOptimalAtAVertexAndFixesSometh
 
   // The classification fixes something on a real point: the optimal vertex itself holds
   // every nonbasic column at a bound with an agreeing reduced cost.
-  EXPECT_GT(count_fixable_columns(model, crossed), 0);
+  const FixAndSolveClassification c =
+      classify_for_fix_and_solve(model, crossed, tol::kFixAndSolveAtBound);
+  EXPECT_GT(c.cols_fixed, 0);
+  EXPECT_GT(c.cols_fixed + c.rows_snapped, model.num_rows());
 }
 
 TEST(CrossoverFromNonoptimal, TheGateRefusesWhatIsNotAUsablePoint) {
@@ -303,6 +307,43 @@ TEST(CrossoverFromNonoptimal, TheTimeReserveAppliesOnlyWhenTheOptionIsOnAndTheLi
   const Options no_limit = ipm_options(true);
   EXPECT_EQ(interior_point_options_before_crossover(no_limit).get_double("time_limit"),
             no_limit.get_double("time_limit"));
+}
+
+TEST(CrossoverFromNonoptimal, FixAndSolveOnAMidSizeStaircaseMatchesTheColdSolve) {
+  // #888 on a multi-period model of the refinery's shape (6,000 rows): the vertex the route
+  // reaches verifies at the project tolerances and sits at the cold dual simplex's objective,
+  // and it came through the restricted LP, not through the plain crossover's fallback.
+  const Model model = staircase(2000);
+  Options cold;
+  cold.set_bool("log_to_console", false);
+  cold.set_string("algorithm", "dual-simplex");
+  const Solution reference = solve(model, cold);
+  ASSERT_EQ(reference.status, SolveStatus::kOptimal) << reference.message;
+
+  Options on;
+  on.set_bool("log_to_console", false);
+  on.set_string("algorithm", "pdhg");
+  on.set_bool("pdhg_polish", false);
+  on.set_double("pdhg_tolerance", 1e-6);
+  on.set_bool("pdhg_crossover", true);
+  on.set_bool("pdhg_crossover_fix_and_solve", true);
+  const Solution crossed = solve(model, on);
+  ASSERT_EQ(crossed.status, SolveStatus::kOptimal) << crossed.message;
+  EXPECT_EQ(crossed.message.rfind("fix-and-solve (#888)", 0), 0U) << crossed.message;
+  EXPECT_NEAR(crossed.objective, reference.objective,
+              1e-9 * std::max(1.0, std::fabs(reference.objective)));
+  expect_a_verified_vertex(model, crossed, "staircase(2000), PDHG then fix-and-solve");
+
+  // The push from the slack basis (pdhg_crossover_slack_push), the route that won the
+  // T = 365 refinery A/B: no basis guess, every interior entry walked to a bound.
+  Options slack = on;
+  slack.set_bool("pdhg_crossover_fix_and_solve", false);
+  slack.set_bool("pdhg_crossover_slack_push", true);
+  const Solution pushed = solve(model, slack);
+  ASSERT_EQ(pushed.status, SolveStatus::kOptimal) << pushed.message;
+  EXPECT_NEAR(pushed.objective, reference.objective,
+              1e-9 * std::max(1.0, std::fabs(reference.objective)));
+  expect_a_verified_vertex(model, pushed, "staircase(2000), PDHG then the slack-basis push");
 }
 
 }  // namespace

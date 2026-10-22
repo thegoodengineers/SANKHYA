@@ -1836,6 +1836,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.9,
                  {}});
+    s.push_back({"crossover_triangular_guess",
+                 OptionType::Bool,
+                 false,
+                 "Build the crossover's basis guess by a triangular crash over the entries the "
+                 "point holds inside their bounds (#888; Bixby 1992): nonsingular by "
+                 "construction in one pass over the nonzeros, so the rank repair's "
+                 "factorization rounds never run. Off by default: the guess from a barrier "
+                 "point is taken by slack and repaired, as before.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"crossover_pivots_per_dimension",
                  OptionType::Double,
                  tol::kCrossoverPivotsPerDimension,
@@ -2575,13 +2586,37 @@ const std::vector<OptionSpec>& Options::registry() {
          OptionType::Bool,
          false,
          "With pdhg_crossover: before the plain crossover, fix every column the first-order "
-         "point holds at a bound (with the reduced cost agreeing) at that bound, solve the "
-         "restricted LP with the dual simplex under presolve, release the fixed columns and "
-         "run the crossover from that vertex (#888; Bixby & Saltzman 1994). The restricted LP "
+         "point holds at a bound (with the reduced cost agreeing) at that bound and snap every "
+         "row whose activity sits on a bound to an equality there (within "
+         "pdhg_crossover_fix_tolerance), solve the restricted LP with the dual simplex under "
+         "presolve, release the fixed entries and run the crossover's push and primal loop "
+         "from the restricted vertex's basis (#888; Bixby & Saltzman 1994). The restricted LP "
          "is a fraction of the model, so this skips the rank repair of a basis guessed off a "
          "point that is not a vertex (409 s with no pivot on the 779,640-row refinery year). "
-         "A restricted LP that is infeasible, or a crossover that does not finish, falls back "
-         "to the plain crossover. Off by default until an A/B on main.",
+         "A restricted LP that is infeasible, or a push that does not finish, falls back to "
+         "the plain crossover. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
+        {"pdhg_crossover_fix_tolerance",
+         OptionType::Double,
+         tol::kFixAndSolveAtBound,
+         "pdhg_crossover_fix_and_solve: how close to a bound, relative to its own size, an "
+         "entry of the first-order point must be to be fixed (a column) or snapped to an "
+         "equality (a row) there before the restricted LP is solved (#888).",
+         0.0,
+         1.0,
+         {}});
+    s.push_back(
+        {"pdhg_crossover_slack_push",
+         OptionType::Bool,
+         false,
+         "With pdhg_crossover, when the fix-and-solve route is off or fell back: run the "
+         "crossover's push from the slack basis instead of from a basis guessed off the "
+         "first-order point (#888; Bixby 1994): no guess, so no rank repair rounds; every "
+         "entry the point holds inside its bounds is pushed to one through the slack basis. "
+         "Off by default.",
          0.0,
          0.0,
          {}});

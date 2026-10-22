@@ -70,7 +70,20 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
           !is_finite_bound(lower_[u]) || v - lower_[u] > primal_tolerance_ * scale;
       const bool inside_upper =
           !is_finite_bound(upper_[u]) || upper_[u] - v > primal_tolerance_ * scale;
-      if (!inside_lower || !inside_upper) continue;
+      if (!inside_lower || !inside_upper) {
+        // On a bound: the one the POINT is on, not the one the warm start named or
+        // set_initial_basis() picked nearest to zero (#888). A slack-basis start sent every
+        // column the point held at its upper bound to its lower one, and x_B then missed
+        // the point by 1.7e+02 on the refinery at T = 365.
+        if (!inside_lower) {
+          status_[u] = BasisStatus::kAtLower;
+          nonbasic_value_[u] = lower_[u];
+        } else {
+          status_[u] = BasisStatus::kAtUpper;
+          nonbasic_value_[u] = upper_[u];
+        }
+        continue;
+      }
       nonbasic_value_[u] = v;
       superbasic.push_back(k);
     }
