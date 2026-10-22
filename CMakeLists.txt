@@ -152,9 +152,11 @@ if(MSVC)
   if(SANKHYA_ENABLE_CUDA)
     # CCCL (bundled with CUDA toolkit) requires the conforming preprocessor; pass it
     # to the host compiler for all CUDA translation units. fmt 12 asserts /utf-8 under
-    # MSVC; its target adds it for CXX only, so CUDA units need it passed through too.
+    # MSVC; nvcc's own front end evaluates that assert and never sees a host flag, so
+    # CUDA units build fmt without its Unicode support (they format no text).
     target_compile_options(sankhya_flags INTERFACE
       "$<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor;-Xcompiler=/utf-8>")
+    target_compile_definitions(sankhya_flags INTERFACE "$<$<COMPILE_LANGUAGE:CUDA>:FMT_UNICODE=0>")
   endif()
 else()
   set(SANKHYA_GCC_WARNINGS
