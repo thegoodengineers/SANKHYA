@@ -420,6 +420,15 @@ inline constexpr double kCrossoverStartInfeasibility = 1e-4;
 /// was cre-a's 0.27. 10 leaves almost four times the worst. cycle's failing push (221,027
 /// pivots, 57 per row and column of its presolved model) is stopped at 38,920.
 inline constexpr double kCrossoverPivotsPerDimension = 10.0;
+
+/// How close to a bound, relative to the entry's own size, the fix-and-solve route (#888,
+/// core/pdhg_fix_and_solve.cpp) reads a first-order point as "at" it: such a column is fixed
+/// there and such a row snapped to an equality there before the restricted LP is solved.
+/// The same fraction crossover_guess() calls nonbasic-at-bound. Loose on purpose, as there:
+/// an entry fixed wrongly costs the primal loop a pivot after the release, and at worst an
+/// infeasible restricted LP, which falls back to the plain crossover; one left free costs
+/// the restricted LP a column. Overridden by pdhg_crossover_fix_tolerance.
+inline constexpr double kFixAndSolveAtBound = 1e-6;
 inline constexpr double kPdhgTight = 1e-8;
 
 /// The LP PDHG's restart criteria on the relative KKT error of the restart candidate

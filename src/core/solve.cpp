@@ -64,8 +64,8 @@
 #include "core/engine_selection.hpp"
 #include "core/iis.hpp"
 #include "core/kkt_check.hpp"
-#include "core/pdhg_fix_and_solve.hpp"
 #include "core/lp_safe_bound.hpp"
+#include "core/pdhg_fix_and_solve.hpp"
 #include "core/prescale.hpp"
 #include "core/presolve_pipeline.hpp"
 #include "core/resource_limits.hpp"
@@ -391,7 +391,17 @@ void crossover_after_pdhg(Solution* first, const Model& model, const Options& op
   Options wanted = options;
   wanted.set_bool("crossover", true);
   wanted.set_bool("crossover_from_nonoptimal", true);
-  *first = crossover_to_vertex(model, std::move(*first), wanted, logger, control, timer);
+  if (options.get_bool("pdhg_crossover_slack_push") &&
+      crossover_start_is_usable(model, *first)) {
+    // The push from the SLACK basis (Bixby 1994, sec. 4): no basis guessed off the point,
+    // so no rank repair; every entry the point holds inside its bounds is superbasic and
+    // walked to a bound through the slack basis, one ratio test each.
+    logger.info("Crossover (#888): the push from the slack basis, no basis guess");
+    *first = crossover_push_from_basis(model, std::move(*first), WarmStart{}, wanted, logger,
+                                       control, timer);
+  } else {
+    *first = crossover_to_vertex(model, std::move(*first), wanted, logger, control, timer);
+  }
   // PDHG stopped on the relative request alone for this route, so its `feasible` is not
   // the promise that word makes: when the crossover did not reach a vertex, the claim is
   // withdrawn and the point stands as a stopped iterate.
