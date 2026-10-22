@@ -320,6 +320,19 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {"auto", "harris", "textbook"}});
+    s.push_back({"dual_adaptive_boxing",
+                 OptionType::Bool,
+                 false,
+                 "Dual simplex (#1006): the artificial bound a dual infeasible column is "
+                 "parked on is sized from the model (1e3 times its largest finite bound, "
+                 "capped at the flat 1e6) and released as soon as the column leaves it, and "
+                 "the Harris cost shifts are removed, the basis refactorized and the loop "
+                 "resumed once 1,000 of them have accumulated (Koberstein 2005, sec. 4.5 and "
+                 "6.2; Maros ch. 9). Off: a flat 1e6 box kept until the end, shifts kept "
+                 "until the end. OFF until its A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"dual_perturb_costs_at_start",
                  OptionType::Bool,
                  false,

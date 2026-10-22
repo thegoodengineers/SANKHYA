@@ -312,6 +312,12 @@ class Simplex {
   /// Move cost_[k] (and reduced_cost_[k] with it) by `amount`, saving the exact costs the
   /// first time any cost moves; remove_cost_perturbation() undoes every shift (#465).
   void shift_cost(Index k, double amount);
+  /// Put the exact costs under every Harris shift back, keeping the perturbation if one is
+  /// on, and recompute the reduced costs (dual_adaptive_boxing).
+  void remove_cost_shifts();
+  /// Restore column k's real bounds when it no longer sits on its artificial one: basic,
+  /// or parked on the other side (dual_adaptive_boxing).
+  void release_artificial_bound(Index k);
   void reset_dual_weights();
   /// Dual steepest edge (#411): every weight set to the exact squared norm of its row of
   /// B^-1, one BTRAN per row. The slack basis has them all at 1 without the solves.
@@ -497,7 +503,13 @@ class Simplex {
   /// model's, and no optimum is claimed from the dual loop while one is set.
   bool cost_shifted_ = false;
   Count cost_shifts_ = 0;
-  bool dual_harris_ = false;                             ///< dual_ratio_test=harris
+  bool dual_harris_ = false;  ///< dual_ratio_test=harris
+  /// dual_adaptive_boxing (#1006): the artificial bound sized from the model and released
+  /// as soon as a column leaves it, and the Harris shifts removed once
+  /// kDualShiftResetLimit of them have accumulated since the last removal.
+  bool dual_adaptive_boxing_ = false;
+  Count shifts_at_reset_ = 0;
+  double artificial_bound_ = 0.0;  ///< the width used by make_dual_feasible()
   const std::vector<double>* original_costs_ = nullptr;  ///< see count_distinct_costs_on()
 
   /// Number of basis columns swapped for logicals to escape a singular basis (#34).

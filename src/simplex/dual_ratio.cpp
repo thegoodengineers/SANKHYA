@@ -501,6 +501,18 @@ bool Simplex::perturb_costs_at_start() {
   return true;
 }
 
+void Simplex::remove_cost_shifts() {
+  if (!cost_shifted_) return;
+  cost_ = unperturbed_cost_;
+  cost_shifted_ = false;
+  if (cost_perturbed_) {
+    cost_perturbed_ = false;  // perturb_costs() puts the same perturbation back
+    perturb_costs();
+  } else {
+    compute_reduced_costs(false);
+  }
+}
+
 void Simplex::remove_cost_perturbation() {
   if (!cost_perturbed_ && !cost_shifted_) return;
   cost_ = unperturbed_cost_;

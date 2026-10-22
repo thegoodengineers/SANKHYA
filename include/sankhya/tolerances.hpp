@@ -357,6 +357,16 @@ inline constexpr int kPolishCandidates = 8;
 /// kPrimalFeasibility so that a marginally infeasible basic variable does not block a pivot.
 inline constexpr double kRatioTestFeasibility = 1e-9;
 
+/// The dual simplex's artificial bounds under dual_adaptive_boxing (dual_simplex.cpp;
+/// Koberstein 2005 sec. 4.5, Maros ch. 9): the box width is this factor times the largest
+/// finite bound of the working problem (at least 1), capped at the flat 1e6 the default
+/// uses, so a column parked on it sits a model's own scale away rather than 1e6; and once
+/// this many Harris cost shifts have accumulated since the last removal the shifts are
+/// removed, the basis refactorized and the loop resumed, the shifted reduced costs being
+/// inside the dual tolerance without them.
+inline constexpr double kDualArtificialBoundFactor = 1e3;
+inline constexpr int kDualShiftResetLimit = 1000;
+
 /// Bound relaxation for the Harris two-pass ratio test (issue #67). Pass one finds the
 /// tightest step allowed if every candidate row's bound were loosened by this much; pass two
 /// then picks, among the rows whose EXACT (unrelaxed) step still fits under that limit, the

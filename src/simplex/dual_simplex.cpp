@@ -138,6 +138,19 @@ constexpr int kRefutedFeasibilityLimit = 20;
 void Simplex::make_dual_feasible() {
   artificial_lower_.assign(static_cast<std::size_t>(total_), 0);
   artificial_upper_.assign(static_cast<std::size_t>(total_), 0);
+  // THE BOX WIDTH (dual_adaptive_boxing): the model's own scale times a factor, capped at
+  // the flat value, so a column parked on the box, and the primal phase 1 a hand-over
+  // starts from it, is not 1e6 away on a model whose bounds are of order one.
+  artificial_bound_ = kArtificialBound;
+  if (dual_adaptive_boxing_) {
+    double largest = 1.0;
+    for (Index k = 0; k < total_; ++k) {
+      const auto u = static_cast<std::size_t>(k);
+      if (is_finite_bound(lower_[u])) largest = std::max(largest, std::fabs(lower_[u]));
+      if (is_finite_bound(upper_[u])) largest = std::max(largest, std::fabs(upper_[u]));
+    }
+    artificial_bound_ = std::min(kArtificialBound, tol::kDualArtificialBoundFactor * largest);
+  }
   Count boxed = 0;
   Count flipped = 0;
   for (Index k = 0; k < total_; ++k) {
@@ -148,7 +161,7 @@ void Simplex::make_dual_feasible() {
       case BasisStatus::kAtLower:
         if (d < -dual_tolerance_) {
           if (!is_finite_bound(upper_[u])) {
-            upper_[u] = lower_[u] + kArtificialBound;
+            upper_[u] = lower_[u] + artificial_bound_;
             artificial_upper_[u] = 1;
             ++boxed;
           }
@@ -160,7 +173,7 @@ void Simplex::make_dual_feasible() {
       case BasisStatus::kAtUpper:
         if (d > dual_tolerance_) {
           if (!is_finite_bound(lower_[u])) {
-            lower_[u] = upper_[u] - kArtificialBound;
+            lower_[u] = upper_[u] - artificial_bound_;
             artificial_lower_[u] = 1;
             ++boxed;
           }
@@ -174,8 +187,8 @@ void Simplex::make_dual_feasible() {
         // sides and parked on the side its sign admits; it enters the basis at the first
         // pivot that can use it, and stays there as a rule.
         if (std::fabs(d) > dual_tolerance_) {
-          lower_[u] = -kArtificialBound;
-          upper_[u] = kArtificialBound;
+          lower_[u] = -artificial_bound_;
+          upper_[u] = artificial_bound_;
           artificial_lower_[u] = 1;
           artificial_upper_[u] = 1;
           ++boxed;
@@ -219,6 +232,26 @@ bool Simplex::any_artificial_bound_active() const {
     if (status_[u] == BasisStatus::kAtUpper && artificial_upper_[u] != 0) return true;
   }
   return false;
+}
+
+void Simplex::release_artificial_bound(Index k) {
+  const auto u = static_cast<std::size_t>(k);
+  if (artificial_lower_[u] == 0 && artificial_upper_[u] == 0) return;
+  // Still parked on the artificial side: the box is doing its job.
+  if (basis_position_[u] < 0) {
+    if (status_[u] == BasisStatus::kAtLower && artificial_lower_[u] != 0) return;
+    if (status_[u] == BasisStatus::kAtUpper && artificial_upper_[u] != 0) return;
+  }
+  if (k < n_) {
+    if (artificial_lower_[u] != 0) lower_[u] = model_.col_lower[u];
+    if (artificial_upper_[u] != 0) upper_[u] = model_.col_upper[u];
+  } else {
+    const auto r = static_cast<std::size_t>(k - n_);
+    if (artificial_lower_[u] != 0) lower_[u] = model_.row_lower[r];
+    if (artificial_upper_[u] != 0) upper_[u] = model_.row_upper[r];
+  }
+  artificial_lower_[u] = 0;
+  artificial_upper_[u] = 0;
 }
 
 void Simplex::remove_artificial_bounds() {
@@ -564,6 +597,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   pivot_row_single_thread_ = true;  // no thread pool: the gather is serial whatever was asked
 #endif
   compute_reduced_costs(false);
+  dual_adaptive_boxing_ = options_.get_bool("dual_adaptive_boxing");  // read by the boxing
   make_dual_feasible();
   rebuild_infeasible_list();
   reset_dual_weights();
@@ -573,6 +607,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   // perturbation is still off by default until its own.
   const std::string ratio_rule = options_.get_string("dual_ratio_test");
   dual_harris_ = ratio_rule == "harris" || ratio_rule == "auto";
+  shifts_at_reset_ = cost_shifts_;
   // Which rule each dual solve ran under, for whoever reads the counters: the test that
   // pins LP solves to Harris and branch-and-bound LPs to textbook reads exactly these.
   if (Profiler* profiler = logger_.profiler();
@@ -819,8 +854,34 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
         x_basic_[s] += flip_rhs_[s];
         note_slot(i);
       }
+      // A column that flipped off its artificial bound is dual feasible on its real one
+      // from now on; the box has done its job (dual_adaptive_boxing).
+      if (dual_adaptive_boxing_) {
+        for (const Index k : ratio.flips) release_artificial_bound(k);
+      }
       charge(6);
     }
+    // The flips of this iteration taken back: a flip without its step leaves the flipped
+    // column's reduced cost on the wrong side. flip_rhs_ still holds B^-1 times the flips'
+    // change to -N x_N.
+    const auto undo_flips = [&]() {
+      if (ratio.flips.empty()) return;
+      for (const Index k : ratio.flips) {
+        const auto u = static_cast<std::size_t>(k);
+        if (status_[u] == BasisStatus::kAtLower) {
+          status_[u] = BasisStatus::kAtUpper;
+          nonbasic_value_[u] = upper_[u];
+        } else {
+          status_[u] = BasisStatus::kAtLower;
+          nonbasic_value_[u] = lower_[u];
+        }
+        --bound_flips_;
+      }
+      for (Index i = 0; i < m_; ++i) {
+        x_basic_[static_cast<std::size_t>(i)] -= flip_rhs_[static_cast<std::size_t>(i)];
+      }
+      rebuild_infeasible_list();
+    };
 
     const double x_now = x_basic_[static_cast<std::size_t>(leaving_slot)];
     const double target = to_upper ? upper_[l] : lower_[l];
@@ -929,24 +990,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       // made for its step are undone - the step is not taken, and a flip without its step
       // leaves the flipped column's reduced cost on the wrong side - and the loop prices again.
       // When every infeasible row has been set aside, the hand-over above still happens.
-      if (!ratio.flips.empty()) {
-        for (const Index k : ratio.flips) {
-          const auto u = static_cast<std::size_t>(k);
-          if (status_[u] == BasisStatus::kAtLower) {
-            status_[u] = BasisStatus::kAtUpper;
-            nonbasic_value_[u] = upper_[u];
-          } else {
-            status_[u] = BasisStatus::kAtLower;
-            nonbasic_value_[u] = lower_[u];
-          }
-          --bound_flips_;
-        }
-        // flip_rhs_ still holds B^-1 times the flips' change to -N x_N.
-        for (Index i = 0; i < m_; ++i) {
-          x_basic_[static_cast<std::size_t>(i)] -= flip_rhs_[static_cast<std::size_t>(i)];
-        }
-        rebuild_infeasible_list();
-      }
+      undo_flips();
       dual_row_rejected_[static_cast<std::size_t>(leaving_slot)] = 1;
       ++dual_rows_rejected_now_;
       ++dual_row_rejections_;
@@ -966,6 +1010,23 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       const double d = reduced_cost_[e];
       const double a = (to_upper ? 1.0 : -1.0) * pivot_by_row;
       if (a > 0.0 ? d < 0.0 : d > 0.0) shift_cost(entering, -d);
+      // SHIFTS ACCUMULATED PAST THE LIMIT (dual_adaptive_boxing; Koberstein 2005, sec.
+      // 6.2.2: remove the shifts, refactorize and go on). A shift leaves the column at a
+      // reduced cost of exactly zero, the first breakpoint of every later row that touches
+      // it, and on pilot87 the loop re-entered such columns 7,793 times in 17,575 pivots.
+      // Without the shifts every reduced cost is within kDualHarrisRelaxation of the sign
+      // its status needs, inside the dual tolerance, so the loop resumes dual feasible;
+      // the pivot in hand and its flips are given up and the row priced again.
+      if (dual_adaptive_boxing_ &&
+          cost_shifts_ - shifts_at_reset_ >= static_cast<Count>(tol::kDualShiftResetLimit)) {
+        logger_.verbose("iteration {}: {} Harris cost shifts since the last removal; removed",
+                        iterations, cost_shifts_ - shifts_at_reset_);
+        undo_flips();
+        remove_cost_shifts();
+        shifts_at_reset_ = cost_shifts_;
+        if (!refresh()) return singular();
+        continue;
+      }
     }
 
     // Dual step length: the duals move by this much along rho below, and the stall counter
@@ -1011,6 +1072,8 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     status_[e] = BasisStatus::kBasic;
     nonbasic_value_[e] += delta;
     swap_nonbasic(entering, leaving);
+    // Basic now: its real bounds are what its infeasibility is measured against.
+    if (dual_adaptive_boxing_) release_artificial_bound(entering);
 
     // UPDATE, DO NOT RECOMPUTE (#210). Every iteration used to end with a fresh FTRAN and a
     // pass over the nonzeros for x_B, and a fresh BTRAN and a pass over every column for d
