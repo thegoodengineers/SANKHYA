@@ -284,7 +284,11 @@ TEST(Certificate, AnInfeasibilityPresolveProvesWithoutAProofIsRetriedForOne) {
   // could not supply is retried once against the original model, and the retry's verified
   // certificate is what comes back. Without the retry this model has no certificate.
   const Model model = galenet();
-  const Solution solution = solve(model, quiet(/*presolve=*/true));
+  // With the dual reductions on (#1164) the forcing rows settle galenet and the stage's own
+  // Farkas vector proves it, so no retry happens; the retry path is what this test is about.
+  Options options = quiet(/*presolve=*/true);
+  options.set_bool("presolve_dual_reductions", false);
+  const Solution solution = solve(model, options);
   ASSERT_EQ(solution.status, SolveStatus::kInfeasible) << solution.message;
   ASSERT_FALSE(solution.farkas_dual.empty()) << solution.message;
   std::string why;
