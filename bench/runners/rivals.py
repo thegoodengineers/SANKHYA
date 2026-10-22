@@ -186,7 +186,12 @@ def _worker_highs(model: Path, time_limit: float, sol: Path) -> dict:
     solved and not its relaxation. mip_feasibility_tolerance, the row and integrality
     tolerance of HiGHS's MIP solver (1e-6 by default), is set to the same 1e-7 as the LP
     tolerances; it does nothing on a model without integers. A MIP has no duals, so its
-    point is written `feasible` and verified primal and integral only."""
+    point is written `feasible` and verified primal and integral only.
+
+    For a MIP the row also records HiGHS's node count and final dual bound (HighsInfo) and
+    its ROOT bound, read from its own log (#1158): the BestBound of the last tree-table line
+    at node 0, i.e. after its root cuts, so a miss of ours can be laid against HiGHS's root
+    bound, nodes per second and first incumbent."""
     import highspy  # noqa: PLC0415 - external solver, never a build dependency
     h = highspy.Highs()
     for key, value in (("output_flag", False), ("time_limit", float(time_limit)),
@@ -195,8 +200,14 @@ def _worker_highs(model: Path, time_limit: float, sol: Path) -> dict:
                        ("mip_feasibility_tolerance", FEASIBILITY_TOLERANCE)):
         h.setOptionValue(key, value)
     with tempfile.TemporaryDirectory() as tmp:
+        log = Path(tmp) / "highs.log"
+        h.setOptionValue("log_file", str(log))
+        h.setOptionValue("log_to_console", False)
+        h.setOptionValue("output_flag", True)
         h.readModel(str(_mps_path(model, Path(tmp))))
         h.run()
+        h.setOptionValue("log_file", "")  # closes the file HiGHS holds open, flushing it
+        root_bound = highs_root_bound(log.read_text(errors="replace")) if log.exists() else None
     status = h.modelStatusToString(h.getModelStatus()).strip().lower()
     info, lp, solution = h.getInfo(), h.getLp(), h.getSolution()
     mapped = {"optimal": "optimal", "infeasible": "infeasible", "unbounded": "unbounded",
@@ -206,7 +217,11 @@ def _worker_highs(model: Path, time_limit: float, sol: Path) -> dict:
            "iterations": (info.simplex_iteration_count + max(info.ipm_iteration_count, 0)
                           + max(info.qp_iteration_count, 0)),
            "objective": info.objective_function_value if mapped == "optimal" else None,
-           "duals": bool(solution.dual_valid), "version": h.version()}
+           "duals": bool(solution.dual_valid), "version": h.version(),
+           "nodes": getattr(info, "mip_node_count", None),
+           "dual_bound": getattr(info, "mip_dual_bound", None), "root_bound": root_bound}
+    if out["nodes"] in (None, -1):  # an LP or a QP: HighsInfo's MIP fields are -1 / inf
+        out["nodes"], out["dual_bound"], out["root_bound"] = None, None, None
     if mapped == "optimal" and solution.value_valid:
         duals = bool(solution.dual_valid)
         # One copy of each vector: highspy converts the whole vector on every attribute
@@ -221,6 +236,25 @@ def _worker_highs(model: Path, time_limit: float, sol: Path) -> dict:
                   rows={n: (row_value[i], row_dual[i] if duals else 0.0)
                         for i, n in enumerate(lp.row_names_)})
     return out
+
+
+def highs_root_bound(log: str) -> float | None:
+    """The BestBound of the last line of HiGHS's MIP tree table still at node 0 (the root,
+    after its cut rounds). A table line is `[Src] Proc InQueue Leaves Expl% BestBound BestSol
+    Gap Cuts InLp Confl LpIters Time`, Src a letter or blank. None when there is no such
+    line (an LP, or a model presolve settled)."""
+    found = None
+    for line in log.splitlines():
+        tokens = line.split()
+        if tokens and len(tokens[0]) == 1 and tokens[0].isalpha():
+            tokens = tokens[1:]
+        if (len(tokens) >= 5 and tokens[0] == "0" and tokens[1].isdigit() and tokens[2].isdigit()
+                and tokens[3].endswith("%")):
+            try:
+                found = float(tokens[4])
+            except ValueError:
+                continue
+    return found
 
 
 def _worker_scip(model: Path, time_limit: float, sol: Path) -> dict:

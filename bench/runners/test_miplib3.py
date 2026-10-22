@@ -126,19 +126,39 @@ check(not risk("82.1999", 82.1999, False) and not risk("65.67", 65.67, False),
 print("manifest")
 INTEGRAL = {"bell3a": False, "danoint": False, "dsbmip": False, "flugpl": False, "gen": False,
             "gt2": True, "harp2": True, "misc03": False, "noswot": True, "pk1": False,
-            "pp08a": False, "rgn": False}
+            "pp08a": False, "rgn": False, "arki001": False, "dano3mip": False, "seymour": True,
+            "mas74": False}
 models = {n: f"* header\nNAME {n}\nENDATA\n".encode() for n in cat}
 models["mas74"] = b"NAME mas74\nENDATA\n"
+models["nocat"] = b"NAME nocat\nENDATA\n"
 manifest = fetch_miplib3.build_manifest(models, cat, CATALOGUE.encode(), INTEGRAL)
 inst, excl = manifest["instances"], manifest["excluded"]
-check(set(inst) == set(cat) - {"arki001", "dano3mip", "seymour", "misc03", "pp08a"},
-      "a reference for every row not marked (not opt) and not at unconfirmed rounding risk",
+check(set(inst) == set(cat) | {"mas74"},
+      "every catalogue row and every later-proven model is an instance (#1158)",
       str(sorted(inst)))
-check(set(excl) == {"arki001", "dano3mip", "seymour", "mas74", "misc03", "pp08a"},
-      "the rest are excluded")
-check(excl["mas74"]["reason"].startswith("no row") and "(not opt)" in excl["seymour"]["reason"]
-      and "no proven value" in excl["pp08a"]["reason"]
-      and excl["pp08a"]["catalogue_int_soln"] == "7350.0", "each with its reason")
+check(set(excl) == {"nocat"} and excl["nocat"]["reason"].startswith("no row"),
+      "a model with no row and no later proof is excluded, with its reason")
+check(inst["mas74"]["reference_source"] == "later_proven"
+      and inst["mas74"]["published_optimal"] == 11801.18572
+      and inst["mas74"]["catalogue_int_soln"] is None and "line 156" in inst["mas74"]["reference_note"]
+      and "0 differ" in inst["mas74"]["reference_note"],
+      "mas74: no catalogue row, MIPLIB 2017's proven optimum, same-model check recorded")
+check(inst["seymour"]["reference_source"] == "later_proven"
+      and inst["seymour"]["published_optimal"] == 423.0
+      and inst["seymour"]["catalogue_int_soln"] == "423",
+      "seymour: the (not opt) print, proven later")
+check(inst["dano3mip"]["published_optimal"] is None
+      and inst["dano3mip"]["reference_source"] == "none"
+      and "status alone" in inst["dano3mip"]["reference_note"],
+      "dano3mip: no proven optimum anywhere, status-only scoring")
+check(inst["pp08a"]["published_optimal"] == 7350.0 and inst["pp08a"]["published_tolerance"] == 1.0
+      and inst["misc03"]["published_tolerance"] == 1.0
+      and "stated loosening" in inst["pp08a"]["reference_note"]
+      and inst["pp08a"]["reference_source"] == "miplib.cat",
+      "pp08a, misc03: an unconfirmed integer print is graded with one unit, and says so")
+check(miplib.matches_published(7350.9, 7350.0, inst["pp08a"])
+      and not miplib.matches_published(7351.1, 7350.0, inst["pp08a"]),
+      "one unit, not more")
 check(inst["rgn"]["published_optimal"] == 82.1999 and inst["rgn"]["published_tolerance"] == 1e-4
       and inst["gt2"]["published_tolerance"] == 0.0, "rgn's and gt2's tolerances recorded")
 check(inst["rgn"]["sha256"] == fetch_miplib3.hashlib.sha256(models["rgn"]).hexdigest()
@@ -178,17 +198,23 @@ if COMMITTED.exists():
     import json
     real = json.loads(COMMITTED.read_text(encoding="utf-8"))
     ri, rx = real["instances"], real["excluded"]
-    check(len(ri) == 52 and len(rx) == 13, "the committed manifest: 52 references, 13 excluded",
+    check(len(ri) == 65 and len(rx) == 0, "the committed manifest: all 65 models, 0 excluded",
           f"{len(ri)} and {len(rx)}")
+    check({n for n, e in ri.items() if e["reference_source"] == "later_proven"}
+          == set(fetch_miplib3.LATER_PROVEN)
+          and {n for n, e in ri.items() if e["published_optimal"] is None} == {"dano3mip"},
+          "the eight later-proven references and the one status-only instance")
     check({n for n, e in ri.items() if e["reference_source"] == "override"} == {"noswot", "gen"},
           "the committed overrides are noswot and gen")
     unsafe = [n for n, e in ri.items()
-              if e["reference_source"] != "override" and "confirmed by" not in
+              if e["reference_source"] == "miplib.cat" and "confirmed by" not in
               e.get("reference_note", "") and fetch_miplib3.rounding_risk(
-                  e["published_text"], e["published_optimal"], e["objective_integral"])]
-    check(not unsafe, "no committed reference is an unconfirmed integer print at risk", str(unsafe))
-    check({n for n, e in rx.items() if "no proven value" in e["reason"]}
-          == {"fixnet6", "misc03", "pp08a", "pp08aCUTS"}, "the rounding exclusions")
+                  e["published_text"], e["published_optimal"], e["objective_integral"])
+              and e["published_tolerance"] != fetch_miplib3.INTEGER_PRINT_TOLERANCE]
+    check(not unsafe, "every unconfirmed integer print at risk carries the stated tolerance",
+          str(unsafe))
+    check({n for n, e in ri.items() if "stated loosening" in e.get("reference_note", "")}
+          == {"fixnet6", "misc03", "pp08a", "pp08aCUTS"}, "the four loosened integer prints")
 try:
     fetch_miplib3.build_manifest({"rgn": b""}, cat, b"", INTEGRAL)
     check(False, "a catalogue row with no model file is refused")
@@ -217,6 +243,7 @@ check(miplib.matches_published(1201501.0, 1201500.0, {})
       "a MIPLIB 2017 entry (no field) keeps the 1e-6 relative rule")
 check(not miplib.matches_published(None, 1.0, rgn)
       and not miplib.matches_published(float("nan"), 1.0, rgn), "no objective never matches")
+check(not miplib.matches_published(1.0, None, {}), "no published optimum never matches (#1158)")
 
 print("CSV names")
 names = {
@@ -307,6 +334,9 @@ class FakeHighs:
     def getRunTime(self):
         return 0.01
 
+    def writeLog(self):
+        pass
+
     def version(self):
         return "fake"
 
@@ -343,6 +373,24 @@ with tempfile.TemporaryDirectory() as tmp:
           "nothing asks HiGHS to solve the relaxation instead of the MIP")
     check(out["status"] == "optimal" and parse_sol(sol).status == "feasible",
           "a MIP has no duals: written `feasible`, verified primal and integral only")
+    check(options.get("log_file") == "" and options.get("output_flag") is True
+          and options.get("log_to_console") is False,
+          "its log goes to a file (closed after the run), not the console")
+    LOG = """        Nodes      |    B&B Tree     |            Objective Bounds              |  Dynamic Constraints |       Work
+Src  Proc. InQueue |  Leaves   Expl. | BestBound       BestSol              Gap |   Cuts   InLp Confl. | LpIters     Time
+
+         0       0         0   0.00%   -inf            inf                  inf        0      0      0         0     0.0s
+ R       0       0         0   0.00%   1200.88         inf                  inf        0      0      0       318     0.1s
+ L       0       0         0   0.00%   3192.04         3983               24.8%      120     80      0      2000     0.9s
+ B      14       9         3   1.20%   3300.5          3983               20.7%      120     60      5      9000     3.1s
+
+Solving report
+  Status            Optimal
+"""
+    check(rivals.highs_root_bound(LOG) == 3192.04 and rivals.highs_root_bound("") is None,
+          "the root bound is the last node-0 table line's BestBound (#1158)")
+    check(out.get("nodes") is None and out.get("root_bound") is None,
+          "no MIP fields from the stand-in: blank, not a guess")
     qps = Path(tmp) / "model.qps"
     qps.write_text(MIP, encoding="utf-8")
     rivals._worker_highs(qps, 60.0, Path(tmp) / "q.sol")
@@ -358,6 +406,12 @@ with tempfile.TemporaryDirectory() as tmp:
     out = rivals._worker_highs(model_path, 60.0, sol)
     loose = compare_suite.grade("highs", suite, model, model_path, sol, dict(out), 1.99995,
                                 None, 60.0, published_tolerance=1e-4)
+    out = rivals._worker_highs(model_path, 60.0, sol)
+    none = compare_suite.grade("highs", suite, model, model_path, sol, dict(out), None, None,
+                               60.0)
+    check(none["matches_reference"] is False and none["absolute_gap"] is None
+          and none["independently_verified"] is True,
+          "no reference (status-only): verified, never matched, gaps blank")
     out = rivals._worker_highs(model_path, 60.0, sol)
     strict = compare_suite.grade("highs", suite, model, model_path, sol, dict(out), 1.99995,
                                  None, 60.0)
@@ -430,6 +484,23 @@ with tempfile.TemporaryDirectory() as tmp:
           "HiGHS's verdicts, its misses named, an instance it did not run")
     check("Excluded, with no reference: `seymour` (marked \"(not opt)\")" in text,
           "exclusions named with their reason")
+    man2 = {"models_in_archive": 3, "excluded": {},
+            "instances": {"rgn": {"published_text": "82.1999"},
+                          "dano3mip": {"published_text": "", "published_optimal": None,
+                                       "reference_source": "none",
+                                       "reference_note": "no proven optimum"},
+                          "mas74": {"published_text": "11801.18572",
+                                    "reference_source": "later_proven",
+                                    "reference_note": "no catalogue row; line 156"},
+                          "pp08a": {"published_text": "7350.0", "published_tolerance": 1.0,
+                                    "reference_note": "a stated loosening of the 1e-6 rule"}}}
+    text2 = miplib3_doc.section({60: (sankhya, None)}, man2)
+    check("**4** are the instances below, **3** with a reference and `dano3mip` scored on "
+          "status alone" in text2 and "Nothing is excluded." in text2
+          and "`mas74` 11801.18572: no catalogue row; line 156" in text2
+          and "tolerance of one unit" in text2 and "`pp08a` 7350.0" in text2
+          and "| `dano3mip` | status only | no run |" in text2,
+          "the full set: status-only, later-proven and loosened instances each named")
     check("#### At 300 s\n\nNot yet run." in text, "the other limit still says Not yet run")
 
 print(f"\n{'all passed' if FAILURES == 0 else f'{FAILURES} FAILED'}")

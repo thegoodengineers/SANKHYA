@@ -43,6 +43,7 @@ on:
           - qplib-qcqp
           - kennington
           - miplib-tier1
+          - miplib3
           - refinery
           - ab-netlib
           - ab-supernodal
@@ -130,6 +131,11 @@ jobs:
         if: inputs.suite == 'refinery'
         run: pip install numpy highspy pyscipopt
 
+      # #1158: HiGHS beside SANKHYA on the same 65 MIPLIB 3 models, same job, same machine.
+      - name: Install HiGHS for the MIPLIB 3 head-to-head
+        if: inputs.suite == 'miplib3'
+        run: pip install numpy highspy
+
       # #983: the Maros-Meszaros head-to-head runs every rival compare_suite.py knows - HiGHS,
       # SCIP, Clp and GLPK, and the convex QP solvers OSQP, Clarabel, PIQP and SCS (PROVENANCE
       # judgement call 40) - each a separate process; nothing here is linked into SANKHYA.
@@ -188,6 +194,10 @@ jobs:
               git checkout -- data/qplib/reference_qcqp.json ;;
             kennington) python3 bench/runners/fetch_kennington.py ;;
             miplib-tier1|fj-share-miplib) python3 bench/runners/fetch_miplib.py ;;
+            # #1158: the fetch rewrites the tracked manifest; the committed one is put back.
+            miplib3)
+              python3 bench/runners/fetch_miplib3.py
+              git checkout -- data/miplib3/manifest.json ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
             mittelmann) python3 bench/runners/fetch_mittelmann.py --set small ;;
             pdhg-step-weight-ab)
@@ -201,6 +211,9 @@ jobs:
                 *kennington.py*) python3 bench/runners/fetch_kennington.py ;;
                 *maros_meszaros.py*) python3 bench/runners/fetch_maros_meszaros.py ;;
                 *mittelmann.py*) python3 bench/runners/fetch_mittelmann.py --set small ;;
+                *miplib3*)
+                  python3 bench/runners/fetch_miplib3.py
+                  git checkout -- data/miplib3/manifest.json ;;
                 *miplib.py*) python3 bench/runners/fetch_miplib.py ;;
               esac ;;
           esac
@@ -232,6 +245,13 @@ jobs:
               miplib-tier1)
                 python3 bench/runners/miplib.py --binary build/sankhya --tier 1 \
                   --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #1158: the classic set, 3 seeds, then HiGHS on the same files in the same
+              # job; options go to miplib.py only (e.g. --threads 4).
+              miplib3)
+                python3 bench/runners/miplib.py --binary build/sankhya --set miplib3 --seeds 3 \
+                  --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} "$@"
+                python3 bench/runners/compare.py --suite miplib3 --sankhya-binary build/sankhya \
+                  --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} ;;
               head-to-head-maros-meszaros)
                 python3 bench/runners/compare.py --suite maros-meszaros                   --sankhya-binary build/sankhya --machine-kind "github-actions ubuntu-24.04"                   ${limit[@]+"${limit[@]}"} "$@" ;;
               # #514: the pooling set (committed in data/pooling), and the same 39 runs with

@@ -1930,7 +1930,11 @@ Bound moved towards the published optimum: none. Moved away: none. #418's accept
 
 The 1998 set much of the published record and most teaching material still report on, run beside the MIPLIB 2017 tables above and never merged into them: its own fetcher, manifest, CSVs and table. Source: Bixby, Ceria, McZeal and Savelsbergh, *An updated mixed integer programming library: MIPLIB 3.0*, Optima 58 (1998); the archive `https://miplib2010.zib.de/miplib3/miplib3.tar.gz`, pinned by size and sha256 in `bench/runners/fetch_miplib3.py`, whose manifest (`data/miplib3/manifest.json`) records the sha256 of every model as solved.
 
-The archive holds 65 models; **52** carry a reference and are the instances below. Excluded, with no reference: `arki001`, `dano3mip`, `seymour` (marked "(not opt)"); `fixnet6`, `misc03`, `pp08a`, `pp08aCUTS` (printed as an integer while the objective can be fractional, with no proven value with more digits to confirm it); `markshare1`, `markshare2`, `mas74`, `mas76`, `mkc`, `swath` (no catalogue row).
+The archive holds 65 models; **65** are the instances below, **64** with a reference and `dano3mip` scored on status alone (no proven optimum exists: the catalogue prints 728.1111 (not opt) and no later MIPLIB proves an optimum (https://miplib.zib.de/downloads/miplib2017-v28.solu line 757: =best= 664.0208333333334; https://miplib2010.zib.de/download/miplib2010_all.solu line 41: =unkn=); scored on status alone, never counted as matched (#1158)), so it never counts as REACHED and PROVED there is the solver's own claim. Nothing is excluded.
+
+**References the catalogue does not give** (`reference_source: later_proven`), each a later PROVEN optimum of the same model: `arki001` 7580813.0459: the catalogue prints 7580813.0459 (not opt); MIPLIB 2017 proves it; https://miplib.zib.de/downloads/miplib2017-v28.solu line 163: =opt= arki001 7580813.0459; same model: 1048x1388, 538 integer, identical up to names (26699 entries, 0 differ); `markshare1` 0.9999999999990905: no catalogue row; https://miplib.zib.de/downloads/miplib2017-v28.solu line 132: =opt= markshare1 0.9999999999990905; same model: 6x62, 50 integer, identical up to names (510 entries, 0 differ); `markshare2` 1: no catalogue row; https://miplib.zib.de/downloads/miplib2017-v28.solu line 148: =opt= markshare2 1; same model: 7x74, 60 integer, identical up to names (670 entries, 0 differ); `mas74` 11801.18572: no catalogue row; https://miplib.zib.de/downloads/miplib2017-v28.solu line 156: =opt= mas74 11801.18572; same model: 13x151, 150 integer, identical up to names (2185 entries, 0 differ); `mas76` 40005.05398999999: no catalogue row; https://miplib.zib.de/downloads/miplib2017-v28.solu line 197: =opt= mas76 40005.05398999999; same model: 12x151, 150 integer, identical up to names (2117 entries, 0 differ); `mkc` -563.8460100132: no catalogue row (https://miplib2010.zib.de/download/miplib2010_all.solu line 110 says =opt= -563.846); https://miplib.zib.de/downloads/miplib2017-v28.solu line 342: =opt= mkc -563.8460100132; same model: 3411x5325, 5323 integer, identical up to names (39835 entries, 0 differ); `seymour` 423: the catalogue prints 423 (not opt); MIPLIB 2017 proves it; https://miplib.zib.de/downloads/miplib2017-v28.solu line 867: =opt= seymour 423; same model: 4944x1372, 1372 integer, identical up to names (47553 entries, 0 differ); `swath` 467.407491: no catalogue row (https://miplib2010.zib.de/download/miplib2010_all.solu line 336 says =opt= 467.407491); https://miplib.zib.de/downloads/miplib2017-v28.solu line 597: =opt= swath 467.407491; same model: 884x6805, 6724 integer, identical up to names (57148 entries, 0 differ).
+
+**Integer prints graded with a tolerance of one unit** (a stated loosening of the 1e-6 rule; `published_tolerance: 1` in the manifest): `fixnet6` 3983; `misc03` 3360; `pp08a` 7350.0; `pp08aCUTS` 7350.0. the catalogue prints an integer and the objective can be fractional, so a rounding of up to one unit is more than the 1e-6 rule allows at this size; no proven value with more digits in https://miplib.zib.de/downloads/miplib2017-v28.solu or https://miplib2010.zib.de/download/miplib2010_all.solu (neither has a row); graded with published_tolerance 1, one unit in the last printed place, a stated loosening of the 1e-6 rule (#1158).
 
 **References that override the catalogue** (`reference_source: override` in the manifest), each a later PROVEN optimum of the same model: `gen` 112313 -> 112313.3627179998: the catalogue prints 112313, a rounding: the objective can be fractional and the proven optimum is 0.36 above it, outside the 1e-6 rule (0.11); https://miplib.zib.de/downloads/miplib2017-v28.solu line 294: =opt= gen 112313.3627179998; same model: 780x870, 150 integer, identical up to names; `noswot` -43 -> -41.00000885: the catalogue prints -43, which is its own LP SOLN; MIPLIB 2017 proves -41 for the same model (https://miplib2010.zib.de/download/miplib2010_all.solu line 207 also says =opt= -41); https://miplib.zib.de/downloads/miplib2017-v28.solu line 23: =opt= noswot -41.00000885; same model: 182x128, 100 integer, identical up to names except 50 coefficient lines differing by at most 6e-9 relative.
 
@@ -1952,10 +1956,12 @@ HiGHS: `bench/results/highs-miplib3-60s-f2cf240.csv`, HiGHS 1.15.1, machine `E2E
 | `air03` | 340160 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.96 | optimal, matched, verified, 1.6 s |
 | `air04` | 56137 | 2/3 (0 2) | 1/3 (0) | 3/3 | 59.36 | optimal, matched, verified, 23.4 s |
 | `air05` | 26374 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 37.73 | optimal, matched, verified, 19.9 s |
+| `arki001` | 7580813.0459 | no run | - | - | - | not run |
 | `bell3a` | 878430.32 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 13.74 | optimal, matched, verified, 0.7 s |
 | `bell5` | 8966406.49 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.2 s |
 | `blend2` | 7.598985 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.71 | optimal, matched, verified, 1.4 s |
 | `cap6000` | -2451377 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, NOT matched, verified, 1.0 s |
+| `dano3mip` | status only | no run | - | - | - | not run |
 | `danoint` | 65.67 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
 | `dcmulti` | 188182 | 1/3 (0) | 1/3 (0) | 3/3 | 28.03 | optimal, matched, verified, 1.3 s |
 | `dsbmip` | -305.19817501 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.97 | optimal, matched, verified, 0.3 s |
@@ -1963,6 +1969,7 @@ HiGHS: `bench/results/highs-miplib3-60s-f2cf240.csv`, HiGHS 1.15.1, machine `E2E
 | `enigma` | 0.0 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.88 | optimal, matched, verified, 0.1 s |
 | `fast0507` | 174 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
 | `fiber` | 405935.18000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.44 | optimal, matched, verified, 0.5 s |
+| `fixnet6` | 3983 | no run | - | - | - | not run |
 | `flugpl` | 1201500 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.05 | optimal, matched, verified, 0.1 s |
 | `gen` | 112313.3627179998 | 2/3 (0 2) | 2/3 (0 2) | 3/3 | 9.20 | optimal, matched, verified, 0.0 s |
 | `gesa2` | 25779856.372 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.24 | optimal, matched, verified, 0.3 s |
@@ -1974,9 +1981,15 @@ HiGHS: `bench/results/highs-miplib3-60s-f2cf240.csv`, HiGHS 1.15.1, machine `E2E
 | `khb05250` | 106940226 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.18 | optimal, matched, verified, 0.2 s |
 | `l152lav` | 4722 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.60 | optimal, matched, verified, 1.9 s |
 | `lseu` | 1120 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.25 | optimal, matched, verified, 0.2 s |
+| `markshare1` | 0.9999999999990905 | no run | - | - | - | not run |
+| `markshare2` | 1 | no run | - | - | - | not run |
+| `mas74` | 11801.18572 | no run | - | - | - | not run |
+| `mas76` | 40005.05398999999 | no run | - | - | - | not run |
+| `misc03` | 3360 | no run | - | - | - | not run |
 | `misc06` | 12850.8607 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 9.78 | optimal, matched, verified, 0.2 s |
 | `misc07` | 2810 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 45.1 s |
 | `mitre` | 115155 | 0/3 | 0/3 | - | 60.00 | optimal, matched, verified, 0.8 s |
+| `mkc` | -563.8460100132 | no run | - | - | - | not run |
 | `mod008` | 307 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.06 | optimal, matched, verified, 0.7 s |
 | `mod010` | 6548 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.31 | optimal, matched, verified, 0.5 s |
 | `mod011` | -54558535 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 32.1 s |
@@ -1989,6 +2002,8 @@ HiGHS: `bench/results/highs-miplib3-60s-f2cf240.csv`, HiGHS 1.15.1, machine `E2E
 | `p0548` | 8691 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.73 | optimal, matched, verified, 0.0 s |
 | `p2756` | 3124 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.3 s |
 | `pk1` | 11.0 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `pp08a` | 7350.0 | no run | - | - | - | not run |
+| `pp08aCUTS` | 7350.0 | no run | - | - | - | not run |
 | `qiu` | -132.873137 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 51.9 s |
 | `qnet1` | 16029.692681 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 6.18 | optimal, matched, verified, 0.4 s |
 | `qnet1_o` | 16029.692681 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 13.74 | optimal, matched, verified, 0.4 s |
@@ -1996,14 +2011,18 @@ HiGHS: `bench/results/highs-miplib3-60s-f2cf240.csv`, HiGHS 1.15.1, machine `E2E
 | `rgn` | 82.1999 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.30 | optimal, matched, verified, 0.1 s |
 | `rout` | 1077.56 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 15.2 s |
 | `set1ch` | 54537.75 | 1/3 (0) | 1/3 (0) | 3/3 | 28.80 | optimal, matched, verified, 0.2 s |
+| `seymour` | 423 | no run | - | - | - | not run |
 | `stein27` | 18 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.36 | optimal, matched, verified, 0.4 s |
 | `stein45` | 30 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 50.29 | optimal, matched, verified, 16.3 s |
+| `swath` | 467.407491 | no run | - | - | - | not run |
 | `vpm1` | 20 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.02 | optimal, matched, verified, 0.0 s |
 | `vpm2` | 13.75 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 1.5 s |
 
 SANKHYA runs that did not reach the published optimum, named: `air04` seed 1 (feasible), `cap6000` seed 0 (optimal), `cap6000` seed 1 (optimal), `cap6000` seed 2 (optimal), `danoint` seed 0 (feasible), `danoint` seed 1 (feasible), `danoint` seed 2 (feasible), `dcmulti` seed 1 (optimal), `dcmulti` seed 2 (optimal), `fast0507` seed 0 (feasible), `fast0507` seed 1 (feasible), `fast0507` seed 2 (feasible), `gen` seed 1 (optimal), `gesa2_o` seed 0 (optimal), `gesa2_o` seed 1 (optimal), `gesa2_o` seed 2 (optimal), `gesa3_o` seed 2 (optimal), `harp2` seed 0 (feasible), `harp2` seed 1 (feasible), `harp2` seed 2 (feasible), `misc06` seed 2 (optimal), `mitre` seed 0 (time_limit), `mitre` seed 1 (time_limit), `mitre` seed 2 (time_limit), `mod011` seed 0 (feasible), `mod011` seed 1 (feasible), `mod011` seed 2 (feasible), `modglob` seed 0 (feasible), `modglob` seed 1 (feasible), `modglob` seed 2 (feasible), `noswot` seed 1 (feasible), `noswot` seed 2 (feasible), `nw04` seed 0 (feasible), `nw04` seed 1 (feasible), `nw04` seed 2 (feasible), `p2756` seed 0 (feasible), `p2756` seed 1 (feasible), `p2756` seed 2 (feasible), `pk1` seed 0 (feasible), `pk1` seed 1 (feasible), `pk1` seed 2 (feasible), `qnet1_o` seed 2 (optimal), `rout` seed 0 (feasible), `rout` seed 1 (feasible), `rout` seed 2 (feasible), `set1ch` seed 1 (optimal), `set1ch` seed 2 (optimal).
 
 Reported optimal but rejected by the verifier: none. Reported optimal away from the published optimum: `cap6000` seed 0, `cap6000` seed 1, `cap6000` seed 2, `dcmulti` seed 1, `dcmulti` seed 2, `gen` seed 1, `gesa2_o` seed 0, `gesa2_o` seed 1, `gesa2_o` seed 2, `gesa3_o` seed 2, `misc06` seed 2, `qnet1_o` seed 2, `set1ch` seed 1, `set1ch` seed 2.
+
+Instances with a reference but no SANKHYA run in the CSV: `arki001`, `dano3mip`, `fixnet6`, `markshare1`, `markshare2`, `mas74`, `mas76`, `misc03`, `mkc`, `pp08a`, `pp08aCUTS`, `seymour`, `swath`.
 
 HiGHS runs that did not end optimal, matched and verified, named: `cap6000` (optimal, NOT matched, verified, 1.0 s), `danoint` (time_limit, 60.0 s), `fast0507` (time_limit, 60.0 s), `noswot` (time_limit, 60.0 s), `pk1` (time_limit, 60.0 s).
 
@@ -2023,10 +2042,12 @@ HiGHS: `bench/results/highs-miplib3-300s-f2cf240.csv`, HiGHS 1.15.1, machine `E2
 | `air03` | 340160 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.21 | optimal, matched, verified, 1.6 s |
 | `air04` | 56137 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 82.24 | optimal, matched, verified, 23.3 s |
 | `air05` | 26374 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 42.46 | optimal, matched, verified, 19.8 s |
+| `arki001` | 7580813.0459 | no run | - | - | - | not run |
 | `bell3a` | 878430.32 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 14.18 | optimal, matched, verified, 0.7 s |
 | `bell5` | 8966406.49 | 3/3 (0 1 2) | 2/3 (1 2) | 3/3 | 170.94 | optimal, matched, verified, 0.2 s |
 | `blend2` | 7.598985 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.79 | optimal, matched, verified, 1.4 s |
 | `cap6000` | -2451377 | 0/3 | 0/3 | 3/3 | 300.00 | optimal, NOT matched, verified, 1.0 s |
+| `dano3mip` | status only | no run | - | - | - | not run |
 | `danoint` | 65.67 | 1/3 (0) | 0/3 | 3/3 | 300.00 | time_limit, 300.0 s |
 | `dcmulti` | 188182 | 1/3 (0) | 1/3 (0) | 3/3 | 92.66 | optimal, matched, verified, 1.3 s |
 | `dsbmip` | -305.19817501 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.13 | optimal, matched, verified, 0.3 s |
@@ -2034,6 +2055,7 @@ HiGHS: `bench/results/highs-miplib3-300s-f2cf240.csv`, HiGHS 1.15.1, machine `E2
 | `enigma` | 0.0 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.89 | optimal, matched, verified, 0.1 s |
 | `fast0507` | 174 | 0/3 | 0/3 | 3/3 | 300.00 | time_limit, 300.1 s |
 | `fiber` | 405935.18000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.54 | optimal, matched, verified, 0.5 s |
+| `fixnet6` | 3983 | no run | - | - | - | not run |
 | `flugpl` | 1201500 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.05 | optimal, matched, verified, 0.1 s |
 | `gen` | 112313.3627179998 | 2/3 (0 2) | 2/3 (0 2) | 3/3 | 21.55 | optimal, matched, verified, 0.0 s |
 | `gesa2` | 25779856.372 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.54 | optimal, matched, verified, 0.3 s |
@@ -2045,9 +2067,15 @@ HiGHS: `bench/results/highs-miplib3-300s-f2cf240.csv`, HiGHS 1.15.1, machine `E2
 | `khb05250` | 106940226 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.20 | optimal, matched, verified, 0.2 s |
 | `l152lav` | 4722 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.06 | optimal, matched, verified, 1.8 s |
 | `lseu` | 1120 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.26 | optimal, matched, verified, 0.2 s |
+| `markshare1` | 0.9999999999990905 | no run | - | - | - | not run |
+| `markshare2` | 1 | no run | - | - | - | not run |
+| `mas74` | 11801.18572 | no run | - | - | - | not run |
+| `mas76` | 40005.05398999999 | no run | - | - | - | not run |
+| `misc03` | 3360 | no run | - | - | - | not run |
 | `misc06` | 12850.8607 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 22.51 | optimal, matched, verified, 0.2 s |
 | `misc07` | 2810 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 107.05 | optimal, matched, verified, 45.3 s |
 | `mitre` | 115155 | 0/3 | 0/3 | - | 300.00 | optimal, matched, verified, 0.9 s |
+| `mkc` | -563.8460100132 | no run | - | - | - | not run |
 | `mod008` | 307 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.09 | optimal, matched, verified, 0.6 s |
 | `mod010` | 6548 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.56 | optimal, matched, verified, 0.5 s |
 | `mod011` | -54558535 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 177.64 | optimal, matched, verified, 32.2 s |
@@ -2060,6 +2088,8 @@ HiGHS: `bench/results/highs-miplib3-300s-f2cf240.csv`, HiGHS 1.15.1, machine `E2
 | `p0548` | 8691 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.93 | optimal, matched, verified, 0.0 s |
 | `p2756` | 3124 | 0/3 | 0/3 | 3/3 | 300.00 | optimal, matched, verified, 0.3 s |
 | `pk1` | 11.0 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 247.18 | optimal, matched, verified, 197.0 s |
+| `pp08a` | 7350.0 | no run | - | - | - | not run |
+| `pp08aCUTS` | 7350.0 | no run | - | - | - | not run |
 | `qiu` | -132.873137 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 130.33 | optimal, matched, verified, 52.0 s |
 | `qnet1` | 16029.692681 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 6.43 | optimal, matched, verified, 0.4 s |
 | `qnet1_o` | 16029.692681 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 29.33 | optimal, matched, verified, 0.4 s |
@@ -2067,14 +2097,18 @@ HiGHS: `bench/results/highs-miplib3-300s-f2cf240.csv`, HiGHS 1.15.1, machine `E2
 | `rgn` | 82.1999 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.30 | optimal, matched, verified, 0.2 s |
 | `rout` | 1077.56 | 0/3 | 0/3 | 3/3 | 300.00 | optimal, matched, verified, 15.6 s |
 | `set1ch` | 54537.75 | 1/3 (0) | 1/3 (0) | 3/3 | 94.61 | optimal, matched, verified, 0.2 s |
+| `seymour` | 423 | no run | - | - | - | not run |
 | `stein27` | 18 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.37 | optimal, matched, verified, 0.4 s |
 | `stein45` | 30 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 58.66 | optimal, matched, verified, 16.3 s |
+| `swath` | 467.407491 | no run | - | - | - | not run |
 | `vpm1` | 20 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.02 | optimal, matched, verified, 0.0 s |
 | `vpm2` | 13.75 | 3/3 (0 1 2) | 0/3 | 3/3 | 300.00 | optimal, matched, verified, 1.5 s |
 
 SANKHYA runs that did not reach the published optimum, named: `cap6000` seed 0 (optimal), `cap6000` seed 1 (optimal), `cap6000` seed 2 (optimal), `danoint` seed 1 (feasible), `danoint` seed 2 (feasible), `dcmulti` seed 1 (optimal), `dcmulti` seed 2 (optimal), `fast0507` seed 0 (feasible), `fast0507` seed 1 (feasible), `fast0507` seed 2 (feasible), `gen` seed 1 (optimal), `gesa2_o` seed 0 (optimal), `gesa2_o` seed 1 (optimal), `gesa2_o` seed 2 (optimal), `gesa3_o` seed 2 (optimal), `harp2` seed 0 (feasible), `harp2` seed 1 (feasible), `harp2` seed 2 (feasible), `misc06` seed 2 (optimal), `mitre` seed 0 (time_limit), `mitre` seed 1 (time_limit), `mitre` seed 2 (time_limit), `modglob` seed 0 (feasible), `modglob` seed 1 (feasible), `modglob` seed 2 (feasible), `noswot` seed 1 (feasible), `p2756` seed 0 (feasible), `p2756` seed 1 (feasible), `p2756` seed 2 (feasible), `pk1` seed 2 (feasible), `qnet1_o` seed 2 (optimal), `rout` seed 0 (feasible), `rout` seed 1 (feasible), `rout` seed 2 (feasible), `set1ch` seed 1 (optimal), `set1ch` seed 2 (optimal).
 
 Reported optimal but rejected by the verifier: none. Reported optimal away from the published optimum: `cap6000` seed 0, `cap6000` seed 1, `cap6000` seed 2, `dcmulti` seed 1, `dcmulti` seed 2, `gen` seed 1, `gesa2_o` seed 0, `gesa2_o` seed 1, `gesa2_o` seed 2, `gesa3_o` seed 2, `misc06` seed 2, `qnet1_o` seed 2, `set1ch` seed 1, `set1ch` seed 2.
+
+Instances with a reference but no SANKHYA run in the CSV: `arki001`, `dano3mip`, `fixnet6`, `markshare1`, `markshare2`, `mas74`, `mas76`, `misc03`, `mkc`, `pp08a`, `pp08aCUTS`, `seymour`, `swath`.
 
 HiGHS runs that did not end optimal, matched and verified, named: `cap6000` (optimal, NOT matched, verified, 1.0 s), `danoint` (time_limit, 300.0 s), `fast0507` (time_limit, 300.1 s).
 

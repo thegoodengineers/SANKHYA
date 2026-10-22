@@ -47,8 +47,10 @@ MANIFESTS = {
 }
 
 
-def instances_of(runner: str) -> list[str]:
-    path = REPO_ROOT / MANIFESTS[runner]
+def instances_of(runner: str, set_name: str | None = None) -> list[str]:
+    # miplib.py --set miplib3 reads the classic set's own manifest (#761, #1158).
+    path = REPO_ROOT / ("data/miplib3/manifest.json" if set_name == "miplib3"
+                        else MANIFESTS[runner])
     instances = json.loads(path.read_text(encoding="utf-8"))["instances"]
     if runner == "refinery_lp.py":  # the refinery manifest lists its MILPs too
         instances = {name: entry for name, entry in instances.items()
@@ -72,13 +74,15 @@ def main() -> int:
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--seeds", type=int, default=None,
                         help="miplib.py only: its --seeds, the seeds each arm runs per instance")
+    parser.add_argument("--set", dest="set_name", choices=("miplib2017", "miplib3"),
+                        default=None, help="miplib.py only: its --set (#1158)")
     parser.add_argument("--machine", required=True)
     parser.add_argument("--out-prefix", required=True)
     args = parser.parse_args()
     if not args.option and args.base_binary is None:
         parser.error("nothing differs between the arms: give --option or --base-binary")
 
-    names = args.instances or instances_of(args.runner)
+    names = args.instances or instances_of(args.runner, args.set_name)
     arms = {"off": args.solver_option, "on": args.solver_option + args.option}
     binaries = {"off": args.base_binary or args.binary, "on": args.binary}
     work = Path(tempfile.mkdtemp(prefix="option-ab-"))
@@ -98,6 +102,8 @@ def main() -> int:
                     cmd += ["--time-limit", f"{args.time_limit:g}"]
                 if args.seeds is not None and args.runner == "miplib.py":
                     cmd += ["--seeds", str(args.seeds)]
+                if args.set_name is not None and args.runner == "miplib.py":
+                    cmd += ["--set", args.set_name]
                 for option in arms[arm]:
                     cmd += ["--solver-option", option]
                 print(f"== r{repeat} {name} {arm}", flush=True)

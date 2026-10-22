@@ -196,7 +196,9 @@ def incumbent_metrics(trace: list, optimum: float, end: float,
                 "incumbents": 0, "trace_recorded": False}
     first = min((t for t, _ in events), default=None)
     return {"time_to_first_feasible": first,
-            "primal_integral": primal_integral(events, optimum, end),
+            # None: no published optimum to measure the gap against (#1158).
+            "primal_integral": None if optimum is None else primal_integral(events, optimum,
+                                                                            end),
             "incumbents": len(events), "trace_recorded": recorded}
 
 
