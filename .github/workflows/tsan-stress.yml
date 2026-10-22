@@ -11,7 +11,7 @@
 # beside it. TSan halts on its first report, and the test fails on the first numerical_error,
 # with the seed in the message. Shards take disjoint seed ranges.
 #
-# It also runs on a pull request that changes this file, so the change carries its own run.
+# Dispatch only: a 4 h hunt is not a pull-request gate.
 
 name: tsan-stress
 
@@ -26,9 +26,6 @@ on:
         description: trials per job (60 s each; keep under ~300 for the 6 h job limit)
         default: "240"
         required: true
-  pull_request:
-    paths:
-      - .github/workflows/tsan-stress.yml
 
 permissions:
   contents: read
