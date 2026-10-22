@@ -302,14 +302,42 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
   for (const Cone& cone : model.cones) {
     for (const Index j : cone.columns) in_cone[static_cast<std::size_t>(j)] = 1;
   }
+  // Dual feasibility measured as tools/verify_solution.py measures it (#1146): a reduced cost
+  // pricing a bound that does not exist, relative to the largest of a floor, the objective
+  // gradient and the column's terms a_ij y_i. The floor is 1, or max|c| below 1 on a model
+  // with no quadratic objective. `dual` keeps the absolute worst, `dual_relative` the gate's.
+  double dual_relative = 0.0;
   double dual_scale = 1.0;
-  for (Index j = 0; j < n; ++j) {
-    const auto u = static_cast<std::size_t>(j);
-    const double dj = sigma * solution.col_dual[u];
-    dual_scale = std::max(dual_scale, std::fabs(dj));
-    if (in_cone[u]) continue;
-    if (dj > 0.0 && !is_finite_bound(lin.col_lower[u])) dual = std::max(dual, dj);
-    if (dj < 0.0 && !is_finite_bound(lin.col_upper[u])) dual = std::max(dual, -dj);
+  double dual_floor = 1.0;
+  if (!lin.has_quadratic_objective()) {
+    double largest = 0.0;
+    for (const double c : lin.col_cost) largest = std::max(largest, std::fabs(c));
+    if (largest > 0.0 && largest < 1.0) dual_floor = largest;
+  }
+  {
+    std::vector<double> gradient(lin.col_cost.size(), 0.0);
+    if (lin.has_quadratic_objective()) qp::ipm_detail::hessian_times(lin.hessian, x, &gradient);
+    for (std::size_t u = 0; u < gradient.size(); ++u) gradient[u] += lin.col_cost[u];
+    for (Index j = 0; j < n; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      const double dj = sigma * solution.col_dual[u];
+      dual_scale = std::max(dual_scale, std::fabs(dj));
+      if (in_cone[u]) continue;
+      double violation = 0.0;
+      if (dj > 0.0 && !is_finite_bound(lin.col_lower[u])) violation = dj;
+      if (dj < 0.0 && !is_finite_bound(lin.col_upper[u])) violation = -dj;
+      if (violation == 0.0) continue;
+      double column_scale = std::max(dual_floor, std::fabs(gradient[u]));
+      const ColumnView column = lin.matrix.column(j);
+      for (Index p = 0; p < column.size; ++p) {
+        column_scale =
+            std::max(column_scale,
+                     std::fabs(column.values[p] *
+                               solution.row_dual[static_cast<std::size_t>(column.rows[p])]));
+      }
+      dual = std::max(dual, violation);
+      dual_relative = std::max(dual_relative, violation / column_scale);
+    }
   }
   {
     // The reduced costs of a cone's columns must lie in the (self-)dual cone.
@@ -317,10 +345,28 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
     probe.cones = model.cones;
     std::vector<double> ds(static_cast<std::size_t>(n));
     for (std::size_t u = 0; u < ds.size(); ++u) ds[u] = sigma * solution.col_dual[u];
+    // Not gated: a cone member's reduced cost also carries its own bound multipliers (a
+    // fixed member's above all), which the verifier separates from the cone's dual; this
+    // plain membership test does not, so it is reported and not trusted (#1146).
     dual = std::max(dual, cone_violation(probe, ds));
   }
+  {
+    // A row price of the wrong sign, relative to the largest price, as the verifier has it.
+    double norm = dual_floor;
+    for (const double y : solution.row_dual) norm = std::max(norm, std::fabs(y));
+    for (Index i = 0; i < m; ++i) {
+      const auto u = static_cast<std::size_t>(i);
+      if (lin.row_lower[u] == lin.row_upper[u]) continue;
+      const double y = sigma * solution.row_dual[u];
+      double violation = 0.0;
+      if (y > 0.0 && !is_finite_bound(lin.row_lower[u])) violation = y;
+      if (y < 0.0 && !is_finite_bound(lin.row_upper[u])) violation = -y;
+      dual = std::max(dual, violation);
+      dual_relative = std::max(dual_relative, violation / norm);
+    }
+  }
   solution.dual_infeasibility = dual;
-  solution.dual_infeasibility_scaled = dual / dual_scale;
+  solution.dual_infeasibility_scaled = dual_relative;
 
   // ---- the dual bound: the Wolfe dual value at the reported multipliers -------------------
   // In minimization space f(x) - sum_i y_i (g_i(x) - b_i) - sum_j d_j (x_j - l_j), each
@@ -376,6 +422,16 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
         "tolerance; not claimed optimal ({})",
         run.primal_residual, run.dual_residual, run.gap, solution.primal_infeasibility,
         solution.primal_infeasibility_scaled, finished);
+  } else if (solution.dual_infeasibility_scaled > tol::kDualFeasibility) {
+    // The KKT gate (#1146), as the QP engine has it: the point is feasible, but the reported
+    // multipliers do not certify it, so it is not claimed optimal.
+    solution.status = SolveStatus::kFeasible;
+    solution.message = fmt::format(
+        "feasible, not proved optimal: the reported multipliers miss dual feasibility by "
+        "{:.3e} ({:.3e} relative), above the dual tolerance ({}); Wolfe dual gap {:.2e} "
+        "relative",
+        solution.dual_infeasibility, solution.dual_infeasibility_scaled, finished,
+        solution.relative_gap);
   } else {
     solution.message = fmt::format(
         "optimal: relative residuals {:.2e} primal, {:.2e} dual, {:.2e} gap on the conic form; "

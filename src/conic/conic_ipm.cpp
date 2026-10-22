@@ -214,6 +214,12 @@ HsdResult solve_hsd(const ConicForm& f, const Options& options, Logger& logger,
   SolveStatus status = SolveStatus::kIterationLimit;
   std::string message;
   double pres = 0.0, dres = 0.0, gap = 0.0;
+  struct Kept {
+    std::vector<double> x, y, s;
+    double tau = 0.0, pres = 0.0, dres = 0.0, gap = 0.0;
+    Count iterations = -1;
+    Count first = -1;
+  } kept;
 
   const auto residuals = [&]() {
     // r_p = b tau - A x ; r_d = A'y + s - c tau ; r_g = kappa + c'x - b'y
@@ -240,9 +246,18 @@ HsdResult solve_hsd(const ConicForm& f, const Options& options, Logger& logger,
         "{:.2e}",
         iterations, pres, dres, gap, mu, tau, kappa);
 
+    // The accuracy-targeted stop (#1146): an iterate that meets `tol` is kept, and the
+    // interior point goes on toward kConicTargetTolerance for at most kConicRefineIterations
+    // more; whatever ends it from here, the latest kept iterate is the answer.
     if (pres <= tol && dres <= tol && gap <= tol) {
-      status = SolveStatus::kOptimal;
-      break;
+      if (kept.iterations < 0) kept.first = iterations;
+      kept = {x, y, s, tau, pres, dres, gap, iterations, kept.first};
+      const double target = tol::kConicTargetTolerance;
+      if ((pres <= target && dres <= target && gap <= target) ||
+          iterations - kept.first >= tol::kConicRefineIterations) {
+        status = SolveStatus::kOptimal;
+        break;
+      }
     }
     // ---- certificates read off a ray (Andersen, Roos & Terlaky 2003, section 5) ----------
     //
@@ -530,6 +545,20 @@ HsdResult solve_hsd(const ConicForm& f, const Options& options, Logger& logger,
     }
   }
 
+  if (status != SolveStatus::kOptimal && kept.iterations >= 0) {
+    // Refinement ended without reaching the target (a stall, a limit, a lost factorization):
+    // the latest iterate that met kConicTolerance stands, as optimal at that tolerance.
+    x = std::move(kept.x);
+    y = std::move(kept.y);
+    s = std::move(kept.s);
+    tau = kept.tau;
+    pres = kept.pres;
+    dres = kept.dres;
+    gap = kept.gap;
+    status = SolveStatus::kOptimal;
+    out.stopped_by = LimitReason::kNone;
+    message.clear();
+  }
   out.status = status;
   out.message = message;
   out.iterations = iterations;
