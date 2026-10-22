@@ -320,6 +320,19 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {"auto", "harris", "textbook"}});
+    s.push_back({"dual_stall_reperturb",
+                 OptionType::Bool,
+                 false,
+                 "Dual simplex: a run of 1,000 dual-degenerate iterations that the cost "
+                 "perturbation did not break refactorizes and perturbs again at ten times "
+                 "the scale, up to 1e-3 of the costs, before the basis is handed to the "
+                 "primal simplex (Koberstein 2005, sec. 6.2.3). Off: the hand-over happens "
+                 "at the first such run, which on pilot87 with a few rows substituted away "
+                 "started a primal phase 1 that ended in a numerical error. OFF until its "
+                 "A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"dual_perturb_costs_at_start",
                  OptionType::Bool,
                  false,

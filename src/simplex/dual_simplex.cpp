@@ -573,6 +573,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   // perturbation is still off by default until its own.
   const std::string ratio_rule = options_.get_string("dual_ratio_test");
   dual_harris_ = ratio_rule == "harris" || ratio_rule == "auto";
+  dual_stall_reperturb_ = options_.get_bool("dual_stall_reperturb");
   // Which rule each dual solve ran under, for whoever reads the counters: the test that
   // pins LP solves to Harris and branch-and-bound LPs to textbook reads exactly these.
   if (Profiler* profiler = logger_.profiler();
@@ -986,6 +987,26 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
         continue;
       }
       if (degenerate_run > kStallLimit) {
+        // A STALL THE PERTURBATION DID NOT BREAK (dual_stall_reperturb). Handing the basis
+        // to the primal loop here starts a phase 1 from a point far outside its bounds: on
+        // pilot87 with 3% of its rows substituted away (#1125) the dual stalled at
+        // iteration 9,291, the primal then met three singular bases and ended in a
+        // numerical error 40,000 pivots later, and the unscaled retry solved the model. A
+        // larger perturbation is the dual's own remedy (Koberstein 2005, sec. 6.2.3): fresh
+        // factors, the costs perturbed again at the next scale, and the loop goes on; the
+        // hand-over waits until the scale is capped.
+        const double scale =
+            std::max(1.0, cost_perturbation_scale_) * tol::kDualPerturbationEscalation;
+        if (dual_stall_reperturb_ && scale <= tol::kDualPerturbationMaxScale) {
+          logger_.verbose(
+              "{} consecutive dual-degenerate iterations at iteration {} under a cost "
+              "perturbation of {:g}: refactorizing and perturbing at {:g}",
+              degenerate_run, iterations, cost_perturbation_scale_, scale);
+          if (!refresh()) return singular();
+          perturb_costs(scale);
+          degenerate_run = 0;
+          continue;
+        }
         return hand_over(
             fmt::format("{} consecutive dual-degenerate iterations", degenerate_run));
       }

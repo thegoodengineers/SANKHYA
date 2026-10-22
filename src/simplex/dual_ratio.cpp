@@ -426,16 +426,25 @@ void Simplex::shift_cost(Index k, double amount) {
 // Cost perturbation
 // -----------------------------------------------------------------------------------------
 
-void Simplex::perturb_costs() {
-  if (cost_perturbed_) return;
-  if (!cost_shifted_) unperturbed_cost_ = cost_;
+void Simplex::perturb_costs(double scale) {
+  // A second call re-perturbs from the exact costs at the new scale (dual_stall_reperturb,
+  // Koberstein 2005 sec. 6.2.3: a stall that survives the perturbation asks for a larger
+  // one, not for the primal); the first keeps the exact costs for the end.
+  if (cost_perturbed_ && scale <= cost_perturbation_scale_) return;
+  if (cost_perturbed_ || cost_shifted_) {
+    cost_ = unperturbed_cost_;
+  } else {
+    unperturbed_cost_ = cost_;
+  }
+  cost_perturbation_scale_ = scale;
   for (Index k = 0; k < total_; ++k) {
     const auto u = static_cast<std::size_t>(k);
     if (basis_position_[u] >= 0) continue;
     // The per-variable factor in (0.25, 1] that perturbation_for() encodes, rescaled from
     // the bound perturbation's size to the cost one's, times the cost's own magnitude.
     const double factor = perturbation_for(k) / kPerturbationSize;
-    const double shift = kDualCostPerturbation * factor * std::max(1.0, std::fabs(cost_[u]));
+    const double shift =
+        scale * kDualCostPerturbation * factor * std::max(1.0, std::fabs(cost_[u]));
     if (status_[u] == BasisStatus::kAtLower) {
       cost_[u] += shift;  // d_j = c_j - a_j^T y grows: further inside dual feasibility
     } else if (status_[u] == BasisStatus::kAtUpper) {
@@ -492,6 +501,7 @@ bool Simplex::perturb_costs_at_start() {
     ++moved;
   }
   cost_perturbed_ = true;
+  cost_perturbation_scale_ = 1.0;  // the stall perturbation then has nothing to add
   ++cost_perturbations_;
   compute_reduced_costs(false);
   logger_.verbose(
@@ -505,6 +515,7 @@ void Simplex::remove_cost_perturbation() {
   if (!cost_perturbed_ && !cost_shifted_) return;
   cost_ = unperturbed_cost_;
   cost_perturbed_ = false;
+  cost_perturbation_scale_ = 0.0;
   cost_shifted_ = false;
   compute_reduced_costs(false);
 }

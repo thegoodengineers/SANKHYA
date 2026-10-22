@@ -357,6 +357,14 @@ inline constexpr int kPolishCandidates = 8;
 /// kPrimalFeasibility so that a marginally infeasible basic variable does not block a pivot.
 inline constexpr double kRatioTestFeasibility = 1e-9;
 
+/// The dual's cost perturbation on a stall that survives it (dual_stall_reperturb,
+/// dual_simplex.cpp): the scale, in units of the first perturbation, is multiplied by the
+/// escalation on each further stall up to the cap, after which the basis goes to the
+/// primal loop as before. 1e3 keeps the largest perturbation at 1e-3 of max(1, |c_j|),
+/// which the exact costs restored at the end and the primal clean-up remove like the first.
+inline constexpr double kDualPerturbationEscalation = 10.0;
+inline constexpr double kDualPerturbationMaxScale = 1e3;
+
 /// Bound relaxation for the Harris two-pass ratio test (issue #67). Pass one finds the
 /// tightest step allowed if every candidate row's bound were loosened by this much; pass two
 /// then picks, among the rows whose EXACT (unrelaxed) step still fits under that limit, the

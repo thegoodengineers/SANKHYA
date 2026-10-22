@@ -233,7 +233,7 @@ class Simplex {
 
   /// Shift every nonbasic cost in the direction that keeps its reduced cost dual feasible,
   /// so the dual ratio test stops tying. Recomputes the reduced costs.
-  void perturb_costs();
+  void perturb_costs(double scale = 1.0);
   /// Koberstein's perturbation at the start (#465, dual_perturb_costs_at_start): every
   /// nonbasic structural cost moved away from dual infeasibility, when the costs take few
   /// distinct values. Returns whether it was applied.
@@ -492,6 +492,12 @@ class Simplex {
   bool cost_perturbed_ = false;
   std::vector<double> unperturbed_cost_;
   Count cost_perturbations_ = 0;
+  /// The scale the costs are perturbed at, in units of kDualCostPerturbation: 0 while
+  /// unperturbed, 1 after the first stall, escalated by kDualPerturbationEscalation on each
+  /// stall after it when dual_stall_reperturb is on (see the loop), up to
+  /// kDualPerturbationMaxScale.
+  double cost_perturbation_scale_ = 0.0;
+  bool dual_stall_reperturb_ = false;  ///< dual_stall_reperturb
   /// Harris cost shifts (#465): set once any cost has been shifted, sharing
   /// unperturbed_cost_ with the perturbation. Either flag means the costs are not the
   /// model's, and no optimum is claimed from the dual loop while one is set.
