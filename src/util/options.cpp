@@ -2575,6 +2575,23 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          {}});
     s.push_back(
+        {"pdhg_relative_stop",
+         OptionType::Bool,
+         false,
+         "Stop the CPU LP PDHG on the relative KKT request alone - primal, dual and gap "
+         "residuals all at or under pdhg_tolerance - which is PDLP's own termination "
+         "(Applegate et al., NeurIPS 2021, section 2), and leave the verdict to the "
+         "report and to the interior-point polish (pdhg_polish) that takes any non-optimal "
+         "point. `optimal` still needs the project's absolute standard; a point that meets "
+         "the request and is primal feasible to the absolute tolerance is `feasible`; one "
+         "that is not is reported as stopped, the request met noted in its message. By "
+         "default the loop runs on to the absolute standard, which on a model with large "
+         "row bounds or multipliers costs most of the iterations after the relative "
+         "request is met. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
         {"pdhg_halpern",
          OptionType::Bool,
          false,
