@@ -26,6 +26,7 @@
 #include "sankhya/options.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
+#include "core/pdhg_fix_and_solve.hpp"
 #include "simplex/crossover.hpp"
 
 namespace sankhya {
@@ -190,6 +191,29 @@ TEST(CrossoverFromNonoptimal, ThroughSolveAPdhgPointEndsOptimalAtAVertexUnderPdh
   const Solution alone = solve(model, off);
   EXPECT_NE(alone.status, SolveStatus::kNotSolved) << alone.message;
   EXPECT_EQ(alone.algorithm.find("crossover"), std::string::npos) << alone.algorithm;
+}
+
+TEST(CrossoverFromNonoptimal, FixAndSolveRouteEndsOptimalAtAVertexAndFixesSomething) {
+  // #888: the restricted LP route. The point PDHG stops at holds columns at bounds; those
+  // are fixed, the rest solved exactly, and the crossover finishes from that vertex.
+  const Model model = netlib("afiro");
+  Options on;
+  on.set_bool("log_to_console", false);
+  on.set_string("algorithm", "pdhg");
+  on.set_bool("pdhg_polish", false);
+  on.set_bool("pdhg_stop_at_request", true);
+  on.set_double("pdhg_tolerance", 1e-6);
+  on.set_bool("pdhg_crossover", true);
+  on.set_bool("pdhg_crossover_fix_and_solve", true);
+  const Solution crossed = solve(model, on);
+  ASSERT_EQ(crossed.status, SolveStatus::kOptimal) << crossed.message;
+  EXPECT_NEAR(crossed.objective, -464.75314286, 1e-6 * 464.75314286);
+  EXPECT_NE(crossed.message.find("fix-and-solve"), std::string::npos) << crossed.message;
+  expect_a_verified_vertex(model, crossed, "afiro, PDHG then fix-and-solve then crossover");
+
+  // The classification fixes something on a real point: the optimal vertex itself holds
+  // every nonbasic column at a bound with an agreeing reduced cost.
+  EXPECT_GT(count_fixable_columns(model, crossed), 0);
 }
 
 TEST(CrossoverFromNonoptimal, TheGateRefusesWhatIsNotAUsablePoint) {
