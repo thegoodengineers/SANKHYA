@@ -53,7 +53,7 @@ as regenerable backups.
 | Netlib infeasible | 29 | **28 of 29** (certified infeasible, `passed`) | - | `bench/results/netlib-infeasible-5a39fb2.csv` | `5a39fb2` | 2026-10-01 |
 | Kennington | 16 | **16 of 16** (matches published optimum and verified, `passed`) | - | `bench/results/kennington-full-9463fd7.csv` | `9463fd7` | 2026-10-02 |
 | Mittelmann | 12 | **5 of 12** (matches HiGHS's objective and verified, `passed`) | HiGHS (objective check) | `bench/results/mittelmann-72123ff.csv` | `72123ff` | 2026-09-24 |
-| MIPLIB 3 | 52 | **44 of 52** (matched the published optimum and verified, best of 3 seeds) | HiGHS (same host) | `bench/results/miplib3-300s-seeds3-f2cf240.csv` | `f2cf240` | 2026-10-03 |
+| MIPLIB 3 | 65 | **35 of 65** (proved the published optimum and verified, best of 3 seeds, 60 s, 1 thread) | HiGHS 49 of 65 (same job, same rule) | `bench/results/miplib3-60s-seeds3-312818a.csv` | `312818a` | 2026-10-22 |
 | MIPLIB 2017 | 30 | **14 of 30** (matched the published optimum and verified) | - | `bench/results/miplib-ad57c03.csv` | `ad57c03` | 2026-09-27 |
 | Maros-Meszaros (QP) | 138 | **117 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-cad720c.csv` | `cad720c` | 2026-10-19 |
 | Maros-Meszaros head-to-head (QP) | 138 | **117 of 138** (matched within 1e-6 and verified, every solver graded the same, 60 s) | PIQP 128 of 138, Clarabel 90 of 138, SCS 71 of 138, OSQP 46 of 138 | `bench/results/head-to-head-maros-meszaros-d0eb672.csv` | `d0eb672` | 2026-10-19 |
@@ -354,11 +354,14 @@ not known in advance.
 
 **Four more sets and three checks, run on `main` between 30 September and 4 October.**
 MIPLIB 3, the classic 1998 set, kept beside MIPLIB 2017 and never merged into its tables
-(`docs/BENCHMARKS.md` section 2a, #761): 52 instances with a reference x 3 seeds, one thread,
-on a 16-vCPU container at `f2cf240`. At 300 s **120 of 156** runs reach the published optimum
-and **113** prove it, every one of the 153 points written accepted by the verifier; HiGHS 1.15.1
-on the same container reaches 49 of 52 (`bench/results/miplib3-300s-seeds3-f2cf240.csv`). At
-60 s, 109 and 95 against HiGHS's 47 (`miplib3-60s-seeds3-f2cf240.csv`). The harder MIPLIB 2017
+(`docs/BENCHMARKS.md` section 2a, #761, #1158): all 65 models x 3 seeds, one thread, 60 s, on a
+4-vCPU GitHub runner at `312818a`, HiGHS 1.15.1 on the same files in the same job. SANKHYA
+proves the published optimum on **35 of 65** (best of 3 seeds; 33, 34 and 33 per seed, 31 in
+every seed), HiGHS on **49 of 65**, both graded by the same rule and the same verifier, every
+one of the 187 points written accepted (`bench/results/miplib3-60s-seeds3-312818a.csv`,
+`highs-miplib3-60s-312818a.csv`). Of the 15 HiGHS proves and SANKHYA does not, 11 are a
+weaker root bound after cuts (the table is in #1158). The earlier 52-instance run at 300 s
+(`miplib3-300s-seeds3-f2cf240.csv`) stays in section 2a. The harder MIPLIB 2017
 tier, the first 60 benchmark instances with a proven optimum by file size, chosen before the run
 (#504, `bench/results/miplib-tier2-seeds3-e7c0c60.csv`, 3 seeds at 300 s): **32 of 180** runs
 reach the optimum and **18** prove it. Every one of QPLIB's 453 instances through the reader and

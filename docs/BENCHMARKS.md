@@ -1944,87 +1944,85 @@ The archive holds 65 models; **65** are the instances below, **64** with a refer
 
 #### At 60 s
 
-SANKHYA: `bench/results/miplib3-60s-seeds3-f2cf240.csv`, commit `f2cf240`, machine `E2E TIR C3 container, 16 vCPU 29 GB (cgroup limits), AMD EPYC 9555 64-Core Processor host, nothing else running; AMD EPYC 9555 64-Core Processor; 16 cores (cgroup quota; host 256); 30 GiB RAM (cgroup limit; host 1512 GiB); Linux-x86_64`, 1 thread(s), shipped defaults.  
-HiGHS: `bench/results/highs-miplib3-60s-f2cf240.csv`, HiGHS 1.15.1, machine `E2E TIR C3 container, 16 vCPU 29 GB (cgroup limits), AMD EPYC 9555 64-Core Processor host, nothing else running; AMD EPYC 9555 64-Core Processor; 16 cores (cgroup quota; host 256); 30 GiB RAM (cgroup limit; host 1512 GiB); Linux-x86_64`, one thread, 60.0 s.
+SANKHYA: `bench/results/miplib3-60s-seeds3-312818a.csv`, commit `312818a`, machine `github-actions ubuntu-24.04; AMD EPYC 9V74 80-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`, 1 thread(s), shipped defaults.  
+HiGHS: `bench/results/highs-miplib3-60s-312818a.csv`, HiGHS 1.15.1, machine `github-actions ubuntu-24.04; AMD EPYC 9V74 80-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`, one thread, 60.0 s.
 
-**SANKHYA**, 156 runs (52 instances x 3 seeds): **109** reached the published optimum, **95** proved it, **153 of 153** points verified; reached in every seed on 32 of 52 instances, proved in every seed on 28; shifted geometric mean time 16.51 s (shift 10 s, every run that did not prove charged 60 s).
-**HiGHS**, 52 runs: **48** optimal, **47** of them at the published optimum, **48** verified.
+**SANKHYA**, 195 runs (65 instances x 3 seeds): **110** reached the published optimum, **100** proved it, **187 of 187** points verified; reached in every seed on 34 of 65 instances, proved in every seed on 31; shifted geometric mean time 21.59 s (shift 10 s, every run that did not prove charged 60 s).
+**HiGHS**, 65 runs: **50** optimal, **49** of them at the published optimum, **50** verified.
 
 | instance | published | reached (seeds) | proved (seeds) | verified | sgm time (s) | HiGHS |
 |---|---:|---:|---:|---:|---:|---|
-| `10teams` | 924 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 17.87 | optimal, matched, verified, 3.1 s |
-| `air03` | 340160 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.96 | optimal, matched, verified, 1.6 s |
-| `air04` | 56137 | 2/3 (0 2) | 1/3 (0) | 3/3 | 59.36 | optimal, matched, verified, 23.4 s |
-| `air05` | 26374 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 37.73 | optimal, matched, verified, 19.9 s |
-| `arki001` | 7580813.0459 | no run | - | - | - | not run |
-| `bell3a` | 878430.32 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 13.74 | optimal, matched, verified, 0.7 s |
-| `bell5` | 8966406.49 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.2 s |
-| `blend2` | 7.598985 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.71 | optimal, matched, verified, 1.4 s |
-| `cap6000` | -2451377 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, NOT matched, verified, 1.0 s |
-| `dano3mip` | status only | no run | - | - | - | not run |
+| `10teams` | 924 | 3/3 (0 1 2) | 2/3 (1 2) | 3/3 | 25.72 | optimal, matched, verified, 5.4 s |
+| `air03` | 340160 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.06 | optimal, matched, verified, 2.9 s |
+| `air04` | 56137 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 41.0 s |
+| `air05` | 26374 | 1/3 (2) | 1/3 (2) | 3/3 | 58.63 | optimal, matched, verified, 35.6 s |
+| `arki001` | 7580813.0459 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `bell3a` | 878430.32 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 13.71 | optimal, matched, verified, 1.3 s |
+| `bell5` | 8966406.49 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.56 | optimal, matched, verified, 0.4 s |
+| `blend2` | 7.598985 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.55 | optimal, matched, verified, 2.6 s |
+| `cap6000` | -2451377 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, NOT matched, verified, 1.7 s |
+| `dano3mip` | status only | 0/3 | 0/3 | - | 60.00 | time_limit, 60.0 s |
 | `danoint` | 65.67 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
-| `dcmulti` | 188182 | 1/3 (0) | 1/3 (0) | 3/3 | 28.03 | optimal, matched, verified, 1.3 s |
-| `dsbmip` | -305.19817501 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.97 | optimal, matched, verified, 0.3 s |
-| `egout` | 568.101 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.03 | optimal, matched, verified, 0.0 s |
-| `enigma` | 0.0 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.88 | optimal, matched, verified, 0.1 s |
+| `dcmulti` | 188182 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 2.3 s |
+| `dsbmip` | -305.19817501 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 16.34 | optimal, matched, verified, 0.5 s |
+| `egout` | 568.101 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.21 | optimal, matched, verified, 0.0 s |
+| `enigma` | 0.0 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.51 | optimal, matched, verified, 0.1 s |
 | `fast0507` | 174 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
-| `fiber` | 405935.18000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.44 | optimal, matched, verified, 0.5 s |
-| `fixnet6` | 3983 | no run | - | - | - | not run |
-| `flugpl` | 1201500 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.05 | optimal, matched, verified, 0.1 s |
-| `gen` | 112313.3627179998 | 2/3 (0 2) | 2/3 (0 2) | 3/3 | 9.20 | optimal, matched, verified, 0.0 s |
-| `gesa2` | 25779856.372 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.24 | optimal, matched, verified, 0.3 s |
-| `gesa2_o` | 25779856.372 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.4 s |
-| `gesa3` | 27991042.648 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 9.81 | optimal, matched, verified, 1.4 s |
-| `gesa3_o` | 27991042.648 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 23.35 | optimal, matched, verified, 2.3 s |
-| `gt2` | 21166.000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.07 | optimal, matched, verified, 0.0 s |
-| `harp2` | -73899798.00 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 12.8 s |
-| `khb05250` | 106940226 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.18 | optimal, matched, verified, 0.2 s |
-| `l152lav` | 4722 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.60 | optimal, matched, verified, 1.9 s |
-| `lseu` | 1120 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.25 | optimal, matched, verified, 0.2 s |
-| `markshare1` | 0.9999999999990905 | no run | - | - | - | not run |
-| `markshare2` | 1 | no run | - | - | - | not run |
-| `mas74` | 11801.18572 | no run | - | - | - | not run |
-| `mas76` | 40005.05398999999 | no run | - | - | - | not run |
-| `misc03` | 3360 | no run | - | - | - | not run |
-| `misc06` | 12850.8607 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 9.78 | optimal, matched, verified, 0.2 s |
-| `misc07` | 2810 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 45.1 s |
-| `mitre` | 115155 | 0/3 | 0/3 | - | 60.00 | optimal, matched, verified, 0.8 s |
-| `mkc` | -563.8460100132 | no run | - | - | - | not run |
-| `mod008` | 307 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.06 | optimal, matched, verified, 0.7 s |
-| `mod010` | 6548 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.31 | optimal, matched, verified, 0.5 s |
-| `mod011` | -54558535 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 32.1 s |
-| `modglob` | 20740508 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.3 s |
+| `fiber` | 405935.18000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 10.82 | optimal, matched, verified, 0.9 s |
+| `fixnet6` | 3983 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 2.8 s |
+| `flugpl` | 1201500 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.04 | optimal, matched, verified, 0.1 s |
+| `gen` | 112313.3627179998 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.30 | optimal, matched, verified, 0.0 s |
+| `gesa2` | 25779856.372 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.6 s |
+| `gesa2_o` | 25779856.372 | 2/3 (1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.7 s |
+| `gesa3` | 27991042.648 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 7.51 | optimal, matched, verified, 2.3 s |
+| `gesa3_o` | 27991042.648 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 7.44 | optimal, matched, verified, 3.9 s |
+| `gt2` | 21166.000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.21 | optimal, matched, verified, 0.0 s |
+| `harp2` | -73899798.00 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 22.7 s |
+| `khb05250` | 106940226 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.35 | optimal, matched, verified, 0.3 s |
+| `l152lav` | 4722 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 4.53 | optimal, matched, verified, 3.2 s |
+| `lseu` | 1120 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.44 | optimal, matched, verified, 0.3 s |
+| `markshare1` | 0.9999999999990905 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `markshare2` | 1 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `mas74` | 11801.18572 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `mas76` | 40005.05398999999 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `misc03` | 3360 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.92 | optimal, matched, verified, 0.6 s |
+| `misc06` | 12850.8607 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.94 | optimal, matched, verified, 0.3 s |
+| `misc07` | 2810 | 3/3 (0 1 2) | 2/3 (0 1) | 3/3 | 46.36 | time_limit, 60.0 s |
+| `mitre` | 115155 | 0/3 | 0/3 | - | 60.00 | optimal, matched, verified, 1.5 s |
+| `mkc` | -563.8460100132 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `mod008` | 307 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.83 | optimal, matched, verified, 1.1 s |
+| `mod010` | 6548 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.96 | optimal, matched, verified, 0.8 s |
+| `mod011` | -54558535 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 56.6 s |
+| `modglob` | 20740508 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.5 s |
 | `noswot` | -41.00000885 | 1/3 (0) | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
-| `nw04` | 16862 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 31.8 s |
-| `p0033` | 3089 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.02 | optimal, matched, verified, 0.0 s |
-| `p0201` | 7615 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.57 | optimal, matched, verified, 0.5 s |
-| `p0282` | 258411 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.21 | optimal, matched, verified, 0.1 s |
-| `p0548` | 8691 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.73 | optimal, matched, verified, 0.0 s |
-| `p2756` | 3124 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.3 s |
+| `nw04` | 16862 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 57.2 s |
+| `p0033` | 3089 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.05 | optimal, matched, verified, 0.0 s |
+| `p0201` | 7615 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.34 | optimal, matched, verified, 0.9 s |
+| `p0282` | 258411 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.55 | optimal, matched, verified, 0.2 s |
+| `p0548` | 8691 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 12.51 | optimal, matched, verified, 0.1 s |
+| `p2756` | 3124 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.6 s |
 | `pk1` | 11.0 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
-| `pp08a` | 7350.0 | no run | - | - | - | not run |
-| `pp08aCUTS` | 7350.0 | no run | - | - | - | not run |
-| `qiu` | -132.873137 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 51.9 s |
-| `qnet1` | 16029.692681 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 6.18 | optimal, matched, verified, 0.4 s |
-| `qnet1_o` | 16029.692681 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 13.74 | optimal, matched, verified, 0.4 s |
-| `rentacar` | 30356761 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 6.31 | optimal, matched, verified, 3.3 s |
-| `rgn` | 82.1999 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.30 | optimal, matched, verified, 0.1 s |
-| `rout` | 1077.56 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 15.2 s |
-| `set1ch` | 54537.75 | 1/3 (0) | 1/3 (0) | 3/3 | 28.80 | optimal, matched, verified, 0.2 s |
-| `seymour` | 423 | no run | - | - | - | not run |
-| `stein27` | 18 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.36 | optimal, matched, verified, 0.4 s |
-| `stein45` | 30 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 50.29 | optimal, matched, verified, 16.3 s |
-| `swath` | 467.407491 | no run | - | - | - | not run |
-| `vpm1` | 20 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.02 | optimal, matched, verified, 0.0 s |
-| `vpm2` | 13.75 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 1.5 s |
+| `pp08a` | 7350.0 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 1.4 s |
+| `pp08aCUTS` | 7350.0 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 37.99 | optimal, matched, verified, 1.2 s |
+| `qiu` | -132.873137 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `qnet1` | 16029.692681 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.86 | optimal, matched, verified, 0.6 s |
+| `qnet1_o` | 16029.692681 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.31 | optimal, matched, verified, 0.7 s |
+| `rentacar` | 30356761 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 13.00 | optimal, matched, verified, 5.9 s |
+| `rgn` | 82.1999 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.87 | optimal, matched, verified, 0.2 s |
+| `rout` | 1077.56 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 26.9 s |
+| `set1ch` | 54537.75 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.4 s |
+| `seymour` | 423 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
+| `stein27` | 18 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.31 | optimal, matched, verified, 0.8 s |
+| `stein45` | 30 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 40.85 | optimal, matched, verified, 28.7 s |
+| `swath` | 467.407491 | 0/3 | 0/3 | 1/1 | 60.00 | time_limit, 60.0 s |
+| `vpm1` | 20 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.51 | optimal, matched, verified, 0.0 s |
+| `vpm2` | 13.75 | 2/3 (0 1) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 2.5 s |
 
-SANKHYA runs that did not reach the published optimum, named: `air04` seed 1 (feasible), `cap6000` seed 0 (optimal), `cap6000` seed 1 (optimal), `cap6000` seed 2 (optimal), `danoint` seed 0 (feasible), `danoint` seed 1 (feasible), `danoint` seed 2 (feasible), `dcmulti` seed 1 (optimal), `dcmulti` seed 2 (optimal), `fast0507` seed 0 (feasible), `fast0507` seed 1 (feasible), `fast0507` seed 2 (feasible), `gen` seed 1 (optimal), `gesa2_o` seed 0 (optimal), `gesa2_o` seed 1 (optimal), `gesa2_o` seed 2 (optimal), `gesa3_o` seed 2 (optimal), `harp2` seed 0 (feasible), `harp2` seed 1 (feasible), `harp2` seed 2 (feasible), `misc06` seed 2 (optimal), `mitre` seed 0 (time_limit), `mitre` seed 1 (time_limit), `mitre` seed 2 (time_limit), `mod011` seed 0 (feasible), `mod011` seed 1 (feasible), `mod011` seed 2 (feasible), `modglob` seed 0 (feasible), `modglob` seed 1 (feasible), `modglob` seed 2 (feasible), `noswot` seed 1 (feasible), `noswot` seed 2 (feasible), `nw04` seed 0 (feasible), `nw04` seed 1 (feasible), `nw04` seed 2 (feasible), `p2756` seed 0 (feasible), `p2756` seed 1 (feasible), `p2756` seed 2 (feasible), `pk1` seed 0 (feasible), `pk1` seed 1 (feasible), `pk1` seed 2 (feasible), `qnet1_o` seed 2 (optimal), `rout` seed 0 (feasible), `rout` seed 1 (feasible), `rout` seed 2 (feasible), `set1ch` seed 1 (optimal), `set1ch` seed 2 (optimal).
+SANKHYA runs that did not reach the published optimum, named: `air04` seed 0 (feasible), `air04` seed 1 (feasible), `air04` seed 2 (feasible), `air05` seed 0 (feasible), `air05` seed 1 (feasible), `arki001` seed 0 (feasible), `arki001` seed 1 (feasible), `arki001` seed 2 (feasible), `cap6000` seed 0 (optimal), `cap6000` seed 1 (optimal), `cap6000` seed 2 (optimal), `dano3mip` seed 0 (time_limit), `dano3mip` seed 1 (time_limit), `dano3mip` seed 2 (time_limit), `danoint` seed 0 (feasible), `danoint` seed 1 (feasible), `danoint` seed 2 (feasible), `dcmulti` seed 0 (optimal), `dcmulti` seed 1 (optimal), `dcmulti` seed 2 (optimal), `fast0507` seed 0 (feasible), `fast0507` seed 1 (feasible), `fast0507` seed 2 (feasible), `fixnet6` seed 0 (feasible), `fixnet6` seed 1 (feasible), `fixnet6` seed 2 (feasible), `gesa2` seed 0 (feasible), `gesa2` seed 1 (feasible), `gesa2` seed 2 (feasible), `gesa2_o` seed 0 (feasible), `harp2` seed 0 (feasible), `harp2` seed 1 (feasible), `harp2` seed 2 (feasible), `markshare1` seed 0 (feasible), `markshare1` seed 1 (feasible), `markshare1` seed 2 (feasible), `markshare2` seed 0 (feasible), `markshare2` seed 1 (feasible), `markshare2` seed 2 (feasible), `mas74` seed 0 (feasible), `mas74` seed 1 (feasible), `mas74` seed 2 (feasible), `mas76` seed 0 (feasible), `mas76` seed 1 (feasible), `mas76` seed 2 (feasible), `mitre` seed 0 (time_limit), `mitre` seed 1 (time_limit), `mitre` seed 2 (time_limit), `mkc` seed 0 (feasible), `mkc` seed 1 (feasible), `mkc` seed 2 (feasible), `mod011` seed 0 (feasible), `mod011` seed 1 (feasible), `mod011` seed 2 (feasible), `modglob` seed 0 (feasible), `modglob` seed 1 (feasible), `modglob` seed 2 (feasible), `noswot` seed 1 (feasible), `noswot` seed 2 (feasible), `nw04` seed 0 (feasible), `nw04` seed 1 (feasible), `nw04` seed 2 (feasible), `p2756` seed 0 (feasible), `p2756` seed 1 (feasible), `p2756` seed 2 (feasible), `pk1` seed 0 (feasible), `pk1` seed 1 (feasible), `pk1` seed 2 (feasible), `pp08a` seed 0 (feasible), `pp08a` seed 1 (feasible), `pp08a` seed 2 (feasible), `pp08aCUTS` seed 2 (feasible), `rout` seed 0 (feasible), `rout` seed 1 (feasible), `rout` seed 2 (feasible), `set1ch` seed 0 (feasible), `set1ch` seed 1 (feasible), `set1ch` seed 2 (feasible), `seymour` seed 0 (feasible), `seymour` seed 1 (feasible), `seymour` seed 2 (feasible), `swath` seed 0 (feasible), `swath` seed 1 (time_limit), `swath` seed 2 (time_limit), `vpm2` seed 2 (feasible).
 
-Reported optimal but rejected by the verifier: none. Reported optimal away from the published optimum: `cap6000` seed 0, `cap6000` seed 1, `cap6000` seed 2, `dcmulti` seed 1, `dcmulti` seed 2, `gen` seed 1, `gesa2_o` seed 0, `gesa2_o` seed 1, `gesa2_o` seed 2, `gesa3_o` seed 2, `misc06` seed 2, `qnet1_o` seed 2, `set1ch` seed 1, `set1ch` seed 2.
+Reported optimal but rejected by the verifier: none. Reported optimal away from the published optimum: `cap6000` seed 0, `cap6000` seed 1, `cap6000` seed 2, `dcmulti` seed 0, `dcmulti` seed 1, `dcmulti` seed 2.
 
-Instances with a reference but no SANKHYA run in the CSV: `arki001`, `dano3mip`, `fixnet6`, `markshare1`, `markshare2`, `mas74`, `mas76`, `misc03`, `mkc`, `pp08a`, `pp08aCUTS`, `seymour`, `swath`.
-
-HiGHS runs that did not end optimal, matched and verified, named: `cap6000` (optimal, NOT matched, verified, 1.0 s), `danoint` (time_limit, 60.0 s), `fast0507` (time_limit, 60.0 s), `noswot` (time_limit, 60.0 s), `pk1` (time_limit, 60.0 s).
+HiGHS runs that did not end optimal, matched and verified, named: `arki001` (time_limit, 60.0 s), `cap6000` (optimal, NOT matched, verified, 1.7 s), `dano3mip` (time_limit, 60.0 s), `danoint` (time_limit, 60.0 s), `fast0507` (time_limit, 60.0 s), `markshare1` (time_limit, 60.0 s), `markshare2` (time_limit, 60.0 s), `mas74` (time_limit, 60.0 s), `mas76` (time_limit, 60.0 s), `misc07` (time_limit, 60.0 s), `mkc` (time_limit, 60.0 s), `noswot` (time_limit, 60.0 s), `pk1` (time_limit, 60.0 s), `qiu` (time_limit, 60.0 s), `seymour` (time_limit, 60.0 s), `swath` (time_limit, 60.0 s).
 
 #### At 300 s
 

@@ -227,17 +227,28 @@ def miplib_row() -> Row | None:
 
 
 def miplib3_row() -> Row | None:
-    path = latest_result.latest(miplib3_doc.sankhya_pattern(300))
+    # 60 s, the limit the published record reports the set at (#1158), so the row reads
+    # against it directly; the 300 s table stays in docs/BENCHMARKS.md.
+    path = latest_result.latest(miplib3_doc.sankhya_pattern(60))
     if path is None:
         return None
     rows = read_csv(path)
+    # PROVED, the count the published record reports: reported optimal at the published
+    # value, point verified; HiGHS is counted by the same rule below.
     passed, total = passed_predicate(
-        rows, lambda r: r.get("matched_published") == "1"
+        rows, lambda r: r.get("proved_optimal") == "1"
         and r.get("independently_verified") == "1")
-    highs = latest_result.latest(miplib3_doc.highs_pattern(300))
-    reference = "HiGHS (same host)" if highs else "-"
+    highs = latest_result.latest(miplib3_doc.highs_pattern(60))
+    reference = "-"
+    if highs:
+        hrows = read_csv(highs)
+        proved = sum(1 for r in hrows if r.get("status") == "optimal"
+                     and r.get("matches_reference") == "1"
+                     and r.get("independently_verified") == "1")
+        reference = f"HiGHS {proved} of {len(hrows)} (same job, same rule)"
     return Row("MIPLIB 3", path, passed, total,
-               "matched the published optimum and verified, best of 3 seeds", reference)
+               "proved the published optimum and verified, best of 3 seeds, 60 s, 1 thread",
+               reference)
 
 
 def stress_row() -> Row | None:
