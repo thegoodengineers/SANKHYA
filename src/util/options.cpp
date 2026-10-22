@@ -2188,13 +2188,16 @@ const std::vector<OptionSpec>& Options::registry() {
          {}});
     s.push_back({"qp_ipm_adaptive_dual_regularization",
                  OptionType::Bool,
-                 false,
+                 true,
                  "qp_algorithm=ipm (#981): when a Newton step leaves more than "
                  "tol::kQpIpmStepPrimalShare of the primal residual in place, cut the floor of "
                  "the dual regularization delta by tol::kQpIpmDualFloorCut (to at least "
                  "tol::kQpIpmDualFloorMin); rho keeps qp_ipm_regularization. Aimed at "
                  "degenerate models (LISWET), where delta |dy| outgrows the residual. From the "
-                 "first cut on, each step is also refined as qp_ipm_krylov_refinement does.",
+                 "first cut on, each step is also refined as qp_ipm_krylov_refinement does. On by "
+                 "default since the A/B at 950712b (bench/results/"
+                 "option-ab-maros-meszaros-qp-ipm-adaptive-dual-950712b.csv: 124 to 132 "
+                 "verified of 138, nothing lost; Netlib identical).",
                  0.0,
                  0.0,
                  {}});

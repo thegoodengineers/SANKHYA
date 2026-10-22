@@ -231,6 +231,17 @@ More one-at-a-time rounds do not finish these working sets; they start too far f
 
 ---
 
+### A flat lower QP regularization floor, Gondzio correctors, and Krylov refinement on every step (#981, PR #1150, kept off)
+
+Measured on GitHub Actions with `bench.yml`'s `ab-option` suite and `--base-binary`, base `320fa9a1`, Maros-Meszaros 138 at 60 s, beside the adaptive dual floor that was adopted (`option-ab-maros-meszaros-qp-ipm-adaptive-dual-950712b.csv`). Each of these raised the verified count from 124 but lost an instance that was optimal:
+
+- `qp_ipm_regularization=1e-12` (run 39736572856): 130 verified. It lost qforplan (feasible to the iteration ceiling) and cont-201 (to the time limit).
+- That floor with `qp_ipm_krylov_refinement` and three `qp_ipm_centrality_correctors` (run 39736560914): 130 verified. The correctors end qisrael, qpcboei2 and qscagr25 with one product the KKT gate refuses. boyd2 and cont-300 ran out of time, because they paid for GMRES on every step.
+- The adaptive floor with Krylov on every step (run 39752483470): 131 verified, boyd2 lost to time.
+- The adaptive floor without Krylov (run 39752496156): 126 verified, cont-300 lost to time.
+
+The options remain, off by default. The CSVs were not committed; the branch stamps are not on `main`.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
