@@ -349,6 +349,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   // the first-order engine for whatever time is left. See the file header and the comment at
   // the stall test below.
   const bool stall_handoff = options.get_bool("qp_ipm_stall_handoff");
+  const bool adaptive_dual = options.get_bool("qp_ipm_adaptive_dual_regularization");
   const bool krylov_refinement = options.get_bool("qp_ipm_krylov_refinement");
   const Count centrality_correctors = options.get_int("qp_ipm_centrality_correctors");
   const double primal_tolerance = options.get_double("primal_feasibility_tolerance");
@@ -404,6 +405,9 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   double rho = options.get_double("qp_ipm_regularization");
   double delta = rho;
   const double regularization_floor = rho;
+  // #981, qp_ipm_adaptive_dual_regularization: the floor delta follows down to, lowered
+  // whenever the step leaves the primal residual largely in place (see below).
+  double dual_floor = rho;
 
   SolveStatus status = SolveStatus::kIterationLimit;
   std::string message;
@@ -860,6 +864,27 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
       break;
     }
 
+    // #981: the second block row of the regularized system is M dv - delta dy = b - M v, so
+    // once delta |dy| reaches |b - M v| the step stops closing the primal residual while mu
+    // still falls (liswet1, measured: |b - M v - M dv| / |b - M v| from 1e-9 at iteration 9
+    // to 0.99 by iteration 30, with delta = 1e-8 and |dy| = 250 against |b - M v| = 1e-6),
+    // and refinement against the unregularized matrix no longer contracts on its degenerate
+    // active rows. A step that leaves more than kQpIpmStepPrimalShare of the residual in
+    // place lowers delta's floor (Altman & Gondzio 1999: the regularization must stay small
+    // against what the step has to achieve), so only the models that need it see a smaller
+    // delta.
+    if (adaptive_dual && nr > 0 && dual_floor > tol::kQpIpmDualFloorMin) {
+      std::fill(mv.begin(), mv.end(), 0.0);
+      s.m.multiply_add(dv.data(), mv.data());
+      double missed = 0.0, needed = 0.0;
+      for (std::size_t i = 0; i < nr; ++i) {
+        missed = std::max(missed, std::fabs(rp[i] - mv[i]));
+        needed = std::max(needed, std::fabs(rp[i]));
+      }
+      if (missed > tol::kQpIpmStepPrimalShare * needed) {
+        dual_floor = std::max(tol::kQpIpmDualFloorMin, dual_floor * tol::kQpIpmDualFloorCut);
+      }
+    }
     const double alpha =
         bound_count > 0 ? std::min(1.0, kFractionToBoundary * longest_step()) : 1.0;
     for (std::size_t j = 0; j < nc; ++j) {
@@ -886,7 +911,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     // The proximal parameters follow mu down, never below the configured floor (the
     // centres move with the iterate, so a large rho slows the method and never biases it).
     rho = std::max(regularization_floor, std::min(rho, 0.1 * mu));
-    delta = rho;
+    delta = adaptive_dual ? std::max(dual_floor, std::min(delta, 0.1 * mu)) : rho;
   }
 
   // #980: the active-set finish, only once the IPM itself claims optimal and only when its
