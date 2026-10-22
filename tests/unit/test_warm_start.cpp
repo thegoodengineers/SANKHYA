@@ -518,6 +518,7 @@ TEST(WarmStart, APdhgIterateThroughSolveControlResolvesInFewerIterationsThanCold
   Model model = netlib("afiro");
   Options options = quiet("pdhg");
   options.set_bool("pdhg_polish", false);
+  options.set_bool("pdhg_relative_stop", false);  // the engine alone, to the standard (#1163)
   options.set_bool("presolve", false);
   const Solution first = solve(model, options);
   ASSERT_EQ(first.status, SolveStatus::kOptimal) << first.message;

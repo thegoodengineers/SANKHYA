@@ -481,7 +481,9 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     return r.primal <= tol::kPdhgTight && r.absolute_primal <= tol::kPrimalFeasibility;
   };
   const auto passes_stopping_test = [&](const Residuals& r) {
-    if (relative_stop) return r.worst() <= tolerance;
+    // pdhg_stop_at_request is the stricter request (the point primal feasible to the
+    // absolute tolerance as well) and keeps that meaning when both are on.
+    if (relative_stop && !stop_at_request) return r.worst() <= tolerance;
     return r.meets_request(tolerance) && (stop_at_request || r.meets_project_standard());
   };
   // Keep a polished pair when its x reached the target and it beats the one in hand.
