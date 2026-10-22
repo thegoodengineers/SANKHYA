@@ -124,6 +124,25 @@ RINS gains two matches (`neos-5140963-mincio`, `noswot`, `ran12x21` one seed eac
 Files: `bench/results/miplib-414-n2000-<leg>-seeds3-729112d8.csv` and their `summary-` files, rendered under "every optional heuristic alone" in `docs/BENCHMARKS.md`.
 What would earn a default: a leg that gains a matched or proved seed and loses neither, on this harness and again under a time limit.
 
+### The multi-round root cut loop, with tailing off (`root_cut_loop`, #956, #1116)
+
+Rounds of the root cut separators until the bound stalls, demoted in #956 at `f7cfd57`. #1116 added a tailing-off stop: a round gaining at most 0.1 of round 1's gain ends the loop (Padberg and Rinaldi 1991). It also cut the root's time share from 0.2 to 0.05. Root only, on the ten worst tier-1 instances, the tailed loop keeps most of the extra closure with about half the rows: k16x240b closes 40.1% of the root gap with 148 rows, against 48.6% with 256 untailed and 13.5% with one round. The 60 s A/B still loses.
+
+| arm (`ab-option`, `main` at `e01ae9c`, tier 1, 3 seeds, 60 s, both arms in one job on one EPYC 7763 runner) | matched / 90 | proved / 90 | sgm time (s, shift 10) |
+|---|---:|---:|---:|
+| `root_cut_loop=false` (the default) | 53 | 30 | 28.33 |
+| `root_cut_loop=true` | 49 | 28 | 28.49 |
+
+- **Proofs lost:** both on `neos-3611689-kaihu`, seeds 0 and 2. The default proves them in 50 s and 32 s; with the loop the root adds 120 cut rows instead of 30, and the run stops at the limit.
+- **Matches lost:** `ej` seeds 1 and 2, `markshare_4_0` seed 1, `neos5` seeds 0 and 1, `noswot` seed 2 and `kaihu` seed 2.
+- **Matches gained:** `gen-ip054` seed 2, `markshare_4_0` seed 0 and `neos5` seed 2.
+- **Node throughput:** lower on every run that moved; `ej` explored 416k nodes against 361k in the same 60 s.
+
+The cost is still the rows every node LP carries, not the root's time.
+
+Files: `bench/results/option-ab-miplib-rootloop-tailing-e01ae9c.csv` (the `arm` column), and the root-only legs `bench/results/rootgap-<leg>-24e289d9.csv`.
+What would earn a default: a loop whose extra rows do not ride along in the tree. For example, keep only the rows still tight at the last root LP, or move the rest to the cut pool, then repeat this A/B.
+
 ---
 
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
