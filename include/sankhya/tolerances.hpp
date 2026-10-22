@@ -1292,6 +1292,14 @@ inline constexpr double kIpmDeviceSystemCeiling = 1e8;
 /// x/tau, y/tau, s/tau: relative primal residual, relative dual residual and relative gap each
 /// at or below this. The LP embedding's kIpmHsdTolerance, so the two converge alike.
 inline constexpr double kConicTolerance = 1e-8;
+/// Past kConicTolerance the interior point keeps going (#1146): an optimum's value converges
+/// with the gap but its point and multipliers only with about the gap's square root on a
+/// second-order cone, and at 1e-8 the model's multipliers missed kDualFeasibility on 12 of 13
+/// QPLIB convex QCQPs. It aims for kConicTargetTolerance, at most kConicRefineIterations
+/// iterations past the first one that met kConicTolerance, and returns the latest iterate
+/// that met kConicTolerance when it stalls or a limit ends it - never a worse one.
+inline constexpr double kConicTargetTolerance = 1e-12;
+inline constexpr int kConicRefineIterations = 10;
 /// A certificate (a dual ray y, s with A'y + s = 0, s in the dual cone, b'y = 1; or a primal
 /// ray x with A x = 0, x in the cone, c'x = -1) is accepted when its defining equation holds
 /// to this, relative to the terms it is made of.
