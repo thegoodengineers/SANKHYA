@@ -19,11 +19,12 @@
 // MASS ELIMINATION: a member i of L_p left with no variable neighbour and no live element
 // except p has the neighbourhood L_p, the same as p's, so it leaves with p.
 //
-// Not built: dense-row postponement (the interior point removes its dense columns before the
-// ordering, dense_columns.cpp). Ties go to the most recently inserted node of the minimum
-// degree and every list is built in index order, so the permutation is deterministic.
+// Dense-node postponement wraps both orderings, opt-in: order() at the end of this file. Ties
+// go to the most recently inserted node of the minimum degree and every list is built in index
+// order, so the permutation is deterministic.
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -306,6 +307,70 @@ bool SparseLdl::minimum_degree_supervariable(const SparseMatrix& lower,
   absorbed_ = n - pivots;
   inverse_.assign(un, -1);
   for (Index k = 0; k < n; ++k) inverse_[at(perm_[at(k)])] = k;
+  return true;
+}
+
+// DENSE-NODE POSTPONEMENT (Amestoy, Davis & Duff, ACM TOMS 30(3), 2004, the AMD code's
+// dense rule). The orderings above are run on the graph with every edge of a dense node
+// removed - such a node is then isolated, ordered at once, and pulled out of the permutation -
+// and the dense nodes are appended last in index order. Any order is a valid permutation; this
+// one only changes where the dense nodes' fill is paid, which is at the end, all at once.
+bool SparseLdl::order(const SparseMatrix& lower, const ShouldStop& should_stop) {
+  dense_postponed_ = 0;
+  const auto run = [&](const SparseMatrix& graph) {
+    return supervariables_ ? minimum_degree_supervariable(graph, should_stop)
+                           : minimum_degree(graph, should_stop);
+  };
+  if (!postpone_dense_) return run(lower);
+  const Index n = n_;
+  const auto un = static_cast<std::size_t>(n);
+  std::vector<Index> degree(un, 0);
+  for (Index c = 0; c < n; ++c) {
+    const ColumnView column = lower.column(c);
+    for (Index p = 0; p < column.size; ++p) {
+      if (column.rows[p] <= c) continue;
+      ++degree[static_cast<std::size_t>(column.rows[p])];
+      ++degree[static_cast<std::size_t>(c)];
+    }
+  }
+  const double threshold = std::max(16.0, 10.0 * std::sqrt(static_cast<double>(n)));
+  std::vector<bool> dense(un, false);
+  for (std::size_t i = 0; i < un; ++i) {
+    if (static_cast<double>(degree[i]) > threshold) {
+      dense[i] = true;
+      ++dense_postponed_;
+    }
+  }
+  if (dense_postponed_ == 0) return run(lower);
+  std::vector<Index> starts(un + 1, 0);
+  std::vector<Index> rows;
+  std::vector<double> values;
+  for (Index c = 0; c < n; ++c) {
+    starts[static_cast<std::size_t>(c)] = static_cast<Index>(rows.size());
+    const ColumnView column = lower.column(c);
+    for (Index p = 0; p < column.size; ++p) {
+      const Index r = column.rows[p];
+      if (r != c && (dense[static_cast<std::size_t>(r)] || dense[static_cast<std::size_t>(c)]))
+        continue;
+      rows.push_back(r);
+      values.push_back(column.values[p]);
+    }
+  }
+  starts[un] = static_cast<Index>(rows.size());
+  SparseMatrix sparse;
+  sparse.assign_columns(n, n, std::move(starts), std::move(rows), std::move(values));
+  if (!run(sparse)) return false;
+  std::vector<Index> perm;
+  perm.reserve(un);
+  for (const Index i : perm_) {
+    if (!dense[static_cast<std::size_t>(i)]) perm.push_back(i);
+  }
+  for (Index i = 0; i < n; ++i) {
+    if (dense[static_cast<std::size_t>(i)]) perm.push_back(i);
+  }
+  perm_ = std::move(perm);
+  for (Index k = 0; k < n; ++k)
+    inverse_[static_cast<std::size_t>(perm_[static_cast<std::size_t>(k)])] = k;
   return true;
 }
 

@@ -98,6 +98,7 @@ class ProximalSystem {
     double first_residual = 0.0;  ///< unregularized residual of the plain K_reg solve
     double final_residual = 0.0;  ///< the same after the kept corrections
     double scale = 1.0;           ///< max(1, |g|, |r_b|), infinity norms
+    int krylov_steps = 0;         ///< GMRES iterations of a kept Krylov correction
     /// final_residual / scale: what the target tol::kIpmProximalRefinementTarget is on.
     [[nodiscard]] double relative_residual() const noexcept { return final_residual / scale; }
   };
@@ -105,15 +106,23 @@ class ProximalSystem {
   /// Solve the UNREGULARIZED Newton system for dx (n + m) and dy (m), given g (n + m) and
   /// r_b (m), with the factors of the last assemble() in `ldl`, and up to `max_steps`
   /// refinement corrections. Entries of g at fixed variables are ignored, dx is 0 there.
+  /// When the refinement ends above tol::kIpmProximalRefinementTarget, up to `krylov_steps`
+  /// GMRES iterations on the same factors follow (see gmres()).
   Refinement solve(const SparseLdl& ldl, const std::vector<double>& g,
                    const std::vector<double>& r_b, int max_steps, std::vector<double>* dx,
-                   std::vector<double>* dy) const;
+                   std::vector<double>* dy, int krylov_steps = 0) const;
 
  private:
   /// (dx, dy) = K_reg^-1 (p, q), in the full n + m + m space.
   void apply_inverse(const SparseLdl& ldl, const std::vector<double>& p,
                      const std::vector<double>& q, std::vector<double>* dx,
                      std::vector<double>* dy) const;
+  /// GMRES on K_0 right-preconditioned by K_reg^-1 from (dx, dy), whose residual is (p, q)
+  /// with infinity norm `best`; keeps the result only if its residual is lower.
+  double gmres(const SparseLdl& ldl, const std::vector<double>& g,
+               const std::vector<double>& r_b, int steps, double best, std::vector<double>* dx,
+               std::vector<double>* dy, std::vector<double>* p, std::vector<double>* q,
+               int* taken) const;
   /// (p, q) = (g, r_b) - K_0 (dx, dy); returns the infinity norm of the residual.
   double residual(const std::vector<double>& g, const std::vector<double>& r_b,
                   const std::vector<double>& dx, const std::vector<double>& dy,

@@ -194,6 +194,14 @@ class SparseLdl {
   /// can change an interior point's outcome (Netlib sierra and perold stall with it on).
   void set_supervariables(bool on) noexcept { supervariables_ = on; }
   [[nodiscard]] bool supervariables() const noexcept { return supervariables_; }
+  /// Dense-node postponement in the ordering (Amestoy, Davis & Duff, "Algorithm 837: AMD",
+  /// ACM TOMS 30(3), 2004): a node of degree above max(16, 10 sqrt(n)) is left out of the
+  /// minimum-degree graph and ordered last. Every elimination next to such a node otherwise
+  /// rescans its whole list - on the augmented system of Kennington osa-60 (#473) that kept the
+  /// ordering past a minute. Off by default, so the normal equations' orderings are unchanged.
+  void set_postpone_dense(bool on) noexcept { postpone_dense_ = on; }
+  /// Nodes the last ordering postponed as dense.
+  [[nodiscard]] Index dense_postponed() const noexcept { return dense_postponed_; }
   /// Variables the last supervariable ordering did not have to order on their own: merged
   /// into another or eliminated with a pivot. 0 when the ordering was the unweighted one.
   [[nodiscard]] Index variables_absorbed() const noexcept { return absorbed_; }
@@ -219,7 +227,10 @@ class SparseLdl {
   [[nodiscard]] bool minimum_degree(const SparseMatrix& lower, const ShouldStop& should_stop);
   [[nodiscard]] bool minimum_degree_supervariable(const SparseMatrix& lower,
                                                   const ShouldStop& should_stop);
+  [[nodiscard]] bool order(const SparseMatrix& lower, const ShouldStop& should_stop);
   bool supervariables_ = false;
+  bool postpone_dense_ = false;
+  Index dense_postponed_ = 0;
   Index absorbed_ = 0;
   [[nodiscard]] bool factorize_signed(const SparseMatrix& lower, double regularization,
                                       const signed char* signs, const ShouldStop& should_stop);

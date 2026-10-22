@@ -48,8 +48,8 @@ using ldl_detail::DeadlineByWork;
 // Not implemented here, deliberately: supervariable detection (indistinguishable nodes merged
 // and eliminated together) and dense-row postponement. Supervariables and mass elimination
 // are in ldl_amd.cpp (#471), behind set_supervariables(), so this version stays the oracle
-// it is tested against; dense-row postponement is not built (dense columns are removed
-// before the ordering, dense_columns.cpp).
+// it is tested against; dense-node postponement is SparseLdl::order() in ldl_amd.cpp, opt-in
+// (the normal equations remove their dense columns before the ordering, dense_columns.cpp).
 //
 // Ties go to the most recently inserted vertex of the minimum degree, and every list is
 // built in index order, so the ordering is deterministic: the same matrix gives the same
@@ -454,8 +454,7 @@ bool SparseLdl::analyze(const SparseMatrix& lower, const ShouldStop& should_stop
   // three to four times a numeric factorization, and at 20,000 rows it is most of an
   // 813-second first iteration (#193). It is therefore the one phase that has to be
   // interruptible for a time limit to mean anything.
-  if (!(supervariables_ ? minimum_degree_supervariable(lower, should_stop)
-                        : minimum_degree(lower, should_stop))) {
+  if (!order(lower, should_stop)) {
     // Two reasons to give up, told apart for the caller: a deadline is a time limit, a
     // budget is a refusal with the number in it (#246).
     stopped_early_ = !ordering_too_large_;

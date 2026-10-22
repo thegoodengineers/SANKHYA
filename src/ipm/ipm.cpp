@@ -1520,7 +1520,8 @@ void InteriorPoint::newton_direction() {
 
 void InteriorPoint::proximal_newton_direction(const std::vector<double>& g) {
   const ProximalSystem::Refinement refined =
-      proximal_->solve(ldl_, g, r_b_, tol::kIpmProximalRefinementSteps, &dx_, &dy_);
+      proximal_->solve(ldl_, g, r_b_, tol::kIpmProximalRefinementSteps, &dx_, &dy_,
+                       tol::kIpmProximalKrylovSteps);
   refinement_steps_ += refined.steps;
   ++refinement_solves_;
   // THE REFINEMENT CAN FAIL, AND NOT SILENTLY (review of #473). The residual is measured
@@ -2215,6 +2216,8 @@ Solution InteriorPoint::run() {
   build();
   if (options_.get_bool("ipm_proximal_regularization")) {
     proximal_ = std::make_unique<ProximalSystem>(model_.matrix, fixed_);
+    // A dense row of A is a dense node of the augmented system; ordered last (#473, osa-60).
+    ldl_.set_postpone_dense(true);
     purify_ldl_.set_ordering_budget(ldl_.ordering_budget());
     // The supernodal kernel (#470) factors the positive-definite normal equations only; the
     // signed quasi-definite factorization this path runs is the scalar one whatever the
