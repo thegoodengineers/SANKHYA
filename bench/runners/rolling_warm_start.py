@@ -138,6 +138,12 @@ def main() -> int:
         for arm, solver_options in arms:
             rng = random.Random(args.rng_seed)
             warm_previous = None
+            # The arms share one model object, and a week's edit stays in it: the second arm
+            # has to start from the file's own costs, not from the first arm's 52 edits.
+            for week in range(args.periods):
+                if columns[week] not in base_costs:
+                    base_costs[columns[week]] = _read_cost_from_mps(instance, target_name[week])
+                model.set_cost(columns[week], base_costs[columns[week]])
             for week in range(args.periods):
                 column = columns[week]
                 # The cost this column already carries - read once and perturbed relative to
