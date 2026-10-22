@@ -31,3 +31,4 @@ ab04612 37f4c56 engine-tree-ab-netlib-full-{rules,learned}-ab04612.csv, run on t
 7fd851d 8a463fb7 option-ab-{maros-meszaros,netlib}-keep-tiny-7fd851d.csv, the #1079 coefficient-keeping A/B against base cfb7bef (runs 39594062659, 39594072958), run on the #1107 branch; 8a463fb7 is its squash merge
 1bcb251 10ed9980 dantzig-wolfe-1bcb251.csv, the Dantzig-Wolfe refinery ladder, run on the #1068 branch; 10ed9980 is its squash merge
 b4bfb56 d14d738b option-ab-{netlib,kennington,refinery}-substitution-off-b4bfb56.csv, the presolve_substitution A/B (runs 39636762695, 39636772686, 39636779750), run on the #1125 branch; d14d738b is its squash merge
+5e05d71 49c085ed option-ab-{netlib,kennington,refinery}-dual-reductions-5e05d71.csv, the presolve_dual_reductions A/B (runs 39827542120, 39827549219, 39827556516), run on the #1160 branch; 49c085ed is its squash merge
