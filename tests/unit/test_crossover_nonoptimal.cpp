@@ -47,6 +47,9 @@ Options ipm_options(bool from_nonoptimal) {
   options.set_bool("log_to_console", false);
   options.set_string("algorithm", "ipm");
   options.set_bool("crossover_from_nonoptimal", from_nonoptimal);
+  // Raw solve_ipm without presolve: share2b stalls on the proximal path (#473), so the
+  // early-stop sweep runs on the normal equations it was written for.
+  options.set_bool("ipm_proximal_regularization", false);
   return options;
 }
 

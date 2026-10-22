@@ -34,6 +34,7 @@ Options ipm_with_correctors(std::int64_t cap) {
   options.set_string("algorithm", "ipm");
   options.set_bool("crossover", false);  // the interior point's own answer is judged
   options.set_int("ipm_centrality_correctors", cap);
+  options.set_bool("ipm_proximal_regularization", false);  // the normal equations (#473)
   return options;
 }
 
@@ -202,6 +203,7 @@ TEST(CentralityCorrectors, TheDefaultIsBitForBitTheOptionSetOff) {
     by_default.set_bool("log_to_console", false);
     by_default.set_string("algorithm", "ipm");
     by_default.set_bool("crossover", false);
+    by_default.set_bool("ipm_proximal_regularization", false);  // as ipm_with_correctors
     const Solution untouched = solve(model, by_default);
     const Solution off = solve(model, ipm_with_correctors(0));
     EXPECT_EQ(untouched.status, off.status) << name;

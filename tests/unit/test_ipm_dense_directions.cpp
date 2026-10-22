@@ -183,6 +183,7 @@ std::vector<Recorded> record_run(const std::string& name, Solution* solution) {
   options.set_bool("log_to_console", false);
   options.set_string("algorithm", "ipm");
   options.set_bool("ipm_dense_columns", true);
+  options.set_bool("ipm_proximal_regularization", false);  // the normal equations (#473)
   options.set_double("ipm_dense_column_factor", 1.0);
   *solution = solve(model, options);
   ipm::testing::dense_solve_observer = nullptr;
@@ -282,6 +283,7 @@ Options logged_dense_options() {
   options.set_string("log_level", "verbose");
   options.set_string("algorithm", "ipm");
   options.set_bool("ipm_dense_columns", true);
+  options.set_bool("ipm_proximal_regularization", false);  // the normal equations (#473)
   return options;
 }
 
@@ -296,6 +298,7 @@ TEST(DenseColumnFoldBack, AnUnconvergedSolveFoldsTheColumnsBackWhenTheWholeSyste
   Options plain;
   plain.set_bool("log_to_console", false);
   plain.set_string("algorithm", "ipm");
+  plain.set_bool("ipm_proximal_regularization", false);  // the normal equations (#473)
   const Solution reference = solve(model, plain);
   ASSERT_EQ(reference.status, SolveStatus::kOptimal) << reference.message;
 

@@ -187,6 +187,7 @@ Options ipm_options(const char* side) {
   Options options;
   options.set_bool("log_to_console", false);
   options.set_string("algorithm", "ipm");
+  options.set_bool("ipm_proximal_regularization", false);  // the normal equations (#473)
   options.set_string("ipm_normal_side", side);
   return options;
 }

@@ -265,6 +265,7 @@ TEST(InteriorPoint, TheBarrierExhaustedStopTakesOneMoreStepAndProvesTheAnswer) {
   const io::ReadResult read = io::read_model(path, &model);
   ASSERT_TRUE(read.ok) << path << ": " << read.error;
   Options options = with_algorithm("ipm");
+  options.set_bool("ipm_proximal_regularization", false);  // the normal equations (#473)
   options.set_bool("crossover", false);
   const Solution ipm = solve(model, options);
   ASSERT_EQ(ipm.status, SolveStatus::kOptimal) << ipm.message;

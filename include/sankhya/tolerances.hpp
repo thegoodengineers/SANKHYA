@@ -728,6 +728,9 @@ inline constexpr double kIpmProximalRefinementProgress = 0.9;
 /// refinement's contraction improves.
 inline constexpr double kIpmProximalRefinementTarget = 1e-8;
 inline constexpr double kIpmProximalRefinementShrink = 0.1;
+/// GMRES iterations (one restart cycle) on the same factors after a refinement that ended
+/// above kIpmProximalRefinementTarget: the stationary refinement stalls where Theta^-1 << rho.
+inline constexpr int kIpmProximalKrylovSteps = 20;
 /// After a non-finite Newton direction (#209) the rho floor rises by this factor per raise,
 /// capped at kIpmProximalRecoveryCap. The default path's x1e4 on its 1e-10 dual
 /// regularization, applied to the 1e-8 rho floor, took rho to 1 after two raises: a proximal

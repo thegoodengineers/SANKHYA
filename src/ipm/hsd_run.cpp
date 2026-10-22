@@ -291,7 +291,6 @@ void announce_homogeneous(const Options& options, Logger& logger) {
   const auto note = [&ignored](const char* name) {
     ignored += ignored.empty() ? name : std::string(", ") + name;
   };
-  if (options.get_bool("ipm_proximal_regularization")) note("ipm_proximal_regularization");
   if (options.get_bool("ipm_dense_columns")) note("ipm_dense_columns");
   if (options.get_string("ipm_normal_side") != "rows") note("ipm_normal_side");
   if (options.get_string("ipm_linear_solver") == "cudss") note("ipm_linear_solver=cudss");

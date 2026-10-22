@@ -399,7 +399,7 @@ class InteriorPoint {
     return device_factored_ ? device_->regularized_pivots() : ldl_.regularized_pivots();
   }
 
-  // THE PROXIMAL PATH (#473, ipm_proximal_regularization, off by default): the regularized
+  // THE PROXIMAL PATH (#473, ipm_proximal_regularization, on by default): the regularized
   // augmented system of ipm/proximal_system.hpp in place of the normal equations. ldl_ then
   // holds ITS factors, so the reporting below reads the same object on either path; the
   // dual purification, which needs the normal equations, gets its own factorization.
@@ -1520,7 +1520,8 @@ void InteriorPoint::newton_direction() {
 
 void InteriorPoint::proximal_newton_direction(const std::vector<double>& g) {
   const ProximalSystem::Refinement refined =
-      proximal_->solve(ldl_, g, r_b_, tol::kIpmProximalRefinementSteps, &dx_, &dy_);
+      proximal_->solve(ldl_, g, r_b_, tol::kIpmProximalRefinementSteps, &dx_, &dy_,
+                       tol::kIpmProximalKrylovSteps);
   refinement_steps_ += refined.steps;
   ++refinement_solves_;
   // THE REFINEMENT CAN FAIL, AND NOT SILENTLY (review of #473). The residual is measured
@@ -2213,8 +2214,20 @@ Solution InteriorPoint::run() {
     }
   }
   build();
-  if (options_.get_bool("ipm_proximal_regularization")) {
+  // ON BY DEFAULT since #473's A/B (nothing lost on Netlib, Kennington, Maros-Meszaros). A CUDA
+  // build keeps the normal equations, which its device factor (#489) takes and this path does
+  // not; the device was not part of that A/B. ipm_dense_columns, ipm_normal_side and
+  // ipm_linear_solver = cudss still need the option set false, and the log says so.
+  const bool yields = gpu::CudssFactor::compiled();
+  if (options_.get_bool("ipm_proximal_regularization") && yields) {
+    logger_.verbose(
+        "interior point: ipm_proximal_regularization yields to the device factor in a CUDA "
+        "build; the normal equations are factored");
+  }
+  if (options_.get_bool("ipm_proximal_regularization") && !yields) {
     proximal_ = std::make_unique<ProximalSystem>(model_.matrix, fixed_);
+    // A dense row of A is a dense node of the augmented system; ordered last (#473, osa-60).
+    ldl_.set_postpone_dense(true);
     purify_ldl_.set_ordering_budget(ldl_.ordering_budget());
     // The supernodal kernel (#470) factors the positive-definite normal equations only; the
     // signed quasi-definite factorization this path runs is the scalar one whatever the

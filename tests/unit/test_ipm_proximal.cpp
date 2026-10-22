@@ -303,6 +303,76 @@ TEST(ProximalSystem, TheResidualIsReportedRelativeToTheRightHandSide) {
       << "absolute " << refined.final_residual;
 }
 
+TEST(ProximalSystem, GmresNeverRaisesTheRefinedResidual) {
+  // One more variable with Theta^-1 << rho than there are rows: K_0 is nearly singular and the
+  // refinement stalls far above the target (#473). GMRES runs, and what it hands back never has
+  // a larger unregularized residual than the refinement's. Its gain on a real run is
+  // pilot.ja's, measured by the Netlib A/B.
+  std::mt19937_64 rng(1473);
+  std::uniform_real_distribution<double> value(-2.0, 2.0);
+  const Index m = 5;
+  const Index n = 12;
+  SparseMatrix a(m, n);
+  for (Index j = 0; j < n; ++j) {
+    for (Index i = 0; i < m; ++i) {
+      if ((i + 2 * j) % 3 != 0 || i == j % m) a.add_entry(i, j, value(rng));
+    }
+  }
+  a.finalize();
+  const Index total = n + m;
+  const std::vector<bool> fixed(static_cast<std::size_t>(total), false);
+  std::vector<double> theta_inverse(static_cast<std::size_t>(total));
+  for (Index k = 0; k < total; ++k) {
+    theta_inverse[static_cast<std::size_t>(k)] = k < m + 1 ? 1e-9 : 1e2;
+  }
+  std::vector<double> g(static_cast<std::size_t>(total)), r_b(static_cast<std::size_t>(m));
+  for (double& v : g) v = value(rng);
+  for (double& v : r_b) v = value(rng);
+  ipm::ProximalSystem system(a, fixed);
+  SparseLdl ldl;
+  system.assemble(theta_inverse, 1e-6, 1e-6);
+  ASSERT_TRUE(ldl.analyze(system.matrix()));
+  double reg = 1e-6;
+  int attempts = 0;
+  ASSERT_TRUE(system.factorize(ldl, theta_inverse, &reg, {}, &attempts));
+  std::vector<double> dx(static_cast<std::size_t>(total)), dy(static_cast<std::size_t>(m));
+  const ipm::ProximalSystem::Refinement stationary =
+      system.solve(ldl, g, r_b, tol::kIpmProximalRefinementSteps, &dx, &dy);
+  EXPECT_GT(stationary.relative_residual(), tol::kIpmProximalRefinementTarget);
+  const ipm::ProximalSystem::Refinement krylov = system.solve(
+      ldl, g, r_b, tol::kIpmProximalRefinementSteps, &dx, &dy, tol::kIpmProximalKrylovSteps);
+  EXPECT_LE(krylov.final_residual, stationary.final_residual);
+}
+
+TEST(SparseLdl, ADenseNodeIsPostponedToTheEndOfTheOrdering) {
+  // An arrow matrix: node 0 touches every other node. With postponement it is ordered last
+  // (Amestoy, Davis & Duff 2004), and the factorization still solves the system.
+  const Index n = 400;
+  SparseMatrix lower(n, n);
+  for (Index j = 0; j < n; ++j) {
+    lower.add_entry(j, j, j == 0 ? static_cast<double>(n) : 2.0);
+    if (j > 0) lower.add_entry(j, 0, 1.0);
+  }
+  lower.finalize();
+  SparseLdl ldl;
+  ldl.set_postpone_dense(true);
+  ASSERT_TRUE(ldl.analyze(lower));
+  EXPECT_EQ(ldl.dense_postponed(), 1);
+  EXPECT_EQ(ldl.permutation().back(), 0);
+  EXPECT_EQ(ldl.factor_nonzeros(), n - 1);  // no fill at all with the hub last
+  ASSERT_TRUE(ldl.factorize(lower, 0.0));
+  std::vector<double> b(static_cast<std::size_t>(n), 1.0);
+  std::vector<double> x = b;
+  ldl.solve(x.data());
+  // Row 0: n x_0 + sum x_j = 1; row j: x_0 + 2 x_j = 1.
+  double row0 = static_cast<double>(n) * x[0];
+  for (Index j = 1; j < n; ++j) {
+    EXPECT_NEAR(x[0] + 2.0 * x[static_cast<std::size_t>(j)], 1.0, 1e-12);
+    row0 += x[static_cast<std::size_t>(j)];
+  }
+  EXPECT_NEAR(row0, 1.0, 1e-10);  // a sum of 400 terms: 400 roundings of eps
+}
+
 TEST(ProximalSystem, AMissedRefinementShrinksRhoAndARecoveryRaisesItsFloorToTheCap) {
   using ipm::ProximalSystem;
   // A miss shrinks the previous rho by kIpmProximalRefinementShrink before the mu rule...
@@ -491,12 +561,12 @@ TEST(InteriorPointProximal, ARankDeficientLpWithAFreeColumnNeedsNoLiftedPivot) {
   }
 }
 
-TEST(InteriorPointProximal, OffByDefaultAndTheDefaultPathIsTheExplicitlyOffPath) {
+TEST(InteriorPointProximal, OnByDefaultAndTheDefaultPathIsTheExplicitlyOnPath) {
   Options defaults;
-  EXPECT_FALSE(defaults.get_bool("ipm_proximal_regularization"));
-  // The default path, pinned against the same solve with the option set false explicitly:
+  EXPECT_TRUE(defaults.get_bool("ipm_proximal_regularization"));
+  // The default path, pinned against the same solve with the option set true explicitly (#473):
   // the same iterations, the same objective and the same point, bit for bit. Afiro's
-  // default-path count is its own; the proximal one is only held to the same optimum.
+  // normal-equations path is only held to the same optimum.
   const Model model = netlib("afiro");
   Options unset;
   unset.set_bool("log_to_console", false);
@@ -507,15 +577,15 @@ TEST(InteriorPointProximal, OffByDefaultAndTheDefaultPathIsTheExplicitlyOffPath)
   ASSERT_EQ(by_default.status, SolveStatus::kOptimal) << by_default.message;
   ASSERT_EQ(plain.status, SolveStatus::kOptimal) << plain.message;
   ASSERT_EQ(proximal.status, SolveStatus::kOptimal) << proximal.message;
-  EXPECT_EQ(by_default.iterations, plain.iterations);
-  EXPECT_EQ(by_default.objective, plain.objective);
-  EXPECT_EQ(by_default.col_value, plain.col_value);
+  EXPECT_EQ(by_default.iterations, proximal.iterations);
+  EXPECT_EQ(by_default.objective, proximal.objective);
+  EXPECT_EQ(by_default.col_value, proximal.col_value);
   // The message is compared with its wall-clock readings blanked: crossover reports "in
   // 0.01s", which is a measurement of the machine, not of the path taken. Comparing it raw
   // failed whenever the two solves straddled a hundredth of a second (the sanitizer CI job).
   const std::regex seconds(R"([0-9]+\.[0-9]+s\b)");
   EXPECT_EQ(std::regex_replace(by_default.message, seconds, "<t>s"),
-            std::regex_replace(plain.message, seconds, "<t>s"));
+            std::regex_replace(proximal.message, seconds, "<t>s"));
   EXPECT_NEAR(plain.objective, proximal.objective, 1e-6 * std::fabs(plain.objective));
 }
 

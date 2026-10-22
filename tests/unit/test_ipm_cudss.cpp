@@ -55,6 +55,7 @@ Options ipm_options(const char* linear_solver) {
   Options options;
   options.set_bool("log_to_console", false);
   options.set_string("algorithm", "ipm");
+  options.set_bool("ipm_proximal_regularization", false);  // the normal equations (#473)
   options.set_bool("crossover", false);  // the interior point's own answer is judged
   options.set_string("ipm_linear_solver", linear_solver);
   return options;
