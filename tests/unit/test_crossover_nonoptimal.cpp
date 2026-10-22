@@ -167,6 +167,31 @@ TEST(CrossoverFromNonoptimal, ThroughSolveAStoppedInteriorPointEndsOptimal) {
   EXPECT_EQ(alone.algorithm.find("crossover"), std::string::npos) << alone.algorithm;
 }
 
+TEST(CrossoverFromNonoptimal, ThroughSolveAPdhgPointEndsOptimalAtAVertexUnderPdhgCrossover) {
+  // #888: the route a first-order answer takes to a basis. PDHG stops on its request
+  // (pdhg_stop_at_request, feasible and not optimal), the crossover finishes from that
+  // point, and the vertex passes the same checks as the interior point's. The same solve
+  // without the option keeps PDHG's own answer.
+  const Model model = netlib("afiro");
+  Options on;
+  on.set_bool("log_to_console", false);
+  on.set_string("algorithm", "pdhg");
+  on.set_bool("pdhg_polish", false);
+  on.set_bool("pdhg_stop_at_request", true);
+  on.set_double("pdhg_tolerance", 1e-6);
+  Options off = on;
+  on.set_bool("pdhg_crossover", true);
+  const Solution crossed = solve(model, on);
+  ASSERT_EQ(crossed.status, SolveStatus::kOptimal) << crossed.message;
+  EXPECT_NEAR(crossed.objective, -464.75314286, 1e-6 * 464.75314286);
+  EXPECT_NE(crossed.algorithm.find("crossover"), std::string::npos) << crossed.algorithm;
+  expect_a_verified_vertex(model, crossed, "afiro, PDHG then crossover through solve()");
+
+  const Solution alone = solve(model, off);
+  EXPECT_NE(alone.status, SolveStatus::kNotSolved) << alone.message;
+  EXPECT_EQ(alone.algorithm.find("crossover"), std::string::npos) << alone.algorithm;
+}
+
 TEST(CrossoverFromNonoptimal, TheGateRefusesWhatIsNotAUsablePoint) {
   const Model model = netlib("afiro");
   Logger quiet(nullptr);
