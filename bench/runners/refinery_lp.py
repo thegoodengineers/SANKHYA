@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import kkt_crossings  # noqa: E402
 import netlib  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -83,6 +84,8 @@ def main() -> int:
             "wall_seconds": round(blob.get("wall_seconds", 0.0), 6),
             "solver_seconds": blob.get("solver_seconds", ""),
             "iterations": blob.get("iterations", ""), "algorithm": blob.get("algorithm", ""),
+            # #486: run_one flattened the crossings already; blank for an engine other than PDHG.
+            **{k: blob.get(k, "") for k in kkt_crossings.ALL_COLUMNS},
             "git_commit": commit, "solver_options": options, "machine": machine,
             "timestamp_utc": timestamp,
         })

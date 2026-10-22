@@ -69,6 +69,7 @@ add_executable(sankhya_tests
   unit/test_pdhg_refinement.cpp
   unit/test_pdhg_halpern.cpp
   unit/test_pdhg_step_weight.cpp
+  unit/test_pdhg_restart_necessary.cpp
   unit/test_operator_norm.cpp
   unit/test_pdhg_norm_rescale.cpp
   unit/test_crossover.cpp

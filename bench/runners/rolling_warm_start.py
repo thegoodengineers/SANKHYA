@@ -78,6 +78,12 @@ def main() -> int:
     parser.add_argument("--algorithm", default="auto",
                         help="the solver's algorithm option: auto (simplex basis restart) "
                              "or pdhg (the previous iterate as the start)")
+    parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE",
+                        help="an option for every solve (both arms of an A/B); repeatable")
+    parser.add_argument("--arm", action="append", default=[], metavar="KEY=VALUE",
+                        help="an option A/B in this one process: every week is solved once "
+                             "without these options (arm off) and once with them (arm on), "
+                             "and the CSV gains an arm column; repeatable")
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--machine", default=None,
                         help="machine tag for the CSV (default: OS-architecture)")
@@ -124,67 +130,80 @@ def main() -> int:
                  f"{check}-column model", file=sys.stderr)
             return 2
 
-        rng = random.Random(args.rng_seed)
-        rows: list[dict] = []
-        warm_previous = None
         base_costs = {}
+        shared = _typed_options(args.solver_option)
+        arms = [("", shared)] if not args.arm else [
+            ("off", shared), ("on", {**shared, **_typed_options(args.arm)})]
+        rows: list[dict] = []
+        for arm, solver_options in arms:
+            rng = random.Random(args.rng_seed)
+            warm_previous = None
+            # The arms share one model object, and a week's edit stays in it: the second arm
+            # has to start from the file's own costs, not from the first arm's 52 edits.
+            for week in range(args.periods):
+                if columns[week] not in base_costs:
+                    base_costs[columns[week]] = _read_cost_from_mps(instance, target_name[week])
+                model.set_cost(columns[week], base_costs[columns[week]])
+            for week in range(args.periods):
+                column = columns[week]
+                # The cost this column already carries - read once and perturbed relative to
+                # ITSELF each visit, so ten runs of this script at the same --rng-seed move the
+                # same column by the same sequence of factors regardless of solve order.
+                if column not in base_costs:
+                    # Model has no "read one coefficient back" accessor either (by the same
+                    # write-only design as column lookup above); the ORIGINAL cost is instead
+                    # read once from Result.reduced_costs's algebra is not it - simplest correct
+                    # source is the file itself, parsed once per column on first use.
+                    base_costs[column] = _read_cost_from_mps(instance, target_name[week])
+                factor = 1.0 + rng.uniform(-args.delta, args.delta)
+                model.set_cost(column, base_costs[column] * factor)
 
-        for week in range(args.periods):
-            column = columns[week]
-            # The cost this column already carries - read once and perturbed relative to
-            # ITSELF each visit, so ten runs of this script at the same --rng-seed move the
-            # same column by the same sequence of factors regardless of solve order.
-            if column not in base_costs:
-                # Model has no "read one coefficient back" accessor either (by the same
-                # write-only design as column lookup above); the ORIGINAL cost is instead
-                # read once from Result.reduced_costs's algebra is not it - simplest correct
-                # source is the file itself, parsed once per column on first use.
-                base_costs[column] = _read_cost_from_mps(instance, target_name[week])
-            factor = 1.0 + rng.uniform(-args.delta, args.delta)
-            model.set_cost(column, base_costs[column] * factor)
+                cold = model.solve(log_to_console=False, algorithm=args.algorithm,
+                                   **solver_options)
+                warm = model.solve(log_to_console=False, algorithm=args.algorithm,
+                                   start=warm_previous, **solver_options)
+                warm_previous = warm
 
-            cold = model.solve(log_to_console=False, algorithm=args.algorithm)
-            warm = model.solve(log_to_console=False, algorithm=args.algorithm,
-                               start=warm_previous)
-            warm_previous = warm
+                check_match = cold.status == warm.status and (
+                    not cold.claims_a_point or abs(cold.objective - warm.objective)
+                    <= 1e-6 * max(1.0, abs(cold.objective)))
+                rows.append({
+                    **({"arm": arm} if args.arm else {}),
+                    "week": week + 1,
+                    "algorithm": args.algorithm,
+                    "column": target_name[week],
+                    "cost_factor": f"{factor:.6f}",
+                    "cold_status": cold.status,
+                    "warm_status": warm.status,
+                    "cold_objective": f"{cold.objective:.10g}" if cold.claims_a_point else "",
+                    "warm_objective": f"{warm.objective:.10g}" if warm.claims_a_point else "",
+                    "answers_agree": check_match,
+                    "cold_iterations": cold.iterations,
+                    "warm_iterations": warm.iterations,
+                    "cold_seconds": f"{cold.seconds:.6f}",
+                    "warm_seconds": f"{warm.seconds:.6f}",
+                })
+                if not check_match:
+                    print(f"week {week + 1}: WARM AND COLD DISAGREE - "
+                         f"cold={cold.status}/{cold.objective if cold.claims_a_point else 'n/a'} "
+                         f"warm={warm.status}/{warm.objective if warm.claims_a_point else 'n/a'}",
+                         file=sys.stderr)
 
-            check_match = cold.status == warm.status and (
-                not cold.claims_a_point or abs(cold.objective - warm.objective)
-                <= 1e-6 * max(1.0, abs(cold.objective)))
-            rows.append({
-                "week": week + 1,
-                "algorithm": args.algorithm,
-                "column": target_name[week],
-                "cost_factor": f"{factor:.6f}",
-                "cold_status": cold.status,
-                "warm_status": warm.status,
-                "cold_objective": f"{cold.objective:.10g}" if cold.claims_a_point else "",
-                "warm_objective": f"{warm.objective:.10g}" if warm.claims_a_point else "",
-                "answers_agree": check_match,
-                "cold_iterations": cold.iterations,
-                "warm_iterations": warm.iterations,
-                "cold_seconds": f"{cold.seconds:.6f}",
-                "warm_seconds": f"{warm.seconds:.6f}",
-            })
-            if not check_match:
-                print(f"week {week + 1}: WARM AND COLD DISAGREE - "
-                     f"cold={cold.status}/{cold.objective if cold.claims_a_point else 'n/a'} "
-                     f"warm={warm.status}/{warm.objective if warm.claims_a_point else 'n/a'}",
-                     file=sys.stderr)
-
-        total_cold_iter = sum(r["cold_iterations"] for r in rows)
-        total_warm_iter = sum(r["warm_iterations"] for r in rows)
-        total_cold_s = sum(float(r["cold_seconds"]) for r in rows)
-        total_warm_s = sum(float(r["warm_seconds"]) for r in rows)
         disagreements = sum(1 for r in rows if not r["answers_agree"])
-
-        print(f"{args.periods} weeks, crude {args.crude}, delta +/-{args.delta:.0%}, "
-              f"algorithm {args.algorithm}:")
-        print(f"  iterations: cold {total_cold_iter}, warm {total_warm_iter} "
-             f"({total_warm_iter / max(1, total_cold_iter):.3f}x)")
-        print(f"  seconds:    cold {total_cold_s:.4f}, warm {total_warm_s:.4f} "
-             f"({total_warm_s / max(1e-9, total_cold_s):.3f}x)")
-        print(f"  answers agree on {len(rows) - disagreements}/{len(rows)} weeks")
+        for arm, _ in arms:
+            mine = [r for r in rows if r.get("arm", "") == arm]
+            total_cold_iter = sum(r["cold_iterations"] for r in mine)
+            total_warm_iter = sum(r["warm_iterations"] for r in mine)
+            total_cold_s = sum(float(r["cold_seconds"]) for r in mine)
+            total_warm_s = sum(float(r["warm_seconds"]) for r in mine)
+            print(f"{args.periods} weeks, crude {args.crude}, delta +/-{args.delta:.0%}, "
+                  f"algorithm {args.algorithm}{f', arm {arm}' if arm else ''}:")
+            print(f"  iterations: cold {total_cold_iter}, warm {total_warm_iter} "
+                 f"({total_warm_iter / max(1, total_cold_iter):.3f}x)")
+            print(f"  seconds:    cold {total_cold_s:.4f}, warm {total_warm_s:.4f} "
+                 f"({total_warm_s / max(1e-9, total_cold_s):.3f}x)")
+            agreed = sum(1 for r in mine if r["answers_agree"])
+            print(f"  answers agree on {agreed}/{len(mine)} weeks")
 
         # The commit the BINARY was built from (#433), read from the CLI built beside the
         # library the bindings load - the library itself reports no commit. HEAD would
@@ -207,6 +226,20 @@ def main() -> int:
         print(f"wrote {out}")
 
         return 0 if disagreements == 0 else 1
+
+
+def _typed_options(pairs: list[str]) -> dict:
+    """KEY=VALUE strings to the typed values Model.solve's keyword options take."""
+    def typed(value: str):
+        if value.lower() in ("true", "false"):
+            return value.lower() == "true"
+        for cast in (int, float):
+            try:
+                return cast(value)
+            except ValueError:
+                pass
+        return value
+    return {k: typed(v) for k, v in (p.split("=", 1) for p in pairs)}
 
 
 def _read_cost_from_mps(path: Path, column_name: str) -> float:
