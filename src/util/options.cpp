@@ -2557,6 +2557,20 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          {}});
     s.push_back(
+        {"pdhg_crossover",
+         OptionType::Bool,
+         false,
+         "After PDHG (CPU or CUDA) returns, push its point to a vertex with the crossover "
+         "(#888): the same gate the interior point's answer goes through (#474) - an optimal "
+         "point is always a start, a feasible or stopped one only when its scaled primal and "
+         "dual infeasibility are at most 1e-4 - and only the simplex's own vertex, measured "
+         "by the status guard, can be reported optimal; a start the pivots cannot finish in "
+         "the time left leaves PDHG's answer as it was. The route a first-order answer on the "
+         "card takes to an exact, basis-carrying answer. Off by default until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back(
         {"pdhg_halpern",
          OptionType::Bool,
          false,
