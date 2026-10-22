@@ -25,6 +25,18 @@
 // Sais (eds.), Handbook of Parallel Constraint Reasoning, Springer, 2018: each worker owns a
 // subtree, the incumbent and the bound are the shared state, and idle workers are fed by
 // taking work from the busy ones. docs/PROVENANCE.md carries the row.
+//
+// THE ROOT'S CUTS TRAVEL WITH THE SUBTREES (#1158). Cuts are separated at the root of a
+// worker's own tree only (branch_and_bound.cpp, node 0), and a worker starting a donated
+// subtree plants the chain's leaf as its first node, so until #1158 a donated subtree was
+// bounded by the bare LP relaxation with none of the root's cuts: on fiber, whose root cuts
+// close most of the gap, four threads explored 290,431 nodes where one explored 4,396. The
+// root worker now publishes the cut rows active in its LP the first time it gives a subtree
+// away, and every worker that takes a subtree appends them before its first node, which is
+// the shared global cut pool of Ralphs, Ladanyi and Saltzman, "Parallel branch, cut, and
+// price for large-scale discrete optimization", Mathematical Programming 98 (2003): cuts
+// found at the root are valid for the whole tree, so every subtree is bounded as the root's
+// tree is.
 #pragma once
 
 #include <atomic>
@@ -165,6 +177,15 @@ class SharedSearch {
   /// Add what a worker observed on top of the snapshot it started from.
   void merge_pseudocosts(const Pseudocosts& start, const Pseudocosts& end);
 
+  // ---- The root's cuts, carried into every donated subtree (#1158) ----------------------
+
+  /// Published once, by the root worker before its first donation: the cut rows then active
+  /// in its LP, every one valid for the whole tree. A later call changes nothing.
+  void set_root_cuts(std::vector<Cut> cuts);
+  /// A copy for a worker about to start a donated subtree; empty before the root published.
+  [[nodiscard]] std::vector<Cut> root_cuts();
+  [[nodiscard]] std::size_t root_cut_count();
+
  private:
   const int workers_;
   const Count node_limit_;
@@ -197,6 +218,10 @@ class SharedSearch {
 
   std::mutex pseudocost_mutex_;
   Pseudocosts pseudocosts_;
+
+  std::mutex cuts_mutex_;
+  std::vector<Cut> root_cuts_;
+  bool root_cuts_set_ = false;
 
   NodeScaling scaling_;
   bool has_scaling_ = false;

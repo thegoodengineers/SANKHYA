@@ -213,11 +213,35 @@ void SharedSearch::merge_pseudocosts(const Pseudocosts& start, const Pseudocosts
   }
 }
 
+void SharedSearch::set_root_cuts(std::vector<Cut> cuts) {
+  const std::lock_guard<std::mutex> lock(cuts_mutex_);
+  if (root_cuts_set_) return;
+  root_cuts_ = std::move(cuts);
+  root_cuts_set_ = true;
+}
+
+std::vector<Cut> SharedSearch::root_cuts() {
+  const std::lock_guard<std::mutex> lock(cuts_mutex_);
+  return root_cuts_;
+}
+
+std::size_t SharedSearch::root_cut_count() {
+  const std::lock_guard<std::mutex> lock(cuts_mutex_);
+  return root_cuts_.size();
+}
+
 // =========================================================================================
 // The worker's side of BranchAndBound
 // =========================================================================================
 
 void BranchAndBound::plant_seed() {
+  // The root's cuts first (#1158, parallel_search.hpp): appended as the root worker appended
+  // its own, so the subtree's every node LP is bounded by them. The seed's basis, taken over
+  // the donor's model rows alone, is then of the wrong size and is dropped below, as it was.
+  if (std::vector<Cut> carried = shared_->root_cuts(); !carried.empty()) {
+    append_cut_rows(carried);
+    resize_warm_starts(working_.num_rows());
+  }
   // The chain as ordinary tree nodes under the root, each one's parent the one before, so
   // enter() walks it exactly as it walks any node's ancestry. Only the last is open.
   Index parent = 0;
@@ -314,6 +338,15 @@ void BranchAndBound::sync_pseudocosts() {
 }
 
 void BranchAndBound::donate_open_nodes() {
+  // The root worker's first donation publishes the cut rows active in its LP (#1158): the
+  // only workers awake at that moment are waiting on the queue, so this is before any
+  // subtree starts. set_root_cuts() keeps the first set; later calls are no-ops.
+  if (seed_ == nullptr && first_cut_row_ >= 0) {
+    std::vector<Cut> active;
+    active.reserve(cut_lp_rows_.size());
+    for (const std::size_t pool_index : cut_lp_rows_) active.push_back(pool_cuts_[pool_index]);
+    shared_->set_root_cuts(std::move(active));
+  }
   // The smallest-bound nodes, never the two newest: those are the children the hybrid's
   // dive is about to take, and the dive is what keeps the dual simplex's warm starts short.
   const std::size_t keep = 2;
@@ -631,9 +664,10 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   double best = std::numeric_limits<double>::infinity();
   std::vector<double> best_x;
   const bool found = shared.incumbent(&best, &best_x);
-  const std::string summary =
-      fmt::format("parallel tree search on {} threads: {} subtrees, {} given away", threads,
-                  shared.subtrees.load(), shared.donations.load());
+  const std::string summary = fmt::format(
+      "parallel tree search on {} threads: {} subtrees, {} given away, {} root cut(s) carried "
+      "into each",
+      threads, shared.subtrees.load(), shared.donations.load(), shared.root_cut_count());
 
   if (!found) {
     const double nothing = model.sense == ObjSense::kMaximize ? -kInfinity : kInfinity;
