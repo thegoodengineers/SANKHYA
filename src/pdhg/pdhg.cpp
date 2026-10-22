@@ -232,6 +232,12 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   // and no time left for the crossover). The report below still refuses kOptimal, and
   // solve() withdraws the kFeasible claim when the crossover does not reach a vertex.
   const bool start_for_crossover = options.get_bool("pdhg_crossover");
+  // pdhg_relative_stop: the loop stops on the relative KKT request alone, [PDLP]'s own
+  // termination, and the verdict is left to the report below and to the interior-point polish
+  // (solve.cpp) that takes any non-optimal point: `optimal` still needs the absolute standard,
+  // `feasible` still needs absolute primal feasibility, and a point with neither is reported
+  // as stopped, its relative residuals stated.
+  const bool relative_stop = options.get_bool("pdhg_relative_stop");
   const bool geometric_evaluation = options.get_bool("pdhg_geometric_evaluation");
   const bool use_halpern = options.get_bool("pdhg_halpern");
   // pdhg_two_matvec (#479): "cpu", the default, is two products here unless Halpern is on,
@@ -441,6 +447,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   std::vector<double> best_y = y;
 
   bool converged = false;
+  bool relative_stopped = false;  // pdhg_relative_stop: the relative request ended the loop
   bool logged_table = false;
   HalpernResult last_halpern_res;
 
@@ -481,6 +488,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
   };
   const auto passes_stopping_test = [&](const Residuals& r) {
     if (start_for_crossover) return r.meets_relative_request(tolerance);
+    if (relative_stop) return r.worst() <= tolerance;
     return r.meets_request(tolerance) && (stop_at_request || r.meets_project_standard());
   };
   // Keep a polished pair when its x reached the target and it beats the one in hand.
@@ -831,7 +839,11 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       best = better;
       best_x = *chosen_x;
       best_y = *chosen_y;
-      converged = true;
+      // Under pdhg_relative_stop a point that is not primal feasible to the project's
+      // absolute tolerance has not earned `feasible` (the verifier holds that status to it),
+      // so it is reported as stopped, with the request met noted in the message.
+      converged = !relative_stop || better.absolute_primal <= tol::kPrimalFeasibility;
+      relative_stopped = relative_stop;
       break;
     }
 
@@ -1082,9 +1094,11 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
         tolerance, iteration, final_residuals.absolute_primal, tol::kPrimalFeasibility,
         final_residuals.absolute_dual, tol::kDualFeasibility, final_residuals.gap_as_verified,
         tol::kDualityGap,
-        stop_at_request ? "pdhg_stop_at_request is on, so this is the cheap answer that was "
-                          "asked for; turn it off to run on to the standard"
-                        : "Tighten --option pdhg_tolerance to close it");
+        relative_stop     ? "pdhg_relative_stop is on, so the loop ended on the relative "
+                            "request; the interior-point polish, when on, finishes it"
+        : stop_at_request ? "pdhg_stop_at_request is on, so this is the cheap answer that was "
+                            "asked for; turn it off to run on to the standard"
+                          : "Tighten --option pdhg_tolerance to close it");
   } else {
     // PDHG stopping short is the normal case, not an exception. Report the residuals it
     // actually reached rather than implying the point is optimal.
@@ -1094,9 +1108,14 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
             : SolveStatus::kIterationLimit;
     solution.message = fmt::format(
         "stopped at relative primal {:.3e}, dual {:.3e}, gap {:.3e} after {} iterations "
-        "and {} restarts (target {:.1e})",
+        "and {} restarts (target {:.1e}){}",
         final_residuals.primal, final_residuals.dual, final_residuals.gap, iteration, restarts,
-        tolerance);
+        tolerance,
+        relative_stopped ? fmt::format(": the relative request was met (pdhg_relative_stop) "
+                                       "but the point is not primal feasible to the "
+                                       "absolute standard (primal {:.3e} vs {:.1e})",
+                                       final_residuals.absolute_primal, tol::kPrimalFeasibility)
+                         : "");
   }
 
   // Only a verifiable point carries a dual bound. Anything else leaves it unknown, which is
