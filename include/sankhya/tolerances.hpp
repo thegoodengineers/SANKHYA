@@ -614,6 +614,16 @@ inline constexpr int kQpIpmRegularizationAttempts = 8;
 /// and kIpmProximalRefinementProgress, tuned apart.
 inline constexpr int kQpIpmRefinementSteps = 5;
 inline constexpr double kQpIpmRefinementProgress = 0.9;
+/// qp_ipm_krylov_refinement (#981): the Krylov space the GMRES refinement of each Newton step
+/// against the unregularized KKT matrix may build, preconditioned by the regularized factors.
+inline constexpr int kQpIpmKrylovDimension = 30;
+/// qp_ipm_adaptive_dual_regularization (#981): a Newton step that leaves more than this share
+/// of the primal residual b - M v in place (infinity norm) cuts the floor of the dual
+/// regularization delta by kQpIpmDualFloorCut, never below kQpIpmDualFloorMin (the option
+/// range's own lower end for qp_ipm_regularization).
+inline constexpr double kQpIpmStepPrimalShare = 0.1;
+inline constexpr double kQpIpmDualFloorCut = 0.01;
+inline constexpr double kQpIpmDualFloorMin = 1e-14;
 
 /// The active-set finish after the QP interior point (#980, qp_ipm_finish, off by default):
 /// a bound counts as active when the point is within this distance of it, scaled by
@@ -678,6 +688,16 @@ inline constexpr double kQpIpmWarmCentringHigh = 10.0;
 /// or three iterations when it is converging, so ten iterations without one is a stall.
 inline constexpr int kQpIpmWarmStallWindow = 10;
 inline constexpr double kQpIpmWarmStallFactor = 0.1;
+
+/// Gondzio's multiple centrality correctors (Comput. Optim. Appl. 6, 1996), #981: the trial
+/// step aims kQpIpmGondzioStepGain further than the current one; trial products are pulled
+/// into [kQpIpmGondzioBetaMin, kQpIpmGondzioBetaMax] times sigma mu; a corrector is kept
+/// only when it lengthens the step by kQpIpmGondzioAcceptShare of the aimed gain. The
+/// values are the paper's (sec. 4).
+inline constexpr double kQpIpmGondzioStepGain = 0.1;
+inline constexpr double kQpIpmGondzioBetaMin = 0.1;
+inline constexpr double kQpIpmGondzioBetaMax = 10.0;
+inline constexpr double kQpIpmGondzioAcceptShare = 0.1;
 
 // ---- Proximal regularization of the LP interior point (#473, ipm_proximal_regularization) --
 

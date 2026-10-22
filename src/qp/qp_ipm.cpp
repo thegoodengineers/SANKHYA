@@ -99,6 +99,7 @@ using ipm_detail::hessian_times;
 using ipm_detail::inf_norm;
 using ipm_detail::KktMatrix;
 using ipm_detail::largest_complementarity_product;
+using ipm_detail::refine_krylov;
 using ipm_detail::refine_unregularized;
 using ipm_detail::solve_refined;
 using ipm_detail::Standard;
@@ -348,6 +349,9 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   // the first-order engine for whatever time is left. See the file header and the comment at
   // the stall test below.
   const bool stall_handoff = options.get_bool("qp_ipm_stall_handoff");
+  const bool adaptive_dual = options.get_bool("qp_ipm_adaptive_dual_regularization");
+  const bool krylov_refinement = options.get_bool("qp_ipm_krylov_refinement");
+  const Count centrality_correctors = options.get_int("qp_ipm_centrality_correctors");
   const double primal_tolerance = options.get_double("primal_feasibility_tolerance");
   StopController stop(control, timer, limits);
 
@@ -401,6 +405,9 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   double rho = options.get_double("qp_ipm_regularization");
   double delta = rho;
   const double regularization_floor = rho;
+  // #981, qp_ipm_adaptive_dual_regularization: the floor delta follows down to, lowered
+  // whenever the step leaves the primal residual largely in place (see below).
+  double dual_floor = rho;
 
   SolveStatus status = SolveStatus::kIterationLimit;
   std::string message;
@@ -437,6 +444,12 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     for (std::size_t i = 0; i < nr; ++i) rhs[nc + i] = rp[i];
     solve_refined(ldl, k, rhs, &step);
     refine_unregularized(ldl, k0, rhs, &step);
+    // #981: with qp_ipm_adaptive_dual_regularization the Krylov refinement joins once the
+    // floor has been cut - only on a model whose step already failed to close the residual,
+    // so a large well-posed model (boyd2) never pays for it.
+    if (krylov_refinement || (adaptive_dual && dual_floor < regularization_floor)) {
+      refine_krylov(ldl, k0, rhs, &step);
+    }
     for (std::size_t j = 0; j < nc; ++j) {
       dv[j] = step[j];
       dzl[j] = has_lower[j] ? (rcl[j] - zl[j] * dv[j]) / (v[j] - s.lower[j]) : 0.0;
@@ -800,6 +813,53 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
         }
       }
       newton(k);
+
+      // ---- #981: Gondzio's multiple centrality correctors (Comput. Optim. Appl. 6, 1996,
+      // sec. 3): aim a longer step, pull every product that step would reach into
+      // [beta_min, beta_max] sigma mu, solve for that correction alone (rd = rp = 0) with the
+      // same factors, and keep it only while the step lengthens enough.
+      double alpha_now = longest_step();
+      for (Count c = 0; c < centrality_correctors && alpha_now < 1.0; ++c) {
+        const double aim = std::min(1.0, alpha_now + tol::kQpIpmGondzioStepGain);
+        const double low = tol::kQpIpmGondzioBetaMin * sigma * mu;
+        const double high = tol::kQpIpmGondzioBetaMax * sigma * mu;
+        const auto target = [&](double product) {
+          if (product < low) return low - product;
+          if (product > high) return std::max(high - product, -high);
+          return 0.0;
+        };
+        for (std::size_t j = 0; j < nc; ++j) {
+          rcl[j] = has_lower[j]
+                       ? target((v[j] - s.lower[j] + aim * dv[j]) * (zl[j] + aim * dzl[j]))
+                       : 0.0;
+          rcu[j] = has_upper[j]
+                       ? target((s.upper[j] - v[j] - aim * dv[j]) * (zu[j] + aim * dzu[j]))
+                       : 0.0;
+        }
+        const std::vector<double> kept_dv = dv, kept_dy = dy, kept_dzl = dzl, kept_dzu = dzu;
+        const std::vector<double> kept_rd = rd, kept_rp = rp;
+        std::fill(rd.begin(), rd.end(), 0.0);
+        std::fill(rp.begin(), rp.end(), 0.0);
+        newton(k);
+        rd = kept_rd;
+        rp = kept_rp;
+        for (std::size_t j = 0; j < nc; ++j) {
+          dv[j] += kept_dv[j];
+          dzl[j] += kept_dzl[j];
+          dzu[j] += kept_dzu[j];
+        }
+        for (std::size_t i = 0; i < nr; ++i) dy[i] += kept_dy[i];
+        const double alpha_new = longest_step();
+        if (!(alpha_new >=
+              alpha_now + tol::kQpIpmGondzioAcceptShare * tol::kQpIpmGondzioStepGain)) {
+          dv = kept_dv;
+          dy = kept_dy;
+          dzl = kept_dzl;
+          dzu = kept_dzu;
+          break;
+        }
+        alpha_now = alpha_new;
+      }
     }
 
     // #893: the step itself, before it is taken - on a model that has no optimum this is the
@@ -809,6 +869,27 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
       break;
     }
 
+    // #981: the second block row of the regularized system is M dv - delta dy = b - M v, so
+    // once delta |dy| reaches |b - M v| the step stops closing the primal residual while mu
+    // still falls (liswet1, measured: |b - M v - M dv| / |b - M v| from 1e-9 at iteration 9
+    // to 0.99 by iteration 30, with delta = 1e-8 and |dy| = 250 against |b - M v| = 1e-6),
+    // and refinement against the unregularized matrix no longer contracts on its degenerate
+    // active rows. A step that leaves more than kQpIpmStepPrimalShare of the residual in
+    // place lowers delta's floor (Altman & Gondzio 1999: the regularization must stay small
+    // against what the step has to achieve), so only the models that need it see a smaller
+    // delta.
+    if (adaptive_dual && nr > 0 && dual_floor > tol::kQpIpmDualFloorMin) {
+      std::fill(mv.begin(), mv.end(), 0.0);
+      s.m.multiply_add(dv.data(), mv.data());
+      double missed = 0.0, needed = 0.0;
+      for (std::size_t i = 0; i < nr; ++i) {
+        missed = std::max(missed, std::fabs(rp[i] - mv[i]));
+        needed = std::max(needed, std::fabs(rp[i]));
+      }
+      if (missed > tol::kQpIpmStepPrimalShare * needed) {
+        dual_floor = std::max(tol::kQpIpmDualFloorMin, dual_floor * tol::kQpIpmDualFloorCut);
+      }
+    }
     const double alpha =
         bound_count > 0 ? std::min(1.0, kFractionToBoundary * longest_step()) : 1.0;
     for (std::size_t j = 0; j < nc; ++j) {
@@ -835,7 +916,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     // The proximal parameters follow mu down, never below the configured floor (the
     // centres move with the iterate, so a large rho slows the method and never biases it).
     rho = std::max(regularization_floor, std::min(rho, 0.1 * mu));
-    delta = rho;
+    delta = adaptive_dual ? std::max(dual_floor, std::min(delta, 0.1 * mu)) : rho;
   }
 
   // #980: the active-set finish, only once the IPM itself claims optimal and only when its
