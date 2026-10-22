@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <limits>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 
 #include "sankhya/tolerances.hpp"
@@ -76,6 +77,14 @@ std::size_t require_index(const std::string& name) {
 }
 
 }  // namespace
+
+// The shipped mip_threads: one tree worker per hardware core, capped at 4 (#1158). The cap
+// is where the A/B evidence stops, a 4-vCPU runner. hardware_concurrency() may report 0;
+// that is one thread, the sequential search.
+static std::int64_t default_mip_threads() {
+  const auto cores = static_cast<std::int64_t>(std::thread::hardware_concurrency());
+  return std::min<std::int64_t>(4, std::max<std::int64_t>(1, cores));
+}
 
 const std::vector<OptionSpec>& Options::registry() {
   static const std::vector<OptionSpec> specs = [] {
@@ -2023,11 +2032,13 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"mip_threads",
                  OptionType::Int,
-                 std::int64_t{1},
+                 default_mip_threads(),
                  "MILP: worker threads for the branch-and-bound tree (#222); each runs its own "
                  "node LPs on subtrees the others give away, sharing the incumbent, the node "
-                 "count and the pool. 1 (default) is the sequential search; 0 means one per "
-                 "hardware core. The objective and status do not depend on it, the tree "
+                 "count and the pool. The default is one per hardware core, at most 4 (#1158: "
+                 "on MIPLIB 3 at 60 s four threads proved 40 of 65 against 37 and lost nothing "
+                 "matched); 1 is the sequential search; 0 means one per hardware core, "
+                 "uncapped. The objective and status do not depend on it, the tree "
                  "explored does. Ignored, with a note, for an MIQP, with pool_complete, with a "
                  "checkpoint or resume, and in deterministic mode. node_limit may be overshot "
                  "by at most one node per worker (each counts a node after exploring it), "
