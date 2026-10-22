@@ -8,6 +8,7 @@
 #include <cmath>
 #include <limits>
 #include <utility>
+#include <vector>
 
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
@@ -259,6 +260,90 @@ void refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
     best = next;
     if (stalled) break;
   }
+}
+
+// Reference: Saad & Schultz, "GMRES: a generalized minimal residual algorithm for solving
+// nonsymmetric linear systems", SIAM J. Sci. Stat. Comput. 7 (1986), right preconditioned
+// (Saad, Iterative Methods for Sparse Linear Systems, 2nd ed., 2003, sec. 9.3.2); used as
+// refinement with the factors of a nearby matrix as the preconditioner after Arioli, Duff &
+// Ruiz, SIAM J. Matrix Anal. Appl. 13 (1992) and Carson & Higham, SIAM J. Sci. Comput. 39
+// (2017). On LISWET (#981) the stationary refinement above stops gaining once delta |dy|
+// reaches |b - M v|, and the Newton step then leaves almost all of the primal residual
+// in place; GMRES is not held to a contraction factor below one.
+void refine_krylov(const SparseLdl& ldl, const SparseMatrix& k0, const std::vector<double>& rhs,
+                   std::vector<double>* x) {
+  const std::size_t n = rhs.size();
+  const auto m = static_cast<std::size_t>(tol::kQpIpmKrylovDimension);
+  std::vector<double> kx(n);
+  const auto residual = [&](const std::vector<double>& at, std::vector<double>* out) {
+    KktMatrix::multiply(k0, at, &kx);
+    double sum = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+      (*out)[i] = rhs[i] - kx[i];
+      sum += (*out)[i] * (*out)[i];
+    }
+    return std::sqrt(sum);
+  };
+  std::vector<double> r(n);
+  const double beta = residual(*x, &r);
+  if (!(beta > 0.0) || !std::isfinite(beta)) return;
+  std::vector<std::vector<double>> basis(m + 1, std::vector<double>(n));
+  std::vector<std::vector<double>> hess(m + 1, std::vector<double>(m, 0.0));
+  std::vector<double> cs(m), sn(m), g(m + 1, 0.0), w(n);
+  for (std::size_t i = 0; i < n; ++i) basis[0][i] = r[i] / beta;
+  g[0] = beta;
+  std::size_t built = 0;
+  for (std::size_t j = 0; j < m; ++j) {
+    w = basis[j];
+    ldl.solve(w.data());
+    KktMatrix::multiply(k0, w, &kx);
+    w = kx;
+    for (std::size_t i = 0; i <= j; ++i) {  // modified Gram-Schmidt
+      double dot = 0.0;
+      for (std::size_t q = 0; q < n; ++q) dot += w[q] * basis[i][q];
+      hess[i][j] = dot;
+      for (std::size_t q = 0; q < n; ++q) w[q] -= dot * basis[i][q];
+    }
+    double norm = 0.0;
+    for (std::size_t q = 0; q < n; ++q) norm += w[q] * w[q];
+    norm = std::sqrt(norm);
+    hess[j + 1][j] = norm;
+    for (std::size_t i = 0; i < j; ++i) {  // the earlier Givens rotations
+      const double a = hess[i][j], b = hess[i + 1][j];
+      hess[i][j] = cs[i] * a + sn[i] * b;
+      hess[i + 1][j] = -sn[i] * a + cs[i] * b;
+    }
+    const double radius = std::hypot(hess[j][j], hess[j + 1][j]);
+    if (!(radius > 0.0) || !std::isfinite(radius)) break;
+    cs[j] = hess[j][j] / radius;
+    sn[j] = hess[j + 1][j] / radius;
+    hess[j][j] = radius;
+    hess[j + 1][j] = 0.0;
+    g[j + 1] = -sn[j] * g[j];
+    g[j] = cs[j] * g[j];
+    built = j + 1;
+    if (std::fabs(g[j + 1]) <= std::numeric_limits<double>::epsilon() * beta || !(norm > 0.0)) {
+      break;
+    }
+    for (std::size_t q = 0; q < n; ++q) basis[j + 1][q] = w[q] / norm;
+  }
+  if (built == 0) return;
+  std::vector<double> coef(built);
+  for (std::size_t i = built; i-- > 0;) {
+    double sum = g[i];
+    for (std::size_t q = i + 1; q < built; ++q) sum -= hess[i][q] * coef[q];
+    coef[i] = sum / hess[i][i];
+  }
+  std::vector<double> z(n, 0.0);
+  for (std::size_t i = 0; i < built; ++i) {
+    for (std::size_t q = 0; q < n; ++q) z[q] += coef[i] * basis[i][q];
+  }
+  ldl.solve(z.data());
+  std::vector<double> trial(*x);
+  for (std::size_t q = 0; q < n; ++q) trial[q] += z[q];
+  std::vector<double> trial_r(n);
+  const double next = residual(trial, &trial_r);
+  if (next < beta) std::swap(*x, trial);
 }
 
 }  // namespace sankhya::qp::ipm_detail

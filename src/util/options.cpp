@@ -2186,6 +2186,27 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back({"qp_ipm_krylov_refinement",
+                 OptionType::Bool,
+                 false,
+                 "qp_algorithm=ipm (#981): after the stationary refinement of each Newton step "
+                 "against the unregularized KKT matrix, refine it further by GMRES "
+                 "preconditioned with the regularized factors (Saad & Schultz, SIAM J. Sci. "
+                 "Stat. Comput. 7, 1986), kept only when the residual falls.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"qp_ipm_centrality_correctors",
+                 OptionType::Int,
+                 std::int64_t{0},
+                 "qp_algorithm=ipm (#981): at most this many Gondzio multiple centrality "
+                 "correctors after Mehrotra's corrector at each iteration (Gondzio, Comput. "
+                 "Optim. Appl. 6, 1996). Each one pulls the complementarity products the step "
+                 "would reach back into [beta_min, beta_max] times sigma mu and is kept only "
+                 "while it lengthens the step. 0, the default, is Mehrotra's method alone.",
+                 0.0,
+                 10.0,
+                 {}});
     s.push_back(
         {"qp_ipm_finish",
          OptionType::Bool,

@@ -99,6 +99,7 @@ using ipm_detail::hessian_times;
 using ipm_detail::inf_norm;
 using ipm_detail::KktMatrix;
 using ipm_detail::largest_complementarity_product;
+using ipm_detail::refine_krylov;
 using ipm_detail::refine_unregularized;
 using ipm_detail::solve_refined;
 using ipm_detail::Standard;
@@ -348,6 +349,8 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   // the first-order engine for whatever time is left. See the file header and the comment at
   // the stall test below.
   const bool stall_handoff = options.get_bool("qp_ipm_stall_handoff");
+  const bool krylov_refinement = options.get_bool("qp_ipm_krylov_refinement");
+  const Count centrality_correctors = options.get_int("qp_ipm_centrality_correctors");
   const double primal_tolerance = options.get_double("primal_feasibility_tolerance");
   StopController stop(control, timer, limits);
 
@@ -437,6 +440,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     for (std::size_t i = 0; i < nr; ++i) rhs[nc + i] = rp[i];
     solve_refined(ldl, k, rhs, &step);
     refine_unregularized(ldl, k0, rhs, &step);
+    if (krylov_refinement) refine_krylov(ldl, k0, rhs, &step);
     for (std::size_t j = 0; j < nc; ++j) {
       dv[j] = step[j];
       dzl[j] = has_lower[j] ? (rcl[j] - zl[j] * dv[j]) / (v[j] - s.lower[j]) : 0.0;
@@ -800,6 +804,53 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
         }
       }
       newton(k);
+
+      // ---- #981: Gondzio's multiple centrality correctors (Comput. Optim. Appl. 6, 1996,
+      // sec. 3): aim a longer step, pull every product that step would reach into
+      // [beta_min, beta_max] sigma mu, solve for that correction alone (rd = rp = 0) with the
+      // same factors, and keep it only while the step lengthens enough.
+      double alpha_now = longest_step();
+      for (Count c = 0; c < centrality_correctors && alpha_now < 1.0; ++c) {
+        const double aim = std::min(1.0, alpha_now + tol::kQpIpmGondzioStepGain);
+        const double low = tol::kQpIpmGondzioBetaMin * sigma * mu;
+        const double high = tol::kQpIpmGondzioBetaMax * sigma * mu;
+        const auto target = [&](double product) {
+          if (product < low) return low - product;
+          if (product > high) return std::max(high - product, -high);
+          return 0.0;
+        };
+        for (std::size_t j = 0; j < nc; ++j) {
+          rcl[j] = has_lower[j]
+                       ? target((v[j] - s.lower[j] + aim * dv[j]) * (zl[j] + aim * dzl[j]))
+                       : 0.0;
+          rcu[j] = has_upper[j]
+                       ? target((s.upper[j] - v[j] - aim * dv[j]) * (zu[j] + aim * dzu[j]))
+                       : 0.0;
+        }
+        const std::vector<double> kept_dv = dv, kept_dy = dy, kept_dzl = dzl, kept_dzu = dzu;
+        const std::vector<double> kept_rd = rd, kept_rp = rp;
+        std::fill(rd.begin(), rd.end(), 0.0);
+        std::fill(rp.begin(), rp.end(), 0.0);
+        newton(k);
+        rd = kept_rd;
+        rp = kept_rp;
+        for (std::size_t j = 0; j < nc; ++j) {
+          dv[j] += kept_dv[j];
+          dzl[j] += kept_dzl[j];
+          dzu[j] += kept_dzu[j];
+        }
+        for (std::size_t i = 0; i < nr; ++i) dy[i] += kept_dy[i];
+        const double alpha_new = longest_step();
+        if (!(alpha_new >=
+              alpha_now + tol::kQpIpmGondzioAcceptShare * tol::kQpIpmGondzioStepGain)) {
+          dv = kept_dv;
+          dy = kept_dy;
+          dzl = kept_dzl;
+          dzu = kept_dzu;
+          break;
+        }
+        alpha_now = alpha_new;
+      }
     }
 
     // #893: the step itself, before it is taken - on a model that has no optimum this is the
