@@ -53,6 +53,15 @@ long long given_away(const Solution& solution) {
   return std::stoll(match[1].str());
 }
 
+/// How many root cuts the message says every donated subtree carried (#1158); -1 when the
+/// message does not say, which a parallel answer always does.
+long long carried_cuts(const Solution& solution) {
+  static const std::regex pattern(R"((\d+) root cut\(s\) carried)");
+  std::smatch match;
+  if (!std::regex_search(solution.message, match, pattern)) return -1;
+  return std::stoll(match[1].str());
+}
+
 /// A small pure-integer program built around a random point, with equality rows now and then.
 Model random_integer_program(std::mt19937& rng, bool maximize) {
   std::uniform_int_distribution<int> columns(5, 8);
@@ -280,6 +289,8 @@ TEST(ParallelTree, SubtreesAreGivenAwayOnATreeThatOutlastsThreadStartup) {
     const Solution solved = solve(model, options);
     ASSERT_NE(solved.status, SolveStatus::kNumericalError) << solved.message;
     EXPECT_GT(given_away(solved), 0) << "seed " << seed << ": " << solved.message;
+    // The root's cuts travel with every donated subtree (#1158): the answer says how many.
+    EXPECT_GE(carried_cuts(solved), 0) << "seed " << seed << ": " << solved.message;
   }
 }
 
