@@ -456,13 +456,13 @@ file in exact rational arithmetic. A certified relative gap at or under 1e-6 mea
 reported objective is within 1e-6 of a proven bound on the true optimum, so that closeness
 rests on a proof and not on a solver tolerance. The timings of this run are not used anywhere.
 
-Run at `92ef682` on `github-actions ubuntu-24.04 4 vCPU INTEL(R) XEON(R) PLATINUM 8573C 15 GiB RAM` (`certified-gap-netlib-full-92ef682.csv`).
+Run at `81b812c` on `github-actions ubuntu-24.04 4 vCPU AMD EPYC 9V74 80-Core Processor 15 GiB RAM` (`certified-gap-netlib-full-81b812c.csv`), with `certified_gap_seconds=120`.
 
 | optimal answers | certified to 1e-6 relative | finite bound, looser | no finite bound | stated bound re-derived exactly by the verifier |
 |---:|---:|---:|---:|---:|
-| 94 | **92** (worst 5.1e-08) | 2 | 0 | 94 of 94 |
+| 94 | **93** (worst 5.1e-08) | 1 | 0 | 94 of 94 |
 
-Finite but looser than 1e-6: greenbea (9.99e-05), pilot87 (6.26e-06).
+Finite but looser than 1e-6: pilot87 (5.36e-06).
 
 ### 1d. Beyond Netlib — Mittelmann's LP set
 

@@ -102,8 +102,10 @@ def m_certified(rows):
     none = sum(r["safe_lower_bound"] in ("", "-inf") for r in optimal)
     slots = {"optimal": len(optimal), "tight": tight, "none": none,
              "loose": len(optimal) - tight - none}
+    options = (rows[0].get("solver_options") or "").strip() if rows else ""
     return (f"Safe bounds on Netlib: {tight} of {len(optimal)} optimal answers certified to "
-            f"1e-6 by a rigorous bound, {none} with no finite bound", slots)
+            f"1e-6 by a rigorous bound, {none} with no finite bound"
+            + (f" (with `{options}`)" if options else ""), slots)
 
 
 def m_passed(label):
@@ -250,7 +252,11 @@ def gather() -> None:
         evidence("h2h_" + suite.split("-")[0],
                  new(f"head-to-head-{suite}-*.csv", prefix=f"head-to-head-{suite}"),
                  m_head_to_head)
-    evidence("certified", new("certified-gap-netlib-full-*.csv"), m_certified)
+    # #1082: the certified tier runs with certified_gap_seconds raised, stated in m_certified.
+    evidence("certified",
+             mbd.latest_result.latest("certified-gap-netlib-full-*.csv",
+                                      allowed_options=mbd.latest_result.CERTIFIED_TIER_OPTIONS),
+             m_certified)
     evidence("infeasible", new("netlib-infeasible-*.csv"),
              m_passed("Netlib infeasible set, verdict with a verified Farkas certificate"))
     evidence("exact", new("exact-sensitivity-*.csv", prefix="exact-sensitivity"), m_exact)
