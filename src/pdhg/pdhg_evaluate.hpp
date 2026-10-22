@@ -54,6 +54,13 @@ struct Residuals {
   /// feasible point is being reported, so stopping on a relative residual alone would let
   /// this engine claim feasibility for a point that misses the project's own primal
   /// tolerance - a weaker claim than kOptimal, but still one the verifier rejects.
+  /// The relative request alone, no absolute clause: what a point handed to the crossover
+  /// (#888, `pdhg_crossover`) needs, since the simplex, not this engine, delivers the
+  /// feasibility; never the basis of a kOptimal or a kFeasible claim.
+  [[nodiscard]] bool meets_relative_request(double tolerance) const {
+    return primal <= tolerance && dual <= tolerance && gap <= tolerance;
+  }
+
   [[nodiscard]] bool meets_request(double tolerance) const {
     return primal <= tolerance && dual <= tolerance && gap <= tolerance &&
            absolute_primal <= tol::kPrimalFeasibility;

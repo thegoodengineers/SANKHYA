@@ -219,6 +219,12 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
                                     : static_cast<Count>(limits.iteration_limit());
   const bool use_restarts = options.get_bool("pdhg_restart");
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
+  // #888: a run whose point goes to the crossover stops on the RELATIVE request alone; the
+  // absolute primal clause of meets_request() would run it to the clock on a model with
+  // large row bounds (the refinery year: 1,000,000 iterations in 600 s at relative 7e-11,
+  // and no time left for the crossover). The report below still refuses kOptimal, and
+  // solve() withdraws the kFeasible claim when the crossover does not reach a vertex.
+  const bool start_for_crossover = options.get_bool("pdhg_crossover");
   const bool geometric_evaluation = options.get_bool("pdhg_geometric_evaluation");
   const bool use_halpern = options.get_bool("pdhg_halpern");
   // pdhg_two_matvec (#479): "cpu", the default, is two products here unless Halpern is on,
@@ -463,6 +469,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     return r.primal <= tol::kPdhgTight && r.absolute_primal <= tol::kPrimalFeasibility;
   };
   const auto passes_stopping_test = [&](const Residuals& r) {
+    if (start_for_crossover) return r.meets_relative_request(tolerance);
     return r.meets_request(tolerance) && (stop_at_request || r.meets_project_standard());
   };
   // Keep a polished pair when its x reached the target and it beats the one in hand.
@@ -804,8 +811,7 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
     // claim. On a model with large row bounds the primal clause binds long after the relative
     // request is met (adlittle: 132,520 iterations at 1e-4 and at 1e-8 alike), which is the
     // price of that promise.
-    const bool stop_here =
-        better.meets_request(tolerance) && (stop_at_request || better.meets_project_standard());
+    const bool stop_here = passes_stopping_test(better);
     if (stop_here) {
       // Report the point that PASSED, not whichever earlier iterate happened to have the
       // smallest relative residual. best_x tracks worst(), which is a relative measure, so

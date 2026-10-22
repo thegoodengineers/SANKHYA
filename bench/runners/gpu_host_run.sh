@@ -66,7 +66,7 @@ PY=\$VENV/bin/python
 export PATH=\$VENV/bin:/usr/local/cuda/bin:\$PATH
 # clone and build (fresh clone at REF, never a dirty tree: the stamp must be clean)
 if [ ! -d src ]; then git clone -q https://github.com/thegoodengineers/SANKHYA.git src; fi
-( cd src && git fetch -q origin && git checkout -q "\$REF" 2>/dev/null || git checkout -q "origin/\$REF" ) || { log "checkout of \$REF failed"; exit 1; }
+( cd src && git fetch -q origin && { git checkout -q "\$REF" 2>/dev/null || git checkout -q "origin/\$REF"; } && { git merge -q --ff-only "origin/\$REF" 2>/dev/null || true; } ) || { log "checkout of \$REF failed"; exit 1; }
 ( cd src && git log --oneline -1 && git status --porcelain --untracked-files=no | head -3 )
 cmake -S src -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSANKHYA_ENABLE_CUDA=ON \\
   -DSANKHYA_CUDA_ARCHITECTURES=\$ARCH -DSANKHYA_BUILD_TESTS=OFF \\
