@@ -30,6 +30,7 @@
 
 #include <fmt/format.h>
 
+#include "../util/profiler.hpp"
 #include "primal_simplex.hpp"
 #include "sankhya/tolerances.hpp"
 #include "simplex_core.hpp"
@@ -169,7 +170,12 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
     }
 
     // alpha = B^-1 a_k: how the basic variables move per unit of the push.
-    ftran_entering_column(k);
+    {
+      const ProfileScope timed(logger_.profiler(), "push ftran", ProfileMode::kDetailed);
+      ftran_entering_column(k);
+    }
+    const ProfileScope ratio_timed(logger_.profiler(), "push ratio test and update",
+                                   ProfileMode::kDetailed);
     double step = distance;
     Index leaving_slot = -1;
     bool leaving_to_upper = false;
@@ -228,8 +234,13 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
     nonbasic_value_[u] = x_basic_[slot];
     ++pivots;
     ++since_refactor;
-    const bool updated = lu_.update(leaving_slot, alpha_.data());
+    const bool updated = [&] {
+      const ProfileScope timed(logger_.profiler(), "push basis update", ProfileMode::kDetailed);
+      return lu_.update(leaving_slot, alpha_.data());
+    }();
     if (!updated || since_refactor >= 100) {
+      const ProfileScope timed(logger_.profiler(), "push refactorization",
+                               ProfileMode::kDetailed);
       if (!refactorize()) {
         if (factors_abandoned_) return factorization_failed(pivots, timer);
         return finish(SolveStatus::kNumericalError,
