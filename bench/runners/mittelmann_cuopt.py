@@ -145,8 +145,10 @@ def cuopt_worker(mps: Path, tolerance: float, time_limit: float, method: str,
                 "absolute_gap_tolerance", "relative_gap_tolerance"):
         settings.set_parameter(key, float(tolerance))
     if method:
-        settings.set_parameter(parameters.CUOPT_METHOD,
-                               getattr(parameters.SolverMethod, method))
+        # SolverMethod lives in solver_settings in 26.8.0 and in solver_parameters in the
+        # 26.10 reference; take whichever the installed package has.
+        enum = getattr(settings_module, "SolverMethod", None) or getattr(parameters, "SolverMethod")
+        settings.set_parameter(parameters.CUOPT_METHOD, getattr(enum, method))
     started = time.perf_counter()
     problem.solve(settings)
     wall = time.perf_counter() - started
