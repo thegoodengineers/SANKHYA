@@ -30,6 +30,8 @@ Petrochemicals Limited.
 
 Project site: [sankhya-solver.vercel.app](https://sankhya-solver.vercel.app) — the problem
 statement, what is different, the evidence, how to use it, and the team, on one page.
+Demo video: [sankhya-film.mp4](https://sankhya-solver.vercel.app/media/sankhya-film.mp4) (hosted on the
+site). Jury report: [`docs/REPORT.pdf`](docs/REPORT.pdf). Deck: [`docs/SANKHYA-deck.pptx`](docs/SANKHYA-deck.pptx).
 
 For the jury, [`docs/REPORT.pdf`](docs/REPORT.pdf), the report generated from the same CSVs as
 this readme and attached to every release, with a 25-question Q&A whose every answer names its
@@ -55,12 +57,14 @@ as regenerable backups.
 | Mittelmann | 12 | **5 of 12** (matches HiGHS's objective and verified, `passed`) | HiGHS (objective check) | `bench/results/mittelmann-72123ff.csv` | `72123ff` | 2026-09-24 |
 | MIPLIB 3 | 65 | **35 of 65** (proved the published optimum and verified, best of 3 seeds, 60 s, 1 thread) | HiGHS 49 of 65 (same job, same rule) | `bench/results/miplib3-60s-seeds3-312818a.csv` | `312818a` | 2026-10-22 |
 | MIPLIB 2017 | 30 | **14 of 30** (matched the published optimum and verified) | - | `bench/results/miplib-ad57c03.csv` | `ad57c03` | 2026-09-27 |
-| Maros-Meszaros (QP) | 138 | **117 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-cad720c.csv` | `cad720c` | 2026-10-19 |
+| Maros-Meszaros (QP) | 138 | **127 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-c766eae.csv` | `c766eae` | 2026-10-22 |
 | Maros-Meszaros head-to-head (QP) | 138 | **117 of 138** (matched within 1e-6 and verified, every solver graded the same, 60 s) | PIQP 128 of 138, Clarabel 90 of 138, SCS 71 of 138, OSQP 46 of 138 | `bench/results/head-to-head-maros-meszaros-d0eb672.csv` | `d0eb672` | 2026-10-19 |
 | QPLIB (convex) | 16 | **9 of 16** (within relative 1e-6 of the published or best-known value and verified, `passed`) | - | `bench/results/qplib-5a39fb2.csv` | `5a39fb2` | 2026-10-01 |
 | Stress set | 126 | **111 of 126** (verdict `correct`) | - | `bench/results/stress-d32b3847.csv` | `d32b3847` | 2026-10-08 |
 | GPU, real instances (A100) | 3 | **2 of 3** (faster than the faster CPU arm on the same instance) | construction, highs | `bench/results/gpu-real-a100-fdd1f35.csv` | `fdd1f35` | 2026-09-27 |
 | GPU, real instances (L4) | 3 | **2 of 3** (faster than the faster CPU arm on the same instance) | construction, highs | `bench/results/gpu-real-l4-58a8374.csv` | `58a8374` | 2026-09-25 |
+
+**How to read these numbers.** Every count above comes from a CSV in `bench/results/` that carries, per instance, the instance file's sha256, the commit the binary was built from and the machine it ran on; the generator reads the count from that file and prints its name beside it. Every answer counted was checked by `tools/verify_solution.py`, which reads the written `.sol` file and never links the solver. "Certified" means the optimal answer lies within 1e-6 of a bound derived in exact arithmetic, which the verifier re-derives on its own. The time limit and the non-default options of each run are printed beside its count, read from the CSV, not typed in.
 <!-- scoreboard:end -->
 
 ## Since 19 October
@@ -309,8 +313,11 @@ at `60455ce`, after #559's certificates, **28 of 29** carry a Farkas certificate
 accepts; `cplex2` stays a `numerical_error`, since its elastic optimum is zero at the 1e-7
 tolerance and no certificate exists there (`bench/results/netlib-infeasible-60455ce.csv`, a
 laptop with desktop apps open; every instance ends in under 14 s of its 60 s limit). At `5a39fb2`, with `--iis` (#871), the 28 stay certified, and **12 of 29** also name an irreducible infeasible subsystem the verifier proves on its own arithmetic, infeasible using nothing outside the set and irreducible by one witness per member; 18 name one (`bench/results/netlib-infeasible-5a39fb2.csv`). Infeasibility repair (#523, `tools/repair_infeasibility.py`, elastic programming over rows and column bounds) on the same 29: the repair applied, the repaired model re-solved as a pure feasibility problem by the CLI and checked by `tools/verify_solution.py`, **28 of 29** accepted; `gran`'s elastic LP itself ends `numerical_error` (`bench/results/netlib-repair-5a39fb2.csv`, `bench/runners/netlib_repair.py`). Maros-Meszaros, all 138 convex QPs at 60 s with the proximal interior point the
-default QP engine (#740): **`optimal` on 119, within 1e-6 of the reference on 117,
-verifier-accepted on 124, and no `optimal` the verifier rejects** (`bench/results/maros-meszaros-cad720c.csv`,
+default QP engine (#740): **`optimal` on 128, within 1e-6 of the reference on 127,
+verifier-accepted on 132, and no `optimal` the verifier rejects** (`bench/results/maros-meszaros-c766eae.csv`;
+119 / 117 / 124 at `cad720c` before #1156, whose adaptive dual regularization floor unfroze
+`liswet1`, `liswet7`, `liswet10`, `liswet11` and `yao`, and took `qfffff80`, `qsierra`,
+`cvxqp1l` and `cvxqp3l` to `optimal`, #981;
 `docs/BENCHMARKS.md` section 2b; GitHub Actions `ubuntu-latest`, 4 vCPUs and 15 GB, through
 `bench.yml`'s `maros-meszaros` suite at the full commit hash, 60 s per instance - the earlier
 laptop runs under WSL, `dcbd32eb` among them, lost `boyd2`, `cont-300` and `cvxqp2l` to the clock
@@ -438,20 +445,20 @@ ctest --test-dir build --output-on-failure
 ```
 
 **Without a build.** Download the pre-release
-[v1.0.0-rc2](https://github.com/thegoodengineers/SANKHYA/releases/tag/v1.0.0-rc2): Linux
+[v1.0.0-rc5](https://github.com/thegoodengineers/SANKHYA/releases/tag/v1.0.0-rc5): Linux
 x86-64 CPU, Linux x86-64 CUDA (the CUDA runtime and cuSPARSE linked statically, so a host
-needs only the NVIDIA driver), Windows x64 CPU and the two pip wheels, built by `.github/workflows/release.yml`
+needs only the NVIDIA driver), Windows x64 CPU, Windows x64 CUDA, the two pip wheels, the
+container image, the jury report and the deck, built by `.github/workflows/release.yml`
 (#748) on clean runners, each unpacked on a machine with no compiler and checked there (solve,
 verifier, Python bindings) before it was attached. Each archive keeps this repository's layout
 (`build/sankhya`, the library, the Python package, `tools/`, `demo/`), so every command in
 this README works from the unpacked directory, and carries `MANIFEST.txt` (the `sankhya
 version` banner and the link dependencies of the shipped files, grepped for solver libraries)
-and its own `SHA256SUMS`; the release's `SHA256SUMS` covers the archives and the wheels. This
-pre-release has no Windows CUDA archive. The workflow now builds one, Windows x64 CUDA: MSVC (the
-host compiler nvcc requires on Windows) with the CUDA 12.6 toolkit on a `windows-2022` runner,
-compiled without a card, the CUDA runtime, cuSPARSE and MSVC runtime DLLs beside the binary,
-unpacked and run on a runner with no compiler and no card (the `--gpu` solve falls back to the
-CPU and verifies). The next tag's release carries it.
+and its own `SHA256SUMS`; the release's `SHA256SUMS` covers the archives and the wheels. The
+Windows x64 CUDA archive is built with MSVC (the host compiler nvcc requires on Windows) and
+the CUDA 12.6 toolkit on a `windows-2022` runner, compiled without a card, the CUDA runtime,
+cuSPARSE and MSVC runtime DLLs beside the binary, unpacked and run on a runner with no
+compiler and no card (the `--gpu` solve falls back to the CPU and verifies).
 
 ```bash
 tar -xzf sankhya-1.0.0-linux-x86_64-cpu.tar.gz && cd sankhya-1.0.0-linux-x86_64-cpu
@@ -464,23 +471,23 @@ demo/finale.sh                        # Windows: unzip, then demo\finale.cmd
 **From pip.** The bindings are ctypes over the C API, so one wheel per platform, with the
 library and the CLI inside it, serves CPython 3.9 to 3.13: `manylinux_2_35_x86_64` (glibc 2.35
 or later) and `win_amd64`. CI installs each into a clean venv of every one of those versions
-and solves and verifies the demo there. The `v1.0.0-rc2` release carries them; install
+and solves and verifies the demo there. The `v1.0.0-rc5` release carries them; install
 straight from the release:
 
 ```bash
-pip install https://github.com/thegoodengineers/SANKHYA/releases/download/v1.0.0-rc2/sankhya-1.0.0-py3-none-manylinux_2_35_x86_64.whl
-# Windows: pip install https://github.com/thegoodengineers/SANKHYA/releases/download/v1.0.0-rc2/sankhya-1.0.0-py3-none-win_amd64.whl
+pip install https://github.com/thegoodengineers/SANKHYA/releases/download/v1.0.0-rc5/sankhya-1.0.0-py3-none-manylinux_2_35_x86_64.whl
+# Windows: pip install https://github.com/thegoodengineers/SANKHYA/releases/download/v1.0.0-rc5/sankhya-1.0.0-py3-none-win_amd64.whl
 python -c "import sankhya; print(sankhya.version())"
 ```
 
 Nothing is on PyPI.
 
 The container image (the CUDA build, the verifier and the demo models) is public at
-`ghcr.io/thegoodengineers/sankhya:v1.0.0-rc2`:
+`ghcr.io/thegoodengineers/sankhya:v1.0.0-rc5`:
 
 ```bash
-docker pull ghcr.io/thegoodengineers/sankhya:v1.0.0-rc2
-docker run --rm --gpus all ghcr.io/thegoodengineers/sankhya:v1.0.0-rc2 sankhya solve demo/crude_blend.mps --gpu
+docker pull ghcr.io/thegoodengineers/sankhya:v1.0.0-rc5
+docker run --rm --gpus all ghcr.io/thegoodengineers/sankhya:v1.0.0-rc5 sankhya solve demo/crude_blend.mps --gpu
 # offline: docker load < sankhya-image.tar.gz (a release asset), then run it as sankhya:ci
 # or build it:  docker build -t sankhya . && docker run --rm --gpus all sankhya sankhya version
 ```
