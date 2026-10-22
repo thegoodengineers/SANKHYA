@@ -58,6 +58,8 @@ else
   VENV=\$WORK/venv; [ -d \$VENV ] || python3 -m venv \$VENV
 fi
 PY=\$VENV/bin/python
+# a venv made without pip (the cuOpt one on TIR, 22 Oct 2026) gets one from ensurepip
+\$PY -m pip --version > /dev/null 2>&1 || \$PY -m ensurepip --upgrade 2>&1 | tail -1
 \$PY -m pip install -q cmake ninja highspy 2>&1 | tail -2
 \$PY -c 'import cuopt' 2>/dev/null || \$PY -m pip install -q --extra-index-url=https://pypi.nvidia.com cuopt-cu12 2>&1 | tail -3
 \$PY -c 'import importlib.metadata as m; print("cuopt-cu12", m.version("cuopt-cu12"))' || log "cuOpt NOT installed; leg 2 will record it"
