@@ -382,6 +382,16 @@ void crossover_after_pdhg(Solution* first, const Model& model, const Options& op
   wanted.set_bool("crossover", true);
   wanted.set_bool("crossover_from_nonoptimal", true);
   *first = crossover_to_vertex(model, std::move(*first), wanted, logger, control, timer);
+  // PDHG stopped on the relative request alone for this route, so its `feasible` is not
+  // the promise that word makes: when the crossover did not reach a vertex, the claim is
+  // withdrawn and the point stands as a stopped iterate.
+  if (first->status == SolveStatus::kFeasible &&
+      first->primal_infeasibility > tol::kPrimalFeasibility) {
+    first->status = SolveStatus::kIterationLimit;
+    first->message +=
+        "; PDHG stopped at the relative request as a crossover start and the crossover did "
+        "not reach a vertex, so no feasible point is claimed";
+  }
 }
 
 /// A copy of `Options` narrowed to whatever is left of a finite time_limit (or the options

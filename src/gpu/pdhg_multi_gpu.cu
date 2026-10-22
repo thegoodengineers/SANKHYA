@@ -218,6 +218,8 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
       limits.iteration_limit() < 0 ? 1000000 : static_cast<Count>(limits.iteration_limit());
   const bool use_restarts = options.get_bool("pdhg_restart");
   const bool stop_at_request = options.get_bool("pdhg_stop_at_request");
+  // #888: a crossover start stops on the relative request alone (see pdhg.cpp).
+  const bool start_for_crossover = options.get_bool("pdhg_crossover");
 
   // ---- Initial x (scaled) ------------------------------------------------
   std::vector<double> x0_scaled(n);
@@ -560,7 +562,10 @@ Solution solve_pdhg_multi_gpu(const Model& model, const Options& options,
                      better.primal, better.dual, timer.elapsed_seconds());
 
     const bool stop_here =
-        better.meets_request(tolerance) && (stop_at_request || better.meets_project_standard());
+        start_for_crossover
+            ? better.meets_relative_request(tolerance)
+            : better.meets_request(tolerance) &&
+                  (stop_at_request || better.meets_project_standard());
     if (stop_here) {
       best = better;
       gpu_error = !keep_chosen();
