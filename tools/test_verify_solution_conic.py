@@ -60,6 +60,26 @@ CSECTION disc 0.0 QUAD
 ENDATA
 """
 
+# The same disc with t fixed by a bound, not by a row.
+DISC_FIXED = """\
+NAME disc_fixed
+ROWS
+ N obj
+COLUMNS
+ t obj 0
+ x1 obj -1
+ x2 obj -1
+BOUNDS
+ FX bnd t 1
+ FR bnd x1
+ FR bnd x2
+CSECTION disc 0.0 QUAD
+ t
+ x1
+ x2
+ENDATA
+"""
+
 
 # #1061 review: min t s.t. t >= ||(x1, x2)||, x1 + x2 = 2, x1 and x2 at the MPS default lower
 # bound 0. The optimum is sqrt 2 at x = (1, 1). The point t = 2, x = (2, 0) is 41% worse and
@@ -176,3 +196,24 @@ def run(check) -> None:
         wrong_dual = _solution(model, x, -r2, {"tfix": -1.0}, {"t": 1.0, "x1": -1.0, "x2": -1.0})
         check(_verify(model, wrong_dual).failures > 0, "duals outside the dual cone are rejected",
               "exact dual membership")
+
+        # The same disc with t fixed by a bound instead of a row (#1146 follow-up). The cone's
+        # dual is s = sqrt 2 (1, -1/sqrt 2, -1/sqrt 2); the reduced cost of t is c_t = 0, so the
+        # bound multiplier is mu_t = 0 - sqrt 2. A fixed member is an equality and either sign
+        # is admissible: the true answer must verify. It was rejected as a wrong-signed
+        # lower-bound multiplier before.
+        path = Path(tmp) / "disc_fixed.mps"
+        path.write_text(DISC_FIXED)
+        fixed_model = vs.parse_mps(path)
+        x_fixed = {"t": 1.0, "x1": 1.0 / r2, "x2": 1.0 / r2}
+        true_fixed = _solution(fixed_model, x_fixed, -r2, {}, {"t": 0.0, "x1": -1.0, "x2": -1.0})
+        report = _verify(fixed_model, true_fixed)
+        check(report.failures == 0, "a fixed cone member's multiplier of either sign is accepted",
+              f"{report.failures} check(s) failed")
+        # A wrong answer on the same model is still rejected: x = (1, 0.6, 0.8) is on the
+        # cone's boundary but not optimal (objective -1.4), and no split of its reduced costs
+        # makes the free members' d equal a multiple of the reflection.
+        x_wrong = {"t": 1.0, "x1": 0.6, "x2": 0.8}
+        wrong_fixed = _solution(fixed_model, x_wrong, -1.4, {}, {"t": 0.0, "x1": -1.0, "x2": -1.0})
+        check(_verify(fixed_model, wrong_fixed).failures > 0,
+              "a suboptimal point with a fixed cone member is rejected", "free members' d - s")
