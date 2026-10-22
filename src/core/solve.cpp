@@ -397,8 +397,21 @@ void crossover_after_pdhg(Solution* first, const Model& model, const Options& op
     // so no rank repair; every entry the point holds inside its bounds is superbasic and
     // walked to a bound through the slack basis, one ratio test each.
     logger.info("Crossover (#888): the push from the slack basis, no basis guess");
-    *first = crossover_push_from_basis(model, std::move(*first), WarmStart{}, wanted, logger,
-                                       control, timer);
+    Solution pushed =
+        crossover_push_from_basis(model, *first, WarmStart{}, wanted, logger, control, timer);
+    if (pushed.status == SolveStatus::kOptimal) {
+      *first = std::move(pushed);
+    } else {
+      // The guessed basis is still the better start from a CENTRED point (the polish's
+      // interior point, pilot.we in the Netlib A/B at c2e84e2: the slack push ended at the
+      // pivot budget where the guess reached a verified vertex), so a push that did not
+      // finish hands the same point to the guess route rather than giving up.
+      first->message +=
+          "; " + pushed.message.substr(pushed.message.rfind("crossover") == std::string::npos
+                                           ? 0
+                                           : pushed.message.rfind("crossover"));
+      *first = crossover_to_vertex(model, std::move(*first), wanted, logger, control, timer);
+    }
   } else {
     *first = crossover_to_vertex(model, std::move(*first), wanted, logger, control, timer);
   }
