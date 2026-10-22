@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -68,7 +69,14 @@ Solution solve_miqcp(const QcqpModel& model, const Options& options, SolveContro
     ++nodes;
     relaxed.linear.col_lower = node.lower;
     relaxed.linear.col_upper = node.upper;
-    const Solution s = solve_conic(relaxed, options, control);
+    // Each node gets only what is left of the search's own time_limit, so the search ends
+    // within it; the no-limit sentinel is passed through as it is.
+    Options node_options = options;
+    if (time_limit < std::numeric_limits<double>::max()) {
+      node_options.set_double("time_limit",
+                              std::max(0.0, time_limit - timer.elapsed_seconds()));
+    }
+    const Solution s = solve_conic(relaxed, node_options, control);
     iterations += s.iterations;
     if (s.status == SolveStatus::kInfeasible) continue;
     if (s.status != SolveStatus::kOptimal) {

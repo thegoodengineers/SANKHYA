@@ -139,6 +139,116 @@ double row_multiplier(const conic::QuadraticRowMap& map, const conic::TermsByRow
   return gg > 0.0 ? -gt / gg : map.sign * y_primary;
 }
 
+/// The cone part of the KKT gate, split as tools/verify_solution_conic.py splits it: each
+/// cone's reduced costs d_K (minimization space) are the cone's dual s_K plus the bound
+/// multipliers of members at their own bounds. s_K is zero inside the cone, beta R(x_K) on
+/// its boundary (R the reflection across the axis, beta fitted on the members at no bound)
+/// and, at the apex, the cone point closest to d_K within the members' intervals
+/// (Alizadeh & Goldfarb, "Second-order cone programming", Math. Programming 95 (2003),
+/// sec. 2 and 4). Returns the worst relative violation of: d - s on a free member, a
+/// wrong-signed bound multiplier, s outside the cone, all against kDualFeasibility; and
+/// x_K's_K against kComplementarity, rescaled onto the same yardstick so one number gates.
+}  // namespace
+
+double conic::cone_dual_violation(const QcqpModel& model, const std::vector<double>& x,
+                                  const std::vector<double>& d) {
+  const Model& lin = model.linear;
+  const double share = tol::kConeInteriorShare;
+  double worst = 0.0;
+  for (const Cone& cone : model.cones) {
+    const bool rotated = cone.kind == Cone::Kind::kRotated;
+    const std::size_t heads = rotated ? 2 : 1;
+    const std::size_t k = cone.columns.size();
+    std::vector<double> xs(k), ds(k), s(k, 0.0);
+    // -1 at its lower bound, +1 at its upper, 2 fixed (an equality: either sign), 0 at neither
+    std::vector<int> side(k, 0);
+    double dscale = 1.0;
+    double xmax = 0.0;
+    for (std::size_t i = 0; i < k; ++i) {
+      const auto u = static_cast<std::size_t>(cone.columns[i]);
+      xs[i] = x[u];
+      ds[i] = d[u];
+      dscale = std::max(dscale, std::fabs(ds[i]));
+      xmax = std::max(xmax, std::fabs(xs[i]));
+      const double scale = std::max(1.0, std::fabs(xs[i]));
+      if (lin.col_lower[u] == lin.col_upper[u]) {
+        side[i] = 2;
+      } else if (is_finite_bound(lin.col_lower[u]) &&
+                 std::fabs(xs[i] - lin.col_lower[u]) <= tol::kPrimalFeasibility * scale) {
+        side[i] = -1;
+      } else if (is_finite_bound(lin.col_upper[u]) &&
+                 std::fabs(xs[i] - lin.col_upper[u]) <= tol::kPrimalFeasibility * scale) {
+        side[i] = 1;
+      }
+    }
+    double tail = 0.0;
+    for (std::size_t i = heads; i < k; ++i) tail += xs[i] * xs[i];
+    const double margin = rotated
+                              ? std::min({xs[0], xs[1],
+                                          (2.0 * xs[0] * xs[1] - tail) /
+                                              std::max(1.0, std::fabs(2.0 * xs[0] * xs[1]))})
+                              : (xs[0] - std::sqrt(tail)) / std::max(1.0, std::fabs(xs[0]));
+    if (xmax <= share) {
+      s = ds;  // the apex
+      for (std::size_t i = heads; i < k; ++i) {
+        if (side[i] == 2) s[i] = 0.0;
+        if (side[i] == -1) s[i] = std::min(ds[i], 0.0);
+        if (side[i] == 1) s[i] = std::max(ds[i], 0.0);
+      }
+      double st = 0.0;
+      for (std::size_t i = heads; i < k; ++i) st += s[i] * s[i];
+      const double need = rotated ? std::sqrt(st) / std::sqrt(2.0) : std::sqrt(st);
+      for (std::size_t i = 0; i < heads; ++i) {
+        if (side[i] == 1) s[i] = std::max(ds[i], need);
+        if (side[i] == 2) s[i] = need;
+      }
+    } else if (margin <= share) {
+      std::vector<double> r(xs);  // the reflection
+      if (rotated) std::swap(r[0], r[1]);
+      for (std::size_t i = heads; i < k; ++i) r[i] = -r[i];
+      const bool any_free = std::any_of(side.begin(), side.end(), [](int e) { return e == 0; });
+      double num = 0.0;
+      double norm = 0.0;
+      for (std::size_t i = 0; i < k; ++i) {
+        if (any_free && side[i] != 0) continue;
+        num += ds[i] * r[i];
+        norm += r[i] * r[i];
+      }
+      double beta = norm > 0.0 ? num / norm : 0.0;
+      if (beta < 0.0) {
+        worst = std::max(worst, -beta / dscale);
+        beta = 0.0;
+      }
+      for (std::size_t i = 0; i < k; ++i) s[i] = beta * r[i];
+    }
+    // s outside the cone, relative to the squares.
+    {
+      double st = 0.0;
+      double sq = 1.0;
+      for (std::size_t i = 0; i < k; ++i) sq = std::max(sq, s[i] * s[i]);
+      for (std::size_t i = heads; i < k; ++i) st += s[i] * s[i];
+      double outside = rotated ? std::max({0.0, -s[0], -s[1], st - 2.0 * s[0] * s[1]})
+                               : std::max({0.0, -s[0], st - s[0] * s[0]});
+      worst = std::max(worst, outside / sq);
+    }
+    double product = 0.0;
+    double smax = 0.0;
+    for (std::size_t i = 0; i < k; ++i) {
+      const double mu = ds[i] - s[i];
+      if (side[i] == 0) worst = std::max(worst, std::fabs(mu) / dscale);
+      if (side[i] == -1) worst = std::max(worst, -mu / dscale);
+      if (side[i] == 1) worst = std::max(worst, mu / dscale);
+      product += xs[i] * s[i];
+      smax = std::max(smax, std::fabs(s[i]));
+    }
+    const double comp = std::fabs(product) / std::max(1.0, xmax * smax);
+    worst = std::max(worst, comp * (tol::kDualFeasibility / tol::kComplementarity));
+  }
+  return worst;
+}
+
+namespace {
+
 /// How far x is from the cones of `model`, as an absolute violation.
 double cone_violation(const QcqpModel& model, const std::vector<double>& x) {
   double worst = 0.0;
@@ -345,10 +455,10 @@ Solution solve_conic(const QcqpModel& model, const Options& options, SolveContro
     probe.cones = model.cones;
     std::vector<double> ds(static_cast<std::size_t>(n));
     for (std::size_t u = 0; u < ds.size(); ++u) ds[u] = sigma * solution.col_dual[u];
-    // Not gated: a cone member's reduced cost also carries its own bound multipliers (a
-    // fixed member's above all), which the verifier separates from the cone's dual; this
-    // plain membership test does not, so it is reported and not trusted (#1146).
+    // Plain membership is reported (a member's bound multipliers are in it); the gate takes
+    // the verifier's split of d_K into the cone's dual and those multipliers.
     dual = std::max(dual, cone_violation(probe, ds));
+    dual_relative = std::max(dual_relative, conic::cone_dual_violation(model, x, ds));
   }
   {
     // A row price of the wrong sign, relative to the largest price, as the verifier has it.

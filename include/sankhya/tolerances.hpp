@@ -1320,6 +1320,11 @@ inline constexpr double kConicTolerance = 1e-8;
 /// that met kConicTolerance when it stalls or a limit ends it - never a worse one.
 inline constexpr double kConicTargetTolerance = 1e-12;
 inline constexpr int kConicRefineIterations = 10;
+/// A cone's point is inside it when its margin exceeds this relative to its own scale, and
+/// at the apex when every member is within it of zero; in between it is on the boundary.
+/// The INTERIOR_SHARE of tools/verify_solution_conic.py, so the gate splits a cone's
+/// reduced costs as the verifier does (#1146).
+inline constexpr double kConeInteriorShare = 1e-6;
 /// A certificate (a dual ray y, s with A'y + s = 0, s in the dual cone, b'y = 1; or a primal
 /// ray x with A x = 0, x in the cone, c'x = -1) is accepted when its defining equation holds
 /// to this, relative to the terms it is made of.
