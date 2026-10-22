@@ -297,6 +297,7 @@ Options ipm_options(bool dense) {
   Options options;
   options.set_bool("log_to_console", false);
   options.set_string("algorithm", "ipm");
+  options.set_bool("ipm_proximal_regularization", false);  // the normal equations (#473)
   options.set_bool("ipm_dense_columns", dense);
   options.set_double("ipm_dense_column_factor", 2.0);
   return options;

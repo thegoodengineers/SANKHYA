@@ -174,6 +174,7 @@ TEST(InteriorPointTimeLimit, TheDeviceDeadlineStopsAfterOneLateCallNotNineteen) 
   Options options;
   options.set_bool("log_to_console", false);
   options.set_string("ipm_linear_solver", "cudss");
+  options.set_bool("ipm_proximal_regularization", false);  // the device's path (#473)
   options.set_double("time_limit", kLimit);
   options.set_double("ipm_setup_share", 1.0);
   Logger quiet(nullptr);
@@ -243,6 +244,7 @@ TEST(InteriorPointTimeLimit, AnExplicitCudssDoesNotStartTheDeviceWithNoBudgetToR
   Options options;
   options.set_bool("log_to_console", false);
   options.set_string("ipm_linear_solver", "cudss");
+  options.set_bool("ipm_proximal_regularization", false);  // the device's path (#473)
   options.set_double("time_limit", kLimit);
   Logger quiet(nullptr);
   const Solution solved = ipm::solve_ipm(model, options, quiet);
@@ -262,6 +264,7 @@ TEST(InteriorPointTimeLimit, ADenseColumnDoesNotCarryTheSolvePastItsTimeLimit) {
   Options options;
   options.set_bool("log_to_console", false);
   options.set_double("time_limit", kLimit);
+  options.set_bool("ipm_proximal_regularization", false);  // the normal equations (#473)
   // The set-up share would decline at a fifth of the limit with not_solved (#357); this test
   // is about the limit itself, so the set-up is given all of it.
   options.set_double("ipm_setup_share", 1.0);

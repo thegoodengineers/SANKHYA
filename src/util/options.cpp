@@ -2381,8 +2381,9 @@ const std::vector<OptionSpec>& Options::registry() {
          "Newton system from its factors by iterative refinement, then GMRES on the same "
          "factors when the refinement stalls. Replaces the normal equations and their fixed "
          "1e-10 floor. Default ON (#473: nothing lost on Netlib, Kennington or "
-         "Maros-Meszaros); it yields to ipm_linear_solver=cudss, ipm_dense_columns, "
-         "ipm_normal_side other than rows, and to CUDA builds.",
+         "Maros-Meszaros). A CUDA build keeps the normal equations for its device factor. "
+         "Set it false for ipm_dense_columns, ipm_normal_side or ipm_linear_solver=cudss, "
+         "which factor the normal equations.",
          0.0,
          0.0,
          {}});

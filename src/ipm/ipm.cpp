@@ -2214,18 +2214,15 @@ Solution InteriorPoint::run() {
     }
   }
   build();
-  // ON BY DEFAULT since #473's A/B (nothing lost on Netlib, Kennington, Maros-Meszaros). It
-  // yields to a request it would otherwise override - the device factor, the dense-column
-  // path, the column side - and to any CUDA build, whose auto device factor takes the normal
-  // equations only; those keep the normal-equations path exactly as before.
-  const bool yields = options_.get_string("ipm_linear_solver") == "cudss" ||
-                      options_.get_bool("ipm_dense_columns") ||
-                      options_.get_string("ipm_normal_side") != "rows" ||
-                      gpu::CudssFactor::compiled();
+  // ON BY DEFAULT since #473's A/B (nothing lost on Netlib, Kennington, Maros-Meszaros). A CUDA
+  // build keeps the normal equations, which its device factor (#489) takes and this path does
+  // not; the device was not part of that A/B. ipm_dense_columns, ipm_normal_side and
+  // ipm_linear_solver = cudss still need the option set false, and the log says so.
+  const bool yields = gpu::CudssFactor::compiled();
   if (options_.get_bool("ipm_proximal_regularization") && yields) {
     logger_.verbose(
-        "interior point: ipm_proximal_regularization yields to the device factor, "
-        "ipm_dense_columns or ipm_normal_side; the normal equations are factored");
+        "interior point: ipm_proximal_regularization yields to the device factor in a CUDA "
+        "build; the normal equations are factored");
   }
   if (options_.get_bool("ipm_proximal_regularization") && !yields) {
     proximal_ = std::make_unique<ProximalSystem>(model_.matrix, fixed_);
