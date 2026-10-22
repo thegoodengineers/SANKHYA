@@ -63,6 +63,8 @@ as regenerable backups.
 | Stress set | 126 | **111 of 126** (verdict `correct`) | - | `bench/results/stress-d32b3847.csv` | `d32b3847` | 2026-10-08 |
 | GPU, real instances (A100) | 3 | **2 of 3** (faster than the faster CPU arm on the same instance) | construction, highs | `bench/results/gpu-real-a100-fdd1f35.csv` | `fdd1f35` | 2026-09-27 |
 | GPU, real instances (L4) | 3 | **2 of 3** (faster than the faster CPU arm on the same instance) | construction, highs | `bench/results/gpu-real-l4-58a8374.csv` | `58a8374` | 2026-09-25 |
+
+**How to read these numbers.** Every count above comes from a CSV in `bench/results/` that carries, per instance, the instance file's sha256, the commit the binary was built from and the machine it ran on; the generator reads the count from that file and prints its name beside it. Every answer counted was checked by `tools/verify_solution.py`, which reads the written `.sol` file and never links the solver. "Certified" means the optimal answer lies within 1e-6 of a bound derived in exact arithmetic, which the verifier re-derives on its own. The time limit and the non-default options of each run are printed beside its count, read from the CSV, not typed in.
 <!-- scoreboard:end -->
 
 ## Since 19 October
