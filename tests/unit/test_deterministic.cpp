@@ -313,6 +313,8 @@ TEST(Deterministic, GpuPdhgUnderDeterministicReproducesBitForBit) {
   Options options = deterministic(true);
   options.set_bool("gpu", true);
   options.set_string("algorithm", "pdhg");
+  // The engine alone: the relative stop (#1163) would hand the point to the polish.
+  options.set_bool("pdhg_relative_stop", false);
 
   const Solution result = solve(lp, options);
   ASSERT_NE(result.status, SolveStatus::kNotSolved) << result.message;
@@ -335,6 +337,8 @@ TEST(Deterministic, MultiGpuPdhgUnderDeterministicReproducesBitForBit) {
   Options options = deterministic(true);
   options.set_bool("gpu", true);
   options.set_string("algorithm", "pdhg");
+  // The engine alone: the relative stop (#1163) would hand the point to the polish.
+  options.set_bool("pdhg_relative_stop", false);
   options.set_string("gpu_devices", "0,1");
   const Solution result = solve(lp, options);
   ASSERT_NE(result.status, SolveStatus::kNotSolved) << result.message;

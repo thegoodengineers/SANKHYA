@@ -58,6 +58,7 @@ Options pdhg_options(double tolerance) {
   // These tests are about the first-order method itself; the interior-point polish (#229)
   // that finishes its answer by default has its own tests below.
   options.set_bool("pdhg_polish", false);
+  options.set_bool("pdhg_relative_stop", false);  // the engine alone, to the standard (#1163)
   return options;
 }
 
@@ -667,6 +668,7 @@ TEST(SolveStatusGuard, ANonClaimingStatusIsLeftAlone) {
   options.set_string("algorithm", "pdhg");
   options.set_int("iteration_limit", 5);
   options.set_bool("pdhg_polish", false);  // the guard is under test, not the polish (#229)
+  options.set_bool("pdhg_relative_stop", false);  // the engine alone, to the standard (#1163)
 
   const Solution solution = solve(model, options);
   EXPECT_EQ(solution.status, SolveStatus::kIterationLimit) << solution.message;
@@ -761,6 +763,7 @@ Options polish_options(bool polish) {
   options.set_string("algorithm", "pdhg");
   options.set_int("iteration_limit", 20);  // PDHG stops short, on purpose
   options.set_bool("pdhg_polish", polish);
+  options.set_bool("pdhg_relative_stop", false);  // the engine alone, to the standard (#1163)
   return options;
 }
 
