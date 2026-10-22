@@ -42,6 +42,7 @@
 #include "cuts.hpp"
 #include "domain_propagation.hpp"
 #include "mir_cuts.hpp"
+#include "node_lp_fault.hpp"
 #include "obbt.hpp"
 #include "parallel_search.hpp"
 #include "sankhya/mip.hpp"
@@ -653,6 +654,12 @@ Solution BranchAndBound::run() {
       ProfileScope timed(logger_.profiler(), "node LP", ProfileMode::kDetailed);
       return solve_node();
     }();
+    if (node_index != 0 && relaxation.status == SolveStatus::kOptimal &&
+        fail_next_node_lps_for_testing.load(std::memory_order_relaxed) > 0 &&
+        fail_next_node_lps_for_testing.fetch_sub(1, std::memory_order_relaxed) > 0) {
+      relaxation.status = SolveStatus::kNumericalError;
+      relaxation.message = "injected by fail_next_node_lps_for_testing";
+    }
     if (debug_inside) debug_after_node_lp(relaxation);
 
     // The cut pool (#497): a pooled cut the node's point violates is put back in force (its
@@ -717,6 +724,30 @@ Solution BranchAndBound::run() {
         solution.message =
             fmt::format("the continuous relaxation was refused: {}", relaxation.message);
         return solution;
+      }
+      // A NODE LP THAT FAILED NUMERICALLY BELOW THE ROOT (#733) does not end the search. Its
+      // subtree's optimum is no better than the bound it inherited from its parent, so that
+      // bound is kept: pruned if it already meets the incumbent, otherwise set aside, still
+      // counted in every bound reported, and in the way of any optimality claim until an
+      // incumbent meets it. The answer is then `feasible` with an honest bound where it used
+      // to be numerical_error, never an `optimal` that skipped the node. (#733 was a phase-1
+      // stall at 4.1e-7 against 1e-7 on gen-ip016 at mip_threads=8.)
+      if (node_index != 0 && relaxation.status == SolveStatus::kNumericalError) {
+        const double inherited = open_key(nodes_[static_cast<std::size_t>(node_index)].bound);
+        if (can_prune(inherited)) {
+          ++nodes_pruned_;
+        } else {
+          if (unsolved_nodes_ == 0) {
+            logger_.info(
+                "node LP failed at node {} ({}); the node is set aside on its inherited bound "
+                "and the search goes on",
+                nodes_explored_, relaxation.message);
+          }
+          certificate_refuse("a node LP failed numerically and its subtree was not searched");
+          ++unsolved_nodes_;
+          unsolved_bound_ = std::min(unsolved_bound_, inherited);
+        }
+        continue;
       }
       const bool out_of_iterations = relaxation.status == SolveStatus::kIterationLimit;
       limit_hit = out_of_iterations;
@@ -1025,7 +1056,9 @@ Solution BranchAndBound::run() {
   report_batch();
   finish_certificate();  // #518: written here, whatever status the search ends in
   // A search stopped by a limit is exactly the one worth resuming (#287).
-  if (limit_hit && !open_.empty()) save_checkpoint();
+  // Not with a node set aside unsolved (#733): the checkpoint holds the open list only, and a
+  // resumed search would lose the bound that node still holds.
+  if (limit_hit && !open_.empty() && unsolved_nodes_ == 0) save_checkpoint();
   if (shared_ != nullptr) leave_shared(limit_hit, solution.stopped_by, gap_target_met);
 
   // ---- Report ------------------------------------------------------------------------------
@@ -1035,9 +1068,17 @@ Solution BranchAndBound::run() {
     final_bound = std::min(final_bound,
                            integral_bound(nodes_[static_cast<std::size_t>(open_index)].bound));
   }
+  if (unsolved_nodes_ > 0) final_bound = std::min(final_bound, integral_bound(unsolved_bound_));
 
   if (!have_incumbent_) {
-    if (!limit_hit) {
+    if (!limit_hit && unsolved_nodes_ > 0) {
+      // Nothing found, and a subtree was never searched: infeasibility is not proved.
+      solution.status = SolveStatus::kNumericalError;
+      solution.message = fmt::format(
+          "no integer feasible point found, and {} node LP(s) failed numerically, so "
+          "infeasibility is not proved",
+          unsolved_nodes_);
+    } else if (!limit_hit) {
       solution.status = SolveStatus::kInfeasible;
       solution.message = fmt::format(
           "the search closed with no integer feasible point after {} nodes", nodes_explored_);
@@ -1115,7 +1156,7 @@ Solution BranchAndBound::run() {
   solution.solve_seconds = timer_.elapsed_seconds();
   report_root(&solution);
 
-  if (open_.empty() && !limit_hit && !gap_target_met) {
+  if (open_.empty() && !limit_hit && !gap_target_met && !unsolved_blocks_proof()) {
     // The tree is exhausted: the incumbent is proven optimal and is its own bound.
     solution.status = SolveStatus::kOptimal;
     solution.dual_bound = reported(incumbent_internal_);
@@ -1132,6 +1173,12 @@ Solution BranchAndBound::run() {
     // otherwise would assert a proof that was never established.
     solution.status = SolveStatus::kFeasible;
     solution.dual_bound = reported(final_bound);
+    if (!limit_hit && unsolved_blocks_proof()) {
+      solution.message = fmt::format(
+          "feasible, not proved: {} node LP(s) failed numerically and their subtrees were "
+          "not searched; the bound includes their inherited bounds (#733)",
+          unsolved_nodes_);
+    }
   }
   solution.recompute_quality(original_);
   if (tree_cut_rounds_ > 0) {

@@ -170,6 +170,16 @@ void SharedSearch::add_residual(double bound, bool gap_met) {
   gap_met_ = gap_met_ || gap_met;
 }
 
+void SharedSearch::add_unsolved(double bound) {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  unsolved_ = std::min(unsolved_, bound);
+}
+
+double SharedSearch::unsolved() {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  return unsolved_;
+}
+
 double SharedSearch::residual() {
   const std::lock_guard<std::mutex> lock(state_mutex_);
   return residual_;
@@ -362,6 +372,7 @@ void BranchAndBound::leave_shared(bool limit_hit, LimitReason why, bool gap_targ
     }
     shared_->add_residual(bound, gap_target_met);
   }
+  if (unsolved_blocks_proof()) shared_->add_unsolved(integral_bound(unsolved_bound_));
   if (limit_hit && why != LimitReason::kNone) shared_->stop(why);
   sync_pseudocosts();
 }
@@ -612,8 +623,11 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   const bool stopped = why != LimitReason::kNone;
   // Subtrees still queued carry raw node bounds; they are rounded with the step the workers
   // found, as the sequential search rounds every bound it reports (#221).
-  const double residual = std::min(
-      shared.residual(), round_up_to_step(shared.queued_bound(), shared.objective_step()));
+  // Nodes a worker set aside unsolved (#733) bound the answer like any open node.
+  const double unsolved = shared.unsolved();
+  const double residual =
+      std::min({shared.residual(), unsolved,
+                round_up_to_step(shared.queued_bound(), shared.objective_step())});
   double best = std::numeric_limits<double>::infinity();
   std::vector<double> best_x;
   const bool found = shared.incumbent(&best, &best_x);
@@ -632,6 +646,14 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
       solution.dual_bound = reported(residual);
       solution.message =
           fmt::format("{} with no integer feasible point; {}", to_string(why), summary);
+    } else if (unsolved < kInfinity) {
+      // Nothing found and a subtree never searched: infeasibility is not proved (#733).
+      solution.status = SolveStatus::kNumericalError;
+      solution.dual_bound = reported(residual);
+      solution.message = fmt::format(
+          "no integer feasible point found, and a node LP failed numerically, so "
+          "infeasibility is not proved; {}",
+          summary);
     } else {
       solution.status = SolveStatus::kInfeasible;
       solution.dual_bound = nothing;
@@ -647,7 +669,9 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   solution.col_value = best_x;
   const double bound = std::min(best, residual);
   solution.dual_bound = reported(bound);
-  if (!stopped) {
+  // A node set aside unsolved (#733) whose bound no incumbent met: nothing is proved.
+  const bool unproved = unsolved < best;
+  if (!stopped && !unproved) {
     // Every subtree closed, or stopped within the gap target against an incumbent no worse
     // than this one: proved, to the target.
     solution.status = SolveStatus::kOptimal;
@@ -658,6 +682,12 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
                   "open node's, the tree was not exhausted; {}",
                   solution.nodes, summary)
             : summary;
+  } else if (!stopped) {
+    solution.status = SolveStatus::kFeasible;
+    solution.message = fmt::format(
+        "feasible, not proved: a node LP failed numerically and its subtree was not "
+        "searched; the bound includes its inherited bound (#733); {}",
+        summary);
   } else {
     solution.status = SolveStatus::kFeasible;
     solution.stopped_by = why;

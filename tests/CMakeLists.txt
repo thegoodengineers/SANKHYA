@@ -157,6 +157,7 @@ add_executable(sankhya_tests
   unit/test_obbt.cpp
   unit/test_checkpoint.cpp
   unit/test_parallel_tree.cpp
+  unit/test_node_lp_failure.cpp
   unit/test_profiler.cpp
   unit/test_expression.cpp
   unit/test_nonlinear_model.cpp

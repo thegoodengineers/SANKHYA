@@ -414,9 +414,11 @@ class BranchAndBound {
   /// Take one node out of `open_` at position `k`, and out of the bound index.
   void erase_open_at(std::size_t k);
   /// The smallest bound of an open node, raw (not rounded); +inf with nothing open. O(1).
+  /// The nodes set aside unsolved (#733) count as open here: their bound is still unproved.
   [[nodiscard]] double open_min_bound() const {
-    return open_by_bound_.empty() ? std::numeric_limits<double>::infinity()
-                                  : open_by_bound_.begin()->first;
+    const double open = open_by_bound_.empty() ? std::numeric_limits<double>::infinity()
+                                               : open_by_bound_.begin()->first;
+    return std::min(open, unsolved_bound_);
   }
   /// The key a node is filed under in the bound index. A NaN bound cannot be ordered, and a
   /// node whose bound is unknown proves nothing, so it is filed as -inf: never pruned by the
@@ -1157,6 +1159,16 @@ class BranchAndBound {
   /// violates it (#497, `mip_cut_pooling`).
   Count cut_age_limit_ = tol::kCutRowAgeLimit;
   Count nodes_pruned_ = 0;
+  /// Nodes whose LP failed numerically and whose inherited bound did not meet the incumbent
+  /// (#733): set aside, not solved, not pruned. Their smallest inherited bound stays part of
+  /// every bound the search reports, and while it is below the incumbent nothing is proved.
+  Count unsolved_nodes_ = 0;
+  double unsolved_bound_ = std::numeric_limits<double>::infinity();
+  /// Whether an unsolved node still blocks a proof: one exists and the incumbent has not
+  /// since met its bound.
+  [[nodiscard]] bool unsolved_blocks_proof() const {
+    return unsolved_nodes_ > 0 && !can_prune(unsolved_bound_);
+  }
 
   /// Conflict analysis (#292): the learned conflicts, their statistics, and whether the
   /// search is inside an analysis (whose trial propagations must not count as uses).

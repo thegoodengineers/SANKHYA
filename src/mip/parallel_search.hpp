@@ -117,6 +117,10 @@ class SharedSearch {
   /// smallest bound here; gap_met records that some subtree stopped on the gap target.
   void add_residual(double bound, bool gap_met);
   [[nodiscard]] double residual();
+  /// A worker set nodes aside whose LP failed numerically (#733); their smallest bound,
+  /// rounded. +inf when none. Below the incumbent it blocks any optimality claim.
+  void add_unsolved(double bound);
+  [[nodiscard]] double unsolved();
   [[nodiscard]] bool gap_met();
   /// The objective step of #221, as the workers detected it; 0 when none is known.
   void set_objective_step(double step) {
@@ -185,6 +189,7 @@ class SharedSearch {
   Solution failure_;
   std::exception_ptr exception_;
   double residual_ = std::numeric_limits<double>::infinity();
+  double unsolved_ = std::numeric_limits<double>::infinity();
   bool gap_met_ = false;
 
   std::atomic<Count> nodes_{0};
