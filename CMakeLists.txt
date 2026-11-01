@@ -253,6 +253,7 @@ set(SANKHYA_CORE_SOURCES
   src/core/sc_sos.cpp
   src/core/basis_map.cpp
   src/core/resource_limits.cpp
+  src/core/pdhg_fix_and_solve.cpp
   src/core/solve.cpp
   src/core/deterministic_mode.cpp
   src/core/presolve_pipeline.cpp

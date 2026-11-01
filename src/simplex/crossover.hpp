@@ -25,6 +25,7 @@
 #include <functional>
 #include <vector>
 
+#include "primal_simplex.hpp"
 #include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
@@ -54,8 +55,13 @@ struct CrossoverGuess {
 /// reads a deadline: `should_stop` is consulted before every round and inside every
 /// factorization, before each pivot step, and when it fires the guess comes back with
 /// `stopped` set. Never asked, it changes nothing.
+///
+/// With `triangular` (#888, option crossover_triangular_guess) the m basic entries are
+/// chosen by a triangular crash over the interior entries instead, nonsingular by
+/// construction in one pass over the nonzeros, and the rank repair never runs.
 [[nodiscard]] CrossoverGuess crossover_guess(const Model& model, const Solution& interior,
-                                             const std::function<bool()>& should_stop = {});
+                                             const std::function<bool()>& should_stop = {},
+                                             bool triangular = false);
 
 /// Push `interior` (an interior-point answer to `model`) to an optimal vertex with the
 /// simplex warm-started from crossover_guess(). Returns the simplex's vertex when it reaches
@@ -71,6 +77,17 @@ struct CrossoverGuess {
 [[nodiscard]] Solution crossover_to_vertex(const Model& model, Solution interior,
                                            const Options& options, Logger& logger,
                                            SolveControl* control, const Timer& timer);
+
+/// The second half of crossover_to_vertex(), from a basis already in hand (#888): install
+/// `warm` on `model`, push every entry of `interior` that is strictly inside its bounds to
+/// one, and finish with the primal loop, under the same pivot budget and time limit. The
+/// fix-and-solve route (core/pdhg_fix_and_solve.cpp) brings the basis of its restricted
+/// vertex here, where crossover_to_vertex() brings its guess. The verdict is the simplex's
+/// own: `optimal` only when its loop ends there, otherwise `interior` with a note.
+[[nodiscard]] Solution crossover_push_from_basis(const Model& model, Solution interior,
+                                                 WarmStart warm, const Options& options,
+                                                 Logger& logger, SolveControl* control,
+                                                 const Timer& timer);
 
 /// Whether a NON-optimal interior-point answer is a usable crossover start (#474): its status
 /// is feasible, time_limit, iteration_limit or numerical_error (the last with the best

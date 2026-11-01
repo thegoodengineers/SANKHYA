@@ -47,7 +47,7 @@ struct Score {
 }  // namespace
 
 CrossoverGuess crossover_guess(const Model& model, const Solution& interior,
-                               const std::function<bool()>& should_stop) {
+                               const std::function<bool()>& should_stop, bool triangular) {
   const Index n = model.num_cols();
   const Index m = model.num_rows();
   CrossoverGuess guess;
@@ -150,6 +150,70 @@ CrossoverGuess crossover_guess(const Model& model, const Solution& interior,
     }
     status_of(entry) = status;
   };
+  if (triangular) {
+    // THE TRIANGULAR CRASH (#888). The rank repair below factorizes the guess round after
+    // round, and from a first-order point - 61% of the refinery's entries interior at
+    // T = 365, 9,457 of 29,565 columns evicted, no pivot after 409 s at T = 8,760 - those
+    // rounds are the whole cost and the basis they leave is useless (it reproduced the
+    // point to 1.9e+17). This guess is nonsingular by construction instead, in one pass
+    // over the nonzeros: candidates are taken in preference order, interior structurals
+    // by slack first and interior logicals after, and a structural is accepted only when
+    // it has no nonzero in a row an accepted column already pivots on and at least one in
+    // a row none does, which becomes its pivot row (the largest entry there, so the
+    // triangle's diagonal is each column's own largest). Ordered by acceptance the basis
+    // is lower triangular with a nonzero diagonal, so it factorizes without a single
+    // eviction, and the rows no column pivots on take their logical. Bixby, "Implementing
+    // the simplex method: the initial basis", ORSA J. Computing 4 (1992), sec. 3 (the
+    // triangular crash, with a preference order from the point here instead of from the
+    // bound types); Maros, "Computational Techniques of the Simplex Method" (2003), sec.
+    // 9.3. The m - (accepted) interior entries left nonbasic are the push's superbasics.
+    std::stable_partition(candidates.begin(), candidates.end(),
+                          [n](const Score& c) { return c.entry < n; });
+    std::vector<char> pivoted(static_cast<std::size_t>(m), 0);
+    for (const Score& candidate : candidates) {
+      const Index k = candidate.entry;
+      if (k >= n) {
+        const auto row = static_cast<std::size_t>(k - n);
+        if (pivoted[row]) {
+          to_nearer_bound(k);
+          continue;
+        }
+        pivoted[row] = 1;
+        guess.row_status[row] = BasisStatus::kBasic;
+        ++guess.basic;
+        continue;
+      }
+      const ColumnView column = model.matrix.column(k);
+      Index pivot_row = -1;
+      double pivot = 0.0;
+      bool clashes = false;
+      for (Index t = 0; t < column.size && !clashes; ++t) {
+        const Index row = column.rows[t];
+        const double a = std::fabs(column.values[t]);
+        if (a <= tol::kPivotTolerance) continue;
+        if (pivoted[static_cast<std::size_t>(row)]) {
+          clashes = true;
+        } else if (a > pivot) {
+          pivot = a;
+          pivot_row = row;
+        }
+      }
+      if (clashes || pivot_row < 0) {
+        to_nearer_bound(k);
+        continue;
+      }
+      pivoted[static_cast<std::size_t>(pivot_row)] = 1;
+      guess.col_status[static_cast<std::size_t>(k)] = BasisStatus::kBasic;
+      ++guess.basic;
+    }
+    for (Index i = 0; i < m; ++i) {
+      const auto u = static_cast<std::size_t>(i);
+      if (pivoted[u]) continue;
+      guess.row_status[u] = BasisStatus::kBasic;
+      ++guess.basic;
+    }
+    return guess;
+  }
   for (const Score& candidate : candidates) {
     if (guess.basic < m) {
       status_of(candidate.entry) = BasisStatus::kBasic;
@@ -364,7 +428,8 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
   const CrossoverGuess guess = [&] {
     const ProfileScope timed(logger.profiler(), "crossover basis guess",
                              ProfileMode::kDetailed);
-    return crossover_guess(model, interior, should_stop);
+    return crossover_guess(model, interior, should_stop,
+                           options.get_bool("crossover_triangular_guess"));
   }();
   if (guess.stopped) {
     const bool interrupted = control != nullptr && control->interruption_requested();
@@ -385,6 +450,28 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
     return interior;
   }
 
+  WarmStart warm;
+  warm.col_status = guess.col_status;
+  warm.row_status = guess.row_status;
+  logger.info(
+      "Crossover: {} of {} entries interior, basis guess of {} from the interior point, {} "
+      "evicted for rank",
+      guess.interior, model.num_cols() + model.num_rows(), guess.basic, guess.repaired);
+  return crossover_push_from_basis(model, std::move(interior), std::move(warm), options, logger,
+                                   control, timer);
+}
+
+Solution crossover_push_from_basis(const Model& model, Solution interior, WarmStart warm,
+                                   const Options& options, Logger& logger,
+                                   SolveControl* control, const Timer& timer) {
+  const bool from_optimal = interior.status == SolveStatus::kOptimal;
+  const double time_limit = options.get_double("time_limit");
+  const bool limited = time_limit > 0.0 && std::isfinite(time_limit) && time_limit < 1e300;
+  const auto no_time_left = [&] {
+    interior.message += "; no time left for crossover, the interior point's answer stands";
+    withdraw_attached_point(model, &interior);
+    return std::move(interior);
+  };
   Options pivots = options;
   pivots.set_string("algorithm", "dual-simplex");
   // THE PIVOTS ARE BOUNDED BY A COUNT, NOT ONLY BY THE CLOCK (#1072). On Netlib cycle the
@@ -408,13 +495,6 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
     if (remaining <= 0.0) return no_time_left();
     pivots.set_double("time_limit", remaining);
   }
-  WarmStart warm;
-  warm.col_status = guess.col_status;
-  warm.row_status = guess.row_status;
-  logger.info(
-      "Crossover: {} of {} entries interior, basis guess of {} from the interior point, {} "
-      "evicted for rank",
-      guess.interior, model.num_cols() + model.num_rows(), guess.basic, guess.repaired);
   Timer pivot_clock;
   // The push (#343) runs on the model as given, unscaled: the interior point's values are in
   // the model's units, and the relative pivot floor (#244) is what makes the unscaled loop
@@ -440,7 +520,7 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
   vertex.iterations += interior.iterations;
   vertex.algorithm = interior.algorithm + "+crossover";
   const std::string note = fmt::format(
-      "crossover: {} pivots from the interior point's basis guess in {:.2f}s, after {} "
+      "crossover: {} pivots from the starting basis in {:.2f}s, after {} "
       "interior point iterations{}",
       pivot_count, pivot_clock.elapsed_seconds(), interior.iterations,
       from_optimal ? std::string{}
