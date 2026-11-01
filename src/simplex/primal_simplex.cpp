@@ -346,6 +346,7 @@ bool Simplex::refactorize() {
   // Reset at entry rather than at the successful return, so every exit path - the ladder,
   // a repair, a failure - leaves the counter consistent with whatever factors are in use.
   eta_work_since_refactor_ = 0.0;
+  reduced_costs_stale_ = true;  // fresh factors: the primal loop re-prices from a BTRAN
   last_factorization_plain_ = false;
   // A column judged dependent on the previous factors is eligible again on these.
   std::fill(numerically_dependent_.begin(), numerically_dependent_.end(), 0);
@@ -754,6 +755,35 @@ void Simplex::compute_reduced_costs(bool phase_one) {
     const double own_cost = phase_one ? 0.0 : cost_[static_cast<std::size_t>(k)];
     reduced_cost_[static_cast<std::size_t>(k)] = own_cost - dot;
   }
+}
+
+void Simplex::update_reduced_costs_through_pivot_row(Index entering, Index leaving_slot,
+                                                     Index leaving) {
+  // Row r of B^-1 [A | -I] over the nonbasic columns, entering among them still (this runs
+  // before the basis swap). The leaving column is basic, so its entry is 0 here and is set
+  // by hand below.
+  compute_pivot_row(leaving_slot);
+  const auto e = static_cast<std::size_t>(entering);
+  const double alpha_rq = pivot_row_[e];
+  const double d_q = reduced_cost_[e];
+  if (!std::isfinite(alpha_rq) || std::fabs(alpha_rq) < tol::kPivotTolerance ||
+      !std::isfinite(d_q / alpha_rq)) {
+    reduced_costs_stale_ = true;  // too small to update through: recompute next iteration
+    return;
+  }
+  const double theta = d_q / alpha_rq;
+  const auto apply = [&](Index k) {
+    const auto u = static_cast<std::size_t>(k);
+    if (basis_position_[u] >= 0) return;
+    reduced_cost_[u] -= theta * pivot_row_[u];
+  };
+  if (pivot_row_held_sparse_) {
+    for (const Index k : pivot_row_touched_) apply(k);
+  } else {
+    for (Index k = 0; k < total_; ++k) apply(k);
+  }
+  reduced_cost_[e] = 0.0;
+  reduced_cost_[static_cast<std::size_t>(leaving)] = -theta;
 }
 
 Index Simplex::price(bool bland, int* direction) const {
@@ -1504,6 +1534,16 @@ Solution Simplex::run(const WarmStart* warm) {
 Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
   Count& iterations = *iterations_io;
   StopController stop(control_, timer, limits_);
+  // The pivot row's scratch, as dual_loop() sets it up (#243): the reduced-cost update
+  // below reads row r of B^-1 [A | -I] through compute_pivot_row().
+  if (static_cast<Index>(pivot_row_.size()) != total_) {
+    pivot_row_.assign(static_cast<std::size_t>(total_), 0.0);
+    pivot_row_marked_.assign(static_cast<std::size_t>(total_), 0);
+    pivot_row_touched_.clear();
+    pivot_row_held_sparse_ = false;
+    by_row_.build(model_.matrix);
+  }
+  reduced_costs_stale_ = true;
   // A budget of zero iterations buys zero iterations (#289). The check below this loop runs
   // after a pivot, which is the right place for every other count and the wrong one for
   // this one: it used to perform one iteration and then report that none were allowed.
@@ -1553,10 +1593,25 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
     was_phase_one = phase_one;
 
     iterations_seen_ = iterations;
-    {
+    // THE REDUCED COSTS ARE UPDATED THROUGH THE PIVOT ROW, NOT RECOMPUTED (#888). Every
+    // iteration used to solve y = B^-T c_B and take c - A^T y over every column: on the
+    // refinery at T = 365, after the crossover push, 32.1 of the primal loop's 68 s, more
+    // than pricing, FTRAN and the ratio test together (profile=detailed). After a pivot with
+    // entering q and leaving row r the new reduced costs are d_j - (d_q / alpha_rq) alpha_rj
+    // for every nonbasic j, and -d_q / alpha_rq for the column that left (Maros,
+    // "Computational Techniques of the Simplex Method", 2003, sec. 9.2; Forrest & Goldfarb,
+    // "Steepest-edge simplex algorithms for linear programming", Mathematical Programming
+    // 57 (1992), sec. 2, the same bookkeeping their weights ride on), which costs one BTRAN
+    // and one pass over the row's support, as the dual loop already pays. The full
+    // recomputation stays where it proves something: on fresh factors after every
+    // refactorization (so the optimality declared on them below is priced from a BTRAN, as
+    // before), in phase 1, whose costs move with the basic positions, and after a pivot too
+    // small to update through.
+    if (reduced_costs_stale_ || phase_one) {
       const ProfileScope timed(logger_.profiler(), "primal reduced costs",
                                ProfileMode::kDetailed);
       compute_reduced_costs(phase_one);
+      reduced_costs_stale_ = phase_one;
     }
 
     if (iterations % 20 == 0) {
@@ -1866,6 +1921,11 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       // basis, so no edge changes and no weight is stale.
       update_devex_weights(entering, ratio.leaving_position,
                            alpha_[static_cast<std::size_t>(ratio.leaving_position)]);
+      if (!reduced_costs_stale_) {
+        const ProfileScope timed(logger_.profiler(), "primal dual update",
+                                 ProfileMode::kDetailed);
+        update_reduced_costs_through_pivot_row(entering, ratio.leaving_position, leaving);
+      }
 
       basis_position_[l] = -1;
       // Snap the departing variable exactly onto the bound it hit. Leaving it at the
