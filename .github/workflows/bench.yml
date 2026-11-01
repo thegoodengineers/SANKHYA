@@ -250,7 +250,8 @@ jobs:
               # mip_threads is one per core; options go to miplib.py only.
               miplib3)
                 python3 bench/runners/miplib.py --binary build/sankhya --set miplib3 --seeds 3 \
-                  --threads 1 --machine-kind "github-actions ubuntu-24.04" \n                  ${limit[@]+"${limit[@]}"} "$@"
+                  --threads 1 --machine-kind "github-actions ubuntu-24.04" \
+                  ${limit[@]+"${limit[@]}"} "$@"
                 python3 bench/runners/compare.py --suite miplib3 --sankhya-binary build/sankhya \
                   --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} ;;
               head-to-head-maros-meszaros)
