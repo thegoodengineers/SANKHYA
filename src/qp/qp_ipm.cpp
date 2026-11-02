@@ -350,6 +350,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   // the stall test below.
   const bool stall_handoff = options.get_bool("qp_ipm_stall_handoff");
   const bool adaptive_dual = options.get_bool("qp_ipm_adaptive_dual_regularization");
+  const bool adaptive_drop = adaptive_dual && options.get_bool("qp_ipm_adaptive_dual_drop");
   const bool krylov_refinement = options.get_bool("qp_ipm_krylov_refinement");
   const Count centrality_correctors = options.get_int("qp_ipm_centrality_correctors");
   const double primal_tolerance = options.get_double("primal_feasibility_tolerance");
@@ -888,6 +889,9 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
       }
       if (missed > tol::kQpIpmStepPrimalShare * needed) {
         dual_floor = std::max(tol::kQpIpmDualFloorMin, dual_floor * tol::kQpIpmDualFloorCut);
+        // #1178: delta only ever fell through min(delta, 0.1 mu), and on liswet8, 9 and 12
+        // mu rises after the cut, so the cut floor was never reached; the drop takes it now.
+        if (adaptive_drop) delta = dual_floor;
       }
     }
     const double alpha =
