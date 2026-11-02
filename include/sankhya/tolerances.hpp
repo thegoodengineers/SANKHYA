@@ -535,6 +535,14 @@ inline constexpr double kGmiRhsRelaxRelative = 1e-9;
 /// or barely violated are safely rejected to save LP solves.
 inline constexpr double kCutViolationTolerance = 1e-5;
 
+/// Row aggregation for the MIR and flow cover separators (row_aggregation.hpp; Marchand and
+/// Wolsey 2001): at most this many rows added to a base row, one per continuous column
+/// eliminated, and a column counts as inside its bounds, so worth eliminating, when its
+/// slack to the nearer bound exceeds kRowAggregationInside. 6 is Marchand and Wolsey's
+/// MAXAGGR; a lot-sizing (l, S) inequality over k periods needs k - 1 aggregations.
+inline constexpr int kRowAggregationDepth = 6;
+inline constexpr double kRowAggregationInside = 1e-6;
+
 /// Presolve, parallel rows (#412; Andersen & Andersen 1995, sec. 5). Two rows are
 /// proportional when every coefficient matches its scaled counterpart to this relative
 /// tolerance, measured against max(1, |a|, |scaled|). Tighter than the pivot drop because a
