@@ -467,6 +467,62 @@ TEST(ParallelTree, ThePoolIsSharedAndEveryMemberIsFeasible) {
   }
 }
 
+TEST(ParallelTree, AModelPresolveSettlesEntirelyIsOptimalNotInfeasible) {
+  // `2 x0 <= 7`, x0 integer in [0, 10], min -x0: presolve rounds the bound to 3, fixes the
+  // column and removes the row, so the search sees a model with no columns and its one
+  // point is the empty vector. Before #1158 the driver read an empty incumbent as none and
+  // reported the model infeasible (81 tests found it the day the default became 4 threads).
+  Model model;
+  model.resize_columns(1);
+  model.col_cost = {-1.0};
+  model.col_lower = {0.0};
+  model.col_upper = {10.0};
+  model.col_type = {VarType::kInteger};
+  model.resize_rows(1);
+  model.row_lower = {-std::numeric_limits<double>::infinity()};
+  model.row_upper = {7.0};
+  model.matrix.reset(1, 1);
+  model.matrix.add_entry(0, 0, 2.0);
+  model.matrix.finalize();
+  model.hessian.reset(1, 1);
+  model.hessian.finalize();
+  ASSERT_EQ(model.validate(), "");
+  for (const bool presolve : {true, false}) {
+    Options options = on_threads(4);
+    options.set_bool("presolve", presolve);
+    const Solution solved = solve(model, options);
+    SCOPED_TRACE(presolve ? "presolve on" : "presolve off");
+    ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+    EXPECT_NEAR(solved.objective, -3.0, 1e-9);
+    ASSERT_EQ(solved.col_value.size(), 1u);
+    EXPECT_NEAR(solved.col_value[0], 3.0, 1e-9);
+  }
+}
+
+TEST(ParallelTree, AnInterruptRequestedBeforeTheSolveStopsItBeforeAnyNode) {
+  // The engine contract (test_solver_engine_conformance): an interrupt already requested
+  // ends the solve as interrupted. The driver forwarded one every 50 ms, which a small
+  // model never reached, and the answer came back optimal (#1158).
+  SolveControl control;
+  control.interrupt();
+  const Solution stopped = solve(knapsack(16, 3), on_threads(4), &control);
+  EXPECT_EQ(stopped.status, SolveStatus::kInterrupted) << stopped.message;
+  EXPECT_EQ(stopped.stopped_by, LimitReason::kInterrupt);
+  EXPECT_EQ(stopped.nodes, 0) << stopped.message;
+}
+
+TEST(ParallelTree, TheIncumbentTraceIsRecordedOnTheDriversClock) {
+  // #504's trace feeds time-to-first-feasible and the primal integral in miplib.py; the
+  // parallel search kept none, so those columns went blank at mip_threads > 1 (#1158).
+  const Solution solved = solve(knapsack(16, 3), on_threads(4));
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+  ASSERT_FALSE(solved.incumbent_trace.empty()) << solved.message;
+  EXPECT_NEAR(solved.incumbent_trace.back().objective, solved.objective, 1e-9);
+  for (std::size_t k = 1; k < solved.incumbent_trace.size(); ++k) {
+    EXPECT_GE(solved.incumbent_trace[k].seconds, solved.incumbent_trace[k - 1].seconds);
+  }
+}
+
 TEST(ParallelTree, TheModesItDoesNotTakeRunSequentially) {
   const Model model = knapsack(16, 3);
   Options deterministic = on_threads(4);

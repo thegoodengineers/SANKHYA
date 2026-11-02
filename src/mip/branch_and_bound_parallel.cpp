@@ -93,16 +93,23 @@ bool SharedSearch::publish(double objective, const std::vector<double>& x) {
   const std::lock_guard<std::mutex> lock(incumbent_mutex_);
   if (objective >= best_.load(std::memory_order_relaxed) - 1e-12) return false;
   best_x_ = x;
+  has_best_ = true;
+  trace_.emplace_back(clock_ != nullptr ? clock_->elapsed_seconds() : 0.0, objective);
   best_.store(objective, std::memory_order_release);
   return true;
 }
 
 bool SharedSearch::incumbent(double* objective, std::vector<double>* x) {
   const std::lock_guard<std::mutex> lock(incumbent_mutex_);
-  if (best_x_.empty()) return false;
+  if (!has_best_) return false;
   *objective = best_.load(std::memory_order_relaxed);
   *x = best_x_;
   return true;
+}
+
+std::vector<std::pair<double, double>> SharedSearch::trace() {
+  const std::lock_guard<std::mutex> lock(incumbent_mutex_);
+  return trace_;
 }
 
 void SharedSearch::offer_to_pool(double objective, const std::vector<double>& x) {
@@ -546,6 +553,7 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
       threads, options.get_int("node_limit"),
       SolutionPool(integer_columns, static_cast<std::size_t>(options.get_int("pool_size")),
                    options.get_bool("pool_diversity")));
+  shared.set_clock(&clock);
   const double time_limit = options.get_double("time_limit");
   const bool has_time_limit = std::isfinite(time_limit) && time_limit >= 0.0;
 
@@ -580,6 +588,12 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   // The workers answer to their own control; this thread forwards the caller's interrupt
   // and calls the caller's progress callback, which was never promised to be thread-safe.
   SolveControl stop_signal;
+  // An interrupt already requested is honoured before a worker takes a node (#1158): the
+  // loop below forwards one every 50 ms, which a model solved in less never reached.
+  if (control != nullptr && control->interruption_requested()) {
+    shared.stop(LimitReason::kInterrupt);
+    stop_signal.interrupt();
+  }
   Solution root_answer;
   std::vector<std::thread> workers;
   workers.reserve(static_cast<std::size_t>(threads));
@@ -701,6 +715,9 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   }
 
   solution.col_value = best_x;
+  for (const auto& [seconds, internal] : shared.trace()) {
+    solution.incumbent_trace.push_back({seconds, reported(internal)});
+  }
   const double bound = std::min(best, residual);
   solution.dual_bound = reported(bound);
   // A node set aside unsolved (#733) whose bound no incumbent met: nothing is proved.
