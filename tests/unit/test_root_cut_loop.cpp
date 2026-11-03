@@ -84,6 +84,8 @@ Options root_cuts(bool loop) {
   Options options;
   options.set_bool("log_to_console", false);
   options.set_bool("presolve", false);  // the root the loop sees is the model's own
+  options.set_int("mip_threads", 1);    // the loop's rounds and moved rows are reported by the
+                                        // sequential search only (#1158)
   for (const char* name :
        {"enable_root_cuts", "enable_mir_cuts", "enable_clique_cuts", "enable_zero_half_cuts"}) {
     options.set_bool(name, true);

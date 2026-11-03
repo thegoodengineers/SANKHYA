@@ -131,6 +131,8 @@ bool literals_hold(const nlohmann::json& conflict, const std::vector<double>& x)
 Options searching(bool cutoff, const std::string& out) {
   Options options;
   options.set_bool("log_to_console", false);
+  options.set_int("mip_threads", 1);  // conflict_out and a repeatable learning order are the
+                                      // sequential search's (#1158)
   // The models here are a few columns, so every root cut is "dense" and the admission
   // (#496) would close them at the root; pinned off, since the tree is what is tested.
   options.set_int("cut_dense_max", 0);

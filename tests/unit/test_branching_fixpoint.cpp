@@ -32,6 +32,8 @@ namespace {
 Options quiet() {
   Options o;
   o.set_bool("log_to_console", false);
+  o.set_int("mip_threads", 1);  // the fixpoint counters read here are the sequential
+                                // search's; the parallel default (#1158) keeps none
   return o;
 }
 

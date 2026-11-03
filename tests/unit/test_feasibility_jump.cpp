@@ -335,6 +335,8 @@ TEST(FeasibilityJump, TheSearchWithItOnAgreesWithTheExactOracle) {
   std::mt19937_64 rng(50600);
   Options options;
   options.set_string("mip_heur_fj", "on");
+  options.set_int("mip_threads", 1);  // FJ's calls are read off the console log below, which
+                                      // the parallel search's workers do not write (#1158)
   // Presolve off, so the generated models reach the search and FJ with them; the log goes to
   // stdout, captured per trial, so the test can show FJ actually ran (review of #635).
   options.set_bool("presolve", false);

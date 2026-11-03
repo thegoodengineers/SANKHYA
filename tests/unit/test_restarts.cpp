@@ -126,6 +126,7 @@ Options quiet() {
   options.set_bool("root_cut_loop", false);
   options.set_bool("log_to_console", false);
   options.set_bool("presolve", false);
+  options.set_int("mip_threads", 1);  // restarts run in the sequential search only (#1158)
   return options;
 }
 
