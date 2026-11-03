@@ -109,9 +109,15 @@ CutSelection select_cuts(const Model& model, const std::vector<double>& point,
   return out;
 }
 
-Index root_cut_row_budget(Index model_rows) {
+Index root_cut_row_budget(Index model_rows, Index pooled_per_round) {
   const double share = std::floor(tol::kRootCutRowShare * static_cast<double>(model_rows));
-  return static_cast<Index>(std::max(static_cast<double>(tol::kRootCutRowFloor), share));
+  double budget = std::max(static_cast<double>(tol::kRootCutRowFloor), share);
+  if (pooled_per_round > 0) {
+    budget = std::max(budget, static_cast<double>(tol::kRootCutPooledRowFactor) *
+                                  static_cast<double>(pooled_per_round) *
+                                  static_cast<double>(tol::kRootCutMaxRounds));
+  }
+  return static_cast<Index>(budget);
 }
 
 void take_within_budget(std::vector<Cut>* selected, std::vector<Cut>* waiting,

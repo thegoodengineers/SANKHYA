@@ -60,8 +60,12 @@ struct CutSelection {
                                        double max_parallelism);
 
 /// The root separation loop's row budget (#495): max(kRootCutRowFloor, kRootCutRowShare *
-/// `model_rows`) cut rows in all, `model_rows` the rows before the first cut.
-[[nodiscard]] Index root_cut_row_budget(Index model_rows);
+/// `model_rows`) cut rows in all, `model_rows` the rows before the first cut. With
+/// `pooled_per_round` > 0 (the cut pool removes the loop's slack rows from the LP at the end
+/// of the root, #1143, so the rows that ride into the tree are the tight ones, not the
+/// budget), also at least kRootCutPooledRowFactor * pooled_per_round * kRootCutMaxRounds:
+/// the rounds, not the rows, then bound the loop.
+[[nodiscard]] Index root_cut_row_budget(Index model_rows, Index pooled_per_round = 0);
 
 /// A selection cut short to `room` rows: the first `room` of `selected` (best first, as
 /// select_cuts returns them) stay; the rest go to the FRONT of `waiting`, since they scored

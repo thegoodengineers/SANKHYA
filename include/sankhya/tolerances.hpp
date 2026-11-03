@@ -978,6 +978,12 @@ inline constexpr double kRootCutTimeShare = 0.05;
 /// round 1 included, m the rows of the LP the root separates on before its first cut.
 inline constexpr int kRootCutRowFloor = 100;
 inline constexpr double kRootCutRowShare = 1.0;
+/// When the cut pool removes the rows slack at the loop's last LP (#1143), what rides into
+/// the tree is the tight rows, not the budget, so the budget is then also at least this many
+/// times cut_max_per_round * kRootCutMaxRounds, and the rounds bound the loop instead. The
+/// #1158 A/B at d178213 (bench/results/option-ab-miplib3-rootloop-d178213.csv) had the
+/// m-row budget binding on 14 of 195 loop runs, pp08a, harp2, vpm2 and misc07 among them.
+inline constexpr int kRootCutPooledRowFactor = 2;
 
 /// GPU PDHG device loop (#478): iterations replayed on the device per host synchronisation.
 /// Larger amortises the synchronisation further but checks the iteration and time limits
