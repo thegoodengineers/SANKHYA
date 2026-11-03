@@ -185,8 +185,8 @@ def incumbent_metrics(trace: list, optimum: float, end: float,
     """Time to first feasible and the primal integral of one run.
 
     `trace` is the stats JSON's effort.incumbent_trace, [[seconds, objective], ...]. When it
-    is empty but the run reports a point (presolve settled the model, or the parallel search,
-    which keeps no trace), the point is charged as found at `end`: an upper bound, and
+    is empty but the run reports a point (presolve settled the model), the point is charged
+    as found at `end`: an upper bound, and
     `trace_recorded` says it is one."""
     events = [(float(t), float(v)) for t, v in trace
               if t is not None and v is not None]

@@ -50,6 +50,7 @@
 #include <vector>
 
 #include "branch_and_bound_internal.hpp"
+#include "sankhya/timer.hpp"
 #include "solution_pool.hpp"
 
 namespace sankhya::mip {
@@ -99,10 +100,17 @@ class SharedSearch {
   // ---- The incumbent, in minimise space ------------------------------------------------
 
   [[nodiscard]] double best() const noexcept { return best_.load(std::memory_order_acquire); }
-  /// Offer a verified point; true when it became the incumbent.
+  /// Offer a verified point; true when it became the incumbent. Recorded on the trace with
+  /// the driver's clock (#1158), as the sequential search records its own.
   bool publish(double objective, const std::vector<double>& x);
-  /// Copy the incumbent out; false when there is none.
+  /// Copy the incumbent out; false when none was published. A published point may be EMPTY
+  /// (a model with no columns, which presolve leaves behind when it settles everything):
+  /// that is an incumbent, and before #1158 it read as none and the answer was "infeasible".
   bool incumbent(double* objective, std::vector<double>* x);
+  /// The clock publish() stamps the trace with: the driver's, since solve() started.
+  void set_clock(const Timer* clock) { clock_ = clock; }
+  /// Every incumbent published, in order: (seconds, objective in minimise space).
+  [[nodiscard]] std::vector<std::pair<double, double>> trace();
   /// Every verified point goes to the one shared pool, as in the sequential search (#225).
   void offer_to_pool(double objective, const std::vector<double>& x);
   [[nodiscard]] SolutionPool& pool() { return pool_; }
@@ -201,6 +209,9 @@ class SharedSearch {
   std::mutex incumbent_mutex_;
   std::atomic<double> best_{std::numeric_limits<double>::infinity()};
   std::vector<double> best_x_;
+  bool has_best_ = false;
+  std::vector<std::pair<double, double>> trace_;
+  const Timer* clock_ = nullptr;
   SolutionPool pool_;
 
   std::atomic<bool> stop_{false};

@@ -773,8 +773,8 @@ class Solution {
 
   /// Every incumbent a MILP search accepted as an improvement (#504), in the order found:
   /// the solver clock in seconds since solve() started, and the objective in the model's
-  /// own sense and units. Empty for an LP or QP, for a model presolve settled, and for the
-  /// parallel search (mip_threads > 1), which does not record one. Time to first feasible
+  /// own sense and units. Empty for an LP or QP and for a model presolve settled; the
+  /// parallel search (mip_threads > 1) records it on the driver's clock. Time to first feasible
   /// and Berthold's primal integral ("Measuring the impact of primal heuristics", Oper.
   /// Res. Lett. 41, 2013) are read from it by bench/runners/miplib.py.
   struct IncumbentEvent {
