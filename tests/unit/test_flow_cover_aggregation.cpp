@@ -194,18 +194,19 @@ int exact_gate(const Model& m, const Cut& cut, int* skipped, std::string* why) {
 }
 
 TEST(FlowCoverCuts, TheTwoPeriodPathCutComesFromTheAggregatedBalanceRows) {
-  // Periods with capacity 5 and demand 2 each. At y = (0.6, 0.2), x = (3, 1), s_1 = 1 the
-  // balance rows hold. Period 1 alone gives x_1 - 2 y_1 - s_1 <= 0 (cover {1}, lambda 3),
-  // violated by 1. Eliminating s_1 with the second balance row gives x_1 + x_2 = 4: cover
-  // {1} with lambda 1, the cut x_1 + x_2 - 4 y_1 - 4 y_2 <= 0 once x_2 is lifted
-  // (f(5) = max(0, 5 - 5 + 1) = 1, so its switch coefficient is 5 - 1 = 4), violated by
-  // 0.8. The more violated aggregate is what comes back, and the gate must pass it.
+  // Capacities 6 and 5, demand 2 each. At y = (0.5, 0.2), x = (3, 1), s_1 = 1 both balance
+  // rows and both variable upper bounds hold. Period 1 alone gives x_1 - 2 y_1 - s_1 <= 0
+  // (cover {1}, lambda 4), violated by 1.0. Eliminating s_1 with the second balance row
+  // gives x_1 + x_2 <= 4: cover {1} with lambda 2, and x_2 lifted with g(5) = max(0, 5 -
+  // (6 - 2)) = 1, so its switch coefficient is 5 - 1 = 4: x_1 + x_2 - 4 y_1 - 4 y_2 <= 0,
+  // violated by 1.2. The more violated aggregate is what comes back, and the gate must
+  // pass it: with y_1 = 1 alone, x_1 is at most 4 (x_2 = 0 forces s_1 = 2).
   LotSizing ls;
-  ls.u = {5, 5};
+  ls.u = {6, 5};
   ls.d = {2, 2};
   const Model m = build(ls);
   FlowCoverStats stats;
-  const std::vector<Cut> cuts = generate_flow_cover_cuts(m, at({3.0, 1.0, 0.6, 0.2, 1.0}),
+  const std::vector<Cut> cuts = generate_flow_cover_cuts(m, at({3.0, 1.0, 0.5, 0.2, 1.0}),
                                                          m.col_lower, m.col_upper, &stats);
   ASSERT_FALSE(cuts.empty());
   EXPECT_GE(stats.aggregated, 1) << "no cut came from an aggregate";
@@ -316,7 +317,6 @@ TEST(FlowCoverCuts, TheSearchOnLotSizingChainsAgreesWithTheExactOptimum) {
       if (!any || value < best) best = value;
       any = true;
     }
-    ASSERT_TRUE(any) << "trial " << trial << ": demand cannot be met";
     Options options;
     options.set_bool("log_to_console", false);
     options.set_bool("enable_root_cuts", true);
@@ -324,6 +324,11 @@ TEST(FlowCoverCuts, TheSearchOnLotSizingChainsAgreesWithTheExactOptimum) {
     options.set_bool("root_cut_loop", true);
     const Solution solved = solve(m, options);
     ++compared;
+    if (!any) {  // the capacities cannot meet the demand: the search must say so
+      EXPECT_EQ(solved.status, SolveStatus::kInfeasible)
+          << "trial " << trial << ": " << solved.message;
+      continue;
+    }
     ASSERT_EQ(solved.status, SolveStatus::kOptimal)
         << "trial " << trial << ": " << solved.message;
     EXPECT_NEAR(solved.objective, best.to_double(), 1e-6 * std::max(1.0, best.to_double()))
