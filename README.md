@@ -76,7 +76,7 @@ as regenerable backups.
 - **OpenMP gate.** A column loop starts an OpenMP team only when its work exceeds `omp_min_work`. `threads` is now applied on the global and nonlinear paths too (#1103). The A/B CSVs are `bench/results/option-ab-*-omp-gate-*.csv` (#1120).
 - **GCC 15.** The project builds and passes its tests under GCC 15 on ubuntu-26.04 (#1109).
 - **Maros-Meszaros head-to-head: PIQP is ahead.** All 138 QPs at 60 s, one thread, with every solver graded the same way. PIQP matches 130 references and has 128 both matched and verified. SANKHYA has 117 matched and verified. Clarabel has 90 and SCS 71 (`bench/results/head-to-head-maros-meszaros-d0eb672.csv`, #1084).
-- **Reference errata.** The published optima for `huestis` and `hues-mod` are recorded beside their exact optima in `data/maros-meszaros/reference_errata.json` (#1078).
+- **Reference errata.** The published optima for `huestis` and `hues-mod` are recorded beside their exact optima in `data/maros-meszaros/reference_errata.json` (#1078); `liswet8`'s published 7.1447006e+03 is ten times the 714.47006 that HiGHS, Clp, PIQP and SANKHYA all reach (#1178), recorded there the same way. None of the three is re-scored: a run is still judged against the published value.
 
 ## Status
 

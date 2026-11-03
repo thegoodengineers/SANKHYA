@@ -84,17 +84,19 @@ def errata_paragraph(rows: list[dict], errata_path: Path = ERRATA) -> list[str]:
         return []
     by_name = {row["instance"]: row for row in rows}
     out = ["**Reference errata.** For these instances the published objective is not the "
-           "optimum: it was recomputed exactly (`data/maros-meszaros/reference_errata.json`). "
-           "The table above still judges them against the published value, so they count "
-           "as not matched.", "",
-           "| instance | published | exact optimum | relative difference | ours (this run) | how |",
+           "optimum: it was recomputed exactly, or independent solvers agree on another value "
+           "(`data/maros-meszaros/reference_errata.json`). The table above still judges them "
+           "against the published value, so they count as not matched.", "",
+           "| instance | published | optimum | relative difference | ours (this run) | how |",
            "|---|---:|---:|---:|---:|---|"]
     for name in sorted(errata):
         e = errata[name]
         ours = _float(by_name.get(name, {}), "our_objective")
-        out.append(f"| `{name}` | {e['published']} | {e['exact_optimum']} | "
+        optimum = e.get("exact_optimum") or e.get("agreed_optimum")
+        how = f"`{e['script']}`" if "script" in e else e["comparators"]
+        out.append(f"| `{name}` | {e['published']} | {optimum} | "
                    f"{e['relative_difference']} | {'-' if ours is None else format(ours, '.17g')} "
-                   f"| `{e['script']}` |")
+                   f"| {how} |")
     return out + [""]
 
 
