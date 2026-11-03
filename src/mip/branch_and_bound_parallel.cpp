@@ -237,6 +237,44 @@ std::size_t SharedSearch::root_cut_count() {
   return root_cuts_.size();
 }
 
+void SharedSearch::add_to_tally(const Solution& a) {
+  const std::lock_guard<std::mutex> lock(tally_mutex_);
+  Tally& t = tally_;
+  t.iterations += a.iterations;
+  t.cuts_applied += a.cuts_applied;
+  t.cut_rows_aged_out += a.cut_rows_aged_out;
+  t.cuts_reactivated += a.cuts_reactivated;
+  t.cut_rows_removed += a.cut_rows_removed;
+  t.cut_rows_readded += a.cut_rows_readded;
+  t.restarts += a.restarts;
+  t.reduced_cost_fixings += a.reduced_cost_fixings;
+  t.objective_branches += a.objective_branches;
+  t.safe_bound_nodes += a.safe_bound_nodes;
+  t.safe_bound_infinite += a.safe_bound_infinite;
+  t.safe_bound_refusals += a.safe_bound_refusals;
+  t.conflicts_analysed += a.conflicts_analysed;
+  t.conflicts_learned += a.conflicts_learned;
+  t.conflicts_learned_cutoff += a.conflicts_learned_cutoff;
+  t.conflict_nodes_pruned += a.conflict_nodes_pruned;
+  t.conflict_tightenings += a.conflict_tightenings;
+  t.clique_cuts_generated += a.clique_cuts_generated;
+  t.node_lp_rows_max = std::max(t.node_lp_rows_max, a.node_lp_rows_max);
+  if (!std::isnan(a.node_lp_rows_mean) && a.nodes > 0) {
+    t.node_lp_rows_sum += a.node_lp_rows_mean * static_cast<double>(a.nodes);
+    t.node_lp_rows_weight += a.nodes;
+  }
+  const auto widest = [](double* into, double value) {
+    if (!std::isnan(value) && (std::isnan(*into) || value > *into)) *into = value;
+  };
+  widest(&t.safe_bound_max_gap, a.safe_bound_max_gap);
+  widest(&t.safe_bound_max_rel_gap, a.safe_bound_max_rel_gap);
+}
+
+SharedSearch::Tally SharedSearch::tally() {
+  const std::lock_guard<std::mutex> lock(tally_mutex_);
+  return tally_;
+}
+
 // =========================================================================================
 // The worker's side of BranchAndBound
 // =========================================================================================
@@ -481,6 +519,7 @@ void run_worker(const Model& model, const Options& options, SharedSearch* shared
       BranchAndBound search(model, worker_options, silent, stop_signal);
       search.attach(shared, spec.is_root ? nullptr : &spec);
       Solution answer = search.run();
+      shared->add_to_tally(answer);  // its counters, into the one answer (#1158)
       if (answer.status == SolveStatus::kUnbounded ||
           answer.status == SolveStatus::kNumericalError ||
           answer.status == SolveStatus::kModelError) {
@@ -662,9 +701,36 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   solution.nodes = shared.nodes();
   solution.root_bound = root_answer.root_bound;
   solution.root_bound_after_cuts = root_answer.root_bound_after_cuts;
-  solution.cuts_applied = root_answer.cuts_applied;
   solution.cut_filter_report = root_answer.cut_filter_report;
   solution.symmetry_generators = shared.symmetry_generators();
+  // Every subtree's counters, summed (#1158): the root's cut rounds, every worker's tree
+  // rounds, fixings, conflicts and safe bounds, as the sequential search reports its own.
+  const SharedSearch::Tally tally = shared.tally();
+  solution.iterations = tally.iterations;
+  solution.cuts_applied = tally.cuts_applied;
+  solution.cut_rows_aged_out = tally.cut_rows_aged_out;
+  solution.cuts_reactivated = tally.cuts_reactivated;
+  solution.cut_rows_removed = tally.cut_rows_removed;
+  solution.cut_rows_readded = tally.cut_rows_readded;
+  solution.restarts = tally.restarts;
+  solution.reduced_cost_fixings = tally.reduced_cost_fixings;
+  solution.objective_branches = tally.objective_branches;
+  solution.safe_bound_nodes = tally.safe_bound_nodes;
+  solution.safe_bound_infinite = tally.safe_bound_infinite;
+  solution.safe_bound_refusals = tally.safe_bound_refusals;
+  solution.safe_bound_max_gap = tally.safe_bound_max_gap;
+  solution.safe_bound_max_rel_gap = tally.safe_bound_max_rel_gap;
+  solution.conflicts_analysed = tally.conflicts_analysed;
+  solution.conflicts_learned = tally.conflicts_learned;
+  solution.conflicts_learned_cutoff = tally.conflicts_learned_cutoff;
+  solution.conflict_nodes_pruned = tally.conflict_nodes_pruned;
+  solution.conflict_tightenings = tally.conflict_tightenings;
+  solution.clique_cuts_generated = tally.clique_cuts_generated;
+  solution.node_lp_rows_max = tally.node_lp_rows_max;
+  if (tally.node_lp_rows_weight > 0) {
+    solution.node_lp_rows_mean =
+        tally.node_lp_rows_sum / static_cast<double>(tally.node_lp_rows_weight);
+  }
 
   const LimitReason why = shared.reason();
   const bool stopped = why != LimitReason::kNone;

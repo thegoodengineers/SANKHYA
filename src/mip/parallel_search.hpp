@@ -185,6 +185,43 @@ class SharedSearch {
   /// Add what a worker observed on top of the snapshot it started from.
   void merge_pseudocosts(const Pseudocosts& start, const Pseudocosts& end);
 
+  // ---- The subtrees' counters, into the one answer (#1158) ------------------------------
+
+  /// Every counter a subtree's answer reports, summed over the subtrees (a maximum where
+  /// the counter is one, a node-weighted mean for node_lp_rows_mean), so the answer of the
+  /// parallel search carries what the sequential search's does and bench/runners/miplib.py
+  /// writes the same columns at any thread count. Before #1158 the driver copied the root
+  /// subtree's cut count and nothing else: iterations, the cut pool's aged-out, reactivated,
+  /// removed and re-added rows, reduced-cost fixings, the safe-bound and conflict counters,
+  /// clique cuts and the node LP row statistics were all zero or blank at mip_threads > 1.
+  struct Tally {
+    Count iterations = 0;
+    Count cuts_applied = 0;
+    Count cut_rows_aged_out = 0;
+    Count cuts_reactivated = 0;
+    Count cut_rows_removed = 0;
+    Count cut_rows_readded = 0;
+    Count restarts = 0;
+    Count reduced_cost_fixings = 0;
+    Count objective_branches = 0;
+    Count safe_bound_nodes = 0;
+    Count safe_bound_infinite = 0;
+    Count safe_bound_refusals = 0;
+    double safe_bound_max_gap = std::numeric_limits<double>::quiet_NaN();
+    double safe_bound_max_rel_gap = std::numeric_limits<double>::quiet_NaN();
+    Count conflicts_analysed = 0;
+    Count conflicts_learned = 0;
+    Count conflicts_learned_cutoff = 0;
+    Count conflict_nodes_pruned = 0;
+    Count conflict_tightenings = 0;
+    Count clique_cuts_generated = 0;
+    Count node_lp_rows_max = 0;
+    double node_lp_rows_sum = 0.0;  ///< node_lp_rows_mean x nodes, over subtrees with nodes
+    Count node_lp_rows_weight = 0;
+  };
+  void add_to_tally(const Solution& answer);
+  [[nodiscard]] Tally tally();
+
   // ---- The root's cuts, carried into every donated subtree (#1158) ----------------------
 
   /// Published once, by the root worker before its first donation: the cut rows then active
@@ -233,6 +270,9 @@ class SharedSearch {
   std::mutex cuts_mutex_;
   std::vector<Cut> root_cuts_;
   bool root_cuts_set_ = false;
+
+  std::mutex tally_mutex_;
+  Tally tally_;
 
   NodeScaling scaling_;
   bool has_scaling_ = false;
