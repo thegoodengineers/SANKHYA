@@ -350,6 +350,16 @@ def test_reference_errata() -> None:
         check(rows[0]["matches_reference"] == "0", "the row is not re-scored")
         check(doc.errata_paragraph(rows, Path(tmp) / "absent.json") == [],
               "no errata file, no paragraph")
+        errata.write_text(json.dumps({"errata": {"liswet8": {
+            "published": "7.1447006e+03", "agreed_optimum": "714.47006",
+            "relative_difference": "9.0000e-01", "comparators": "HiGHS, Clp and PIQP",
+            "reason": "test"}}}), encoding="utf-8")
+        rows = [{"instance": "liswet8", "our_objective": "714.470059768",
+                 "matches_reference": "0"}]
+        text = "\n".join(doc.errata_paragraph(rows, errata))
+        check("`liswet8`" in text and "714.47006" in text and "HiGHS, Clp and PIQP" in text,
+              "an erratum established by independent solvers names them in place of a script")
+        check(rows[0]["matches_reference"] == "0", "that row is not re-scored either")
     committed = json.loads(doc.ERRATA.read_text(encoding="utf-8"))["errata"]
     manifest = json.loads(doc.MANIFEST.read_text(encoding="utf-8"))["instances"]
     for name, entry in committed.items():

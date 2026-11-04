@@ -2283,12 +2283,13 @@ Every failure, named:
 - **`optimal` but more than 1e-6 relative from the reference objective** (1): `hues-mod`.
 - **`optimal` but not successful at 1e-9 relative** (12): `gouldqp3`, `hs268`, `hs35mod`, `liswet1`, `liswet10`, `liswet11`, `liswet2`, `liswet3`, `liswet4`, `liswet5`, `liswet6`, `s268`.
 
-**Reference errata.** For these instances the published objective is not the optimum: it was recomputed exactly (`data/maros-meszaros/reference_errata.json`). The table above still judges them against the published value, so they count as not matched.
+**Reference errata.** For these instances the published objective is not the optimum: it was recomputed exactly, or independent solvers agree on another value (`data/maros-meszaros/reference_errata.json`). The table above still judges them against the published value, so they count as not matched.
 
-| instance | published | exact optimum | relative difference | ours (this run) | how |
+| instance | published | optimum | relative difference | ours (this run) | how |
 |---|---:|---:|---:|---:|---|
 | `hues-mod` | 3.4824690e+07 | 34824463.87334522571976875 | 6.4933e-06 | 34824463.873345532 | `bench/runners/exact_diagonal_qp.py data/maros-meszaros/hues-mod.qps` |
 | `huestis` | 3.4824690e+11 | 348244638733.4522571976875 | 6.4933e-06 | 348244638733.45282 | `bench/runners/exact_diagonal_qp.py data/maros-meszaros/huestis.qps` |
+| `liswet8` | 7.1447006e+03 | 714.47006 | 9.0000e-01 | 653.9165061262438 | HiGHS 714.4700590543218, Clp 714.4700590347206 and PIQP 714.4700559636733, each optimal and the latter two accepted by tools/verify_solution.py, in bench/results/head-to-head-maros-meszaros-d0eb672.csv (#1084); SANKHYA 714.470059768, optimal and verified, with qp_ipm_adaptive_dual_drop (#1178) |
 
 ---
 

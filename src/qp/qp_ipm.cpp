@@ -408,6 +408,11 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   // #981, qp_ipm_adaptive_dual_regularization: the floor delta follows down to, lowered
   // whenever the step leaves the primal residual largely in place (see below).
   double dual_floor = rho;
+  // #1178: a trial iterate that is not finite is rejected - the last finite iterate restored
+  // and the proximal parameters raised, at most tol::kQpIpmRegularizationAttempts times in a
+  // run - so the iterate that leaves this loop is always finite.
+  int step_rejections = 0;
+  std::vector<double> prev_v, prev_y, prev_zl, prev_zu;  // the iterate a rejected step restores
 
   SolveStatus status = SolveStatus::kIterationLimit;
   std::string message;
@@ -892,6 +897,10 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     }
     const double alpha =
         bound_count > 0 ? std::min(1.0, kFractionToBoundary * longest_step()) : 1.0;
+    prev_v = v;
+    prev_y = y;
+    prev_zl = zl;
+    prev_zu = zu;
     for (std::size_t j = 0; j < nc; ++j) {
       v[j] += alpha * dv[j];
       zl[j] += alpha * dzl[j];
@@ -902,6 +911,26 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
       return std::all_of(x.begin(), x.end(), [](double e) { return std::isfinite(e); });
     };
     if (!finite(v) || !finite(y) || !finite(zl) || !finite(zu)) {
+      // #1178: the trial iterate is rejected and the last finite one restored, so whatever
+      // leaves this loop - the answer, a save point, the point handed to another engine - is
+      // finite. The system is then changed before the step is tried again: the proximal
+      // parameters are raised as the factorization raises them on a wrong pivot (Altman &
+      // Gondzio 1999), at most tol::kQpIpmRegularizationAttempts times in a run, and only
+      // then does the run end as it did before.
+      v = prev_v;
+      y = prev_y;
+      zl = prev_zl;
+      zu = prev_zu;
+      if (step_rejections < tol::kQpIpmRegularizationAttempts) {
+        ++step_rejections;
+        rho *= tol::kQpIpmRegularizationRaise;
+        delta *= tol::kQpIpmRegularizationRaise;
+        logger.verbose(
+            "QP interior point: the trial iterate at iteration {} is not finite; the step is "
+            "rejected and rho, delta raised to {:.1e}, {:.1e} (rejection {} of {})",
+            iterations, rho, delta, step_rejections, tol::kQpIpmRegularizationAttempts);
+        continue;
+      }
       if (!kept_v.empty()) {
         v = kept_v;  // the last point that met the relative measures; the gate judges it
         y = kept_y;

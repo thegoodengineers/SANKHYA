@@ -1,5 +1,5 @@
 {
-  "about": "Published Maros-Meszaros reference objectives shown to be off by an exact computation. reference.json keeps the published values and every benchmark is still judged against them (matches_reference is unchanged); this file only records what the exact optimum is, how it was computed, and why the published value cannot be met. #980.",
+  "about": "Published Maros-Meszaros reference objectives shown to be off, by an exact computation (exact_optimum, script) or by independent solvers agreeing on another value (agreed_optimum, comparators). reference.json keeps the published values and every benchmark is still judged against them (matches_reference is unchanged); this file only records what the optimum is, how that was established, and why the published value cannot be met. #980, #1178.",
   "errata": {
     "huestis": {
       "published": "3.4824690e+11",
@@ -14,6 +14,13 @@
       "relative_difference": "6.4933e-06",
       "script": "bench/runners/exact_diagonal_qp.py data/maros-meszaros/hues-mod.qps",
       "reason": "huestis with Q scaled by 1e-4, solved the same way; the published value is 6.49e-6 above the exact optimum, the same error scaled with the model."
+    },
+    "liswet8": {
+      "published": "7.1447006e+03",
+      "agreed_optimum": "714.47006",
+      "relative_difference": "9.0000e-01",
+      "comparators": "HiGHS 714.4700590543218, Clp 714.4700590347206 and PIQP 714.4700559636733, each optimal and the latter two accepted by tools/verify_solution.py, in bench/results/head-to-head-maros-meszaros-d0eb672.csv (#1084); SANKHYA 714.470059768, optimal and verified, with qp_ipm_adaptive_dual_drop (#1178)",
+      "reason": "The published value is ten times the optimum four solvers agree on to eight digits: 7.1447006e+03 against 7.1447006e+02, a misplaced decimal point in the README's OPT column (liswet9 and liswet12, the same family, are met to 1e-8)."
     }
   }
 }
