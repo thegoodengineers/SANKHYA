@@ -848,6 +848,9 @@ class BranchAndBound {
   /// the current LP point, append, re-solve warm, until the bound stalls, the round cap, the
   /// time share or a round that takes nothing. `first_taken` and `first_iterations` are
   /// round 1's, for its log line.
+  /// root_cut_loop, read with root_cut_loop_when (#1158): always, or only on a model with a
+  /// variable upper bound x <= u y, decided once at the root from working_'s rows.
+  bool root_cut_loop_wanted();
   void root_cut_loop(Solution* relaxation, Index model_rows,
                      const std::vector<Cut>& first_taken, std::int64_t first_iterations);
   /// A round at a node of depth <= tree_cut_depth_: MIR cuts on the global bounds,
@@ -934,6 +937,7 @@ class BranchAndBound {
     solution->cuts_reactivated = cuts_reactivated_;
     solution->cut_rows_removed = cut_rows_removed_;
     solution->cut_rows_readded = cut_rows_readded_;
+    solution->root_cut_rounds = root_cut_rounds_;
     solution->node_lp_rows_max = node_lp_rows_max_;
     if (node_lp_solves_ > 0) {
       solution->node_lp_rows_mean = node_lp_rows_sum_ / static_cast<double>(node_lp_solves_);
@@ -1110,6 +1114,7 @@ class BranchAndBound {
   double root_bound_after_cuts_internal_ = std::numeric_limits<double>::quiet_NaN();
   Count root_cuts_applied_ = 0;
   Count root_cut_rounds_ = 0;      ///< #495: rounds that appended rows at the root
+  int root_loop_wanted_ = -1;      ///< root_cut_loop_wanted()'s answer once taken; -1 not yet
   std::string cut_filter_report_;  ///< the root filter's verdicts per family and reason (#496)
   Count dense_cuts_admitted_ = 0;  ///< #496: dense cuts admitted at the root
   Count dense_nonzeros_admitted_ = 0;  ///< their nonzeros, against the budget

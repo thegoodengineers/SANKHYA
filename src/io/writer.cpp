@@ -567,6 +567,7 @@ bool write_stats_json(const std::string& path, const Model& model, const Solutio
       {"cuts_reactivated", solution.cuts_reactivated},
       {"cut_rows_removed", solution.cut_rows_removed},
       {"cut_rows_readded", solution.cut_rows_readded},
+      {"root_cut_rounds", solution.root_cut_rounds},
       {"node_lp_rows_mean", json_number(solution.node_lp_rows_mean)},
       {"node_lp_rows_max", solution.node_lp_rows_max},
       {"cut_filter", solution.cut_filter_report},

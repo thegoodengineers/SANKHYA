@@ -626,6 +626,21 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"root_cut_loop_when",
+                 OptionType::String,
+                 std::string("always"),
+                 "When root_cut_loop runs its rounds (#1158). always: on every model. "
+                 "switched-flows: only on a model with a variable upper bound x <= u y (a "
+                 "two-nonzero row pairing a continuous column with an integer one), the "
+                 "fixed-charge and lot-sizing structure whose root the rounds close: in the "
+                 "MIPLIB 3 A/B at 99dfa36 (bench/results/option-ab-miplib3-recipe-99dfa36.csv) "
+                 "every instance the loop proved and the defaults did not has that structure "
+                 "(set1ch, pp08a, pp08aCUTS, fixnet6, vpm2, modglob, dcmulti), and every "
+                 "instance whose tree it lost has none (bell5, 10teams, air05, qiu, gen, "
+                 "misc06). Solution::root_cut_rounds says whether the loop was entered.",
+                 0.0,
+                 0.0,
+                 {"always", "switched-flows"}});
     s.push_back({"mip_heuristics",
                  OptionType::Bool,
                  false,

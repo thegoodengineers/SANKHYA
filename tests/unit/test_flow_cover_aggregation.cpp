@@ -340,5 +340,57 @@ TEST(FlowCoverCuts, TheSearchOnLotSizingChainsAgreesWithTheExactOptimum) {
   EXPECT_EQ(compared, 40);
 }
 
+TEST(RootCutLoop, SwitchedFlowsGateEntersOnALotSizingChainAndNotOnAKnapsack) {
+  // root_cut_loop_when=switched-flows (#1158): the rounds run only on a model with a
+  // variable upper bound x <= u y. The chain has them, so the gate changes nothing against
+  // `always`; a knapsack over binaries has none, so the gate leaves the single round.
+  auto solve_with = [](const Model& m, const char* when) {
+    Options options;
+    options.set_bool("log_to_console", false);
+    options.set_bool("presolve", false);
+    options.set_bool("enable_root_cuts", true);
+    options.set_bool("root_cut_loop", true);
+    options.set_string("root_cut_loop_when", when);
+    options.set_int("cut_support_floor", 100);
+    return solve(m, options);
+  };
+  LotSizing ls;
+  ls.u = {6, 5, 7, 4};
+  ls.d = {2, 3, 1, 3};
+  ls.fixed_cost = {9, 7, 8, 6};
+  ls.holding_cost = {1, 1, 1};
+  const Model chain = build(ls);
+  const Solution always = solve_with(chain, "always");
+  const Solution gated = solve_with(chain, "switched-flows");
+  ASSERT_EQ(always.status, SolveStatus::kOptimal);
+  ASSERT_EQ(gated.status, SolveStatus::kOptimal);
+  EXPECT_EQ(gated.root_cut_rounds, always.root_cut_rounds) << "the chain has switched flows";
+  EXPECT_NEAR(gated.objective, always.objective,
+              1e-9 * std::max(1.0, std::fabs(always.objective)));
+
+  // 3 x1 + 5 x2 + 4 x3 + 6 x4 <= 9 over binaries, maximising 4 x1 + 6 x2 + 5 x3 + 7 x4:
+  // a cover cut model with no continuous column, so no variable bound anywhere.
+  Model knapsack;
+  knapsack.sense = ObjSense::kMaximize;
+  knapsack.col_cost = {4, 6, 5, 7};
+  knapsack.col_lower = {0, 0, 0, 0};
+  knapsack.col_upper = {1, 1, 1, 1};
+  knapsack.col_type.assign(4, VarType::kInteger);
+  knapsack.matrix.reset(1, 4);
+  knapsack.matrix.add_entry(0, 0, 3.0);
+  knapsack.matrix.add_entry(0, 1, 5.0);
+  knapsack.matrix.add_entry(0, 2, 4.0);
+  knapsack.matrix.add_entry(0, 3, 6.0);
+  knapsack.matrix.finalize();
+  knapsack.row_lower = {-kInf};
+  knapsack.row_upper = {9.0};
+  knapsack.hessian.reset(4, 4);
+  knapsack.hessian.finalize();
+  ASSERT_EQ(knapsack.validate(), "");
+  const Solution gated_knapsack = solve_with(knapsack, "switched-flows");
+  ASSERT_EQ(gated_knapsack.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(gated_knapsack.objective, 11.0, 1e-9);  // x2 + x4 (5 + 6 > 9): x1 + x4 = 11
+  EXPECT_LE(gated_knapsack.root_cut_rounds, 1) << "no switched flow: the single round only";
+}
 }  // namespace
 }  // namespace sankhya::mip

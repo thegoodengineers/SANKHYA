@@ -716,6 +716,7 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   solution.root_bound = root_answer.root_bound;
   solution.root_bound_after_cuts = root_answer.root_bound_after_cuts;
   solution.cut_filter_report = root_answer.cut_filter_report;
+  solution.root_cut_rounds = root_answer.root_cut_rounds;
   solution.symmetry_generators = shared.symmetry_generators();
   // Every subtree's counters, summed (#1158): the root's cut rounds, every worker's tree
   // rounds, fixings, conflicts and safe bounds, as the sequential search reports its own.
