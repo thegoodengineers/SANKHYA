@@ -258,6 +258,19 @@ On the target it is worse on both models (`a527-measure` runs 39841147240 and 39
 
 Measured on GitHub Actions with `bench.yml`'s `ab-option` suite, one binary at `6b31e51`, both arms interleaved per instance on one machine: `bench/results/option-ab-netlib-adaptive-boxing-6b31e51.csv` (run 39854167447, 94 instances, 2 repeats; the first dispatch, 39841027101, failed after 54 minutes with its log purged and is not evidence either way), `option-ab-kennington-adaptive-boxing-6b31e51.csv` (41310882885; the first dispatch, 39841033606, was cancelled) and `option-ab-refinery-adaptive-boxing-6b31e51.csv` (39841040064, 3 repeats). Netlib loses pilot87 (optimal in 18,887 iterations and 14.3 s off, time_limit at 268,064 on), the other 93 verified in both arms with the iteration SGM flat, 410.9 against 411.4, and the time SGM 0.284 s against 0.646 s with the lost instance charged the limit; Kennington 16/16 both arms, iterations 2,039.1 against 2,039.4, 10.29 s against 10.36 s; the refinery LPs 18/18, iterations 257.5 against 256.8, 0.192 s against 0.210 s. Closed unmerged. What the two experiments leave as the item: the equilibration on the pilot family, not the dual loop.
 
+### Dropping the QP dual regularization to its cut floor at once (#1178, PR #1180, not merged)
+
+With `qp_ipm_adaptive_dual_regularization` (on since #1156) a step that misses a tenth of the primal residual cuts the floor of delta, but delta itself falls only through `min(delta, 0.1 mu)`, and on liswet8, liswet9 and liswet12 mu rises after the cut, so the cut floor is never reached and the step keeps its 1e-8 proximal term. The change dropped delta to the new floor for the next factorization (option `qp_ipm_adaptive_dual_drop`), in two forms: unconditional, and keyed on `delta |dy|` outrunning the residual and judged by the first step factored with it (undone, with no further drop in the run, when that step missed no less of the residual, when its length collapsed, or when the trial iterate was not finite).
+
+Measured on GitHub Actions with `bench.yml`'s `ab-option` suite and `--base-binary`, both arms in one job, Maros-Meszaros 138 at 60 s:
+
+| version | base | new | off | on | gained | lost |
+|---|---|---|---|---|---|---|
+| unconditional (run 41425495840) | `d178213a` | `87fa381e` | 128 optimal / 127 matched / 132 verified | 129 / 127 / 133 | liswet8, liswet9, liswet12 | qgfrdxpn (feasible to Condat-Vu's ceiling), qshare1b (optimal to the same), qsierra (optimal to feasible, one product at 3e-4, 63 s) |
+| keyed and judged (run 41702161915) | `94cdcc02` | `58762237` | 128 / 127 / 132 | 129 / 127 / 133 | the same three | the same three |
+
+Netlib was identical per instance in both (runs 41425504073 and 41702169175). On the laptop build the keyed version held all three (qgfrdxpn feasible in 69 iterations, qshare1b optimal in 80, qsierra optimal in 27) and still gained the LISWET three, so the judgement passes the drop on one machine's rounding and not another's: on a rank-deficient row block `|dy|` grows as 1/delta after a drop (qfffff80: 5.4e7 to 5.4e9 to 2.4e11 over 1e-8, 1e-10, 1e-12) and whether the run recovers is a knife edge. Not merged, in either form. What did ship from the same PR is the step rejection it was built on - a non-finite trial iterate restores the last finite one and raises the regularization, so no engine is ever handed a non-finite point - which changed no row on the 138 or on Netlib (run 41702177032). The three LISWET instances converge with a flat `qp_ipm_regularization=1e-12`, which loses qforplan and cont-201 (#1150); they stay open on #1178. The A/B CSVs are not committed (branch stamps).
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.

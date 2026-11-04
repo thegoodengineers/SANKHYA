@@ -644,10 +644,6 @@ inline constexpr int kQpIpmKrylovDimension = 30;
 inline constexpr double kQpIpmStepPrimalShare = 0.1;
 inline constexpr double kQpIpmDualFloorCut = 0.01;
 inline constexpr double kQpIpmDualFloorMin = 1e-14;
-/// qp_ipm_adaptive_dual_drop (#1178): a step length below this under a dropped delta is a
-/// drop gone wrong, undone before the step is taken (Wright, Primal-Dual Interior-Point
-/// Methods, SIAM 1997, ch. 6: a step that short makes no progress).
-inline constexpr double kQpIpmStepFloor = 1e-8;
 
 /// The active-set finish after the QP interior point (#980, qp_ipm_finish, off by default):
 /// a bound counts as active when the point is within this distance of it, scaled by

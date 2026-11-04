@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// SANKHYA - #1178: the QP interior point's reversible drop of the dual regularization
-// (qp_ipm_adaptive_dual_drop) and the step rejection it rests on: a trial iterate that is not
-// finite, or a drop whose step misses no less of the residual, never becomes the iterate.
+// SANKHYA - #1178: the QP interior point never hands on a non-finite point. A trial iterate
+// that is not finite is rejected, the last finite iterate restored and the regularization
+// raised; and the adaptive cut of the dual regularization (#1156) on a rank-deficient or an
+// inconsistent row block ends on a finite point either way.
 //
 // Every optimum below is worked out by hand, as test_qp_ipm.cpp's are.
 #include <cmath>
@@ -19,11 +20,10 @@
 namespace sankhya {
 namespace {
 
-Options drop_on() {
+Options engine_only() {
   Options options;
   options.set_bool("log_to_console", false);
   options.set_bool("qp_ipm_adaptive_dual_regularization", true);
-  options.set_bool("qp_ipm_adaptive_dual_drop", true);
   options.set_bool("qp_ipm_stall_handoff", false);
   return options;
 }
@@ -55,9 +55,9 @@ Model duplicated_row_qp() {
 }
 
 /// min x1^2 + x2^2  s.t.  x1 + x2 = 1  and  x1 + x2 = 1 + gap, x >= 0: the two equality
-/// rows disagree by `gap`, so b - M v keeps a component no step can close, and that is
-/// exactly the miss the dual-regularization cut reads. With the drop on, each drop makes
-/// |dy| grow as 1 / delta while the miss stays, which is the cascade qfffff80 showed.
+/// rows disagree by `gap`, so b - M v keeps a component no step can close - the miss the
+/// adaptive cut reads - and the dual grows without bound as the barrier shrinks. The run
+/// cannot end optimal; what it must not end on is a non-finite point or a numerical error.
 Model inconsistent_rows_qp(double gap) {
   Model model;
   model.sense = ObjSense::kMinimize;
@@ -105,32 +105,23 @@ bool all_finite(const std::vector<double>& x) {
   return true;
 }
 
-TEST(QpIpmDualDrop, DefaultsOff) {
-  EXPECT_FALSE(Options().get_bool("qp_ipm_adaptive_dual_drop"));
+TEST(QpIpmStepRejection, ARankDeficientRowBlockReachesTheHandOptimum) {
+  Solution s;
+  solve_logged(duplicated_row_qp(), engine_only(), &s);
+  ASSERT_EQ(s.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(s.objective, -4.5, 1e-6);
+  ASSERT_EQ(s.col_value.size(), 2u);
+  EXPECT_NEAR(s.col_value[0], 0.5, 1e-5);
+  EXPECT_NEAR(s.col_value[1], 1.5, 1e-5);
+  EXPECT_TRUE(all_finite(s.col_value));
+  EXPECT_TRUE(all_finite(s.row_dual));
 }
 
-TEST(QpIpmDualDrop, OnARankDeficientRowBlockTheDropStillReachesTheHandOptimum) {
-  Solution with_drop;
-  solve_logged(duplicated_row_qp(), drop_on(), &with_drop);
-  ASSERT_EQ(with_drop.status, SolveStatus::kOptimal);
-  EXPECT_NEAR(with_drop.objective, -4.5, 1e-6);
-  ASSERT_EQ(with_drop.col_value.size(), 2u);
-  EXPECT_NEAR(with_drop.col_value[0], 0.5, 1e-5);
-  EXPECT_NEAR(with_drop.col_value[1], 1.5, 1e-5);
-  EXPECT_TRUE(all_finite(with_drop.col_value));
-  EXPECT_TRUE(all_finite(with_drop.row_dual));
-}
-
-TEST(QpIpmDualDrop, AnUnclosableResidualForcesADropCascadeAndTheRunEndsOnAFinitePoint) {
-  Options options = drop_on();
+TEST(QpIpmStepRejection, AnUnclosableResidualEndsOnAFinitePointAndNotANumericalError) {
+  Options options = engine_only();
   options.set_int("iteration_limit", 80);
   Solution s;
   const std::string log = solve_logged(inconsistent_rows_qp(1e-6), options, &s);
-  // The drop happened and was undone by its own judgement, before any step of it was taken.
-  EXPECT_NE(log.find("delta dropped from"), std::string::npos) << log;
-  EXPECT_NE(log.find("undone at iteration"), std::string::npos) << log;
-  // Whatever the run ends as, it is not a non-finite point and not a numerical failure: the
-  // iterate that leaves the loop is the last finite one.
   EXPECT_NE(s.status, SolveStatus::kNumericalError) << log;
   EXPECT_NE(s.status, SolveStatus::kOptimal) << log;
   ASSERT_EQ(s.col_value.size(), 2u);

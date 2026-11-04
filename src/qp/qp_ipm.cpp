@@ -350,7 +350,6 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   // the stall test below.
   const bool stall_handoff = options.get_bool("qp_ipm_stall_handoff");
   const bool adaptive_dual = options.get_bool("qp_ipm_adaptive_dual_regularization");
-  const bool adaptive_drop = adaptive_dual && options.get_bool("qp_ipm_adaptive_dual_drop");
   const bool krylov_refinement = options.get_bool("qp_ipm_krylov_refinement");
   const Count centrality_correctors = options.get_int("qp_ipm_centrality_correctors");
   const double primal_tolerance = options.get_double("primal_feasibility_tolerance");
@@ -409,16 +408,9 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   // #981, qp_ipm_adaptive_dual_regularization: the floor delta follows down to, lowered
   // whenever the step leaves the primal residual largely in place (see below).
   double dual_floor = rho;
-  // #1178, qp_ipm_adaptive_dual_drop: a drop of delta to the cut floor is speculative. It is
-  // judged by the first step factored with the smaller delta and undone when that step
-  // misses no less of the residual than the one that triggered it, when its step length
-  // collapses, or when the trial iterate is not finite; an undone drop ends dropping for
-  // the run. The step rejection itself (the trial iterate restored, the regularization
-  // raised) holds whether or not a drop is active: the iterate handed on is always finite.
-  bool dropped = false;        // delta is below what the mu schedule alone would give
-  bool drop_pending = false;   // the next step judges the latest drop
-  bool drops_refused = false;  // a drop was undone; none is tried again
-  double delta_before_drop = 0.0, miss_share_at_drop = 0.0;
+  // #1178: a trial iterate that is not finite is rejected - the last finite iterate restored
+  // and the proximal parameters raised, at most tol::kQpIpmRegularizationAttempts times in a
+  // run - so the iterate that leaves this loop is always finite.
   int step_rejections = 0;
   std::vector<double> prev_v, prev_y, prev_zl, prev_zu;  // the iterate a rejected step restores
 
@@ -891,7 +883,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     // place lowers delta's floor (Altman & Gondzio 1999: the regularization must stay small
     // against what the step has to achieve), so only the models that need it see a smaller
     // delta.
-    if (adaptive_dual && nr > 0) {
+    if (adaptive_dual && nr > 0 && dual_floor > tol::kQpIpmDualFloorMin) {
       std::fill(mv.begin(), mv.end(), 0.0);
       s.m.multiply_add(dv.data(), mv.data());
       double missed = 0.0, needed = 0.0;
@@ -899,64 +891,12 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
         missed = std::max(missed, std::fabs(rp[i] - mv[i]));
         needed = std::max(needed, std::fabs(rp[i]));
       }
-      // #1178: the step factored with a dropped delta judges the drop. On liswet8 the share
-      // of the residual the step misses goes from 1.1e-1 at the cut to 6e-11 with delta at
-      // 1e-10; on qfffff80 it goes from 2.7e-1 to 9.95e-1, |dy| grows with 1/delta (the
-      // active rows are rank-deficient and the dual not unique), and a second and third
-      // drop followed until the iterate stopped being finite. A drop that does not shrink
-      // the miss is undone here, before its step is taken, and none is tried again.
-      if (drop_pending) {
-        drop_pending = false;
-        if (!(needed > 0.0) || missed >= miss_share_at_drop * needed) {
-          logger.verbose(
-              "QP interior point: the drop of delta to {:.1e} undone at iteration {} - the "
-              "step misses {:.1e} of the primal residual, {:.1e} before the drop",
-              delta, iterations, needed > 0.0 ? missed / needed : 0.0, miss_share_at_drop);
-          delta = delta_before_drop;
-          dropped = false;
-          drops_refused = true;
-          continue;  // the step is refactored with the restored delta
-        }
-      }
-      if (dual_floor > tol::kQpIpmDualFloorMin &&
-          missed > tol::kQpIpmStepPrimalShare * needed) {
+      if (missed > tol::kQpIpmStepPrimalShare * needed) {
         dual_floor = std::max(tol::kQpIpmDualFloorMin, dual_floor * tol::kQpIpmDualFloorCut);
-        // #1178: delta only ever fell through min(delta, 0.1 mu), and on liswet8, 9 and 12
-        // mu rises after the cut, so the cut floor was never reached; the drop takes it now,
-        // when the regularization term itself outruns the residual the step has to close -
-        // delta |dy| above the same share of |b - M v| (the second block row reads
-        // M dv - delta dy = b - M v).
-        double dy_norm = 0.0;
-        for (std::size_t i = 0; i < nr; ++i) dy_norm = std::max(dy_norm, std::fabs(dy[i]));
-        if (adaptive_drop && !drops_refused &&
-            delta * dy_norm > tol::kQpIpmStepPrimalShare * needed) {
-          if (!dropped) delta_before_drop = delta;
-          dropped = true;
-          drop_pending = true;
-          miss_share_at_drop = missed / needed;
-          logger.verbose(
-              "QP interior point: delta dropped from {:.1e} to {:.1e} at iteration {}", delta,
-              dual_floor, iterations);
-          delta = dual_floor;
-        }
       }
     }
     const double alpha =
         bound_count > 0 ? std::min(1.0, kFractionToBoundary * longest_step()) : 1.0;
-    // #1178: a step length that has collapsed under a dropped delta is the other sign of a
-    // drop gone wrong (qfffff80: 5e-5 two iterations after the drop); the drop is undone and
-    // the step not taken.
-    if (dropped && bound_count > 0 && alpha < tol::kQpIpmStepFloor) {
-      logger.verbose(
-          "QP interior point: the drop of delta to {:.1e} undone at iteration {} - the step "
-          "length collapsed to {:.1e}",
-          delta, iterations, alpha);
-      delta = delta_before_drop;
-      dropped = false;
-      drop_pending = false;
-      drops_refused = true;
-      continue;
-    }
     prev_v = v;
     prev_y = y;
     prev_zl = zl;
@@ -973,25 +913,14 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     if (!finite(v) || !finite(y) || !finite(zl) || !finite(zu)) {
       // #1178: the trial iterate is rejected and the last finite one restored, so whatever
       // leaves this loop - the answer, a save point, the point handed to another engine - is
-      // finite. The system is then changed before the step is tried again: an active drop
-      // is undone, otherwise the proximal parameters are raised as the factorization raises
-      // them on a wrong pivot (Altman & Gondzio 1999), at most
-      // tol::kQpIpmRegularizationAttempts times in a run.
+      // finite. The system is then changed before the step is tried again: the proximal
+      // parameters are raised as the factorization raises them on a wrong pivot (Altman &
+      // Gondzio 1999), at most tol::kQpIpmRegularizationAttempts times in a run, and only
+      // then does the run end as it did before.
       v = prev_v;
       y = prev_y;
       zl = prev_zl;
       zu = prev_zu;
-      if (dropped) {
-        logger.verbose(
-            "QP interior point: the drop of delta to {:.1e} undone at iteration {} - the "
-            "trial iterate is not finite",
-            delta, iterations);
-        delta = delta_before_drop;
-        dropped = false;
-        drop_pending = false;
-        drops_refused = true;
-        continue;
-      }
       if (step_rejections < tol::kQpIpmRegularizationAttempts) {
         ++step_rejections;
         rho *= tol::kQpIpmRegularizationRaise;

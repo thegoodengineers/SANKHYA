@@ -2245,23 +2245,6 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
-    s.push_back({"qp_ipm_adaptive_dual_drop",
-                 OptionType::Bool,
-                 false,
-                 "qp_algorithm=ipm (#1178), with qp_ipm_adaptive_dual_regularization: when the "
-                 "floor of the dual regularization delta is cut and delta |dy| is itself above "
-                 "tol::kQpIpmStepPrimalShare of the primal residual, delta drops to the new "
-                 "floor for the next factorization, instead of waiting for 0.1 mu to fall "
-                 "below it. On liswet8, liswet9 and liswet12 mu rises after the cut, so the "
-                 "cut floor was never reached and the step kept the 1e-8 proximal term. The "
-                 "drop is judged by the step factored with it and undone - no further drop "
-                 "in the run - when that step misses no less of the residual than the one at "
-                 "the cut, when its length falls under tol::kQpIpmStepFloor, or when the "
-                 "trial iterate is not finite (qfffff80, whose rank-deficient rows make |dy| "
-                 "grow with 1/delta).",
-                 0.0,
-                 0.0,
-                 {}});
     s.push_back({"qp_ipm_krylov_refinement",
                  OptionType::Bool,
                  false,
