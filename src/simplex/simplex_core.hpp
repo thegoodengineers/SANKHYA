@@ -291,6 +291,12 @@ class Simplex {
   void collect_alpha_support();
   /// rho_ = B^-T e_r and pivot_row_[j] = rho . a_j for every nonbasic column j.
   void compute_pivot_row(Index leaving_slot);
+  /// The primal loop's reduced costs after the pivot (entering, leaving_slot), through the
+  /// pivot row (#888): d_j -= (d_q / alpha_rq) alpha_rj over the nonbasic columns, the
+  /// leaving column's d = -d_q / alpha_rq. Called BEFORE the basis swap. A pivot-row entry
+  /// under tol::kPivotTolerance marks the reduced costs stale instead.
+  void update_reduced_costs_through_pivot_row(Index entering, Index leaving_slot,
+                                              Index leaving);
   /// The bounded dual ratio test with bound flipping (Maros ch. 10; Koberstein 2005), by
   /// the rule dual_ratio_test selects (dual_ratio.cpp).
   [[nodiscard]] DualRatioResult dual_ratio_test(Index leaving_slot,
@@ -721,6 +727,11 @@ class Simplex {
   mutable std::vector<DualBreakpoint> breakpoint_group_;  ///< the Harris test's first group
   std::vector<char> pivot_row_marked_;
   bool pivot_row_held_sparse_ = false;  ///< the last pass left zeros everywhere but touched
+  /// THE PRIMAL LOOP'S REDUCED COSTS ARE UPDATED, NOT RECOMPUTED (#888). True when they
+  /// must be recomputed from a fresh BTRAN at the next iteration: at entry, after every
+  /// refactorization (refactorize() sets it), in phase 1 (its costs move with the basic
+  /// positions), and when a pivot's row entry was too small to update through.
+  bool reduced_costs_stale_ = true;
   /// The nonbasic columns in no particular order, for the breakpoint scan of a dense pivot
   /// row (#1006), and each column's place on it (-1 when basic).
   std::vector<Index> nonbasic_list_;
