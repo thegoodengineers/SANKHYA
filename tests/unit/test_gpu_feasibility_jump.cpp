@@ -379,6 +379,9 @@ TEST(GpuFeasibilityJump, TheSearchWithItOnAgreesWithTheExactOracle) {
   // judged by exact arithmetic. The log shows which search ran.
   std::mt19937_64 rng(50800);
   Options options = fj_options();
+  options.set_int("mip_threads", 1);  // the device and CPU calls are read off the
+                                      // console log, which the parallel search's
+                                      // workers do not write (#1158)
   options.set_bool("gpu_feasibility_jump", true);
   options.set_bool("log_to_console", true);
   options.set_string("log_level", "verbose");

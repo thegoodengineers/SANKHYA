@@ -306,7 +306,11 @@ TEST(BranchAndBound, RespectsSolveControlInterruptionWithCallback) {
     return 0;
   };
 
-  const Solution s = solve(model, mip_options(), &control);
+  Options options = mip_options();
+  options.set_int("mip_threads", 1);  // the callback cadence is the sequential search's,
+                                      // one call per node line; the driver's is one per
+                                      // 50 ms (#1158)
+  const Solution s = solve(model, options, &control);
   EXPECT_EQ(s.status, SolveStatus::kInterrupted);
   // An interrupted search carries its incumbent or nothing (#505). Which of the two depends
   // on whether the interrupt landed before the first integer point, and that is timing, so
@@ -949,6 +953,7 @@ oracle::GeneratorConfig deep_shape() {
 
 Options restart_options() {
   Options options = mip_options();
+  options.set_int("mip_threads", 1);  // restarts run in the sequential search only (#1158)
   options.set_bool("mip_reduced_cost_fixing", true);
   options.set_int("mip_restarts", 2);
   options.set_double("mip_restart_fraction", 0.0);
@@ -980,6 +985,8 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithRestarts) {
 // to the wrong side, or left behind when the search moved on, cuts off the optimum.
 TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithObjectiveBranching) {
   Options options = mip_options();
+  options.set_int("mip_threads", 1);  // objective branching runs in the sequential search
+                                      // only (#1158); this sweep is of that path
   options.set_bool("mip_objective_branching", true);
   expect_clean_sweep(run_milp_fuzz(options, "objective branching"));
   options.set_bool("presolve", false);
@@ -1060,6 +1067,9 @@ TEST(BranchAndBound, ProgressOutWritesReadableJsonlForAMilpSolve) {
   const TempFile file("", ".jsonl");
   Options options = mip_options();
   options.set_string("progress_out", file.path());
+  options.set_int("mip_threads", 1);  // progress_out carries the sequential search's per-node
+                                      // and per-iteration lines; the workers log silently
+                                      // (#1158)
 
   const Solution s = solve(model, options);
   ASSERT_EQ(s.status, SolveStatus::kOptimal);

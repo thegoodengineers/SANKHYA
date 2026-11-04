@@ -38,6 +38,9 @@ namespace {
 Options quiet() {
   Options options;
   options.set_bool("log_to_console", false);
+  options.set_int("mip_threads", 1);  // a node limit is exact and the stop messages are the
+                                      // sequential search's; the parallel default
+                                      // (#1158) overshoots by one node per worker
   // The models here are a few columns, so every root cut is "dense" and the admission
   // (#496) would close them at the root; pinned off, since the tree is what is tested.
   options.set_int("cut_dense_max", 0);

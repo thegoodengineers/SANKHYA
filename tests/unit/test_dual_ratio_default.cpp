@@ -60,6 +60,8 @@ Model branching_model(bool integer) {
 Options bare() {
   Options o;
   o.set_bool("presolve", false);
+  o.set_int("mip_threads", 1);  // the node LP counters read here are the sequential
+                                // search's (#1158)
   o.set_bool("enable_root_cuts", false);
   o.set_bool("mip_objective_integrality", false);
   return o;

@@ -234,12 +234,17 @@ bool has_path(const nlohmann::json& blob, const std::string& path) {
 
 TEST(Profiler, ProfilingChangesNoAnswer) {
   for (const Model& model : {small_lp(), small_milp()}) {
+    // One thread on both sides: the same tree, node count and point twice is what the
+    // sequential search promises; the parallel default (#1158) varies the tree.
     Options plain;
     plain.set_bool("log_to_console", false);
+    plain.set_int("mip_threads", 1);
     const Solution off = solve(model, plain);
+    Options profiled;
+    profiled.set_int("mip_threads", 1);
     for (const char* mode : {"basic", "detailed"}) {
       Solution on;
-      (void)profile_of(model, Options{}, mode, &on);
+      (void)profile_of(model, profiled, mode, &on);
       EXPECT_EQ(on.status, off.status) << mode;
       EXPECT_EQ(on.objective, off.objective) << mode << ": to the bit";
       EXPECT_EQ(on.iterations, off.iterations) << mode;
@@ -268,6 +273,9 @@ TEST(Profiler, ABasicProfileOfAnLpShowsTheSolvePhases) {
 TEST(Profiler, ADetailedProfileOfAMilpShowsTheSearch) {
   Options options;
   options.set_bool("presolve", false);  // keep the search, not presolve, doing the work
+  options.set_int("mip_threads", 1);    // the search regions and counters are the sequential
+                                        // search's; the parallel default (#1158) runs the
+                                        // tree in workers the profiler does not see
   const nlohmann::json blob = profile_of(small_milp(), options, "detailed");
   ASSERT_FALSE(blob.is_null());
   EXPECT_TRUE(has_path(blob, "solve/engine/node LP")) << blob.dump(2);

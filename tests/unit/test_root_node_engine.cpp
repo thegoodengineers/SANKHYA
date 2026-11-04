@@ -74,6 +74,8 @@ Model packing(Index columns, Index rows, std::uint64_t seed) {
 Options root_only() {
   Options options;
   options.set_bool("log_to_console", false);
+  options.set_int("mip_threads",
+                  1);  // the root engine counters are the sequential search's (#1158)
   options.set_bool("presolve", false);  // the root the tree sees is the model's own
   options.set_bool("mip_symmetry", false);
   options.set_bool("enable_root_cuts", false);

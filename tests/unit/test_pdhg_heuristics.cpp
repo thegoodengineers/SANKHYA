@@ -325,6 +325,9 @@ TEST(PdhgHeuristics, TheSearchWithBothOnAgreesWithTheExactOracle) {
   const OneThread one_thread;
   std::mt19937_64 rng(50900);
   Options options;
+  options.set_int("mip_threads", 1);  // the heuristics' runs are read off the
+                                      // console log, which the parallel search's
+                                      // workers do not write (#1158)
   options.set_bool("gpu_pump", true);
   options.set_bool("gpu_fix_and_prop", true);
   options.set_string("gpu_heur_backend", "cpu");
