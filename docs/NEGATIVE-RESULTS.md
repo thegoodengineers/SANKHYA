@@ -142,7 +142,18 @@ Rounds of the root cut separators until the bound stalls, demoted in #956 at `f7
 
 The cost is still the rows every node LP carries, not the root's time.
 
-Files: `bench/results/option-ab-miplib-rootloop-tailing-e01ae9c.csv` (the `arm` column), and the root-only legs `bench/results/rootgap-<leg>-24e289d9.csv`.
+**On MIPLIB 3 (#1158), alone and with the pool and the aggregated flow covers.** The 65-instance set is where the loop moves the root: set1ch, pp08a, fixnet6 and vpm2 close 0.3 to 0.6 of their root gap under it (root only, `bench/results/rootgap3-<cfg>-b69a3dc7.csv`). Two A/Bs at 60 s, 3 seeds, one thread, both arms in one bench.yml job:
+
+| A/B | arm | seed 0 m/p/v | seed 1 m/p/v | seed 2 m/p/v | all m/p/v | sgm time (s) |
+|---|---|---|---|---|---|---:|
+| (a) `main` d178213, run 41613095648 | defaults | 39/34/63 | 37/34/63 | 36/34/62 | 112/102/188 | 21.33 |
+| | `root_cut_loop=true` | 40/36/63 | 38/36/62 | 38/34/63 | 116/106/188 | 20.22 |
+| (b) `main` 94cdcc0 against #1183's 99dfa36, run 41755022388 | `main`'s defaults | 39/35/63 | 37/35/63 | 38/35/63 | 114/105/189 | 20.42 |
+| | loop + pool + aggregated flow covers | 41/39/62 | 40/37/63 | 40/38/63 | 121/114/188 | 17.38 |
+
+Proved is above the defaults on every seed in both, and both lose runs, so neither earns the default under the rule (proved >= on every seed and nothing lost). (a) loses 3 proofs and 6 matches; (b) loses 8 proofs (10teams s1, air05 s2, bell5 s1 and s2, gen s1, gesa2_o s0, misc06 s2, qiu s0), 8 matches and arki001 seed 0's feasible point. Two kinds of loss: gen, misc06, gesa2 and gesa2_o end `optimal within the relative gap target` at 1.8e-5 to 9.9e-5 with a verified incumbent a few 1e-5 from the published value (the tighter root meets the 1e-4 target before the published optimum is found - a gap-target stop the 1e-6 match rule scores as a miss, not a wrong answer); bell5, 10teams, air05, qiu and danoint are trees the extra rows do not finish in 60 s (bell5 proves at 11k nodes in 1.5 s with 23 rows and runs 343k nodes with 57). The gains are the lot-sizing and fixed-charge models: in (b) fixnet6, pp08a, vpm2 and modglob prove on all three seeds (60 s unproved to 0.8-25 s), set1ch and pp08aCUTS on the seeds the defaults miss.
+
+Files: `bench/results/option-ab-miplib-rootloop-tailing-e01ae9c.csv` (tier 1), `option-ab-miplib3-rootloop-d178213.csv` and `option-ab-miplib3-recipe-99dfa36.csv` (MIPLIB 3; the `arm` column), and the root-only legs `bench/results/rootgap-<leg>-24e289d9.csv` and `rootgap3-<cfg>-b69a3dc7.csv`.
 What would earn a default: a loop whose extra rows do not ride along in the tree. For example, keep only the rows still tight at the last root LP, or move the rest to the cut pool, then repeat this A/B.
 
 ---
