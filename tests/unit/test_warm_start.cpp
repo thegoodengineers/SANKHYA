@@ -541,11 +541,35 @@ TEST(WarmStart, APdhgIterateThroughSolveControlResolvesInFewerIterationsThanCold
   EXPECT_NEAR(warm.objective, cold.objective, 1e-6 * std::max(1.0, std::fabs(cold.objective)));
   EXPECT_LT(warm.iterations, cold.iterations)
       << "warm " << warm.iterations << " vs cold " << cold.iterations;
-  // The pair is offered back with row_dual's reported sign, sense * (-y), and the engine
-  // must undo it (#888): with the sign as reported the start was a quarter as good as cold,
-  // and this bound, a small fraction of the cold count, is what a converged pair buys.
-  EXPECT_LE(warm.iterations * 4, cold.iterations)
-      << "warm " << warm.iterations << " vs cold " << cold.iterations;
+  // THE SIGN OF THE DUALS (#913, #888). row_dual is reported as sense * (-y) and the intake
+  // must undo that; with the pair offered back as reported the duals start negated, which
+  // the primal half's head start hid from the EXPECT_LT above. Two probes pin it: the same
+  // pair offered to the UNEDITED model (a converged pair, nothing left to do) and the same
+  // two starts with the duals negated by hand, which must each do worse than the right sign.
+  SolveControl same_control;
+  same_control.start_col_value = first.col_value;
+  same_control.start_row_dual = first.row_dual;
+  const Solution same = solve(model, options, &same_control);
+  ASSERT_EQ(same.status, SolveStatus::kOptimal) << same.message;
+  std::vector<double> negated = first.row_dual;
+  for (double& y : negated) y = -y;
+  SolveControl wrong_control;
+  wrong_control.start_col_value = first.col_value;
+  wrong_control.start_row_dual = negated;
+  const Solution wrong = solve(edited, options, &wrong_control);
+  SolveControl same_wrong_control;
+  same_wrong_control.start_col_value = first.col_value;
+  same_wrong_control.start_row_dual = negated;
+  const Solution same_wrong = solve(model, options, &same_wrong_control);
+  EXPECT_LT(same.iterations, same_wrong.iterations)
+      << "same model: right sign " << same.iterations << " vs negated " << same_wrong.iterations
+      << " (first " << first.iterations << ")";
+  EXPECT_LT(warm.iterations, wrong.iterations)
+      << "edited model: right sign " << warm.iterations << " vs negated " << wrong.iterations
+      << " (cold " << cold.iterations << ")";
+  EXPECT_LT(same.iterations * 4, first.iterations)
+      << "a converged pair offered back: " << same.iterations << " vs " << first.iterations
+      << " from zero";
 }
 
 // A warm iterate of the wrong size (model.num_cols() changed) is ignored: solve() must not
