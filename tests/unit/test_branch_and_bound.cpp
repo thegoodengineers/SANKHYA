@@ -306,10 +306,11 @@ TEST(BranchAndBound, RespectsSolveControlInterruptionWithCallback) {
     return 0;
   };
 
-  const Solution s = solve(model, mip_options(), &control);
-  options.set_int("mip_threads", 1);  // the callback cadence is the sequential
-                                      // search's, one call per node line; the
-                                      // driver's is one per 50 ms (#1158)
+  Options options = mip_options();
+  options.set_int("mip_threads", 1);  // the callback cadence is the sequential search's,
+                                      // one call per node line; the driver's is one per
+                                      // 50 ms (#1158)
+  const Solution s = solve(model, options, &control);
   EXPECT_EQ(s.status, SolveStatus::kInterrupted);
   // An interrupted search carries its incumbent or nothing (#505). Which of the two depends
   // on whether the interrupt landed before the first integer point, and that is timing, so
