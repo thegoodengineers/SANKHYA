@@ -735,9 +735,10 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     }
     if (warm_usable && warm_start->y.size() == static_cast<std::size_t>(rows) && m > 0) {
       std::vector<double> y0(m);
+      // Solution::row_dual is reported as sense * (-y); the iterate wants y (#888).
       for (Index i = 0; i < rows; ++i) {
         const auto u = static_cast<std::size_t>(i);
-        y0[u] = warm_start->y[u] / scaling.row[u];
+        y0[u] = -sense * warm_start->y[u] / scaling.row[u];
       }
       if (!hd_copy(y0.data(), g.d_y, m)) {
         logger.warning("GPU PDHG: initial dual iterate upload failed; falling back to CPU solver");
@@ -888,7 +889,7 @@ Solution solve_pdhg_gpu(const Model& model, const Options& options, Logger& logg
     if (warm_usable && warm_start->y.size() == static_cast<std::size_t>(rows)) {
       for (Index i = 0; i < rows; ++i) {
         const auto u = static_cast<std::size_t>(i);
-        y_restart[u] = warm_start->y[u] / scaling.row[u];
+        y_restart[u] = -sense * warm_start->y[u] / scaling.row[u];  // as above (#888)
       }
     }
   }

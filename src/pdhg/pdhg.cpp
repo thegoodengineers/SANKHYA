@@ -330,9 +330,12 @@ Solution solve_pdhg(const Model& model, const Options& options, Logger& logger,
       x[u] = project(xhat, scaling.col_lower[u], scaling.col_upper[u]);
     }
     if (warm_start->y.size() == static_cast<std::size_t>(rows)) {
+      // The caller hands back Solution::row_dual, which the finish below reports as
+      // sense * (-y) (the Lagrangian adds y'Ax); the iterate wants y itself (#888: a point
+      // offered back with the sign as reported restarted at a relative residual of 2e-2).
       for (Index i = 0; i < rows; ++i) {
         const auto u = static_cast<std::size_t>(i);
-        y[u] = warm_start->y[u] / scaling.row[u];
+        y[u] = -sense * warm_start->y[u] / scaling.row[u];
       }
     }
   } else {

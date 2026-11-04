@@ -541,6 +541,11 @@ TEST(WarmStart, APdhgIterateThroughSolveControlResolvesInFewerIterationsThanCold
   EXPECT_NEAR(warm.objective, cold.objective, 1e-6 * std::max(1.0, std::fabs(cold.objective)));
   EXPECT_LT(warm.iterations, cold.iterations)
       << "warm " << warm.iterations << " vs cold " << cold.iterations;
+  // The pair is offered back with row_dual's reported sign, sense * (-y), and the engine
+  // must undo it (#888): with the sign as reported the start was a quarter as good as cold,
+  // and this bound, a small fraction of the cold count, is what a converged pair buys.
+  EXPECT_LE(warm.iterations * 4, cold.iterations)
+      << "warm " << warm.iterations << " vs cold " << cold.iterations;
 }
 
 // A warm iterate of the wrong size (model.num_cols() changed) is ignored: solve() must not
