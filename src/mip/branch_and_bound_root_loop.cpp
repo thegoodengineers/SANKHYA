@@ -75,7 +75,9 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
                reported(bounds.back()), first_taken.size(), by_family(first_taken),
                first_iterations);
   const bool timed = time_limit_ > 0.0 && time_limit_ < 1e300;
-  const auto row_budget = static_cast<Count>(root_cut_row_budget(model_rows));
+  // With the pool removing the slack rows at the end (below), the budget is the pooled one.
+  const auto row_budget = static_cast<Count>(
+      root_cut_row_budget(model_rows, cut_removal_ ? cut_max_per_round_ : 0));
   const char* why = "the round cap";
   for (int round = 2; round <= tol::kRootCutMaxRounds; ++round) {
     if (root_cuts_applied_ >= row_budget) {

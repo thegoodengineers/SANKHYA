@@ -402,7 +402,8 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   // (#495): "at most the budget in all, round 1 included".
   if (options_.get_bool("root_cut_loop")) {
     take_within_budget(&accepted, &waiting_cuts_,
-                       static_cast<std::size_t>(root_cut_row_budget(original_root_rows)));
+                       static_cast<std::size_t>(root_cut_row_budget(
+                           original_root_rows, cut_removal_ ? cut_max_per_round_ : 0)));
   }
   certify_round_cuts(&accepted);  // #518: certificate mode only
   if (accepted.empty()) return;

@@ -44,6 +44,8 @@ Eight legs, every one negative on the instances the issue named. The family fire
 Files: `bench/results/miplib-419-{cuts-baseline,flow-cover-on,aggregation-baseline,aggregation-on,localsearch-baseline,localsearch-on}.csv`; the three stamps are branch commits carried to `main` by #454, recorded in `bench/results/squash-stamps.txt`. Section 2 of `docs/BENCHMARKS.md`.
 What would earn the default: a target instance reaching its published optimum under the family. The next lever is separation strength — exact sequential lifting (Gu, Nemhauser & Savelsbergh 1999) — not the inequality or the filter.
 
+**The lifted form, on tier 1 (#1131).** With the sequence-independent lifting of Gu, Nemhauser and Savelsbergh (1999) in place, the family measured again as `enable_flow_cover_cuts=true` against the defaults on MIPLIB tier 1: `ab-option`, `main` at `1f468a6`, 3 seeds, 60 s, one thread, both arms in one job on one runner. The two arms are identical run for run: 53 matched, 33 proved and 90 verified of 90 either way, shifted geometric mean 28.00 s both. On tier 1 the family recognises a switched flow on k16x240b only (root only, it closes 24.2% of that root gap lifted against 23.9% unlifted), and the single round's 30-row selection never takes a flow cover over the Gomory and MIR cuts there. File: `bench/results/option-ab-miplib-flowcover-lifted-1f468a6.csv` (the `arm` column). The set the family is built for is MIPLIB 3's fixed-charge and lot-sizing models (#1158), where its reading is separate.
+
 ### The Harris two-pass ratio test (`ratio_test=harris`)
 
 Selectable beside the default ratio test (#67). Off.

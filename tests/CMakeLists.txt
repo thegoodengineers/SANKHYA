@@ -125,6 +125,7 @@ add_executable(sankhya_tests
   unit/test_local_mip.cpp
   unit/test_restarts.cpp
   unit/test_flow_cover_cuts.cpp
+  unit/test_flow_cover_aggregation.cpp
   unit/test_implied_bound_cuts.cpp
   unit/test_domain_propagation.cpp
   unit/test_presolve_dual_fixing.cpp

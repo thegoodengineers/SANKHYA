@@ -16,12 +16,12 @@
 
 #include "cut_derivation.hpp"
 #include "mir_cmir.hpp"
+#include "row_aggregation.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <optional>
-#include <unordered_map>
 #include <vector>
 
 #include "sankhya/tolerances.hpp"
@@ -39,12 +39,6 @@ constexpr double kMinViolation = 1e-4;
 /// numerical filter, applied here as well as in the shared filter so a bad divisor is not
 /// even proposed).
 constexpr double kMaxDynamism = 1e6;
-/// How many rows may be added to a starting row before the search gives up on it
-/// (Marchand & Wolsey use 6; the issue names the same number).
-constexpr int kMaxAggregation = 6;
-/// A continuous variable is "inside" its bounds, and so worth eliminating, when its slack to
-/// the nearer bound exceeds this.
-constexpr double kInsideTolerance = 1e-6;
 
 [[nodiscard]] double fractional_part(double v) {
   return v - std::floor(v);
@@ -53,35 +47,6 @@ constexpr double kInsideTolerance = 1e-6;
 [[nodiscard]] bool integral(double v) {
   return std::fabs(v - std::round(v)) <= tol::kIntegrality;
 }
-
-/// One row of the model in row-wise form: (column, coefficient) pairs.
-struct RowEntries {
-  std::vector<Index> columns;
-  std::vector<double> values;
-};
-
-std::vector<RowEntries> rows_of(const Model& model) {
-  std::vector<RowEntries> rows(static_cast<std::size_t>(model.num_rows()));
-  for (Index j = 0; j < model.num_cols(); ++j) {
-    const ColumnView column = model.matrix.column(j);
-    for (Index k = 0; k < column.size; ++k) {
-      RowEntries& row = rows[static_cast<std::size_t>(column.rows[k])];
-      row.columns.push_back(j);
-      row.values.push_back(column.values[k]);
-    }
-  }
-  return rows;
-}
-
-/// A base inequality sum coef_j x_j <= rhs over the model's columns, sparse.
-struct BaseRow {
-  std::vector<Index> columns;
-  std::vector<double> values;
-  double rhs = 0.0;
-  /// The rows it is the sum of, in the `<=` orientation (w > 0 on a row's upper side),
-  /// for a certificate's derivation (#518).
-  std::vector<std::pair<Index, double>> multipliers;
-};
 
 /// The split an MIR cut on `base` rests on (#518; Nemhauser and Wolsey 1990): with the base
 /// divided by `divisor`, b = rhs / divisor, f0 = frac(b), and the integer y_k rounded down
@@ -227,73 +192,6 @@ std::optional<Cut> separate_from_base(const Model& model, const Solution& soluti
   return best;
 }
 
-/// The continuous column of `base` that sits furthest inside its bounds at the LP point,
-/// or -1 when every continuous column is at a bound (nothing to eliminate).
-Index column_to_eliminate(const Model& model, const Solution& solution,
-                          const std::vector<double>& col_lower,
-                          const std::vector<double>& col_upper, const BaseRow& base) {
-  Index chosen = -1;
-  double deepest = kInsideTolerance;
-  for (std::size_t k = 0; k < base.columns.size(); ++k) {
-    if (std::fabs(base.values[k]) <= tol::kZeroDrop) continue;
-    const Index j = base.columns[k];
-    const auto uj = static_cast<std::size_t>(j);
-    if (model.col_type[uj] == VarType::kInteger) continue;
-    const double x = solution.col_value[uj];
-    double slack = std::numeric_limits<double>::infinity();
-    if (is_finite_bound(col_lower[uj])) slack = std::min(slack, x - col_lower[uj]);
-    if (is_finite_bound(col_upper[uj])) slack = std::min(slack, col_upper[uj] - x);
-    if (std::isinf(slack)) continue;  // a free continuous column: the base is unusable anyway
-    if (slack > deepest) {
-      deepest = slack;
-      chosen = j;
-    }
-  }
-  return chosen;
-}
-
-/// Add lambda times row i (as `sum a x <= u` for lambda > 0, `sum a x >= l` for lambda < 0)
-/// to `base`, so that column `eliminate` cancels. Returns false when row i has no finite
-/// bound on the side the sign needs.
-bool aggregate_row(const Model& model, const std::vector<RowEntries>& rows, Index i,
-                   Index eliminate, BaseRow* base) {
-  const RowEntries& row = rows[static_cast<std::size_t>(i)];
-  double coef_in_row = 0.0;
-  for (std::size_t k = 0; k < row.columns.size(); ++k) {
-    if (row.columns[k] == eliminate) coef_in_row = row.values[k];
-  }
-  if (std::fabs(coef_in_row) <= tol::kZeroDrop) return false;
-  double coef_in_base = 0.0;
-  for (std::size_t k = 0; k < base->columns.size(); ++k) {
-    if (base->columns[k] == eliminate) coef_in_base = base->values[k];
-  }
-  const double lambda = -coef_in_base / coef_in_row;
-  const auto ui = static_cast<std::size_t>(i);
-  const double bound = lambda > 0.0 ? model.row_upper[ui] : model.row_lower[ui];
-  if (!is_finite_bound(bound)) return false;
-  // Merge: base += lambda * row.
-  std::unordered_map<Index, std::size_t> position;
-  for (std::size_t k = 0; k < base->columns.size(); ++k) position[base->columns[k]] = k;
-  for (std::size_t k = 0; k < row.columns.size(); ++k) {
-    const Index j = row.columns[k];
-    const double add = lambda * row.values[k];
-    auto it = position.find(j);
-    if (it == position.end()) {
-      base->columns.push_back(j);
-      base->values.push_back(add);
-    } else {
-      base->values[it->second] += add;
-    }
-  }
-  base->rhs += lambda * bound;
-  base->multipliers.emplace_back(i, lambda);
-  // The eliminated column is exactly cancelled in exact arithmetic; make it so here.
-  for (std::size_t k = 0; k < base->columns.size(); ++k) {
-    if (base->columns[k] == eliminate) base->values[k] = 0.0;
-  }
-  return true;
-}
-
 }  // namespace
 
 bool mir_inequality(const std::vector<double>& coefficient, const std::vector<bool>& is_integer,
@@ -387,7 +285,7 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
       std::optional<Cut> best;
       double best_violation = 0.0;
       int best_depth = 0;
-      for (int depth = 0; depth <= kMaxAggregation; ++depth) {
+      for (int depth = 0; depth <= tol::kRowAggregationDepth; ++depth) {
         if (std::optional<Cut> cut = separate(base)) {
           double lhs = 0.0;
           for (Index j = 0; j < n; ++j) {
@@ -401,7 +299,7 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
             best_depth = depth;
           }
         }
-        if (depth == kMaxAggregation) break;
+        if (depth == tol::kRowAggregationDepth) break;
         // Eliminate the continuous column furthest inside its bounds with an unused row that
         // contains it and has a finite bound on the side the multiplier needs.
         const Index eliminate =

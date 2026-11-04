@@ -204,6 +204,13 @@ TEST(RootCutLoop, TheBudgetIsTheFloorOrTheShareOfTheRows) {
   EXPECT_EQ(mip::root_cut_row_budget(29), tol::kRootCutRowFloor);  // gt2: the floor
   const auto timtab1 = static_cast<Index>(std::floor(tol::kRootCutRowShare * 169.0));
   EXPECT_EQ(mip::root_cut_row_budget(169), std::max<Index>(tol::kRootCutRowFloor, timtab1));
+  // With the pool taking the slack rows back (#1143): at least the rounds times the per-round
+  // cap times the factor, which is what pp08a's m = 136 budget stopped short of (#1158).
+  const auto pooled =
+      static_cast<Index>(tol::kRootCutPooledRowFactor * 30 * tol::kRootCutMaxRounds);
+  EXPECT_EQ(mip::root_cut_row_budget(136, 30), std::max<Index>(136, pooled));
+  EXPECT_EQ(mip::root_cut_row_budget(5000, 30), std::max<Index>(5000, pooled));
+  EXPECT_EQ(mip::root_cut_row_budget(136, 0), std::max<Index>(tol::kRootCutRowFloor, 136));
 }
 
 TEST(RootCutLoop, ARoundCutShortKeepsItsBestAndTheRestWaitFirst) {

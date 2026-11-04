@@ -69,11 +69,13 @@
 namespace sankhya::mip {
 
 struct FlowCoverStats {
-  int vub_rows = 0;   ///< variable-upper-bound rows x <= u y recognised
-  int flow_rows = 0;  ///< row sides with at least one switched inflow, tried
-  int covers = 0;     ///< of those, where a cover with lambda > 0 was found
-  int cuts = 0;       ///< violated cuts returned
-  int lifted = 0;     ///< of those, the lifted form (LIFTING)
+  int vub_rows = 0;    ///< variable-upper-bound rows x <= u y recognised
+  int flow_rows = 0;   ///< row sides with at least one switched inflow, tried
+  int covers = 0;      ///< of those, where a cover with lambda > 0 was found
+  int cuts = 0;        ///< violated cuts returned
+  int lifted = 0;      ///< of those, the lifted form (LIFTING)
+  int aggregated = 0;  ///< of those, from an aggregate of two or more rows (AGGREGATION)
+  int deepest = 0;     ///< the most rows added to a base that gave a cut
 };
 
 /// Flow cover cuts violated at `solution.col_value`, from the rows whose inflows carry an
