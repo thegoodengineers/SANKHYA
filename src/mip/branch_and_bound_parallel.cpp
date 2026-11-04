@@ -627,6 +627,20 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
   // The workers answer to their own control; this thread forwards the caller's interrupt
   // and calls the caller's progress callback, which was never promised to be thread-safe.
   SolveControl stop_signal;
+  // The caller's progress callback is called once before the first node, as the sequential
+  // search calls it at its first check (#1158): the loop below reaches it only after a 50 ms
+  // wait, which a search that ends sooner never returns from, and #223's contract is at
+  // least one call per solve and at most one per callback window. A nonzero return is an
+  // interrupt, honoured below before any worker takes a node.
+  if (control != nullptr && control->progress_callback && control->callback_due()) {
+    Progress progress;
+    progress.phase = Progress::Phase::kTree;
+    progress.objective = kInfinity;
+    progress.best_bound = model.sense == ObjSense::kMaximize ? kInfinity : -kInfinity;
+    progress.gap = kInfinity;
+    progress.elapsed_seconds = clock.elapsed_seconds();
+    if (control->progress_callback(progress) != 0) control->interrupt();
+  }
   // An interrupt already requested is honoured before a worker takes a node (#1158): the
   // loop below forwards one every 50 ms, which a model solved in less never reached.
   if (control != nullptr && control->interruption_requested()) {
