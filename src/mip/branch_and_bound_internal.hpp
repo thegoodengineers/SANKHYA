@@ -850,7 +850,7 @@ class BranchAndBound {
   /// round 1's, for its log line.
   /// root_cut_loop, read with root_cut_loop_when (#1158): always, or only on a model with a
   /// variable upper bound x <= u y, decided once at the root from working_'s rows.
-  bool root_cut_loop_wanted();
+  bool root_cut_loop_wanted(const std::vector<Cut>& round1);
   void root_cut_loop(Solution* relaxation, Index model_rows,
                      const std::vector<Cut>& first_taken, std::int64_t first_iterations);
   /// A round at a node of depth <= tree_cut_depth_: MIR cuts on the global bounds,
