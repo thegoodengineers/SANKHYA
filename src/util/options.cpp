@@ -1873,6 +1873,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"crossover_push_ceiling",
+                 OptionType::Double,
+                 0.0,
+                 "The crossover push's ceiling on the infeasibility of the point it starts "
+                 "from, absolute (#888): a point its basis reproduces to worse than this is "
+                 "declined and the first-order or interior point's answer stands. 0, the "
+                 "default, means tol::kCrossoverPushCeilingFactor times the primal "
+                 "feasibility tolerance (1e-4). Above it the primal loop's phase 1 is asked "
+                 "to repair the difference, which is measured, not assumed, per model.",
+                 0.0,
+                 1.0,
+                 {}});
     s.push_back({"crossover_pivots_per_dimension",
                  OptionType::Double,
                  tol::kCrossoverPivotsPerDimension,

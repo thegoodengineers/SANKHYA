@@ -97,7 +97,10 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
   // a massively degenerate model, ran 683,000 pivots to a time limit. A point that is not
   // feasible to a loose multiple of the tolerance is handed back as "not solved", and the
   // caller keeps the interior point's answer.
-  const double loose = 1e3 * primal_tolerance_;
+  const double asked_ceiling = options_.get_double("crossover_push_ceiling");
+  const double loose = asked_ceiling > 0.0
+                           ? asked_ceiling
+                           : tol::kCrossoverPushCeilingFactor * primal_tolerance_;
   // FACTORS THAT FACTORIZED ARE NOT YET FACTORS THAT SOLVE (#1023). Threshold pivoting
   // bounds the growth of U only by (1 + 1/tau) per step, so a basis can factorize at
   // tau = 0.01 with every pivot above the tolerance and still solve to nothing: on
@@ -175,31 +178,63 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
     }
     const ProfileScope ratio_timed(logger_.profiler(), "push ratio test and update",
                                    ProfileMode::kDetailed);
-    double step = distance;
-    Index leaving_slot = -1;
-    bool leaving_to_upper = false;
+    // THE RATIO TEST IS HARRIS'S TWO PASSES WITH A RELATIVE PIVOT FLOOR (#888; Harris 1973,
+    // Gill, Murray, Saunders & Wright 1989; the dual loop's rule, #244). A single pass that
+    // takes the first blocking variable and refuses only |alpha| <= 1e-9 pivoted, on the
+    // refinery year, on entries down to 1.3e-9 of a column whose largest entry is O(1),
+    // and the basis went singular after 47,520 pivots from a primal-feasible point. Pass
+    // one finds the longest step every basic variable allows when its bound is relaxed by
+    // the primal tolerance; pass two takes, among the variables that block at or before
+    // that step, the one with the LARGEST |alpha|, and no entry below the relative floor
+    // (tol::kCrossoverPushPivotRelativeFloor of alpha's largest) can block at all.
+    double alpha_max = 0.0;
     for (Index slot = 0; slot < m_; ++slot) {
+      alpha_max = std::max(alpha_max, std::fabs(alpha_[static_cast<std::size_t>(slot)]));
+    }
+    const double pivot_floor =
+        std::max(tol::kPivotTolerance, tol::kCrossoverPushPivotRelativeFloor * alpha_max);
+    const auto blocking = [&](Index slot, double tolerance, double* t, bool* to_upper) {
       const double a = alpha_[static_cast<std::size_t>(slot)];
-      if (std::fabs(a) <= tol::kPivotTolerance) continue;
+      if (std::fabs(a) <= pivot_floor) return false;
       // x_B changes by -direction * a per unit step.
       const double rate = -static_cast<double>(direction) * a;
       const auto i = static_cast<std::size_t>(basis_[static_cast<std::size_t>(slot)]);
       const double xb = x_basic_[static_cast<std::size_t>(slot)];
       double room;
       if (rate < 0.0) {
-        if (!is_finite_bound(lower_[i])) continue;
-        room = xb - lower_[i];
+        if (!is_finite_bound(lower_[i])) return false;
+        room = xb - lower_[i] + tolerance;
       } else {
-        if (!is_finite_bound(upper_[i])) continue;
-        room = upper_[i] - xb;
+        if (!is_finite_bound(upper_[i])) return false;
+        room = upper_[i] - xb + tolerance;
       }
-      const double t = std::max(0.0, room) / std::fabs(rate);
-      if (t < step) {
-        step = t;
+      *t = std::max(0.0, room) / std::fabs(rate);
+      *to_upper = rate > 0.0;
+      return true;
+    };
+    double theta_max = distance;
+    for (Index slot = 0; slot < m_; ++slot) {
+      double t = 0.0;
+      bool to_upper = false;
+      if (blocking(slot, primal_tolerance_, &t, &to_upper)) theta_max = std::min(theta_max, t);
+    }
+    double step = distance;
+    Index leaving_slot = -1;
+    bool leaving_to_upper = false;
+    double leaving_alpha = 0.0;
+    for (Index slot = 0; slot < m_; ++slot) {
+      double t = 0.0;
+      bool to_upper = false;
+      if (!blocking(slot, 0.0, &t, &to_upper) || t > theta_max) continue;
+      const double a = std::fabs(alpha_[static_cast<std::size_t>(slot)]);
+      if (a > leaving_alpha) {
+        leaving_alpha = a;
         leaving_slot = slot;
-        leaving_to_upper = rate > 0.0;
+        leaving_to_upper = to_upper;
+        step = t;
       }
     }
+    if (leaving_slot >= 0) step = std::min(step, distance);
 
     for (Index slot = 0; slot < m_; ++slot) {
       x_basic_[static_cast<std::size_t>(slot)] -=

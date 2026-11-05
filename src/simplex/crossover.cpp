@@ -486,7 +486,15 @@ Solution crossover_push_from_basis(const Model& model, Solution interior, WarmSt
   if (per_dimension > 0.0) {
     const auto pivot_budget = static_cast<std::int64_t>(
         per_dimension * static_cast<double>(model.num_rows() + model.num_cols()));
-    const std::int64_t asked = options.get_int("iteration_limit");
+    // The caller's own iteration_limit still bounds the pivots - unless it is what stopped
+    // the start (#888): then the first engine has spent that count, and re-applying it to
+    // a different engine's pivots left the crossover from an interior point stopped after
+    // 8 iterations exactly 8 pivots, which the push alone used on afiro (its ratio test
+    // chooses the largest pivot now, one swap more than the first blocking variable did);
+    // the deterministic per-dimension budget is the bound that was meant.
+    const std::int64_t asked = interior.status == SolveStatus::kIterationLimit
+                                   ? -1
+                                   : options.get_int("iteration_limit");
     pivots.set_int("iteration_limit",
                    asked >= 0 ? std::min(asked, pivot_budget) : pivot_budget);
   }
