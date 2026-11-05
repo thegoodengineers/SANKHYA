@@ -1845,6 +1845,7 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
   solution.cuts_reactivated = reduced.cuts_reactivated;
   solution.cut_rows_removed = reduced.cut_rows_removed;
   solution.cut_rows_readded = reduced.cut_rows_readded;
+  solution.root_cut_rounds = reduced.root_cut_rounds;
   solution.node_lp_rows_mean = reduced.node_lp_rows_mean;
   solution.node_lp_rows_max = reduced.node_lp_rows_max;
   solution.cut_filter_report = reduced.cut_filter_report;
