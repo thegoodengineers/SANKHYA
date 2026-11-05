@@ -86,6 +86,7 @@
 #include "sankhya/pdhg.hpp"
 #include "sankhya/qp.hpp"
 #include "sankhya/solve_control.hpp"
+#include "sankhya/sparse.hpp"
 #include "sankhya/timer.hpp"
 #include "sankhya/version.hpp"
 #include "simplex/crossover.hpp"
@@ -547,6 +548,54 @@ constexpr int kPrescalePasses = 20;
 /// The no-presolve retry's share of the time left when the prescaled retry follows it.
 constexpr double kNoPresolveRetryShare = 0.5;
 
+/// "; worst: row NAME activity A outside [L, U] (largest term |a x| = T on column C)" or
+/// the column version, for the status guard's message; empty when nothing is violated.
+std::string worst_violation(const Model& model, const Solution& solution) {
+  const Index n = model.num_cols();
+  const Index m = model.num_rows();
+  if (static_cast<Index>(solution.col_value.size()) != n) return "";
+  std::vector<double> activity(static_cast<std::size_t>(m), 0.0);
+  if (m > 0) model.matrix.multiply(solution.col_value.data(), activity.data());
+  double worst = 0.0;
+  std::string where;
+  for (Index i = 0; i < m; ++i) {
+    const auto u = static_cast<std::size_t>(i);
+    double violation = 0.0;
+    if (is_finite_bound(model.row_lower[u])) violation = model.row_lower[u] - activity[u];
+    if (is_finite_bound(model.row_upper[u])) {
+      violation = std::max(violation, activity[u] - model.row_upper[u]);
+    }
+    if (violation <= worst) continue;
+    worst = violation;
+    where = fmt::format("; worst: row {} ({}) activity {:.10g} outside [{:.10g}, {:.10g}]", i,
+                        u < model.row_names.size() ? model.row_names[u] : "?", activity[u],
+                        model.row_lower[u], model.row_upper[u]);
+    const CsrView by_row(model.matrix);
+    const ColumnView row = by_row.row(i);
+    for (Index k = 0; k < row.size; ++k) {
+      const auto c = static_cast<std::size_t>(row.rows[k]);
+      where +=
+          fmt::format(" | {} ({}) a={:.10g} x={:.17g} int={}", row.rows[k],
+                      c < model.col_names.size() ? model.col_names[c] : "?", row.values[k],
+                      solution.col_value[c], model.col_type[c] == VarType::kInteger ? 1 : 0);
+    }
+  }
+  for (Index j = 0; j < n; ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    const double x = solution.col_value[u];
+    double violation = 0.0;
+    if (is_finite_bound(model.col_lower[u])) violation = model.col_lower[u] - x;
+    if (is_finite_bound(model.col_upper[u]))
+      violation = std::max(violation, x - model.col_upper[u]);
+    if (violation <= worst) continue;
+    worst = violation;
+    where = fmt::format("; worst: column {} ({}) value {:.10g} outside [{:.10g}, {:.10g}]", j,
+                        u < model.col_names.size() ? model.col_names[u] : "?", x,
+                        model.col_lower[u], model.col_upper[u]);
+  }
+  return where;
+}
+
 void reconcile_status_with_measurement(const Model& model, Solution* solution,
                                        const Options& options, Logger& logger,
                                        bool check_dual) {
@@ -575,12 +624,15 @@ void reconcile_status_with_measurement(const Model& model, Solution* solution,
   // that point infeasible says nothing about the point and everything about the units the
   // question was asked in. See Solution::primal_infeasibility_scaled for the derivation.
   if (solution->primal_infeasibility_scaled > primal_tolerance) {
-    const std::string detail = fmt::format(
+    std::string detail = fmt::format(
         "engine reported {} but the returned point violates primal feasibility by {:.3e} "
         "({:.3e} relative to the scale it was measured on), above the {:.1e} tolerance; it is "
         "not a feasible point",
         to_string(solution->status), solution->primal_infeasibility,
         solution->primal_infeasibility_scaled, primal_tolerance);
+    // The row or column that carries the violation, so the message names the thing to look
+    // at and not only the number (#1187).
+    detail += worst_violation(model, *solution);
     solution->status = SolveStatus::kNumericalError;
     solution->message = solution->message.empty() ? detail : solution->message + "; " + detail;
     logger.warning("{}", detail);
