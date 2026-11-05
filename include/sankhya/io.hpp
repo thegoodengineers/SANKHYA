@@ -79,8 +79,12 @@ bool read_solution_basis(const std::string& path, const Model& model,
 /// for `model`, matched by name, into `col_values` - what `sankhya solve --start` seeds
 /// as the initial incumbent. Returns false and fills `error` when the file cannot be read,
 /// names a column the model lacks, or provides an incomplete assignment.
+/// With `row_duals` given, the dual field of the rows section is read too (#888), for
+/// `sankhya solve --pdhg-start`, which offers a saved PDHG point back to PDHG; a file
+/// whose rows section is missing or incomplete leaves `row_duals` empty, never fails.
 bool read_solution_point(const std::string& path, const Model& model,
-                         std::vector<double>* col_values, std::string* error);
+                         std::vector<double>* col_values, std::string* error,
+                         std::vector<double>* row_duals = nullptr);
 
 // -----------------------------------------------------------------------------------------
 // Writers

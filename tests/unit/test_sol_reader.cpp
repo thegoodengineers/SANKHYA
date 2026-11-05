@@ -88,6 +88,33 @@ TEST(SolReader, QuotedNamesRoundTrip) {
   EXPECT_EQ(rows, cold.row_status);
 }
 
+TEST(SolReader, ThePointAndTheRowDualsComeBackExactlyForAPdhgStart) {
+  // #888, `sankhya solve --pdhg-start`: the values and the row duals of a written solution
+  // round-trip bit for bit (the writer keeps 17 significant digits), and the pair, offered
+  // back through SolveControl, is a PDHG start the engine accepts.
+  const Model model = netlib("afiro");
+  const Solution cold = solve(model, quiet());
+  ASSERT_EQ(cold.status, SolveStatus::kOptimal) << cold.message;
+  const TempFile file("", ".sol");
+  std::string error;
+  ASSERT_TRUE(io::write_solution(file.path(), model, cold, &error)) << error;
+  std::vector<double> values;
+  std::vector<double> duals;
+  ASSERT_TRUE(io::read_solution_point(file.path(), model, &values, &error, &duals)) << error;
+  EXPECT_EQ(values, cold.col_value);
+  EXPECT_EQ(duals, cold.row_dual);
+
+  SolveControl control;
+  control.start_col_value = values;
+  control.start_row_dual = duals;
+  Options pdhg = quiet();
+  pdhg.set_string("algorithm", "pdhg");
+  pdhg.set_bool("pdhg_polish", false);
+  pdhg.set_bool("presolve", false);
+  const Solution warm = solve(model, pdhg, &control);
+  EXPECT_EQ(warm.status, SolveStatus::kOptimal) << warm.message;
+}
+
 TEST(SolReader, AColumnOrRowNamedBeginOrEndIsDataNotASectionMark) {
   // "end" and "begin" are legitimate names, and writer.cpp does not quote them. Before the
   // reader asked whether a line closes the OPEN section, "end 0 0 at_lower" ended the

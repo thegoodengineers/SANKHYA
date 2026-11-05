@@ -319,6 +319,17 @@ inline constexpr double kSensitivityAgreement = 1e-9;
 /// this value.
 inline constexpr double kDualPivotRelativeFloor = 1e-7;
 
+/// The crossover push's pivot floor RELATIVE to the column it is choosing from (#888, the
+/// same rule as the dual's above, #244): a basic variable whose |alpha_i| is below this
+/// fraction of alpha's largest entry cannot block the push, whatever the absolute
+/// kPivotTolerance says. The push used the absolute floor alone, and on the 779,640-row
+/// refinery year it pivoted on entries down to 1.3e-9 until the basis went singular after
+/// 47,520 pivots from a feasible point (and 74,669 from an infeasible one). Harris, "Pivot
+/// selection methods of the Devex LP code", Mathematical Programming 5 (1973); Gill, Murray,
+/// Saunders & Wright, "A practical anti-cycling procedure for linearly constrained
+/// optimization", Mathematical Programming 45 (1989); Koberstein (2005), sec. 6.2.2.2.
+inline constexpr double kCrossoverPushPivotRelativeFloor = 1e-7;
+
 // ---------------------------------------------------------------------------------------
 // Simplex
 // ---------------------------------------------------------------------------------------
@@ -410,6 +421,15 @@ inline constexpr double kPdhgLoose = 1e-4;
 /// simplex starts: the vertex it returns is judged at kPrimalFeasibility and
 /// kDualFeasibility like any other.
 inline constexpr double kCrossoverStartInfeasibility = 1e-4;
+
+/// The crossover push's ceiling on the infeasibility of the point it is handed, as a
+/// multiple of kPrimalFeasibility (#343, simplex_push.cpp): a point the installed basis
+/// reproduces to worse than this is declined rather than handed to the primal loop's
+/// phase 1 (wood1p ran 683,000 pivots repairing 1e-2). Overridden, as an absolute value, by
+/// the option crossover_push_ceiling (#888): the refinery year's PDHG point at relative 1e-8
+/// sits at 1.9e-4, just above 1e3 x 1e-7, and whether phase 1 can absorb that is measured
+/// there.
+inline constexpr double kCrossoverPushCeilingFactor = 1e3;
 
 /// The crossover's pivot budget, per row and column of the model it runs on (#1072): its
 /// simplex stops with the interior point's answer standing after this many pivots times

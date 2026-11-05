@@ -207,12 +207,18 @@ bool read_solution_basis(const std::string& path, const Model& model,
 }
 
 bool read_solution_point(const std::string& path, const Model& model,
-                         std::vector<double>* col_values, std::string* error) {
+                         std::vector<double>* col_values, std::string* error,
+                         std::vector<double>* row_duals) {
   LineReader reader;
   if (!reader.open(path, error)) return false;
   const auto cols = index_by_name(model.col_names, model.num_cols(), 'C');
   col_values->assign(static_cast<std::size_t>(model.num_cols()),
                      std::numeric_limits<double>::quiet_NaN());
+  const auto rows = index_by_name(model.row_names, model.num_rows(), 'R');
+  Index duals_read = 0;
+  if (row_duals != nullptr) {
+    row_duals->assign(static_cast<std::size_t>(model.num_rows()), 0.0);
+  }
 
   Section section = Section::kNone;
   bool saw_columns = false;
@@ -225,12 +231,31 @@ bool read_solution_point(const std::string& path, const Model& model,
     // The same begin/end rule as read_solution_basis(): see closes_section().
     if (section == Section::kNone && tokens[0] == "begin") {
       const std::string_view what = tokens.size() > 1 ? tokens[1] : std::string_view();
-      section = what == "columns" ? Section::kColumns : Section::kOther;
+      section = what == "columns" ? Section::kColumns
+                : what == "rows"  ? Section::kRows
+                                  : Section::kOther;
       saw_columns = saw_columns || section == Section::kColumns;
       continue;
     }
     if (closes_section(tokens, section)) {
       section = Section::kNone;
+      continue;
+    }
+    if (section == Section::kRows) {
+      // name activity dual basis_status: the dual is the second number (#888).
+      if (row_duals == nullptr) continue;
+      std::string name;
+      std::string_view rest;
+      if (!leading_name(text, &name, &rest)) continue;
+      tokenize(rest, &tokens);
+      const auto it = rows.find(name);
+      if (tokens.size() < 2 || it == rows.end()) continue;
+      try {
+        (*row_duals)[static_cast<std::size_t>(it->second)] = std::stod(std::string(tokens[1]));
+        ++duals_read;
+      } catch (...) {
+        continue;
+      }
       continue;
     }
     if (section != Section::kColumns) continue;
@@ -274,6 +299,7 @@ bool read_solution_point(const std::string& path, const Model& model,
     *error = fmt::format("{}: no columns section: the file carries no point", path);
     return false;
   }
+  if (row_duals != nullptr && duals_read != model.num_rows()) row_duals->clear();
 
   return true;
 }

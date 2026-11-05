@@ -288,6 +288,13 @@ int main(int argc, char** argv) {
   solve_cmd->add_option("--start", mip_start_path,
                         "A complete, feasible user-supplied MILP solution to install as "
                         "the initial incumbent before the root search begins");
+  std::string pdhg_start_path;
+  solve_cmd->add_option("--pdhg-start", pdhg_start_path,
+                        "Start PDHG from the point in this .sol file (its column values and "
+                        "row duals, matched by name), a previous PDHG solve of this model "
+                        "(#888): the run continues from there instead of from zero, so a "
+                        "saved point can be taken on to a tighter tolerance or straight "
+                        "into the crossover (presolve is bypassed)");
   bool compute_iis = false;
   solve_cmd->add_flag("--iis", compute_iis,
                       "On an infeasible model, name the irreducible infeasible subsystem: "
@@ -471,6 +478,22 @@ int main(int argc, char** argv) {
             "{} row(s) of the file are gone, {} of them basic\n",
             mapping.matched_cols, mapping.matched_rows, mapping.new_cols, mapping.new_rows,
             mapping.removed_cols, mapping.removed_rows, mapping.removed_basic);
+      }
+    }
+    if (!pdhg_start_path.empty()) {
+      std::string error;
+      std::vector<double> duals;
+      if (!sankhya::io::read_solution_point(pdhg_start_path, model, &control.start_col_value,
+                                            &error, &duals)) {
+        fmt::print(stderr, "error: {}\n", error);
+        return 3;
+      }
+      control.start_row_dual = std::move(duals);
+      if (control.start_row_dual.empty()) {
+        fmt::print(stderr,
+                   "warning: {} carries no complete row duals; PDHG starts from its primal "
+                   "point with zero duals\n",
+                   pdhg_start_path);
       }
     }
     if (!mip_start_path.empty()) {
