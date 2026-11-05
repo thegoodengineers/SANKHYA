@@ -367,7 +367,12 @@ proves the published optimum on **35 of 65** (best of 3 seeds; 33, 34 and 33 per
 every seed), HiGHS on **49 of 65**, both graded by the same rule and the same verifier, every
 one of the 187 points written accepted (`bench/results/miplib3-60s-seeds3-312818a.csv`,
 `highs-miplib3-60s-312818a.csv`). Of the 15 HiGHS proves and SANKHYA does not, 11 are a
-weaker root bound after cuts (the table is in #1158). The earlier 52-instance run at 300 s
+weaker root bound after cuts (the table is in #1158). The multi-round root cut loop with the
+cut pool and the aggregated, lifted flow covers closes that root on the fixed-charge and
+lot-sizing models and proves 13 more runs of 195 in the same job (#1158's A/B (d), `bench/results/option-ab-miplib3-covers-gated-recipe-391ff68.csv`); it stays off
+by default until #1187 is fixed and is available as `--option root_cut_loop=true
+--option mip_cut_pooling=true --option enable_flow_cover_cuts=true --option
+root_cut_loop_when=flow-covers`. The earlier 52-instance run at 300 s
 (`miplib3-300s-seeds3-f2cf240.csv`) stays in section 2a. The harder MIPLIB 2017
 tier, the first 60 benchmark instances with a proven optimum by file size, chosen before the run
 (#504, `bench/results/miplib-tier2-seeds3-e7c0c60.csv`, 3 seeds at 300 s): **32 of 180** runs

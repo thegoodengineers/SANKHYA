@@ -637,10 +637,13 @@ const std::vector<OptionSpec>& Options::registry() {
                  "every instance the loop proved and the defaults did not has that structure "
                  "(set1ch, pp08a, pp08aCUTS, fixnet6, vpm2, modglob, dcmulti), and every "
                  "instance whose tree it lost has none (bell5, 10teams, air05, qiu, gen, "
-                 "misc06). Solution::root_cut_rounds says whether the loop was entered.",
+                 "misc06). flow-covers: only when round 1 took at least one flow cover "
+                 "(enable_flow_cover_cuts on): the rows existing let bell5 in and cost two "
+                 "proofs in A/B (c); a cover being found did not, in (b). "
+                 "Solution::root_cut_rounds says whether the loop was entered.",
                  0.0,
                  0.0,
-                 {"always", "switched-flows"}});
+                 {"always", "switched-flows", "flow-covers"}});
     s.push_back({"mip_heuristics",
                  OptionType::Bool,
                  false,

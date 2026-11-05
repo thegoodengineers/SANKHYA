@@ -66,10 +66,22 @@ std::string by_family(const std::vector<Cut>& cuts) {
 
 }  // namespace
 
-bool BranchAndBound::root_cut_loop_wanted() {
+bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
   if (root_loop_wanted_ < 0) {
     bool wanted = options_.get_bool("root_cut_loop");
-    if (wanted && options_.get_string("root_cut_loop_when") == "switched-flows") {
+    const std::string when = options_.get_string("root_cut_loop_when");
+    if (wanted && when == "flow-covers") {
+      // Round 1 took a flow cover: the separator found a violated cover on a switched flow,
+      // which is the reading that separated the loop's wins from its losses in #1158's
+      // A/B (b) - bell5 has the rows but no cover was ever found on it.
+      wanted = std::any_of(round1.begin(), round1.end(),
+                           [](const Cut& cut) { return cut.family == CutFamily::kFlowCover; });
+      if (!wanted) {
+        logger_.info(
+            "Root cut loop: not entered, round 1 took no flow cover "
+            "(root_cut_loop_when=flow-covers)");
+      }
+    } else if (wanted && when == "switched-flows") {
       // The rounds pay on fixed-charge and lot-sizing models, whose switched flows x <= u y
       // are what the aggregated flow covers and the c-MIR path cuts work on (#1158's A/B:
       // every instance the loop proved had such a row, every tree it lost had none). The

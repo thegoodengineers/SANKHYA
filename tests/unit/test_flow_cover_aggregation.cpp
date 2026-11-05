@@ -391,6 +391,30 @@ TEST(RootCutLoop, SwitchedFlowsGateEntersOnALotSizingChainAndNotOnAKnapsack) {
   ASSERT_EQ(gated_knapsack.status, SolveStatus::kOptimal);
   EXPECT_NEAR(gated_knapsack.objective, 11.0, 1e-9);  // x2 + x4 (5 + 6 > 9): x1 + x4 = 11
   EXPECT_LE(gated_knapsack.root_cut_rounds, 1) << "no switched flow: the single round only";
+
+  // flow-covers: the chain enters only when the family is on and round 1 takes a cover.
+  auto solve_covers = [](const Model& m, bool family) {
+    Options options;
+    options.set_bool("log_to_console", false);
+    options.set_bool("presolve", false);
+    options.set_bool("enable_root_cuts", true);
+    options.set_bool("enable_flow_cover_cuts", family);
+    options.set_bool("root_cut_loop", true);
+    options.set_string("root_cut_loop_when", "flow-covers");
+    options.set_int("cut_support_floor", 100);
+    return solve(m, options);
+  };
+  const Solution without = solve_covers(chain, false);
+  ASSERT_EQ(without.status, SolveStatus::kOptimal);
+  EXPECT_LE(without.root_cut_rounds, 1) << "no flow cover family: no cover taken, no loop";
+  const Solution with = solve_covers(chain, true);
+  ASSERT_EQ(with.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(with.objective, always.objective,
+              1e-9 * std::max(1.0, std::fabs(always.objective)));
+  std::printf(
+      "[  INFO    ] flow-covers gate: chain %lld round(s) with the family, %lld without\n",
+      static_cast<long long>(with.root_cut_rounds),
+      static_cast<long long>(without.root_cut_rounds));
 }
 }  // namespace
 }  // namespace sankhya::mip
