@@ -618,11 +618,28 @@ Index BranchAndBound::choose_branching_column(const std::vector<double>& x, doub
   return best;
 }
 
-bool BranchAndBound::offer_incumbent(const std::vector<double>& x) {
+bool BranchAndBound::offer_incumbent(const std::vector<double>& candidate) {
   // Integrality, against the ORIGINAL bounds - a candidate must be feasible for the model
   // the user handed us, not merely for the node it was found in.
   for (const Index j : integer_columns_) {
-    if (fractionality(x[static_cast<std::size_t>(j)]) > integrality_tolerance_) return false;
+    const double v = candidate[static_cast<std::size_t>(j)];
+    if (fractionality(v) > integrality_tolerance_) return false;
+  }
+  // SNAPPED (#1187). An integral node LP point carries its integer columns to the LP's
+  // tolerance, not exactly: dsbmip's seed-2 permutation accepted a binary at -1.9e-8, which
+  // the 1e-7 bound test passed, and the big-M row 10080 y + x - z >= 0 it sits in was then
+  // violated by 2e-4 at the end, where the status guard refused the point. What the search
+  // reports as an integer value is the integer, so every integer column is rounded (and kept
+  // inside its box, which the rounding cannot leave for an integral bound) before the
+  // candidate is checked and kept; the row test below then measures the point that will be
+  // reported, and a candidate that only looked feasible with the slop is turned away here.
+  std::vector<double> x = candidate;
+  for (const Index j : integer_columns_) {
+    const auto u = static_cast<std::size_t>(j);
+    double v = std::round(x[u]);
+    if (is_finite_bound(original_.col_lower[u])) v = std::max(v, original_.col_lower[u]);
+    if (is_finite_bound(original_.col_upper[u])) v = std::min(v, original_.col_upper[u]);
+    x[u] = v;
   }
   // Semi-continuous columns and special ordered sets (#754), which original_ has relaxed:
   // every heuristic's candidate passes through here, so none of them needs to know.
