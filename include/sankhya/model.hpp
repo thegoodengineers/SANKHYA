@@ -690,6 +690,10 @@ class Solution {
   /// that is the root search only, as for cuts_applied.
   Count cut_rows_aged_out = 0;
   Count cuts_reactivated = 0;
+  /// Root cut rounds that appended rows (#495, #1158): 1 for the single round, more when
+  /// the root separation loop ran, 0 when no cut was added. With `root_cut_loop_when` =
+  /// switched-flows this is how a run says whether the loop was entered at all.
+  Count root_cut_rounds = 0;
   /// With `mip_cut_pooling` (#497), of those: the aged rows deleted from the node LP rather
   /// than freed in place, and the deleted rows appended again because a node LP point
   /// violated them. Zero with the option off, and under `write_certificate`, where aged

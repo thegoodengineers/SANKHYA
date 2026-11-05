@@ -214,6 +214,7 @@ CSV_COLUMNS = [
     "cuts_reactivated",
     "cut_rows_removed",
     "cut_rows_readded",
+    "root_cut_rounds",
     "node_lp_rows_mean",
     "node_lp_rows_max",
     # Probing (#512): presolve's own counts from the stats JSON, and the clique cuts the
@@ -238,7 +239,8 @@ SAFE_BOUND_COLUMNS = ("safe_bound_nodes", "safe_bound_infinite", "safe_bound_ref
                       "conflict_nodes_pruned", "conflict_tightenings",
                       # So do the cut pool's (#497).
                       "cut_rows_aged_out", "cuts_reactivated", "cut_rows_removed",
-                      "cut_rows_readded", "node_lp_rows_mean", "node_lp_rows_max")
+                      "cut_rows_readded", "root_cut_rounds", "node_lp_rows_mean",
+                      "node_lp_rows_max")
 
 # The certificate writer's log line (src/mip/certificate_writer.cpp, #756).
 LEAVES_LINE = re.compile(r"leaves: (\d+) from their own LP duals, (\d+) from an ancestor's,.*?"

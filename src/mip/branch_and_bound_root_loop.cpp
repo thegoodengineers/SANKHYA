@@ -46,6 +46,7 @@
 #include <fmt/format.h>
 
 #include "branch_and_bound_internal.hpp"
+#include "mir_cmir.hpp"
 
 namespace sankhya::mip {
 
@@ -64,6 +65,26 @@ std::string by_family(const std::vector<Cut>& cuts) {
 }
 
 }  // namespace
+
+bool BranchAndBound::root_cut_loop_wanted() {
+  if (root_loop_wanted_ < 0) {
+    bool wanted = options_.get_bool("root_cut_loop");
+    if (wanted && options_.get_string("root_cut_loop_when") == "switched-flows") {
+      // The rounds pay on fixed-charge and lot-sizing models, whose switched flows x <= u y
+      // are what the aggregated flow covers and the c-MIR path cuts work on (#1158's A/B:
+      // every instance the loop proved had such a row, every tree it lost had none). The
+      // reading is the c-MIR's, once, on the root model.
+      wanted = find_variable_bounds(working_).rows > 0;
+      if (!wanted) {
+        logger_.info(
+            "Root cut loop: not entered, the model has no variable upper bound "
+            "(root_cut_loop_when=switched-flows)");
+      }
+    }
+    root_loop_wanted_ = wanted ? 1 : 0;
+  }
+  return root_loop_wanted_ == 1;
+}
 
 void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
                                    const std::vector<Cut>& first_taken,
