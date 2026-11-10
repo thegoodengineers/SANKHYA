@@ -93,6 +93,10 @@ Options root_cuts(bool loop) {
   // On models this small 0.2 n is one or two nonzeros; the floor (#608) lets cuts through.
   options.set_int("cut_support_floor", 100);
   options.set_bool("root_cut_loop", loop);
+  // These models are binary knapsacks and covers, with no switched flow: under the default
+  // gate (root_cut_loop_when=flow-covers, #1158) the loop would never run on them, and the
+  // loop itself is what these tests are about.
+  options.set_string("root_cut_loop_when", "always");
   return options;
 }
 
