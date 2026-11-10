@@ -42,6 +42,9 @@ struct ExactDualBound {
   /// of the basis, for the floating-point stages to evaluate with their own outward
   /// rounding (#1082). Empty otherwise.
   std::vector<double> refined;
+  /// True when the duals came from the exact rational LU (the fallback when the refinement
+  /// stops converging), false when the numeric-symbolic refinement reached them (#1082).
+  bool by_exact_lu = false;
 };
 
 /// The exact duals of the basis `basis` carries (col_status / row_status, one basic variable

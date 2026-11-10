@@ -10,6 +10,8 @@
 
 #include "exact/exact_repair.hpp"
 
+#include "sankhya/timer.hpp"
+
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -281,6 +283,8 @@ BasisStatus status_of(const Problem& problem, Nb nb, Sz k) {
 RepairResult repair_basis_exact(const Model& model, const Solution& solution, double seconds) {
   RepairResult result;
   const Deadline deadline(seconds);
+  const Timer clock;
+  double load_seconds = 0.0;
   const Index n = model.num_cols();
   const Index m = model.num_rows();
   if (solution.status != SolveStatus::kOptimal) {
@@ -300,6 +304,7 @@ RepairResult repair_basis_exact(const Model& model, const Solution& solution, do
     Problem problem(model);
     Basis basis;
     const LoadResult loaded = load_basis(model, solution, problem, deadline, &basis);
+    load_seconds = clock.elapsed_seconds();
     if (!loaded.message.empty()) {
       result.verdict = loaded.verdict;
       result.message = loaded.message;
@@ -338,8 +343,19 @@ RepairResult repair_basis_exact(const Model& model, const Solution& solution, do
     result.message = failed.why;
   } catch (const ExactBudgetExceeded&) {
     result.verdict = ExactVerdict::kDeclined;
-    result.message = fmt::format(
-        "the exact repair ran past its {} s budget (option exact_seconds)", seconds);
+    // What the budget bought, for the stage table of #1082: the rational load of the basis,
+    // then the pivots it managed before the clock ran out.
+    result.message =
+        load_seconds > 0.0
+            ? fmt::format("the exact repair ran past its {} s budget (option exact_seconds): the "
+                          "exact load of the basis took {:.1f} s, then {} dual and {} primal "
+                          "pivot(s) and {} bound flip(s) in {:.1f} s",
+                          seconds, load_seconds, result.dual_pivots, result.primal_pivots,
+                          result.bound_flips, clock.elapsed_seconds() - load_seconds)
+            : fmt::format("the exact repair ran past its {} s budget (option exact_seconds) "
+                          "inside the exact load of the basis (its rational LU), before any "
+                          "pivot",
+                          seconds);
   } catch (const RationalOverflow&) {
     result.verdict = ExactVerdict::kDeclined;
     result.message = "no exact rational result: a non-finite value in the data";

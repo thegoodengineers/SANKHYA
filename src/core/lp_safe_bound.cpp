@@ -61,6 +61,8 @@
 
 #include "core/lp_safe_bound.hpp"
 
+#include "sankhya/timer.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -271,8 +273,15 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
       !options.get_bool("certified_gap")) {
     return;
   }
+  // Every note carries the clock since the stage before it (#1082): the stage table.
+  const Timer stage_clock;
+  double last_note_seconds = 0.0;
   const auto note = [&](const std::string& line) {
-    if (logger != nullptr) logger->info("Safe bound: {}", line);
+    const double now = stage_clock.elapsed_seconds();
+    if (logger != nullptr) {
+      logger->info("Safe bound: {} [{:.1f} s]", line, now - last_note_seconds);
+    }
+    last_note_seconds = now;
   };
   const bool maximize = model.sense == ObjSense::kMaximize;
   const double sense = model.sense_multiplier();
@@ -372,15 +381,46 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
 
   // 4. The exact duals of a basis, over the box stage 2 left: the reported one here, and in
   // stage 5 the re-solve's, for the costs it was optimal for.
+  // THE SAME BASIS IS NOT SOLVED EXACTLY TWICE (#1082). The dual phase below can return the
+  // basis it was given (0 iterations), and on pilot87 that re-derived the same exact duals a
+  // third time, 26 s of a 120 s budget. The exact duals depend on the costs and the basic
+  // set alone, so a repeat of both returns the bound already in hand.
+  std::vector<double> last_exact_cost;
+  std::vector<BasisStatus> last_exact_cols;
+  std::vector<BasisStatus> last_exact_rows;
+  std::optional<ExactDualBound> last_exact;
+  const auto basic_set_equal = [](const std::vector<BasisStatus>& a,
+                                  const std::vector<BasisStatus>& b) {
+    if (a.size() != b.size()) return false;
+    for (Sz k = 0; k < a.size(); ++k) {
+      if ((a[k] == BasisStatus::kBasic) != (b[k] == BasisStatus::kBasic)) return false;
+    }
+    return true;
+  };
   const auto try_exact = [&](std::span<const double> dual_cost, const Solution& source,
                              const std::string& what, double seconds) {
     if (exact_timed_out) return ExactDualBound{};
+    if (last_exact && std::equal(dual_cost.begin(), dual_cost.end(), last_exact_cost.begin(),
+                                 last_exact_cost.end()) &&
+        basic_set_equal(source.col_status, last_exact_cols) &&
+        basic_set_equal(source.row_status, last_exact_rows)) {
+      note(fmt::format("exact duals of {}: the same basis and costs as the last exact solve, "
+                       "not recomputed",
+                       what));
+      return *last_exact;
+    }
     ExactDualBound exact_bound =
         exact_dual_bound(model, dual_cost, cost, lower, upper, source, seconds);
     exact_timed_out = exact_bound.timed_out;
+    last_exact_cost.assign(dual_cost.begin(), dual_cost.end());
+    last_exact_cols = source.col_status;
+    last_exact_rows = source.row_status;
+    last_exact = exact_bound;
     if (exact_bound.proved) {
-      note(fmt::format("exact duals of {}: {:.17g} ({:.3e} relative)", what, exact_bound.value,
-                       relative_gap(exact_bound.value)));
+      note(fmt::format("exact duals of {}: {:.17g} ({:.3e} relative, {})", what,
+                       exact_bound.value, relative_gap(exact_bound.value),
+                       exact_bound.by_exact_lu ? "by the exact rational LU"
+                                               : "by the numeric-symbolic refinement"));
     } else {
       note(fmt::format("exact duals of {}: no bound, {}", what, exact_bound.message));
     }

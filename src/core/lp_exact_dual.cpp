@@ -434,6 +434,7 @@ ExactDualBound exact_dual_bound(const Model& model, std::span<const double> dual
       y = std::move(solved);
       out.message.clear();
       out.refined.clear();  // exact after all
+      out.by_exact_lu = true;
     }
 
     // ---- The bound, exactly, times q: sum_i p_i side_i + sum_j S_j bound_j, with
