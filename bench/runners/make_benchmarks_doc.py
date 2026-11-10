@@ -2910,8 +2910,9 @@ def main() -> int:
                          for suite in ("netlib", "kennington", "maros-meszaros")}
     # The refinery suite (#1004): the same naming rule as the head-to-head above.
     refinery_suite_csv = newest("head-to-head-refinery-*.csv", prefix="head-to-head-refinery")
-    refinery_qp_csv = newest("head-to-head-refinery-qp-*.csv",
-                             prefix="head-to-head-refinery-qp")
+    refinery_qp_csv = latest_result.latest("head-to-head-refinery-qp-*.csv",
+                                           prefix="head-to-head-refinery-qp",
+                                           allowed_options=("threads", "qp_algorithm"))
     robustness_csv = newest("robustness-*.csv")
     stress_csv = newest("stress-*.csv", prefix="stress")
     # The default run only; the per-engine runs carry `algorithm=` in solver_options, which

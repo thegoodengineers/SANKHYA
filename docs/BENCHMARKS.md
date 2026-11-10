@@ -4033,6 +4033,35 @@ Every run that did not count, by solver:
 
 - **SANKHYA**, 4: `lot_sizing_large` (feasible), `lot_sizing_medium` (feasible), `unit_modes_large` (feasible), `unloading_large` (feasible)
 
+
+## 4d. The refinery model with convex cost curves, at 13k, 110k and 1M columns, against HiGHS's QP solver
+
+A refinery's cost of buying and processing is rarely linear: a crude's premium rises with the
+volume bought and a unit's cost per barrel rises toward its limit. This is the planning model
+of section 3 with those curves, a separable convex QP at three sizes, solved by SANKHYA's
+default QP engine (the proximal interior point), by its first-order QP engine (Condat-Vu) and by
+HiGHS's QP solver, every answer checked against an optimum known exactly. Produced by
+`python bench/runners/compare.py --suite refinery-qp` (`bench/runners/compare_suite.py`,
+`bench/runners/refinery_qp_doc.py`).
+
+**The model.** `bench/runners/generate_refinery_lp.py`'s T-period refinery (#211) - crude purchases, CDU throughput, crude and product tanks, yields, unit capacities, quality budgets and delivery commitments - with convex cost curves: every purchase column `BUY[k,t]` and throughput column `RUN[k,t]` carries `q_j x_j^2 / 2`, `q_j` a hundredth in [0.01, 0.09], so the Hessian is diagonal, positive on those columns and zero elsewhere. The optimum is exact by construction: the LP generator's plan, tight set and multipliers are kept and the linear prices re-derived as `c = d + A'y - Q x*`, every KKT condition of the QP re-checked in rational arithmetic before the file is written (`bench/refinery/refinery_qp.py`). Generated where the comparison runs by `python bench/refinery/generate.py --qp` (seed 1) and not committed - the largest file is about 120 MB - so the generator and its seed are the record and the CSV carries the sha256 of every file each solver read. Graded as section 4a: `matched` within 1e-6 relative of the constructed optimum at the solver's own point, `verified` by `tools/verify_solution.py`; 600 s, one thread, each solver a separate process.
+
+Source CSV: `bench/results/head-to-head-refinery-qp-d6cecac.csv`  
+Commit `d6cecac` · machine `github-actions ubuntu-24.04; AMD EPYC 9V74 80-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`  
+time limit 600 s · 1 thread per solver
+
+| instance | rows | columns | sha256 | optimum | SANKHYA, interior point (default) | SANKHYA, Condat-Vu (first-order) | HiGHS QP |
+|---|---:|---:|---|---:|---|---|---|
+| `refinery_qp_13k` | 8,455 | 13,110 | `9c192adaf4e5` | -517917.97688 | optimal, 9.12 s, gap 1.7e-12, verified | optimal, 69.24 s, gap 2.1e-13, verified | **time_limit**, 600.01 s |
+| `refinery_qp_110k` | 71,200 | 110,400 | `c432e4bff11a` | -4109020.40198 | optimal, 89.46 s, gap 8.7e-13, verified | **time_limit**, 599.94 s | **not set**, 227.48 s |
+| `refinery_qp_1m` | 649,700 | 1,007,400 | `ad2ea54ef80a` | -38014387.6501 | **time_limit**, 599.40 s | **time_limit**, 599.40 s | **time_limit**, 600.45 s |
+
+**Read per instance**, from the cells above:
+
+- `refinery_qp_13k`: SANKHYA optimal, matched and verified in 9.12 s; HiGHS's QP solver time_limit after 600 s, so no ratio is stated.
+- `refinery_qp_110k`: SANKHYA optimal, matched and verified in 89.46 s; HiGHS's QP solver not set after 227 s, so no ratio is stated.
+- `refinery_qp_1m`: neither SANKHYA's default engine nor HiGHS's QP solver produced a matched, verified answer within the limit.
+
 ---
 
 ## 4b. Agreement against size-limited commercial editions (#533)

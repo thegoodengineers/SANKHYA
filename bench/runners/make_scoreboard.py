@@ -215,8 +215,11 @@ def refinery_qp_row() -> Row | None:
     """The refinery planning model with convex cost curves (bench/refinery/refinery_qp.py):
     SANKHYA's default QP engine against HiGHS's QP solver, matched within 1e-6 of the
     constructed optimum and verified, from one CSV."""
+    # allowed_options: the first run, at d6cecac, recorded threads=1 on SANKHYA's rows, the
+    # suite's stated one-thread configuration, before compare_suite.py stopped writing it.
     path = latest_result.latest("head-to-head-refinery-qp-*.csv",
-                                prefix="head-to-head-refinery-qp")
+                                prefix="head-to-head-refinery-qp",
+                                allowed_options=("threads", "qp_algorithm"))
     if path is None:
         return None
     rows = read_csv(path)
