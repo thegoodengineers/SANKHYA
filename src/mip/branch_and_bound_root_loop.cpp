@@ -93,6 +93,16 @@ bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
             "(root_cut_loop_when=switched-flows)");
       }
     }
+    // The pool follows the gate (#1193's tier-1 gate): when root_cut_loop is on but its gate
+    // keeps the loop out, the search runs as it would without the loop, pool included. On ej
+    // and enlight8 the pool's row removal was the only difference the recipe made (same cuts,
+    // loop not entered), and it cost ej its optimum and enlight8 its proof. Decided in round
+    // 1, before any row has aged, so no row has been removed yet.
+    if (!wanted && options_.get_bool("root_cut_loop") && cut_pooling_) {
+      cut_pooling_ = false;
+      cut_removal_ = false;
+      logger_.info("Cut pool: off with the root cut loop (mip_cut_pooling follows its gate)");
+    }
     root_loop_wanted_ = wanted ? 1 : 0;
   }
   return root_loop_wanted_ == 1;

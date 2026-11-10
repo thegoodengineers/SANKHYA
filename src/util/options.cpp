@@ -532,7 +532,11 @@ const std::vector<OptionSpec>& Options::registry() {
                  "are not removed: an aged row is freed in place and its right-hand side "
                  "restored when violated, because the certificate states every node's "
                  "duals over one fixed list of cut rows. Only read when enable_root_cuts is "
-                 "set. ON by default since the MIPLIB 3 A/B at the #1187 fix (bench/results/option-ab-miplib3-covers-gated-recipe-fix-2c71558.csv, #1158: 65 x 3 seeds, 60 s, one thread, the four together against the old defaults: proved 34/34/34 -> 37/38/41 per seed, 189 verified against 188, nothing lost but two gap-target stops).",
+                 "set. With root_cut_loop on, the pool follows the loop's gate "
+                 "(root_cut_loop_when): a model the gate keeps out of the loop runs without "
+                 "the pool, as on ej and enlight8 in MIPLIB tier 1 the pool's row removal was "
+                 "the recipe's only effect and cost one optimum and one proof (#1193). ON by "
+                 "default since the MIPLIB 3 A/B at the #1187 fix (bench/results/option-ab-miplib3-covers-gated-recipe-fix-2c71558.csv, #1158: 65 x 3 seeds, 60 s, one thread, the four together against the old defaults: proved 34/34/34 -> 37/38/41 per seed, 189 verified against 188, nothing lost but two gap-target stops).",
                  0.0,
                  0.0,
                  {}});
