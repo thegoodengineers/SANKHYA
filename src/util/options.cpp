@@ -523,7 +523,7 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"mip_cut_pooling",
                  OptionType::Bool,
-                 false,
+                 true,
                  "The cut pool (#497; Achterberg 2007, ch. 8): a cut row slack for "
                  "mip_cut_age_limit node solves is deleted from the node LP and kept in a "
                  "pool, and appended again (its logical basic, the node LP re-solved) when a "
@@ -532,7 +532,7 @@ const std::vector<OptionSpec>& Options::registry() {
                  "are not removed: an aged row is freed in place and its right-hand side "
                  "restored when violated, because the certificate states every node's "
                  "duals over one fixed list of cut rows. Only read when enable_root_cuts is "
-                 "set. OFF until the MIPLIB A/B on main says what it changes.",
+                 "set. ON by default since the MIPLIB 3 A/B at the #1187 fix (bench/results/option-ab-miplib3-covers-gated-recipe-fix-2c71558.csv, #1158: 65 x 3 seeds, 60 s, one thread, the four together against the old defaults: proved 34/34/34 -> 37/38/41 per seed, 189 verified against 188, nothing lost but two gap-target stops).",
                  0.0,
                  0.0,
                  {}});
@@ -612,23 +612,22 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"root_cut_loop",
                  OptionType::Bool,
-                 false,
+                 true,
                  "Root cuts (#495): after the first round, separate again at the new LP "
                  "point, add, re-solve warm, and repeat until a round gains at most a tenth "
                  "of round 1's gain (tailing off), the bound stalls (3 rounds "
                  "moving it by at most 1e-3 of the gap, or of max(1, |bound|) with no "
                  "incumbent), 20 rounds, 5 percent of time_limit, a round that takes "
                  "nothing, or max(100, m) cut rows added in all, m the rows before the first "
-                 "cut. Logs one line per round. Only read when enable_root_cuts is set. Off by "
-                 "default again after the 60 s A/B on main f7cfd57 (MIPLIB tier 1, 3 seeds: "
-                 "off 50 of 90 matched and 31 proved, on 42 and 32; "
-                 "bench/results/rootloop-ab-miplib-seeds3-*-f7cfd57.csv, #956).",
+                 "cut. Logs one line per round. Only read when enable_root_cuts is set. Off "
+                 "by default after the tier-1 A/B on f7cfd57 (#956); with root_cut_loop_when="
+                 "flow-covers, the cut pool and the flow covers, ON by default since the MIPLIB 3 A/B at the #1187 fix (bench/results/option-ab-miplib3-covers-gated-recipe-fix-2c71558.csv, #1158: 65 x 3 seeds, 60 s, one thread, the four together against the old defaults: proved 34/34/34 -> 37/38/41 per seed, 189 verified against 188, nothing lost but two gap-target stops).",
                  0.0,
                  0.0,
                  {}});
     s.push_back({"root_cut_loop_when",
                  OptionType::String,
-                 std::string("always"),
+                 std::string("flow-covers"),
                  "When root_cut_loop runs its rounds (#1158). always: on every model. "
                  "switched-flows: only on a model with a variable upper bound x <= u y (a "
                  "two-nonzero row pairing a continuous column with an integer one), the "
@@ -640,7 +639,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  "misc06). flow-covers: only when round 1 took at least one flow cover "
                  "(enable_flow_cover_cuts on): the rows existing let bell5 in and cost two "
                  "proofs in A/B (c); a cover being found did not, in (b). "
-                 "Solution::root_cut_rounds says whether the loop was entered.",
+                 "Solution::root_cut_rounds says whether the loop was entered. flow-covers "
+                 "is the default with root_cut_loop on: ON by default since the MIPLIB 3 A/B at the #1187 fix (bench/results/option-ab-miplib3-covers-gated-recipe-fix-2c71558.csv, #1158: 65 x 3 seeds, 60 s, one thread, the four together against the old defaults: proved 34/34/34 -> 37/38/41 per seed, 189 verified against 188, nothing lost but two gap-target stops).",
                  0.0,
                  0.0,
                  {"always", "switched-flows", "flow-covers"}});
@@ -1319,14 +1319,14 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"enable_flow_cover_cuts",
                  OptionType::Bool,
-                 false,
+                 true,
                  "Include flow cover cuts in the cut rounds (#419; Padberg, Van Roy and "
                  "Wolsey 1985): on a row whose inflows are switched by binaries through "
                  "variable-upper-bound rows x <= u y, the cover of switched arcs whose "
                  "capacity exceeds what the row takes gives sum x_j + (u_j - lambda)^+ "
                  "(1 - y_j) <= b plus the outflows, the family built for the fixed-charge "
-                 "models MIR is weak on. Unlifted. Only read when enable_root_cuts is set; "
-                 "OFF until the MIPLIB A/B on main says what it buys.",
+                 "models MIR is weak on. Lifted (flow_cover_lifting) and on aggregated rows "
+                 "since #1131 and #1183. Only read when enable_root_cuts is set; ON by default since the MIPLIB 3 A/B at the #1187 fix (bench/results/option-ab-miplib3-covers-gated-recipe-fix-2c71558.csv, #1158: 65 x 3 seeds, 60 s, one thread, the four together against the old defaults: proved 34/34/34 -> 37/38/41 per seed, 189 verified against 188, nothing lost but two gap-target stops).",
                  0.0,
                  0.0,
                  {}});
