@@ -44,6 +44,9 @@ MANIFESTS = {
     "miplib.py": "data/miplib/reference.json",
     "pooling.py": "data/pooling/reference.json",
     "refinery_lp.py": "data/refinery/manifest.json",
+    # Mittelmann's LPfeas-14 (#759, #1177); --runner-arg=--engine --runner-arg=cpu
+    # --runner-arg=--skip-cuopt runs our CPU PDHG alone.
+    "mittelmann_cuopt.py": "bench/runners/lpfeas14.json",
 }
 
 
@@ -77,6 +80,9 @@ def main() -> int:
     parser.add_argument("--set", dest="set_name", choices=("miplib2017", "miplib3"),
                         default=None, help="miplib.py only: its --set (#1158)")
     parser.add_argument("--machine", required=True)
+    parser.add_argument("--runner-arg", action="append", default=[], metavar="ARG",
+                        help="passed to the runner as given, for both arms; write "
+                             "--runner-arg=--flag for a value that starts with a dash")
     parser.add_argument("--out-prefix", required=True)
     args = parser.parse_args()
     if not args.option and args.base_binary is None:
@@ -106,6 +112,7 @@ def main() -> int:
                     cmd += ["--set", args.set_name]
                 for option in arms[arm]:
                     cmd += ["--solver-option", option]
+                cmd += args.runner_arg
                 print(f"== r{repeat} {name} {arm}", flush=True)
                 subprocess.run(cmd, cwd=REPO_ROOT, check=False)
                 if not out.exists():

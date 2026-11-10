@@ -117,8 +117,8 @@
       "columns": 17680,
       "nonzeros": 1179680,
       "mps_sha256": "b04a127c9c4513876f16048dff24fac5bd2b359dae593e35885fd39fcc0a22d5",
-      "reference_objective": null,
-      "reference_source": null
+      "reference_objective": 100.00000000000013,
+      "reference_source": "highs, optimal at 300 s on the A100 host (bench/results/lpfeas14-cuopt-a100-a5e418d.csv)"
     },
     "s250r10": {
       "name": "s250r10",
@@ -131,8 +131,8 @@
       "columns": 273142,
       "nonzeros": 1572104,
       "mps_sha256": "a78c8b66c69469c924acffca14be460fa9e74b4da82a7a61057c88a494be5e41",
-      "reference_objective": null,
-      "reference_source": null
+      "reference_objective": -0.17267704190548075,
+      "reference_source": "highs, optimal at 300 s on the A100 host (bench/results/lpfeas14-cuopt-a100-a5e418d.csv)"
     },
     "datt256_lp": {
       "name": "datt256_lp",

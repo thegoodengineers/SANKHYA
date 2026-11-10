@@ -88,6 +88,37 @@ def test_status_map_and_rows() -> None:
     check(m is not None and m.group(2) == "16", "restarts parsed from the message")
 
 
+def test_cpu_engine_trace_and_classes() -> None:
+    m = mittelmann_cuopt
+    check(m.our_options("cpu", 1e-4, 4, []) == [
+        "algorithm=pdhg", "pdhg_polish=false", "pdhg_stop_at_request=true",
+        "pdhg_tolerance=0.0001", "threads=4", "pdhg_parallel_spmv=true"],
+          "the CPU engine on four threads turns the parallel A x on, and no gpu=true")
+    check(m.our_options("gpu", 1e-8, 4, ["pdhg_restart_necessary=true"])[-2:] == [
+        "gpu=true", "pdhg_restart_necessary=true"], "an A/B arm's option comes last")
+    log = ("restart 1 at iteration 80 (sufficient): KKT 2.5e-01 (primal 1e-1, dual 1e-2, gap "
+           "2e-1; from the average), primal weight 4.300e-01, step 1.0e-01\n"
+           "restart 16 at iteration 99000 (artificial): KKT 9.9e-01 (primal 5e-2, dual 3e-6, "
+           "gap 9.9e-01; from the current iterate), primal weight 9.500e-05, step 1.0e-01\n")
+    trace = m.trace_of(log)
+    check(trace == {"restarts": 16, "primal_weight_first": "4.300e-01",
+                    "primal_weight_last": "9.500e-05"}, "the restart trace", str(trace))
+    check(m.trace_of("no restarts here")["restarts"] == 0, "no restart line, zero restarts")
+    check(m.classify({"verified": 1, "status": "feasible"}) == "", "a verified answer")
+    check(m.classify({"status": "iteration_limit", "kkt_1e4_iterations": 1407}) == "stop-rule",
+          "met the request, nothing verified: the stopping test")
+    check(m.classify({"status": "iteration_limit", "kkt_1e4_iterations": -1, **trace})
+          == "pw-collapse", "Linf_520c's 0.43 to 9.5e-5")
+    check(m.classify({"status": "time_limit", "kkt_1e4_iterations": -1,
+                      "primal_weight_first": "0.5", "primal_weight_last": "0.02"}) == "slow",
+          "1.4 decades is not a collapse")
+    check(m.classify({"status": "no_output"}) == "no-answer", "no answer at all")
+    final = m.FINAL_RESIDUALS.search("stopped at relative primal 3.820e-02, dual 3.070e-07, "
+                                     "gap 9.980e-01 after 100000 iterations and 16 restarts")
+    check(final is not None and final.groups() == ("3.820e-02", "3.070e-07", "9.980e-01"),
+          "the final relative residuals from the stop message")
+
+
 def test_cuopt_sol_conversion_verifies() -> None:
     """A cuOpt-shaped answer (names, values, reduced costs, duals, placeholder activities)
     on Netlib afiro, written as rivals.write_sol does in the worker, activities filled, and
@@ -126,7 +157,8 @@ def test_cuopt_sol_conversion_verifies() -> None:
 
 
 def main() -> int:
-    for test in (test_manifest, test_status_map_and_rows, test_cuopt_sol_conversion_verifies):
+    for test in (test_manifest, test_status_map_and_rows, test_cpu_engine_trace_and_classes,
+                 test_cuopt_sol_conversion_verifies):
         print(test.__name__)
         test()
     print(f"\n{'OK' if FAILURES == 0 else f'{FAILURES} FAILED'}")

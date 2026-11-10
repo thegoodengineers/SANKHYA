@@ -44,8 +44,10 @@ import bz2
 import csv
 import datetime
 import json
+import math
 import os
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -72,7 +74,57 @@ CSV_COLUMNS = [
     "rel_gap", "independently_verified", "verified_at_tolerance", "verifier_message",
     "iterations", "seconds", "wall_seconds", "git_commit", "machine", "gpu", "driver_version",
     "cuda_runtime", "cuopt_version", "timestamp_utc",
+    # Our engine's own trace (blank on a cuOpt row): what the classification below reads.
+    "engine", "solver_options", "kkt_1e4_iterations", "kkt_1e4_seconds", "restarts",
+    "primal_weight_first", "primal_weight_last", "final_rel_primal", "final_rel_dual",
+    "final_rel_gap", "failure_class",
 ]
+
+RESTART_LINE = re.compile(r"restart (\d+) at iteration (\d+).*?primal weight ([-+0-9.eE]+)")
+FINAL_RESIDUALS = re.compile(
+    r"stopped at relative primal ([-+0-9.eE]+), dual ([-+0-9.eE]+), gap ([-+0-9.eE]+)")
+# The primal weight moving this many decades from its first restart to its last is the
+# collapse #1174 measured on Linf_520c (0.43 to 9.5e-5, the gap pinned at 0.998).
+COLLAPSE_DECADES = 2.0
+
+
+def classify(result: dict) -> str:
+    """Why one of our solves did not end with a verified answer, in one word, from what the
+    solve itself recorded. Pure, so the test pins it.
+
+    stop-rule    the relative KKT request was met (the #486 crossing) and yet no verified
+                 point came back: the stopping test ended the run, not a lack of convergence
+    pw-collapse  never met the request, and the primal weight moved COLLAPSE_DECADES or more
+                 decades between the first restart and the last
+    slow         never met the request, the weight stayed in range: slow convergence
+    """
+    if result.get("verified") == 1:
+        return ""
+    if result.get("status") in ("no_output", "crashed", "hung"):
+        return "no-answer"
+    crossing = result.get("kkt_1e4_iterations")
+    try:
+        if crossing not in ("", None) and int(crossing) >= 0:
+            return "stop-rule"
+    except (TypeError, ValueError):
+        pass
+    first, last = result.get("primal_weight_first"), result.get("primal_weight_last")
+    try:
+        if first and last and abs(math.log10(float(last) / float(first))) >= COLLAPSE_DECADES:
+            return "pw-collapse"
+    except (TypeError, ValueError, ZeroDivisionError):
+        pass
+    return "slow"
+
+
+def trace_of(log_text: str) -> dict:
+    """Restart count and the primal weight at the first and last restart, from a verbose
+    log (pdhg.cpp's `restart N at iteration K (...): ... primal weight W` line)."""
+    restarts = RESTART_LINE.findall(log_text)
+    if not restarts:
+        return {"restarts": 0, "primal_weight_first": "", "primal_weight_last": ""}
+    return {"restarts": int(restarts[-1][0]), "primal_weight_first": restarts[0][2],
+            "primal_weight_last": restarts[-1][2]}
 
 # cuOpt's Status names (its Python API's `Problem.Status.name`), lowercased, to ours.
 CUOPT_STATUS = {
@@ -231,29 +283,63 @@ def run_cuopt(mps: Path, tolerance: float, time_limit: float, method: str, sol: 
     return out
 
 
-def run_ours(binary: Path, mps: Path, tolerance: float, time_limit: float, sol: Path) -> dict:
-    """One GPU PDHG solve, the same options as gpu_real_instances.run_solve (#488), with
-    the .sol kept for the two verifications."""
+def our_options(engine: str, tolerance: float, threads: int, extra: list[str]) -> list[str]:
+    """The options of one of our solves: PDHG alone (no interior-point polish: the
+    first-order engine is what is compared), stopping on the request, on the card or on the
+    CPU; `extra` last, so an A/B arm can override any of them."""
+    options = ["algorithm=pdhg", "pdhg_polish=false", "pdhg_stop_at_request=true",
+               f"pdhg_tolerance={tolerance:g}"]
+    if engine == "gpu":
+        options.append("gpu=true")
+    elif threads > 1:
+        options += [f"threads={threads}", "pdhg_parallel_spmv=true"]
+    else:
+        options.append("threads=1")
+    return options + list(extra)
+
+
+def run_ours(binary: Path, mps: Path, tolerance: float, time_limit: float, sol: Path,
+             engine: str = "gpu", threads: int = 1, extra: list[str] | None = None,
+             log_path: Path | None = None) -> dict:
+    """One PDHG solve with the .sol kept for the two verifications. With `log_path` the
+    solve logs verbose to that file, and the restart trace (count, primal weight at the
+    first and the last restart) is read back from it."""
+    options = our_options(engine, tolerance, threads, extra or [])
     with tempfile.TemporaryDirectory() as tmp:
         stats = Path(tmp) / "stats.json"
         command = [str(binary), "solve", str(mps), "--stats", str(stats), "--write-sol",
                    str(sol), "--time-limit", str(time_limit)]
-        for option in ("log_to_console=false", "algorithm=pdhg", "pdhg_polish=false",
-                       "pdhg_stop_at_request=true", f"pdhg_tolerance={tolerance:g}", "gpu=true"):
+        logging = (["log_to_console=true", "log_level=verbose"] if log_path is not None
+                   else ["log_to_console=false"])
+        for option in logging + options:
             command += ["--option", option]
         started = time.perf_counter()
         done = subprocess.run(command, capture_output=True, text=True, check=False)
         wall = time.perf_counter() - started
+        trace = {}
+        if log_path is not None:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(done.stdout + done.stderr, encoding="utf-8")
+            trace = trace_of(done.stdout + done.stderr)
+        base = {"engine": engine, "solver_options": " ".join(options), **trace}
         if not stats.exists():
-            return {"status": "no_output", "objective": None, "iterations": "", "seconds": wall,
-                    "wall": wall, "message": done.stderr.strip()[-300:]}
+            return {**base, "status": "no_output", "objective": None, "iterations": "",
+                    "seconds": wall, "wall": wall, "message": done.stderr.strip()[-300:]}
         blob = json.loads(stats.read_text())
         effort, result = blob.get("effort", {}), blob.get("result", {})
         seconds = effort.get("solve_seconds")
-        return {"status": result.get("status", "unknown"), "objective": result.get("objective"),
+        message = result.get("message", "")
+        final = FINAL_RESIDUALS.search(message)
+        return {**base, "status": result.get("status", "unknown"),
+                "objective": result.get("objective"),
                 "iterations": effort.get("iterations", ""),
+                "kkt_1e4_iterations": effort.get("kkt_1e4_iterations", ""),
+                "kkt_1e4_seconds": effort.get("kkt_1e4_seconds", ""),
+                "final_rel_primal": final.group(1) if final else "",
+                "final_rel_dual": final.group(2) if final else "",
+                "final_rel_gap": final.group(3) if final else "",
                 "seconds": wall if seconds is None else float(seconds), "wall": wall,
-                "message": result.get("message", "")}
+                "message": message}
 
 
 def verify(mps: Path, sol: Path, tolerance: float | None) -> tuple[int, str]:
@@ -299,6 +385,12 @@ def build_row(name: str, entry: dict, digest: str, solver: str, method: str, tol
         "seconds": round(float(result.get("seconds", 0.0)), 6),
         "wall_seconds": round(float(result.get("wall", result.get("seconds", 0.0))), 6),
         **stamp_fields,
+        **{key: result.get(key, "") for key in (
+            "engine", "solver_options", "kkt_1e4_iterations", "kkt_1e4_seconds", "restarts",
+            "primal_weight_first", "primal_weight_last", "final_rel_primal",
+            "final_rel_dual", "final_rel_gap")},
+        "failure_class": (classify({**result, "verified": verified[0]})
+                          if solver.startswith("sankhya") else ""),
     }
 
 
@@ -320,6 +412,17 @@ def main() -> int:
     parser.add_argument("--instances", nargs="*", help="a subset of the manifest's names")
     parser.add_argument("--skip-ours", action="store_true", help="cuOpt only")
     parser.add_argument("--skip-cuopt", action="store_true", help="our GPU PDHG only")
+    parser.add_argument("--engine", choices=("gpu", "cpu"), default="gpu",
+                        help="our side on the card (default) or on the CPU PDHG engine")
+    parser.add_argument("--threads", type=int, default=1,
+                        help="--engine cpu: threads, with pdhg_parallel_spmv above one")
+    parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE",
+                        help="added to every one of our solves, last (an A/B arm's option)")
+    parser.add_argument("--machine", default="",
+                        help="the machine column (default: OS-architecture)")
+    parser.add_argument("--log-dir", type=Path, default=None,
+                        help="keep each of our solves' verbose log here; the restart trace "
+                             "columns and the failure class read it")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
 
@@ -341,9 +444,10 @@ def main() -> int:
     if unknown:
         parser.error(f"not in {MANIFEST.name}: {', '.join(unknown)}")
     commit = stamp.stamp(args.binary) if args.binary else stamp.stamp()
-    gpu = gpu_description(args.binary) if args.binary else ""
+    gpu = gpu_description(args.binary) if args.binary and args.engine == "gpu" else ""
     stamp_fields = {"git_commit": commit,
-                    "machine": f"{platform.system()}-{platform.machine()}", "gpu": gpu,
+                    "machine": args.machine or f"{platform.system()}-{platform.machine()}",
+                    "gpu": gpu if args.engine == "gpu" else "",
                     **gpu_arms.platform_cells(gpu),
                     "cuopt_version": "" if args.skip_cuopt else cuopt_version(),
                     "timestamp_utc": datetime.datetime.now(datetime.timezone.utc)
@@ -353,7 +457,9 @@ def main() -> int:
     print(f"{'instance':>20} {'solver':>8} {'tol':>6} {'status':>15} {'seconds':>9} "
           f"{'rel gap':>10} {'verified':>8} {'at tol':>6}")
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = args.out or RESULTS_DIR / f"lpfeas14-cuopt-{args.card or 'unknown'}-{commit}.csv"
+    ours = "sankhya-gpu" if args.engine == "gpu" else "sankhya-cpu"
+    stem = f"lpfeas14-{ours}" if args.skip_cuopt else "lpfeas14-cuopt"
+    out = args.out or RESULTS_DIR / f"{stem}-{args.card or 'unknown'}-{commit}.csv"
     # RESUMABLE: every row is appended and flushed as it is produced, and a (instance,
     # solver, tolerance) already in the file is not run again, so a dropped connection or
     # a killed run loses nothing but the solve in flight.
@@ -387,7 +493,7 @@ def main() -> int:
         for tolerance in args.tolerances:
             legs = []
             if not args.skip_ours:
-                legs.append(("sankhya-gpu", "pdhg-cuda"))
+                legs.append((ours, "pdhg-cuda" if args.engine == "gpu" else "pdhg-cpu"))
             if not args.skip_cuopt:
                 legs.append(("cuopt", args.cuopt_method or "default"))
             for solver, method in legs:
@@ -395,8 +501,11 @@ def main() -> int:
                     continue
                 with tempfile.TemporaryDirectory() as tmp:
                     sol = Path(tmp) / "solution.sol"
-                    if solver == "sankhya-gpu":
-                        result = run_ours(args.binary, mps, tolerance, args.time_limit, sol)
+                    if solver == ours:
+                        log = (args.log_dir / f"{name}-{tolerance:.0e}.log"
+                               if args.log_dir is not None else None)
+                        result = run_ours(args.binary, mps, tolerance, args.time_limit, sol,
+                                          args.engine, args.threads, args.solver_option, log)
                         verified, at_tolerance = ("", ""), ("", "")
                         if sol.exists() and result["status"] in ("optimal", "feasible"):
                             verified = verify(mps, sol, None)
@@ -418,16 +527,14 @@ def main() -> int:
                       f"{row['seconds']:>9.3f} {row['rel_gap'] or '-':>10} "
                       f"{str(row['independently_verified']):>8} "
                       f"{str(row['verified_at_tolerance']):>6}")
-    if not rows:
+    handle.close()
+    # The file IS the appended rows. It used to be rewritten here with this run's rows alone,
+    # which dropped every row a resumed run had skipped: qap15 and irish-electricity on the
+    # A100 (#1177).
+    if not rows and not done_keys:
         print("no results")
         return 1
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = args.out or RESULTS_DIR / f"lpfeas14-cuopt-{args.card or 'unknown'}-{commit}.csv"
-    with out.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
-        writer.writeheader()
-        writer.writerows(rows)
-    print(f"\nwrote {out}")
+    print(f"\nwrote {out} ({len(rows)} new rows, {len(done_keys)} kept)")
     return 0
 
 
