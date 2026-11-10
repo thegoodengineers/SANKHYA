@@ -45,6 +45,7 @@ on:
           - miplib-tier1
           - miplib3
           - refinery
+          - head-to-head-refinery-qp
           - ab-netlib
           - ab-supernodal
           - mittelmann
@@ -128,7 +129,7 @@ jobs:
       # HiGHS and SCIP are rivals in the refinery head-to-head, run as separate processes
       # (bench/runners/rivals.py); nothing here is linked into SANKHYA.
       - name: Install the refinery rivals
-        if: inputs.suite == 'refinery'
+        if: inputs.suite == 'refinery' || inputs.suite == 'head-to-head-refinery-qp'
         run: pip install numpy highspy pyscipopt
 
       # #1158: HiGHS beside SANKHYA on the same 65 MIPLIB 3 models, same job, same machine.
@@ -195,6 +196,11 @@ jobs:
             kennington) python3 bench/runners/fetch_kennington.py ;;
             miplib-tier1|fj-share-miplib) python3 bench/runners/fetch_miplib.py ;;
             # #1158: the fetch rewrites the tracked manifest; the committed one is put back.
+            # The convex-cost refinery QPs: generated here, not committed (the largest is
+            # about 120 MB); the generator and its seed are the record and the CSV carries
+            # every file's sha256. Untracked, so the -dirty check below is not affected.
+            head-to-head-refinery-qp)
+              python3 bench/refinery/generate.py --qp ;;
             miplib3)
               python3 bench/runners/fetch_miplib3.py
               git checkout -- data/miplib3/manifest.json ;;
@@ -264,6 +270,9 @@ jobs:
                 python3 bench/runners/pooling.py --binary build/sankhya --certificate                   ${limit[@]+"${limit[@]}"} "$@" ;;
               refinery)
                 python3 bench/runners/compare.py --suite refinery --sankhya-binary build/sankhya \
+                  --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} "$@" ;;
+              head-to-head-refinery-qp)
+                python3 bench/runners/compare.py --suite refinery-qp --sankhya-binary build/sankhya \
                   --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} "$@" ;;
               # #913: options="--algorithm pdhg" for the PDHG warm start. Runs through the
               # Python bindings, which load build/libsankhya; it takes no time limit.

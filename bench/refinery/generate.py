@@ -7,6 +7,9 @@
                                                       # file or exact optimum that differs
     python bench/refinery/generate.py --cross-check   # fill the references of the two
                                                       # scheduling MILPs from HiGHS and SCIP
+    python bench/refinery/generate.py --qp 13k 110k 1m # the convex-cost refinery QPs
+                                                      # (refinery_qp.py) into data/refinery-qp/,
+                                                      # not committed: generated where run
 
 Every generator is deterministic in (size, seed), so `--check` is what CI runs: a committed
 file is the file the generator writes today, byte for byte, and the manifest's exact optimum
@@ -41,11 +44,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import blending  # noqa: E402
 import planning  # noqa: E402
 import pooling  # noqa: E402
+import refinery_qp  # noqa: E402
 import scheduling  # noqa: E402
 from kit import sha256_file  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data" / "refinery"
+QP_DIR = REPO_ROOT / "data" / "refinery-qp"
 MANIFEST = DATA_DIR / "manifest.json"
 SEED = 1
 SIZES = ("small", "medium", "large")
@@ -125,6 +130,38 @@ def cross_check(path: Path) -> dict:
     return out
 
 
+def generate_qp(labels: list[str], out_dir: Path) -> int:
+    """The convex-cost refinery QPs (refinery_qp.py) and their manifest, in the shape
+    bench/runners/compare_suite.py's `refinery-qp` suite reads. The files are generated where
+    the comparison runs, not committed (the largest is about 120 MB); the generator, its seed
+    and the sha256 of every file it writes are the record, and the run's CSV carries the
+    sha256 of the file each solver read."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    instances = {}
+    for label in labels:
+        periods = refinery_qp.QP_SIZES[label]
+        inst, q = refinery_qp.build(periods, refinery_qp.QP_SEED)
+        refinery_qp.verify_qp(inst, q)
+        path = out_dir / f"refinery_qp_{label}.qps"
+        value = refinery_qp.write_qps(inst, q, path, label, periods, refinery_qp.QP_SEED)
+        instances[path.stem] = {
+            "kind": "qp", "periods": periods, "rows": len(inst.rows),
+            "columns": len(inst.cols), "quadratic_columns": sum(1 for v in q if v),
+            "nonzeros": sum(len(e) for e in inst.row_entries), "sha256": sha256_file(path),
+            "reference_exact": str(value), "reference_objective": float(value),
+            "reference_source": "kkt-construction"}
+        print(f"{path.stem:<22} qp {len(inst.rows):>7} x {len(inst.cols):<8} "
+              f"reference {float(value)!r}")
+    (out_dir / "manifest.json").write_text(json.dumps({
+        "generator": "bench/refinery/generate.py --qp (bench/refinery/refinery_qp.py)",
+        "seed": refinery_qp.QP_SEED,
+        "reference_kinds": {"kkt-construction": "chosen plan, derived linear prices "
+                            "c = d + A'y - Qx, every KKT condition of the QP re-checked "
+                            "exactly (refinery_qp.verify_qp)"},
+        "instances": instances}, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -132,7 +169,12 @@ def main() -> int:
     parser.add_argument("--cross-check", action="store_true")
     parser.add_argument("--models", nargs="*", default=list(MODELS))
     parser.add_argument("--sizes", nargs="*", default=list(SIZES))
+    parser.add_argument("--qp", nargs="*", choices=list(refinery_qp.QP_SIZES), default=None,
+                        help="write the convex-cost refinery QPs instead (13k, 110k, 1m)")
+    parser.add_argument("--qp-dir", type=Path, default=QP_DIR)
     args = parser.parse_args()
+    if args.qp is not None:
+        return generate_qp(args.qp or list(refinery_qp.QP_SIZES), args.qp_dir)
     old = (json.loads(MANIFEST.read_text(encoding="utf-8"))["instances"]
            if MANIFEST.exists() else {})
     if args.check:
