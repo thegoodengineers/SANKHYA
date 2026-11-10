@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 
 SOLVERS = ("highs", "scip", "cbc-clp", "glpk", "osqp", "clarabel", "piqp", "scs")
-LABELS = {"sankhya": "SANKHYA", "highs": "HiGHS", "scip": "SCIP", "cbc-clp": "CBC/Clp",
+LABELS = {"sankhya": "SANKHYA", "sankhya-condat-vu": "SANKHYA CV", "highs": "HiGHS", "scip": "SCIP", "cbc-clp": "CBC/Clp",
           "glpk": "GLPK", "osqp": "OSQP", "clarabel": "Clarabel", "piqp": "PIQP",
           "scs": "SCS"}
 # osqp, clarabel, piqp and scs (#983) are the convex QP comparators Maros-Meszaros is

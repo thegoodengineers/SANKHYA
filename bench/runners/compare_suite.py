@@ -65,6 +65,9 @@ RESULTS_DIR = REPO_ROOT / "bench" / "results"
 VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
 MATCH_TOLERANCE = 1e-6  # netlib.PASS_RELATIVE_TOLERANCE and maros_meszaros.REFERENCE_TOLERANCE
 ALL_SOLVERS = ("sankhya",) + rivals.SOLVERS
+# SANKHYA run with an engine other than its default, each a solver column of its own: the
+# arm's name and the options it adds. Only a suite that lists one runs it.
+SANKHYA_ARMS = {"sankhya-condat-vu": ["qp_algorithm=condat-vu"]}
 
 SUITES = {
     "netlib": {"dir": "netlib", "suffix": ".mps", "kind": "lp", "reference": "published_optimal",
@@ -94,6 +97,16 @@ SUITES = {
                  "reference": "reference_objective", "with_constant": False,
                  "time_limit": 600.0, "manifest": "manifest.json",
                  "solvers": ("sankhya", "highs", "scip")},
+    # The refinery planning model with convex cost curves on purchase and processing
+    # (bench/refinery/refinery_qp.py): a separable positive definite QP at about 13k, 110k
+    # and 1M columns, generated where it runs by `bench/refinery/generate.py --qp` into
+    # data/refinery-qp/ (not committed; the CSV carries each file's sha256), its optimum
+    # exact by construction. SANKHYA's default QP engine (the interior point), its
+    # first-order QP engine (Condat-Vu), and HiGHS's QP solver; 600 s, one thread.
+    "refinery-qp": {"dir": "refinery-qp", "suffix": ".qps", "kind": "qp",
+                    "reference": "reference_objective", "with_constant": False,
+                    "time_limit": 600.0, "manifest": "manifest.json",
+                    "solvers": ("sankhya", "sankhya-condat-vu", "highs")},
 }
 
 
@@ -220,11 +233,11 @@ def solve(solver: str, suite: dict, model_path: Path, time_limit: float, sol: Pa
           binary: Path, commit: str) -> dict:
     """One solve, normalised: status, objective, seconds, wall, iterations, version,
     message, and whether the .sol file claims duals."""
-    if solver != "sankhya":
+    if solver != "sankhya" and solver not in SANKHYA_ARMS:
         out = rivals.run(solver, model_path, suite["kind"], time_limit, sol)
         out.setdefault("objective", None)
         return out
-    options = ["threads=1"]
+    options = ["threads=1"] + SANKHYA_ARMS.get(solver, [])
     if suite["kind"] == "qp":
         blob = maros_meszaros.run_one(binary, model_path, time_limit, False, options,
                                       keep_sol=sol)
@@ -236,7 +249,7 @@ def solve(solver: str, suite: dict, model_path: Path, time_limit: float, sol: Pa
             "message": str(blob.get("message") or blob.get("stderr") or "")[:200],
             "seconds": seconds if seconds is not None else blob.get("wall_seconds"),
             "wall_seconds": blob.get("wall_seconds"), "iterations": blob.get("iterations", ""),
-            "version": commit, "duals": True}
+            "version": commit, "duals": True, "solver_options": " ".join(options)}
 
 
 def grade(solver: str, suite: dict, model, model_path: Path, sol: Path, out: dict,
@@ -255,7 +268,7 @@ def grade(solver: str, suite: dict, model, model_path: Path, sol: Path, out: dic
            "independently_verified": None, "verifier_message": ""}
     notes = []
     if status == "optimal" and sol.exists():
-        if solver != "sankhya":
+        if solver != "sankhya" and solver not in SANKHYA_ARMS:
             notes = rivals.reconcile(sol, model, solver)
         row["point_objective"] = point_objective(model, sol, suite["with_constant"])
         row["verification"] = ("primal+dual" if parse_sol(sol).status == "optimal"
@@ -324,7 +337,7 @@ def run_suite(args) -> int:
     names = sorted(args.instances or manifest)
     allowed = suite.get("solvers", ALL_SOLVERS)
     solvers = args.solvers.split(",") if args.solvers else list(allowed)
-    unknown = [s for s in solvers if s not in ALL_SOLVERS]
+    unknown = [s for s in solvers if s not in ALL_SOLVERS and s not in SANKHYA_ARMS]
     if unknown:
         raise SystemExit(f"unknown solver(s): {', '.join(unknown)}")
     refused = [s for s in solvers if s not in allowed]

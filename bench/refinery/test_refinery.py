@@ -149,5 +149,41 @@ with tempfile.TemporaryDirectory() as tmp:
     check("No `head-to-head-refinery-*.csv`" in refinery_doc.section(None, sgm),
           "no CSV: no numbers")
 
+
+print("\nthe convex-cost refinery QP (refinery_qp.py)")
+import refinery_qp  # noqa: E402
+
+inst, q = refinery_qp.build(3)
+refinery_qp.verify_qp(inst, q)
+check(all(v > 0 for v, name in zip(q, inst.cols) if name.startswith(("BUY_", "RUN_")))
+      and all(v == 0 for v, name in zip(q, inst.cols)
+              if not name.startswith(("BUY_", "RUN_"))),
+      "curvature on every purchase and run column and nowhere else")
+with tempfile.TemporaryDirectory() as tmp:
+    path = Path(tmp) / "refinery_qp_t3.qps"
+    value = refinery_qp.write_qps(inst, q, path, "t3", 3, refinery_qp.QP_SEED)
+    again = Path(tmp) / "again.qps"
+    inst2, q2 = refinery_qp.build(3)
+    refinery_qp.write_qps(inst2, q2, again, "t3", 3, refinery_qp.QP_SEED)
+    check(path.read_bytes() == again.read_bytes(), "the QP is deterministic in (periods, seed)")
+    model = parse_mps(path)
+    check(model.num_cols == len(inst.cols) and model.num_rows == len(inst.rows),
+          "the verifier's reader sees the generator's dimensions")
+    x = [float(v) for v in inst.x]
+    stated = sum(c * v for c, v in zip(model.col_cost, x)) + model.quadratic_objective(x)
+    check(abs(stated - float(value)) <= 1e-9 * max(1.0, abs(float(value))),
+          "c'x* + x*'Qx*/2 read back from the file is the stated optimum",
+          f"{stated} vs {float(value)}")
+# A price moved off the derived one breaks dual feasibility at an interior column.
+j = next(k for k, name in enumerate(inst.cols)
+         if name.startswith("RUN_") and inst.lower[k] < inst.x[k]
+         and (inst.upper[k] is None or inst.x[k] < inst.upper[k]))
+inst.cost[j] += 1
+try:
+    refinery_qp.verify_qp(inst, q)
+    check(False, "a moved price is rejected")
+except AssertionError:
+    check(True, "a moved price is rejected")
+
 print(f"\n{FAILURES} failure(s)")
 sys.exit(1 if FAILURES else 0)
