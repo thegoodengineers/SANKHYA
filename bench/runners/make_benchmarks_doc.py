@@ -47,6 +47,7 @@ import gpu_doc  # 1g.1 and 1g.3 (#488)
 import gpu_plot  # the speedup-against-nonzeros figure of 1g.3 (#488)
 import head_to_head_doc  # section 4a, the five-solver head-to-head (#766)
 import refinery_doc  # section 4c, the refinery suite against HiGHS and SCIP (#1004)
+import refinery_qp_doc  # section 4d, the convex-cost refinery QP against HiGHS's QP
 import pricing_ab_doc  # 1b.1, dual pricing: Devex against dual steepest edge (#411)
 import race_ab_doc  # 1b.2, the engine race against the rule table (#476)
 from gpu_doc import gpu_datacenter_table, gpu_real_section, ipm_cudss_section, multi_gpu_section
@@ -2909,6 +2910,9 @@ def main() -> int:
                          for suite in ("netlib", "kennington", "maros-meszaros")}
     # The refinery suite (#1004): the same naming rule as the head-to-head above.
     refinery_suite_csv = newest("head-to-head-refinery-*.csv", prefix="head-to-head-refinery")
+    refinery_qp_csv = latest_result.latest("head-to-head-refinery-qp-*.csv",
+                                           prefix="head-to-head-refinery-qp",
+                                           allowed_options=("threads", "qp_algorithm"))
     robustness_csv = newest("robustness-*.csv")
     stress_csv = newest("stress-*.csv", prefix="stress")
     # The default run only; the per-engine runs carry `algorithm=` in solver_options, which
@@ -3582,6 +3586,18 @@ shifted geometric mean. Produced by `python bench/runners/compare.py --suite ref
 (`bench/runners/compare_suite.py`, `bench/runners/rivals.py`, `bench/runners/refinery_doc.py`).
 
 {refinery_doc.section(refinery_suite_csv, shifted_geometric_mean)}
+
+## 4d. The refinery model with convex cost curves, at 13k, 110k and 1M columns, against HiGHS's QP solver
+
+A refinery's cost of buying and processing is rarely linear: a crude's premium rises with the
+volume bought and a unit's cost per barrel rises toward its limit. This is the planning model
+of section 3 with those curves, a separable convex QP at three sizes, solved by SANKHYA's
+default QP engine (the proximal interior point), by its first-order QP engine (Condat-Vu) and by
+HiGHS's QP solver, every answer checked against an optimum known exactly. Produced by
+`python bench/runners/compare.py --suite refinery-qp` (`bench/runners/compare_suite.py`,
+`bench/runners/refinery_qp_doc.py`).
+
+{refinery_qp_doc.section(refinery_qp_csv)}
 ---
 
 ## 4b. Agreement against size-limited commercial editions (#533)

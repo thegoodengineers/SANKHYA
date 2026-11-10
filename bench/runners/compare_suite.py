@@ -249,7 +249,11 @@ def solve(solver: str, suite: dict, model_path: Path, time_limit: float, sol: Pa
             "message": str(blob.get("message") or blob.get("stderr") or "")[:200],
             "seconds": seconds if seconds is not None else blob.get("wall_seconds"),
             "wall_seconds": blob.get("wall_seconds"), "iterations": blob.get("iterations", ""),
-            "version": commit, "duals": True, "solver_options": " ".join(options)}
+            "version": commit, "duals": True,
+            # Only what an arm adds: threads=1 is every suite's stated configuration (the
+            # `threads` column), and latest_result.is_default_run() reads a non-empty
+            # solver_options on the first row as an option experiment.
+            "solver_options": " ".join(SANKHYA_ARMS.get(solver, []))}
 
 
 def grade(solver: str, suite: dict, model, model_path: Path, sol: Path, out: dict,
