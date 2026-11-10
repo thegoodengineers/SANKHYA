@@ -211,6 +211,31 @@ def maros_meszaros_head_to_head_row() -> Row | None:
                reference or "-")
 
 
+def refinery_qp_row() -> Row | None:
+    """The refinery planning model with convex cost curves (bench/refinery/refinery_qp.py):
+    SANKHYA's default QP engine against HiGHS's QP solver, matched within 1e-6 of the
+    constructed optimum and verified, from one CSV."""
+    path = latest_result.latest("head-to-head-refinery-qp-*.csv",
+                                prefix="head-to-head-refinery-qp")
+    if path is None:
+        return None
+    rows = read_csv(path)
+
+    def graded(solver: str) -> tuple[int, int]:
+        return passed_predicate(
+            [r for r in rows if r.get("solver") == solver],
+            lambda r: r.get("matches_reference") == "1"
+            and r.get("independently_verified") == "1")
+
+    passed, total = graded("sankhya")
+    n, m = graded("highs")
+    limit = rows[0].get("time_limit", "") if rows else ""
+    return Row("Refinery QP, convex cost (13k / 110k / 1M columns)", path, passed, total,
+               "matched the constructed optimum within 1e-6 and verified, default engine, "
+               f"{float(limit):g} s" if limit else "matched within 1e-6 and verified",
+               f"HiGHS QP {n} of {m} (same job, same rule)" if m else "-")
+
+
 def qplib_row() -> Row | None:
     path = (latest_result.latest("qplib-*.csv", prefix="qplib")
             or latest_result.latest("qplib-small-*.csv", prefix="qplib-small"))
@@ -322,7 +347,7 @@ def all_rows() -> list[Row]:
     rows = [netlib_row(), netlib_certified_row(), netlib_infeasible_row(), kennington_row(),
             mittelmann_row(),
             miplib3_row(), miplib_row(), maros_meszaros_row(), maros_meszaros_head_to_head_row(),
-            qplib_row(), stress_row()]
+            refinery_qp_row(), qplib_row(), stress_row()]
     rows = [r for r in rows if r is not None]
     rows += gpu_rows()
     return rows
