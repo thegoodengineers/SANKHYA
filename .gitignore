@@ -9,6 +9,9 @@ build-*/
 # instance sha256 and reference.json records the upstream readme hash.
 data/miplib/
 data/miplib-tier2/
+# The whole MIPLIB 2017 benchmark set (#1199): the manifest is committed, the 240 models are not.
+data/miplib2017-bench/*
+!data/miplib2017-bench/manifest.json
 # The classic MIPLIB 3 set (#761) is fetched by bench/runners/fetch_miplib3.py from one pinned
 # archive; the models and the catalogue are not committed, the manifest (every model's
 # sha256, the catalogue optima and their published_tolerance, the excluded models) is.

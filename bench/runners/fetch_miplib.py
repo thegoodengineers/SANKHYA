@@ -34,6 +34,21 @@ THREE THINGS THIS IS DELIBERATE ABOUT.
     python bench/runners/fetch_miplib.py --select-tier2      # rewrite miplib_tier2.json (#504)
     python bench/runners/fetch_miplib.py --tier 2            # download the tier-2 instances
     python bench/runners/fetch_miplib.py --tier 2 neos5      # ... or some of them
+    python bench/runners/fetch_miplib.py --build-benchmark   # rewrite the 240-model manifest
+    python bench/runners/fetch_miplib.py --benchmark         # download all 240 from it
+    python bench/runners/fetch_miplib.py --benchmark --shard 2/6   # ... or one shard of them
+
+THE WHOLE BENCHMARK SET (#1199). BENCH_RULE below: every one of the 240 instances of
+benchmark-v2.test, none chosen or left out, so a count reads against the set the published
+record reports on. Each carries the reference miplib2017-v28.solu PROVES: its `=opt=` value,
+or, for the seven it marks `=inf=`, infeasibility (graded by status: a run that reports the
+model infeasible matches it). The solution file is pinned by sha256 (fetch_miplib3.py read
+the same file on 3 Oct 2026), and `--build-benchmark` downloads every instance once and
+writes data/miplib2017-bench/manifest.json with the sha256 of every .mps.gz and the .solu line
+each reference was read from; that manifest is committed, the instances are not.
+`--benchmark --shard K/N` downloads the K-th of N shards (bench.yml runs one per job: 240
+models at 60 s for two solvers do not fit one job) and writes its names to
+data/miplib2017-bench/shard-K-of-N.txt.
 
 THE SECOND TIER (#504). TIER2_RULE below is the whole selection rule, written before the tier
 was ever run: MIPLIB 2017's BENCHMARK set (not the easy list), those with a proven optimum,
@@ -75,6 +90,18 @@ TIER2_RULE = (
     "(Content-Length), ties broken by name, the first 60. No instance is added or removed for "
     "any other reason, in particular not for how SANKHYA does on it.")
 INSTANCE_BASE = f"{MIPLIB}/WebData/instances"
+
+# The whole benchmark set (#1199), module docstring.
+BENCH_DIR = REPO_ROOT / "data" / "miplib2017-bench"
+BENCH_MANIFEST = BENCH_DIR / "manifest.json"
+# miplib2017-v28.solu as fetched on 3 Oct 2026 (fetch_miplib3.SOLU_2017_SHA256); any other
+# bytes are refused, a reference being a reference only for the file it was read from.
+SOLUTION_FILE_SHA256 = "61535544c02c300c583bcd58315039137c0f2d0d3d7206d132535a60e28c3814"
+BENCH_RULE = (
+    "Every instance of the MIPLIB 2017 benchmark set (benchmark-v2.test), none chosen or left "
+    "out. The reference is what miplib2017-v28.solu proves: the =opt= value, or infeasibility "
+    "for an instance marked =inf= (graded by status). An instance marked otherwise would be "
+    "scored on status alone; the set has none.")
 
 
 def ssl_context() -> ssl.SSLContext:
@@ -120,6 +147,132 @@ def published_optima() -> dict[str, float]:
             except ValueError:
                 continue
     return optima
+
+
+def solu_records(text: str) -> dict[str, dict]:
+    """Every record of a .solu file: name -> {status, text, line}, `status` the marker
+    (`=opt=`, `=inf=`, `=best=`, ...), `text` the value as printed ("" when there is none),
+    `line` 1-based. The first record of a name wins. Pure, so it is unit-tested."""
+    records: dict[str, dict] = {}
+    for number, line in enumerate(text.splitlines(), start=1):
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].startswith("=") and parts[0].endswith("="):
+            records.setdefault(parts[1], {"status": parts[0],
+                                          "text": parts[2] if len(parts) > 2 else "",
+                                          "line": number})
+    return records
+
+
+def shard(instances: dict[str, dict], k: int, n: int) -> list[str]:
+    """The K-th (1-based) of N shards of a manifest's instances: ordered by compressed size,
+    ties by name, every N-th from the K-th, so each shard holds as many large models as
+    the others. Pure: the N shards are disjoint and together the whole set."""
+    if not 1 <= k <= n:
+        raise ValueError(f"shard {k}/{n}: K must be between 1 and N")
+    ordered = sorted(instances, key=lambda name: (instances[name]["gz_bytes"], name))
+    return ordered[k - 1::n]
+
+
+def build_benchmark() -> int:
+    """BENCH_RULE: download every benchmark instance and write the manifest."""
+    solu = get(SOLUTION_FILE)
+    digest = hashlib.sha256(solu).hexdigest()
+    if digest != SOLUTION_FILE_SHA256:
+        print(f"{SOLUTION_FILE} has sha256 {digest}, not the pinned {SOLUTION_FILE_SHA256}; "
+              "refusing it", file=sys.stderr)
+        return 1
+    records = solu_records(solu.decode(errors="replace"))
+    listing = get(BENCHMARK_LIST)
+    names = [entry.replace(".mps.gz", "") for entry in listing.decode(errors="replace").split()
+             if entry.endswith(".mps.gz")]
+    BENCH_DIR.mkdir(parents=True, exist_ok=True)
+    instances: dict[str, dict] = {}
+    for count, name in enumerate(names, start=1):
+        url = f"{INSTANCE_BASE}/{name}.mps.gz"
+        # A file already on disk is a complete earlier download (written atomically), so an
+        # interrupted build resumes; its bytes are what the manifest records either way.
+        on_disk = BENCH_DIR / f"{name}.mps.gz"
+        blob = on_disk.read_bytes() if on_disk.exists() else get_with_retries(url)
+        write_atomically(on_disk, blob)
+        record = records.get(name, {"status": "none", "text": "", "line": 0})
+        optimum = float(record["text"]) if record["status"] == "=opt=" else None
+        instances[name] = {"name": name, "url": url, "gz_bytes": len(blob),
+                           "gz_sha256": hashlib.sha256(blob).hexdigest(),
+                           "published_optimal": optimum, "published_text": record["text"],
+                           "solu_status": record["status"], "solu_line": record["line"]}
+        print(f"  {count:>3}/{len(names)} {name:<32}{len(blob):>11}  {record['status']} "
+              f"{record['text']}", flush=True)
+    manifest = {"rule": BENCH_RULE, "source": MIPLIB, "solution_file": SOLUTION_FILE,
+                "solution_file_sha256": SOLUTION_FILE_SHA256, "benchmark_list": BENCHMARK_LIST,
+                "benchmark_list_sha256": hashlib.sha256(listing).hexdigest(),
+                "instances": instances}
+    BENCH_MANIFEST.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                              encoding="utf-8", newline="\n")
+    statuses: dict[str, int] = {}
+    for entry in instances.values():
+        statuses[entry["solu_status"]] = statuses.get(entry["solu_status"], 0) + 1
+    print(f"wrote {BENCH_MANIFEST.relative_to(REPO_ROOT)}: {len(instances)} instances, {statuses}")
+    return 0
+
+
+def fetch_benchmark(names: list[str], shard_spec: str | None) -> int:
+    """Download from the committed manifest: the names given, one shard, or all of it. A file
+    on disk with the recorded sha256 is kept; any other download must match it."""
+    manifest = json.loads(BENCH_MANIFEST.read_text(encoding="utf-8"))
+    instances = manifest["instances"]
+    if shard_spec:
+        k, n = (int(part) for part in shard_spec.split("/"))
+        names = shard(instances, k, n)
+        BENCH_DIR.mkdir(parents=True, exist_ok=True)
+        (BENCH_DIR / f"shard-{k}-of-{n}.txt").write_text("\n".join(names) + "\n",
+                                                          encoding="utf-8", newline="\n")
+    unknown = [name for name in names if name not in instances]
+    if unknown:
+        print(f"not in {BENCH_MANIFEST.name}: {', '.join(unknown)}", file=sys.stderr)
+        return 1
+    BENCH_DIR.mkdir(parents=True, exist_ok=True)
+    fetched = 0
+    for name in names or sorted(instances):
+        entry = instances[name]
+        destination = BENCH_DIR / f"{name}.mps.gz"
+        if destination.exists() and \
+                hashlib.sha256(destination.read_bytes()).hexdigest() == entry["gz_sha256"]:
+            continue
+        blob = get_with_retries(entry["url"])
+        if hashlib.sha256(blob).hexdigest() != entry["gz_sha256"]:
+            print(f"{name}: downloaded bytes do not match the recorded sha256", file=sys.stderr)
+            return 1
+        write_atomically(destination, blob)
+        fetched += 1
+    print(f"MIPLIB 2017 benchmark: {len(names or instances)} instance(s), {fetched} downloaded"
+          + (f", shard {shard_spec}" if shard_spec else ""))
+    return 0
+
+
+def get_with_retries(url: str, attempts: int = 4) -> bytes:
+    """get() again after a dropped connection (an IncompleteRead from miplib.zib.de midway
+    through the 240, #1199); the last failure is raised."""
+    import http.client  # noqa: PLC0415
+    import time  # noqa: PLC0415
+    for attempt in range(1, attempts + 1):
+        try:
+            return get(url, timeout=600)
+        except (OSError, http.client.HTTPException):
+            if attempt == attempts:
+                raise
+            time.sleep(5 * attempt)
+    raise AssertionError("unreachable")
+
+
+def write_atomically(destination: Path, blob: bytes) -> None:
+    # A scratch path and a rename, so an interrupted fetch cannot leave a truncated instance
+    # that looks like a real one (#87).
+    scratch = destination.with_suffix(destination.suffix + ".partial")
+    try:
+        scratch.write_bytes(blob)
+        scratch.replace(destination)
+    finally:
+        scratch.unlink(missing_ok=True)
 
 
 def easy_instances() -> list[str]:
@@ -246,10 +399,22 @@ def main() -> int:
     parser.add_argument("--select-tier2", action="store_true",
                         help="apply the tier-2 rule and rewrite miplib_tier2.json; downloads "
                              "no instance")
+    parser.add_argument("--build-benchmark", action="store_true",
+                        help="download all 240 benchmark instances and rewrite "
+                             "data/miplib2017-bench/manifest.json (#1199)")
+    parser.add_argument("--benchmark", action="store_true",
+                        help="download benchmark instances from the committed manifest: all, "
+                             "the names given, or --shard K/N")
+    parser.add_argument("--shard", default=None, metavar="K/N",
+                        help="with --benchmark: the K-th of N size-balanced shards")
     args = parser.parse_args()
 
     if args.select_tier2:
         return select_tier2()
+    if args.build_benchmark:
+        return build_benchmark()
+    if args.benchmark:
+        return fetch_benchmark(args.instances, args.shard)
     if args.tier == 1 and not args.instances and args.count == 30 and TIER1_FILE.exists():
         return fetch_tier1_from_manifest()
     data_dir = DATA_DIR if args.tier == 1 else TIER2_DIR

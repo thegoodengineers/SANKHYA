@@ -81,7 +81,12 @@ TIER_DIRS = {1: DATA_DIR, 2: REPO_ROOT / "data" / "miplib-tier2"}
 # The classic MIPLIB 3 set (#761), fetched by fetch_miplib3.py: plain .mps files, exactly as
 # archived, and a manifest of its own name, so nothing here ever reads it as MIPLIB 2017.
 MIPLIB3_DIR = REPO_ROOT / "data" / "miplib3"
-SETS = ("miplib2017", "miplib3")
+# The whole MIPLIB 2017 benchmark set (#1199), fetched by `fetch_miplib.py --benchmark`.
+BENCH_DIR = REPO_ROOT / "data" / "miplib2017-bench"
+SETS = ("miplib2017", "miplib3", "miplib2017-bench")
+# A solve that has not answered by the time limit plus this is killed and recorded `hang`,
+# the margin rivals.py gives every rival (#1199: the benchmark set's largest models).
+HANG_MARGIN_SECONDS = 60.0
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
 CERTIFICATE_CHECKER = REPO_ROOT / "tools" / "verify_certificate.py"
@@ -127,6 +132,9 @@ def default_out_name(set_name: str, tier: int, seeds: int, time_limit: float,
     glob can pick it up (test_miplib3.py checks every one)."""
     if set_name == "miplib3":
         return f"miplib3-{time_limit:g}s-seeds{seeds}-{commit}.csv"
+    if set_name == "miplib2017-bench":  # #1199; `miplib2017-` is not `miplib-`
+        return f"miplib2017-bench-{time_limit:g}s-{'' if seeds == 1 else f'seeds{seeds}-'}" \
+               f"{commit}.csv"
     tier_part = "" if tier == 1 else f"tier{tier}-"
     seeds_part = "" if seeds == 1 else f"seeds{seeds}-"
     return f"miplib-{tier_part}{seeds_part}{commit}.csv"
@@ -332,7 +340,14 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
         if profile:
             command += ["--option", "profile=detailed", "--option", f"profile_out={profile_path}"]
         started = time.perf_counter()
-        completed = subprocess.run(command, capture_output=True, text=True)
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True,
+                                       timeout=time_limit + HANG_MARGIN_SECONDS)
+        except subprocess.TimeoutExpired:
+            return {"status": "hang",
+                    "message": f"no answer within the time limit plus {HANG_MARGIN_SECONDS:g} s; "
+                               "killed",
+                    "wall_seconds": time.perf_counter() - started, "verified": None}
         wall = time.perf_counter() - started
 
         if not stats_path.exists():
@@ -519,8 +534,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.seeds < 1:
         parser.error("--seeds must be at least 1")
-    if args.set_name == "miplib3" and args.tier != 1:
-        parser.error("--tier is a MIPLIB 2017 choice; MIPLIB 3 is one set")
+    if args.set_name != "miplib2017" and args.tier != 1:
+        parser.error("--tier is a choice within the MIPLIB 2017 subsets; this set is one set")
 
     binary = find_binary(args.binary)
     if binary is None:
@@ -531,6 +546,10 @@ def main() -> int:
         data_dir, suffix = MIPLIB3_DIR, ".mps"
         reference_path = data_dir / "manifest.json"
         fetch = "bench/runners/fetch_miplib3.py"
+    elif args.set_name == "miplib2017-bench":
+        data_dir, suffix = BENCH_DIR, ".mps.gz"
+        reference_path = data_dir / "manifest.json"
+        fetch = "bench/runners/fetch_miplib.py --benchmark"
     else:
         data_dir, suffix = TIER_DIRS[args.tier], ".mps.gz"
         reference_path = data_dir / "reference.json"
@@ -652,13 +671,19 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
     ours = blob.get("objective")
     status = blob["status"]
     matched = matches_published(ours, published, entry)
+    # A model the solution file proves infeasible (#1199, `=inf=`): the reference is the
+    # status, and reporting it infeasible is both the match and the proof.
+    infeasible_reference = entry.get("solu_status") == "=inf="
+    if infeasible_reference:
+        matched = status == "infeasible"
     # PROVED means the solver closed the bound itself - to within the gap target (1e-4
     # relative, 1e-6 absolute; since #188 that is reported optimal) or by exhausting the
     # tree - not that the number happens to be right. Only kOptimal asserts that, and
     # #29's guard has already re-measured it. With no published optimum (status-only
     # scoring, #1158) PROVED is the solver's own claim of optimality, and MATCHED is never
     # set: the row says so through its blank published_objective.
-    proved = status == "optimal" and (matched or published is None)
+    proved = (status == "infeasible" if infeasible_reference
+              else status == "optimal" and (matched or published is None))
     relative = blob.get("relative_gap")
     closed = root_gap_closed(blob.get("root_bound"), blob.get("root_bound_after_cuts"), ours)
     return {

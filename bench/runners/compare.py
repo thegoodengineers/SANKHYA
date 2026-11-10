@@ -334,7 +334,7 @@ def main() -> int:
                         help="seconds per solve; 60 by default, or the suite's own limit "
                              "with --suite")
     parser.add_argument("--suite", choices=("netlib", "kennington", "maros-meszaros", "miplib3",
-                                            "refinery", "refinery-qp"),
+                                            "miplib2017-bench", "refinery", "refinery-qp"),
                         help="the head-to-head mode: every solver over this suite (#766); "
                              "miplib3 runs HiGHS alone beside miplib.py --set miplib3 (#761)")
     parser.add_argument("--solvers", default=None,
