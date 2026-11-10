@@ -178,6 +178,9 @@ TEST(RootCutLoop, NeverAddsMoreRowsThanItsBudget) {
   std::mt19937_64 rng(20260929);
   Options options = root_cuts(true);
   options.set_int("cut_max_per_round", 60);
+  // The m-row budget is the one under test; with the pool on (the default since #1158) the
+  // budget is the pooled one, root_cut_row_budget(m, per_round), tested on its own below.
+  options.set_bool("mip_cut_pooling", false);
   int loops = 0;
   int reached = 0;
   long most = 0;
