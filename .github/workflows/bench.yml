@@ -49,6 +49,7 @@ on:
           - ab-netlib
           - ab-supernodal
           - mittelmann
+          - lpfeas14
           - pdhg-step-weight-ab
           - rolling-warm-start
           - structural-warm-start
@@ -206,11 +207,13 @@ jobs:
               git checkout -- data/miplib3/manifest.json ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
             mittelmann) python3 bench/runners/fetch_mittelmann.py --set small ;;
+            lpfeas14) python3 bench/runners/mittelmann_cuopt.py --fetch ;;
             pdhg-step-weight-ab)
               python3 bench/runners/fetch_data.py --set full --offline-fallback
               python3 bench/runners/fetch_kennington.py ;;
             ab-option)
               case "$OPTIONS" in
+                *mittelmann_cuopt.py*) python3 bench/runners/mittelmann_cuopt.py --fetch ;;
                 *netlib.py*)
                   python3 bench/runners/fetch_data.py --set full --offline-fallback
                   git checkout -- 'data/netlib/*.mps' ;;
@@ -309,6 +312,12 @@ jobs:
               mittelmann)
                 python3 bench/runners/mittelmann.py --binary build/sankhya \
                   ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #1177: Mittelmann's LPfeas-14 on the CPU PDHG engine, ours alone (no card, no
+              # cuOpt here), every solve's verbose log kept and its restart trace in the CSV.
+              lpfeas14)
+                python3 bench/runners/mittelmann_cuopt.py --binary build/sankhya --engine cpu \
+                  --skip-cuopt --threads "$(nproc)" --reference-time-limit 0 --card ci \
+                  --machine "$machine" --log-dir "$out/logs" ${limit[@]+"${limit[@]}"} "$@" ;;
               # #482: the step and primal-weight legs on one binary.
               pdhg-step-weight-ab)
                 python3 bench/runners/pdhg_step_weight_ab.py --binary build/sankhya \
