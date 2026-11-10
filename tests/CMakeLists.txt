@@ -125,6 +125,7 @@ add_executable(sankhya_tests
   unit/test_heuristics.cpp
   unit/test_local_mip.cpp
   unit/test_restarts.cpp
+  unit/test_gap_target_extension.cpp
   unit/test_flow_cover_cuts.cpp
   unit/test_flow_cover_aggregation.cpp
   unit/test_regression_dsbmip.cpp

@@ -2011,6 +2011,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  1.0,
                  {}});
+    s.push_back({"mip_gap_target_extension",
+                 OptionType::Double,
+                 0.0,
+                 "When the relative or absolute gap target is met before the tree is "
+                 "exhausted, go on searching for this fraction of the nodes explored so "
+                 "far, and stop at the target as before when they run out (#1158). The "
+                 "target stays met while it searches: a closed tree reports a proof, and a "
+                 "limit reached meanwhile reports the target's verdict. One search only. 0 "
+                 "is off, the default until the MIPLIB A/B on main.",
+                 0.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"mip_absolute_gap",
                  OptionType::Double,
                  tol::kMipAbsoluteGap,

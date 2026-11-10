@@ -460,6 +460,7 @@ Solution BranchAndBound::run() {
   bool dive = false;
   bool limit_hit = false;
   bool gap_target_met = false;
+  Count extension_until = -1;  // mip_gap_target_extension: the node count it searches to
   double open_bound = -std::numeric_limits<double>::infinity();
 
   StopController stop(control_, timer_, limits_);
@@ -569,13 +570,37 @@ Solution BranchAndBound::run() {
           // solving demo/miqp_blend.mps at the defaults saw a failure on a solved model.
           // The message carries the achieved gap and says the tree was not exhausted, and
           // dual_bound is the best OPEN bound, so the claim is exactly what was proven.
-          gap_target_met = true;
-          solution.message = fmt::format(
-              "optimal within the {} gap target ({:.3e} absolute, {:.3e} relative) after {} "
-              "nodes; the bound is the best open node's, the tree was not exhausted",
-              relative <= relative_gap_target_ ? "relative" : "absolute", gap, relative,
-              nodes_explored_);
-          break;
+          //
+          // GAP-TARGET EXTENSION (#1158, mip_gap_target_extension, off by default). Meeting
+          // the target proves the incumbent is within it, not that it is the optimum: dcmulti
+          // stopped here on every seed 3.2e-5 above its published optimum, and the tree it
+          // left closed in 10-24 more nodes (102-265 explored). With the option set, the
+          // search goes on past the target for that fraction of the nodes explored so far,
+          // and stops at the target as before when they run out. Achterberg, "Constraint
+          // Integer Programming" (thesis, 2007), sec. 3.2: the gap limit is a stopping
+          // rule, and the tree behind it is the same; the incumbent and the bound only
+          // improve, so the target stays met, and whatever ends the extension early - a
+          // limit, a node set aside - reports the target's verdict (after the loop).
+          if (gap_target_extension_ > 0.0 && shared_ == nullptr && extension_until < 0) {
+            extension_until =
+                nodes_explored_ +
+                std::max<Count>(1, static_cast<Count>(std::ceil(
+                                       gap_target_extension_ *
+                                       static_cast<double>(nodes_explored_))));
+            logger_.info(
+                "gap target met after {} nodes ({:.3e} relative); searching on to node {} "
+                "for a closed tree (mip_gap_target_extension={})",
+                nodes_explored_, relative, extension_until, gap_target_extension_);
+          }
+          if (extension_until < 0 || nodes_explored_ >= extension_until) {
+            gap_target_met = true;
+            solution.message = fmt::format(
+                "optimal within the {} gap target ({:.3e} absolute, {:.3e} relative) after {} "
+                "nodes; the bound is the best open node's, the tree was not exhausted",
+                relative <= relative_gap_target_ ? "relative" : "absolute", gap, relative,
+                nodes_explored_);
+            break;
+          }
         }
       }
     }
@@ -1046,6 +1071,21 @@ Solution BranchAndBound::run() {
       logger_.node(nodes_explored_, static_cast<Count>(open_.size()), incumbent_report,
                    reported(best_open_bound), gap, timer_.elapsed_seconds());
     }
+  }
+
+  // The extension (#1158) began with the target met, and nothing since can unmeet it: a
+  // limit, or a node set aside numerically, that stops it before the tree closes reports
+  // the target's verdict, which is what the search would have said without the option.
+  if (extension_until >= 0 && !gap_target_met &&
+      !(open_.empty() && !limit_hit && !unsolved_blocks_proof())) {
+    gap_target_met = true;
+    limit_hit = false;
+    solution.stopped_by = LimitReason::kNone;
+    solution.message = fmt::format(
+        "optimal within the gap target after {} nodes, stopped while searching past it "
+        "(mip_gap_target_extension); the bound is the best open node's, the tree was not "
+        "exhausted",
+        nodes_explored_);
   }
 
   report_conflicts();
