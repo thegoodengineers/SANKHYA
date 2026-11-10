@@ -44,6 +44,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import latest_result  # noqa: E402
 import miplib3_doc  # noqa: E402
+import miplib2017_bench_doc  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 README = REPO_ROOT / "README.md"
@@ -264,6 +265,25 @@ def miplib_row() -> Row | None:
                "matched the published optimum and verified", "-")
 
 
+def miplib2017_benchmark_row() -> Row | None:
+    # #1199: the whole benchmark set at 60 s, PROVED counted as miplib2017_bench_doc says, and
+    # HiGHS's count by the same rule from the same jobs beside it.
+    path = latest_result.latest(miplib2017_bench_doc.sankhya_pattern())
+    if path is None:
+        return None
+    ours = miplib2017_bench_doc.counts(read_csv(path), miplib2017_bench_doc.sankhya_verdicts)
+    highs = latest_result.latest(miplib2017_bench_doc.highs_pattern())
+    reference = "-"
+    if highs:
+        theirs = miplib2017_bench_doc.counts(read_csv(highs),
+                                             miplib2017_bench_doc.highs_verdicts)
+        reference = (f"HiGHS {theirs['proved']} of {theirs['instances']} proved, "
+                     f"{theirs['feasible']} feasible and verified (same jobs, same rule)")
+    return Row("MIPLIB 2017 benchmark set", path, ours["proved"], ours["instances"],
+               f"proved the published optimum or infeasibility, verified; {ours['feasible']} "
+               "feasible and verified; 60 s, 1 thread, 1 seed", reference)
+
+
 def miplib3_row() -> Row | None:
     # 60 s, the limit the published record reports the set at (#1158), so the row reads
     # against it directly; the 300 s table stays in docs/BENCHMARKS.md.
@@ -349,8 +369,8 @@ def gpu_rows() -> list[Row]:
 def all_rows() -> list[Row]:
     rows = [netlib_row(), netlib_certified_row(), netlib_infeasible_row(), kennington_row(),
             mittelmann_row(),
-            miplib3_row(), miplib_row(), maros_meszaros_row(), maros_meszaros_head_to_head_row(),
-            refinery_qp_row(), qplib_row(), stress_row()]
+            miplib3_row(), miplib2017_benchmark_row(), miplib_row(), maros_meszaros_row(),
+            maros_meszaros_head_to_head_row(), refinery_qp_row(), qplib_row(), stress_row()]
     rows = [r for r in rows if r is not None]
     rows += gpu_rows()
     return rows

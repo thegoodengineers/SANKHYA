@@ -171,6 +171,13 @@ def _mps_path(model: Path, tmp: Path) -> Path:
     HiGHS picks its reader by extension and reads nothing from a `.qps` file."""
     if model.suffix.lower() == ".mps":
         return model
+    if model.name.lower().endswith(".mps.gz"):  # #1199: decompressed, HiGHS reads plain MPS
+        import gzip  # noqa: PLC0415
+        import shutil  # noqa: PLC0415
+        plain = tmp / model.name[:-3]
+        with gzip.open(model, "rb") as source, plain.open("wb") as target:
+            shutil.copyfileobj(source, target)
+        return plain
     link = tmp / (model.stem + ".mps")
     try:
         link.symlink_to(model.resolve())
@@ -222,6 +229,16 @@ def _worker_highs(model: Path, time_limit: float, sol: Path) -> dict:
            "dual_bound": getattr(info, "mip_dual_bound", None), "root_bound": root_bound}
     if out["nodes"] in (None, -1):  # an LP or a QP: HighsInfo's MIP fields are -1 / inf
         out["nodes"], out["dual_bound"], out["root_bound"] = None, None, None
+    # A MIP stopped by the limit with an incumbent (#1199): the point is written `feasible`
+    # and checked like any other, so "feasible and verified" counts HiGHS by SANKHYA's rule.
+    # Its objective is reported; matching a reference still needs an optimal status.
+    integer_model = bool(getattr(lp, "integrality_", None))
+    if mapped == "time_limit" and integer_model and solution.value_valid:
+        out["objective"] = info.objective_function_value
+        col_value, row_value = list(solution.col_value), list(solution.row_value)
+        write_sol(sol, solver="highs", status="feasible", objective=out["objective"],
+                  columns={n: (col_value[j], 0.0) for j, n in enumerate(lp.col_names_)},
+                  rows={n: (row_value[i], 0.0) for i, n in enumerate(lp.row_names_)})
     if mapped == "optimal" and solution.value_valid:
         duals = bool(solution.dual_valid)
         # One copy of each vector: highspy converts the whole vector on every attribute

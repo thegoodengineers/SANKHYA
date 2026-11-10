@@ -44,6 +44,7 @@ on:
           - kennington
           - miplib-tier1
           - miplib3
+          - miplib2017-bench
           - refinery
           - head-to-head-refinery-qp
           - ab-netlib
@@ -135,7 +136,7 @@ jobs:
 
       # #1158: HiGHS beside SANKHYA on the same 65 MIPLIB 3 models, same job, same machine.
       - name: Install HiGHS for the MIPLIB 3 head-to-head
-        if: inputs.suite == 'miplib3'
+        if: inputs.suite == 'miplib3' || inputs.suite == 'miplib2017-bench'
         run: pip install numpy highspy
 
       # #983: the Maros-Meszaros head-to-head runs every rival compare_suite.py knows - HiGHS,
@@ -205,6 +206,9 @@ jobs:
             miplib3)
               python3 bench/runners/fetch_miplib3.py
               git checkout -- data/miplib3/manifest.json ;;
+            # #1199: options is the shard, K/N; the fetch writes its names beside the models.
+            miplib2017-bench)
+              python3 bench/runners/fetch_miplib.py --benchmark --shard "${OPTIONS:-1/1}" ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
             mittelmann) python3 bench/runners/fetch_mittelmann.py --set small ;;
             lpfeas14) python3 bench/runners/mittelmann_cuopt.py --fetch ;;
@@ -263,6 +267,20 @@ jobs:
                   ${limit[@]+"${limit[@]}"} "$@"
                 python3 bench/runners/compare.py --suite miplib3 --sankhya-binary build/sankhya \
                   --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} ;;
+              # #1199: one shard of the 240-model MIPLIB 2017 benchmark set, SANKHYA on one
+              # thread then HiGHS on the same files in the same job.
+              miplib2017-bench)
+                shard="${OPTIONS:-1/1}"; k="${shard%/*}"; n="${shard#*/}"
+                mapfile -t names < "data/miplib2017-bench/shard-${k}-of-${n}.txt"
+                tag="${TIME_LIMIT:-60}s-shard${k}of${n}-${sha}"
+                python3 bench/runners/miplib.py --binary build/sankhya --set miplib2017-bench \
+                  --threads 1 --machine-kind "github-actions ubuntu-24.04" \
+                  ${limit[@]+"${limit[@]}"} --instances "${names[@]}" \
+                  --out "bench/results/miplib2017-bench-${tag}.csv"
+                python3 bench/runners/compare.py --suite miplib2017-bench \
+                  --sankhya-binary build/sankhya --machine-kind "github-actions ubuntu-24.04" \
+                  ${limit[@]+"${limit[@]}"} --instances "${names[@]}" \
+                  --out "bench/results/highs-miplib2017-bench-${tag}.csv" ;;
               head-to-head-maros-meszaros)
                 python3 bench/runners/compare.py --suite maros-meszaros                   --sankhya-binary build/sankhya --machine-kind "github-actions ubuntu-24.04"                   ${limit[@]+"${limit[@]}"} "$@" ;;
               # #514: the pooling set (committed in data/pooling), and the same 39 runs with

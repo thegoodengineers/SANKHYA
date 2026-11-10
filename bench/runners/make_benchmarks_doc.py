@@ -38,6 +38,7 @@ import nlp_doc  # the nonlinear section (NLP stages 2-3), kept in its own file
 import pooling_doc  # the non-convex pooling section (#516), kept in its own file
 import miplib_ab_doc  # #504 tier 2 over seeds, and the #501 and #506 A/Bs
 import miplib3_doc  # section 2a, the classic MIPLIB 3 set beside MIPLIB 2017 (#761)
+import miplib2017_bench_doc  # the whole MIPLIB 2017 benchmark set, 240 models (#1199)
 import qplib_doc  # the QPLIB convex continuous section (#492), kept in its own file
 import qplib_qcqp_doc  # the convex QCQP section (#755), kept in its own file
 import qplib_all_doc  # every QPLIB instance through the reader and dispatcher (#835)
@@ -2894,6 +2895,10 @@ def main() -> int:
     miplib3_runs = {limit: (newest(miplib3_doc.sankhya_pattern(limit)),
                             newest(miplib3_doc.highs_pattern(limit)))
                     for limit in miplib3_doc.LIMITS}
+    # The whole benchmark set (#1199), its joined shards: `miplib2017-bench-` and
+    # `highs-miplib2017-bench-`, which no glob above takes.
+    benchmark_set_runs = (newest(miplib2017_bench_doc.sankhya_pattern()),
+                          newest(miplib2017_bench_doc.highs_pattern()))
     # prefix: pdhg-threads-*, pdhg-two-matvec-* and pdhg-478-* share the glob, and since #592
     # section 1e had been reading the thread-scaling CSV as its own (0 instances shown).
     pdhg_csv = newest("pdhg-*.csv", prefix="pdhg")
@@ -3360,6 +3365,11 @@ clock, ends the unproved runs, so a shared machine moves the time columns and no
 
 {miplib_ab_doc.plateau_ab(*objective_branching_ab, "mip_objective_branching") or OBJECTIVE_BRANCHING_AB_NOT_RUN}
 
+---
+
+## 2-all. MIPLIB 2017, the whole benchmark set: 240 models at 60 s (#1199)
+
+{miplib2017_bench_doc.section(*benchmark_set_runs, miplib2017_bench_doc.load_manifest())}
 ---
 
 ## 2a. MIPLIB 3, the classic set beside MIPLIB 2017 (#761)
