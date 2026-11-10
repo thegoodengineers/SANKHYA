@@ -186,5 +186,24 @@ TEST(CutPool, WithTheOptionOffNothingIsRemoved) {
   EXPECT_GT(aged, 0) << "no row aged out, so the check above saw nothing";
 }
 
+// The pool follows the root loop's gate (#1193): a knapsack takes no flow cover, so under
+// root_cut_loop_when=flow-covers the loop stays out and so does the pool; under "always" the
+// loop runs and the pool removes rows as before.
+TEST(CutPool, FollowsTheRootLoopsGate) {
+  std::mt19937_64 rng(20261002);
+  std::int64_t removed_always = 0;
+  for (int attempt = 0; attempt < 40; ++attempt) {
+    const Model model = integer_model(knapsack_instance(rng));
+    Options options = pool_options(true);
+    options.set_bool("root_cut_loop", true);
+    options.set_string("root_cut_loop_when", "flow-covers");
+    const Solution gated = solve(model, options);
+    EXPECT_EQ(gated.cut_rows_removed, 0) << "attempt " << attempt;
+    options.set_string("root_cut_loop_when", "always");
+    removed_always += solve(model, options).cut_rows_removed;
+  }
+  EXPECT_GT(removed_always, 0) << "the pool never removed a row with the loop entered";
+}
+
 }  // namespace
 }  // namespace sankhya::mip
