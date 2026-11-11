@@ -400,6 +400,7 @@ set(SANKHYA_CORE_SOURCES
   src/pdhg/pdhg_evaluate.cpp
   src/pdhg/pdhg_certificate.cpp
   src/pdhg/pdhg_feasibility_polish.cpp
+  src/pdhg/pdhg_host_polish.cpp
   src/pdhg/pdhg_halpern.cpp
   src/pdhg/pdhg_norm_rescale.cpp
   src/pdhg/batch_pdhg.cpp
