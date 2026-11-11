@@ -16,6 +16,8 @@ from pathlib import Path
 
 SOLVERS = (("sankhya", "SANKHYA, interior point (default)"),
            ("sankhya-condat-vu", "SANKHYA, Condat-Vu (first-order)"),
+           ("sankhya-condat-vu-relative",
+            "SANKHYA, Condat-Vu with `qp_relative_stop`, finished by the interior point"),
            ("highs", "HiGHS QP"))
 ORDER = ("refinery_qp_13k", "refinery_qp_110k", "refinery_qp_1m")
 
@@ -43,7 +45,40 @@ def counted(row: dict | None) -> bool:
     return row is not None and row.get("counted_for_time") == "1"
 
 
-def section(path: Path | None) -> str:
+def table(rows: list[dict]) -> list[str]:
+    """One row per instance, one cell per solver present, straight from the CSV."""
+    by = {(r["instance"], r["solver"]): r for r in rows}
+    names = [n for n in ORDER if any(r["instance"] == n for r in rows)]
+    present = [(s, label) for s, label in SOLVERS if any(r["solver"] == s for r in rows)]
+    out = ["| instance | rows | columns | sha256 | optimum | " +
+           " | ".join(label for _, label in present) + " |",
+           "|---|---:|---:|---|---:|" + "---|" * len(present)]
+    for name in names:
+        any_row = next(r for r in rows if r["instance"] == name)
+        ref = any_row.get("reference_objective") or ""
+        ref_text = f"{float(ref):.12g}" if ref else "-"
+        out.append(f"| `{name}` | {int(any_row['rows']):,} | {int(any_row['columns']):,} | "
+                   f"`{any_row['instance_sha256'][:12]}` | {ref_text} | "
+                   + " | ".join(cell(by.get((name, s))) for s, _ in present) + " |")
+    return out + [""]
+
+
+def longer_section(path: Path | None) -> list[str]:
+    """The same suite at a longer limit, beside the 600 s table and not instead of it."""
+    if path is None:
+        return []
+    rows = read_csv(path)
+    if not rows:
+        return []
+    first = rows[0]
+    return [f"**The same suite at {float(first['time_limit']):g} s**, every solver on the "
+            "same longer limit, to record what the sizes that do not finish in 600 s need:", "",
+            f"Source CSV: `bench/results/{path.name}`  ",
+            f"Commit `{first['git_commit']}` · machine `{first['machine']}`", "",
+            *table(rows)]
+
+
+def section(path: Path | None, longer: Path | None = None) -> str:
     out = ["**The model.** `bench/runners/generate_refinery_lp.py`'s T-period refinery (#211) - "
            "crude purchases, CDU throughput, crude and product tanks, yields, unit capacities, "
            "quality budgets and delivery commitments - with convex cost curves: every purchase "
@@ -74,17 +109,7 @@ def section(path: Path | None) -> str:
     out += [f"Source CSV: `bench/results/{path.name}`  ",
             f"Commit `{first['git_commit']}` · machine `{first['machine']}`  ",
             f"time limit {float(first['time_limit']):g} s · 1 thread per solver", "",
-            "| instance | rows | columns | sha256 | optimum | " +
-            " | ".join(label for _, label in present) + " |",
-            "|---|---:|---:|---|---:|" + "---|" * len(present)]
-    for name in names:
-        any_row = next(r for r in rows if r["instance"] == name)
-        ref = any_row.get("reference_objective") or ""
-        ref_text = f"{float(ref):.12g}" if ref else "-"
-        out.append(f"| `{name}` | {int(any_row['rows']):,} | {int(any_row['columns']):,} | "
-                   f"`{any_row['instance_sha256'][:12]}` | {ref_text} | "
-                   + " | ".join(cell(by.get((name, s))) for s, _ in present) + " |")
-    out.append("")
+            *table(rows)]
     ours, theirs = "sankhya", "highs"
     lines = []
     for name in names:
@@ -108,4 +133,5 @@ def section(path: Path | None) -> str:
                          "produced a matched, verified answer within the limit.")
     out += ["**Read per instance**, from the cells above:", ""] + [f"- {x}" for x in lines]
     out.append("")
+    out += longer_section(longer)
     return "\n".join(out)
