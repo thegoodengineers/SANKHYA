@@ -65,7 +65,18 @@ void BranchAndBound::leave() {
 bool BranchAndBound::propagate() {
   conflict_pruned_ = false;
   const Index rows = working_.num_rows();
-  const CsrView by_row(working_.matrix);
+  // The row-wise copy is kept between nodes (#1158): the transpose is O(nonzeros), and on
+  // mas76 (12 rows, 151 columns) building it at every node was a measurable share of a node
+  // that pivots a handful of times. scaling_.id names working_'s matrix (#501) and is redrawn
+  // wherever the matrix is replaced; the shape is checked as well, and with scaling off (id
+  // 0) the copy is rebuilt as before.
+  if (scaling_.id == 0 || propagate_rows_id_ != scaling_.id ||
+      propagate_rows_.num_rows() != rows ||
+      static_cast<Index>(propagate_rows_.values().size()) != working_.matrix.num_nonzeros()) {
+    propagate_rows_.build(working_.matrix);
+    propagate_rows_id_ = scaling_.id;
+  }
+  const CsrView& by_row = propagate_rows_;
 
   // EVERY INTEGER COLUMN IS ROUNDED, AND EVERY BOX IS CHECKED, BEFORE ANY ROW IS READ (#328).
   // The row sweeps below round an integer column only while walking a row it appears in, and

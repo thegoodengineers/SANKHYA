@@ -1001,6 +1001,8 @@ class BranchAndBound {
   qp::QpIpmWarmStart last_qp_warm_;
 
   NodeScaling scaling_;
+  CsrView propagate_rows_;  ///< working_'s matrix by row, for propagate() (#1158)
+  std::uint64_t propagate_rows_id_ = 0;
 
   /// mip_node_engine: warm-started dual (default) or cold primal for every node.
   bool node_engine_dual_ = true;
