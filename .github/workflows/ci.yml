@@ -49,8 +49,7 @@ jobs:
 
       - name: Install toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev
+          scripts/ci_apt.sh ninja-build zlib1g-dev
 
       - name: Configure
         run: |
@@ -82,8 +81,7 @@ jobs:
 
       - name: Install toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev clang
+          scripts/ci_apt.sh ninja-build zlib1g-dev clang
 
       - name: Configure
         run: |
@@ -256,8 +254,7 @@ jobs:
 
       - name: Install toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev ccache
+          scripts/ci_apt.sh ninja-build zlib1g-dev ccache
 
       # The compiler cache and ctest's record of how long each test took, restored from the
       # newest run of this leg on main. The Debug+ASan+UBSan leg is the one every merge
@@ -890,8 +887,7 @@ jobs:
 
       - name: Install toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev
+          scripts/ci_apt.sh ninja-build zlib1g-dev
 
       - name: Build
         run: |
@@ -966,8 +962,7 @@ jobs:
 
       - name: Install toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev
+          scripts/ci_apt.sh ninja-build zlib1g-dev
 
       - name: Build
         run: |
@@ -1005,8 +1000,7 @@ jobs:
 
       - name: Install toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build zlib1g-dev
+          scripts/ci_apt.sh ninja-build zlib1g-dev
 
       - name: Configure and build
         run: |
@@ -1123,8 +1117,7 @@ jobs:
       - name: Install what a judge would install
         if: steps.scope.outputs.run == 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build
+          scripts/ci_apt.sh ninja-build
           # numpy and highspy are what separate a complete run from a DEGRADED one: without
           # them reproduce.sh skips the conditioning sweep's SVD and the HiGHS comparison,
           # and this job asserts below that nothing was skipped.
@@ -1211,7 +1204,10 @@ jobs:
           for attempt in 1 2 3; do
             apt-get update && apt-get install -y ninja-build cmake g++ zlib1g-dev git && break
             [ "$attempt" = 3 ] && exit 1
-            sleep 30
+            # 11 Nov 2026: archive.ubuntu.com did not resolve from the runners for hours.
+            # kernel.org mirrors the same signed archive under another name.
+            sed -i 's|http://archive.ubuntu.com/ubuntu|http://mirrors.kernel.org/ubuntu|g' /etc/apt/sources.list
+            sleep 10
           done
 
       - name: Configure with CUDA enabled
