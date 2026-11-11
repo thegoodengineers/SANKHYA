@@ -216,8 +216,7 @@ void BranchAndBound::append_symmetry_rows() {
       "Symmetry (#413): {} generator(s), {} orbit(s) of more than one column, the largest "
       "{} column(s); {} search node(s), {} refinement round(s), {} adjacency visits{}",
       group.generators.size(), group.nontrivial_orbits, group.largest_orbit, group.search_nodes,
-      group.refinements, group.work,
-      group.budget_exhausted ? " (stopped at a budget)" : "");
+      group.refinements, group.work, group.budget_exhausted ? " (stopped at a budget)" : "");
   const std::vector<std::pair<Index, Index>> pairs = ordering_rows(group);
   if (pairs.empty()) return;
   append_ordering_rows(&working_, pairs);

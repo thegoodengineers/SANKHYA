@@ -166,7 +166,8 @@ struct Search {
   /// entries each, 25 s of a 60 s run on the CI runner, and found no generator. A round's
   /// cost is the graph's size, which the node budget does not see.
   [[nodiscard]] bool exhausted() const noexcept {
-    return out.search_nodes >= limit || (work_limit > 0 && out.refinements * arcs >= work_limit);
+    return out.search_nodes >= limit ||
+           (work_limit > 0 && out.refinements * arcs >= work_limit);
   }
 
   /// Descend from `colour` by individualising the first vertex of the target cell each
