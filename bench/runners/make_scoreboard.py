@@ -287,7 +287,8 @@ def miplib2017_benchmark_row() -> Row | None:
 def miplib3_row() -> Row | None:
     # 60 s, the limit the published record reports the set at (#1158), so the row reads
     # against it directly; the 300 s table stays in docs/BENCHMARKS.md.
-    path = latest_result.latest(miplib3_doc.sankhya_pattern(60))
+    path = latest_result.latest(miplib3_doc.sankhya_pattern(60),
+                                allowed_options=latest_result.MIPLIB3_TIER_OPTIONS)
     if path is None:
         return None
     rows = read_csv(path)

@@ -62,6 +62,11 @@ def commit_of(path: Path) -> str:
 #: (#1082): it runs with certified_gap_seconds=120, while the solver's default is 30 s.
 CERTIFIED_TIER_OPTIONS = ("certified_gap_seconds",)
 
+#: MIPLIB 3 is reported at one thread. Since #1158 the tree's default is one worker per core,
+#: so a one-thread run records mip_threads=1; that is the tier's stated configuration, and
+#: without this latest() skipped every MIPLIB 3 run made after the default changed (#1202).
+MIPLIB3_TIER_OPTIONS = ("mip_threads",)
+
 
 def is_default_run(path: Path, allowed_options: tuple[str, ...] = ()) -> bool:
     """False when the run was made with a non-default solver option.
