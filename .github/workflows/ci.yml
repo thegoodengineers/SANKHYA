@@ -1204,7 +1204,10 @@ jobs:
           for attempt in 1 2 3; do
             apt-get update && apt-get install -y ninja-build cmake g++ zlib1g-dev git && break
             [ "$attempt" = 3 ] && exit 1
-            sleep 30
+            # 11 Nov 2026: archive.ubuntu.com did not resolve from the runners for hours.
+            # kernel.org mirrors the same signed archive under another name.
+            sed -i 's|http://archive.ubuntu.com/ubuntu|http://mirrors.kernel.org/ubuntu|g' /etc/apt/sources.list
+            sleep 10
           done
 
       - name: Configure with CUDA enabled
