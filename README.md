@@ -61,7 +61,7 @@ as regenerable backups.
 | Maros-Meszaros head-to-head (QP) | 138 | **117 of 138** (matched within 1e-6 and verified, every solver graded the same, 60 s) | PIQP 128 of 138, Clarabel 90 of 138, SCS 71 of 138, OSQP 46 of 138 | `bench/results/head-to-head-maros-meszaros-d0eb672.csv` | `d0eb672` | 2026-10-19 |
 | Refinery QP, convex cost (13k / 110k / 1M columns) | 3 | **2 of 3** (matched the constructed optimum within 1e-6 and verified, default engine, 600 s) | HiGHS QP 0 of 3 (same job, same rule) | `bench/results/head-to-head-refinery-qp-d6cecac.csv` | `d6cecac` | 2026-11-10 |
 | QPLIB (convex) | 16 | **9 of 16** (within relative 1e-6 of the published or best-known value and verified, `passed`) | - | `bench/results/qplib-5a39fb2.csv` | `5a39fb2` | 2026-10-01 |
-| Stress set | 126 | **106 of 126** (verdict `correct`) | - | `bench/results/stress-ab3f4a1.csv` | `ab3f4a1` | 2026-11-11 |
+| Stress set | 126 | **114 of 126** (verdict `correct`) | - | `bench/results/stress-09ea411.csv` | `09ea411` | 2026-11-11 |
 | GPU, real instances (A100) | 3 | **2 of 3** (faster than the faster CPU arm on the same instance) | construction, highs | `bench/results/gpu-real-a100-fdd1f35.csv` | `fdd1f35` | 2026-09-27 |
 | GPU, real instances (L4) | 3 | **2 of 3** (faster than the faster CPU arm on the same instance) | construction, highs | `bench/results/gpu-real-l4-58a8374.csv` | `58a8374` | 2026-09-25 |
 
@@ -73,12 +73,12 @@ as regenerable backups.
 |---|---:|---:|---|---|---|---|---|---|---|
 | Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-ab3f4a1.csv` | `ab3f4a1` |
 | MIPLIB 3 MILP | 65 | 60 s | 45 / 41 / 45 / 0 | 52 / 51 / 52 / 0 | 52 / 47 / 52 / 0 | 51 / 50 / 51 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-ab3f4a1.csv` | `ab3f4a1` |
-| Stress set LP | 126 | 60 s | 113 / 106 / 113 / 7 | 120 / 29 / 40 / 90 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-ab3f4a1.csv` | `ab3f4a1` |
+| Stress set LP | 126 | 60 s | 114 / 114 / 115 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-09ea411.csv` | `09ea411` |
 | Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | - | 87 / 85 / 60 / 2 | - | - | `bench/results/head-to-head-maros-meszaros-partial-ab3f4a1.csv` | `ab3f4a1` |
 
-Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 51, CBC 50, SCIP 47, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 106, CBC 59, GLPK 45, HiGHS 29, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58.
+Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 51, CBC 50, SCIP 47, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 114, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58.
 
-Versions, as each solver reported them in those runs: HiGHS 1.15.1, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
+Versions, as each solver reported them in those runs: HiGHS 1.15.1 and 1.16.0, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
 <!-- scoreboard:end -->
 
 ## Since 19 October
