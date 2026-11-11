@@ -88,6 +88,40 @@ values = struct.unpack_from(f"{1 + 2 * m + 2 * n}d", blob, 8)
 check((m, n, values[0], values[1 + 2 * m + n:]) == (1, 2, -1.5, (0.5, 0.75)),
       "Clp saveSolution offsets", str(values))
 
+# The MIP paths: the `cbc` binary's result block and saveSolution, glpsol's `s mip` file.
+check(rivals.supports("cbc", "mip") and not rivals.supports("cbc", "lp")
+      and not rivals.supports("cbc-clp", "mip") and rivals.supports("glpk", "mip"),
+      "cbc runs the MIPs, clp the LPs and QPs, GLPK both")
+with tempfile.TemporaryDirectory() as tmp:
+    binary, names, sol = Path(tmp) / "s.bin", Path(tmp) / "names.txt", Path(tmp) / "c.sol"
+    binary.write_bytes(blob)
+    names.write_text("Optimal - objective value 7\n      0 R1  3 0\n      0 X1  2 0\n"
+                     "      1 X2  0.5 0\n")
+    stdout = ("Version: 2.10.11 \nResult - Optimal solution found (within gap tolerance)\n\n"
+              "Objective value:                7.00000000\nLower bound:                    "
+              "6.999\nEnumerated nodes:               12\n")
+    out = rivals._cbc_result({}, stdout, binary, names, sol)
+    parsed = parse_sol(sol)
+    check((out["status"], out["objective"], out["nodes"], out["version"])
+          == ("optimal", 7.0, 12, "2.10.11"), "cbc result block", str(out))
+    check(parsed.status == "feasible" and parsed.col_value == {"X1": 1.0, "X2": 2.0},
+          "cbc's point is the saveSolution columns, written primal only", str(parsed.col_value))
+    out = rivals._cbc_result({}, "Result - Stopped on time limit\n\nNo feasible solution "
+                             "found\n", binary, names, Path(tmp) / "none.sol")
+    check(out["status"] == "time_limit" and not (Path(tmp) / "none.sol").exists(),
+          "cbc at the limit without an incumbent writes no point")
+    report = Path(tmp) / "report.txt"
+    report.write_text(GLPK_REPORT)
+    out = rivals._glpk_mip({"status": "unparsed"}, "RELATIVE MIP GAP TOLERANCE REACHED; SEARCH "
+                           "TERMINATED", "s mip 3 1 f 80".split(), [(0.0, 0.0)] * 3,
+                           [(80.0, 0.0)], report, sol)
+    check(out["status"] == "optimal" and parse_sol(sol).col_value == {"X01": 80.0},
+          "glpsol stopped by --mipgap is the optimal claimed at that gap", str(out))
+    out = rivals._glpk_mip({"status": "time_limit"}, "TIME LIMIT EXCEEDED; SEARCH TERMINATED",
+                           "s mip 3 1 f 80".split(), [(0.0, 0.0)] * 3, [(80.0, 0.0)], report, sol)
+    check(out["status"] == "time_limit" and out["objective"] == 80.0,
+          "glpsol's incumbent at the time limit stays a time limit")
+
 print(".sol conversion and reconcile")
 model = parse_mps(AFIRO)
 with tempfile.TemporaryDirectory() as tmp:

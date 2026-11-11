@@ -185,6 +185,9 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/out"
           mkdir -p "$out/results"
+          # bench/runners/rivals.py keeps each clp, cbc and glpsol run's raw output here, so
+          # it is uploaded with the CSV.
+          export SANKHYA_RIVAL_LOGS="$out/logs"
           cpu="$(lscpu | sed -n 's/^Model name: *//p' | head -1)"
           ram="$(free -g | awk '/^Mem:/ {print $2}')"
           machine="github-actions ubuntu-24.04 $(nproc) vCPU ${cpu} ${ram} GiB RAM"

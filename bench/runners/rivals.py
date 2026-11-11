@@ -61,6 +61,17 @@ SINGLE_THREAD_ENV = {"OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
                      "MKL_NUM_THREADS": "1"}
 
 
+def _keep_log(solver: str, model: Path, text: str) -> None:
+    """With SANKHYA_RIVAL_LOGS naming a directory (bench.yml does), the raw output of every
+    `clp`, `cbc` and `glpsol` run is kept there, so a grade can be laid against what the
+    solver itself printed."""
+    where = os.environ.get("SANKHYA_RIVAL_LOGS")
+    if where:
+        Path(where).mkdir(parents=True, exist_ok=True)
+        (Path(where) / f"{model.name}.{solver}.log").write_text(text, encoding="utf-8",
+                                                                errors="replace")
+
+
 def supports(solver: str, kind: str) -> bool:
     """GLPK has no quadratic objective. The four QP comparators (#983) are run only where
     the issue asks for them, beside Maros-Meszaros: they are convex-QP solvers, not general
@@ -297,7 +308,9 @@ def _worker_scip(model: Path, time_limit: float, sol: Path) -> dict:
     m.optimize()
     status = m.getStatus()
     mapped = {"optimal": "optimal", "infeasible": "infeasible", "unbounded": "unbounded",
-              "inforunbd": "infeasible_or_unbounded", "timelimit": "time_limit"}.get(status,
+              "inforunbd": "infeasible_or_unbounded", "timelimit": "time_limit",
+              # Stopped by limits/gap: the optimal every solver here claims at that gap.
+              "gaplimit": "optimal"}.get(status,
                                                                                     status)
     out = {"status": mapped, "message": status, "seconds": m.getSolvingTime(),
            "iterations": m.getNLPIterations(), "duals": False,
@@ -408,6 +421,9 @@ def _clp(model: Path, kind: str, time_limit: float, sol: Path) -> dict:
                     "message": f"no exit within {time_limit + HANG_MARGIN_SECONDS:g} s"}
         wall = time.perf_counter() - started
         text = done.stdout + done.stderr
+        _keep_log("cbc" if mip else "cbc-clp", model, text + "\n--- -solu, first 20000 "
+                  "characters ---\n" + (names.read_text(errors="replace")[:20000]
+                                        if names.exists() else "(not written)"))
         matches = CLP_STATUS.findall(text)
         word = matches[-1][0] if matches else ""
         status = {"Optimal": "optimal", "Primal infeasible": "infeasible",
@@ -522,17 +538,23 @@ def _glpk(model: Path, kind: str, time_limit: float, sol: Path) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         raw, report = Path(tmp) / "solution.txt", Path(tmp) / "report.txt"
         gap = ["--mipgap", repr(MIP_RELATIVE_GAP)] if kind == "mip" else []
-        command = ["glpsol", "--mps", str(model.resolve()), "--tmlim", str(max(1, int(time_limit))),
-                   *gap, "-w", str(raw), "-o", str(report)]
         started = time.perf_counter()
-        try:
-            done = subprocess.run(command, capture_output=True, text=True, cwd=tmp,
-                                  timeout=time_limit + HANG_MARGIN_SECONDS)
-        except subprocess.TimeoutExpired:
-            return {"status": "hung", "wall_seconds": time.perf_counter() - started,
-                    "message": f"no exit within {time_limit + HANG_MARGIN_SECONDS:g} s"}
+        # Fixed MPS first (Netlib's names have spaces in them); a file glpsol cannot read
+        # that way (the stress set's are free MPS) is given to its free-format reader.
+        for reader in ("--mps", "--freemps"):
+            command = ["glpsol", reader, str(model.resolve()), "--tmlim",
+                       str(max(1, int(time_limit))), *gap, "-w", str(raw), "-o", str(report)]
+            try:
+                done = subprocess.run(command, capture_output=True, text=True, cwd=tmp,
+                                      timeout=time_limit + HANG_MARGIN_SECONDS)
+            except subprocess.TimeoutExpired:
+                return {"status": "hung", "wall_seconds": time.perf_counter() - started,
+                        "message": f"no exit within {time_limit + HANG_MARGIN_SECONDS:g} s"}
+            text = done.stdout + done.stderr
+            if "MPS file processing error" not in text:
+                break
         wall = time.perf_counter() - started
-        text = done.stdout + done.stderr
+        _keep_log("glpk", model, text)
         clock, version = GLPK_TIME.search(text), GLPK_VERSION.search(text)
         iterations = GLPK_ITERATIONS.findall(text)
         out = {"status": "unparsed", "message": text.strip().splitlines()[-1][:200]
