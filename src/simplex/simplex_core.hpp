@@ -228,6 +228,8 @@ class Simplex {
   /// guessed off an interior point), start every nonbasic variable at the interior point's
   /// value (`interior_x` over the columns, `interior_activity` over the rows), push each to a
   /// bound while keeping the basics feasible, then finish with the primal loop.
+  /// max_i |(A x - s)_i| at the simplex's current values: the push's diagnostics (#888).
+  [[nodiscard]] double push_residual() const;
   Solution run_push(const WarmStart& warm, const std::vector<double>& interior_x,
                     const std::vector<double>& interior_activity);
 

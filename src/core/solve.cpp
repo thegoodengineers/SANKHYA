@@ -44,6 +44,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -368,6 +369,45 @@ void polish_with_the_interior_point(Solution* first, const Model& model, const O
                   polished.polish_iterations,
                   polished.message.empty() ? std::string() : " (" + polished.message + ")");
   *first = std::move(polished);
+}
+
+/// A PDHG start given for `original`, carried into `reduced` (presolve's output) by row and
+/// column name (#888). Presolve only drops rows and columns and tightens bounds; a kept
+/// column's value and a kept row's multiplier mean the same in both, and the engine projects
+/// the point into the reduced bounds anyway. A name the original does not have leaves that
+/// entry at zero; duals of the wrong length are dropped, as the engine would drop them.
+void map_pdhg_start_by_name(const Model& original, const Model& reduced, std::vector<double>* x,
+                            std::vector<double>* y) {
+  std::unordered_map<std::string_view, Index> col_index;
+  col_index.reserve(original.col_names.size());
+  for (Index j = 0; j < static_cast<Index>(original.col_names.size()); ++j) {
+    col_index.emplace(original.col_names[static_cast<std::size_t>(j)], j);
+  }
+  std::vector<double> mapped_x(static_cast<std::size_t>(reduced.num_cols()), 0.0);
+  for (Index j = 0; j < reduced.num_cols(); ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    if (u >= reduced.col_names.size()) break;
+    const auto it = col_index.find(reduced.col_names[u]);
+    if (it != col_index.end()) mapped_x[u] = (*x)[static_cast<std::size_t>(it->second)];
+  }
+  *x = std::move(mapped_x);
+  if (y->size() != original.row_names.size() || y->empty()) {
+    y->clear();
+    return;
+  }
+  std::unordered_map<std::string_view, Index> row_index;
+  row_index.reserve(original.row_names.size());
+  for (Index i = 0; i < static_cast<Index>(original.row_names.size()); ++i) {
+    row_index.emplace(original.row_names[static_cast<std::size_t>(i)], i);
+  }
+  std::vector<double> mapped_y(static_cast<std::size_t>(reduced.num_rows()), 0.0);
+  for (Index i = 0; i < reduced.num_rows(); ++i) {
+    const auto u = static_cast<std::size_t>(i);
+    if (u >= reduced.row_names.size()) break;
+    const auto it = row_index.find(reduced.row_names[u]);
+    if (it != row_index.end()) mapped_y[u] = (*y)[static_cast<std::size_t>(it->second)];
+  }
+  *y = std::move(mapped_y);
 }
 
 /// #888, `pdhg_crossover` (off by default): PDHG's point pushed to a vertex by the crossover,
@@ -802,10 +842,21 @@ Solution solve(const Model& model, const Options& requested_options, SolveContro
   if (control != nullptr && control->has_pdhg_warm_start() &&
       static_cast<Index>(control->start_col_value.size()) == model.num_cols() &&
       options.get_string("algorithm") == "pdhg" && options.get_bool("presolve")) {
-    options.set_bool("presolve", false);
-    logger.info(
-        "Starting PDHG iterate given: presolve skipped so it applies to the model's own "
-        "columns (#913)");
+    // A model that names every row and column keeps presolve (#888): the start is carried
+    // into the reduced model by name where the engine is called. Presolve's dropped rows
+    // are what the refinery year needed gone - 70,084 of its 779,640, empty, redundant and
+    // singleton - and bypassing it left the crossover push a basis with those rows in it.
+    const bool named = static_cast<Index>(model.col_names.size()) == model.num_cols() &&
+                       static_cast<Index>(model.row_names.size()) == model.num_rows();
+    if (named) {
+      logger.info(
+          "Starting PDHG iterate given: carried into the presolved model by name (#888)");
+    } else {
+      options.set_bool("presolve", false);
+      logger.info(
+          "Starting PDHG iterate given: presolve skipped so it applies to the model's own "
+          "columns (#913); the model does not name its rows and columns");
+    }
   }
   if (options.get_bool("deterministic")) {
     logger.info("Deterministic mode: no decision depends on the clock");
@@ -1133,6 +1184,9 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         if (control != nullptr && control->has_pdhg_warm_start()) {
           pdhg_warm.x = control->start_col_value;
           pdhg_warm.y = control->start_row_dual;
+          if (target.num_cols() != model.num_cols() || target.num_rows() != model.num_rows()) {
+            map_pdhg_start_by_name(model, target, &pdhg_warm.x, &pdhg_warm.y);
+          }
           if (std::isfinite(control->start_pdhg_omega) && control->start_pdhg_omega > 0.0) {
             pdhg_warm.omega = control->start_pdhg_omega;
           }

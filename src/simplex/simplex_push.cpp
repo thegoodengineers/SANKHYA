@@ -37,6 +37,22 @@
 
 namespace sankhya::detail {
 
+double Simplex::push_residual() const {
+  // max_i |(A x - s)_i| over the working problem [A | -I][x ; s] = 0, every variable at the
+  // value the simplex holds for it (#888 diagnostics).
+  std::vector<double> rows(static_cast<std::size_t>(m_), 0.0);
+  for (Index k = 0; k < total_; ++k) {
+    const double v = variable_value(k);
+    if (v == 0.0) continue;
+    for_each_entry(k, [&](Index row, double coefficient) {
+      rows[static_cast<std::size_t>(row)] += coefficient * v;
+    });
+  }
+  double worst = 0.0;
+  for (const double r : rows) worst = std::max(worst, std::fabs(r));
+  return worst;
+}
+
 Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& interior_x,
                            const std::vector<double>& interior_activity) {
   Timer timer;
@@ -134,8 +150,32 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
   Count pivots = 0;
   Count arrived = 0;
   Count refactorizations = 0;
+  // Per refactorization window (#888 diagnostics): the smallest eta pivot relative to its
+  // column, and the largest step times that column's largest entry.
+  double window_min_relative_pivot = 1.0;
+  double window_max_move = 0.0;
+  const double refactor_below = options_.get_double("crossover_push_refactor_below");
+  const auto refresh_every =
+      static_cast<Count>(options_.get_int("crossover_push_refresh_every"));
+  Count since_refresh = 0;
   bool deadline_hit = false;
-  for (const Index k : superbasic) {
+  // A LEAVING VARIABLE LEAVES WHERE IT IS, NOT WHERE ITS BOUND IS (#888). The ratio test
+  // lets a basic variable pass its bound - by the Harris tolerance, and by more when its
+  // |alpha| is under the pivot floor and it cannot block - and when it later leaves, its
+  // step is clamped at zero and it used to be SET to the bound: the difference went
+  // straight into A x = b. On the 709,556-row refinery year that residual left 1e-10 at
+  // pivot 28,000 and reached 1e15 by 55,000, under every update scheme and refactorization
+  // cadence tried, with fresh factors accurate to 1e-12 throughout. So the variable leaves
+  // at the value it has (the equations stay exact), and one off its bound by more than the
+  // primal tolerance goes back on the queue to be pushed there by a ratio test like any
+  // superbasic; Gill, Murray, Saunders & Wright (1989) keep the same invariant with their
+  // expanding bounds, and reset at the end as the cleanup below does. The requeue count is
+  // bounded by the queue's starting length, past which a variable just waits for cleanup.
+  std::vector<Index> off_bound;
+  const std::size_t requeue_budget = superbasic.size();
+  std::size_t requeued = 0;
+  for (std::size_t next = 0; next < superbasic.size(); ++next) {
+    const Index k = superbasic[next];
     if (deadline_ && (pivots & 63) == 0 && deadline_()) {
       deadline_hit = true;
       break;
@@ -191,8 +231,10 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
     for (Index slot = 0; slot < m_; ++slot) {
       alpha_max = std::max(alpha_max, std::fabs(alpha_[static_cast<std::size_t>(slot)]));
     }
-    const double pivot_floor =
-        std::max(tol::kPivotTolerance, tol::kCrossoverPushPivotRelativeFloor * alpha_max);
+    const double asked_floor = options_.get_double("crossover_push_pivot_floor");
+    const double pivot_floor = std::max(
+        tol::kPivotTolerance,
+        (asked_floor > 0.0 ? asked_floor : tol::kCrossoverPushPivotRelativeFloor) * alpha_max);
     const auto blocking = [&](Index slot, double tolerance, double* t, bool* to_upper) {
       const double a = alpha_[static_cast<std::size_t>(slot)];
       if (std::fabs(a) <= pivot_floor) return false;
@@ -235,6 +277,8 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
       }
     }
     if (leaving_slot >= 0) step = std::min(step, distance);
+    const double relative_pivot = alpha_max > 0.0 ? leaving_alpha / alpha_max : 1.0;
+    window_max_move = std::max(window_max_move, step * alpha_max);
 
     for (Index slot = 0; slot < m_; ++slot) {
       x_basic_[static_cast<std::size_t>(slot)] -=
@@ -253,20 +297,34 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
     const Index leaving = basis_[slot];
     const auto l = static_cast<std::size_t>(leaving);
     basis_position_[l] = -1;
-    if (leaving_to_upper) {
-      nonbasic_value_[l] = upper_[l];
-      status_[l] = BasisStatus::kAtUpper;
-    } else {
-      nonbasic_value_[l] = lower_[l];
-      status_[l] = BasisStatus::kAtLower;
-    }
+    const double leaving_bound = leaving_to_upper ? upper_[l] : lower_[l];
+    const double leaving_now = x_basic_[slot];
+    status_[l] = leaving_to_upper ? BasisStatus::kAtUpper : BasisStatus::kAtLower;
     if (lower_[l] == upper_[l]) status_[l] = BasisStatus::kFixed;
+    // Within the push's own ceiling on the start's infeasibility (`loose`) it is set onto
+    // the bound as before, and the next x_B solve absorbs the difference: a start the push
+    // accepted 5e-5 infeasible (the refinery at T = 365) has basic slacks that far outside,
+    // and requeueing every one of them doubled that push (45,027 requeues, 85,781 pivots
+    // for 40,671) at a threshold of one tolerance and of ten alike.
+    const double leaving_scale = std::max(1.0, std::fabs(leaving_bound));
+    if (std::fabs(leaving_now - leaving_bound) <= loose * leaving_scale) {
+      nonbasic_value_[l] = leaving_bound;
+    } else {
+      nonbasic_value_[l] = leaving_now;
+      off_bound.push_back(leaving);
+      if (requeued < requeue_budget) {
+        superbasic.push_back(leaving);
+        ++requeued;
+      }
+    }
     basis_[slot] = k;
     basis_position_[u] = leaving_slot;
     status_[u] = BasisStatus::kBasic;
     x_basic_[slot] = value + static_cast<double>(direction) * step;
     nonbasic_value_[u] = x_basic_[slot];
     ++pivots;
+    window_min_relative_pivot = std::min(window_min_relative_pivot, relative_pivot);
+    const bool small_eta = refactor_below > 0.0 && relative_pivot < refactor_below;
     const bool updated = [&] {
       const ProfileScope timed(logger_.profiler(), "push basis update", ProfileMode::kDetailed);
       return lu_.update(leaving_slot, alpha_.data());
@@ -281,9 +339,31 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
     const bool past_break_even =
         eta_work_since_refactor_ >
         refactor_work_ratio_ * std::max(1.0, static_cast<double>(lu_.factor_nonzeros()));
-    if (!updated || past_break_even || lu_.should_refactorize()) {
+    const bool refactor_now =
+        !updated || small_eta || past_break_even || lu_.should_refactorize();
+    if (!refactor_now && refresh_every > 0 && ++since_refresh >= refresh_every) {
+      // x_B again from the factors, as the primal loop does every iteration: the push's
+      // incrementally moved x_B carries every eta's error forward (#888).
+      compute_basic_values();
+      since_refresh = 0;
+    }
+    if (refactor_now) {
+      since_refresh = 0;
       const ProfileScope timed(logger_.profiler(), "push refactorization",
                                ProfileMode::kDetailed);
+      // WHERE THE PUSH'S FACTORS DEGRADE (#888), under profile=detailed only: one line per
+      // refactorization with why it fired, the etas it discarded, the fresh factors' pivot
+      // range, and the residual of [A | -I] x = 0 through the eta-updated x_B and then
+      // through fresh factors. A residual that grows between refactorizations is the update;
+      // one that stays large after a fresh factorization is the basis itself.
+      const bool diagnose =
+          logger_.profiler() != nullptr && logger_.profiler()->records(ProfileMode::kDetailed);
+      const Index etas_before = lu_.eta_count();
+      const char* why = !updated          ? "update refused"
+                        : small_eta       ? "small eta pivot"
+                        : past_break_even ? "break-even"
+                                          : "eta cap";
+      const double residual_before = diagnose ? push_residual() : 0.0;
       if (!refactorize()) {
         if (factors_abandoned_) return factorization_failed(pivots, timer);
         return finish(SolveStatus::kNumericalError,
@@ -293,6 +373,33 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
       ++refactorizations;
       eta_work_since_refactor_ = 0.0;
       compute_basic_values();
+      if (diagnose) {
+        logger_.info(
+            "Push refactorization {} at pivot {}: {} ({} etas), pivots {:.3e} .. {:.3e} "
+            "(spread {:.2e}), {} nonzeros, residual {:.3e} before, {:.3e} after; window: "
+            "smallest eta pivot {:.2e} of its column, largest move {:.2e}",
+            refactorizations, pivots, why, etas_before, lu_.smallest_pivot(),
+            lu_.largest_pivot(), lu_.largest_pivot() / std::max(lu_.smallest_pivot(), 1e-300),
+            lu_.factor_nonzeros(), residual_before, push_residual(), window_min_relative_pivot,
+            window_max_move);
+      }
+      window_min_relative_pivot = 1.0;
+      window_max_move = 0.0;
+    }
+  }
+  // The cleanup: every variable that left off its bound and is still nonbasic goes onto it
+  // now, and x_B is solved for afresh below; what that moves is the infeasibility the
+  // check after it measures and the primal loop's phase 1 repairs.
+  for (const Index k : off_bound) {
+    const auto u = static_cast<std::size_t>(k);
+    if (basis_position_[u] >= 0) continue;
+    if (lower_[u] == upper_[u]) {
+      status_[u] = BasisStatus::kFixed;
+      nonbasic_value_[u] = lower_[u];
+    } else if (status_[u] == BasisStatus::kAtUpper) {
+      nonbasic_value_[u] = upper_[u];
+    } else if (status_[u] == BasisStatus::kAtLower) {
+      nonbasic_value_[u] = lower_[u];
     }
   }
   if (!refactorize()) {
@@ -304,9 +411,10 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
   compute_basic_values();
   reset_devex();
   logger_.info(
-      "Crossover push: {} superbasic variable(s), {} arrived at a bound without a pivot, {} "
-      "basis changes, {} refactorizations, max infeasibility {:.3e}{}",
-      superbasic.size(), arrived, pivots, refactorizations, max_infeasibility(),
+      "Crossover push: {} superbasic variable(s) ({} of them requeued after leaving off a "
+      "bound), {} arrived at a bound without a pivot, {} basis changes, {} refactorizations, "
+      "max infeasibility {:.3e}{}",
+      superbasic.size(), requeued, arrived, pivots, refactorizations, max_infeasibility(),
       deadline_hit ? " (time limit reached inside the push)" : "");
   if (max_infeasibility() > loose) {
     return finish(SolveStatus::kNotSolved,

@@ -1899,6 +1899,32 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"crossover_push_pivot_floor",
+         OptionType::Double,
+         0.0,
+         "Diagnostic (#888): the crossover push's relative pivot floor; 0, the default, "
+         "means tol::kCrossoverPushPivotRelativeFloor.",
+         0.0,
+         1.0,
+         {}});
+    s.push_back({"crossover_push_refresh_every",
+                 OptionType::Int,
+                 std::int64_t{0},
+                 "Diagnostic (#888): the crossover push solves for x_B from the factors every "
+                 "this many pivots between refactorizations. 0, the default, never.",
+                 0.0,
+                 1e9,
+                 {}});
+    s.push_back({"crossover_push_refactor_below",
+                 OptionType::Double,
+                 0.0,
+                 "Diagnostic (#888): the crossover push refactorizes right after a pivot whose "
+                 "|alpha_r| is below this fraction of its column's largest entry. 0, the "
+                 "default, never.",
+                 0.0,
+                 1.0,
+                 {}});
     s.push_back({"crossover_push_ceiling",
                  OptionType::Double,
                  0.0,
