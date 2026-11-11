@@ -2213,8 +2213,11 @@ const std::vector<OptionSpec>& Options::registry() {
          "stated whenever the reported y is dual feasible to 1e-8 relative and the dual "
          "tolerance. The iteration count includes the polishing steps, so it can exceed "
          "iteration_limit (iteration_limit bounds the main run, each polishing phase has the "
-         "budget above); the time limit still bounds the whole. CPU engine only: the CUDA "
-         "engine ignores it and says so. Off by default until an A/B on main.",
+         "budget above); the time limit still bounds the whole. The CUDA engine has no "
+         "polish of its own: its answer is polished on the host once the card returns "
+         "(#1177), each phase allowed twice the steps the card took, the card given 70% of "
+         "a finite time limit and the host the rest. Off by default: the Netlib A/B at main "
+         "d4bb701 loses fffff800 with it on.",
          0.0,
          0.0,
          {}});

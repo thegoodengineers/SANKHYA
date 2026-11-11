@@ -18,9 +18,12 @@
 
 #include <gtest/gtest.h>
 
+#include "pdhg/pdhg_host_polish.hpp"
 #include "sankhya/io.hpp"
+#include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
 
@@ -200,6 +203,46 @@ TEST_P(PdhgFeasibilityPolish, OffIsTheEngineAsItWas) {
   EXPECT_EQ(by_default.message, explicit_off.message);
   EXPECT_EQ(by_default.message.find("feasibility polish"), std::string::npos);
   EXPECT_TRUE(std::isinf(by_default.dual_bound));
+}
+
+TEST_P(PdhgFeasibilityPolish, AnotherEnginesAnswerIsPolishedOnTheHost) {
+  // #1177: the CUDA engine has no polish of its own, so solve() hands the card's answer to
+  // pdhg::polish_engine_answer on the host. Exercised here without a card: the CPU engine's
+  // unpolished answer at the same limit stands in for the card's (same Solution contract:
+  // values, row_dual = sense * (-y), the iterations taken), and the host step must leave a
+  // primal feasible point with its gap stated, as the in-engine polish above does.
+  const Case c = GetParam();
+  const Model model = netlib(c.name);
+  Options options = pdhg_options(c.iteration_limit);
+  Solution card = solve(model, options);
+  ASSERT_EQ(card.status, SolveStatus::kIterationLimit) << card.message;
+  const Count taken = card.iterations;
+
+  options.set_bool("pdhg_feasibility_polish", true);
+  Logger quiet(nullptr);
+  const Timer timer;
+  pdhg::polish_engine_answer(&card, model, options, quiet, nullptr, timer);
+  EXPECT_NE(card.message.find("reported point polished"), std::string::npos) << card.message;
+  EXPECT_GT(card.iterations, taken) << card.message;
+  EXPECT_NE(card.algorithm.find("+feasibility-polish"), std::string::npos) << card.algorithm;
+  const Recomputed r = recompute(model, card);
+  EXPECT_LE(r.relative_primal, tol::kPdhgTight) << c.name << ": " << card.message;
+  EXPECT_LE(r.absolute_primal, tol::kPrimalFeasibility) << c.name << ": " << card.message;
+  EXPECT_NEAR(r.objective, card.objective, 1e-9 * (1.0 + std::fabs(card.objective))) << c.name;
+  if (std::isfinite(card.dual_bound)) {
+    const double scale = 1.0 + std::fabs(card.objective);
+    EXPECT_NEAR(card.dual_bound, r.dual_objective, 1e-7 * scale) << c.name;
+    EXPECT_LE(r.dual_objective, r.objective + 1e-6 * scale) << c.name;
+  }
+
+  // Off, the host step is not there: the answer comes back bit for bit.
+  Options off = pdhg_options(c.iteration_limit);
+  Solution untouched = solve(model, off);
+  const Solution copy = untouched;
+  pdhg::polish_engine_answer(&untouched, model, off, quiet, nullptr, timer);
+  EXPECT_EQ(untouched.col_value, copy.col_value);
+  EXPECT_EQ(untouched.message, copy.message);
+  EXPECT_EQ(untouched.iterations, copy.iterations);
 }
 
 INSTANTIATE_TEST_SUITE_P(Netlib, PdhgFeasibilityPolish,

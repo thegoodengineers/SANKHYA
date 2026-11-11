@@ -76,6 +76,7 @@
 #include "exact/exact_verify.hpp"
 #include "mip/components.hpp"
 #include "mip/sos_reformulate.hpp"
+#include "pdhg/pdhg_host_polish.hpp"
 #include "presolve/substitute.hpp"
 #include "sankhya/certificate.hpp"
 #include "sankhya/ipm.hpp"
@@ -1141,10 +1142,14 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         if (use_gpu_pdhg) {
           // GPU path: auto-routed by size:pdhg-gpu, or explicit --gpu flag (both gated by the
           // VRAM check above). Multi-GPU when gpu_devices names more than one device (#295).
-          if (options.get_bool("pdhg_feasibility_polish")) {
-            logger.warning(
-                "pdhg_feasibility_polish (#483) is implemented on the CPU PDHG engine only; "
-                "the CUDA engine runs without it");
+          // pdhg_feasibility_polish (#483) has no device implementation: the card's answer
+          // is polished on the host afterwards (#1177), so the card gets the same share of a
+          // finite limit the interior-point polish leaves it, and the host the rest.
+          if (options.get_bool("pdhg_feasibility_polish") &&
+              !engine_options.get_bool("pdhg_polish") &&
+              !engine_options.get_bool("deterministic") && time_limit > 0.0 &&
+              std::isfinite(time_limit)) {
+            first_pass.set_double("time_limit", time_limit * kPdhgShareOfTheTimeLimit);
           }
           const std::vector<int> gpu_dev_ids =
               gpu::parse_device_ids(options.get_string("gpu_devices"));
@@ -1156,6 +1161,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           } else {
             first = gpu::solve_pdhg_gpu(target, first_pass, logger, control, pdhg_warm_ptr);
           }
+          pdhg::polish_engine_answer(&first, target, options, logger, control, timer);
           polish_with_the_interior_point(&first, target, options, logger, control, timer);
           crossover_after_pdhg(&first, target, options, logger, control, timer);
           return first;
