@@ -330,9 +330,21 @@ jobs:
               refinery)
                 python3 bench/runners/compare.py --suite refinery --sankhya-binary build/sankhya \
                   --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} "$@" ;;
+              # `--ipm-trace` also runs the default QP engine alone on the 1M instance at
+              # log_level=verbose and keeps that log in the artifact (where its time goes).
               head-to-head-refinery-qp)
+                trace=0; pass=()
+                for a in "$@"; do
+                  if [ "$a" = "--ipm-trace" ]; then trace=1; else pass+=("$a"); fi
+                done
                 python3 bench/runners/compare.py --suite refinery-qp --sankhya-binary build/sankhya \
-                  --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} "$@" ;;
+                  --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} ${pass[@]+"${pass[@]}"}
+                if [ "$trace" = 1 ]; then
+                  build/sankhya solve data/refinery-qp/refinery_qp_1m.qps --time-limit 600 \
+                    --option threads=1 --option log_level=verbose --option profile=detailed \
+                    > "$out/ipm-1m-trace.log" 2>&1 || true
+                  tail -60 "$out/ipm-1m-trace.log"
+                fi ;;
               # #913: options="--algorithm pdhg" for the PDHG warm start. Runs through the
               # Python bindings, which load build/libsankhya; it takes no time limit.
               # One job, one machine, one binary: both arms of an option A/B interleaved

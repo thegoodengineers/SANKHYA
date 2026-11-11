@@ -2218,6 +2218,20 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back({"qp_relative_stop",
+                 OptionType::Bool,
+                 false,
+                 "qp_algorithm=condat-vu: also end the loop when the RELATIVE primal and "
+                 "dual measures (the worst row violation over 1 + the largest row activity or "
+                 "bound; the projected-gradient stationarity over 1 + the largest of |c|, "
+                 "|Qx|, |A'y|) are both at most qp_tolerance, as pdhg_relative_stop does for "
+                 "LP PDHG (#1174). The verdict is unchanged: optimal still needs the absolute "
+                 "measures; a point that met only the relative request is reported as "
+                 "iteration_limit with its residuals, and qp_ipm_stall_handoff hands it to the "
+                 "interior point for the time left.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"qp_tolerance",
                  OptionType::Double,
                  1e-8,

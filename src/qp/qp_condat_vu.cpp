@@ -252,6 +252,29 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
   }
 
   const double tolerance = options.get_double("qp_tolerance");
+  // qp_relative_stop (#1178 follow-up, after the LP engine's pdhg_relative_stop, #1174): the
+  // loop may end on the RELATIVE measures - the worst row violation over 1 + the largest row
+  // activity or finite row bound, the projected-gradient stationarity over 1 + the largest
+  // of |c|, |Q x| and |A'y| (the scaling of O'Donoghue, Chu, Parikh & Boyd, J. Optim. Theory
+  // Appl. 169 (2016), and of Applegate et al., PDLP, NeurIPS 2021) - both at most
+  // qp_tolerance. The verdict does not move: `optimal` still needs both ABSOLUTE measures at
+  // most qp_tolerance, as before; a point that met only the relative request is reported as
+  // stopped (iteration_limit, its residuals in the message), which solve.cpp hands to the
+  // interior point as a warm start for the time left (qp_ipm_stall_handoff, #981).
+  const bool relative_stop = options.get_bool("qp_relative_stop");
+  double row_bound_scale = 0.0, cost_scale = 0.0;
+  if (relative_stop) {
+    for (Index i = 0; i < m; ++i) {
+      const auto u = static_cast<std::size_t>(i);
+      if (std::isfinite(model.row_lower[u]))
+        row_bound_scale = std::max(row_bound_scale, std::fabs(model.row_lower[u]));
+      if (std::isfinite(model.row_upper[u]))
+        row_bound_scale = std::max(row_bound_scale, std::fabs(model.row_upper[u]));
+    }
+    for (Index j = 0; j < n; ++j) {
+      cost_scale = std::max(cost_scale, std::fabs(model.col_cost[static_cast<std::size_t>(j)]));
+    }
+  }
   // A first-order method with no iteration limit still needs a stopping point, so an absent
   // limit becomes this engine's own ceiling rather than an unbounded loop.
   constexpr Count kIterationCeiling = 1000000;
@@ -361,12 +384,14 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
 
     // Primal residual: the worst row-bound violation.
     double primal_residual = 0.0;
+    double activity_scale = 0.0;
     if (m > 0) {
       model.matrix.multiply(x.data(), ax.data());
       for (Index i = 0; i < m; ++i) {
         const auto u = static_cast<std::size_t>(i);
         const double projected = project(ax[u], model.row_lower[u], model.row_upper[u]);
         primal_residual = std::max(primal_residual, std::fabs(ax[u] - projected));
+        activity_scale = std::max(activity_scale, std::fabs(ax[u]));
       }
     }
 
@@ -376,16 +401,35 @@ Solution solve_convex_qp(const Model& model, const Options& options, Logger& log
     std::fill(at_y.begin(), at_y.end(), 0.0);
     if (m > 0) model.matrix.transpose_multiply_add(y.data(), at_y.data());
     double dual_residual = 0.0;
+    double gradient_scale = cost_scale;
     for (Index j = 0; j < n; ++j) {
       const auto u = static_cast<std::size_t>(j);
       const double gradient = sense * model.col_cost[u] + sense * qx[u] + at_y[u];
       const double stepped = project(x[u] - gradient, model.col_lower[u], model.col_upper[u]);
       dual_residual = std::max(dual_residual, std::fabs(x[u] - stepped));
+      if (relative_stop) {
+        gradient_scale = std::max({gradient_scale, std::fabs(qx[u]), std::fabs(at_y[u])});
+      }
     }
 
     if (primal_residual <= tolerance && dual_residual <= tolerance) {
       status = SolveStatus::kOptimal;
       break;
+    }
+    if (relative_stop) {
+      const double primal_relative =
+          primal_residual / (1.0 + std::max(activity_scale, row_bound_scale));
+      const double dual_relative = dual_residual / (1.0 + gradient_scale);
+      if (primal_relative <= tolerance && dual_relative <= tolerance) {
+        status = SolveStatus::kIterationLimit;
+        message = fmt::format(
+            "stopped on the relative request (qp_relative_stop) after {} iterations: relative "
+            "primal {:.3e}, dual {:.3e} against {:.1e}; the absolute standard is not met "
+            "(primal {:.3e}, dual {:.3e}), so this is not an optimality claim",
+            iterations, primal_relative, dual_relative, tolerance, primal_residual,
+            dual_residual);
+        break;
+      }
     }
     if (iterations % 5000 == 0) {
       logger.iteration(iterations, model.evaluate_objective(x.data()), primal_residual,
