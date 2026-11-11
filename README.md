@@ -55,7 +55,7 @@ as regenerable backups.
 | Netlib infeasible | 29 | **28 of 29** (certified infeasible, `passed`) | - | `bench/results/netlib-infeasible-5a39fb2.csv` | `5a39fb2` | 2026-10-01 |
 | Kennington | 16 | **16 of 16** (matches published optimum and verified, `passed`) | - | `bench/results/kennington-full-9463fd7.csv` | `9463fd7` | 2026-10-02 |
 | Mittelmann | 12 | **5 of 12** (matches HiGHS's objective and verified, `passed`) | HiGHS (objective check) | `bench/results/mittelmann-72123ff.csv` | `72123ff` | 2026-09-24 |
-| MIPLIB 3 | 65 | **42 of 65** (proved the published optimum and verified, best of 3 seeds, 60 s, 1 thread) | HiGHS 49 of 65 (same job, same rule) | `bench/results/miplib3-60s-seeds3-d4bb701.csv` | `d4bb701` | 2026-11-10 |
+| MIPLIB 3 | 65 | **43 of 65** (proved the published optimum and verified, best of 3 seeds, 60 s, 1 thread) | HiGHS 49 of 65 (same job, same rule) | `bench/results/miplib3-60s-seeds3-f697caa.csv` | `f697caa` | 2026-11-11 |
 | MIPLIB 2017 | 30 | **14 of 30** (matched the published optimum and verified) | - | `bench/results/miplib-ad57c03.csv` | `ad57c03` | 2026-09-27 |
 | Maros-Meszaros (QP) | 138 | **127 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-c766eae.csv` | `c766eae` | 2026-10-22 |
 | Maros-Meszaros head-to-head (QP) | 138 | **117 of 138** (matched within 1e-6 and verified, every solver graded the same, 60 s) | PIQP 128 of 138, Clarabel 90 of 138, SCS 71 of 138, OSQP 46 of 138 | `bench/results/head-to-head-maros-meszaros-d0eb672.csv` | `d0eb672` | 2026-10-19 |
@@ -376,14 +376,19 @@ not known in advance.
 **Four more sets and three checks, run on `main` between 30 September and 4 October.**
 MIPLIB 3, the classic 1998 set, kept beside MIPLIB 2017 and never merged into its tables
 (`docs/BENCHMARKS.md` section 2a, #761, #1158): all 65 models x 3 seeds, one thread, 60 s, on a
-4-vCPU GitHub runner at `d4bb701`, HiGHS 1.15.1 on the same files in the same job. SANKHYA
-proves the published optimum on **42 of 65** (best of 3 seeds; 37, 39 and 41 per seed, 36 in
+4-vCPU GitHub runner at `f697caa`, HiGHS 1.15.1 on the same files in the same job. SANKHYA
+proves the published optimum on **43 of 65** (best of 3 seeds; 40, 41 and 42 per seed, 39 in
 every seed), HiGHS on **49 of 65**, both graded by the same rule and the same verifier, every
-one of the 188 points written accepted (`bench/results/miplib3-60s-seeds3-d4bb701.csv`,
-`highs-miplib3-60s-d4bb701.csv`). SANKHYA alone proves misc07 and qiu; HiGHS alone proves
-air04, dcmulti, gesa2, harp2, mitre, mod011, nw04, p2756 and rout (the per-model causes are in
-#1158). The run before (`312818a`) read 35 of 65, most of the gap a weaker root bound after
-cuts. Since #1193 the root separates in rounds when round 1 takes a flow cover, with the cut
+one of the 189 points written accepted (`bench/results/miplib3-60s-seeds3-f697caa.csv`,
+`highs-miplib3-60s-f697caa.csv`). SANKHYA alone proves misc07 and qiu; HiGHS alone proves
+air04, gesa2, harp2, mitre, mod011, nw04, p2756 and rout (the per-model causes are in
+#1158). The runs before read 35 of 65 (`312818a`, most of the gap a weaker root bound after
+cuts) and 42 of 65 (`d4bb701`). The step from 42 is dcmulti: a search that meets the 1e-4 gap
+target with the tree still open now goes on for half as many nodes again
+(`mip_gap_target_extension`, #1212), and dcmulti, which had stopped 3.2e-5 above its optimum
+on every seed, closes its tree on all three. Its two gates proved more on every seed and each
+lost one proof at the 60 s edge, on a run where the option had not acted
+(`bench/results/option-ab-miplib3-gap-extension-95f84b6.csv`, `-repeat-95f84b6.csv`). Since #1193 the root separates in rounds when round 1 takes a flow cover, with the cut
 pool and lifted flow covers on aggregated rows, which closes that root on the fixed-charge and
 lot-sizing models (fixnet6, pp08a, vpm2, modglob, set1ch); the gate before its merge, both arms
 in one job, proved 37/39/41 against 34/34/34 per seed with no proof or verified point lost
