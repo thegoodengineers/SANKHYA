@@ -2892,7 +2892,10 @@ def main() -> int:
     milp_long_csv = newest_named("miplib-600s-*.csv")
     # MIPLIB 3 (#761) at each of its limits, SANKHYA's run and HiGHS's: names of their own
     # (`miplib3-`, `highs-miplib3-`) that none of the MIPLIB 2017 globs above can match.
-    miplib3_runs = {limit: (newest(miplib3_doc.sankhya_pattern(limit)),
+    # mip_threads=1 is the tier's stated one-thread configuration (latest_result.py, #1202).
+    miplib3_runs = {limit: (latest_result.latest(
+                                miplib3_doc.sankhya_pattern(limit),
+                                allowed_options=latest_result.MIPLIB3_TIER_OPTIONS),
                             newest(miplib3_doc.highs_pattern(limit)))
                     for limit in miplib3_doc.LIMITS}
     # The whole benchmark set (#1199), its joined shards: `miplib2017-bench-` and
