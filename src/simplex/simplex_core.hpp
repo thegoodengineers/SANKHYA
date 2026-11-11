@@ -772,7 +772,7 @@ class Simplex {
                                           Engine engine, const WarmStart* warm,
                                           SolveControl* control = nullptr,
                                           NodeFactorCache* factors = nullptr,
-                                          bool costed = false);
+                                          bool rescaled_costs = false);
 
 /// One row's candidate breakpoint, gathered in pass one of the Harris test and re-examined
 /// in pass two.
