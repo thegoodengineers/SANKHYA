@@ -196,6 +196,7 @@ class BranchAndBound {
     integrality_tolerance_ = options.get_double("integrality_tolerance");
     relative_gap_target_ = options.get_double("mip_relative_gap");
     absolute_gap_target_ = options.get_double("mip_absolute_gap");
+    gap_target_extension_ = options.get_double("mip_gap_target_extension");
     // One interpretation of every limit, shared with every other engine (#289).
     limits_ = ResourceLimits(options, logger);
     time_limit_ = options.get_double("time_limit");
@@ -959,6 +960,7 @@ class BranchAndBound {
   double integrality_tolerance_ = tol::kIntegrality;
   double relative_gap_target_ = tol::kMipRelativeGap;
   double absolute_gap_target_ = tol::kMipAbsoluteGap;
+  double gap_target_extension_ = 0.0;  ///< mip_gap_target_extension (#1158)
   ResourceLimits limits_;
   double time_limit_ = 0.0;
   double sense_ = 1.0;
