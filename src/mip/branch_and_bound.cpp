@@ -584,9 +584,9 @@ Solution BranchAndBound::run() {
           if (gap_target_extension_ > 0.0 && shared_ == nullptr && extension_until < 0) {
             extension_until =
                 nodes_explored_ +
-                std::max<Count>(1, static_cast<Count>(std::ceil(
-                                       gap_target_extension_ *
-                                       static_cast<double>(nodes_explored_))));
+                std::max<Count>(
+                    1, static_cast<Count>(std::ceil(gap_target_extension_ *
+                                                    static_cast<double>(nodes_explored_))));
             logger_.info(
                 "gap target met after {} nodes ({:.3e} relative); searching on to node {} "
                 "for a closed tree (mip_gap_target_extension={})",

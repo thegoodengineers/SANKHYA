@@ -73,7 +73,8 @@ double enumerate(const Model& m, const std::vector<std::vector<double>>& weights
     }
     bool fits = true;
     for (Index i = 0; i < kRows; ++i) {
-      fits = fits && activity[static_cast<std::size_t>(i)] <= m.row_upper[static_cast<std::size_t>(i)];
+      fits = fits &&
+             activity[static_cast<std::size_t>(i)] <= m.row_upper[static_cast<std::size_t>(i)];
     }
     if (fits && value > best) best = value;
   }
@@ -114,7 +115,8 @@ TEST(GapTargetExtension, AClosedTreeReportsTheEnumeratedOptimum) {
     Options on = loose_options();
     on.set_double("mip_gap_target_extension", 1e6);
     const Solution closed = solve(m, on);
-    ASSERT_EQ(closed.status, SolveStatus::kOptimal) << "seed " << seed << ": " << closed.message;
+    ASSERT_EQ(closed.status, SolveStatus::kOptimal)
+        << "seed " << seed << ": " << closed.message;
     EXPECT_NEAR(closed.objective, optimum, 1e-9) << "seed " << seed;
     EXPECT_EQ(closed.message.find("not exhausted"), std::string::npos)
         << "seed " << seed << ": " << closed.message;
