@@ -457,4 +457,32 @@ TEST(Symmetry, TheOptionIsRegisteredAndOnByDefault) {
 }
 
 }  // namespace
+TEST(Symmetry, ACallersStopEndsDetectionWithinOneRefinementRound) {
+  // #1199: detection ran two minutes under a 60 s limit on a 300,000-nonzero model, with
+  // nothing asking the clock. `stop` is asked before every refinement round: saying yes
+  // from the start means no round runs and no generator is claimed; saying yes after three
+  // rounds means at most three ran. Either way what is returned is exact, and flagged.
+  const Model m = build({{3, 3, 3, 3, 5, 7}}, {-kInf}, {10.0}, {2, 2, 2, 2, 4, 6}, 0.0, 1.0);
+  const SymmetryGroup free_run = detect_symmetry(m, 1000);
+  ASSERT_FALSE(free_run.generators.empty());
+  ASSERT_GT(free_run.refinements, 3);
+
+  const SymmetryGroup at_once = detect_symmetry(m, 1000, 0, [] { return true; });
+  EXPECT_TRUE(at_once.stopped);
+  EXPECT_TRUE(at_once.budget_exhausted);
+  EXPECT_EQ(at_once.refinements, 0);
+  EXPECT_TRUE(at_once.generators.empty());
+
+  Count asked = 0;
+  const SymmetryGroup later = detect_symmetry(m, 1000, 0, [&] { return ++asked > 3; });
+  EXPECT_TRUE(later.stopped);
+  EXPECT_LE(later.refinements, 3);
+  for (const Permutation& p : later.generators) EXPECT_TRUE(dense_automorphism(m, p));
+
+  const SymmetryGroup never = detect_symmetry(m, 1000, 0, [] { return false; });
+  EXPECT_FALSE(never.stopped);
+  EXPECT_EQ(never.generators.size(), free_run.generators.size());
+  EXPECT_EQ(never.refinements, free_run.refinements);
+}
+
 }  // namespace sankhya::mip

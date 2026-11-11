@@ -17,6 +17,7 @@
 // budget and its leftmost-leaf-only comparison decide only how many it finds.
 #pragma once
 
+#include <functional>
 #include <vector>
 
 #include "sankhya/model.hpp"
@@ -46,14 +47,24 @@ struct SymmetryGroup {
   /// True when the search stopped at its node budget: the generators are still exact, the
   /// group they generate may be a proper subgroup.
   bool budget_exhausted = false;
+  /// True when the caller's `stop` ended detection (the solve's deadline or an interrupt).
+  bool stopped = false;
 };
 
 /// Detect the formulation symmetry of `model`, spending at most `search_limit`
 /// individualisations and, when `work_limit` is positive, at most about that many visits of
 /// the graph's adjacency entries in refinement (#1158). A model whose refined partition is
 /// already discrete costs one refinement and no search.
+///
+/// `stop`, when given, is asked before every refinement round and ends detection when it
+/// returns true (#1199): detection runs before the first node, where nothing else looks at
+/// the clock, and on a model of 300,000 nonzeros it ran two minutes under a 60 s time
+/// limit. The work budget bounds the cost the same on every machine; `stop` is the
+/// wall-clock guarantee whatever the budget is set to. The generators found before the
+/// stop are exact, as at any budget.
 [[nodiscard]] SymmetryGroup detect_symmetry(const Model& model, Count search_limit,
-                                            Count work_limit = 0);
+                                            Count work_limit = 0,
+                                            const std::function<bool()>& stop = {});
 
 /// Is `p` an automorphism of `model`: a bijection on columns and on rows that preserves
 /// every cost, bound, type and matrix entry exactly? The check every generator passed.

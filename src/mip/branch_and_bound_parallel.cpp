@@ -605,15 +605,25 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
     // Not under a certificate, whose search runs without the rows (branch_and_bound.cpp):
     // the workers would not append them and the scaling would count rows they lack.
     if (options.get_bool("mip_symmetry") && options.get_string("write_certificate").empty()) {
+      // The time limit and the caller's interrupt end detection (#1199), as in the
+      // sequential search: it runs before any worker starts.
+      const double symmetry_deadline = options.get_double("time_limit");
+      const std::function<bool()> out_of_time = [&] {
+        return (control != nullptr && control->interruption_requested()) ||
+               (std::isfinite(symmetry_deadline) && symmetry_deadline >= 0.0 &&
+                clock.elapsed_seconds() >= symmetry_deadline);
+      };
       const SymmetryGroup group = detect_symmetry(
           model, static_cast<Count>(options.get_int("mip_symmetry_search_limit")),
-          static_cast<Count>(options.get_int("mip_symmetry_work_limit")));
+          static_cast<Count>(options.get_int("mip_symmetry_work_limit")), out_of_time);
       std::vector<std::pair<Index, Index>> pairs = ordering_rows(group);
       logger.info(
           "Symmetry (#413): {} generator(s), {} orbit(s) of more than one column; {} "
           "ordering row(s) x_i <= x_k for every worker{}",
           group.generators.size(), group.nontrivial_orbits, pairs.size(),
-          group.budget_exhausted ? " (stopped at a budget)" : "");
+          group.stopped            ? " (stopped by the solve's limit)"
+          : group.budget_exhausted ? " (stopped at a budget)"
+                                   : "");
       append_ordering_rows(&rows, pairs);
       shared.set_symmetry(std::move(pairs), static_cast<Count>(group.generators.size()));
     }
