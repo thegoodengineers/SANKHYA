@@ -606,13 +606,14 @@ Solution solve_branch_and_bound_parallel(const Model& model, const Options& opti
     // the workers would not append them and the scaling would count rows they lack.
     if (options.get_bool("mip_symmetry") && options.get_string("write_certificate").empty()) {
       const SymmetryGroup group = detect_symmetry(
-          model, static_cast<Count>(options.get_int("mip_symmetry_search_limit")));
+          model, static_cast<Count>(options.get_int("mip_symmetry_search_limit")),
+          static_cast<Count>(options.get_int("mip_symmetry_work_limit")));
       std::vector<std::pair<Index, Index>> pairs = ordering_rows(group);
       logger.info(
           "Symmetry (#413): {} generator(s), {} orbit(s) of more than one column; {} "
           "ordering row(s) x_i <= x_k for every worker{}",
           group.generators.size(), group.nontrivial_orbits, pairs.size(),
-          group.budget_exhausted ? " (stopped at mip_symmetry_search_limit)" : "");
+          group.budget_exhausted ? " (stopped at a budget)" : "");
       append_ordering_rows(&rows, pairs);
       shared.set_symmetry(std::move(pairs), static_cast<Count>(group.generators.size()));
     }

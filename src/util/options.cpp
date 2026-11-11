@@ -1149,6 +1149,16 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  kNoLimit,
                  {}});
+    s.push_back({"mip_symmetry_work_limit",
+                 OptionType::Int,
+                 std::int64_t{0},
+                 "Adjacency entries the symmetry search's colour refinement may visit (#1158) "
+                 "before it stops with the generators found so far, which are exact whatever "
+                 "the budget; one refinement round visits two per nonzero. 0 is no limit, the "
+                 "default until the MIPLIB A/B on main.",
+                 0.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"mip_obbt",
                  OptionType::Bool,
                  false,

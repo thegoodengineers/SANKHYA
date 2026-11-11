@@ -41,15 +41,19 @@ struct SymmetryGroup {
   Index largest_orbit = 1;      ///< columns in the largest orbit
   Count search_nodes = 0;       ///< individualisations the search performed
   Count refinements = 0;        ///< refinement rounds, over the whole detection
+  /// Adjacency entries the refinement rounds visited (each round visits all of them).
+  Count work = 0;
   /// True when the search stopped at its node budget: the generators are still exact, the
   /// group they generate may be a proper subgroup.
   bool budget_exhausted = false;
 };
 
 /// Detect the formulation symmetry of `model`, spending at most `search_limit`
-/// individualisations. A model whose refined partition is already discrete costs one
-/// refinement and no search.
-[[nodiscard]] SymmetryGroup detect_symmetry(const Model& model, Count search_limit);
+/// individualisations and, when `work_limit` is positive, at most about that many visits of
+/// the graph's adjacency entries in refinement (#1158). A model whose refined partition is
+/// already discrete costs one refinement and no search.
+[[nodiscard]] SymmetryGroup detect_symmetry(const Model& model, Count search_limit,
+                                            Count work_limit = 0);
 
 /// Is `p` an automorphism of `model`: a bijection on columns and on rows that preserves
 /// every cost, bound, type and matrix entry exactly? The check every generator passed.

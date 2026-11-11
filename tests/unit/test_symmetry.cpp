@@ -156,6 +156,32 @@ TEST(Symmetry, TheBudgetStopsTheSearchWithExactGeneratorsOnly) {
   for (const Permutation& p : some.generators) EXPECT_TRUE(dense_automorphism(m, p));
 }
 
+TEST(Symmetry, TheWorkBudgetStopsTheSearchWithExactGeneratorsOnly) {
+  // #1158: the same model under the adjacency-visit budget. Unlimited (0), it searches to
+  // the end; a budget of one round's visits stops it after the first refinement; between,
+  // whatever it stops with is exact. `work` is what the rounds visited.
+  const Model m = build({{3, 3, 3, 3, 5, 7}}, {-kInf}, {10.0}, {2, 2, 2, 2, 4, 6}, 0.0, 1.0);
+  const SymmetryGroup full = detect_symmetry(m, 1000, 0);
+  ASSERT_FALSE(full.budget_exhausted);
+  ASSERT_FALSE(full.generators.empty());
+  const Count round = full.work / full.refinements;  // 2 per nonzero: 12
+  EXPECT_EQ(round, 12);
+  const SymmetryGroup none = detect_symmetry(m, 1000, round);
+  EXPECT_TRUE(none.budget_exhausted);
+  EXPECT_TRUE(none.generators.empty());
+  EXPECT_EQ(none.search_nodes, 0);
+  for (Count budget = 2 * round; budget < full.work; budget += round) {
+    const SymmetryGroup some = detect_symmetry(m, 1000, budget);
+    EXPECT_TRUE(some.budget_exhausted) << budget;
+    EXPECT_LE(some.generators.size(), full.generators.size()) << budget;
+    for (const Permutation& p : some.generators) EXPECT_TRUE(dense_automorphism(m, p));
+  }
+  // A check can fall after the last round, so the budget that never stops it is one more.
+  const SymmetryGroup enough = detect_symmetry(m, 1000, full.work + round);
+  EXPECT_FALSE(enough.budget_exhausted);
+  EXPECT_EQ(enough.generators.size(), full.generators.size());
+}
+
 // ---- Searches with the rows on, against enumeration and the exact oracle ----------------
 
 bool feasible(const Model& m, const std::vector<double>& x) {
