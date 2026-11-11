@@ -108,6 +108,23 @@ bool gap_fixes_columns(const Work& w, Index i, double gap, bool at_sup, double f
   return true;
 }
 
+/// What one column of row i moving by the feasibility tolerance changes the activity by, at
+/// most: the largest |a_rj| * max(1, |bound|) over the row. A row is redundant when the box
+/// keeps it inside its bounds to within the tolerance, and that tolerance is the row's own
+/// only as far as this scale: 1e-8 x0 + 1e-8 x1 >= 2e-8 with x in [0, 1] is short by 2e-8
+/// at x = 0, inside an absolute 1e-7, and is x0 + x1 >= 2.
+double row_scale(const Work& w, Index i) {
+  double scale = 0.0;
+  for (const auto& [j, a] : w.rows[static_cast<std::size_t>(i)]) {
+    const auto u = static_cast<std::size_t>(j);
+    double size = 1.0;
+    if (finite(w.col_lower[u])) size = std::max(size, std::fabs(w.col_lower[u]));
+    if (finite(w.col_upper[u])) size = std::max(size, std::fabs(w.col_upper[u]));
+    scale = std::max(scale, std::fabs(a) * size);
+  }
+  return scale;
+}
+
 /// Forcing and redundant rows over the live rows; true when something fired.
 bool reduce_rows(Work* w, double feasibility, DualReduceResult* out) {
   bool changed = false;
@@ -120,9 +137,13 @@ bool reduce_rows(Work* w, double feasibility, DualReduceResult* out) {
     const double hi = w->row_upper[ui];
     const double tol_lo = feasibility * std::max(1.0, std::fabs(lo));
     const double tol_hi = feasibility * std::max(1.0, std::fabs(hi));
-    // Redundant: the box alone keeps the row inside its bounds. Dual zero.
-    const bool lower_slack = !finite(lo) || (act.inf_finite && act.inf >= lo - tol_lo);
-    const bool upper_slack = !finite(hi) || (act.sup_finite && act.sup <= hi + tol_hi);
+    // Redundant: the box alone keeps the row inside its bounds, to within the tolerance at
+    // the row's own scale (row_scale). Dual zero.
+    const double slack = feasibility * row_scale(*w, i);
+    const bool lower_slack =
+        !finite(lo) || (act.inf_finite && act.inf >= lo - std::min(tol_lo, slack));
+    const bool upper_slack =
+        !finite(hi) || (act.sup_finite && act.sup <= hi + std::min(tol_hi, slack));
     if (lower_slack && upper_slack) {
       DualReduction rec;
       rec.kind = DualReduction::Kind::kRedundantRow;
