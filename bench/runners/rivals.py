@@ -564,10 +564,14 @@ def _glpk(model: Path, kind: str, time_limit: float, sol: Path) -> dict:
                "version": version.group(1) if version else ""}
         if "TIME LIMIT EXCEEDED" in text:
             out["status"] = "time_limit"
-        elif "PROBLEM HAS NO PRIMAL FEASIBLE SOLUTION" in text:
+        # `PROBLEM HAS ...` is the simplex driver's wording and `LP HAS ...` its LP
+        # presolver's, which glpsol runs by default and after which it writes no point.
+        elif "HAS NO PRIMAL FEASIBLE SOLUTION" in text:
             out["status"] = "infeasible"
-        elif "PROBLEM HAS UNBOUNDED SOLUTION" in text:
+        elif "HAS UNBOUNDED SOLUTION" in text or "HAS UNBOUNDED PRIMAL SOLUTION" in text:
             out["status"] = "unbounded"
+        elif "HAS NO DUAL FEASIBLE SOLUTION" in text:
+            out["status"] = "infeasible_or_unbounded"
         if not raw.exists():
             if out["status"] == "unparsed":
                 out["status"] = "numerical_error" if done.returncode == 0 else "crashed"
