@@ -55,7 +55,7 @@ as regenerable backups.
 | Netlib infeasible | 29 | **28 of 29** (certified infeasible, `passed`) | - | `bench/results/netlib-infeasible-5a39fb2.csv` | `5a39fb2` | 2026-10-01 |
 | Kennington | 16 | **16 of 16** (matches published optimum and verified, `passed`) | - | `bench/results/kennington-full-9463fd7.csv` | `9463fd7` | 2026-10-02 |
 | Mittelmann | 12 | **5 of 12** (matches HiGHS's objective and verified, `passed`) | HiGHS (objective check) | `bench/results/mittelmann-72123ff.csv` | `72123ff` | 2026-09-24 |
-| MIPLIB 3 | 65 | **35 of 65** (proved the published optimum and verified, best of 3 seeds, 60 s, 1 thread) | HiGHS 49 of 65 (same job, same rule) | `bench/results/miplib3-60s-seeds3-312818a.csv` | `312818a` | 2026-10-22 |
+| MIPLIB 3 | 65 | **42 of 65** (proved the published optimum and verified, best of 3 seeds, 60 s, 1 thread) | HiGHS 49 of 65 (same job, same rule) | `bench/results/miplib3-60s-seeds3-d4bb701.csv` | `d4bb701` | 2026-11-10 |
 | MIPLIB 2017 | 30 | **14 of 30** (matched the published optimum and verified) | - | `bench/results/miplib-ad57c03.csv` | `ad57c03` | 2026-09-27 |
 | Maros-Meszaros (QP) | 138 | **127 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-c766eae.csv` | `c766eae` | 2026-10-22 |
 | Maros-Meszaros head-to-head (QP) | 138 | **117 of 138** (matched within 1e-6 and verified, every solver graded the same, 60 s) | PIQP 128 of 138, Clarabel 90 of 138, SCS 71 of 138, OSQP 46 of 138 | `bench/results/head-to-head-maros-meszaros-d0eb672.csv` | `d0eb672` | 2026-10-19 |
@@ -363,17 +363,19 @@ not known in advance.
 **Four more sets and three checks, run on `main` between 30 September and 4 October.**
 MIPLIB 3, the classic 1998 set, kept beside MIPLIB 2017 and never merged into its tables
 (`docs/BENCHMARKS.md` section 2a, #761, #1158): all 65 models x 3 seeds, one thread, 60 s, on a
-4-vCPU GitHub runner at `312818a`, HiGHS 1.15.1 on the same files in the same job. SANKHYA
-proves the published optimum on **35 of 65** (best of 3 seeds; 33, 34 and 33 per seed, 31 in
+4-vCPU GitHub runner at `d4bb701`, HiGHS 1.15.1 on the same files in the same job. SANKHYA
+proves the published optimum on **42 of 65** (best of 3 seeds; 37, 39 and 41 per seed, 36 in
 every seed), HiGHS on **49 of 65**, both graded by the same rule and the same verifier, every
-one of the 187 points written accepted (`bench/results/miplib3-60s-seeds3-312818a.csv`,
-`highs-miplib3-60s-312818a.csv`). Of the 15 HiGHS proves and SANKHYA does not, 11 are a
-weaker root bound after cuts (the table is in #1158). The multi-round root cut loop with the
-cut pool and the aggregated, lifted flow covers closes that root on the fixed-charge and
-lot-sizing models and proves 13 more runs of 195 in the same job (#1158's A/B (d), `bench/results/option-ab-miplib3-covers-gated-recipe-391ff68.csv`); it stays off
-by default until #1187 is fixed and is available as `--option root_cut_loop=true
---option mip_cut_pooling=true --option enable_flow_cover_cuts=true --option
-root_cut_loop_when=flow-covers`. The earlier 52-instance run at 300 s
+one of the 188 points written accepted (`bench/results/miplib3-60s-seeds3-d4bb701.csv`,
+`highs-miplib3-60s-d4bb701.csv`). SANKHYA alone proves misc07 and qiu; HiGHS alone proves
+air04, dcmulti, gesa2, harp2, mitre, mod011, nw04, p2756 and rout (the per-model causes are in
+#1158). The run before (`312818a`) read 35 of 65, most of the gap a weaker root bound after
+cuts. Since #1193 the root separates in rounds when round 1 takes a flow cover, with the cut
+pool and lifted flow covers on aggregated rows, which closes that root on the fixed-charge and
+lot-sizing models (fixnet6, pp08a, vpm2, modglob, set1ch); the gate before its merge, both arms
+in one job, proved 37/39/41 against 34/34/34 per seed with no proof or verified point lost
+(`bench/results/option-ab-miplib3-pool-gated-8ee5e94.csv`), and the MIPLIB 2017 tier-1 gate
+was unchanged on every seed. The earlier 52-instance run at 300 s
 (`miplib3-300s-seeds3-f2cf240.csv`) stays in section 2a. The harder MIPLIB 2017
 tier, the first 60 benchmark instances with a proven optimum by file size, chosen before the run
 (#504, `bench/results/miplib-tier2-seeds3-e7c0c60.csv`, 3 seeds at 300 s): **32 of 180** runs

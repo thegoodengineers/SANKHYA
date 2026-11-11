@@ -1926,6 +1926,21 @@ Bound moved towards the published optimum: none. Moved away: none. #418's accept
 
 ---
 
+## 2-all. MIPLIB 2017, the whole benchmark set: 240 models at 60 s (#1199)
+
+Every one of the 240 instances of the MIPLIB 2017 benchmark set (`benchmark-v2.test`), none chosen or left out, at 60 s, one thread, one seed (the published file), SANKHYA and HiGHS in the same bench.yml job on the same files, shard by shard. References are what `miplib2017-v28.solu` proves (pinned by sha256 in `bench/runners/fetch_miplib.py`; `data/miplib2017-bench/manifest.json` records the sha256 of every model and the line each reference was read from): 7 `=inf=`, 233 `=opt=`. An `=inf=` model is matched and proved by an infeasible status.
+
+PROVED: optimal at the published optimum with a verified point, or infeasible on an `=inf=` model. MATCHED: a verified point at the published optimum (or infeasible on an `=inf=` model), proved or not. FEASIBLE AND VERIFIED: any point `tools/verify_solution.py` accepted. A solve still running at the limit plus 60 s is killed and recorded `hang`.
+
+Not yet run. Reproduce, one shard per job:
+
+```
+python bench/runners/fetch_miplib.py --benchmark --shard 1/6
+# bench.yml suite=miplib2017-bench options=1/6 ... 6/6
+```
+
+---
+
 ## 2a. MIPLIB 3, the classic set beside MIPLIB 2017 (#761)
 
 The 1998 set much of the published record and most teaching material still report on, run beside the MIPLIB 2017 tables above and never merged into them: its own fetcher, manifest, CSVs and table. Source: Bixby, Ceria, McZeal and Savelsbergh, *An updated mixed integer programming library: MIPLIB 3.0*, Optima 58 (1998); the archive `https://miplib2010.zib.de/miplib3/miplib3.tar.gz`, pinned by size and sha256 in `bench/runners/fetch_miplib3.py`, whose manifest (`data/miplib3/manifest.json`) records the sha256 of every model as solved.
@@ -1945,7 +1960,7 @@ The archive holds 65 models; **65** are the instances below, **64** with a refer
 #### At 60 s
 
 SANKHYA: `bench/results/miplib3-60s-seeds3-312818a.csv`, commit `312818a`, machine `github-actions ubuntu-24.04; AMD EPYC 9V74 80-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`, 1 thread(s), shipped defaults.  
-HiGHS: `bench/results/highs-miplib3-60s-6258de4.csv`, HiGHS 1.15.1, machine `github-actions ubuntu-24.04; AMD EPYC 7763 64-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`, one thread, 60.0 s.
+HiGHS: `bench/results/highs-miplib3-60s-d4bb701.csv`, HiGHS 1.15.1, machine `github-actions ubuntu-24.04; AMD EPYC 7763 64-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`, one thread, 60.0 s.
 
 **The two CSVs name different machines**, so their times are not comparable; the verdicts still are.
 
@@ -1956,22 +1971,22 @@ HiGHS: `bench/results/highs-miplib3-60s-6258de4.csv`, HiGHS 1.15.1, machine `git
 |---|---:|---:|---:|---:|---:|---|
 | `10teams` | 924 | 3/3 (0 1 2) | 2/3 (1 2) | 3/3 | 25.72 | optimal, matched, verified, 5.0 s |
 | `air03` | 340160 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.06 | optimal, matched, verified, 2.9 s |
-| `air04` | 56137 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 41.9 s |
-| `air05` | 26374 | 1/3 (2) | 1/3 (2) | 3/3 | 58.63 | optimal, matched, verified, 35.4 s |
+| `air04` | 56137 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 42.8 s |
+| `air05` | 26374 | 1/3 (2) | 1/3 (2) | 3/3 | 58.63 | optimal, matched, verified, 36.0 s |
 | `arki001` | 7580813.0459 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
 | `bell3a` | 878430.32 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 13.71 | optimal, matched, verified, 1.3 s |
 | `bell5` | 8966406.49 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.56 | optimal, matched, verified, 0.4 s |
-| `blend2` | 7.598985 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.55 | optimal, matched, verified, 2.4 s |
+| `blend2` | 7.598985 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 2.55 | optimal, matched, verified, 2.3 s |
 | `cap6000` | -2451377 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, NOT matched, verified, 1.8 s |
-| `dano3mip` | status only | 0/3 | 0/3 | - | 60.00 | time_limit, 60.2 s |
+| `dano3mip` | status only | 0/3 | 0/3 | - | 60.00 | time_limit, 60.1 s |
 | `danoint` | 65.67 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
-| `dcmulti` | 188182 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 2.1 s |
+| `dcmulti` | 188182 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 2.2 s |
 | `dsbmip` | -305.19817501 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 16.34 | optimal, matched, verified, 0.4 s |
 | `egout` | 568.101 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.21 | optimal, matched, verified, 0.0 s |
 | `enigma` | 0.0 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.51 | optimal, matched, verified, 0.1 s |
 | `fast0507` | 174 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
 | `fiber` | 405935.18000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 10.82 | optimal, matched, verified, 0.9 s |
-| `fixnet6` | 3983 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 2.6 s |
+| `fixnet6` | 3983 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 2.7 s |
 | `flugpl` | 1201500 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.04 | optimal, matched, verified, 0.1 s |
 | `gen` | 112313.3627179998 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.30 | optimal, matched, verified, 0.0 s |
 | `gesa2` | 25779856.372 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.5 s |
@@ -1979,7 +1994,7 @@ HiGHS: `bench/results/highs-miplib3-60s-6258de4.csv`, HiGHS 1.15.1, machine `git
 | `gesa3` | 27991042.648 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 7.51 | optimal, matched, verified, 2.2 s |
 | `gesa3_o` | 27991042.648 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 7.44 | optimal, matched, verified, 3.7 s |
 | `gt2` | 21166.000 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.21 | optimal, matched, verified, 0.0 s |
-| `harp2` | -73899798.00 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 21.3 s |
+| `harp2` | -73899798.00 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 21.5 s |
 | `khb05250` | 106940226 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.35 | optimal, matched, verified, 0.3 s |
 | `l152lav` | 4722 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 4.53 | optimal, matched, verified, 3.1 s |
 | `lseu` | 1120 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.44 | optimal, matched, verified, 0.3 s |
@@ -1994,12 +2009,12 @@ HiGHS: `bench/results/highs-miplib3-60s-6258de4.csv`, HiGHS 1.15.1, machine `git
 | `mkc` | -563.8460100132 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
 | `mod008` | 307 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.83 | optimal, matched, verified, 1.1 s |
 | `mod010` | 6548 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.96 | optimal, matched, verified, 0.8 s |
-| `mod011` | -54558535 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 54.5 s |
+| `mod011` | -54558535 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 55.5 s |
 | `modglob` | 20740508 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.4 s |
 | `noswot` | -41.00000885 | 1/3 (0) | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
-| `nw04` | 16862 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 57.3 s |
+| `nw04` | 16862 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 59.1 s |
 | `p0033` | 3089 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.05 | optimal, matched, verified, 0.0 s |
-| `p0201` | 7615 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.34 | optimal, matched, verified, 0.8 s |
+| `p0201` | 7615 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 1.34 | optimal, matched, verified, 0.9 s |
 | `p0282` | 258411 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.55 | optimal, matched, verified, 0.2 s |
 | `p0548` | 8691 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 12.51 | optimal, matched, verified, 0.1 s |
 | `p2756` | 3124 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.6 s |
@@ -2008,14 +2023,14 @@ HiGHS: `bench/results/highs-miplib3-60s-6258de4.csv`, HiGHS 1.15.1, machine `git
 | `pp08aCUTS` | 7350.0 | 2/3 (0 1) | 2/3 (0 1) | 3/3 | 37.99 | optimal, matched, verified, 1.1 s |
 | `qiu` | -132.873137 | 3/3 (0 1 2) | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
 | `qnet1` | 16029.692681 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 5.86 | optimal, matched, verified, 0.6 s |
-| `qnet1_o` | 16029.692681 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.31 | optimal, matched, verified, 0.6 s |
+| `qnet1_o` | 16029.692681 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 3.31 | optimal, matched, verified, 0.7 s |
 | `rentacar` | 30356761 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 13.00 | optimal, matched, verified, 5.6 s |
 | `rgn` | 82.1999 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.87 | optimal, matched, verified, 0.2 s |
-| `rout` | 1077.56 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 25.1 s |
+| `rout` | 1077.56 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 25.3 s |
 | `set1ch` | 54537.75 | 0/3 | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 0.4 s |
 | `seymour` | 423 | 0/3 | 0/3 | 3/3 | 60.00 | time_limit, 60.0 s |
 | `stein27` | 18 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.31 | optimal, matched, verified, 0.7 s |
-| `stein45` | 30 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 40.85 | optimal, matched, verified, 27.3 s |
+| `stein45` | 30 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 40.85 | optimal, matched, verified, 27.5 s |
 | `swath` | 467.407491 | 0/3 | 0/3 | 1/1 | 60.00 | time_limit, 60.0 s |
 | `vpm1` | 20 | 3/3 (0 1 2) | 3/3 (0 1 2) | 3/3 | 0.51 | optimal, matched, verified, 0.0 s |
 | `vpm2` | 13.75 | 2/3 (0 1) | 0/3 | 3/3 | 60.00 | optimal, matched, verified, 2.4 s |
@@ -2024,7 +2039,7 @@ SANKHYA runs that did not reach the published optimum, named: `air04` seed 0 (fe
 
 Reported optimal but rejected by the verifier: none. Reported optimal away from the published optimum: `cap6000` seed 0, `cap6000` seed 1, `cap6000` seed 2, `dcmulti` seed 0, `dcmulti` seed 1, `dcmulti` seed 2.
 
-HiGHS runs that did not end optimal, matched and verified, named: `arki001` (time_limit, 60.0 s), `cap6000` (optimal, NOT matched, verified, 1.8 s), `dano3mip` (time_limit, 60.2 s), `danoint` (time_limit, 60.0 s), `fast0507` (time_limit, 60.0 s), `markshare1` (time_limit, 60.0 s), `markshare2` (time_limit, 60.0 s), `mas74` (time_limit, 60.0 s), `mas76` (time_limit, 60.0 s), `misc07` (time_limit, 60.0 s), `mkc` (time_limit, 60.0 s), `noswot` (time_limit, 60.0 s), `pk1` (time_limit, 60.0 s), `qiu` (time_limit, 60.0 s), `seymour` (time_limit, 60.0 s), `swath` (time_limit, 60.0 s).
+HiGHS runs that did not end optimal, matched and verified, named: `arki001` (time_limit, 60.0 s), `cap6000` (optimal, NOT matched, verified, 1.8 s), `dano3mip` (time_limit, 60.1 s), `danoint` (time_limit, 60.0 s), `fast0507` (time_limit, 60.0 s), `markshare1` (time_limit, 60.0 s), `markshare2` (time_limit, 60.0 s), `mas74` (time_limit, 60.0 s), `mas76` (time_limit, 60.0 s), `misc07` (time_limit, 60.0 s), `mkc` (time_limit, 60.0 s), `noswot` (time_limit, 60.0 s), `pk1` (time_limit, 60.0 s), `qiu` (time_limit, 60.0 s), `seymour` (time_limit, 60.0 s), `swath` (time_limit, 60.0 s).
 
 #### At 300 s
 

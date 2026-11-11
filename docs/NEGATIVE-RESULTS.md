@@ -306,6 +306,12 @@ Measured on GitHub Actions with `bench.yml`'s `ab-option` suite and `--base-bina
 
 Netlib was identical per instance in both (runs 41425504073 and 41702169175). On the laptop build the keyed version held all three (qgfrdxpn feasible in 69 iterations, qshare1b optimal in 80, qsierra optimal in 27) and still gained the LISWET three, so the judgement passes the drop on one machine's rounding and not another's: on a rank-deficient row block `|dy|` grows as 1/delta after a drop (qfffff80: 5.4e7 to 5.4e9 to 2.4e11 over 1e-8, 1e-10, 1e-12) and whether the run recovers is a knife edge. Not merged, in either form. What did ship from the same PR is the step rejection it was built on - a non-finite trial iterate restores the last finite one and raises the regularization, so no engine is ever handed a non-finite point - which changed no row on the 138 or on Netlib (run 41702177032). The three LISWET instances converge with a flat `qp_ipm_regularization=1e-12`, which loses qforplan and cont-201 (#1150); they stay open on #1178. The A/B CSVs are not committed (branch stamps).
 
+- **Complemented knapsack covers do not move the MIPLIB 3 root bounds they were built for (#1158).** The lifted cover separator reads only `<=` rows with positive coefficients; on p2756 its 357 such rows give no violated cover at the root, and the knapsacks are the 375 mixed-sign rows. A `knapsack_cover_complement` option, which negated `>=` rows and complemented negative-coefficient binaries (Crowder, Johnson & Padberg 1983; it passed an exhaustive 0/1 validity check over 400 random rows), separated 65 violated covers on p2756 and 363 on mitre where there were none. The bound did not follow.
+  - p2756, with the loop on and every candidate taken each round: 2702.75 with the covers and 2702.75 without; published optimum 3124.
+  - mitre, the same setting: 114929 with them and 114984 without; published 115155. Neither arm found a feasible point in 60 s.
+
+  These are WSL seed-0 logs at 60 s, one thread, not a CSV, and the change was not merged; the branch was never pushed. What does move p2756's root is #511's coefficient tightening (506 coefficients, 2698.95 to 2730.14 after cuts in the same setting), whose two-gate A/B is the re-run that decides it.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
