@@ -385,6 +385,50 @@ TEST(RootCutLoop, AutoGatePutsAModelWithoutAFlowCoverOnProbation) {
   EXPECT_GT(rolled_back, 0) << "no chain was rolled back: the rollback was not run";
 }
 
+TEST(RootCutLoop, AutoGateKeepsTheRoundsThatBeatRoundOne) {
+  // The other outcome of probation (#1158): the rounds are KEPT, the path that proves gesa2.
+  // Lot-sizing chains with a weak big-M (every capacity the whole horizon's demand) and two
+  // cuts a round: round 1 can take only two, so the rounds after it gain more than it did.
+  // A kept loop reports more than one round and must reach the optimum `always` reaches.
+  auto solve_with = [](const Model& m, const char* when) {
+    Options options;
+    options.set_bool("log_to_console", false);
+    options.set_bool("presolve", false);
+    options.set_bool("enable_root_cuts", true);
+    options.set_bool("enable_flow_cover_cuts", false);
+    options.set_bool("root_cut_loop", true);
+    options.set_string("root_cut_loop_when", when);
+    options.set_int("cut_max_per_round", 2);
+    options.set_int("cut_support_floor", 100);
+    return solve(m, options);
+  };
+  std::mt19937 rng(11581);
+  std::uniform_int_distribution<int> demand(1, 6), fixed(10, 30);
+  int kept = 0;
+  for (int trial = 0; trial < 12; ++trial) {
+    LotSizing ls;
+    std::int64_t total = 0;
+    for (int t = 0; t < 6; ++t) {
+      ls.d.push_back(demand(rng));
+      ls.fixed_cost.push_back(fixed(rng));
+      total += ls.d.back();
+    }
+    ls.u.assign(6, total);
+    ls.holding_cost = {1, 1, 1, 1, 1};
+    const Model chain = build(ls);
+    const Solution always = solve_with(chain, "always");
+    const Solution probation = solve_with(chain, "auto");
+    if (always.status != SolveStatus::kOptimal) continue;
+    ASSERT_EQ(probation.status, SolveStatus::kOptimal) << "trial " << trial;
+    EXPECT_NEAR(probation.objective, always.objective,
+                1e-9 * std::max(1.0, std::fabs(always.objective)))
+        << "trial " << trial;
+    if (probation.root_cut_rounds > 1) ++kept;
+  }
+  std::printf("[  INFO    ] probation: %d of 12 weak big-M chain(s) kept their rounds\n", kept);
+  EXPECT_GT(kept, 0) << "no chain kept its rounds: the kept path was not run";
+}
+
 TEST(RootCutLoop, SwitchedFlowsGateEntersOnALotSizingChainAndNotOnAKnapsack) {
   // root_cut_loop_when=switched-flows (#1158): the rounds run only on a model with a
   // variable upper bound x <= u y. The chain has them, so the gate changes nothing against
