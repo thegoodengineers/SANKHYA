@@ -47,6 +47,13 @@ inline constexpr double kMipRelativeGap = 1e-4;
 /// MIP termination: stop when (incumbent - dual bound) falls below this in absolute terms.
 inline constexpr double kMipAbsoluteGap = 1e-6;
 
+/// Gap-target extension (#1158), the default of mip_gap_target_extension: once a gap target
+/// is met before the tree is exhausted, the search goes on for this fraction of the nodes
+/// explored so far. MIPLIB 3 dcmulti needed 5%, 13% and 10% more nodes on its three seeds to
+/// close the tree it had stopped on; a half covers that and bounds the cost at half the
+/// search again.
+inline constexpr double kMipGapTargetExtension = 0.5;
+
 /// Diving heuristics (#25, #414): maximum integer columns fixed in one dive before it gives
 /// up. Bounds the heuristic's own cost independently of instance size - Achterberg,
 /// "Constraint Integer Programming" (thesis, 2007), ch. 6, notes a dive's payoff is

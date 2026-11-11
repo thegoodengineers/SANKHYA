@@ -571,7 +571,7 @@ Solution BranchAndBound::run() {
           // The message carries the achieved gap and says the tree was not exhausted, and
           // dual_bound is the best OPEN bound, so the claim is exactly what was proven.
           //
-          // GAP-TARGET EXTENSION (#1158, mip_gap_target_extension, off by default). Meeting
+          // GAP-TARGET EXTENSION (#1158, mip_gap_target_extension, 0.5 by default). Meeting
           // the target proves the incumbent is within it, not that it is the optimum: dcmulti
           // stopped here on every seed 3.2e-5 above its published optimum, and the tree it
           // left closed in 10-24 more nodes (102-265 explored). With the option set, the

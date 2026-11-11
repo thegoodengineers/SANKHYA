@@ -19,6 +19,7 @@
 
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/tolerances.hpp"
 
 namespace sankhya {
 namespace {
@@ -89,8 +90,14 @@ Options loose_options() {
   o.set_string("mip_heur_fj", "off");
   o.set_string("mip_heur_parity", "off");
   o.set_double("mip_relative_gap", kLooseGap);
+  o.set_double("mip_gap_target_extension", 0.0);  // the plain stop; each test turns it on
   o.set_int("mip_threads", 1);  // the extension is the one search's; a parallel tree stops
   return o;
+}
+
+TEST(GapTargetExtension, IsOnByDefaultAtTheTolerancesValue) {
+  EXPECT_EQ(Options().get_double("mip_gap_target_extension"), tol::kMipGapTargetExtension);
+  EXPECT_EQ(tol::kMipGapTargetExtension, 0.5);
 }
 
 TEST(GapTargetExtension, AClosedTreeReportsTheEnumeratedOptimum) {
@@ -104,12 +111,15 @@ TEST(GapTargetExtension, AClosedTreeReportsTheEnumeratedOptimum) {
     ASSERT_EQ(plain.status, SolveStatus::kOptimal) << "seed " << seed << ": " << plain.message;
     if (plain.objective < optimum - 1e-9) ++stopped_short;
 
-    // Off (0) is the search without the option, node for node.
-    Options off = loose_options();
-    off.set_double("mip_gap_target_extension", 0.0);
-    const Solution zero = solve(m, off);
-    EXPECT_EQ(zero.nodes, plain.nodes) << "seed " << seed;
-    EXPECT_EQ(zero.objective, plain.objective) << "seed " << seed;
+    // The default fraction: still optimal within the target, never worse than the plain
+    // stop, and at most half as many nodes again (plus the one the count is rounded up by).
+    Options usual = loose_options();
+    usual.set_double("mip_gap_target_extension", tol::kMipGapTargetExtension);
+    const Solution half = solve(m, usual);
+    EXPECT_EQ(half.status, SolveStatus::kOptimal) << "seed " << seed << ": " << half.message;
+    EXPECT_GE(half.objective, plain.objective - 1e-9) << "seed " << seed;
+    EXPECT_LE(half.objective, optimum + 1e-9) << "seed " << seed;
+    EXPECT_LE(half.nodes, plain.nodes + plain.nodes / 2 + 1) << "seed " << seed;
 
     // A budget no tree this size can use: the search closes and proves the optimum.
     Options on = loose_options();

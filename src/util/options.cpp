@@ -2013,13 +2013,20 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"mip_gap_target_extension",
                  OptionType::Double,
-                 0.0,
+                 tol::kMipGapTargetExtension,
                  "When the relative or absolute gap target is met before the tree is "
                  "exhausted, go on searching for this fraction of the nodes explored so "
                  "far, and stop at the target as before when they run out (#1158). The "
                  "target stays met while it searches: a closed tree reports a proof, and a "
                  "limit reached meanwhile reports the target's verdict. One search only. 0 "
-                 "is off, the default until the MIPLIB A/B on main.",
+                 "is off. 0.5 by default since two MIPLIB 3 A/Bs (65 models, 3 seeds, 60 s, "
+                 "one thread; bench/results/option-ab-miplib3-gap-extension-95f84b6.csv and "
+                 "-repeat-95f84b6.csv): proved 38/39/41 -> 40/41/42 and 41/41/42 -> 43/43/43 "
+                 "per seed (dcmulti on every seed, gesa2_o and set1ch on the seeds that "
+                 "stopped above the optimum); tier 1 lost nothing. Not lossless as measured: "
+                 "each run lost one proof, qiu seed 0 in the first and air04 seed 0 in the "
+                 "second, where the old arm met the target at 59.4-59.7 s and this arm "
+                 "reached 60 s under 50 nodes short of it, before the option could act.",
                  0.0,
                  kNoLimit,
                  {}});
