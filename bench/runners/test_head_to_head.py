@@ -295,5 +295,33 @@ with tempfile.TemporaryDirectory() as tmp:
           "a missing suite states no numbers")
     check((img / "profile-netlib.svg").exists(), "the profile figure is written")
 
+print("the named-solvers table")
+import named_solvers_doc  # noqa: E402
+
+base = {"status": "optimal", "independently_verified": "1", "matches_exact": "",
+        "matches_reference": "1", "relative_gap": "0.0"}
+inside = {**base, "matches_reference": "0", "relative_gap": "5e-05"}
+check(not named_solvers_doc.is_wrong("miplib3", inside)
+      and named_solvers_doc.is_wrong("netlib", inside),
+      "an optimum inside the MIP gap is unmatched, not wrong; on an LP it is wrong")
+check(named_solvers_doc.is_wrong("miplib3", {**inside, "relative_gap": "2e-04"})
+      and named_solvers_doc.is_wrong("netlib", {**base, "status": "infeasible"})
+      and not named_solvers_doc.is_wrong("netlib", {**base, "status": "time_limit"}),
+      "outside the gap, or infeasible on a solvable model, is wrong")
+rejected = {**base, "independently_verified": "0"}
+check(not named_solvers_doc.is_wrong("netlib", rejected)
+      and named_solvers_doc.is_rejected("netlib", rejected),
+      "a rejected point at the right objective is rejected, not wrong")
+check(named_solvers_doc.counts("miplib3", [base, inside, {**base, "status": "time_limit"}])
+      == (2, 1, 2, 0), "proved / matched / verified / wrong are counted over the proved runs")
+check(named_solvers_doc.counts("stress", [
+    {"status": "optimal", "verdict": "correct", "verified": "1"},
+    {"status": "unbounded", "expected_status": "optimal", "verdict": "wrong", "verified": ""},
+    {"status": "optimal", "expected_status": "optimal", "verdict": "wrong", "verified": "0",
+     "relative_gap": "0.0"},
+    {"status": "crashed", "verdict": "failed", "verified": ""}]) == (3, 1, 1, 1),
+    "the stress set's cell: a verdict, graded correct, accepted, and wrong; a rejected file "
+    "at the known optimum is not a wrong answer")
+
 print(f"\n{'all passed' if FAILURES == 0 else f'{FAILURES} FAILED'}")
 sys.exit(1 if FAILURES else 0)

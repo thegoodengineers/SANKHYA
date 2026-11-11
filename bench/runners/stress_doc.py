@@ -24,8 +24,11 @@ def section(path: Path | None) -> str:
     families = sorted({r["family"] for r in rows})
     versions = {r["solver"]: r["solver_version"] for r in rows}
     first = rows[0]
+    others = ", ".join(f"{s} {versions[s]}" for s in solvers if s not in ("sankhya", "highs"))
     out = [f"Measured on SANKHYA commit `{first['git_commit']}` against HiGHS "
-           f"{versions.get('highs', '-')} (highspy, separate process), machine "
+           f"{versions.get('highs', '-')} (highspy, separate process)"
+           + (f" and {others} (bench/runners/rivals.py; an `infeasible` or `unbounded` from "
+              "one of these is graded on the status alone)" if others else "") + ", machine "
            f"`{first['machine']}`, {len({r['instance'] for r in rows})} instances. "
            f"Source: `{path.name}`.", "",
            "| family | instances | " + " | ".join(

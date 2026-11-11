@@ -47,6 +47,7 @@ import gpu_ab_doc  # 1g.8 and 1g.9, the device A/Bs of #508 and #478
 import gpu_doc  # 1g.1 and 1g.3 (#488)
 import gpu_plot  # the speedup-against-nonzeros figure of 1g.3 (#488)
 import head_to_head_doc  # section 4a, the five-solver head-to-head (#766)
+import named_solvers_doc  # section 4e, the four open-source solvers the problem names
 import refinery_doc  # section 4c, the refinery suite against HiGHS and SCIP (#1004)
 import refinery_qp_doc  # section 4d, the convex-cost refinery QP against HiGHS's QP
 import pricing_ab_doc  # 1b.1, dual pricing: Devex against dual steepest edge (#411)
@@ -3616,6 +3617,20 @@ HiGHS's QP solver, every answer checked against an optimum known exactly. Produc
 {refinery_qp_doc.section(refinery_qp_csv)}
 ---
 
+## 4e. {named_solvers_doc.TITLE}
+
+PS26119 names COIN-OR CBC, HiGHS, GLPK and SCIP. Sections 4 and 4a compare on LPs and QPs;
+this section puts all four beside SANKHYA on three suites, each in one CI job
+(`.github/workflows/bench.yml`, suites `head-to-head-netlib`, `head-to-head-miplib3` and
+`head-to-head-stress`), every solver a released package run as a separate process
+(`bench/runners/rivals.py`, PROVENANCE judgement calls 35 and 44). The Netlib row is the CSV
+section 4a.1 breaks down and the stress row the CSV of section 5b. On the stress set SCIP's,
+Clp's and GLPK's `infeasible` and `unbounded` are graded on the status alone, since their
+adapters read no certificate, where SANKHYA's and HiGHS's must pass the verifier.
+
+{named_solvers_doc.section(named_solvers_doc.paths(), shifted_geometric_mean)}
+---
+
 ## 4b. Agreement against size-limited commercial editions (#533)
 
 Gurobi Academic/Trial (≤2000 variables + constraints), CPLEX Community Edition (≤1000), and
@@ -3658,8 +3673,9 @@ verdict with a file the verifier accepts (and, when optimal, the objective withi
 relative); **wrong** is a contradicted verdict, an objective off the known optimum, or a file
 the verifier rejects; **failed** is no verdict (a limit, a numerical error, `feasible`).
 
-Reading it: SANKHYA's scaled-Netlib failures are the status guard refusing a claim it cannot
-support, or a time limit, not answers. Three causes were fixed under #792: presolve reading
+Reading it: SANKHYA's scaled-Netlib `failed` rows are the status guard refusing a claim it
+cannot support, or a time limit, not answers; its `wrong` rows, when a run has any, are
+answers, and each is named below with how far off it is. Three causes were fixed under #792: presolve reading
 real coefficients below 1e-11 as zero (#824), complementary slackness judged absolutely
 (#857, #806), and a numerical failure is now retried once on the model equilibrated by powers
 of two, an exact change of variables (#886). What remains is tracked as #792 and #783.
