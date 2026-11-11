@@ -294,6 +294,9 @@ def main() -> int:
                         help="solves per SANKHYA arm (median, min, max); HiGHS runs once")
     parser.add_argument("--no-gpu", action="store_true", help="CPU and HiGHS arms only")
     parser.add_argument("--no-highs", action="store_true")
+    parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE",
+                        help="appended to every SANKHYA arm's options (a crossover route, an "
+                             "A/B option); HiGHS arms are untouched")
     parser.add_argument("--arms", nargs="+", default=None,
                         help="only these arm labels (default: every arm)")
     parser.add_argument("--host-label", default="")
@@ -341,6 +344,8 @@ def main() -> int:
         digest, dims = gpu_arms.sha256_file(mps), mps_dimensions(mps)
         reference = gpu_arms.analytic_optimum(mps)
         for arm in arms(args.cpu_threads, not args.no_gpu):
+            if arm[1] == "sankhya" and args.solver_option:
+                arm = (arm[0], arm[1], arm[2] + args.solver_option)
             label, engine, options = arm
             if (name, label) in done_keys or (engine == "highs" and args.no_highs):
                 continue
