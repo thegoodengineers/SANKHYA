@@ -997,6 +997,14 @@ inline constexpr double kRootCutStallFraction = 1e-3;
 /// proofs it won came from rounds that moved the bound a lot (kaihu, b-ball). A round 1 that
 /// moved nothing makes this "stop at the next round that moves nothing".
 inline constexpr double kRootCutTailingOffFraction = 0.1;
+/// PROBATION (root_cut_loop_when=auto, #1158): a model with switched flows on which round 1
+/// took no flow cover enters the loop on probation, and the rounds after round 1 are kept
+/// only if together they gained at least this multiple of what round 1 gained; otherwise the
+/// root goes back to its state after round 1. In A/B (c) (option-ab-miplib3-gated-recipe-
+/// 26204e0.csv) the rounds added 0.27 of round 1's gain on bell5 (gap closed 0.144 to 0.183),
+/// which then lost two proofs to the larger node LP, and 2.3 of it on gesa2 (0.297 to 0.971)
+/// and 7.6 on mod011 (0.051 to 0.439), which the rounds solved or proved.
+inline constexpr double kRootCutProbationGain = 1.0;
 /// And the loop stops once the solve has used this share of time_limit, so a root whose
 /// every round is slow leaves the tree most of the time it was given. 0.2 until the
 /// tailing-off rule above; 0.05 since (3 s of a 60 s limit).

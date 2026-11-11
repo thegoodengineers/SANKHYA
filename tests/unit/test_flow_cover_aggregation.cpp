@@ -340,6 +340,50 @@ TEST(FlowCoverCuts, TheSearchOnLotSizingChainsAgreesWithTheExactOptimum) {
   EXPECT_EQ(compared, 40);
 }
 
+TEST(RootCutLoop, AutoGatePutsAModelWithoutAFlowCoverOnProbation) {
+  // root_cut_loop_when=auto (#1158): with the flow cover family off, round 1 takes no cover,
+  // so lot-sizing chains (variable upper bounds) enter on probation. Whether the rounds are
+  // kept or rolled back to round 1, the optimum is the one `always` finds, and the loop never
+  // reports more rounds than `always` ran. Twelve chains, so both outcomes can occur.
+  auto solve_with = [](const Model& m, const char* when) {
+    Options options;
+    options.set_bool("log_to_console", false);
+    options.set_bool("presolve", false);
+    options.set_bool("enable_root_cuts", true);
+    options.set_bool("enable_flow_cover_cuts", false);
+    options.set_bool("root_cut_loop", true);
+    options.set_string("root_cut_loop_when", when);
+    options.set_int("cut_support_floor", 100);
+    return solve(m, options);
+  };
+  std::mt19937 rng(1158);
+  std::uniform_int_distribution<int> cap(4, 9), demand(1, 4), fixed(4, 12);
+  int kept = 0;
+  int rolled_back = 0;
+  for (int trial = 0; trial < 12; ++trial) {
+    LotSizing ls;
+    for (int t = 0; t < 5; ++t) {
+      ls.u.push_back(cap(rng));
+      ls.d.push_back(std::min(demand(rng), static_cast<int>(ls.u.back())));
+      ls.fixed_cost.push_back(fixed(rng));
+    }
+    ls.holding_cost = {1, 1, 1, 1};
+    const Model chain = build(ls);
+    const Solution always = solve_with(chain, "always");
+    const Solution probation = solve_with(chain, "auto");
+    if (always.status != SolveStatus::kOptimal) continue;
+    ASSERT_EQ(probation.status, SolveStatus::kOptimal) << "trial " << trial;
+    EXPECT_NEAR(probation.objective, always.objective,
+                1e-9 * std::max(1.0, std::fabs(always.objective)))
+        << "trial " << trial;
+    EXPECT_LE(probation.root_cut_rounds, always.root_cut_rounds) << "trial " << trial;
+    (probation.root_cut_rounds > 1 ? kept : rolled_back) += 1;
+  }
+  std::printf("[  INFO    ] probation: %d chain(s) kept their rounds, %d went back to round 1\n",
+              kept, rolled_back);
+  EXPECT_GT(kept + rolled_back, 0);
+}
+
 TEST(RootCutLoop, SwitchedFlowsGateEntersOnALotSizingChainAndNotOnAKnapsack) {
   // root_cut_loop_when=switched-flows (#1158): the rounds run only on a model with a
   // variable upper bound x <= u y. The chain has them, so the gate changes nothing against

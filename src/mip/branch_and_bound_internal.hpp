@@ -1117,6 +1117,7 @@ class BranchAndBound {
   Count root_cuts_applied_ = 0;
   Count root_cut_rounds_ = 0;      ///< #495: rounds that appended rows at the root
   int root_loop_wanted_ = -1;      ///< root_cut_loop_wanted()'s answer once taken; -1 not yet
+  bool root_loop_probation_ = false;  ///< entered under `auto` without a flow cover (#1158)
   std::string cut_filter_report_;  ///< the root filter's verdicts per family and reason (#496)
   Count dense_cuts_admitted_ = 0;  ///< #496: dense cuts admitted at the root
   Count dense_nonzeros_admitted_ = 0;  ///< their nonzeros, against the budget

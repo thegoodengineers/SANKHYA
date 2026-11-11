@@ -40,6 +40,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -81,6 +82,22 @@ bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
             "Root cut loop: not entered, round 1 took no flow cover "
             "(root_cut_loop_when=flow-covers)");
       }
+    } else if (wanted && when == "auto") {
+      // A flow cover in round 1 enters as under flow-covers. Without one, a model with a
+      // variable upper bound enters ON PROBATION (tolerances.hpp, kRootCutProbationGain):
+      // gesa2 and mod011 have the structure and take no cover in round 1, and so does
+      // bell5, which the rounds only cost; what tells them apart is what the rounds gain,
+      // and root_cut_loop() rolls the root back to round 1 when it is too little.
+      const bool cover = std::any_of(round1.begin(), round1.end(), [](const Cut& cut) {
+        return cut.family == CutFamily::kFlowCover;
+      });
+      wanted = cover || find_variable_bounds(working_).rows > 0;
+      root_loop_probation_ = wanted && !cover;
+      if (!wanted) {
+        logger_.info(
+            "Root cut loop: not entered, round 1 took no flow cover and the model has no "
+            "variable upper bound (root_cut_loop_when=auto)");
+      }
     } else if (wanted && when == "switched-flows") {
       // The rounds pay on fixed-charge and lot-sizing models, whose switched flows x <= u y
       // are what the aggregated flow covers and the c-MIR path cuts work on (#1158's A/B:
@@ -121,6 +138,25 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
   // With the pool removing the slack rows at the end (below), the budget is the pooled one.
   const auto row_budget = static_cast<Count>(
       root_cut_row_budget(model_rows, cut_removal_ ? cut_max_per_round_ : 0));
+  // Probation (root_cut_loop_wanted, `auto`): the root as round 1 left it, to go back to.
+  struct AfterRoundOne {
+    Model model;
+    decltype(scaling_) scaling;
+    Solution relaxation;
+    std::vector<Cut> waiting;
+    std::size_t pool = 0;
+    Count applied = 0;
+  };
+  std::optional<AfterRoundOne> round_one;
+  if (root_loop_probation_) {
+    round_one.emplace();
+    round_one->model = working_;
+    round_one->scaling = scaling_;
+    round_one->relaxation = *relaxation;
+    round_one->waiting = waiting_cuts_;
+    round_one->pool = pool_cuts_.size();
+    round_one->applied = root_cuts_applied_;
+  }
   const char* why = "the round cap";
   for (int round = 2; round <= tol::kRootCutMaxRounds; ++round) {
     if (root_cuts_applied_ >= row_budget) {
@@ -219,6 +255,36 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
         "iteration(s)",
         round, reported(bounds.back()), found, describe_cut_filter(filtered), accepted.size(),
         by_family(accepted), relaxation->iterations);
+  }
+  // PROBATION ENDS. The rounds after round 1 stay only if they gained at least
+  // kRootCutProbationGain times round 1's own gain; otherwise their rows go back out and the
+  // search runs as it does when the gate keeps the loop out: round 1's rows, no pool. The
+  // rows of rounds 2.. are the last ones appended (nothing is removed before this point), so
+  // dropping them from the pool and restoring the saved model is the whole of it.
+  if (round_one.has_value()) {
+    const double first_gain = std::max(bounds[1] - bounds[0], 0.0);
+    const double later_gain = bounds.back() - bounds[1];
+    if (later_gain <= tol::kRootCutProbationGain * first_gain) {
+      logger_.info(
+          "Root cut loop: probation failed after {} round(s), bound {:.10g} to {:.10g} against "
+          "{:.10g} after round 1; back to round 1 (root_cut_loop_when=auto), stopped on {}",
+          root_cut_rounds_, reported(bounds.front()), reported(bounds.back()),
+          reported(bounds[1]), why);
+      drop_cuts_from(round_one->pool);
+      working_ = std::move(round_one->model);
+      scaling_ = std::move(round_one->scaling);
+      *relaxation = std::move(round_one->relaxation);
+      waiting_cuts_ = std::move(round_one->waiting);
+      root_cuts_applied_ = round_one->applied;
+      root_bound_after_cuts_internal_ = bounds[1];
+      root_cut_rounds_ = 1;
+      root_loop_wanted_ = 0;
+      cut_pooling_ = false;
+      cut_removal_ = false;
+      resize_warm_starts(working_.num_rows());
+      current_warm_ = basis_of(*relaxation);
+      return;
+    }
   }
   // ONLY THE TIGHT ROWS STAY (#956's follow-up): a cut row whose logical is basic at the
   // final root LP is slack there, and every node LP would carry it for nothing until it
