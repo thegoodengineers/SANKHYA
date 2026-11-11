@@ -69,15 +69,21 @@ ALL_SOLVERS = ("sankhya",) + rivals.SOLVERS
 # arm's name and the options it adds. Only a suite that lists one runs it.
 SANKHYA_ARMS = {"sankhya-condat-vu": ["qp_algorithm=condat-vu"]}
 
+# The LP engines: `cbc` is the MIP binary and the QP comparators are QP only, so an LP suite
+# names its five rather than record four hundred `unsupported` rows.
+LP_SOLVERS = ("sankhya", "highs", "scip", "cbc-clp", "glpk")
+MIP_SOLVERS = ("sankhya", "highs", "scip", "cbc", "glpk")
+
 SUITES = {
     "netlib": {"dir": "netlib", "suffix": ".mps", "kind": "lp", "reference": "published_optimal",
-               "with_constant": False, "time_limit": 120.0},
+               "with_constant": False, "time_limit": 120.0, "solvers": LP_SOLVERS},
     "kennington": {"dir": "kennington", "suffix": ".mps", "kind": "lp",
                    "reference": "published_optimal", "with_constant": False,
-                   "time_limit": 120.0},
+                   "time_limit": 120.0, "solvers": LP_SOLVERS},
     "maros-meszaros": {"dir": "maros-meszaros", "suffix": ".qps", "kind": "qp",
                        "reference": "reference_objective", "with_constant": True,
-                       "time_limit": 60.0},
+                       "time_limit": 60.0,
+                       "solvers": tuple(s for s in ALL_SOLVERS if s != "cbc")},
     # The classic MIPLIB 3 set (#761), fetched by fetch_miplib3.py. HiGHS only: SANKHYA's
     # runs on this set are miplib.py's (`--set miplib3`, three seeds), and the Clp and GLPK
     # paths here read an LP's basic solution, so on a MIP they would grade a relaxation.
@@ -87,6 +93,13 @@ SUITES = {
     "miplib3": {"dir": "miplib3", "suffix": ".mps", "kind": "mip",
                 "reference": "published_optimal", "with_constant": False,
                 "time_limit": 60.0, "manifest": "manifest.json", "solvers": ("highs",)},
+    # The same 65 files with every solver in one job, SANKHYA included: one run each at its
+    # default seed, one thread, every solver stopping at the same relative gap
+    # (rivals.MIP_RELATIVE_GAP), CBC as its `cbc` binary and GLPK reading its integer
+    # solution. Written to `head-to-head-miplib3-<limit>s-<sha>.csv`.
+    "miplib3-all": {"dir": "miplib3", "suffix": ".mps", "kind": "mip",
+                    "reference": "published_optimal", "with_constant": False,
+                    "time_limit": 60.0, "manifest": "manifest.json", "solvers": MIP_SOLVERS},
     # The whole MIPLIB 2017 benchmark set (#1199), `fetch_miplib.py --benchmark`: HiGHS
     # beside miplib.py --set miplib2017-bench, for the reason MIPLIB 3 gives. Objectives are
     # graded with their constant, as the solution file states them. A model the file proves
@@ -123,6 +136,9 @@ def default_out_name(suite_name: str, full: bool, time_limit: float, commit: str
     and a name no other glob in bench/runners or tools takes (test_miplib3.py checks)."""
     if suite_name in ("miplib3", "miplib2017-bench"):
         return f"highs-{suite_name}-{time_limit:g}s-{'' if full else 'partial-'}{commit}.csv"
+    if suite_name == "miplib3-all":
+        return (f"head-to-head-miplib3-{time_limit:g}s-{'' if full else 'partial-'}"
+                f"{commit}.csv")
     return (f"head-to-head-{suite_name}-{commit}.csv" if full
             else f"head-to-head-{suite_name}-partial-{commit}.csv")
 
@@ -245,6 +261,8 @@ def solve(solver: str, suite: dict, model_path: Path, time_limit: float, sol: Pa
         out.setdefault("objective", None)
         return out
     options = ["threads=1"] + SANKHYA_ARMS.get(solver, [])
+    if suite["kind"] == "mip":
+        options.append("mip_threads=1")  # the tree's own setting, one per core by default
     if suite["kind"] == "qp":
         blob = maros_meszaros.run_one(binary, model_path, time_limit, False, options,
                                       keep_sol=sol)
