@@ -2131,13 +2131,16 @@ struct NodeScratch {
 thread_local NodeScratch node_scratch;
 }  // namespace
 
-void release_node_solve_scratch() { node_scratch = NodeScratch{}; }
+void release_node_solve_scratch() {
+  node_scratch = NodeScratch{};
+}
 
 namespace detail {
 
 Solution solve_with_scaling(const Model& model, const Options& options, Logger& logger,
                             const NodeScaling& cache, Engine engine, const WarmStart* warm,
-                            SolveControl* control, NodeFactorCache* factors, bool rescaled_costs) {
+                            SolveControl* control, NodeFactorCache* factors,
+                            bool rescaled_costs) {
   // OBJECTIVE SCALING, AROUND EVERYTHING BELOW (#783). The dual tolerance is absolute, so it
   // means "1e-7 of a cost of order one", and since #783 the quality measure says so: a dual
   // violation is judged against min(1, max|c|) rather than 1 (src/core/model.cpp). Scaled
@@ -2228,8 +2231,8 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   NodeScratch local;
   NodeScratch& scratch = warm != nullptr ? node_scratch : local;
   Model& scaled = scratch.scaled;
-  const bool held = cache.id != 0 && scratch.id == cache.id && scratch.costed == rescaled_costs &&
-                    scaled.num_cols() == model.num_cols() &&
+  const bool held = cache.id != 0 && scratch.id == cache.id &&
+                    scratch.costed == rescaled_costs && scaled.num_cols() == model.num_cols() &&
                     scaled.num_rows() == model.num_rows() &&
                     scaled.matrix.num_nonzeros() == scaling.matrix.num_nonzeros();
   if (!held) {
