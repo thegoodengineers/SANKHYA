@@ -160,6 +160,24 @@ Proved is above the defaults on every seed in both, and both lose runs, so neith
 Files: `bench/results/option-ab-miplib-rootloop-tailing-e01ae9c.csv` (tier 1), `option-ab-miplib3-rootloop-d178213.csv`, `option-ab-miplib3-recipe-99dfa36.csv`, `option-ab-miplib3-gated-recipe-26204e0.csv` and `option-ab-miplib3-covers-gated-recipe-391ff68.csv` (MIPLIB 3; the `arm` column), and the root-only legs `bench/results/rootgap-<leg>-24e289d9.csv` and `rootgap3-<cfg>-b69a3dc7.csv`.
 What would earn a default: a loop whose extra rows do not ride along in the tree. For example, keep only the rows still tight at the last root LP, or move the rest to the cut pool, then repeat this A/B.
 
+### PDHG feasibility polishing as a default (`pdhg_feasibility_polish`, #483, #1177)
+
+First-order feasibility polishing after Applegate, Hinder, Lu & Lubin (arXiv:2501.07018): PDHG on the zero-objective and the zero-bound problem, so a first-order answer is primal feasible to 1e-8 with its gap measured. Off: `pdhg_feasibility_polish = false`.
+
+| suite (`algorithm=pdhg`, defaults otherwise, `main` at `d4bb701`, both arms in one job) | arm | optimal | verified | passed | wall sum |
+|---|---|---:|---:|---:|---:|
+| Netlib full, 94, 60 s (run 42954273061, EPYC 9V74) | off | 83 | **88** | 77 | 1,448 s |
+| | on | 83 | 87 | 77 | 1,437 s |
+| refinery LPs, 18, 120 s (run 42954305874, EPYC 9V45) | off | 18 | 18 | 18 | 30 s |
+| | on | 18 | 18 | 18 | 31 s |
+| Mittelmann LPfeas-14, PDHG alone at 1e-4, 300 s (run 42814436237, EPYC 7763, `e494f47`) | off | 1 | 6 | - | - |
+| | on | 0 | **8** | - | - |
+
+On Netlib the polish loses fffff800 (`feasible` and verified off, `iteration_limit` on) and turns bnl1 and perold from `optimal` to `feasible`; it gains `optimal` on d2q06c and pilot4 and nothing else moves. On the refinery LPs it never changes an answer. Where it pays is the first-order engine alone on Mittelmann's set at a loose request: rmine15 and supportcase10 go from stopped at the absolute primal clause to verified, nothing lost. A default is flipped only when nothing is lost, so it stays off, and the LPfeas runner asks for it explicitly.
+
+Files: `bench/results/option-ab-netlib-feasibility-polish-d4bb701.csv`, `option-ab-refinery-feasibility-polish-d4bb701.csv`, `option-ab-lpfeas14-feasibility-polish-e494f47.csv`.
+What would earn the default: fffff800, bnl1 and perold keeping their answers with it on - the polished pair replacing a point only when it is at least as good on the dual side as well, not on primal feasibility alone.
+
 ---
 
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
