@@ -546,6 +546,9 @@ class Simplex {
   /// The rung of the Markowitz ladder every factorization starts from (#1023): 0 unless
   /// refactorize_stricter() raised it.
   std::size_t markowitz_rung_ = 0;
+  /// True while the crossover push's own loop runs (#888): refactorize() then goes from a
+  /// failure at the Markowitz threshold straight to the repair, without the stricter rungs.
+  bool in_push_ = false;
 
   /// Latched by refactorize() when the Markowitz ladder climbed past its default.
   bool basis_needed_stricter_threshold_ = false;

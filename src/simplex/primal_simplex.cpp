@@ -391,10 +391,28 @@ bool Simplex::refactorize() {
   // retried with progressively more stability, ending at full partial pivoting - more fill,
   // slower, and still enormously better than a dense refactorization. Only a basis that is
   // singular under partial pivoting is genuinely singular.
-  for (std::size_t attempt = markowitz_rung_; attempt < std::size(kThresholdLadder);
-       ++attempt) {
+  // WHAT LEAVING THE PLAIN PATH COSTS IS LOGGED (#888): one line whenever a factorization
+  // needed a stricter rung or a repair, with the seconds it took.
+  const Timer factor_clock;
+  // IN THE CROSSOVER PUSH A FAILURE AT THE THRESHOLD IS A DEPENDENT COLUMN, NOT A BADLY
+  // SCALED BASIS (#888). The push's basis grows out of the slack basis one column at a
+  // time, and what makes it singular is a pivot on an alpha entry that was rounding noise.
+  // A stricter threshold cannot cure that; on the 709,556-row refinery year one such
+  // refactorization sat in the elimination for over 16 minutes where a plain one takes a
+  // quarter of a second. So the push tries the threshold once and goes to the repair, which
+  // evicts the dependent column for a row's logical (Maros sec. 9.4; Suhl & Suhl 1990), and
+  // factorizes the repaired basis at the same threshold.
+  const std::size_t last_rung = in_push_ ? markowitz_rung_ + 1 : std::size(kThresholdLadder);
+  for (std::size_t attempt = markowitz_rung_; attempt < last_rung; ++attempt) {
     if (lu_.factorize(basis_columns_, m_, tol::kPivotTolerance, kThresholdLadder[attempt],
                       deadline_)) {
+      if (attempt > markowitz_rung_) {
+        logger_.info(
+            "Refactorization at iteration {}: Markowitz threshold {:g} after {:g} failed, "
+            "{:.2f} s, no repair",
+            iterations_seen_, kThresholdLadder[attempt], kThresholdLadder[markowitz_rung_],
+            factor_clock.elapsed_seconds());
+      }
       // PER FACTORIZATION, NOT A LATCH. This used to latch true for the rest of the solve,
       // which disabled the basis update permanently and made every later iteration
       // refactorize from scratch: measured on modszk1, 109,827 refactorizations in 80
@@ -465,8 +483,16 @@ bool Simplex::refactorize() {
         target.size = 1;
       }
     }
-    if (lu_.factorize(basis_columns_, m_, tol::kPivotTolerance, 1.0, deadline_)) {
-      basis_needed_stricter_threshold_ = true;
+    const double repaired_threshold = in_push_ ? kThresholdLadder[markowitz_rung_] : 1.0;
+    const bool repaired_factorizes =
+        lu_.factorize(basis_columns_, m_, tol::kPivotTolerance, repaired_threshold, deadline_);
+    logger_.info(
+        "Refactorization at iteration {}: singular at every rung tried, repaired, the repaired "
+        "basis {} at threshold {:g}, {:.2f} s in all",
+        iterations_seen_, repaired_factorizes ? "factorized" : "did not factorize",
+        repaired_threshold, factor_clock.elapsed_seconds());
+    if (repaired_factorizes) {
+      basis_needed_stricter_threshold_ = !in_push_;
       // THE BASIS CHANGED, SO THE BASIC VALUES DESCRIBE A BASIS THAT NO LONGER EXISTS.
       //
       // Every other caller of refactorize() rebuilds the same factorization of the same

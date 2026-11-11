@@ -171,6 +171,7 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
   // superbasic; Gill, Murray, Saunders & Wright (1989) keep the same invariant with their
   // expanding bounds, and reset at the end as the cleanup below does. The requeue count is
   // bounded by the queue's starting length, past which a variable just waits for cleanup.
+  in_push_ = true;
   std::vector<Index> off_bound;
   const std::size_t requeue_budget = superbasic.size();
   std::size_t requeued = 0;
@@ -392,6 +393,7 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
       window_max_move = 0.0;
     }
   }
+  in_push_ = false;
   // The cleanup: every variable that left off its bound and is still nonbasic goes onto it
   // now, and x_B is solved for afresh below; what that moves is the infeasibility the
   // check after it measures and the primal loop's phase 1 repairs.
