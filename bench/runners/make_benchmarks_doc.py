@@ -2900,7 +2900,10 @@ def main() -> int:
                     for limit in miplib3_doc.LIMITS}
     # The whole benchmark set (#1199), its joined shards: `miplib2017-bench-` and
     # `highs-miplib2017-bench-`, which no glob above takes.
-    benchmark_set_runs = (newest(miplib2017_bench_doc.sankhya_pattern()),
+    # SANKHYA's run records mip_threads=1 (one thread by construction, whatever the runner's
+    # core count), which newest() would skip as a non-default run.
+    benchmark_set_runs = (newest_option_run(miplib2017_bench_doc.sankhya_pattern(),
+                                            "mip_threads=1"),
                           newest(miplib2017_bench_doc.highs_pattern()))
     # prefix: pdhg-threads-*, pdhg-two-matvec-* and pdhg-478-* share the glob, and since #592
     # section 1e had been reading the thread-scaling CSV as its own (0 instances shown).

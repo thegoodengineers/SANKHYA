@@ -268,7 +268,8 @@ def miplib_row() -> Row | None:
 def miplib2017_benchmark_row() -> Row | None:
     # #1199: the whole benchmark set at 60 s, PROVED counted as miplib2017_bench_doc says, and
     # HiGHS's count by the same rule from the same jobs beside it.
-    path = latest_result.latest(miplib2017_bench_doc.sankhya_pattern())
+    path = latest_result.latest(miplib2017_bench_doc.sankhya_pattern(),
+                                allowed_options=("mip_threads=1",))
     if path is None:
         return None
     ours = miplib2017_bench_doc.counts(read_csv(path), miplib2017_bench_doc.sankhya_verdicts)
@@ -370,7 +371,9 @@ def gpu_rows() -> list[Row]:
 def all_rows() -> list[Row]:
     rows = [netlib_row(), netlib_certified_row(), netlib_infeasible_row(), kennington_row(),
             mittelmann_row(),
-            miplib3_row(), miplib2017_benchmark_row(), miplib_row(), maros_meszaros_row(),
+            # miplib2017_benchmark_row() (#1199) is held out of the README scoreboard until its
+            # headline wording is decided; the section in docs/BENCHMARKS.md carries the run.
+            miplib3_row(), miplib_row(), maros_meszaros_row(),
             maros_meszaros_head_to_head_row(), refinery_qp_row(), qplib_row(), stress_row()]
     rows = [r for r in rows if r is not None]
     rows += gpu_rows()
