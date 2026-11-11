@@ -22,6 +22,7 @@
 #include "oracles/rational_simplex.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/tolerances.hpp"
 
 namespace sankhya::mip {
 namespace {
@@ -180,6 +181,11 @@ TEST(Symmetry, TheWorkBudgetStopsTheSearchWithExactGeneratorsOnly) {
   const SymmetryGroup enough = detect_symmetry(m, 1000, full.work + round);
   EXPECT_FALSE(enough.budget_exhausted);
   EXPECT_EQ(enough.generators.size(), full.generators.size());
+}
+
+TEST(Symmetry, TheWorkBudgetIsOnByDefaultAtTheTolerancesValue) {
+  EXPECT_EQ(Options().get_int("mip_symmetry_work_limit"), tol::kSymmetryWorkLimit);
+  EXPECT_EQ(tol::kSymmetryWorkLimit, 100'000'000);
 }
 
 // ---- Searches with the rows on, against enumeration and the exact oracle ----------------

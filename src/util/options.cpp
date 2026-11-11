@@ -1151,11 +1151,15 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"mip_symmetry_work_limit",
                  OptionType::Int,
-                 std::int64_t{0},
+                 std::int64_t{tol::kSymmetryWorkLimit},
                  "Adjacency entries the symmetry search's colour refinement may visit (#1158) "
                  "before it stops with the generators found so far, which are exact whatever "
-                 "the budget; one refinement round visits two per nonzero. 0 is no limit, the "
-                 "default until the MIPLIB A/B on main.",
+                 "the budget; one refinement round visits two per nonzero. 0 is no limit. 1e8 "
+                 "by default since the A/Bs on MIPLIB 3 and MIPLIB tier 1 (3 seeds, 60 s, one "
+                 "thread; bench/results/option-ab-miplib3-symmetry-work-9420c7f.csv and "
+                 "option-ab-tier1-symmetry-work-71e9deb.csv): no run changed its matched, "
+                 "proved or verified verdict, and the first incumbent on nw04 came at 9-11 s "
+                 "instead of 41-43 s, on fast0507 at 3 s instead of 25 s.",
                  0.0,
                  kNoLimit,
                  {}});
