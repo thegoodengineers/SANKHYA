@@ -1144,6 +1144,7 @@ const char* cut_filter_reason_name(CutFilterReason reason) noexcept {
     case CutFilterReason::kCoefficientRatio: return "coefficient_ratio";
     case CutFilterReason::kInsufficientViolation: return "insufficient_violation";
     case CutFilterReason::kDuplicate: return "duplicate";
+    case CutFilterReason::kNotExamined: return "not_examined";
   }
   return "unknown";
 }
@@ -1151,7 +1152,7 @@ const char* cut_filter_reason_name(CutFilterReason reason) noexcept {
 std::string describe_cut_filter(const std::vector<FilteredCut>& filtered) {
   if (filtered.empty()) return "no candidates";
   constexpr int kFamilies = 8;  // kUnknown..kImpliedBound
-  constexpr int kReasons = 7;
+  constexpr int kReasons = 8;
   int counts[kFamilies][kReasons] = {};
   for (const FilteredCut& fc : filtered) {
     ++counts[static_cast<int>(fc.cut.family)][static_cast<int>(fc.reason)];
@@ -1180,14 +1181,29 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
                                                      const CutFilterPolicy& policy) {
   std::vector<FilteredCut> results;
   results.reserve(candidates.size());
+  // The accepted cuts a later candidate is compared against: where each sits in `results`
+  // and its first materially nonzero column, found once when it is accepted (#1199). The
+  // comparison scanned every accepted cut from column 0 for that column, for every
+  // candidate: candidates x accepted x columns, minutes on a 17,030-column model whose
+  // root round proposed thousands of cuts, under a time limit nothing in here reads.
+  std::vector<std::pair<std::size_t, Index>> accepted;
 
   const Index n = model.num_cols();
   if (n < 0) return results;  // Safety check
 
+  bool out_of_time = false;
   for (const Cut& c : candidates) {
     FilteredCut fc;
     fc.cut = c;  // Copy candidate (filtering never modifies coefficients or RHS)
     fc.reason = CutFilterReason::kAccepted;
+
+    // 0. The solve's limit (#1199), asked once per candidate and remembered.
+    if (!out_of_time && policy.stop && policy.stop()) out_of_time = true;
+    if (out_of_time) {
+      fc.reason = CutFilterReason::kNotExamined;
+      results.push_back(fc);
+      continue;
+    }
 
     // 1. Finite-value check
     if (!std::isfinite(c.rhs)) {
@@ -1277,20 +1293,8 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
 
     // Deduplication
     bool is_duplicate = false;
-    for (const FilteredCut& accepted_fc : results) {
-      if (accepted_fc.reason != CutFilterReason::kAccepted) continue;
-      const Cut& accepted_c = accepted_fc.cut;
-
-      // Find first materially nonzero coefficient in accepted_c (A)
-      Index first_nonzero = -1;
-      for (Index j = 0; j < n; ++j) {
-        if (std::abs(accepted_c.coeff[static_cast<std::size_t>(j)]) > tol::kZeroDrop) {
-          first_nonzero = j;
-          break;
-        }
-      }
-
-      if (first_nonzero == -1) continue;  // Should not happen for accepted cuts
+    for (const auto& [position, first_nonzero] : accepted) {
+      const Cut& accepted_c = results[position].cut;
 
       double A_j = accepted_c.coeff[static_cast<std::size_t>(first_nonzero)];
       double C_j = c.coeff[static_cast<std::size_t>(first_nonzero)];
@@ -1336,6 +1340,15 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
     if (too_dense) {
       fc.reason = CutFilterReason::kTooDense;
       fc.dense_only = true;
+    } else {
+      // Accepted: a reference for the candidates after it. Its support is not empty (the
+      // empty-support test passed), so the first nonzero exists.
+      for (Index j = 0; j < n; ++j) {
+        if (std::abs(c.coeff[static_cast<std::size_t>(j)]) > tol::kZeroDrop) {
+          accepted.emplace_back(results.size(), j);
+          break;
+        }
+      }
     }
     results.push_back(fc);
   }

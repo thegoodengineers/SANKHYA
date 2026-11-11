@@ -42,6 +42,7 @@
 //     small: density, coefficient range and violation (filter_and_deduplicate_cuts)
 #pragma once
 
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -245,7 +246,10 @@ enum class CutFilterReason {
   kTooDense,
   kCoefficientRatio,
   kInsufficientViolation,
-  kDuplicate
+  kDuplicate,
+  /// CutFilterPolicy::stop said the solve was out of time before this candidate was looked
+  /// at (#1199): not a judgement on the cut, and never accepted.
+  kNotExamined
 };
 
 /// A candidate cut paired with its acceptance/rejection status.
@@ -274,6 +278,12 @@ struct CutFilterPolicy {
   /// Run a too-dense cut through the remaining tests too and mark it dense_only when it
   /// passes them all (#496): the root's bounded admission of dense cuts reads the mark.
   bool test_dense = false;
+  /// Asked before every candidate (#1199); once true, that candidate and every one after it
+  /// come back kNotExamined. The filter is linear in the columns per candidate and compares
+  /// each against every accepted one, and on a 17,030-column model whose root round proposed
+  /// thousands of cuts it ran a minute past a 60 s limit that nothing in it read. The search
+  /// passes its own limits and interrupt.
+  std::function<bool()> stop;
 };
 
 [[nodiscard]] std::vector<FilteredCut> filter_and_deduplicate_cuts(

@@ -2617,5 +2617,70 @@ TEST(MirCuts, NeverSeparatesTheExactOptimumOnRandomInstances) {
               cuts_checked, with_cuts, instances.size());
 }
 
+TEST(CutFiltering, DuplicatesAreFoundWhateverColumnTheAcceptedCutStartsAt) {
+  // #1199: the first nonzero column of an accepted cut is found once, when it is accepted,
+  // not rescanned for every later candidate. The verdicts must be what they were: a
+  // positive multiple of an accepted cut is a duplicate wherever its support starts, a
+  // negative multiple and a cut that differs in one coefficient are not.
+  Model model;
+  model.col_cost.assign(6, 0.0);
+  Solution sol;
+  sol.col_value.assign(6, 1.0);
+  const auto cut = [](std::vector<double> coeff, double rhs) {
+    Cut c;
+    c.coeff = std::move(coeff);
+    c.rhs = rhs;
+    return c;
+  };
+  const std::vector<Cut> candidates = {
+      cut({0, 0, 1, 2, 0, 0}, 1.0),  // accepted, starts at column 2
+      cut({1, 0, 0, 0, 0, 3}, 2.0),  // accepted, starts at column 0
+      cut({0, 0, 2, 4, 0, 0}, 2.0),  // twice the first: duplicate
+      cut({3, 0, 0, 0, 0, 9}, 6.0),  // three times the second: duplicate
+      cut({0, 0, 1, 2, 0, 1}, 1.0),  // the first plus one coefficient: its own cut
+      cut({0, 0, 2, 4, 0, 0}, 2.5),  // twice the first with another rhs: its own cut
+  };
+  const auto res = filter_and_deduplicate_cuts(model, sol, candidates);
+  ASSERT_EQ(res.size(), candidates.size());
+  const std::vector<CutFilterReason> expected = {
+      CutFilterReason::kAccepted,  CutFilterReason::kAccepted, CutFilterReason::kDuplicate,
+      CutFilterReason::kDuplicate, CutFilterReason::kAccepted, CutFilterReason::kAccepted};
+  for (std::size_t k = 0; k < res.size(); ++k) EXPECT_EQ(res[k].reason, expected[k]) << k;
+}
+
+TEST(CutFiltering, AStopLeavesTheRestNotExaminedAndAcceptsNothingAfterIt) {
+  // #1199: the search's deadline is asked before every candidate. After it says stop,
+  // every remaining candidate comes back, in order and unmodified, marked not_examined;
+  // none is accepted, and the clock is not asked again.
+  Model model;
+  model.col_cost.assign(4, 0.0);
+  Solution sol;
+  sol.col_value.assign(4, 1.0);
+  std::vector<Cut> candidates;
+  for (int k = 0; k < 6; ++k) {
+    Cut c;
+    c.coeff.assign(4, 0.0);
+    c.coeff[static_cast<std::size_t>(k % 4)] = 1.0 + k;
+    c.rhs = 0.5;
+    candidates.push_back(c);
+  }
+  int asked = 0;
+  CutFilterPolicy policy;
+  policy.stop = [&asked] { return ++asked > 2; };
+  const auto res = filter_and_deduplicate_cuts(model, sol, candidates, policy);
+  ASSERT_EQ(res.size(), candidates.size());
+  EXPECT_EQ(res[0].reason, CutFilterReason::kAccepted);
+  EXPECT_EQ(res[1].reason, CutFilterReason::kAccepted);
+  for (std::size_t k = 2; k < res.size(); ++k) {
+    EXPECT_EQ(res[k].reason, CutFilterReason::kNotExamined) << k;
+    EXPECT_EQ(res[k].cut.coeff, candidates[k].coeff) << k;
+  }
+  EXPECT_EQ(asked, 3) << "asked once per candidate until it said stop, then not again";
+  EXPECT_NE(describe_cut_filter(res).find("not_examined"), std::string::npos);
+
+  const auto all = filter_and_deduplicate_cuts(model, sol, candidates);
+  for (const FilteredCut& fc : all) EXPECT_NE(fc.reason, CutFilterReason::kNotExamined);
+}
+
 }  // namespace
 }  // namespace sankhya
