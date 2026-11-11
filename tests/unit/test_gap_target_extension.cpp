@@ -88,6 +88,7 @@ Options loose_options() {
   o.set_string("mip_heur_fj", "off");
   o.set_string("mip_heur_parity", "off");
   o.set_double("mip_relative_gap", kLooseGap);
+  o.set_int("mip_threads", 1);  // the extension is the one search's; a parallel tree stops
   return o;
 }
 
