@@ -2925,6 +2925,9 @@ def main() -> int:
     refinery_qp_csv = latest_result.latest("head-to-head-refinery-qp-*.csv",
                                            prefix="head-to-head-refinery-qp",
                                            allowed_options=("threads", "qp_algorithm"))
+    refinery_qp_long_csv = latest_result.latest(
+        "head-to-head-refinery-qp-1200s-*.csv", prefix="head-to-head-refinery-qp-1200s",
+        allowed_options=("threads", "qp_algorithm"))
     robustness_csv = newest("robustness-*.csv")
     stress_csv = newest("stress-*.csv", prefix="stress")
     # The default run only; the per-engine runs carry `algorithm=` in solver_options, which
@@ -3614,7 +3617,7 @@ HiGHS's QP solver, every answer checked against an optimum known exactly. Produc
 `python bench/runners/compare.py --suite refinery-qp` (`bench/runners/compare_suite.py`,
 `bench/runners/refinery_qp_doc.py`).
 
-{refinery_qp_doc.section(refinery_qp_csv)}
+{refinery_qp_doc.section(refinery_qp_csv, refinery_qp_long_csv)}
 ---
 
 ## 4e. {named_solvers_doc.TITLE}

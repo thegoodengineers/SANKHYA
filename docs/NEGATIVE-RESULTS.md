@@ -201,6 +201,19 @@ What would earn the default: fffff800, bnl1 and perold keeping their answers wit
 
 ---
 
+### The first-order QP route as the default (`qp_algorithm=condat-vu` with `qp_relative_stop`, #1204)
+
+On the refinery planning QP with convex cost curves, Condat-Vu stopped on the relative KKT request and finished by the interior point is the fastest verified arm at 13k and 110k columns: 4.05 s and 44.43 s against the default interior point's 10.63 s and 104.22 s (`bench/results/head-to-head-refinery-qp-90d952a.csv`, `docs/BENCHMARKS.md` section 4d). The question was whether that route should be the default QP engine.
+
+Measured on GitHub Actions with `bench.yml`'s `ab-option` suite and `--base-binary`, both arms on `main` at `90d952a` in one job, Maros-Meszaros 138 at 60 s (run 42967892076, `bench/results/option-ab-maros-meszaros-qp-first-order-route-90d952a.csv`):
+
+| arm | optimal | matched | verified | optimal rejected by the verifier | wall s |
+|---|---:|---:|---:|---:|---:|
+| today's default (interior point) | 128 | 127 | 132 | 0 | 474 |
+| first-order route | 88 | 86 | 91 | 0 | 2,165 |
+
+Forty-three instances are lost, to the time limit or the first-order engine's iteration ceiling before the relative request is met (the cont, boyd and LISWET families, most of the Netlib-derived q* models), and one is gained (huestis). The route pays on a large, well-scaled, staircase QP and not in general, so the default stays the interior point and `qp_relative_stop` stays an option, off.
+
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
 
 These decisions were made on numbers that are not in `bench/results/`. They are recorded as such, and each names the re-run that would move it to section 1.
