@@ -6,8 +6,9 @@
 # On 11 Nov 2026 the hosted runners could not resolve azure.archive.ubuntu.com for over an
 # hour and every job died here before building anything. So: three attempts at apt, and if
 # the mirror is still down, accept each package that the runner image already carries
-# (dpkg -s) and take ninja from PyPI, which is a different host. A package that is neither
-# installed nor replaceable still fails the step, so nothing is silently skipped.
+# (dpkg -s, or its command on PATH), take ninja from PyPI, which is a different host, and
+# stand a pass-through in for ccache. A package that is neither present nor replaceable
+# still fails the step, so nothing is silently skipped.
 set -u
 
 for attempt in 1 2 3; do
@@ -21,14 +22,22 @@ done
 echo "ci_apt: apt is unreachable; falling back to what the image has" >&2
 missing=0
 for pkg in "$@"; do
+  cmd=${pkg%-build} # ninja-build installs `ninja`; for the others the command is the package name
   if dpkg -s "$pkg" >/dev/null 2>&1; then
     echo "ci_apt: $pkg is already installed"
-  elif [ "$pkg" = ninja-build ]; then
-    if command -v ninja >/dev/null 2>&1 || pip install ninja; then
-      echo "ci_apt: ninja $(ninja --version) from $(command -v ninja)"
-    else
-      missing=1
-    fi
+  elif command -v "$cmd" >/dev/null 2>&1; then
+    echo "ci_apt: $cmd is on the image at $(command -v "$cmd")"
+  elif [ "$pkg" = ninja-build ] && pip install ninja; then
+    echo "ci_apt: ninja $(ninja --version) from PyPI"
+  elif [ "$pkg" = ccache ]; then
+    # ccache only makes the build faster. A pass-through keeps the launcher and the stats
+    # calls in ci.yml working: flags are accepted and ignored, a compile line is run as is.
+    printf '#!/bin/sh
+case "$1" in -*) exit 0 ;; esac
+exec "$@"
+' | sudo tee /usr/local/bin/ccache >/dev/null
+    sudo chmod +x /usr/local/bin/ccache
+    echo "ci_apt: ccache replaced by a pass-through; this build is uncached"
   else
     echo "ci_apt: $pkg is not installed and has no fallback" >&2
     missing=1
