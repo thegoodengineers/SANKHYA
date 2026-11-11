@@ -67,7 +67,9 @@ MATCH_TOLERANCE = 1e-6  # netlib.PASS_RELATIVE_TOLERANCE and maros_meszaros.REFE
 ALL_SOLVERS = ("sankhya",) + rivals.SOLVERS
 # SANKHYA run with an engine other than its default, each a solver column of its own: the
 # arm's name and the options it adds. Only a suite that lists one runs it.
-SANKHYA_ARMS = {"sankhya-condat-vu": ["qp_algorithm=condat-vu"]}
+SANKHYA_ARMS = {"sankhya-condat-vu": ["qp_algorithm=condat-vu"],
+                "sankhya-condat-vu-relative": ["qp_algorithm=condat-vu",
+                                               "qp_relative_stop=true"]}
 
 # The LP engines: `cbc` is the MIP binary and the QP comparators are QP only, so an LP suite
 # names its five rather than record four hundred `unsupported` rows.
@@ -126,7 +128,8 @@ SUITES = {
     "refinery-qp": {"dir": "refinery-qp", "suffix": ".qps", "kind": "qp",
                     "reference": "reference_objective", "with_constant": False,
                     "time_limit": 600.0, "manifest": "manifest.json",
-                    "solvers": ("sankhya", "sankhya-condat-vu", "highs")},
+                    "solvers": ("sankhya", "sankhya-condat-vu", "highs",
+                                "sankhya-condat-vu-relative")},
 }
 
 
