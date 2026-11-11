@@ -43,6 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import latest_result  # noqa: E402
+import named_solvers_doc  # noqa: E402
 import miplib3_doc  # noqa: E402
 import miplib2017_bench_doc  # noqa: E402
 
@@ -391,7 +392,9 @@ def render() -> str:
              "solver on the same host | CSV | commit | date |",
              "|---|---:|---|---|---|---|---|"]
     lines += [row.markdown() for row in rows]
-    lines += ["", HOW_TO_READ, END_MARKER]
+    # The four open-source solvers the problem statement names, from the head-to-head CSVs.
+    lines += ["", HOW_TO_READ, "", *named_solvers_doc.table(named_solvers_doc.paths()),
+              END_MARKER]
     return "\n".join(lines) + "\n"
 
 

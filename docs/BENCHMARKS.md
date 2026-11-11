@@ -3783,28 +3783,28 @@ SANKHYA included.
 
 ### 4a.1 Netlib LP
 
-Source CSV: `bench/results/head-to-head-netlib-5e490ef.csv`  
-Commit `5e490ef` · machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores; 16 GiB RAM; Linux-x86_64`  
+Source CSV: `bench/results/head-to-head-netlib-ab3f4a1.csv`  
+Commit `ab3f4a1` · machine `github-actions ubuntu-24.04; AMD EPYC 7763 64-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`  
 94 instances · time limit 120 s · 1 thread per solver · every solver a separate process
 
 **The 92 LPs netlib.org ships as EMPS files:**
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | 5e490ef | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.575 s |
-| HiGHS | 1.15.1 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.163 s |
-| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.398 s |
-| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.355 s |
-| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.486 s |
+| SANKHYA | ab3f4a1 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.304 s |
+| HiGHS | 1.15.1 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.158 s |
+| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.380 s |
+| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.348 s |
+| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.472 s |
 
 **Instance by instance, SANKHYA against each rival:**
 
 | against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
 |---|---:|---:|---:|---:|---:|---:|
-| HiGHS | 92 | 3 | 72 | 17 | 1.00x | 1.08x |
-| SCIP | 92 | 20 | 65 | 7 | 1.00x | 0.42x |
-| CBC/Clp | 92 | 6 | 71 | 15 | 1.00x | 0.72x |
-| GLPK | 92 | 7 | 72 | 13 | 1.00x | 1.86x |
+| HiGHS | 92 | 6 | 78 | 8 | 1.00x | 0.77x |
+| SCIP | 92 | 23 | 66 | 3 | 1.00x | 0.30x |
+| CBC/Clp | 92 | 7 | 77 | 8 | 1.00x | 0.61x |
+| GLPK | 92 | 16 | 71 | 5 | 1.00x | 0.61x |
 
 *A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
 
@@ -3812,11 +3812,11 @@ Commit `5e490ef` · machine `cloud container (docker); Intel(R) Xeon(R) Processo
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | 5e490ef | 2 | 2 | 1 | 2 | 2 | primal+dual | 3.874 s |
-| HiGHS | 1.15.1 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.397 s |
-| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 2.314 s |
-| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.279 s |
-| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 2.164 s |
+| SANKHYA | ab3f4a1 | 2 | 2 | 1 | 2 | 2 | primal+dual | 2.266 s |
+| HiGHS | 1.15.1 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.477 s |
+| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 2.294 s |
+| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.211 s |
+| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.895 s |
 
 `matched` grades against the readme's optimum and `matched exact` against Koch's exact rational optimum (`data/netlib/koch_exact.json`, #747); the timing counts the exact grade. Where the two differ the readme is the one that is wrong: on 80bau3b, ganges, greenbea, greenbeb, nesm, pilot, pilot.we, scrs8 and stocfor3 every solver here agrees with Koch.
 
@@ -3831,7 +3831,7 @@ Every run that did not count, by solver:
 
 What the verifier rejected:
 
-- CBC/Clp on `pilot`: [FAIL] column bounds               worst violation 5.392e-07 (5.392e-07 relative) on UFO006
+- CBC/Clp on `pilot`: [FAIL] column bounds               worst violation 5.392e-07 (5.392e-07 relative) on UFO006; [FAIL] dual feasibility (columns)  worst 8.619e-09 (3.285e-07 relative) on CLS506
 - CBC/Clp on `pilot.ja`: [FAIL] column bounds               worst violation 1.538e-05 (1.538e-05 relative) on USLB06
 - CBC/Clp on `pilot.we`: [FAIL] column bounds               worst violation 1.000e-05 (1.000e-05 relative) on UOSE03
 - CBC/Clp on `pilotnov`: [FAIL] column bounds               worst violation 1.538e-05 (1.538e-05 relative) on USLB06
@@ -4322,6 +4322,91 @@ time limit 600 s · 1 thread per solver
 
 ---
 
+## 4e. SANKHYA against the four open-source solvers the problem statement names
+
+PS26119 names COIN-OR CBC, HiGHS, GLPK and SCIP. Sections 4 and 4a compare on LPs and QPs;
+this section puts all four beside SANKHYA on three suites, each in one CI job
+(`.github/workflows/bench.yml`, suites `head-to-head-netlib`, `head-to-head-miplib3` and
+`head-to-head-stress`), every solver a released package run as a separate process
+(`bench/runners/rivals.py`, PROVENANCE judgement calls 35 and 44). The Netlib row is the CSV
+section 4a.1 breaks down and the stress row the CSV of section 5b. On the stress set SCIP's,
+Clp's and GLPK's `infeasible` and `unbounded` are graded on the status alone, since their
+adapters read no certificate, where SANKHYA's and HiGHS's must pass the verifier.
+
+**SANKHYA against the four open-source solvers the problem statement names** (HiGHS, SCIP, COIN-OR CBC, GLPK). Each row is one job: all five solvers on the same machine, one thread each, the same time limit, each a separate process, every point checked by `tools/verify_solution.py`. A cell is **proved / matched / verified / wrong**: the solver's own claim of an optimum (on the stress set, of any verdict); that claim at the published optimum (on the stress set, graded correct); the point accepted by the verifier; and a wrong answer - an optimum off the published value by more than the solver was asked for, or a verdict the model contradicts. A rejected point with the right objective is not counted wrong: it is the gap between proved and verified. CBC is its `cbc` binary on MILPs and its LP engine, the `clp` binary, on LPs.
+
+| suite | instances | limit | SANKHYA | HiGHS | SCIP | CBC | GLPK | CSV | commit |
+|---|---:|---:|---|---|---|---|---|---|---|
+| Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-ab3f4a1.csv` | `ab3f4a1` |
+| MIPLIB 3 MILP | 65 | 60 s | 45 / 41 / 45 / 0 | 52 / 51 / 52 / 0 | 52 / 47 / 52 / 0 | 51 / 50 / 51 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-ab3f4a1.csv` | `ab3f4a1` |
+| Stress set LP | 126 | 60 s | 113 / 106 / 113 / 7 | 120 / 29 / 40 / 90 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-ab3f4a1.csv` | `ab3f4a1` |
+| Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | - | 87 / 85 / 60 / 2 | - | - | `bench/results/head-to-head-maros-meszaros-partial-ab3f4a1.csv` | `ab3f4a1` |
+
+Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 51, CBC 50, SCIP 47, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 106, CBC 59, GLPK 45, HiGHS 29, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58.
+
+Versions, as each solver reported them in those runs: HiGHS 1.15.1, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
+
+**Every wrong answer counted above** (the stress set's are named, with every rejection, in section 5b):
+
+- Maros-Meszaros QP, SCIP on `dualc1`: optimal; relative gap 6.75066400474483e-06
+- Maros-Meszaros QP, SANKHYA on `hues-mod`: optimal; relative gap 6.493285498031229e-06
+- Maros-Meszaros QP, SCIP on `yao`: optimal; relative gap 0.007724452152089034
+
+**Every other answer the verifier rejected** (proved, not verified):
+
+- Netlib LP, GLPK on `dfl001`: optimal; [FAIL] dual feasibility (columns)  worst 2.851e-07 (2.851e-07 relative) on C11729
+- Netlib LP, CBC/Clp on `pilot`: optimal; [FAIL] column bounds               worst violation 5.392e-07 (5.392e-07 relative) on UFO006; [FAIL] dual feasibility (columns)  worst 8.619e-09 (3.285e-07 relative) on CLS506
+- Netlib LP, CBC/Clp on `pilot.ja`: optimal; [FAIL] column bounds               worst violation 1.538e-05 (1.538e-05 relative) on USLB06
+- Netlib LP, CBC/Clp on `pilot.we`: optimal; [FAIL] column bounds               worst violation 1.000e-05 (1.000e-05 relative) on UOSE03
+- Netlib LP, CBC/Clp on `pilotnov`: optimal; [FAIL] column bounds               worst violation 1.538e-05 (1.538e-05 relative) on USLB06
+- MIPLIB 3 MILP, GLPK on `dsbmip`: optimal; [FAIL] row activity        worst violation 1.653e-05 (1.653e-05 relative to the row's terms) on CIL20019
+- Maros-Meszaros QP, SCIP on `cont-050`: optimal; [FAIL] objective           recomputed -4.563850907011e+00, solver said -4.563850922358e+00, difference 1.535e-08
+- Maros-Meszaros QP, SCIP on `dpklo1`: optimal; [FAIL] objective           recomputed 3.700962171143e-01, solver said 3.700962071807e-01, difference 9.934e-09
+- Maros-Meszaros QP, SCIP on `dual1`: optimal; [FAIL] objective           recomputed 3.501296435026e-02, solver said 3.501295306576e-02, difference 1.128e-08
+- Maros-Meszaros QP, SCIP on `dual4`: optimal; [FAIL] objective           recomputed 7.460908117710e-01, solver said 7.460907969306e-01, difference 1.484e-08
+- Maros-Meszaros QP, SCIP on `genhs28`: optimal; [FAIL] objective           recomputed 9.271736937664e-01, solver said 9.271736837764e-01, difference 9.990e-09
+- Maros-Meszaros QP, SCIP on `hs35`: optimal; [FAIL] objective           recomputed 1.111111045050e-01, solver said 1.111110945017e-01, difference 1.000e-08
+- Maros-Meszaros QP, SCIP on `hs35mod`: optimal; [FAIL] objective           recomputed 2.500000020587e-01, solver said 2.499999900145e-01, difference 1.204e-08
+- Maros-Meszaros QP, SCIP on `hs51`: optimal; [FAIL] objective           recomputed 0.000000000000e+00, solver said -9.075448303975e-08, difference 9.075e-08
+- Maros-Meszaros QP, SCIP on `hs53`: optimal; [FAIL] objective           recomputed 4.093023255814e+00, solver said 4.093023245915e+00, difference 9.899e-09
+- Maros-Meszaros QP, SCIP on `hs76`: optimal; [FAIL] objective           recomputed -4.681818221798e+00, solver said -4.681818231789e+00, difference 9.990e-09
+- Maros-Meszaros QP, SCIP on `ksip`: optimal; [FAIL] objective           recomputed 5.757979899730e-01, solver said 5.757978923372e-01, difference 9.764e-08
+- Maros-Meszaros QP, SCIP on `primal1`: optimal; [FAIL] objective           recomputed -3.501295974008e-02, solver said -3.501298447112e-02, difference 2.473e-08
+- Maros-Meszaros QP, SCIP on `primal2`: optimal; [FAIL] objective           recomputed -3.373366797028e-02, solver said -3.373369384926e-02, difference 2.588e-08
+- Maros-Meszaros QP, SCIP on `primal3`: optimal; [FAIL] objective           recomputed -1.357558326444e-01, solver said -1.357558555116e-01, difference 2.287e-08
+- Maros-Meszaros QP, SCIP on `primal4`: optimal; [FAIL] objective           recomputed -7.460908386962e-01, solver said -7.460908596746e-01, difference 2.098e-08
+- Maros-Meszaros QP, SCIP on `qafiro`: optimal; [FAIL] objective           recomputed -1.590782842719e+00, solver said -1.590782851654e+00, difference 8.936e-09
+- Maros-Meszaros QP, SCIP on `qe226`: optimal; [FAIL] row activity        worst violation 1.105e-07 (1.105e-07 relative to the row's terms) on ...054
+- Maros-Meszaros QP, SCIP on `qisrael`: optimal; [FAIL] row activity        worst violation 9.990e-07 (9.990e-07 relative to the row's terms) on B173
+- Maros-Meszaros QP, SCIP on `qpcblend`: optimal; [FAIL] objective           recomputed -7.842855006777e-03, solver said -7.842864304416e-03, difference 9.298e-09
+- Maros-Meszaros QP, SCIP on `qpcboei2`: optimal; [FAIL] row activity        worst violation 4.114e-07 (4.114e-07 relative to the row's terms) on R-----49
+- Maros-Meszaros QP, SCIP on `qptest`: optimal; [FAIL] objective           recomputed 4.371874914510e+00, solver said 4.371874904520e+00, difference 9.990e-09
+- Maros-Meszaros QP, SCIP on `qsc205`: optimal; [FAIL] objective           recomputed -5.813959148495e-03, solver said -5.813968995113e-03, difference 9.847e-09
+- Maros-Meszaros QP, SCIP on `qsctap1`: optimal; [FAIL] row activity        worst violation 7.073e-07 (7.073e-07 relative to the row's terms) on ACZZ9ZZ2
+- Maros-Meszaros QP, SCIP on `qsctap2`: optimal; [FAIL] row activity        worst violation 7.097e-07 (7.097e-07 relative to the row's terms) on ACZ39ZZ2
+- Maros-Meszaros QP, SCIP on `qsctap3`: optimal; [FAIL] row activity        worst violation 7.088e-07 (7.088e-07 relative to the row's terms) on ACZ32ZZ2
+- Maros-Meszaros QP, SCIP on `tame`: optimal; [FAIL] objective           recomputed 5.187246390146e-23, solver said -9.985476434923e-09, difference 9.985e-09
+- Maros-Meszaros QP, SCIP on `zecevic2`: optimal; [FAIL] objective           recomputed -4.125000039990e+00, solver said -4.125000049982e+00, difference 9.992e-09
+
+**MIPLIB 3 in detail** (`bench/results/head-to-head-miplib3-60s-ab3f4a1.csv`, machine `github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`). Every solver stops at a relative gap of 0.0001, SANKHYA's default and HiGHS's, set explicitly for SCIP, CBC and GLPK; everything else is each solver's default. SANKHYA runs once, at its default seed, where section 2a reports the best of three seeds. The time is the shifted geometric mean of each solver's own clock (shift 10 s), a run that is not proved, matched and verified charged the 60 s limit.
+
+| solver | version | proved | matched | proved, matched and verified | wrong | not proved, and how | SGM time |
+|---|---|---:|---:|---:|---:|---|---:|
+| SANKHYA | ab3f4a1 | 45 | 41 | 41 | 0 | 18 feasible, 2 time_limit | 16.25 s |
+| HiGHS | 1.15.1 | 52 | 51 | 51 | 0 | 13 time_limit | 8.91 s |
+| SCIP | 10.0.2 | 52 | 47 | 47 | 0 | 13 time_limit | 11.36 s |
+| CBC | 2.10.11 | 51 | 50 | 50 | 0 | 14 time_limit | 8.86 s |
+| GLPK | 5.0 | 33 | 32 | 31 | 0 | 32 time_limit | 20.74 s |
+
+Instance by instance, proved, matched and verified:
+
+- HiGHS and not SANKHYA (10): `10teams`, `dcmulti`, `gesa2_o`, `harp2`, `mitre`, `mod011`, `nw04`, `p2756`, `rout`, `set1ch`. SANKHYA and not HiGHS (0): none.
+- SCIP and not SANKHYA (9): `10teams`, `dcmulti`, `mas76`, `mitre`, `noswot`, `nw04`, `p2756`, `rout`, `set1ch`. SANKHYA and not SCIP (3): `gesa3`, `gesa3_o`, `misc06`.
+- CBC and not SANKHYA (10): `10teams`, `dcmulti`, `gesa2_o`, `mas76`, `mitre`, `mod011`, `nw04`, `p2756`, `pk1`, `rout`. SANKHYA and not CBC (1): `qiu`.
+- GLPK and not SANKHYA (1): `dcmulti`. SANKHYA and not GLPK (11): `air04`, `air05`, `dsbmip`, `gesa2`, `gt2`, `modglob`, `pp08a`, `pp08aCUTS`, `qiu`, `vpm1`, `vpm2`.
+
+---
+
 ## 4b. Agreement against size-limited commercial editions (#533)
 
 Gurobi Academic/Trial (≤2000 variables + constraints), CPLEX Community Edition (≤1000), and
@@ -4383,8 +4468,9 @@ verdict with a file the verifier accepts (and, when optimal, the objective withi
 relative); **wrong** is a contradicted verdict, an objective off the known optimum, or a file
 the verifier rejects; **failed** is no verdict (a limit, a numerical error, `feasible`).
 
-Reading it: SANKHYA's scaled-Netlib failures are the status guard refusing a claim it cannot
-support, or a time limit, not answers. Three causes were fixed under #792: presolve reading
+Reading it: SANKHYA's scaled-Netlib `failed` rows are the status guard refusing a claim it
+cannot support, or a time limit, not answers; its `wrong` rows, when a run has any, are
+answers, and each is named below with how far off it is. Three causes were fixed under #792: presolve reading
 real coefficients below 1e-11 as zero (#824), complementary slackness judged absolutely
 (#857, #806), and a numerical failure is now retried once on the model equilibrated by powers
 of two, an exact change of variables (#886). What remains is tracked as #792 and #783.
@@ -4395,39 +4481,201 @@ row of the file as written and most of its certificates failing to prove the fil
 (each failing check is named below); Klee-Minty from n = 30, whose last right-hand sides
 reach 5^29 > 1e20, comes back unbounded.
 
-Measured on SANKHYA commit `d32b3847` against HiGHS 1.15.1 (highspy, separate process), machine `laptop, shared with other jobs; Windows-AMD64`, 126 instances. Source: `stress-d32b3847.csv`.
+Measured on SANKHYA commit `ab3f4a1` against HiGHS 1.15.1 (highspy, separate process) and cbc-clp 1.17.9, glpk 5.0, scip 10.0.2 (bench/runners/rivals.py; an `infeasible` or `unbounded` from one of these is graded on the status alone), machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 9V45 96-Core Processor 15 GiB RAM`, 126 instances. Source: `stress-ab3f4a1.csv`.
 
-| family | instances | sankhya correct / wrong / failed | highs correct / wrong / failed |
-|---|---|---|---|
-| `degenerate` | 5 | 5 / 0 / 0 | 5 / 0 / 0 |
-| `klee_minty` | 7 | 7 / 0 / 0 | 4 / 3 / 0 |
-| `near_singular` | 8 | 8 / 0 / 0 | 8 / 0 / 0 |
-| `scaled_netlib` | 94 | 79 / 0 / 15 | 0 / 87 / 7 |
-| `thin_infeasible` | 8 | 8 / 0 / 0 | 8 / 0 / 0 |
-| `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 |
-| **all** | 126 | 111 / 0 / 15 | 29 / 90 / 7 |
+| family | instances | sankhya correct / wrong / failed | cbc-clp correct / wrong / failed | glpk correct / wrong / failed | highs correct / wrong / failed | scip correct / wrong / failed |
+|---|---|---|---|---|---|---|
+| `degenerate` | 5 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 |
+| `klee_minty` | 7 | 7 / 0 / 0 | 4 / 3 / 0 | 6 / 1 / 0 | 4 / 3 / 0 | 4 / 3 / 0 |
+| `near_singular` | 8 | 8 / 0 / 0 | 7 / 1 / 0 | 8 / 0 / 0 | 8 / 0 / 0 | 6 / 0 / 2 |
+| `scaled_netlib` | 94 | 74 / 7 / 13 | 35 / 59 / 0 | 14 / 80 / 0 | 0 / 88 / 6 | 0 / 67 / 27 |
+| `thin_infeasible` | 8 | 8 / 0 / 0 | 4 / 4 / 0 | 8 / 0 / 0 | 8 / 0 / 0 | 8 / 0 / 0 |
+| `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 | 4 / 0 / 0 | 4 / 0 / 0 | 4 / 0 / 0 |
+| **all** | 126 | 106 / 7 / 13 | 59 / 67 / 0 | 45 / 81 / 0 | 29 / 91 / 6 | 27 / 70 / 29 |
 
-**Reported `optimal` and wrong**, the headline count (#750): sankhya **0**, highs **31**.
+**Reported `optimal` and wrong**, the headline count (#750): sankhya **7**, cbc-clp **64**, glpk **71**, highs **31**, scip **17**.
 
-**sankhya, failed** (15):
+**sankhya, wrong** (7):
 
-- `scaled_80bau3b`: no verdict: time_limit (stopped at the time limit of 59.9897s after 59.99s, 89877 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_bnl2`: no verdict: time_limit (time limit 59.9973s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_cycle`: no verdict: time_limit (stopped at the time limit of 59.9969s after 60.00s, 255383 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_d2q06c`: no verdict: time_limit (time limit 47.5275s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned nume)
-- `scaled_dfl001`: no verdict: time_limit (time limit 59.9929s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_nesm`: no verdict: time_limit (time limit 59.9978s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_perold`: no verdict: time_limit (time limit 59.9984s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot`: no verdict: time_limit (time limit 59.9881s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot.ja`: no verdict: time_limit (stopped at the time limit of 59.9912s after 59.99s, 27840 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_pilot4`: no verdict: time_limit (time limit 59.9867s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot87`: no verdict: time_limit (time limit 59.9899s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilotnov`: no verdict: time_limit (time limit 59.9978s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_stair`: no verdict: time_limit (time limit 59.999s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
-- `scaled_stocfor2`: no verdict: time_limit (stopped at the time limit of 59.9984s after 60.00s, 311808 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_stocfor3`: no verdict: time_limit (stopped at the time limit of 59.9876s after 59.99s, 61021 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_etamacro`: objective off the known optimum by 1.48e-05 relative
+- `scaled_ship04l`: objective off the known optimum by 2.72e-04 relative
+- `scaled_ship04s`: objective off the known optimum by 1.61e-04 relative
+- `scaled_ship08l`: objective off the known optimum by 2.30e-04 relative
+- `scaled_ship08s`: objective off the known optimum by 3.16e-04 relative
+- `scaled_ship12l`: objective off the known optimum by 2.84e-04 relative
+- `scaled_ship12s`: objective off the known optimum by 6.64e-04 relative
 
-**highs, wrong** (90):
+**sankhya, failed** (13):
+
+- `scaled_80bau3b`: no verdict: time_limit (time limit 59.7081s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned nume)
+- `scaled_bnl2`: no verdict: time_limit (time limit 59.999s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
+- `scaled_d2q06c`: no verdict: time_limit (time limit 59.998s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
+- `scaled_degen3`: no verdict: time_limit (stopped at the time limit of 59.9988s after 60.00s, 646960 iterations, 0 nodes; route: the scaled attempt returned time_)
+- `scaled_dfl001`: no verdict: time_limit (stopped at the time limit of 59.9969s after 60.00s, 97992 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_greenbeb`: no verdict: time_limit (time limit 59.9977s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_maros-r7`: no verdict: killed (no exit within 3x the time limit)
+- `scaled_perold`: no verdict: time_limit (stopped at the time limit of 59.9995s after 60.00s, 84536 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_pilot`: no verdict: time_limit (time limit 59.9975s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot.ja`: no verdict: time_limit (time limit 59.999s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
+- `scaled_pilot.we`: no verdict: time_limit (time limit 59.9994s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot87`: no verdict: time_limit (time limit 59.9952s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_stair`: no verdict: time_limit (time limit 59.9997s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+
+**cbc-clp, wrong** (67):
+
+- `klee_minty_30`: unbounded on an instance that is optimal
+- `klee_minty_35`: unbounded on an instance that is optimal
+- `klee_minty_40`: unbounded on an instance that is optimal
+- `near_parallel_12`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 7.629e-06; [FAIL] objective                   recomputed 6.106525675456e+01, solver said 6.106526184082e+01, difference 5.086e-06; [FA
+- `scaled_25fv47`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.968e-05 (1.968e-05 relative) on C1470
+- `scaled_80bau3b`: optimal, verifier rejects: [FAIL] column bounds               worst violation 8.448e-06 (8.448e-06 relative) on C3270; [FAIL] row activity                worst violation 1.250e-04 (1.250e-04 relative to the row's terms) 
+- `scaled_agg`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.104e-05 (1.104e-05 relative) on C128; [FAIL] activity agreement          max /ours - solver's/ = 1.221e-04
+- `scaled_agg2`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.465e-04
+- `scaled_agg3`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 7.629e-06
+- `scaled_bnl2`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.752e-05 (1.752e-05 relative) on C2540; [FAIL] row activity                worst violation 7.957e-05 (7.957e-05 relative to the row's terms) 
+- `scaled_boeing2`: optimal, verifier rejects: [FAIL] dual feasibility (columns)  worst 2.110e-06 (2.110e-06 relative) on C80; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.212e+00 relative to its magnitudes on C80
+- `scaled_cycle`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.788e-06
+- `scaled_czprob`: optimal, verifier rejects: [FAIL] column bounds               worst violation 2.218e-05 (2.218e-05 relative) on C629; [FAIL] row activity                worst violation 1.044e-06 (1.044e-06 relative to the row's terms) o
+- `scaled_d2q06c`: optimal, verifier rejects: [FAIL] column bounds               worst violation 4.000e-01 (4.000e-01 relative) on C1114; [FAIL] activity agreement          max /ours - solver's/ = 3.815e-06; [FAIL] dual feasibility (column
+- `scaled_d6cube`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.351e+00 (1.000e+00 relative) on C3371
+- `scaled_degen2`: optimal, verifier rejects: [FAIL] column bounds               worst violation 9.971e-04 (9.971e-04 relative) on C319; [FAIL] row activity                worst violation 2.494e-06 (2.494e-06 relative to the row's terms) o
+- `scaled_degen3`: optimal, verifier rejects: [FAIL] column bounds               worst violation 2.561e-01 (2.561e-01 relative) on C1552; [FAIL] row activity                worst violation 5.439e-06 (5.439e-06 relative to the row's terms) 
+- `scaled_dfl001`: optimal, verifier rejects: [FAIL] column bounds               worst violation 5.133e-06 (5.133e-06 relative) on C11596; [FAIL] row activity                worst violation 3.278e-06 (3.278e-06 relative to the row's terms)
+- `scaled_e226`: optimal, verifier rejects: [FAIL] complementary slackness     worst /multiplier/ * slack = 3.536e-02 relative to its magnitudes on C158
+- `scaled_etamacro`: optimal, verifier rejects: [FAIL] column bounds               worst violation 2.574e-05 (2.574e-05 relative) on C138
+- `scaled_fffff800`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 3.052e-05
+- `scaled_finnis`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 4.917e-06
+- `scaled_fit1d`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.907e-06
+- `scaled_fit2d`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 2.015e-05
+- `scaled_ganges`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 7.153e-06; [FAIL] reduced costs               max /c - A^T y - d/ = 8.583e-06 (8.583e-06 relative to its terms) on C946
+- `scaled_gfrd-pnc`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 3.815e-06
+- `scaled_greenbea`: optimal, verifier rejects: [FAIL] column bounds               worst violation 6.338e-02 (6.338e-02 relative) on C2406; [FAIL] row activity                worst violation 1.759e-06 (1.759e-06 relative to the row's terms) 
+- `scaled_greenbeb`: optimal, verifier rejects: [FAIL] column bounds               worst violation 8.117e-04 (8.117e-04 relative) on C2439; [FAIL] row activity                worst violation 5.566e-07 (5.566e-07 relative to the row's terms) 
+- `scaled_grow15`: optimal, verifier rejects: [FAIL] row activity                worst violation 9.029e-03 (9.029e-03 relative to the row's terms) on R92; [FAIL] activity agreement          max /ours - solver's/ = 9.029e-03
+- `scaled_grow22`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.876e-03 (2.876e-03 relative to the row's terms) on R357; [FAIL] activity agreement          max /ours - solver's/ = 2.876e-03
+- `scaled_grow7`: optimal, verifier rejects: [FAIL] row activity                worst violation 6.075e-04 (6.075e-04 relative to the row's terms) on R124; [FAIL] activity agreement          max /ours - solver's/ = 6.075e-04
+- `scaled_israel`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 3.052e-05
+- `scaled_kb2`: optimal, verifier rejects: [FAIL] complementary slackness     worst /multiplier/ * slack = 1.758e-02 relative to its magnitudes on C6
+- `scaled_lotfi`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.073e-06
+- `scaled_maros`: optimal, verifier rejects: [FAIL] column bounds               worst violation 5.694e-04 (5.694e-04 relative) on C1282; [FAIL] row activity                worst violation 2.518e-02 (2.518e-02 relative to the row's terms) 
+- `scaled_maros-r7`: optimal, verifier rejects: [FAIL] row activity                worst violation 8.841e-05 (8.841e-05 relative to the row's terms) on R1477; [FAIL] activity agreement          max /ours - solver's/ = 8.841e-05
+- `scaled_modszk1`: optimal, verifier rejects: [FAIL] column bounds               worst violation 4.262e-02 (4.262e-02 relative) on C168; [FAIL] activity agreement          max /ours - solver's/ = 5.007e-06
+- `scaled_perold`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.692e-01 (1.692e-01 relative) on C126; [FAIL] row activity                worst violation 1.480e-07 (1.480e-07 relative to the row's terms) o
+- `scaled_pilot`: optimal, verifier rejects: [FAIL] column bounds               worst violation 2.023e-04 (8.962e-07 relative) on C1363; [FAIL] row activity                worst violation 5.170e-06 (5.170e-06 relative to the row's terms) 
+- `scaled_pilot.ja`: optimal, verifier rejects: [FAIL] column bounds               worst violation 5.907e-02 (5.907e-02 relative) on C1941; [FAIL] row activity                worst violation 1.580e-06 (1.580e-06 relative to the row's terms) 
+- `scaled_pilot.we`: optimal, verifier rejects: [FAIL] column bounds               worst violation 6.942e-03 (6.942e-03 relative) on C1365; [FAIL] activity agreement          max /ours - solver's/ = 2.499e-04
+- `scaled_pilot4`: optimal, verifier rejects: [FAIL] column bounds               worst violation 2.045e-04 (2.045e-04 relative) on C943; [FAIL] row activity                worst violation 5.017e-07 (5.017e-07 relative to the row's terms) o
+- `scaled_pilot87`: optimal, verifier rejects: [FAIL] row activity                worst violation 3.466e-06 (3.466e-06 relative to the row's terms) on R8; [FAIL] activity agreement          max /ours - solver's/ = 2.532e-02; [FAIL] dual fea
+- `scaled_pilotnov`: optimal, verifier rejects: [FAIL] column bounds               worst violation 5.122e-01 (5.122e-01 relative) on C2101; [FAIL] row activity                worst violation 4.219e-06 (4.219e-06 relative to the row's terms) 
+- `scaled_scagr25`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.216e-05
+- `scaled_scfxm1`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.678e-06 (1.678e-06 relative) on C148
+- `scaled_scfxm3`: optimal, verifier rejects: [FAIL] row activity                worst violation 4.578e-06 (4.578e-06 relative to the row's terms) on R6; [FAIL] activity agreement          max /ours - solver's/ = 4.578e-06
+- `scaled_scsd8`: optimal, verifier rejects: [FAIL] column bounds               worst violation 4.579e-06 (4.579e-06 relative) on C533
+- `scaled_sctap1`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.165e-06 (1.165e-06 relative) on C201; [FAIL] row activity                worst violation 5.826e-06 (5.826e-06 relative to the row's terms) o
+- `scaled_sctap3`: optimal, verifier rejects: [FAIL] column bounds               worst violation 9.044e-06 (9.044e-06 relative) on C2210; [FAIL] row activity                worst violation 4.587e-05 (4.587e-05 relative to the row's terms) 
+- `scaled_share1b`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.335e-05
+- `scaled_shell`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.907e-06
+- `scaled_ship04s`: optimal, verifier rejects: [FAIL] column bounds               worst violation 5.680e-06 (5.680e-06 relative) on C382
+- `scaled_ship08l`: optimal, verifier rejects: [FAIL] column bounds               worst violation 2.840e-05 (2.840e-05 relative) on C4261; [FAIL] row activity                worst violation 5.021e-07 (5.021e-07 relative to the row's terms) 
+- `scaled_ship08s`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.854e-07 (1.854e-07 relative) on C675
+- `scaled_ship12l`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.538e-05 (1.538e-05 relative) on C3945; [FAIL] row activity                worst violation 4.574e-06 (4.574e-06 relative to the row's terms) 
+- `scaled_sierra`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.526e-05
+- `scaled_stair`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.069e-07 (1.069e-07 relative to the row's terms) on R195
+- `scaled_standmps`: optimal, verifier rejects: [FAIL] column bounds               worst violation 2.826e-04 (2.826e-04 relative) on C124; [FAIL] row activity                worst violation 8.563e-04 (8.563e-04 relative to the row's terms) o
+- `scaled_stocfor2`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.073e-06
+- `scaled_stocfor3`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.080e+00 (1.000e+00 relative) on C18; [FAIL] row activity                worst violation 5.993e-06 (5.993e-06 relative to the row's terms) on
+- `scaled_wood1p`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.130e-06 (2.130e-06 relative to the row's terms) on R179
+- `scaled_woodw`: optimal, verifier rejects: [FAIL] column bounds               worst violation 7.720e-07 (7.720e-07 relative) on C1711; [FAIL] row activity                worst violation 1.113e-03 (1.113e-03 relative to the row's terms) 
+- `thin_infeasible_1e-6_1`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 3.052e-05; [FAIL] objective                   recomputed 4.509997406006e+02, solver said 4.509996948242e+02, difference 4.578e-05; [FA
+- `thin_infeasible_1e-7_1`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 3.052e-05; [FAIL] objective                   recomputed 4.509997406006e+02, solver said 4.509996948242e+02, difference 4.578e-05; [FA
+- `thin_infeasible_1e-8_1`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 3.052e-05; [FAIL] objective                   recomputed 4.509997406006e+02, solver said 4.509996948242e+02, difference 4.578e-05; [FA
+- `thin_infeasible_1e-9_1`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 3.052e-05; [FAIL] objective                   recomputed 4.509997406006e+02, solver said 4.509996948242e+02, difference 4.578e-05; [FA
+
+**glpk, wrong** (81):
+
+- `klee_minty_30`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.049e+06
+- `scaled_25fv47`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.673e-05 (2.673e-05 relative to the row's terms) on R40; [FAIL] activity agreement          max /ours - solver's/ = 2.673e-05; [FAIL] reduced
+- `scaled_80bau3b`: optimal, verifier rejects: [FAIL] row activity                worst violation 5.806e+05 (5.806e+05 relative to the row's terms) on R66; [FAIL] activity agreement          max /ours - solver's/ = 1.282e-04; [FAIL] reduced
+- `scaled_adlittle`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.317e-05 (2.317e-05 relative to the row's terms) on R49; [FAIL] activity agreement          max /ours - solver's/ = 2.317e-05; [FAIL] reduced
+- `scaled_agg`: optimal, verifier rejects: [FAIL] row activity                worst violation 8.816e-03 (8.816e-03 relative to the row's terms) on R238; [FAIL] activity agreement          max /ours - solver's/ = 4.312e-02
+- `scaled_agg2`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 3.125e-02
+- `scaled_agg3`: optimal, verifier rejects: [FAIL] row activity                worst violation 8.716e-04 (8.716e-04 relative to the row's terms) on R244; [FAIL] activity agreement          max /ours - solver's/ = 9.375e-03
+- `scaled_bandm`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.492e-05 (2.492e-05 relative to the row's terms) on R194; [FAIL] activity agreement          max /ours - solver's/ = 2.492e-05
+- `scaled_beaconfd`: optimal, verifier rejects: [FAIL] row activity                worst violation 5.341e-07 (5.341e-07 relative to the row's terms) on R63; [FAIL] activity agreement          max /ours - solver's/ = 8.440e-06; [FAIL] reduced
+- `scaled_blend`: optimal, verifier rejects: [FAIL] row activity                worst violation 7.070e-07 (7.070e-07 relative to the row's terms) on R28
+- `scaled_bnl2`: optimal, verifier rejects: [FAIL] row activity                worst violation 3.722e-01 (3.722e-01 relative to the row's terms) on R2190; [FAIL] activity agreement          max /ours - solver's/ = 6.704e-05; [FAIL] reduc
+- `scaled_boeing1`: optimal, verifier rejects: [FAIL] row activity                worst violation 7.611e-07 (7.611e-07 relative to the row's terms) on R253
+- `scaled_bore3d`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.892e-07 (2.892e-07 relative to the row's terms) on R71; [FAIL] reduced costs               max /c - A^T y - d/ = 1.596e-06 (1.596e-06 relati
+- `scaled_brandy`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.152e-05 (1.152e-05 relative to the row's terms) on R54; [FAIL] activity agreement          max /ours - solver's/ = 1.152e-05; [FAIL] reduced
+- `scaled_capri`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 5.960e-06
+- `scaled_cycle`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.494e-07 (1.494e-07 relative) on C2804; [FAIL] row activity                worst violation 1.534e-06 (1.534e-06 relative to the row's terms) 
+- `scaled_czprob`: optimal, verifier rejects: [FAIL] row activity                worst violation 7.305e-05 (7.305e-05 relative to the row's terms) on R4; [FAIL] activity agreement          max /ours - solver's/ = 7.305e-05; [FAIL] reduced 
+- `scaled_d2q06c`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.155e-04 (2.155e-04 relative to the row's terms) on R1061; [FAIL] activity agreement          max /ours - solver's/ = 2.155e-04; [FAIL] reduc
+- `scaled_d6cube`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.228e-07 (1.228e-07 relative to the row's terms) on R374; [FAIL] reduced costs               max /c - A^T y - d/ = 1.738e-06 (1.738e-06 relat
+- `scaled_degen3`: optimal, verifier rejects: [FAIL] row activity                worst violation 9.537e-07 (9.537e-07 relative to the row's terms) on R879; [FAIL] activity agreement          max /ours - solver's/ = 1.907e-06
+- `scaled_dfl001`: optimal, verifier rejects: [FAIL] column bounds               worst violation 1.111e-07 (1.111e-07 relative) on C5775; [FAIL] row activity                worst violation 9.537e-05 (9.537e-05 relative to the row's terms) 
+- `scaled_e226`: optimal, verifier rejects: [FAIL] reduced costs               max /c - A^T y - d/ = 2.714e-06 (2.714e-06 relative to its terms) on C121
+- `scaled_etamacro`: infeasible on an instance that is optimal
+- `scaled_fffff800`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 2.136e-04; [FAIL] reduced costs               max /c - A^T y - d/ = 3.514e-06 (3.514e-06 relative to its terms) on C350
+- `scaled_finnis`: optimal, verifier rejects: [FAIL] row activity                worst violation 3.503e+06 (3.503e+06 relative to the row's terms) on R213; [FAIL] activity agreement          max /ours - solver's/ = 3.178e-05; [FAIL] reduce
+- `scaled_fit1d`: optimal, verifier rejects: [FAIL] reduced costs               max /c - A^T y - d/ = 1.505e-05 (1.505e-05 relative to its terms) on C124; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.961e-01 relative 
+- `scaled_fit1p`: optimal, verifier rejects: [FAIL] row activity                worst violation 5.583e-06 (5.583e-06 relative to the row's terms) on R218; [FAIL] activity agreement          max /ours - solver's/ = 5.583e-06
+- `scaled_fit2d`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.413e-05; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.447e-02 relative to its magnitudes on R14
+- `scaled_fit2p`: optimal, verifier rejects: [FAIL] reduced costs               max /c - A^T y - d/ = 1.301e-04 (1.301e-04 relative to its terms) on C173
+- `scaled_ganges`: infeasible on an instance that is optimal
+- `scaled_gfrd-pnc`: optimal, verifier rejects: [FAIL] column bounds               worst violation 8.315e-07 (8.315e-07 relative) on C454; [FAIL] row activity                worst violation 8.755e-06 (8.755e-06 relative to the row's terms) o
+- `scaled_greenbea`: optimal, verifier rejects: [FAIL] row activity                worst violation 4.698e-03 (4.698e-03 relative to the row's terms) on R1909; [FAIL] activity agreement          max /ours - solver's/ = 4.698e-03; [FAIL] reduc
+- `scaled_greenbeb`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.495e-04 (2.495e-04 relative to the row's terms) on R1774; [FAIL] activity agreement          max /ours - solver's/ = 2.495e-04; [FAIL] reduc
+- `scaled_grow15`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.575e-01 (2.575e-01 relative to the row's terms) on R269; [FAIL] activity agreement          max /ours - solver's/ = 2.575e-01; [FAIL] reduce
+- `scaled_grow22`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.287e+00 (1.000e+00 relative to the row's terms) on R224; [FAIL] activity agreement          max /ours - solver's/ = 1.287e+00; [FAIL] reduce
+- `scaled_grow7`: optimal, verifier rejects: [FAIL] row activity                worst violation 3.099e-02 (3.099e-02 relative to the row's terms) on R11; [FAIL] activity agreement          max /ours - solver's/ = 3.099e-02; [FAIL] reduced
+- `scaled_israel`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 9.155e-05
+- `scaled_lotfi`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.519e-07 (1.519e-07 relative to the row's terms) on R139; [FAIL] activity agreement          max /ours - solver's/ = 4.666e-06
+- `scaled_maros`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.136e-04 (1.136e-04 relative to the row's terms) on R607; [FAIL] activity agreement          max /ours - solver's/ = 4.272e-04; [FAIL] reduce
+- `scaled_maros-r7`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.344e-02 (1.344e-02 relative to the row's terms) on R1482; [FAIL] activity agreement          max /ours - solver's/ = 1.344e-02; [FAIL] reduc
+- `scaled_modszk1`: optimal, verifier rejects: [FAIL] column bounds               worst violation 9.537e-07 (9.537e-07 relative) on C1125; [FAIL] row activity                worst violation 2.785e-04 (2.785e-04 relative to the row's terms) 
+- `scaled_nesm`: optimal, verifier rejects: [FAIL] row activity                worst violation 3.261e-03 (3.261e-03 relative to the row's terms) on R145; [FAIL] activity agreement          max /ours - solver's/ = 3.261e-03; [FAIL] reduce
+- `scaled_perold`: optimal, verifier rejects: [FAIL] row activity                worst violation 3.611e+00 (1.000e+00 relative to the row's terms) on R9; [FAIL] activity agreement          max /ours - solver's/ = 3.611e+00; [FAIL] reduced 
+- `scaled_pilot`: infeasible on an instance that is optimal
+- `scaled_pilot.ja`: infeasible on an instance that is optimal
+- `scaled_pilot.we`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.311e+00 (1.000e+00 relative to the row's terms) on R290; [FAIL] activity agreement          max /ours - solver's/ = 1.311e+00; [FAIL] reduce
+- `scaled_pilot4`: optimal, verifier rejects: [FAIL] row activity                worst violation 6.554e-01 (6.554e-01 relative to the row's terms) on R333; [FAIL] activity agreement          max /ours - solver's/ = 7.864e-01
+- `scaled_pilot87`: infeasible on an instance that is optimal
+- `scaled_pilotnov`: infeasible on an instance that is optimal
+- `scaled_recipe`: optimal, verifier rejects: [FAIL] row activity                worst violation 7.629e-06 (7.629e-06 relative to the row's terms) on R77; [FAIL] activity agreement          max /ours - solver's/ = 7.629e-06; [FAIL] reduced
+- `scaled_sc205`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.431e-06
+- `scaled_scagr25`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 1.526e-05; [FAIL] reduced costs               max /c - A^T y - d/ = 5.023e-05 (5.023e-05 relative to its terms) on C113
+- `scaled_scagr7`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.254e-04 (1.254e-04 relative to the row's terms) on R98; [FAIL] activity agreement          max /ours - solver's/ = 1.254e-04; [FAIL] reduced
+- `scaled_scfxm1`: optimal, verifier rejects: [FAIL] row activity                worst violation 3.219e-05 (3.219e-05 relative to the row's terms) on R14; [FAIL] activity agreement          max /ours - solver's/ = 3.219e-05; [FAIL] reduced
+- `scaled_scfxm2`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.049e-06 (1.049e-06 relative to the row's terms) on R349; [FAIL] activity agreement          max /ours - solver's/ = 6.683e-06; [FAIL] reduce
+- `scaled_scfxm3`: optimal, verifier rejects: [FAIL] row activity                worst violation 9.537e-05 (9.537e-05 relative to the row's terms) on R242; [FAIL] activity agreement          max /ours - solver's/ = 1.152e-04; [FAIL] reduce
+- `scaled_scorpion`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.621e+05 (2.621e+05 relative to the row's terms) on R274; [FAIL] reduced costs               max /c - A^T y - d/ = 1.347e-05 (1.347e-05 relat
+- `scaled_scrs8`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.936e-07 (1.936e-07 relative to the row's terms) on R56; [FAIL] reduced costs               max /c - A^T y - d/ = 4.757e-06 (4.757e-06 relati
+- `scaled_scsd6`: optimal, verifier rejects: [FAIL] row activity                worst violation 2.980e-06 (2.980e-06 relative to the row's terms) on R87; [FAIL] activity agreement          max /ours - solver's/ = 2.980e-06; [FAIL] reduced
+- `scaled_scsd8`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.383e-05 (1.383e-05 relative to the row's terms) on R261; [FAIL] activity agreement          max /ours - solver's/ = 1.383e-05; [FAIL] reduce
+- `scaled_sctap1`: optimal, verifier rejects: [FAIL] reduced costs               max /c - A^T y - d/ = 2.861e-06 (2.861e-06 relative to its terms) on C339
+- `scaled_seba`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 4.351e-06
+- `scaled_share1b`: optimal, verifier rejects: [FAIL] activity agreement          max /ours - solver's/ = 8.831e-04
+- `scaled_shell`: optimal, verifier rejects: [FAIL] column bounds               worst violation 4.768e-07 (4.768e-07 relative) on C201; [FAIL] row activity                worst violation 1.500e-06 (1.500e-06 relative to the row's terms) o
+- `scaled_ship04l`: optimal, verifier rejects: [FAIL] reduced costs               max /c - A^T y - d/ = 4.366e-03 (4.366e-03 relative to its terms) on C574
+- `scaled_ship04s`: optimal, verifier rejects: [FAIL] reduced costs               max /c - A^T y - d/ = 5.040e-03 (5.040e-03 relative to its terms) on C1329
+- `scaled_ship08l`: optimal, verifier rejects: [FAIL] row activity                worst violation 3.108e-05 (3.108e-05 relative to the row's terms) on R13; [FAIL] activity agreement          max /ours - solver's/ = 7.664e-05; [FAIL] reduced
+- `scaled_ship08s`: optimal, verifier rejects: [FAIL] reduced costs               max /c - A^T y - d/ = 5.215e-03 (5.215e-03 relative to its terms) on C93
+- `scaled_ship12l`: optimal, verifier rejects: [FAIL] row activity                worst violation 6.649e-06 (6.649e-06 relative to the row's terms) on R268; [FAIL] activity agreement          max /ours - solver's/ = 6.649e-06; [FAIL] reduce
+- `scaled_ship12s`: optimal, verifier rejects: [FAIL] row activity                worst violation 6.241e-07 (6.241e-07 relative to the row's terms) on R68; [FAIL] reduced costs               max /c - A^T y - d/ = 2.581e-05 (2.581e-05 relati
+- `scaled_sierra`: optimal, verifier rejects: [FAIL] column bounds               worst violation 5.582e-07 (5.582e-07 relative) on C852; [FAIL] activity agreement          max /ours - solver's/ = 4.578e-05; [FAIL] reduced costs            
+- `scaled_stair`: infeasible on an instance that is optimal
+- `scaled_standata`: optimal, verifier rejects: [FAIL] row activity                worst violation 9.600e+01 (1.000e+00 relative to the row's terms) on R140
+- `scaled_standmps`: optimal, verifier rejects: [FAIL] row activity                worst violation 6.134e+05 (2.340e-01 relative to the row's terms) on R216
+- `scaled_stocfor1`: infeasible on an instance that is optimal
+- `scaled_stocfor2`: infeasible on an instance that is optimal
+- `scaled_stocfor3`: infeasible on an instance that is optimal
+- `scaled_truss`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.739e-04 (1.739e-04 relative to the row's terms) on R773; [FAIL] activity agreement          max /ours - solver's/ = 1.739e-04; [FAIL] reduce
+- `scaled_vtp.base`: optimal, verifier rejects: [FAIL] column bounds               worst violation 2.346e-04 (2.346e-04 relative) on C169; [FAIL] row activity                worst violation 2.189e-07 (2.189e-07 relative to the row's terms) o
+- `scaled_wood1p`: optimal, verifier rejects: [FAIL] row activity                worst violation 7.994e+04 (5.595e-01 relative to the row's terms) on R243; [FAIL] reduced costs               max /c - A^T y - d/ = 1.505e-03 (1.505e-03 relat
+- `scaled_woodw`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.441e-07 (1.441e-07 relative to the row's terms) on R462
+
+**highs, wrong** (91):
 
 - `klee_minty_30`: unbounded, verifier rejects: [FAIL] ray respects the row bounds     17 would be crossed: R13, R14, R15, R16, R17
 - `klee_minty_35`: unbounded, verifier rejects: [FAIL] ray respects the row bounds     22 would be crossed: R13, R14, R15, R16, R17
@@ -4462,6 +4710,7 @@ Measured on SANKHYA commit `d32b3847` against HiGHS 1.15.1 (highspy, separate pr
 - `scaled_finnis`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C413, C414
 - `scaled_fit1d`: optimal, verifier rejects: [FAIL] row activity                      worst violation 4.925e-04 (4.925e-04 relative to the row's terms) on R17; [FAIL] activity agreement                max /ours - solver's/ = 4.925e-04; [F
 - `scaled_fit2d`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.282e-02 (1.282e-02 relative to the row's terms) on R13; [FAIL] activity agreement                max /ours - solver's/ = 1.282e-02; [F
+- `scaled_fit2p`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         19 unbounded in the direction used, so the aggregate proves nothing: C7, C21, C529, C961, C1456
 - `scaled_forplan`: optimal, verifier rejects: [FAIL] row activity                      worst violation 6.199e-03 (6.199e-03 relative to the row's terms) on R10; [FAIL] activity agreement                max /ours - solver's/ = 6.199e-03; [F
 - `scaled_ganges`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C211
 - `scaled_gfrd-pnc`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.670e-01 (2.670e-01 relative to the row's terms) on R7; [FAIL] activity agreement                max /ours - solver's/ = 2.670e-01; [FA
@@ -4520,17 +4769,121 @@ Measured on SANKHYA commit `d32b3847` against HiGHS 1.15.1 (highspy, separate pr
 - `scaled_vtp.base`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C114
 - `scaled_wood1p`: optimal, verifier rejects: [FAIL] reduced costs                     max /c - A^T y - d/ = 9.080e-06 (9.080e-06 relative to its terms) on C305
 
-**highs, failed** (7):
+**highs, failed** (6):
 
 - `scaled_fit1p`: no verdict: kSolveError
-- `scaled_fit2p`: no verdict: time_limit
 - `scaled_perold`: no verdict: kNotset
 - `scaled_pilot.ja`: no verdict: kNotset
 - `scaled_pilotnov`: no verdict: kNotset
 - `scaled_sierra`: no verdict: kNotset
 - `scaled_woodw`: no verdict: kNotset
 
-14 thin-infeasible answers are `optimal` at a point the verifier accepts with every row inside 1e-7: at the stated tolerance that point is feasible, so the answer is graded correct, and named here so the grade is not mistaken for a proof of infeasibility.
+**scip, wrong** (70):
+
+- `klee_minty_30`: unbounded on an instance that is optimal
+- `klee_minty_35`: unbounded on an instance that is optimal
+- `klee_minty_40`: unbounded on an instance that is optimal
+- `scaled_25fv47`: infeasible on an instance that is optimal
+- `scaled_80bau3b`: infeasible on an instance that is optimal
+- `scaled_adlittle`: optimal, verifier rejects: [FAIL] row activity        worst violation 4.385e-02 (4.385e-02 relative to the row's terms) on R27; [FAIL] activity agreement  max /ours - solver's/ = 4.385e-02
+- `scaled_afiro`: optimal, verifier rejects: [FAIL] row activity        worst violation 4.454e-02 (4.454e-02 relative to the row's terms) on R4; [FAIL] activity agreement  max /ours - solver's/ = 4.454e-02
+- `scaled_agg`: infeasible on an instance that is optimal
+- `scaled_bandm`: infeasible on an instance that is optimal
+- `scaled_beaconfd`: infeasible on an instance that is optimal
+- `scaled_blend`: unbounded on an instance that is optimal
+- `scaled_bnl1`: infeasible on an instance that is optimal
+- `scaled_bnl2`: infeasible on an instance that is optimal
+- `scaled_boeing1`: infeasible on an instance that is optimal
+- `scaled_boeing2`: optimal, verifier rejects: [FAIL] row activity        worst violation 9.445e-03 (9.445e-03 relative to the row's terms) on R88; [FAIL] activity agreement  max /ours - solver's/ = 9.445e-03
+- `scaled_bore3d`: optimal, verifier rejects: [FAIL] row activity        worst violation 1.766e-02 (1.766e-02 relative to the row's terms) on R190; [FAIL] activity agreement  max /ours - solver's/ = 1.766e-02
+- `scaled_brandy`: infeasible on an instance that is optimal
+- `scaled_capri`: infeasible on an instance that is optimal
+- `scaled_cycle`: unbounded on an instance that is optimal
+- `scaled_degen2`: infeasible on an instance that is optimal
+- `scaled_degen3`: infeasible on an instance that is optimal
+- `scaled_dfl001`: infeasible on an instance that is optimal
+- `scaled_fffff800`: infeasible on an instance that is optimal
+- `scaled_finnis`: infeasible on an instance that is optimal
+- `scaled_fit1p`: infeasible on an instance that is optimal
+- `scaled_fit2p`: infeasible on an instance that is optimal
+- `scaled_ganges`: infeasible on an instance that is optimal
+- `scaled_gfrd-pnc`: optimal, verifier rejects: [FAIL] row activity        worst violation 2.670e-01 (2.670e-01 relative to the row's terms) on R7; [FAIL] activity agreement  max /ours - solver's/ = 2.670e-01
+- `scaled_greenbea`: infeasible on an instance that is optimal
+- `scaled_greenbeb`: infeasible on an instance that is optimal
+- `scaled_israel`: optimal, verifier rejects: [FAIL] row activity        worst violation 9.693e+00 (1.000e+00 relative to the row's terms) on R0; [FAIL] activity agreement  max /ours - solver's/ = 9.693e+00
+- `scaled_kb2`: optimal, verifier rejects: [FAIL] row activity        worst violation 2.001e-04 (2.001e-04 relative to the row's terms) on R5; [FAIL] activity agreement  max /ours - solver's/ = 2.001e-04
+- `scaled_lotfi`: optimal, verifier rejects: [FAIL] row activity        worst violation 2.753e-01 (1.901e-01 relative to the row's terms) on R138; [FAIL] activity agreement  max /ours - solver's/ = 2.753e-01
+- `scaled_maros-r7`: infeasible on an instance that is optimal
+- `scaled_modszk1`: optimal, verifier rejects: [FAIL] row activity        worst violation 1.454e+00 (1.000e+00 relative to the row's terms) on R685; [FAIL] activity agreement  max /ours - solver's/ = 1.454e+00
+- `scaled_nesm`: infeasible on an instance that is optimal
+- `scaled_perold`: infeasible on an instance that is optimal
+- `scaled_pilot`: infeasible on an instance that is optimal
+- `scaled_pilot.ja`: infeasible on an instance that is optimal
+- `scaled_pilot.we`: infeasible on an instance that is optimal
+- `scaled_pilot4`: infeasible on an instance that is optimal
+- `scaled_pilot87`: infeasible on an instance that is optimal
+- `scaled_recipe`: infeasible on an instance that is optimal
+- `scaled_sc105`: optimal, verifier rejects: [FAIL] row activity        worst violation 1.876e-02 (1.876e-02 relative to the row's terms) on R25; [FAIL] activity agreement  max /ours - solver's/ = 1.876e-02
+- `scaled_sc205`: optimal, verifier rejects: [FAIL] row activity        worst violation 3.003e-02 (3.003e-02 relative to the row's terms) on R159; [FAIL] activity agreement  max /ours - solver's/ = 3.003e-02
+- `scaled_sc50a`: objective off the known optimum by 1.00e+00 relative
+- `scaled_sc50b`: optimal, verifier rejects: [FAIL] row activity        worst violation 7.628e-05 (7.628e-05 relative to the row's terms) on R35; [FAIL] activity agreement  max /ours - solver's/ = 7.628e-05
+- `scaled_scfxm1`: infeasible on an instance that is optimal
+- `scaled_scfxm2`: infeasible on an instance that is optimal
+- `scaled_scorpion`: infeasible on an instance that is optimal
+- `scaled_scrs8`: infeasible on an instance that is optimal
+- `scaled_sctap1`: optimal, verifier rejects: [FAIL] row activity        worst violation 1.831e-03 (1.831e-03 relative to the row's terms) on R150; [FAIL] activity agreement  max /ours - solver's/ = 1.831e-03
+- `scaled_sctap2`: infeasible on an instance that is optimal
+- `scaled_sctap3`: optimal, verifier rejects: [FAIL] row activity        worst violation 1.221e-03 (1.221e-03 relative to the row's terms) on R457; [FAIL] activity agreement  max /ours - solver's/ = 1.221e-03
+- `scaled_seba`: infeasible on an instance that is optimal
+- `scaled_share1b`: infeasible on an instance that is optimal
+- `scaled_share2b`: optimal, verifier rejects: [FAIL] row activity        worst violation 1.908e-04 (1.908e-04 relative to the row's terms) on R74; [FAIL] activity agreement  max /ours - solver's/ = 4.232e-03
+- `scaled_shell`: infeasible on an instance that is optimal
+- `scaled_ship04l`: optimal, verifier rejects: [FAIL] row activity        worst violation 1.314e-02 (1.314e-02 relative to the row's terms) on R59; [FAIL] activity agreement  max /ours - solver's/ = 1.314e-02
+- `scaled_ship04s`: infeasible on an instance that is optimal
+- `scaled_ship08l`: infeasible on an instance that is optimal
+- `scaled_ship08s`: infeasible on an instance that is optimal
+- `scaled_ship12l`: infeasible on an instance that is optimal
+- `scaled_ship12s`: infeasible on an instance that is optimal
+- `scaled_sierra`: infeasible on an instance that is optimal
+- `scaled_stair`: infeasible on an instance that is optimal
+- `scaled_standata`: infeasible on an instance that is optimal
+- `scaled_standmps`: infeasible on an instance that is optimal
+- `scaled_tuff`: infeasible on an instance that is optimal
+- `scaled_vtp.base`: infeasible on an instance that is optimal
+
+**scip, failed** (29):
+
+- `near_parallel_6`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_agg2`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_agg3`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_czprob`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_d2q06c`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_d6cube`: no verdict: time_limit (timelimit)
+- `scaled_e226`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_etamacro`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_fit1d`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_fit2d`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_forplan`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_grow15`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_grow22`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_grow7`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_maros`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_pilotnov`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_scagr25`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_scagr7`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_scfxm3`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_scsd1`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_scsd6`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_scsd8`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_stocfor1`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_stocfor2`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_stocfor3`: no verdict: infeasible_or_unbounded (inforunbd)
+- `scaled_truss`: no verdict: time_limit (timelimit)
+- `scaled_wood1p`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `scaled_woodw`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+- `singular_basis_20`: no verdict: crashed (Exception: SCIP: error in LP solver!)
+
+32 thin-infeasible answers are `optimal` at a point the verifier accepts with every row inside 1e-7: at the stated tolerance that point is feasible, so the answer is graded correct, and named here so the grade is not mistaken for a proof of infeasibility.
 
 ---
 
