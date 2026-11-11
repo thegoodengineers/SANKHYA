@@ -2640,7 +2640,11 @@ TEST(CutFiltering, DuplicatesAreFoundWhateverColumnTheAcceptedCutStartsAt) {
       cut({0, 0, 1, 2, 0, 1}, 1.0),  // the first plus one coefficient: its own cut
       cut({0, 0, 2, 4, 0, 0}, 2.5),  // twice the first with another rhs: its own cut
   };
-  const auto res = filter_and_deduplicate_cuts(model, sol, candidates);
+  // On six columns two nonzeros are over the density fraction; the floor (#496) is what
+  // the search sets on a small model, and it lets these reach the duplicate test.
+  CutFilterPolicy policy;
+  policy.support_floor = 6;
+  const auto res = filter_and_deduplicate_cuts(model, sol, candidates, policy);
   ASSERT_EQ(res.size(), candidates.size());
   const std::vector<CutFilterReason> expected = {
       CutFilterReason::kAccepted,  CutFilterReason::kAccepted, CutFilterReason::kDuplicate,
@@ -2666,6 +2670,7 @@ TEST(CutFiltering, AStopLeavesTheRestNotExaminedAndAcceptsNothingAfterIt) {
   }
   int asked = 0;
   CutFilterPolicy policy;
+  policy.support_floor = 4;  // one nonzero of four columns is over the fraction (#496)
   policy.stop = [&asked] { return ++asked > 2; };
   const auto res = filter_and_deduplicate_cuts(model, sol, candidates, policy);
   ASSERT_EQ(res.size(), candidates.size());
