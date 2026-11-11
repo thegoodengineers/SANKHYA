@@ -42,6 +42,10 @@ struct NodeScaling {
 
 class NodeFactorCache;
 
+/// Free the scaled model the warm-started node solves of this thread keep between solves
+/// (#1158, primal_simplex.cpp). Called when a tree search ends.
+void release_node_solve_scratch();
+
 /// Compute the reusable part once. Returns an invalid cache when scaling is switched off, so
 /// a caller can build it unconditionally and let the solve decide.
 [[nodiscard]] NodeScaling build_node_scaling(const Model& model, const Options& options);

@@ -1541,7 +1541,7 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
     pivot_row_marked_.assign(static_cast<std::size_t>(total_), 0);
     pivot_row_touched_.clear();
     pivot_row_held_sparse_ = false;
-    by_row_.build(model_.matrix);
+    if (shared_rows_ == nullptr) by_row_.build(model_.matrix);
   }
   reduced_costs_stale_ = true;
   // A budget of zero iterations buys zero iterations (#289). The check below this loop runs
@@ -2119,11 +2119,25 @@ Solution solve_dual_simplex(const Model& model, const Options& options, Logger& 
                                     control, factors);
 }
 
+namespace {
+/// The scaled model of the last warm-started solve on this thread, see solve_with_scaling().
+struct NodeScratch {
+  std::uint64_t id = 0;
+  bool costed = false;
+  bool rows_built = false;
+  Model scaled;
+  CsrView rows;
+};
+thread_local NodeScratch node_scratch;
+}  // namespace
+
+void release_node_solve_scratch() { node_scratch = NodeScratch{}; }
+
 namespace detail {
 
 Solution solve_with_scaling(const Model& model, const Options& options, Logger& logger,
                             const NodeScaling& cache, Engine engine, const WarmStart* warm,
-                            SolveControl* control, NodeFactorCache* factors) {
+                            SolveControl* control, NodeFactorCache* factors, bool costed) {
   // OBJECTIVE SCALING, AROUND EVERYTHING BELOW (#783). The dual tolerance is absolute, so it
   // means "1e-7 of a cost of order one", and since #783 the quality measure says so: a dual
   // violation is judged against min(1, max|c|) rather than 1 (src/core/model.cpp). Scaled
@@ -2141,7 +2155,7 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
     NodeScaling costed_cache = cache;  // ponytail: copies Ahat; paid only when max|c| < 1
     for (double& value : costed_cache.scaling.cost) value *= cost_factor;
     Solution solution = solve_with_scaling(costed, options, logger, costed_cache, engine, warm,
-                                           control, factors);
+                                           control, factors, true);
     for (double& value : solution.row_dual) value /= cost_factor;
     for (double& value : solution.col_dual) value /= cost_factor;
     if (std::isfinite(solution.dual_bound)) {
@@ -2156,9 +2170,12 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   // disagree about which method they are running.
   // `factors` is handed only to the scaled attempt: its matrix is the one cache.id names.
   // The unscaled retry factorizes the caller's matrix, which no id identifies.
+  const Model* scaled_model = nullptr;  // the scratch's scaled model, once it is set up
+  const CsrView* scaled_rows = nullptr;
   const auto run_engine_from = [&](const Model& problem, const Options& problem_options,
                                    NodeFactorCache* reuse, const WarmStart* start) {
     Simplex simplex(problem, problem_options, logger, control);
+    if (&problem == scaled_model) simplex.use_row_view(scaled_rows);
     if (reuse != nullptr) simplex.use_factor_cache(reuse, cache.id);
     simplex.count_distinct_costs_on(&model.col_cost);
     return engine == Engine::kDual ? simplex.run_dual(start) : simplex.run(start);
@@ -2186,14 +2203,53 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
         cache.scaling.row.size(), cache.scaling.column.size(), model.num_rows(),
         model.num_cols());
     return solve_with_scaling(model, options, logger, build_node_scaling(model, options),
-                              engine, warm, control, factors);
+                              engine, warm, control, factors, costed);
   }
 
   const Scaling& scaling = cache.scaling;
 
-  Model scaled = model;
-  scaled.matrix = scaling.matrix;
+  // THE SCALED MODEL IS KEPT BETWEEN SOLVES (#1158). A node LP, a dive step and a strong
+  // branching probe differ from the last solve on this cache by column bounds only, and the
+  // matrix below is the cache's, never the caller's. Building the scaled model afresh copied
+  // the caller's model (matrix and names), copied the scaled matrix over it and transposed
+  // it for the row-wise pivot row: three O(nonzeros) passes before the first pivot. On nw04
+  // (87,482 columns, 636,666 nonzeros) that was about half of the 37 s the 742 probes of a
+  // 60 s run took. Reliability branching (Achterberg, Koch & Martin, Oper. Res. Letters 33,
+  // 2005; Achterberg 2007, ch. 5) assumes a probe costs its few dual pivots. One scratch per
+  // thread, named by the cache's id (which names the matrix, #501) and by whether the costs
+  // are the rescaled ones of the recursion above; the dimensions are checked as well. On a
+  // hit only what a caller may have changed is refreshed: the bounds below, the costs, the
+  // sense and the offset. Nothing in here calls back into this function while it is held.
+  //
+  // Only a warm-started solve keeps it: that is the tree's pattern, and a cold solve - an
+  // LP on its own, or a root - runs on a local as it always did, so a large LP solved once
+  // does not leave its scaled copy behind. release_node_solve_scratch() frees it when the
+  // search ends.
+  NodeScratch local;
+  NodeScratch& scratch = warm != nullptr ? node_scratch : local;
+  Model& scaled = scratch.scaled;
+  const bool held = cache.id != 0 && scratch.id == cache.id && scratch.costed == costed &&
+                    scaled.num_cols() == model.num_cols() &&
+                    scaled.num_rows() == model.num_rows() &&
+                    scaled.matrix.num_nonzeros() == scaling.matrix.num_nonzeros();
+  if (!held) {
+    scaled = model;
+    scaled.matrix = scaling.matrix;
+    scratch.id = cache.id;
+    scratch.costed = costed;
+    scratch.rows_built = false;
+  }
+  scaled.sense = model.sense;
+  scaled.objective_offset = model.objective_offset;
   scaled.col_cost = scaling.cost;
+  if (engine == Engine::kDual && &scratch == &node_scratch) {
+    // The dual loop reads the pivot row row-wise in every solve; the primal builds its own
+    // copy only when it needs one.
+    if (!scratch.rows_built) scratch.rows.build(scaled.matrix);
+    scratch.rows_built = true;
+    scaled_model = &scaled;
+    scaled_rows = &scratch.rows;
+  }
   // BOUNDS ARE RESCALED HERE, not taken from the cache. The cache carries the bounds of the
   // model it was built from, and the whole point of reusing it is that branching has changed
   // them since. Taking scaling.col_lower would solve the ROOT relaxation at every node - a

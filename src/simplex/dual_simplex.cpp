@@ -372,7 +372,7 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
   // below, and the dual update in the loop, read the support rather than every row.
   rho_support_.clear();
   double row_work = 0.0;
-  const std::vector<Index>& row_starts = by_row_.row_starts();
+  const std::vector<Index>& row_starts = rows_view().row_starts();
   for (Index i = 0; i < m_; ++i) {
     if (rho_[static_cast<std::size_t>(i)] == 0.0) continue;
     rho_support_.push_back(i);
@@ -414,7 +414,7 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
       const double rho_i = rho_[static_cast<std::size_t>(i)];
       // The logical column of row i is -e_i, so its entry is -rho_i.
       if (basis_position_[static_cast<std::size_t>(n_ + i)] < 0) touch(n_ + i, -rho_i);
-      const ColumnView row = by_row_.row(i);
+      const ColumnView row = rows_view().row(i);
       for (Index q = 0; q < row.size; ++q) {
         const Index j = row.rows[q];  // a column index: CsrView reuses the ColumnView layout
         if (basis_position_[static_cast<std::size_t>(j)] >= 0) continue;
@@ -449,7 +449,7 @@ void Simplex::compute_pivot_row(Index leaving_slot) {
       const double rho_i = rho_[static_cast<std::size_t>(i)];
       // The logical column of row i is -e_i, so its entry is -rho_i.
       pivot_row_[static_cast<std::size_t>(n_ + i)] = -rho_i;
-      const ColumnView row = by_row_.row(i);
+      const ColumnView row = rows_view().row(i);
       for (Index q = 0; q < row.size; ++q) {
         pivot_row_[static_cast<std::size_t>(row.rows[q])] += rho_i * row.values[q];
       }
@@ -555,7 +555,8 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   pivot_row_held_sparse_ = false;
   dual_row_rejected_.assign(static_cast<std::size_t>(m_), 0);
   dual_rows_rejected_now_ = 0;
-  by_row_.build(model_.matrix);  // once per solve; the pattern never changes (#243)
+  // Once per solve; the pattern never changes (#243). Not at all when the caller holds it.
+  if (shared_rows_ == nullptr) by_row_.build(model_.matrix);
   // Serial also when the gather would not get a team (#514): at threads > 1 a small model
   // otherwise kept the column gather, which reads all of A, for a team it never forks.
   pivot_row_single_thread_ =

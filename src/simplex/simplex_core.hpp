@@ -207,6 +207,11 @@ class Simplex {
     factor_cache_matrix_ = matrix_id;
   }
 
+  /// Use `rows`, the row-wise copy of this model's matrix the caller already holds, instead
+  /// of building one per solve (#1158): the transpose is O(nonzeros), and a branch-and-bound
+  /// probe of a few pivots on an 87,482-column model paid it every time.
+  void use_row_view(const CsrView* rows) { shared_rows_ = rows; }
+
   /// The caller's own costs, before scaling, for the distinct-cost test of
   /// perturb_costs_at_start() (#465): column scaling turns {0, 1} into as many values as
   /// there are scale factors, and the test is about the model, not its scaling.
@@ -721,6 +726,10 @@ class Simplex {
   /// built once per solve; pivot_row_touched_ names the entries the last scatter wrote so
   /// the next can zero them without a pass over every column.
   CsrView by_row_;
+  const CsrView* shared_rows_ = nullptr;  ///< the caller's copy, when it holds one (#1158)
+  [[nodiscard]] const CsrView& rows_view() const noexcept {
+    return shared_rows_ != nullptr ? *shared_rows_ : by_row_;
+  }
   std::vector<Index> pivot_row_touched_;
   /// The ratio test's candidates, kept across iterations so the loop does not allocate.
   mutable std::vector<DualBreakpoint> breakpoints_;
@@ -762,7 +771,8 @@ class Simplex {
                                           Logger& logger, const NodeScaling& cache,
                                           Engine engine, const WarmStart* warm,
                                           SolveControl* control = nullptr,
-                                          NodeFactorCache* factors = nullptr);
+                                          NodeFactorCache* factors = nullptr,
+                                          bool costed = false);
 
 /// One row's candidate breakpoint, gathered in pass one of the Harris test and re-examined
 /// in pass two.

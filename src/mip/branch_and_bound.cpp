@@ -1382,6 +1382,7 @@ Solution solve_branch_and_bound(const Model& given, const Options& requested, Lo
                                               *debug, logger);
   }
   const auto checked = [&](Solution result) {
+    release_node_solve_scratch();  // #1158: the node solves' scaled model, with the search
     if (debug.has_value()) {
       check_search_result_against_debug_solution(model, result, options, *debug, logger);
     }
