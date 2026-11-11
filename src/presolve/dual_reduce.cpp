@@ -89,6 +89,25 @@ Activity activity_of(const Work& w, Index i) {
   return act;
 }
 
+/// Whether fixing every column of row i at the bound that attains its activity bound moves
+/// no column by more than the feasibility tolerance: `gap`, the distance between the
+/// activity bound and the row bound, taken in each column's own units, gap / |a_rj|, and
+/// held to the tolerance a column bound is. The gap alone against an absolute tolerance
+/// reads a row whose bound is itself below that tolerance as forcing: R391 of
+/// scaled_ship04l is sum a_j x_j = 8.8e-8 with x >= 0 and |a_j| down to 5.8e-11, a demand
+/// its columns meet far from zero, and with them fixed at zero the answer came back
+/// 2.7e-4 under the optimum (#1213's stress run).
+bool gap_fixes_columns(const Work& w, Index i, double gap, bool at_sup, double feasibility) {
+  for (const auto& [j, a] : w.rows[static_cast<std::size_t>(i)]) {
+    const auto u = static_cast<std::size_t>(j);
+    const double bound = (a > 0.0) == at_sup ? w.col_upper[u] : w.col_lower[u];
+    if (std::fabs(gap) > feasibility * std::fabs(a) * std::max(1.0, std::fabs(bound))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /// Forcing and redundant rows over the live rows; true when something fired.
 bool reduce_rows(Work* w, double feasibility, DualReduceResult* out) {
   bool changed = false;
@@ -115,10 +134,13 @@ bool reduce_rows(Work* w, double feasibility, DualReduceResult* out) {
       continue;
     }
     // Forcing: the activity bound meets the row bound, so every column sits at the bound
-    // that attains it. A bound crossed by more than the tolerance is an infeasibility the
-    // engine reports; it is left alone here.
-    bool force_lower = finite(lo) && act.sup_finite && std::fabs(act.sup - lo) <= tol_lo;
-    bool force_upper = finite(hi) && act.inf_finite && std::fabs(act.inf - hi) <= tol_hi;
+    // that attains it - to within the tolerance, on the row and on each column it fixes
+    // (gap_fixes_columns). A bound crossed by more than the tolerance is an infeasibility
+    // the engine reports; it is left alone here.
+    bool force_lower = finite(lo) && act.sup_finite && std::fabs(act.sup - lo) <= tol_lo &&
+                       gap_fixes_columns(*w, i, act.sup - lo, true, feasibility);
+    bool force_upper = finite(hi) && act.inf_finite && std::fabs(act.inf - hi) <= tol_hi &&
+                       gap_fixes_columns(*w, i, act.inf - hi, false, feasibility);
     if (!force_lower && !force_upper) continue;
     if (force_lower && force_upper) force_upper = false;  // either reading fixes the same
     DualReduction rec;

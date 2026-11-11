@@ -84,6 +84,43 @@ TEST(FuzzDualReduce, AForcingRowFixesItsColumnsAndPricesItself) {
   EXPECT_TRUE(basis_counts(on, model));
 }
 
+TEST(FuzzDualReduce, ARowWhoseBoundIsBelowTheToleranceIsNotForcing) {
+  // 1e-8 x0 + 1e-8 x1 = 5e-8, x >= 0: x0 + x1 = 5, a demand, and the least activity, zero,
+  // is within 1e-7 of the right-hand side. Read as forcing it fixed both columns at zero,
+  // which is what scaled_ship04l's R391 and R269 got (#1213's stress run: seven scaled
+  // Netlib optima 1.5e-5 to 6.6e-4 under the reference). The second row keeps a column
+  // singleton out of it.
+  Model model;
+  model.resize_columns(2);
+  model.resize_rows(2);
+  model.col_cost = {2.0, 3.0};
+  model.row_lower = {5e-8, -kInfinity};
+  model.row_upper = {5e-8, 8.0};
+  model.matrix.reset(2, 2);
+  model.matrix.add_entry(0, 0, 1e-8);
+  model.matrix.add_entry(0, 1, 1e-8);
+  model.matrix.add_entry(1, 0, 1.0);
+  model.matrix.add_entry(1, 1, 2.0);
+  model.matrix.finalize();
+  Options options;
+  options.set_bool("log_to_console", false);
+  Logger logger(nullptr);
+  EXPECT_EQ(presolve::dual_reduce(model, options, logger).forcing_rows, 0);
+
+  // A row of unit coefficients that far from its activity bound is forcing as before:
+  // x0 + x1 >= 2 - 5e-8 with x in [0, 1] moves neither column by more than the tolerance.
+  model.col_upper = {1.0, 1.0};
+  model.row_lower = {2.0 - 5e-8, -kInfinity};
+  model.row_upper = {kInfinity, 8.0};
+  model.matrix.reset(2, 2);
+  model.matrix.add_entry(0, 0, 1.0);
+  model.matrix.add_entry(0, 1, 1.0);
+  model.matrix.add_entry(1, 0, 1.0);
+  model.matrix.add_entry(1, 1, 2.0);
+  model.matrix.finalize();
+  EXPECT_EQ(presolve::dual_reduce(model, options, logger).forcing_rows, 1);
+}
+
 TEST(FuzzDualReduce, AMaximisationIsReducedInTheMinimisationSense) {
   // max 3 x0 + 2 x1 + 5 s.t. x0 + x1 <= 4, x0 + 3 x1 <= 6, 0 <= x0 <= 3, x1 >= 0: optimum
   // (3, 1), objective 16, both rows tight. The first CI run of the default flip (#1164)
