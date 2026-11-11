@@ -37,8 +37,8 @@ import tempfile
 import time
 from pathlib import Path
 
-SOLVERS = ("highs", "scip", "cbc-clp", "glpk", "osqp", "clarabel", "piqp", "scs")
-LABELS = {"sankhya": "SANKHYA", "sankhya-condat-vu": "SANKHYA CV", "highs": "HiGHS", "scip": "SCIP", "cbc-clp": "CBC/Clp",
+SOLVERS = ("highs", "scip", "cbc-clp", "cbc", "glpk", "osqp", "clarabel", "piqp", "scs")
+LABELS = {"sankhya": "SANKHYA", "sankhya-condat-vu": "SANKHYA CV", "highs": "HiGHS", "scip": "SCIP", "cbc-clp": "CBC/Clp", "cbc": "CBC",
           "glpk": "GLPK", "osqp": "OSQP", "clarabel": "Clarabel", "piqp": "PIQP",
           "scs": "SCS"}
 # osqp, clarabel, piqp and scs (#983) are the convex QP comparators Maros-Meszaros is
@@ -51,11 +51,25 @@ LABELS = {"sankhya": "SANKHYA", "sankhya-condat-vu": "SANKHYA CV", "highs": "HiG
 QP_PYTHON_SOLVERS = ("osqp", "clarabel", "piqp", "scs")
 QP_RELATIVE_TOLERANCE = 1e-6
 FEASIBILITY_TOLERANCE = 1e-7
+# The relative MIP gap every solver stops at on a MIP: SANKHYA's own default
+# (tolerances.hpp) and HiGHS's, set explicitly for SCIP, CBC and GLPK, whose default is 0.
+MIP_RELATIVE_GAP = 1e-4
 # The child is killed this long after its own limit should have stopped it.
 HANG_MARGIN_SECONDS = 60.0
 # One thread everywhere, including any BLAS or OpenMP a library might start.
 SINGLE_THREAD_ENV = {"OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
                      "MKL_NUM_THREADS": "1"}
+
+
+def _keep_log(solver: str, model: Path, text: str) -> None:
+    """With SANKHYA_RIVAL_LOGS naming a directory (bench.yml does), the raw output of every
+    `clp`, `cbc` and `glpsol` run is kept there, so a grade can be laid against what the
+    solver itself printed."""
+    where = os.environ.get("SANKHYA_RIVAL_LOGS")
+    if where:
+        Path(where).mkdir(parents=True, exist_ok=True)
+        (Path(where) / f"{model.name}.{solver}.log").write_text(text, encoding="utf-8",
+                                                                errors="replace")
 
 
 def supports(solver: str, kind: str) -> bool:
@@ -64,6 +78,10 @@ def supports(solver: str, kind: str) -> bool:
     LP/MIP engines, so they are excluded from the LP and MIP suites rather than run there
     on Q=0 and reported as if that were a fair comparison."""
     if solver == "glpk" and kind == "qp":
+        return False
+    # `cbc` is the branch-and-cut binary and runs the MIP suites; on an LP or a QP COIN-OR is
+    # represented by its LP engine, the `clp` binary (`cbc-clp`), which solves no MIP.
+    if solver in ("cbc", "cbc-clp") and (solver == "cbc") != (kind == "mip"):
         return False
     if solver in QP_PYTHON_SOLVERS and kind != "qp":
         return False
@@ -284,18 +302,27 @@ def _worker_scip(model: Path, time_limit: float, sol: Path) -> dict:
     for key, value in (("limits/time", float(time_limit)), ("lp/threads", 1),
                        ("parallel/maxnthreads", 1),
                        ("numerics/feastol", FEASIBILITY_TOLERANCE),
-                       ("numerics/dualfeastol", FEASIBILITY_TOLERANCE)):
+                       ("numerics/dualfeastol", FEASIBILITY_TOLERANCE),
+                       ("limits/gap", MIP_RELATIVE_GAP)):  # does nothing without integers
         m.setParam(key, value)
     m.optimize()
     status = m.getStatus()
     mapped = {"optimal": "optimal", "infeasible": "infeasible", "unbounded": "unbounded",
-              "inforunbd": "infeasible_or_unbounded", "timelimit": "time_limit"}.get(status,
+              "inforunbd": "infeasible_or_unbounded", "timelimit": "time_limit",
+              # Stopped by limits/gap: the optimal every solver here claims at that gap.
+              "gaplimit": "optimal"}.get(status,
                                                                                     status)
     out = {"status": mapped, "message": status, "seconds": m.getSolvingTime(),
            "iterations": m.getNLPIterations(), "duals": False,
            "objective": m.getObjVal() if mapped == "optimal" else None,
-           "version": f"{m.getMajorVersion()}.{m.getMinorVersion()}.{m.getTechVersion()}"}
-    if mapped == "optimal":
+           "version": f"{m.getMajorVersion()}.{m.getMinorVersion()}.{m.getTechVersion()}",
+           "nodes": m.getNTotalNodes(), "dual_bound": m.getDualbound(),
+           "solver_options": f"limits/gap={MIP_RELATIVE_GAP:g}"}
+    # An incumbent at the limit is written and checked like HiGHS's (#1199); it never matches.
+    incumbent = mapped == "time_limit" and m.getNSols() > 0
+    if incumbent:
+        out["objective"] = m.getObjVal()
+    if mapped == "optimal" or incumbent:
         best = m.getBestSol()
         columns = {v.name: (m.getSolVal(best, v), 0.0) for v in m.getVars()}
         rows = {}
@@ -341,6 +368,12 @@ CLP_STATUS = re.compile(r"^(Optimal|Primal infeasible|Dual infeasible|Stopped on
 CLP_TIME = re.compile(r"Total time \(CPU seconds\):\s*([\d.eE+-]+)")
 CLP_ITERATIONS = re.compile(r"-\s*(\d+) iterations")
 CLP_VERSION = re.compile(r"Coin LP version (\S+?),")
+# The `cbc` binary's banner and the result block it prints after a branch and cut.
+CBC_VERSION = re.compile(r"^Version:\s*(\S+)", re.M)
+CBC_RESULT = re.compile(r"^Result - (.+?)\s*$", re.M)
+CBC_OBJECTIVE = re.compile(r"^Objective value:\s*(\S+)", re.M)
+CBC_NODES = re.compile(r"^Enumerated nodes:\s*(\d+)", re.M)
+CBC_BOUND = re.compile(r"^Lower bound:\s*(\S+)", re.M)
 
 
 def _clp_names(text: str) -> tuple[list[str], list[str]]:
@@ -370,9 +403,13 @@ def _clp(model: Path, kind: str, time_limit: float, sol: Path) -> dict:
         # -solve lets Clp choose its algorithm on an LP; a quadratic objective is solved by
         # its barrier, the method its manual names for QPs.
         method = "-barrier" if kind == "qp" else "-solve"
-        command = ["clp", str(model.resolve()), "-sec", repr(float(time_limit)),
-                   "-primalT", repr(FEASIBILITY_TOLERANCE),
-                   "-dualT", repr(FEASIBILITY_TOLERANCE), method,
+        # A MIP goes to the `cbc` binary: the same command line (CBC's takes Clp's
+        # parameters) with the relative gap every solver here stops at.
+        mip = kind == "mip"
+        gap = ["-ratioGap", repr(MIP_RELATIVE_GAP)] if mip else []
+        command = ["cbc" if mip else "clp", str(model.resolve()),
+                   "-sec", repr(float(time_limit)), "-primalT", repr(FEASIBILITY_TOLERANCE),
+                   "-dualT", repr(FEASIBILITY_TOLERANCE), *gap, method,
                    "-printingOptions", "all", "-solu", str(names), "-saveSolution", str(binary)]
         started = time.perf_counter()
         try:
@@ -384,6 +421,9 @@ def _clp(model: Path, kind: str, time_limit: float, sol: Path) -> dict:
                     "message": f"no exit within {time_limit + HANG_MARGIN_SECONDS:g} s"}
         wall = time.perf_counter() - started
         text = done.stdout + done.stderr
+        _keep_log("cbc" if mip else "cbc-clp", model, text + "\n--- -solu, first 20000 "
+                  "characters ---\n" + (names.read_text(errors="replace")[:20000]
+                                        if names.exists() else "(not written)"))
         matches = CLP_STATUS.findall(text)
         word = matches[-1][0] if matches else ""
         status = {"Optimal": "optimal", "Primal infeasible": "infeasible",
@@ -397,6 +437,8 @@ def _clp(model: Path, kind: str, time_limit: float, sol: Path) -> dict:
                "seconds": float(clock.group(1)) if clock else wall, "wall_seconds": wall,
                "iterations": int(iterations[-1]) if iterations else "",
                "version": version.group(1) if version else "", "objective": None}
+        if mip:
+            return _cbc_result(out, text, binary, names, sol)
         if status == "optimal" and binary.exists() and names.exists():
             # saveSolution, as `clp -saveSolution??` documents it: the row and column counts,
             # then doubles - the objective, row activities, row duals, column activities and
@@ -416,6 +458,44 @@ def _clp(model: Path, kind: str, time_limit: float, sol: Path) -> dict:
                       columns={c: (x[j], d[j]) for j, c in enumerate(col_names)},
                       rows={r: (act[i], dual[i]) for i, r in enumerate(row_names)})
         return out
+
+
+def _cbc_result(out: dict, text: str, binary: Path, names: Path, sol: Path) -> dict:
+    """`out` for a MIP solved by the `cbc` binary: the status from its `Result -` line, and
+    its point, read in full precision from -saveSolution (the layout _clp documents), named
+    by the -solu listing, written `feasible` since a MIP has no duals. An incumbent at the
+    time limit is written too. Rows are left to reconcile(), which fills them at A x."""
+    word = (CBC_RESULT.findall(text) or [""])[-1]
+    low = word.lower()
+    status = ("optimal" if low.startswith("optimal") else
+              "infeasible" if "infeasible" in low else
+              "unbounded" if "unbounded" in low else
+              "time_limit" if "time limit" in low else "unparsed" if not word else low)
+    version, nodes = CBC_VERSION.search(text), CBC_NODES.search(text)
+    bound, stated = CBC_BOUND.search(text), CBC_OBJECTIVE.findall(text)
+    out.update(status=status, message=word or text.strip()[-200:], duals=False,
+               version=version.group(1) if version else "",
+               nodes=int(nodes.group(1)) if nodes else None,
+               dual_bound=float(bound.group(1)) if bound else None,
+               solver_options=f"ratioGap={MIP_RELATIVE_GAP:g}")
+    has_point = status == "optimal" or (status == "time_limit"
+                                        and "No feasible solution found" not in text)
+    if not (has_point and stated and binary.exists() and names.exists()):
+        return out
+    data = binary.read_bytes()
+    m, n = struct.unpack_from("ii", data, 0)
+    values = struct.unpack_from(f"{1 + 2 * m + 2 * n}d", data, 8)
+    row_names, col_names = _clp_names(names.read_text(errors="replace"))
+    if len(row_names) != m or len(col_names) != n:
+        out["status"] = "unparsed"
+        out["message"] = f"names for {len(row_names)}x{len(col_names)}, data {m}x{n}"
+        return out
+    out["objective"] = float(stated[-1])
+    x = values[1 + 2 * m:1 + 2 * m + n]
+    write_sol(sol, solver="cbc", status="feasible", objective=out["objective"],
+              columns={c: (x[j], 0.0) for j, c in enumerate(col_names)}, rows={},
+              message="primal only; a MIP has no duals")
+    return out
 
 
 # =========================================================================================
@@ -454,20 +534,27 @@ def _glpk_names(report: str) -> tuple[list[str], list[str]]:
     return rows, cols
 
 
-def _glpk(model: Path, time_limit: float, sol: Path) -> dict:
+def _glpk(model: Path, kind: str, time_limit: float, sol: Path) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         raw, report = Path(tmp) / "solution.txt", Path(tmp) / "report.txt"
-        command = ["glpsol", "--mps", str(model.resolve()), "--tmlim", str(max(1, int(time_limit))),
-                   "-w", str(raw), "-o", str(report)]
+        gap = ["--mipgap", repr(MIP_RELATIVE_GAP)] if kind == "mip" else []
         started = time.perf_counter()
-        try:
-            done = subprocess.run(command, capture_output=True, text=True, cwd=tmp,
-                                  timeout=time_limit + HANG_MARGIN_SECONDS)
-        except subprocess.TimeoutExpired:
-            return {"status": "hung", "wall_seconds": time.perf_counter() - started,
-                    "message": f"no exit within {time_limit + HANG_MARGIN_SECONDS:g} s"}
+        # Fixed MPS first (Netlib's names have spaces in them); a file glpsol cannot read
+        # that way (the stress set's are free MPS) is given to its free-format reader.
+        for reader in ("--mps", "--freemps"):
+            command = ["glpsol", reader, str(model.resolve()), "--tmlim",
+                       str(max(1, int(time_limit))), *gap, "-w", str(raw), "-o", str(report)]
+            try:
+                done = subprocess.run(command, capture_output=True, text=True, cwd=tmp,
+                                      timeout=time_limit + HANG_MARGIN_SECONDS)
+            except subprocess.TimeoutExpired:
+                return {"status": "hung", "wall_seconds": time.perf_counter() - started,
+                        "message": f"no exit within {time_limit + HANG_MARGIN_SECONDS:g} s"}
+            text = done.stdout + done.stderr
+            if "MPS file processing error" not in text:
+                break
         wall = time.perf_counter() - started
-        text = done.stdout + done.stderr
+        _keep_log("glpk", model, text)
         clock, version = GLPK_TIME.search(text), GLPK_VERSION.search(text)
         iterations = GLPK_ITERATIONS.findall(text)
         out = {"status": "unparsed", "message": text.strip().splitlines()[-1][:200]
@@ -477,10 +564,14 @@ def _glpk(model: Path, time_limit: float, sol: Path) -> dict:
                "version": version.group(1) if version else ""}
         if "TIME LIMIT EXCEEDED" in text:
             out["status"] = "time_limit"
-        elif "PROBLEM HAS NO PRIMAL FEASIBLE SOLUTION" in text:
+        # `PROBLEM HAS ...` is the simplex driver's wording and `LP HAS ...` its LP
+        # presolver's, which glpsol runs by default and after which it writes no point.
+        elif "HAS NO PRIMAL FEASIBLE SOLUTION" in text:
             out["status"] = "infeasible"
-        elif "PROBLEM HAS UNBOUNDED SOLUTION" in text:
+        elif "HAS UNBOUNDED SOLUTION" in text or "HAS UNBOUNDED PRIMAL SOLUTION" in text:
             out["status"] = "unbounded"
+        elif "HAS NO DUAL FEASIBLE SOLUTION" in text:
+            out["status"] = "infeasible_or_unbounded"
         if not raw.exists():
             if out["status"] == "unparsed":
                 out["status"] = "numerical_error" if done.returncode == 0 else "crashed"
@@ -494,12 +585,17 @@ def _glpk(model: Path, time_limit: float, sol: Path) -> dict:
                 continue
             if fields[0] == "s":
                 head = fields
+            elif fields[0] in ("i", "j") and head is not None and head[1] == "mip":
+                # `s mip m n stat obj`, then `i row value` and `j col value`: no duals.
+                (row_vals if fields[0] == "i" else col_vals).append((float(fields[2]), 0.0))
             elif fields[0] == "i":
                 row_vals.append((float(fields[3]), float(fields[4])))
             elif fields[0] == "j":
                 col_vals.append((float(fields[3]), float(fields[4])))
         if head is None:
             return out
+        if head[1] == "mip":
+            return _glpk_mip(out, text, head, row_vals, col_vals, report, sol)
         if head[4] == "f" and head[5] == "f":
             out["status"] = "optimal"
         elif out["status"] == "unparsed":
@@ -518,6 +614,35 @@ def _glpk(model: Path, time_limit: float, sol: Path) -> dict:
                   columns={c: col_vals[j] for j, c in enumerate(col_names)},
                   rows={r: row_vals[i] for i, r in enumerate(row_names)})
         return out
+
+
+def _glpk_mip(out: dict, text: str, head: list[str], row_vals: list, col_vals: list,
+              report: Path, sol: Path) -> dict:
+    """`out` for a MIP: glpsol's integer solution status is `o` (optimal), `f` (feasible),
+    `n` (none) or `u` (undefined). Stopped by --mipgap it reports `f`, which is the optimal
+    every solver here claims at that gap; `f` at the time limit is an incumbent, written and
+    checked but never a match."""
+    out.update(duals=False, solver_options=f"mipgap={MIP_RELATIVE_GAP:g}")
+    if head[4] == "o" or (head[4] == "f" and "MIP GAP TOLERANCE REACHED" in text):
+        out["status"] = "optimal"
+    elif head[4] == "n" and out["status"] == "unparsed":
+        out["status"] = "infeasible"
+    elif out["status"] == "unparsed":
+        out["status"] = "numerical_error"
+    if head[4] not in ("o", "f"):
+        return out
+    row_names, col_names = _glpk_names(report.read_text(errors="replace"))
+    if len(row_names) != len(row_vals) or len(col_names) != len(col_vals):
+        out["status"] = "unparsed"
+        out["message"] = (f"names for {len(row_names)}x{len(col_names)}, "
+                          f"data {len(row_vals)}x{len(col_vals)}")
+        return out
+    out["objective"] = float(head[5])
+    write_sol(sol, solver="glpk", status="feasible", objective=out["objective"],
+              columns={c: col_vals[j] for j, c in enumerate(col_names)},
+              rows={r: row_vals[i] for i, r in enumerate(row_names)},
+              message="primal only; a MIP has no duals")
+    return out
 
 
 # =========================================================================================
@@ -787,14 +912,14 @@ def run(solver: str, model: Path, kind: str, time_limit: float, sol: Path) -> di
     process), iterations, duals, version, message. `sol` exists only when the status is
     optimal and the answer could be converted."""
     if not supports(solver, kind):
-        return {"status": "unsupported", "message": "no quadratic objective in GLPK",
+        return {"status": "unsupported", "message": f"{LABELS[solver]} is not run on a {kind}",
                 "seconds": None, "wall_seconds": None, "duals": False}
     if solver in ("highs", "scip"):
         return _python_rival(solver, model, time_limit, sol)
-    if solver == "cbc-clp":
+    if solver in ("cbc-clp", "cbc"):
         return _clp(model, kind, time_limit, sol)
     if solver == "glpk":
-        return _glpk(model, time_limit, sol)
+        return _glpk(model, kind, time_limit, sol)
     if solver in QP_PYTHON_SOLVERS:
         return _python_qp_rival(solver, model, time_limit, sol)
     raise ValueError(f"unknown solver {solver}")

@@ -38,6 +38,9 @@ on:
           - netlib-certified
           - maros-meszaros
           - head-to-head-maros-meszaros
+          - head-to-head-netlib
+          - head-to-head-miplib3
+          - head-to-head-stress
           - pooling
           - pooling-certified
           - qplib-qcqp
@@ -149,6 +152,20 @@ jobs:
           pip install numpy scipy highspy pyscipopt osqp clarabel piqp scs
           pip list 2>/dev/null | grep -iE 'highspy|pyscipopt|osqp|clarabel|piqp|scs'
 
+      # The four open-source solvers the problem statement names - HiGHS, SCIP, CBC (with its
+      # LP engine Clp) and GLPK - as released packages, each run as a separate process
+      # (bench/runners/rivals.py); nothing here is linked into SANKHYA. The versions are
+      # printed here and recorded per row in the CSV.
+      - name: Install the open-source solvers of the head-to-head
+        if: >-
+          inputs.suite == 'head-to-head-netlib' || inputs.suite == 'head-to-head-miplib3'
+          || inputs.suite == 'head-to-head-stress'
+        run: |
+          sudo apt-get install -y coinor-clp coinor-cbc glpk-utils
+          pip install numpy highspy pyscipopt
+          dpkg-query -W coinor-clp coinor-cbc glpk-utils
+          pip list 2>/dev/null | grep -iE 'highspy|pyscipopt'
+
       - name: Build
         run: |
           scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF
@@ -168,6 +185,9 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/out"
           mkdir -p "$out/results"
+          # bench/runners/rivals.py keeps each clp, cbc and glpsol run's raw output here, so
+          # it is uploaded with the CSV.
+          export SANKHYA_RIVAL_LOGS="$out/logs"
           cpu="$(lscpu | sed -n 's/^Model name: *//p' | head -1)"
           ram="$(free -g | awk '/^Mem:/ {print $2}')"
           machine="github-actions ubuntu-24.04 $(nproc) vCPU ${cpu} ${ram} GiB RAM"
@@ -179,7 +199,7 @@ jobs:
           # shellcheck disable=SC2086  # options are split on spaces on purpose
           set -- $OPTIONS
           case "$SUITE" in
-            netlib-full|netlib-certified|ab-netlib)
+            netlib-full|netlib-certified|ab-netlib|head-to-head-netlib|head-to-head-stress)
               # fetch_data.py parses the published optima out of the live readme, and decodes
               # every instance again on the way. On Linux the decode writes LF where the
               # tracked copies are CRLF (stored byte-for-byte, .gitattributes), which marked
@@ -203,7 +223,7 @@ jobs:
             # every file's sha256. Untracked, so the -dirty check below is not affected.
             head-to-head-refinery-qp)
               python3 bench/refinery/generate.py --qp ;;
-            miplib3)
+            miplib3|head-to-head-miplib3)
               python3 bench/runners/fetch_miplib3.py
               git checkout -- data/miplib3/manifest.json ;;
             # #1199: options is the shard, K/N; the fetch writes its names beside the models.
@@ -230,6 +250,11 @@ jobs:
                 *miplib.py*) python3 bench/runners/fetch_miplib.py ;;
               esac ;;
           esac
+          # The stress set is generated from the Netlib files just fetched and from its own
+          # constructions; stress.py refuses a file whose sha256 is not the manifest's.
+          if [ "$SUITE" = head-to-head-stress ]; then
+            python3 bench/runners/stress_instances.py
+          fi
           # The stamp marks a modified tracked file -dirty (the fetchers' manifests aside), and
           # a -dirty CSV is no evidence, so the run stops here rather than produce one.
           dirty="$(git status --porcelain --untracked-files=no -- . ':!data/*/reference.json')"
@@ -281,6 +306,19 @@ jobs:
                   --sankhya-binary build/sankhya --machine-kind "github-actions ubuntu-24.04" \
                   ${limit[@]+"${limit[@]}"} --instances "${names[@]}" \
                   --out "bench/results/highs-miplib2017-bench-${tag}.csv" ;;
+              # SANKHYA, HiGHS, SCIP, CBC and GLPK in one job, each one thread, graded by the
+              # same rule and tools/verify_solution.py: Netlib (120 s), the 65 MIPLIB 3 models
+              # (60 s) and the stress set (60 s).
+              head-to-head-netlib)
+                python3 bench/runners/compare.py --suite netlib --sankhya-binary build/sankhya \
+                  --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} "$@" ;;
+              head-to-head-miplib3)
+                python3 bench/runners/compare.py --suite miplib3-all \
+                  --sankhya-binary build/sankhya \
+                  --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} "$@" ;;
+              head-to-head-stress)
+                python3 bench/runners/stress.py --binary build/sankhya --machine "$machine" \
+                  --solvers sankhya highs scip cbc-clp glpk ${limit[@]+"${limit[@]}"} "$@" ;;
               head-to-head-maros-meszaros)
                 python3 bench/runners/compare.py --suite maros-meszaros                   --sankhya-binary build/sankhya --machine-kind "github-actions ubuntu-24.04"                   ${limit[@]+"${limit[@]}"} "$@" ;;
               # #514: the pooling set (committed in data/pooling), and the same 39 runs with

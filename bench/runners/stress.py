@@ -14,7 +14,14 @@ stress_instances.py for how each answer is known). Every instance is solved by
            written into the same .sol layout. HiGHS is a comparator run as a released
            binary; no HiGHS source is read (docs/PROVENANCE.md, Judgement calls).
 
-and both .sol files are checked by tools/verify_solution.py with the same tolerances.
+  scip, cbc-clp, glpk   the other open-source solvers the problem statement names, each
+           through bench/runners/rivals.py exactly as compare.py --suite runs it (a separate
+           process, one thread, 1e-7 tolerances). An optimal answer is converted to the
+           same .sol layout and graded at the objective of its own point. These adapters
+           read no Farkas vector or ray, so an `infeasible` or `unbounded` from one of them
+           is graded on the status alone and the reason says `status only`.
+
+and every .sol file is checked by tools/verify_solution.py with the same tolerances.
 The grade:
 
   correct  the known verdict, and the verifier accepts the file; for an optimal instance
@@ -172,6 +179,24 @@ def run_highs(mps: Path, sol: Path, time_limit: float) -> dict:
                 "reason": completed.stderr.strip()[-160:]}
 
 
+RIVALS = ("scip", "cbc-clp", "glpk")
+
+
+def run_rival(solver: str, mps: Path, sol: Path, time_limit: float) -> dict:
+    import compare_suite  # noqa: PLC0415 - the head-to-head's own conversion and reader
+    got = compare_suite.rivals.run(solver, mps, "lp", time_limit, sol)
+    out = {"status": got["status"], "objective": None, "version": got.get("version", ""),
+           "iterations": got.get("iterations", ""), "reason": str(got.get("message", ""))}
+    if got["status"] == "optimal" and sol.exists():
+        model = compare_suite.parse_mps(mps)
+        compare_suite.rivals.reconcile(sol, model, solver)
+        # The objective at the solver's own point, constant included, as the reference is.
+        out["objective"] = compare_suite.point_objective(model, sol, True)
+    if got["status"] == "optimal" and out["objective"] is None:
+        out["status"] = "optimal, no point returned"
+    return out
+
+
 def verify(mps: Path, sol: Path) -> tuple[int, str]:
     """(1 accepted, 0 rejected, '' not checkable) and the first failing check."""
     if not sol.exists():
@@ -209,7 +234,7 @@ def main() -> int:
     parser.add_argument("--data", type=Path, default=DATA)
     parser.add_argument("--time-limit", type=float, default=60.0)
     parser.add_argument("--solvers", nargs="+", default=["sankhya", "highs"],
-                        choices=["sankhya", "highs"])
+                        choices=["sankhya", "highs", *RIVALS])
     parser.add_argument("--families", nargs="*", default=None)
     parser.add_argument("--instances", nargs="*", default=None)
     parser.add_argument("--machine", default=f"{platform.system()}-{platform.machine()}")
@@ -240,7 +265,9 @@ def main() -> int:
                 start = time.perf_counter()
                 try:
                     got = (run_sankhya(args.binary, mps, sol, args.time_limit)
-                           if solver == "sankhya" else run_highs(mps, sol, args.time_limit))
+                           if solver == "sankhya" else run_highs(mps, sol, args.time_limit)
+                           if solver == "highs"
+                           else run_rival(solver, mps, sol, args.time_limit))
                 except subprocess.TimeoutExpired:
                     got = {"status": "killed", "reason": "no exit within 3x the time limit"}
                 wall = time.perf_counter() - start
@@ -256,6 +283,8 @@ def main() -> int:
                                         objective, verified, failing)
                 if flipped:
                     reason = (reason + "; " if reason else "") + "sign flipped"
+                if solver in RIVALS and verdict == "correct" and got["status"] != "optimal":
+                    reason = "status only, no certificate read"
                 if verdict == "failed" and got.get("reason"):
                     reason += f" ({got['reason'][:120]})"
                 gap = (abs(objective - reference) if isinstance(objective, (int, float))
