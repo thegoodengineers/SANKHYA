@@ -185,6 +185,23 @@ struct Workspace {
   return bounds;
 }
 
+/// What one live column of `row` moving by the feasibility tolerance changes the activity
+/// by, at most: the largest |a| * max(1, |bound|) over the row. The redundant-row test holds
+/// its tolerance to this scale: 1e-8 x0 + 1e-8 x1 >= 2e-8 with x in [0, 1] is short by 2e-8
+/// at x = 0, inside an absolute 1e-7, and is x0 + x1 >= 2, not a row to drop.
+[[nodiscard]] double activity_scale(const Workspace& work, Index row) {
+  double scale = 0.0;
+  for (const auto& [column, coefficient] : work.rows[static_cast<std::size_t>(row)]) {
+    const auto u = static_cast<std::size_t>(column);
+    if (work.col_dead[u]) continue;
+    double size = 1.0;
+    if (finite(work.col_lower[u])) size = std::max(size, std::fabs(work.col_lower[u]));
+    if (finite(work.col_upper[u])) size = std::max(size, std::fabs(work.col_upper[u]));
+    scale = std::max(scale, std::fabs(coefficient) * size);
+  }
+  return scale;
+}
+
 /// Drop a column from every row it appears in, folding its fixed value into the row bounds.
 ///
 /// Walks `original`'s view, PATCHED by `extra_row_delta[column]`, plus `extra_new_rows
@@ -1155,13 +1172,16 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         if (result.proved_infeasible) break;
       }
 
-      // Redundant row: whatever the variables do within their bounds, this row is satisfied.
+      // Redundant row: whatever the variables do within their bounds, this row is satisfied
+      // - to within the tolerance, taken at the row's own scale when that is below one
+      // (activity_scale).
+      const double slack = feasibility * std::min(1.0, activity_scale(work, i));
       const bool lower_slack =
           !finite(work.row_lower[r]) ||
-          (bounds.lower_finite && bounds.lower >= work.row_lower[r] - feasibility);
+          (bounds.lower_finite && bounds.lower >= work.row_lower[r] - slack);
       const bool upper_slack =
           !finite(work.row_upper[r]) ||
-          (bounds.upper_finite && bounds.upper <= work.row_upper[r] + feasibility);
+          (bounds.upper_finite && bounds.upper <= work.row_upper[r] + slack);
       if (lower_slack && upper_slack) {
         Record record;
         record.kind = Record::Kind::kRedundantRow;
