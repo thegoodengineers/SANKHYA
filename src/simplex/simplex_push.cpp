@@ -323,6 +323,11 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
     x_basic_[slot] = value + static_cast<double>(direction) * step;
     nonbasic_value_[u] = x_basic_[slot];
     ++pivots;
+    // The basis repair's stall guard (repair_basis) counts repairs that arrive "at the same
+    // iteration"; the push never advanced that clock, so its whole run was one iteration
+    // and the fourth singular refactorization in 173,093 pivots on the refinery year was
+    // refused as a stall (#888). A push pivot is progress.
+    iterations_seen_ = pivots;
     window_min_relative_pivot = std::min(window_min_relative_pivot, relative_pivot);
     const bool small_eta = refactor_below > 0.0 && relative_pivot < refactor_below;
     const bool updated = [&] {
