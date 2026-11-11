@@ -1110,6 +1110,8 @@ class BranchAndBound {
   static constexpr double kNoPoolGap = 1e300;
 
   Count nodes_explored_ = 0;
+  /// The root loop was entered under `auto` without a flow cover, so on probation (#1158).
+  bool root_loop_probation_ = false;
   /// Root relaxation objective (internal, minimise space) before and after the root cut
   /// round; NaN until the root LP solved. Reported through Solution::root_bound (#221).
   double root_bound_internal_ = std::numeric_limits<double>::quiet_NaN();
@@ -1117,7 +1119,6 @@ class BranchAndBound {
   Count root_cuts_applied_ = 0;
   Count root_cut_rounds_ = 0;      ///< #495: rounds that appended rows at the root
   int root_loop_wanted_ = -1;      ///< root_cut_loop_wanted()'s answer once taken; -1 not yet
-  bool root_loop_probation_ = false;  ///< entered under `auto` without a flow cover (#1158)
   std::string cut_filter_report_;  ///< the root filter's verdicts per family and reason (#496)
   Count dense_cuts_admitted_ = 0;  ///< #496: dense cuts admitted at the root
   Count dense_nonzeros_admitted_ = 0;  ///< their nonzeros, against the budget

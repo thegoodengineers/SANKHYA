@@ -379,9 +379,9 @@ TEST(RootCutLoop, AutoGatePutsAModelWithoutAFlowCoverOnProbation) {
     EXPECT_LE(probation.root_cut_rounds, always.root_cut_rounds) << "trial " << trial;
     (probation.root_cut_rounds > 1 ? kept : rolled_back) += 1;
   }
-  std::printf("[  INFO    ] probation: %d chain(s) kept their rounds, %d went back to round 1\n",
-              kept, rolled_back);
-  EXPECT_GT(kept + rolled_back, 0);
+  std::printf("[  INFO    ] probation: %d chain(s) kept, %d rolled back\n", kept, rolled_back);
+  EXPECT_GT(kept, 0) << "no chain kept its rounds: the kept path was not run";
+  EXPECT_GT(rolled_back, 0) << "no chain was rolled back: the rollback was not run";
 }
 
 TEST(RootCutLoop, SwitchedFlowsGateEntersOnALotSizingChainAndNotOnAKnapsack) {
