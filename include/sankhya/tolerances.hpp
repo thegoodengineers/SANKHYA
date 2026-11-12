@@ -54,6 +54,12 @@ inline constexpr double kMipAbsoluteGap = 1e-6;
 /// search again.
 inline constexpr double kMipGapTargetExtension = 0.5;
 
+/// Symmetry detection (#413, #1158), the default of mip_symmetry_work_limit: adjacency
+/// entries the colour refinement may visit before the search stops with what it has. On
+/// MIPLIB 3 every model whose search finishes with generators needs at most 3.9e7 (p2756);
+/// the four that pass 1.4e8 (air04, dano3mip, fast0507, nw04) find none.
+inline constexpr std::int64_t kSymmetryWorkLimit = 100'000'000;
+
 /// Diving heuristics (#25, #414): maximum integer columns fixed in one dive before it gives
 /// up. Bounds the heuristic's own cost independently of instance size - Achterberg,
 /// "Constraint Integer Programming" (thesis, 2007), ch. 6, notes a dive's payoff is

@@ -153,10 +153,22 @@ struct Search {
   Count limit;
   SymmetryGroup out;
 
-  Search(const Graph& graph, const Model& m, Count search_limit)
-      : g(graph), model(m), limit(search_limit) {}
+  Count work_limit;
+  Count arcs = 0;  // adjacency entries, all of which one refinement round visits
 
-  [[nodiscard]] bool exhausted() const noexcept { return out.search_nodes >= limit; }
+  Search(const Graph& graph, const Model& m, Count search_limit, Count work)
+      : g(graph), model(m), limit(search_limit), work_limit(work) {
+    for (const auto& list : g.adjacent) arcs += static_cast<Count>(list.size());
+  }
+
+  /// The node budget, and the work budget (#1158): on nw04 (87,482 columns, 636,666
+  /// nonzeros) 1,000 individualisations cost 1,003 refinement rounds over 1.27M adjacency
+  /// entries each, 25 s of a 60 s run on the CI runner, and found no generator. A round's
+  /// cost is the graph's size, which the node budget does not see.
+  [[nodiscard]] bool exhausted() const noexcept {
+    return out.search_nodes >= limit ||
+           (work_limit > 0 && out.refinements * arcs >= work_limit);
+  }
 
   /// Descend from `colour` by individualising the first vertex of the target cell each
   /// time, to a discrete partition or the budget. Returns false when the budget stopped it.
@@ -353,12 +365,13 @@ void compute_orbits(SymmetryGroup* group, Index n) {
 
 }  // namespace
 
-SymmetryGroup detect_symmetry(const Model& model, Count search_limit) {
+SymmetryGroup detect_symmetry(const Model& model, Count search_limit, Count work_limit) {
   const Graph g = build_graph(model);
-  Search search(g, model, search_limit);
+  Search search(g, model, search_limit, work_limit);
   std::vector<Hash> colour = g.initial;
   refine(g, &colour, &search.out.refinements);
   search.run(std::move(colour), {}, 0);
+  search.out.work = search.out.refinements * search.arcs;
   SymmetryGroup group = std::move(search.out);
   compute_orbits(&group, model.num_cols());
   return group;
