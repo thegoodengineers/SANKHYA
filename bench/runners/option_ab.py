@@ -53,7 +53,8 @@ MANIFESTS = {
 def instances_of(runner: str, set_name: str | None = None) -> list[str]:
     # miplib.py --set miplib3 reads the classic set's own manifest (#761, #1158).
     path = REPO_ROOT / ("data/miplib3/manifest.json" if set_name == "miplib3"
-                        else MANIFESTS[runner])
+                        else "data/miplib2017-bench/manifest.json"
+                        if set_name == "miplib2017-bench" else MANIFESTS[runner])
     instances = json.loads(path.read_text(encoding="utf-8"))["instances"]
     if runner == "refinery_lp.py":  # the refinery manifest lists its MILPs too
         instances = {name: entry for name, entry in instances.items()
@@ -77,7 +78,7 @@ def main() -> int:
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--seeds", type=int, default=None,
                         help="miplib.py only: its --seeds, the seeds each arm runs per instance")
-    parser.add_argument("--set", dest="set_name", choices=("miplib2017", "miplib3"),
+    parser.add_argument("--set", dest="set_name", choices=("miplib2017", "miplib3", "miplib2017-bench"),
                         default=None, help="miplib.py only: its --set (#1158)")
     parser.add_argument("--machine", required=True)
     parser.add_argument("--runner-arg", action="append", default=[], metavar="ARG",

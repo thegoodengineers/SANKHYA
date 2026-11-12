@@ -8,6 +8,7 @@
 #include <bit>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <numeric>
 #include <unordered_map>
 #include <unordered_set>
@@ -97,11 +98,17 @@ Graph build_graph(const Model& model) {
 /// canonical - functions of the structure alone - which is what lets two leaves of the
 /// search be compared by colour. A hash collision can only merge classes, never split them:
 /// it costs search effort, and the verification below is what decides correctness.
-void refine(const Graph& g, std::vector<Hash>* colour, Count* refinements) {
+///
+/// `halt` is asked before every round (#1199); when it says stop the partition is left as it
+/// is, possibly not stable. That is safe for the reason above: an unstable partition can
+/// only fail to yield a generator, since every candidate is verified.
+template <typename Halt>
+void refine(const Graph& g, std::vector<Hash>* colour, Count* refinements, const Halt& halt) {
   const auto total = static_cast<std::size_t>(g.vertices());
   std::vector<Hash> next(total);
   std::size_t classes = distinct_colours(*colour);
   for (;;) {
+    if (halt()) return;
     ++*refinements;
     for (std::size_t v = 0; v < total; ++v) {
       Hash sum = 0;
@@ -156,9 +163,23 @@ struct Search {
   Count work_limit;
   Count arcs = 0;  // adjacency entries, all of which one refinement round visits
 
-  Search(const Graph& graph, const Model& m, Count search_limit, Count work)
-      : g(graph), model(m), limit(search_limit), work_limit(work) {
+  const std::function<bool()>& stop;
+
+  Search(const Graph& graph, const Model& m, Count search_limit, Count work,
+         const std::function<bool()>& stop_asked)
+      : g(graph), model(m), limit(search_limit), work_limit(work), stop(stop_asked) {
     for (const auto& list : g.adjacent) arcs += static_cast<Count>(list.size());
+  }
+
+  /// The caller's stop (#1199), remembered: once it says stop the clock is not asked again
+  /// and every loop below unwinds on exhausted().
+  [[nodiscard]] bool halted() {
+    if (!out.stopped && stop && stop()) out.stopped = true;
+    return out.stopped;
+  }
+
+  void refine_from(std::vector<Hash>* colour) {
+    refine(g, colour, &out.refinements, [this] { return halted(); });
   }
 
   /// The node budget, and the work budget (#1158): on nw04 (87,482 columns, 636,666
@@ -166,7 +187,7 @@ struct Search {
   /// entries each, 25 s of a 60 s run on the CI runner, and found no generator. A round's
   /// cost is the graph's size, which the node budget does not see.
   [[nodiscard]] bool exhausted() const noexcept {
-    return out.search_nodes >= limit ||
+    return out.stopped || out.search_nodes >= limit ||
            (work_limit > 0 && out.refinements * arcs >= work_limit);
   }
 
@@ -179,7 +200,7 @@ struct Search {
       if (exhausted()) return false;
       ++out.search_nodes;
       individualise(colour, cell.front(), depth);
-      refine(g, colour, &out.refinements);
+      refine_from(colour);
       ++depth;
     }
   }
@@ -273,7 +294,7 @@ struct Search {
       std::vector<Hash> branch = colour;
       ++out.search_nodes;
       individualise(&branch, vertex, depth);
-      refine(g, &branch, &out.refinements);
+      refine_from(&branch);
       if (find_equivalent_leaf(branch, depth + 1, target, found)) return true;
     }
     return false;
@@ -294,7 +315,7 @@ struct Search {
       std::vector<Hash> first_branch = colour;
       ++out.search_nodes;
       individualise(&first_branch, first, depth);
-      refine(g, &first_branch, &out.refinements);
+      refine_from(&first_branch);
       std::vector<Hash> first_leaf = first_branch;
       const bool first_discrete = leftmost_leaf(&first_leaf, depth + 1);
       if (first_discrete) {
@@ -308,7 +329,7 @@ struct Search {
           std::vector<Hash> branch = colour;
           ++out.search_nodes;
           individualise(&branch, other, depth);
-          refine(g, &branch, &out.refinements);
+          refine_from(&branch);
           Permutation candidate;
           if (find_equivalent_leaf(branch, depth + 1, first_leaf, &candidate)) {
             out.generators.push_back(std::move(candidate));
@@ -365,12 +386,15 @@ void compute_orbits(SymmetryGroup* group, Index n) {
 
 }  // namespace
 
-SymmetryGroup detect_symmetry(const Model& model, Count search_limit, Count work_limit) {
+SymmetryGroup detect_symmetry(const Model& model, Count search_limit, Count work_limit,
+                              const std::function<bool()>& stop) {
   const Graph g = build_graph(model);
-  Search search(g, model, search_limit, work_limit);
+  Search search(g, model, search_limit, work_limit, stop);
   std::vector<Hash> colour = g.initial;
-  refine(g, &colour, &search.out.refinements);
-  search.run(std::move(colour), {}, 0);
+  search.refine_from(&colour);
+  // A partition the stop left unstable is not searched: nothing below it is a leaf.
+  if (!search.out.stopped) search.run(std::move(colour), {}, 0);
+  search.out.budget_exhausted = search.out.budget_exhausted || search.out.stopped;
   search.out.work = search.out.refinements * search.arcs;
   SymmetryGroup group = std::move(search.out);
   compute_orbits(&group, model.num_cols());
