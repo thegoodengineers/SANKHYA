@@ -173,7 +173,11 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
   // bounded by the queue's starting length, past which a variable just waits for cleanup.
   in_push_ = true;
   std::vector<Index> off_bound;
-  const std::size_t requeue_budget = superbasic.size();
+  // A variable is requeued ONCE: with a budget of the queue's starting length the refinery
+  // year spent its last 294,000 pivots (of 1,252,000) on steps of length zero, a handful of
+  // infeasible variables evicting one another in turn, and never reached the cleanup. One
+  // that leaves off its bound a second time waits for the cleanup and the primal loop.
+  std::vector<char> was_requeued(static_cast<std::size_t>(total_), 0);
   std::size_t requeued = 0;
   for (std::size_t next = 0; next < superbasic.size(); ++next) {
     const Index k = superbasic[next];
@@ -313,7 +317,8 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
     } else {
       nonbasic_value_[l] = leaving_now;
       off_bound.push_back(leaving);
-      if (requeued < requeue_budget) {
+      if (was_requeued[l] == 0) {
+        was_requeued[l] = 1;
         superbasic.push_back(leaving);
         ++requeued;
       }
