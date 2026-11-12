@@ -115,7 +115,7 @@ the one stamped in the file's rows, the build that produced it.
 | Maros-Meszaros convex QP: 127 of 138 at the published objective, 132 verifier-accepted, 0 optimal answers rejected | `bench/results/maros-meszaros-c766eae.csv` | `c766eae` |
 | Hock-Schittkowski NLP: 64 of 70 at the published objective, 70 accepted by the checker | `bench/results/nlp-hs-ad57c03.csv` | `ad57c03` |
 | Convex MINLPLib: 14 of 17 at the published objective, 16 accepted by the checker | `bench/results/nlp-minlplib-ad57c03.csv` | `ad57c03` |
-| Stress set, 126 badly scaled and adversarial LPs: SANKHYA 106 correct / 7 wrong / 13 declined; HiGHS on its defaults 29 / 91 / 6 | `bench/results/stress-ab3f4a1.csv` | `ab3f4a1` |
+| Stress set, 126 badly scaled and adversarial LPs: SANKHYA 114 correct / 0 wrong / 12 declined; HiGHS on its defaults 28 / 88 / 10 | `bench/results/stress-09ea411.csv` | `09ea411` |
 | `sankhya scenarios`: 1130 of 1130 scenarios verified | `bench/results/scenarios-de0f393a.csv` | `de0f393a` |
 | A million rows on the CPU: 2 of 9 engine runs optimal and verified (transport 1,000,000 rows by `pdhg` in 119 s; refinery 1,007,400 rows by `pdhg` in 2,336 s) | `bench/results/million-cpu-b561fba.csv` | `b561fba` |
 | HiGHS agreement, medium Netlib tier: objectives agree on 50 of 50 | `bench/results/compare-highs-medium-ad57c03.csv` | `ad57c03` |
@@ -248,8 +248,8 @@ machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores
   (`bench/results/mittelmann-72123ff.csv`, `docs/BENCHMARKS.md` section 1d).
 - **MILP proofs.** 11 of 30 MIPLIB instances proved, 14
   at the published optimum (`bench/results/miplib-ad57c03.csv`, section 2).
-- **Declined instances.** Stress set: 13 of 126 declined,
-  7 wrong (`bench/results/stress-ab3f4a1.csv`, section 5b). Maros-Meszaros: 128
+- **Declined instances.** Stress set: 12 of 126 declined,
+  0 wrong (`bench/results/stress-09ea411.csv`, section 5b). Maros-Meszaros: 128
   of 138 optimal (`bench/results/maros-meszaros-c766eae.csv`, section 2b). Safe bounds: 0 of
   94 with no finite bound (`bench/results/certified-gap-netlib-full-81b812c.csv`).
 - **No real industrial model.** Every refinery number is from a generated model.
@@ -417,15 +417,15 @@ With the `exact` option the duals, reduced costs and ranges are re-derived from 
 
 **Q16. What happens on badly scaled models?**
 
-On 126 scaled-Netlib and adversarial LPs SANKHYA is correct on 106, wrong on 7 and declines 13. HiGHS 1.15.1 on its default options is 29 correct, 91 wrong, 6 failed on the same files; its defaults drop the tiny coefficients these files carry, so this measures defaults on extreme scaling, not HiGHS in general.
+On 126 scaled-Netlib and adversarial LPs SANKHYA is correct on 114, wrong on 0 and declines 12. HiGHS 1.16.0 on its default options is 28 correct, 88 wrong, 10 failed on the same files; its defaults drop the tiny coefficients these files carry, so this measures defaults on extreme scaling, not HiGHS in general.
 
-*Evidence: `bench/results/stress-ab3f4a1.csv` at `ab3f4a1`; `docs/BENCHMARKS.md` section 5b.*
+*Evidence: `bench/results/stress-09ea411.csv` at `09ea411`; `docs/BENCHMARKS.md` section 5b.*
 
 **Q17. What does the solver do when it cannot solve a model?**
 
-It declines: the status is a limit, `numerical_error` or `feasible`, never `optimal`. The 13 stress-set runs above and the Maros-Meszaros runs short of `optimal` (128 of 138 are optimal) are named instance by instance.
+It declines: the status is a limit, `numerical_error` or `feasible`, never `optimal`. The 12 stress-set runs above and the Maros-Meszaros runs short of `optimal` (128 of 138 are optimal) are named instance by instance.
 
-*Evidence: `bench/results/stress-ab3f4a1.csv`; `bench/results/maros-meszaros-c766eae.csv`; `docs/ARCHITECTURE.md` section 8 (resource limits and what each one means).*
+*Evidence: `bench/results/stress-09ea411.csv`; `bench/results/maros-meszaros-c766eae.csv`; `docs/ARCHITECTURE.md` section 8 (resource limits and what each one means).*
 
 **Q18. Does it handle non-convex QP?**
 

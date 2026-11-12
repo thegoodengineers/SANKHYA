@@ -4350,12 +4350,12 @@ adapters read no certificate, where SANKHYA's and HiGHS's must pass the verifier
 |---|---:|---:|---|---|---|---|---|---|---|
 | Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-ab3f4a1.csv` | `ab3f4a1` |
 | MIPLIB 3 MILP | 65 | 60 s | 45 / 41 / 45 / 0 | 52 / 51 / 52 / 0 | 52 / 47 / 52 / 0 | 51 / 50 / 51 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-ab3f4a1.csv` | `ab3f4a1` |
-| Stress set LP | 126 | 60 s | 113 / 106 / 113 / 7 | 120 / 29 / 40 / 90 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-ab3f4a1.csv` | `ab3f4a1` |
+| Stress set LP | 126 | 60 s | 114 / 114 / 115 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-09ea411.csv` | `09ea411` |
 | Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | - | 87 / 85 / 60 / 2 | - | - | `bench/results/head-to-head-maros-meszaros-partial-ab3f4a1.csv` | `ab3f4a1` |
 
-Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 51, CBC 50, SCIP 47, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 106, CBC 59, GLPK 45, HiGHS 29, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58.
+Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 51, CBC 50, SCIP 47, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 114, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58.
 
-Versions, as each solver reported them in those runs: HiGHS 1.15.1, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
+Versions, as each solver reported them in those runs: HiGHS 1.15.1 and 1.16.0, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
 
 **Every wrong answer counted above** (the stress set's are named, with every rejection, in section 5b):
 
@@ -4492,45 +4492,34 @@ row of the file as written and most of its certificates failing to prove the fil
 (each failing check is named below); Klee-Minty from n = 30, whose last right-hand sides
 reach 5^29 > 1e20, comes back unbounded.
 
-Measured on SANKHYA commit `ab3f4a1` against HiGHS 1.15.1 (highspy, separate process) and cbc-clp 1.17.9, glpk 5.0, scip 10.0.2 (bench/runners/rivals.py; an `infeasible` or `unbounded` from one of these is graded on the status alone), machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 9V45 96-Core Processor 15 GiB RAM`, 126 instances. Source: `stress-ab3f4a1.csv`.
+Measured on SANKHYA commit `09ea411` against HiGHS 1.16.0 (highspy, separate process) and cbc-clp 1.17.9, glpk 5.0, scip 10.0.2 (bench/runners/rivals.py; an `infeasible` or `unbounded` from one of these is graded on the status alone), machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 7763 64-Core Processor 15 GiB RAM`, 126 instances. Source: `stress-09ea411.csv`.
 
 | family | instances | sankhya correct / wrong / failed | cbc-clp correct / wrong / failed | glpk correct / wrong / failed | highs correct / wrong / failed | scip correct / wrong / failed |
 |---|---|---|---|---|---|---|
 | `degenerate` | 5 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 |
 | `klee_minty` | 7 | 7 / 0 / 0 | 4 / 3 / 0 | 6 / 1 / 0 | 4 / 3 / 0 | 4 / 3 / 0 |
 | `near_singular` | 8 | 8 / 0 / 0 | 7 / 1 / 0 | 8 / 0 / 0 | 8 / 0 / 0 | 6 / 0 / 2 |
-| `scaled_netlib` | 94 | 74 / 7 / 13 | 35 / 59 / 0 | 14 / 80 / 0 | 0 / 88 / 6 | 0 / 67 / 27 |
+| `scaled_netlib` | 94 | 82 / 0 / 12 | 35 / 59 / 0 | 14 / 80 / 0 | 0 / 84 / 10 | 0 / 67 / 27 |
 | `thin_infeasible` | 8 | 8 / 0 / 0 | 4 / 4 / 0 | 8 / 0 / 0 | 8 / 0 / 0 | 8 / 0 / 0 |
-| `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 | 4 / 0 / 0 | 4 / 0 / 0 | 4 / 0 / 0 |
-| **all** | 126 | 106 / 7 / 13 | 59 / 67 / 0 | 45 / 81 / 0 | 29 / 91 / 6 | 27 / 70 / 29 |
+| `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 | 4 / 0 / 0 | 3 / 1 / 0 | 4 / 0 / 0 |
+| **all** | 126 | 114 / 0 / 12 | 59 / 67 / 0 | 45 / 81 / 0 | 28 / 88 / 10 | 27 / 70 / 29 |
 
-**Reported `optimal` and wrong**, the headline count (#750): sankhya **7**, cbc-clp **64**, glpk **71**, highs **31**, scip **17**.
+**Reported `optimal` and wrong**, the headline count (#750): sankhya **0**, cbc-clp **64**, glpk **71**, highs **30**, scip **17**.
 
-**sankhya, wrong** (7):
+**sankhya, failed** (12):
 
-- `scaled_etamacro`: objective off the known optimum by 1.48e-05 relative
-- `scaled_ship04l`: objective off the known optimum by 2.72e-04 relative
-- `scaled_ship04s`: objective off the known optimum by 1.61e-04 relative
-- `scaled_ship08l`: objective off the known optimum by 2.30e-04 relative
-- `scaled_ship08s`: objective off the known optimum by 3.16e-04 relative
-- `scaled_ship12l`: objective off the known optimum by 2.84e-04 relative
-- `scaled_ship12s`: objective off the known optimum by 6.64e-04 relative
-
-**sankhya, failed** (13):
-
-- `scaled_80bau3b`: no verdict: time_limit (time limit 59.7081s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned nume)
-- `scaled_bnl2`: no verdict: time_limit (time limit 59.999s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
-- `scaled_d2q06c`: no verdict: time_limit (time limit 59.998s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
-- `scaled_degen3`: no verdict: time_limit (stopped at the time limit of 59.9988s after 60.00s, 646960 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_dfl001`: no verdict: time_limit (stopped at the time limit of 59.9969s after 60.00s, 97992 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_greenbeb`: no verdict: time_limit (time limit 59.9977s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_80bau3b`: no verdict: time_limit (time limit 59.4574s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned nume)
+- `scaled_bnl2`: no verdict: time_limit (time limit 59.9984s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_d2q06c`: no verdict: time_limit (time limit 59.9972s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_degen3`: no verdict: time_limit (stopped at the time limit of 59.9981s after 60.00s, 362359 iterations, 0 nodes; route: the scaled attempt returned time_)
+- `scaled_dfl001`: no verdict: time_limit (stopped at the time limit of 59.995s after 60.00s, 58815 iterations, 0 nodes; route: the scaled attempt returned time_li)
+- `scaled_greenbeb`: no verdict: time_limit (time limit 59.9968s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 - `scaled_maros-r7`: no verdict: killed (no exit within 3x the time limit)
-- `scaled_perold`: no verdict: time_limit (stopped at the time limit of 59.9995s after 60.00s, 84536 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_pilot`: no verdict: time_limit (time limit 59.9975s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot.ja`: no verdict: time_limit (time limit 59.999s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
-- `scaled_pilot.we`: no verdict: time_limit (time limit 59.9994s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot87`: no verdict: time_limit (time limit 59.9952s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_stair`: no verdict: time_limit (time limit 59.9997s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_perold`: no verdict: time_limit (time limit 59.9993s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot`: no verdict: time_limit (time limit 59.9961s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot.we`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 2.959e+07 from a least of 1.841e-03, which cannot happen on faithf)
+- `scaled_pilot87`: no verdict: time_limit (time limit 59.9922s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_stair`: no verdict: time_limit (time limit 59.9996s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 
 **cbc-clp, wrong** (67):
 
@@ -4686,7 +4675,7 @@ Measured on SANKHYA commit `ab3f4a1` against HiGHS 1.15.1 (highspy, separate pro
 - `scaled_wood1p`: optimal, verifier rejects: [FAIL] row activity                worst violation 7.994e+04 (5.595e-01 relative to the row's terms) on R243; [FAIL] reduced costs               max /c - A^T y - d/ = 1.505e-03 (1.505e-03 relat
 - `scaled_woodw`: optimal, verifier rejects: [FAIL] row activity                worst violation 1.441e-07 (1.441e-07 relative to the row's terms) on R462
 
-**highs, wrong** (91):
+**highs, wrong** (88):
 
 - `klee_minty_30`: unbounded, verifier rejects: [FAIL] ray respects the row bounds     17 would be crossed: R13, R14, R15, R16, R17
 - `klee_minty_35`: unbounded, verifier rejects: [FAIL] ray respects the row bounds     22 would be crossed: R13, R14, R15, R16, R17
@@ -4695,14 +4684,14 @@ Measured on SANKHYA commit `ab3f4a1` against HiGHS 1.15.1 (highspy, separate pro
 - `scaled_80bau3b`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C1807
 - `scaled_adlittle`: optimal, verifier rejects: [FAIL] row activity                      worst violation 4.385e-02 (4.385e-02 relative to the row's terms) on R27; [FAIL] activity agreement                max /ours - solver's/ = 4.385e-02; [F
 - `scaled_afiro`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.043e-02 (2.043e-02 relative to the row's terms) on R4; [FAIL] activity agreement                max /ours - solver's/ = 2.043e-02; [FA
-- `scaled_agg`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C119
+- `scaled_agg`: infeasible, verifier rejects: [FAIL] certificate uses only real bounds  1 lean on an infinite bound: R450
 - `scaled_agg2`: optimal, verifier rejects: [FAIL] row activity                      worst violation 7.601e+01 (1.977e+00 relative to the row's terms) on R438; [FAIL] activity agreement                max /ours - solver's/ = 1.850e+02; [
 - `scaled_agg3`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.556e+00 (1.094e+00 relative to the row's terms) on R503; [FAIL] activity agreement                max /ours - solver's/ = 2.279e+02; [
-- `scaled_bandm`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         11 unbounded in the direction used, so the aggregate proves nothing: C8, C88, C240, C278, C280
+- `scaled_bandm`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C278
 - `scaled_beaconfd`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C51
 - `scaled_blend`: unbounded on an instance that is optimal
 - `scaled_bnl1`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C4
-- `scaled_bnl2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C935
+- `scaled_bnl2`: infeasible on an instance that is optimal
 - `scaled_boeing1`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C33
 - `scaled_boeing2`: optimal, verifier rejects: [FAIL] row activity                      worst violation 8.099e-03 (8.099e-03 relative to the row's terms) on R88; [FAIL] activity agreement                max /ours - solver's/ = 9.445e-03; [F
 - `scaled_bore3d`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.766e-02 (1.766e-02 relative to the row's terms) on R190; [FAIL] activity agreement                max /ours - solver's/ = 1.766e-02; [
@@ -4715,13 +4704,13 @@ Measured on SANKHYA commit `ab3f4a1` against HiGHS 1.15.1 (highspy, separate pro
 - `scaled_degen2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C58, C59
 - `scaled_degen3`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         3 unbounded in the direction used, so the aggregate proves nothing: C389, C390, C391
 - `scaled_dfl001`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C4912
-- `scaled_e226`: infeasible on an instance that is optimal
+- `scaled_e226`: unbounded, verifier rejects: [FAIL] structure  missing 282 columns, 223 rows
 - `scaled_etamacro`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C226
 - `scaled_fffff800`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C820
 - `scaled_finnis`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C413, C414
 - `scaled_fit1d`: optimal, verifier rejects: [FAIL] row activity                      worst violation 4.925e-04 (4.925e-04 relative to the row's terms) on R17; [FAIL] activity agreement                max /ours - solver's/ = 4.925e-04; [F
+- `scaled_fit1p`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         12 unbounded in the direction used, so the aggregate proves nothing: C0, C14, C387, C431, C543
 - `scaled_fit2d`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.282e-02 (1.282e-02 relative to the row's terms) on R13; [FAIL] activity agreement                max /ours - solver's/ = 1.282e-02; [F
-- `scaled_fit2p`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         19 unbounded in the direction used, so the aggregate proves nothing: C7, C21, C529, C961, C1456
 - `scaled_forplan`: optimal, verifier rejects: [FAIL] row activity                      worst violation 6.199e-03 (6.199e-03 relative to the row's terms) on R10; [FAIL] activity agreement                max /ours - solver's/ = 6.199e-03; [F
 - `scaled_ganges`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C211
 - `scaled_gfrd-pnc`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.670e-01 (2.670e-01 relative to the row's terms) on R7; [FAIL] activity agreement                max /ours - solver's/ = 2.670e-01; [FA
@@ -4731,35 +4720,33 @@ Measured on SANKHYA commit `ab3f4a1` against HiGHS 1.15.1 (highspy, separate pro
 - `scaled_grow22`: optimal, verifier rejects: [FAIL] row activity                      worst violation 6.851e+00 (1.626e+00 relative to the row's terms) on R139; [FAIL] activity agreement                max /ours - solver's/ = 1.451e+03; [
 - `scaled_grow7`: optimal, verifier rejects: [FAIL] row activity                      worst violation 3.708e+00 (1.277e+00 relative to the row's terms) on R16; [FAIL] activity agreement                max /ours - solver's/ = 1.771e+02; [F
 - `scaled_israel`: optimal, verifier rejects: [FAIL] row activity                      worst violation 9.693e+00 (1.000e+00 relative to the row's terms) on R0; [FAIL] activity agreement                max /ours - solver's/ = 9.693e+00; [FA
-- `scaled_kb2`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.274e-03 (1.274e-03 relative to the row's terms) on R11; [FAIL] activity agreement                max /ours - solver's/ = 1.274e-03; [F
+- `scaled_kb2`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.869e-04 (1.869e-04 relative to the row's terms) on R5; [FAIL] activity agreement                max /ours - solver's/ = 1.869e-04; [FA
 - `scaled_lotfi`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.753e-01 (1.901e-01 relative to the row's terms) on R138; [FAIL] activity agreement                max /ours - solver's/ = 2.753e-01; [
 - `scaled_maros`: unbounded, verifier rejects: [FAIL] row activity                    worst violation 3.015e+00 (1.015e+00 relative to the row's terms) on R570; [FAIL] activity agreement              max /ours - solver's/ = 3.956e+01
 - `scaled_maros-r7`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C5945
 - `scaled_modszk1`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.454e+00 (1.000e+00 relative to the row's terms) on R685; [FAIL] activity agreement                max /ours - solver's/ = 1.454e+00; [
 - `scaled_nesm`: infeasible, verifier rejects: [FAIL] infeasibility proof                the rows aggregate to at least 7.379150390625e-02, the column bounds allow at most 1.020935039062e-01, a contradiction of -2.830e-02
-- `scaled_pilot`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C82, C2742
-- `scaled_pilot.we`: infeasible, verifier rejects: [FAIL] certificate uses only real bounds  2 lean on an infinite bound: R60, R79
+- `scaled_pilot`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C82
+- `scaled_pilot.we`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C2014
 - `scaled_pilot4`: infeasible on an instance that is optimal
-- `scaled_pilot87`: infeasible on an instance that is optimal
+- `scaled_pilot87`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C449
 - `scaled_recipe`: infeasible, verifier rejects: [FAIL] infeasibility proof                the rows aggregate to at least 0.000000000000e+00, the column bounds allow at most 6.675720214844e-05, a contradiction of -6.676e-05
 - `scaled_sc105`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.876e-02 (1.876e-02 relative to the row's terms) on R25; [FAIL] activity agreement                max /ours - solver's/ = 1.876e-02; [F
-- `scaled_sc205`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.882e-02 (2.882e-02 relative to the row's terms) on R116; [FAIL] activity agreement                max /ours - solver's/ = 2.882e-02; [
+- `scaled_sc205`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.345e-01 (1.345e-01 relative to the row's terms) on R116; [FAIL] activity agreement                max /ours - solver's/ = 1.345e-01; [
 - `scaled_sc50a`: optimal, verifier rejects: [FAIL] reduced costs                     max /c - A^T y - d/ = 1.112e-04 (1.000e+00 relative to its terms) on C44
 - `scaled_sc50b`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.150e-04 (1.150e-04 relative to the row's terms) on R35; [FAIL] activity agreement                max /ours - solver's/ = 1.150e-04
-- `scaled_scagr25`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C117, C126
 - `scaled_scagr7`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C96
 - `scaled_scfxm1`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C116
 - `scaled_scfxm2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C690
-- `scaled_scfxm3`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C795
+- `scaled_scfxm3`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C1104
 - `scaled_scorpion`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C249, C263
 - `scaled_scrs8`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C1132
 - `scaled_scsd1`: optimal, verifier rejects: [FAIL] row activity                      worst violation 2.271e-05 (2.271e-05 relative to the row's terms) on R7; [FAIL] activity agreement                max /ours - solver's/ = 2.271e-05; [FA
 - `scaled_scsd6`: optimal, verifier rejects: [FAIL] row activity                      worst violation 3.052e-05 (3.052e-05 relative to the row's terms) on R101; [FAIL] activity agreement                max /ours - solver's/ = 3.052e-05; [
-- `scaled_scsd8`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.659e-04 (1.659e-04 relative to the row's terms) on R173; [FAIL] activity agreement                max /ours - solver's/ = 1.659e-04; [
 - `scaled_sctap1`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.831e-03 (1.831e-03 relative to the row's terms) on R150; [FAIL] activity agreement                max /ours - solver's/ = 1.831e-03; [
 - `scaled_sctap2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         3 unbounded in the direction used, so the aggregate proves nothing: C280, C281, C282
-- `scaled_sctap3`: optimal, verifier rejects: [FAIL] row activity                      worst violation 9.766e-04 (9.766e-04 relative to the row's terms) on R171; [FAIL] activity agreement                max /ours - solver's/ = 9.766e-04; [
-- `scaled_seba`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C76
+- `scaled_sctap3`: optimal, verifier rejects: [FAIL] row activity                      worst violation 3.562e-03 (3.562e-03 relative to the row's terms) on R457; [FAIL] activity agreement                max /ours - solver's/ = 3.562e-03; [
+- `scaled_seba`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C76, C255
 - `scaled_share1b`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         2 unbounded in the direction used, so the aggregate proves nothing: C34, C133
 - `scaled_share2b`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.908e-04 (1.908e-04 relative to the row's terms) on R74; [FAIL] activity agreement                max /ours - solver's/ = 4.232e-03; [F
 - `scaled_shell`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C516
@@ -4773,21 +4760,24 @@ Measured on SANKHYA commit `ab3f4a1` against HiGHS 1.15.1 (highspy, separate pro
 - `scaled_standata`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C235
 - `scaled_standmps`: infeasible, verifier rejects: [FAIL] infeasibility proof                the rows aggregate to at least 0.000000000000e+00, the column bounds allow at most 9.918212890625e-05, a contradiction of -9.918e-05
 - `scaled_stocfor1`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C86
-- `scaled_stocfor2`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         3 unbounded in the direction used, so the aggregate proves nothing: C28, C742, C1253
-- `scaled_stocfor3`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         4 unbounded in the direction used, so the aggregate proves nothing: C102, C566, C1782, C1836
 - `scaled_truss`: optimal, verifier rejects: [FAIL] row activity                      worst violation 1.562e-02 (1.562e-02 relative to the row's terms) on R458; [FAIL] activity agreement                max /ours - solver's/ = 1.562e-02; [
-- `scaled_tuff`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C399
+- `scaled_tuff`: infeasible on an instance that is optimal
 - `scaled_vtp.base`: infeasible, verifier rejects: [FAIL] aggregate is bounded above         1 unbounded in the direction used, so the aggregate proves nothing: C114
-- `scaled_wood1p`: optimal, verifier rejects: [FAIL] reduced costs                     max /c - A^T y - d/ = 9.080e-06 (9.080e-06 relative to its terms) on C305
+- `scaled_wood1p`: optimal, verifier rejects: [FAIL] reduced costs                     max /c - A^T y - d/ = 9.043e-06 (9.043e-06 relative to its terms) on C305
+- `unbounded_1`: unbounded, verifier rejects: [FAIL] structure  missing 12 columns, 8 rows
 
-**highs, failed** (6):
+**highs, failed** (10):
 
-- `scaled_fit1p`: no verdict: kSolveError
-- `scaled_perold`: no verdict: kNotset
-- `scaled_pilot.ja`: no verdict: kNotset
-- `scaled_pilotnov`: no verdict: kNotset
-- `scaled_sierra`: no verdict: kNotset
-- `scaled_woodw`: no verdict: kNotset
+- `scaled_fit2p`: no verdict: time_limit
+- `scaled_perold`: no verdict: kModelEmpty
+- `scaled_pilot.ja`: no verdict: kModelEmpty
+- `scaled_pilotnov`: no verdict: kModelEmpty
+- `scaled_scagr25`: no verdict: infeasible_or_unbounded
+- `scaled_scsd8`: no verdict: kUnknown
+- `scaled_sierra`: no verdict: kModelEmpty
+- `scaled_stocfor2`: no verdict: infeasible_or_unbounded
+- `scaled_stocfor3`: no verdict: infeasible_or_unbounded
+- `scaled_woodw`: no verdict: kModelEmpty
 
 **scip, wrong** (70):
 
