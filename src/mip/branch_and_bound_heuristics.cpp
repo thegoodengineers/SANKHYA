@@ -163,7 +163,10 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
 
   // LOCK ROUNDING, every node: O(nonzeros), no LP, and it succeeds exactly where nearest
   // rounding fails for the reason locks see - a covering row rounded the wrong way.
-  if (schedule_.lock_rounding) {
+  // mip_heuristics_until_incumbent: with an incumbent in hand the optional heuristics
+  // below stand down, so a search that has a point spends what the default schedule does.
+  const bool spend = !schedule_.until_incumbent || !have_incumbent_;
+  if (schedule_.lock_rounding && spend) {
     HeuristicStats& s = heuristic_stats_[kLockRounding];
     const Timer clock;
     ++s.calls;
@@ -196,7 +199,7 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
   // are what every rounding keeps anyway; the sub-MIP searches the box around the rest,
   // which is exactly where a rounding goes wrong. Skipped when fewer than half the integer
   // columns are integral - that box is the model itself.
-  if (schedule_.rens && node_index == 0) {
+  if (schedule_.rens && node_index == 0 && spend) {
     HeuristicStats& s = heuristic_stats_[kRens];
     const Timer clock;
     ++s.calls;
@@ -225,8 +228,8 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
   // the solve is deterministic, its TIME at a tenth of the solve's. The node cap alone was
   // not enough: on pk1 a sub-MIP node cost seven main nodes, and 601 of them - inside the
   // node cap - took 8.8 s of a 20 s solve.
-  if (schedule_.rins && schedule_.rins_frequency > 0 && have_incumbent_ && node_index > 0 &&
-      nodes_explored_ % schedule_.rins_frequency == 0) {
+  if (schedule_.rins && !schedule_.until_incumbent && schedule_.rins_frequency > 0 &&
+      have_incumbent_ && node_index > 0 && nodes_explored_ % schedule_.rins_frequency == 0) {
     HeuristicStats& s = heuristic_stats_[kRins];
     const Count budget = std::max<Count>(
         schedule_.rins_nodes,
@@ -293,8 +296,13 @@ void BranchAndBound::run_dives(Index node_index, const std::vector<double>& x) {
   const bool due = node_index == 0 || (schedule_.dive_frequency > 0 &&
                                        nodes_explored_ % schedule_.dive_frequency == 0);
   if (!due) return;
+  // mip_heuristics_until_incumbent: with an incumbent, the default schedule - the
+  // fractional dive at the root and nothing below it.
+  const bool stand_down = schedule_.until_incumbent && have_incumbent_;
+  if (stand_down && node_index != 0) return;
   for (std::size_t r = 0; r < kDiveRules; ++r) {
     if (!schedule_.dive[r]) continue;
+    if (stand_down && r != static_cast<std::size_t>(DiveRule::kFractional)) continue;
     const auto rule = static_cast<DiveRule>(r);
     if (rule == DiveRule::kGuided && !have_incumbent_) continue;  // nothing to be guided by
     dive(kDiveFractional + r, rule, x);
@@ -601,7 +609,9 @@ void BranchAndBound::run_root_lns(const Solution& relaxation) {
   if (integer_columns_.empty() || (seed_ != nullptr && !seed_->is_root)) return;
   if (schedule_.prop_dive && !have_incumbent_)
     propagation_dive(kPropDive, relaxation.col_value);
-  if (schedule_.local_branching) local_branching(kLocalBranching, relaxation.col_value);
+  if (schedule_.local_branching && !schedule_.until_incumbent) {
+    local_branching(kLocalBranching, relaxation.col_value);
+  }
 }
 
 void BranchAndBound::report_heuristics() {

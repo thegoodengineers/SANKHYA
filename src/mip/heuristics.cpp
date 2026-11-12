@@ -645,7 +645,9 @@ bool resolve_switch(const Options& options, const char* name, bool master) {
 
 HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   HeuristicSchedule s;
-  const bool master = options.get_bool("mip_heuristics");
+  s.until_incumbent =
+      options.get_bool("mip_heuristics_until_incumbent") && !options.get_bool("mip_heuristics");
+  const bool master = options.get_bool("mip_heuristics") || s.until_incumbent;
   s.lock_rounding = resolve_switch(options, "mip_heur_lock_rounding", master);
   s.repair = resolve_switch(options, "mip_heur_repair", master);
   s.pump = resolve_switch(options, "mip_heur_pump", master);
@@ -678,6 +680,13 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   s.pdhg_pump_rounds = static_cast<int>(options.get_int("gpu_pump_max_iter"));
   s.fix_and_propagate_backtracks = static_cast<int>(options.get_int("gpu_fix_backtrack"));
   s.seconds_budgets = !options.get_bool("deterministic");
+  if (s.until_incumbent) {
+    // Deeper dives, repeated through the tree, with the one-level backtrack: only while
+    // there is no incumbent (BranchAndBound::run_dives), so an explicit setting wins.
+    s.dive_backtrack = true;
+    s.dive_lp_resolves = std::max(s.dive_lp_resolves, tol::kDivingNoIncumbentLpResolves);
+    if (s.dive_frequency == 0) s.dive_frequency = tol::kDivingNoIncumbentFrequency;
+  }
   return s;
 }
 

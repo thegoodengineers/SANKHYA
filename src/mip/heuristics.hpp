@@ -154,6 +154,9 @@ struct HeuristicSchedule {
   int fix_and_propagate_backtracks = 0;
   bool dive[kDiveRules] = {false, false, false, false};  ///< by DiveRule
   bool dive_backtrack = false;
+  /// mip_heuristics_until_incumbent: the optional heuristics run only while the search
+  /// has no incumbent; once it has one the schedule is the default one again.
+  bool until_incumbent = false;
   Count rins_frequency = 0;
   Count rins_nodes = 0;
   Count rens_nodes = 0;
