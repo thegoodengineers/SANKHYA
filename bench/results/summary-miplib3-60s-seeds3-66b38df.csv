@@ -1,0 +1,66 @@
+instance,seeds,seeds_matched,seeds_proved,matched_seeds,proved_seeds,sgm_seconds,sgm_first_feasible_seconds,mean_primal_integral,time_limit,git_commit,machine
+10teams,3,3,2,0 1 2,1 2,24.2169,4.2671,7.9805,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+air03,3,3,3,0 1 2,0 1 2,1.7476,0.7547,1.1564,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+air04,3,0,0,,,60.0000,9.9526,11.7788,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+air05,3,1,1,2,2,56.3296,5.4400,6.2147,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+arki001,3,0,0,,,60.0000,4.5952,4.7167,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+bell3a,3,3,3,0 1 2,0 1 2,15.0864,0.0566,0.0569,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+bell5,3,3,3,0 1 2,0 1 2,4.0587,0.0009,0.0093,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+blend2,3,3,3,0 1 2,0 1 2,3.1707,0.4286,0.5300,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+cap6000,3,0,0,,,60.0000,0.0069,12.3999,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+dano3mip,3,0,0,,,60.0000,60.0000,,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+danoint,3,0,0,,,60.0000,0.7894,3.6107,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+dcmulti,3,3,3,0 1 2,0 1 2,1.3585,0.0339,0.0477,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+dsbmip,3,3,3,0 1 2,0 1 2,15.6770,11.3789,12.4296,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+egout,3,3,3,0 1 2,0 1 2,0.0358,0.0008,0.0038,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+enigma,3,3,3,0 1 2,0 1 2,0.4939,0.4881,0.4913,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+fast0507,3,0,0,,,60.0000,3.0561,13.2490,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+fiber,3,3,3,0 1 2,0 1 2,10.0124,0.3292,1.1850,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+fixnet6,3,3,3,0 1 2,0 1 2,13.4602,0.0062,4.1822,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+flugpl,3,3,3,0 1 2,0 1 2,0.0339,0.0273,0.0273,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+gen,3,3,3,0 1 2,0 1 2,0.2593,0.0135,0.0143,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+gesa2,3,3,3,0 1 2,0 1 2,2.6919,0.0131,0.1414,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+gesa2_o,3,3,3,0 1 2,0 1 2,13.3541,0.3861,0.6076,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+gesa3,3,3,3,0 1 2,0 1 2,6.5148,0.0142,0.1805,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+gesa3_o,3,3,3,0 1 2,0 1 2,6.5390,0.2804,0.3100,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+gt2,3,3,3,0 1 2,0 1 2,0.1778,0.0005,0.0226,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+harp2,3,0,0,,,60.0000,0.0029,4.8111,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+khb05250,3,3,3,0 1 2,0 1 2,0.1877,0.0040,0.0123,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+l152lav,3,3,3,0 1 2,0 1 2,3.5486,0.5059,0.5289,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+lseu,3,3,3,0 1 2,0 1 2,1.2214,0.0057,0.0176,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+markshare1,3,0,0,,,60.0000,0.0101,58.0088,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+markshare2,3,0,0,,,60.0000,0.0006,59.0459,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+mas74,3,0,0,,,60.0000,0.0011,8.8852,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+mas76,3,0,0,,,60.0000,0.0011,1.1914,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+misc03,3,3,3,0 1 2,0 1 2,1.7868,0.0573,0.1199,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+misc06,3,3,3,0 1 2,0 1 2,0.8697,0.3310,0.3370,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+misc07,3,3,2,0 1 2,0 1,44.3776,0.2584,0.7364,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+mitre,3,0,0,,,60.0000,60.0000,60.0206,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+mkc,3,0,0,,,60.0000,3.2221,12.9797,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+mod008,3,3,3,0 1 2,0 1 2,1.7483,0.0004,0.0022,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+mod010,3,3,3,0 1 2,0 1 2,0.8707,0.3732,0.3785,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+mod011,3,0,0,,,60.0000,4.1168,8.5186,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+modglob,3,3,3,0 1 2,0 1 2,1.3600,0.0041,0.0465,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+noswot,3,1,0,0,,60.0000,0.0015,1.2916,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+nw04,3,0,0,,,60.0000,11.2029,11.8609,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+p0033,3,3,3,0 1 2,0 1 2,0.0487,0.0151,0.0151,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+p0201,3,3,3,0 1 2,0 1 2,1.2708,0.0042,0.0891,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+p0282,3,3,3,0 1 2,0 1 2,0.5335,0.0179,0.1150,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+p0548,3,3,3,0 1 2,0 1 2,13.6430,0.0166,1.2000,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+p2756,3,0,0,,,60.0000,1.2324,32.9907,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+pk1,3,0,0,,,60.0000,0.0012,25.5733,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+pp08a,3,3,3,0 1 2,0 1 2,1.9131,0.0015,0.0872,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+pp08aCUTS,3,3,3,0 1 2,0 1 2,2.3425,0.0022,0.1388,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+qiu,3,3,1,0 1 2,2,59.3082,0.7590,10.0357,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+qnet1,3,3,3,0 1 2,0 1 2,5.2950,0.0181,0.8435,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+qnet1_o,3,3,3,0 1 2,0 1 2,3.0144,0.0521,0.4173,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+rentacar,3,3,3,0 1 2,0 1 2,9.3439,8.9287,9.0672,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+rgn,3,3,3,0 1 2,0 1 2,0.8743,0.0062,0.0103,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+rout,3,0,0,,,60.0000,0.0195,3.6444,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+set1ch,3,3,3,0 1 2,0 1 2,2.2280,0.0041,0.6360,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+seymour,3,0,0,,,60.0000,2.1992,3.8322,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+stein27,3,3,3,0 1 2,0 1 2,0.2888,0.0039,0.0039,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+stein45,3,3,3,0 1 2,0 1 2,37.5603,0.0009,0.2106,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+swath,3,0,0,,,60.0000,51.1711,54.2966,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+vpm1,3,3,3,0 1 2,0 1 2,0.1129,0.0032,0.0193,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
+vpm2,3,3,3,0 1 2,0 1 2,25.9867,0.3316,0.9257,60,66b38df,github-actions ubuntu-24.04; Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz; 4 cores; 16 GiB RAM; Linux-x86_64
