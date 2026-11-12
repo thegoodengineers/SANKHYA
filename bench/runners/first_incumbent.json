@@ -1,0 +1,22 @@
+{
+  "about": "Models on which a committed run ended with no incumbent, or with the dual bound at the optimum and the incumbent away from it. bench/runners/first_incumbent.py runs them, one arm per option.",
+  "sources": {
+    "miplib2017-bench": "bench/results/miplib2017-bench-60s-24e0196.csv against bench/results/highs-miplib2017-bench-60s-24e0196.csv",
+    "miplib3": "the MIPLIB 3 head-to-head at ab3f4a1"
+  },
+  "instances": {
+    "neos-3381206-awhea": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
+    "nursesched-sprint02": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
+    "h80x6320d": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
+    "app1-1": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
+    "roll3000": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
+    "piperout-08": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
+    "piperout-27": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
+    "neos-950242": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
+    "ns1208400": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
+    "decomp2": {"set": "miplib2017-bench", "why": "dual bound at the optimum, incumbent away from it"},
+    "neos-827175": {"set": "miplib2017-bench", "why": "dual bound at the optimum, incumbent away from it"},
+    "mitre": {"set": "miplib3", "why": "no incumbent at the limit"},
+    "cap6000": {"set": "miplib3", "why": "dual bound at the optimum, incumbent inside the 1e-4 gap but away from it"}
+  }
+}

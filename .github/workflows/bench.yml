@@ -48,6 +48,7 @@ on:
           - miplib-tier1
           - miplib3
           - miplib2017-bench
+          - first-incumbent
           - refinery
           - head-to-head-refinery-qp
           - ab-netlib
@@ -138,7 +139,7 @@ jobs:
 
       # #1158: HiGHS beside SANKHYA on the same 65 MIPLIB 3 models, same job, same machine.
       - name: Install HiGHS for the MIPLIB 3 head-to-head
-        if: inputs.suite == 'miplib3' || inputs.suite == 'miplib2017-bench'
+        if: inputs.suite == 'miplib3' || inputs.suite == 'miplib2017-bench' || inputs.suite == 'first-incumbent'
         run: pip install numpy highspy
 
       # #983: the Maros-Meszaros head-to-head runs every rival compare_suite.py knows - HiGHS,
@@ -228,6 +229,18 @@ jobs:
             # #1199: options is the shard, K/N; the fetch writes its names beside the models.
             miplib2017-bench)
               python3 bench/runners/fetch_miplib.py --benchmark --shard "${OPTIONS:-1/1}" ;;
+            # The subset of bench/runners/first_incumbent.json: its MIPLIB 2017 models by
+            # name, and MIPLIB 3 whole (the manifest put back, as for miplib3).
+            first-incumbent)
+              python3 - <<'PY' > "$RUNNER_TEMP/first-incumbent-names.txt"
+          import json
+          subset = json.load(open('bench/runners/first_incumbent.json'))['instances']
+          print(' '.join(n for n, e in sorted(subset.items()) if e['set'] == 'miplib2017-bench'))
+          PY
+              # shellcheck disable=SC2046  # names are split on spaces on purpose
+              python3 bench/runners/fetch_miplib.py --benchmark $(cat "$RUNNER_TEMP/first-incumbent-names.txt")
+              python3 bench/runners/fetch_miplib3.py
+              git checkout -- data/miplib3/manifest.json ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
             mittelmann) python3 bench/runners/fetch_mittelmann.py --set small ;;
             lpfeas14) python3 bench/runners/mittelmann_cuopt.py --fetch ;;
@@ -293,6 +306,11 @@ jobs:
                   --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} ;;
               # #1199: one shard of the 240-model MIPLIB 2017 benchmark set, SANKHYA on one
               # thread then HiGHS on the same files in the same job.
+              # options are first_incumbent.py's own: --arm NAME=opt=val[,opt=val] ...
+              first-incumbent)
+                python3 bench/runners/first_incumbent.py --binary build/sankhya \
+                  --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} \
+                  --out "bench/results/first-incumbent-${sha}.csv" --logs "$out/logs" "$@" ;;
               miplib2017-bench)
                 shard="${OPTIONS:-1/1}"; k="${shard%/*}"; n="${shard#*/}"
                 mapfile -t names < "data/miplib2017-bench/shard-${k}-of-${n}.txt"
