@@ -641,7 +641,7 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back(
         {"root_cut_loop_when",
          OptionType::String,
-         std::string("flow-covers"),
+         std::string("auto"),
          "When root_cut_loop runs its rounds (#1158). always: on every model. "
          "switched-flows: only on a model with a variable upper bound x <= u y (a "
          "two-nonzero row pairing a continuous column with an integer one), the "
@@ -658,10 +658,14 @@ const std::vector<OptionSpec>& Options::registry() {
          "#1187 fix (bench/results/option-ab-miplib3-covers-gated-recipe-fix-2c71558.csv, "
          "#1158: 65 x 3 seeds, 60 s, one thread, the four together against the old defaults: "
          "proved 34/34/34 -> 37/38/41 per seed, 189 verified against 188, nothing lost but two "
-         "gap-target stops).",
+         "gap-target stops). auto: flow-covers, and also a model with a variable upper "
+         "bound on which round 1 took no flow cover, on probation: the rounds after round 1 "
+         "are kept only if together they gain at least what round 1 gained, and otherwise "
+         "the root goes back to its state after round 1 and the pool stays off (gesa2 and "
+         "mod011 enter and keep their rounds; bell5 enters and is rolled back).",
          0.0,
          0.0,
-         {"always", "switched-flows", "flow-covers"}});
+         {"always", "switched-flows", "flow-covers", "auto"}});
     s.push_back({"mip_heuristics",
                  OptionType::Bool,
                  false,

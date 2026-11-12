@@ -1110,6 +1110,8 @@ class BranchAndBound {
   static constexpr double kNoPoolGap = 1e300;
 
   Count nodes_explored_ = 0;
+  /// The root loop was entered under `auto` without a flow cover, so on probation (#1158).
+  bool root_loop_probation_ = false;
   /// Root relaxation objective (internal, minimise space) before and after the root cut
   /// round; NaN until the root LP solved. Reported through Solution::root_bound (#221).
   double root_bound_internal_ = std::numeric_limits<double>::quiet_NaN();
