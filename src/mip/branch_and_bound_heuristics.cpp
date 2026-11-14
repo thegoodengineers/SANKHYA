@@ -343,10 +343,8 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
   // point from Feasibility Jump before the root LP, the deeper backtracking root dive
   // alone cost the proof on all three seeds (bench.yml run 43160544582).
   const bool stood_down = schedule_.until_incumbent && have_incumbent_;
-  const int resolve_cap =
-      stood_down ? schedule_.base_dive_lp_resolves : schedule_.dive_lp_resolves;
-  const bool may_backtrack =
-      stood_down ? schedule_.base_dive_backtrack : schedule_.dive_backtrack;
+  const int resolve_cap = stood_down ? schedule_.base_dive_lp_resolves : schedule_.dive_lp_resolves;
+  const bool may_backtrack = stood_down ? schedule_.base_dive_backtrack : schedule_.dive_backtrack;
   while (depth < tol::kDivingMaxDepth && lp_resolves < resolve_cap) {
     const DiveChoice choice = choose_dive_column(original_, locks_, integer_columns_, x, rule,
                                                  guide, integrality_tolerance_);
