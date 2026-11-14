@@ -64,6 +64,7 @@ import hashlib
 import json
 import math
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -362,6 +363,10 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
         profile_path = Path(tmp) / "profile.json"
         if profile:
             command += ["--option", "profile=detailed", "--option", f"profile_out={profile_path}"]
+        if OVERRUN_LOG_DIR is not None and shutil.which("stdbuf"):
+            # Line-buffered: a pipe is block-buffered, and a run killed at the hang margin
+            # took everything it had printed with it (rd-rplusc-21 left an empty log).
+            command = ["stdbuf", "-oL", *command]
         started = time.perf_counter()
         try:
             completed = subprocess.run(command, capture_output=True, text=True,
