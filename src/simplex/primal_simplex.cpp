@@ -1583,6 +1583,33 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
     }
     if (was_phase_one && !phase_one) {
       logger_.info("Phase 1 complete after {} iterations: primal feasible", iterations);
+      {
+        // scratch: the same basis reached at the end of phase 1 again and again is a cycle.
+        std::uint64_t h = 0;
+        for (Index slot = 0; slot < m_; ++slot) {
+          const auto k1 = static_cast<std::uint64_t>(0x9e3779b97f4a7c15ULL);
+          const auto k2 = static_cast<std::uint64_t>(0xbf58476d1ce4e5b9ULL);
+          const auto k3 = static_cast<std::uint64_t>(0x94d049bb133111ebULL);
+          std::uint64_t z = static_cast<std::uint64_t>(basis_[static_cast<std::size_t>(slot)]) + k1;
+          z = static_cast<std::uint64_t>((z ^ (z >> 30)) * k2);
+          z = static_cast<std::uint64_t>((z ^ (z >> 27)) * k3);
+          h = static_cast<std::uint64_t>(h + (z ^ (z >> 31)));
+        }
+        static thread_local std::vector<std::pair<std::uint64_t, int>> seen;
+        if (iterations_seen_ == 0 || seen.size() > 100000) seen.clear();
+        int count = 0;
+        for (auto& entry : seen) {
+          if (entry.first == h) count = ++entry.second;
+        }
+        if (count == 0) seen.emplace_back(h, 1);
+        if (count > 64) {
+          seen.clear();
+          compute_reduced_costs(false);
+          return finish(SolveStatus::kNumericalError,
+                        fmt::format("cycling: phase 1 ended at the same basis {} times", count),
+                        iterations, timer.elapsed_seconds());
+        }
+      }
       degenerate_run = 0;
       bland = false;
       // The composite phase-1 objective is a different function from the phase-2 one, so
