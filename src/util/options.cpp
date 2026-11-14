@@ -684,6 +684,20 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"mip_heuristics_until_incumbent",
+                 OptionType::Bool,
+                 false,
+                 "Run the optional primal heuristics (everything mip_heuristics switches on, "
+                 "less RINS and local branching, which need an incumbent) only while the "
+                 "search has NO incumbent, with dives of up to "
+                 "tol::kDivingNoIncumbentLpResolves LP re-solves repeated every "
+                 "tol::kDivingNoIncumbentFrequency nodes and the one-level backtrack "
+                 "(Achterberg 2007, sec. 9.2; Berthold 2006). Once a point is in hand the "
+                 "schedule is the default one again, so a search that finds a point early "
+                 "spends nothing more. mip_heuristics=true overrides it. OFF until its A/B.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_rins_frequency",
                  OptionType::Int,
                  std::int64_t{100},

@@ -401,6 +401,24 @@ TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   EXPECT_FALSE(s.rins);
   EXPECT_TRUE(s.rens);
 
+  // mip_heuristics_until_incumbent: every auto on, flagged to stand down at the first
+  // incumbent, with the deeper, repeated, backtracking dives; off by default, and the
+  // master switch overrides it.
+  EXPECT_FALSE(HeuristicSchedule::from(Options()).until_incumbent);
+  Options until;
+  until.set_bool("mip_heuristics_until_incumbent", true);
+  s = HeuristicSchedule::from(until);
+  EXPECT_TRUE(s.until_incumbent);
+  EXPECT_TRUE(s.lock_rounding && s.repair && s.pump && s.rens && s.prop_dive);
+  EXPECT_TRUE(s.dive_backtrack);
+  EXPECT_EQ(s.dive_lp_resolves, tol::kDivingNoIncumbentLpResolves);
+  EXPECT_EQ(s.dive_frequency, tol::kDivingNoIncumbentFrequency);
+  // Once it stands down a dive is the default one: the options' own cap, no backtrack.
+  EXPECT_EQ(s.base_dive_lp_resolves, tol::kDivingMaxLpResolves);
+  EXPECT_FALSE(s.base_dive_backtrack);
+  until.set_bool("mip_heuristics", true);
+  EXPECT_FALSE(HeuristicSchedule::from(until).until_incumbent);
+
   // One heuristic on by name, the master off: the one-heuristic A/B.
   Options one;
   one.set_string("mip_heur_rens", "on");
