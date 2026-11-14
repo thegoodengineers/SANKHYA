@@ -365,8 +365,10 @@ TEST(Heuristics, RensFixesTheIntegralColumnsAndBoxesTheRest) {
 TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   // Defaults: rounding, the fractional dive, parity (on since its A/B, #841:
   // bench/results/miplib-841-parity-default-*-seeds3-fa9e8b4d.csv) and Feasibility Jump
-  // (on since the #506 A/B, #930); nothing else.
+  // (on since the #506 A/B, #930); nothing else once the search has an incumbent, which is
+  // the schedule of mip_heuristics=false (the default is auto, tested below).
   Options defaults;
+  defaults.set_string("mip_heuristics", "false");
   HeuristicSchedule s = HeuristicSchedule::from(defaults);
   EXPECT_TRUE(s.dive[rule_index(DiveRule::kFractional)]);
   EXPECT_TRUE(s.fj);
@@ -401,12 +403,11 @@ TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   EXPECT_FALSE(s.rins);
   EXPECT_TRUE(s.rens);
 
-  // mip_heuristics_until_incumbent: every auto on, flagged to stand down at the first
+  // mip_heuristics=auto, the default: every auto on, flagged to stand down at the first
   // incumbent, with the deeper, repeated, backtracking dives; off by default, and the
   // master switch overrides it.
-  EXPECT_FALSE(HeuristicSchedule::from(Options()).until_incumbent);
+  EXPECT_TRUE(HeuristicSchedule::from(Options()).until_incumbent);
   Options until;
-  until.set_bool("mip_heuristics_until_incumbent", true);
   s = HeuristicSchedule::from(until);
   EXPECT_TRUE(s.until_incumbent);
   EXPECT_TRUE(s.lock_rounding && s.repair && s.pump && s.rens && s.prop_dive);
@@ -421,6 +422,7 @@ TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
 
   // One heuristic on by name, the master off: the one-heuristic A/B.
   Options one;
+  one.set_string("mip_heuristics", "false");
   one.set_string("mip_heur_rens", "on");
   s = HeuristicSchedule::from(one);
   EXPECT_TRUE(s.rens);

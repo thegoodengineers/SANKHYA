@@ -84,8 +84,7 @@ static_assert(kDiveGuided - kDiveFractional + 1 == kDiveRules);
 Options sub_mip_options(const Options& base, Count node_limit, double time_limit) {
   Options sub = base;
   sub.set_bool("log_to_console", false);
-  sub.set_bool("mip_heuristics", false);
-  sub.set_bool("mip_heuristics_until_incumbent", false);
+  sub.set_string("mip_heuristics", "false");
   for (const char* name :
        {"mip_heur_lock_rounding", "mip_heur_repair", "mip_heur_pump", "mip_heur_rins",
         "mip_heur_rens", "mip_heur_fj", "mip_heur_parity", "mip_heur_prop_dive",
@@ -164,7 +163,7 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
 
   // LOCK ROUNDING, every node: O(nonzeros), no LP, and it succeeds exactly where nearest
   // rounding fails for the reason locks see - a covering row rounded the wrong way.
-  // mip_heuristics_until_incumbent: with an incumbent in hand the optional heuristics
+  // mip_heuristics=auto: with an incumbent in hand the optional heuristics
   // below stand down, so a search that has a point spends what the default schedule does.
   const bool spend = !schedule_.until_incumbent || !have_incumbent_;
   if (schedule_.lock_rounding && spend) {
@@ -229,8 +228,8 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
   // the solve is deterministic, its TIME at a tenth of the solve's. The node cap alone was
   // not enough: on pk1 a sub-MIP node cost seven main nodes, and 601 of them - inside the
   // node cap - took 8.8 s of a 20 s solve.
-  if (schedule_.rins && !schedule_.until_incumbent && schedule_.rins_frequency > 0 &&
-      have_incumbent_ && node_index > 0 && nodes_explored_ % schedule_.rins_frequency == 0) {
+  if (schedule_.rins && schedule_.rins_frequency > 0 && have_incumbent_ && node_index > 0 &&
+      nodes_explored_ % schedule_.rins_frequency == 0) {
     HeuristicStats& s = heuristic_stats_[kRins];
     const Count budget = std::max<Count>(
         schedule_.rins_nodes,
@@ -297,7 +296,7 @@ void BranchAndBound::run_dives(Index node_index, const std::vector<double>& x) {
   const bool due = node_index == 0 || (schedule_.dive_frequency > 0 &&
                                        nodes_explored_ % schedule_.dive_frequency == 0);
   if (!due) return;
-  // mip_heuristics_until_incumbent: with an incumbent, the default schedule - the
+  // mip_heuristics=auto: with an incumbent, the default schedule - the
   // fractional dive at the root and nothing below it.
   const bool stand_down = schedule_.until_incumbent && have_incumbent_;
   if (stand_down && node_index != 0) return;
@@ -338,7 +337,7 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
   int lp_resolves = 0;
   bool backtracked = false;
 
-  // mip_heuristics_until_incumbent: a dive that starts with an incumbent in hand is the
+  // mip_heuristics=auto: a dive that starts with an incumbent in hand is the
   // default dive - the options' own re-solve cap and backtrack. On gesa2, which has a
   // point from Feasibility Jump before the root LP, the deeper backtracking root dive
   // alone cost the proof on all three seeds (bench.yml run 43160544582).
@@ -619,9 +618,7 @@ void BranchAndBound::run_root_lns(const Solution& relaxation) {
   if (integer_columns_.empty() || (seed_ != nullptr && !seed_->is_root)) return;
   if (schedule_.prop_dive && !have_incumbent_)
     propagation_dive(kPropDive, relaxation.col_value);
-  if (schedule_.local_branching && !schedule_.until_incumbent) {
-    local_branching(kLocalBranching, relaxation.col_value);
-  }
+  if (schedule_.local_branching) local_branching(kLocalBranching, relaxation.col_value);
 }
 
 void BranchAndBound::report_heuristics() {

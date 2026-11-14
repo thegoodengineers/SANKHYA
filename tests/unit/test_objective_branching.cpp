@@ -218,20 +218,24 @@ TEST(ObjectiveBranching, AResumedSearchReachesTheEnumeratedOptimum) {
   // on the row's logical index and must be admitted and re-applied by the resume.
   std::mt19937 rng(41810000);
   int resumed_short = 0;
+  // The tree as this was measured: with the no-incumbent heuristics most of these small
+  // models close before a quarter of their nodes, and there is nothing left to resume.
+  Options base = quiet();
+  base.set_string("mip_heuristics", "false");
   for (int trial = 0; trial < 40; ++trial) {
     const Model m = random_model(rng, trial);
-    const Solution whole = solve(m, quiet());
+    const Solution whole = solve(m, base);
     if (whole.status != SolveStatus::kOptimal || whole.nodes < 12) continue;
 
     testing::TempFile file("", ".chk");
-    Options first = quiet();
+    Options first = base;
     first.set_string("checkpoint", file.path());
     first.set_int("node_limit", std::max<Count>(2, whole.nodes / 4));
     const Solution stopped = solve(m, first);
     if (stopped.status == SolveStatus::kOptimal) continue;  // closed early: nothing to resume
     ++resumed_short;
 
-    Options second = quiet();
+    Options second = base;
     second.set_string("resume", file.path());
     const Solution resumed = solve(m, second);
     ASSERT_EQ(resumed.status, SolveStatus::kOptimal)

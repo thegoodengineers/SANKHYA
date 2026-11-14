@@ -457,12 +457,16 @@ TEST(BranchAndBound, StopsOnALooseRelativeGapAndReportsOptimalWithinIt) {
       make_milp({{5.0, 4.0, 3.0, 2.0}}, {-kInfinity}, {10.0}, {-10.0, -7.0, -4.0, -3.0},
                 {1.0, 1.0, 1.0, 1.0}, {true, true, true, true});
 
-  // Baseline: default (tight) gaps close the tree completely and prove optimality.
-  const Solution tight = solve(model, mip_options());
+  // Baseline: default (tight) gaps close the tree completely and prove optimality. Without
+  // the no-incumbent heuristics, which find the optimum at the root and leave no gap to
+  // stop on.
+  Options base = mip_options();
+  base.set_string("mip_heuristics", "false");
+  const Solution tight = solve(model, base);
   ASSERT_EQ(tight.status, SolveStatus::kOptimal);
 
   // A relative gap loose enough that the search should stop long before the tree closes.
-  Options options = mip_options();
+  Options options = base;
   options.set_double("mip_relative_gap", 0.5);
   const Solution loose = solve(model, options);
 
@@ -914,6 +918,7 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithNodePricing) {
 // density filter, so it is the one that must have removed and re-added rows.
 TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithTheCutPool) {
   Options options = mip_options();
+  options.set_string("mip_heuristics", "false");  // a tree deep enough to age cuts
   options.set_bool("enable_root_cuts", true);
   options.set_int("tree_cut_depth", 4);
   options.set_bool("mip_cut_pooling", true);

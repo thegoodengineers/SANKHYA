@@ -95,7 +95,10 @@ sankhya_status check_option(const char* name, sankhya::OptionType wanted) {
                                           "'; run `sankhya options` for the list");
   }
   const sankhya::OptionSpec* spec = sankhya::Options::find_spec(name);
-  if (spec != nullptr && spec->type != wanted) {
+  // A string option that takes true and false is also written by the bool setter.
+  const bool bool_into_string =
+      wanted == sankhya::OptionType::Bool && sankhya::Options::takes_true_and_false(name);
+  if (spec != nullptr && spec->type != wanted && !bool_into_string) {
     return fail(SANKHYA_ERROR_OPTION,
                 std::string("option '") + name + "' is not of the type this setter writes");
   }
