@@ -338,7 +338,8 @@ TEST(PresolveProbing, ContinuousBoundsAreWrittenOnlyWhenAsked) {
   // probing gives x <= 3 (y = 0: x <= 0; y = 1: x <= 7 - 4). By default that bound on the
   // continuous column is not written (#1158: it changed the flow covers on modglob), so the
   // reduced model's x has the bound it has without probing; with
-  // presolve_probing_continuous_bounds it has probing's. The optimum is the same all three ways.
+  // presolve_probing_continuous_bounds it has probing's. The optimum is the same all three
+  // ways.
   Model model =
       build({{-5, 1}, {4, 1}}, {-kInf, -kInf}, {0.0, 7.0}, {0, 0}, {1, kInf}, {true, false});
   model.col_cost = {0, -1};
