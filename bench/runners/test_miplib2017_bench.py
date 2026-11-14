@@ -178,6 +178,45 @@ row = miplib.make_row("p", {"published_optimal": 3.0}, 3.0,
                        "wall_seconds": 1.0}, "abc1234", "", 1, "box", "now")
 check(row["memory_limit_gb"] == "", "the CSV's memory_limit_gb is blank with no cap")
 
+print("peak memory, and the log of a run that died")
+with tempfile.TemporaryDirectory() as tmp:
+    eater = Path(tmp) / "eater.py"
+    eater.write_text("import time\nblock = bytearray(200 * 1024 ** 2)\n"
+                     "for i in range(0, len(block), 4096):\n    block[i] = 1\n"
+                     "print('Root cuts: separating', flush=True)\ntime.sleep(1.5)\n"
+                     "raise SystemExit(7)\n", encoding="utf-8")
+    logs = Path(tmp) / "logs"
+    saved_dir = miplib.OVERRUN_LOG_DIR
+    miplib.OVERRUN_LOG_DIR = logs
+    try:
+        import subprocess  # noqa: PLC0415
+        real_run = subprocess.run
+
+        def fake_run(command, **kwargs):
+            return real_run([sys.executable, str(eater)], **kwargs)
+
+        subprocess.run = fake_run
+        result = miplib.solve(Path("unused"), Path("eater.mps"), 30.0, False)
+    finally:
+        subprocess.run = real_run
+        miplib.OVERRUN_LOG_DIR = saved_dir
+    kept = logs / "eater.log"
+    text = kept.read_text(encoding="utf-8") if kept.exists() else ""
+    check(result["status"] == "crashed" and "[exit 7]" in result["message"]
+          and "ended with no answer: exit 7" in text
+          and text.rstrip().endswith("Root cuts: separating"),
+          "a run that dies with no answer leaves its log, the last line where it was", text)
+    if Path("/proc/self/status").exists():
+        check(result["peak_rss_mb"] is not None and 200 <= result["peak_rss_mb"] < 400,
+              "its peak resident memory is the kernel's high-water mark", str(result))
+    else:
+        check(result["peak_rss_mb"] is None, "no /proc here: no peak is claimed")
+row = miplib.make_row("p", {"published_optimal": 3.0}, 3.0,
+                      {"status": "optimal", "objective": 3.0, "verified": True,
+                       "wall_seconds": 1.0, "peak_rss_mb": 1234.4}, "abc1234", "", 1, "box",
+                      "now")
+check(row["peak_rss_mb"] == "1234", "the CSV carries it in MB")
+
 print("HiGHS reads a .mps.gz")
 with tempfile.TemporaryDirectory() as tmp:
     source = Path(tmp) / "tiny.mps.gz"

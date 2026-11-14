@@ -69,6 +69,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 import stamp  # noqa: E402  (#433: stamps from the binary)
 import miplib_seeds  # noqa: E402  (#504: permutations and the per-seed summary)
@@ -101,6 +102,64 @@ OVERRUN_LOG_DIR: Path | None = None
 MEMORY_LIMIT_GB: float | None = None
 
 
+class PeakRss:
+    """The peak resident memory of this process's children while the block runs (#1199), in
+    MB: the kernel's own high-water mark (VmHWM in /proc/<pid>/status) of every child, read
+    four times a second, the largest seen. The solver is the only child while it runs. The
+    mark is the kernel's, so a spike between two reads is still counted unless the process
+    ends inside the same quarter second. None where there is no /proc (Windows, macOS)."""
+
+    def __init__(self) -> None:
+        self.mb: float | None = None
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    @staticmethod
+    def children() -> list[str]:
+        me = os.getpid()
+        try:
+            return Path(f"/proc/{me}/task/{me}/children").read_text().split()
+        except OSError:
+            pass
+        found = []
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                # `pid (comm) state ppid ...`; comm may hold spaces, so split after ")".
+                fields = Path(f"/proc/{entry}/stat").read_text().rsplit(")", 1)[1].split()
+            except (OSError, IndexError):
+                continue
+            if len(fields) > 1 and fields[1] == str(me):
+                found.append(entry)
+        return found
+
+    def sample(self) -> None:
+        for pid in self.children():
+            try:
+                status = Path(f"/proc/{pid}/status").read_text()
+            except OSError:
+                continue
+            for line in status.splitlines():
+                if line.startswith("VmHWM:"):
+                    mb = float(line.split()[1]) / 1024.0
+                    self.mb = mb if self.mb is None else max(self.mb, mb)
+
+    def __enter__(self) -> "PeakRss":
+        if Path("/proc/self/status").exists():
+            def loop() -> None:
+                while not self._stop.wait(0.25):
+                    self.sample()
+            self._thread = threading.Thread(target=loop, daemon=True)
+            self._thread.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join()
+
+
 def memory_cap():
     """The preexec_fn that applies MEMORY_LIMIT_GB to the child, or None when there is no
     cap or no RLIMIT_AS to set (Windows)."""
@@ -116,17 +175,20 @@ OVERRUN_SLACK_SECONDS = 5.0
 
 
 def keep_overrun_log(instance: Path, time_limit: float, wall: float, killed: bool,
-                     output) -> None:
+                     output, died: str = "") -> None:
     """Write `output` (the solver's stdout, text or bytes, possibly partial when it was
     killed) to OVERRUN_LOG_DIR/<instance>.log under a one-line header, when the run was
-    killed or returned more than the slack past its limit."""
-    if OVERRUN_LOG_DIR is None or not (killed or wall > time_limit + OVERRUN_SLACK_SECONDS):
+    killed, returned more than the slack past its limit, or `died` (how, when it ended
+    with no answer: its last line is then where it was)."""
+    late = wall > time_limit + OVERRUN_SLACK_SECONDS
+    if OVERRUN_LOG_DIR is None or not (killed or late or died):
         return
     text = output.decode(errors="replace") if isinstance(output, bytes) else (output or "")
     stem = instance.name.removesuffix(".gz").removesuffix(".mps")
     OVERRUN_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    header = (f"# {stem}: time limit {time_limit:g} s, wall {wall:.1f} s, "
-              f"{'killed at the hang margin' if killed else 'returned late'}\n")
+    how = ("killed at the hang margin" if killed else f"ended with no answer: {died}" if died
+           else "returned late")
+    header = f"# {stem}: time limit {time_limit:g} s, wall {wall:.1f} s, {how}\n"
     (OVERRUN_LOG_DIR / f"{stem}.log").write_text(header + text, encoding="utf-8",
                                                   newline="\n")
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
@@ -283,6 +345,9 @@ CSV_COLUMNS = [
     # #1199: the address-space cap the solve ran under (--memory-limit-gb); blank when
     # there was none, or on a platform that cannot set one.
     "memory_limit_gb",
+    # #1199: the solver process's peak resident memory in MB, the kernel's high-water mark
+    # sampled while it ran; blank where there is no /proc.
+    "peak_rss_mb",
 ]
 
 PROBING_COLUMNS = ("probing_fixings", "probing_tightenings", "probing_implications",
@@ -394,27 +459,31 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             # took everything it had printed with it (rd-rplusc-21 left an empty log).
             command = ["stdbuf", "-oL", *command]
         started = time.perf_counter()
+        rss = PeakRss()
         try:
-            completed = subprocess.run(command, capture_output=True, text=True,
-                                       timeout=time_limit + HANG_MARGIN_SECONDS,
-                                       preexec_fn=memory_cap())
+            with rss:
+                completed = subprocess.run(command, capture_output=True, text=True,
+                                           timeout=time_limit + HANG_MARGIN_SECONDS,
+                                           preexec_fn=memory_cap())
         except subprocess.TimeoutExpired as expired:
             keep_overrun_log(instance, time_limit, time.perf_counter() - started, True,
                              expired.stdout)
             return {"status": "hang",
                     "message": f"no answer within the time limit plus {HANG_MARGIN_SECONDS:g} s; "
                                "killed",
-                    "wall_seconds": time.perf_counter() - started, "verified": None}
+                    "wall_seconds": time.perf_counter() - started, "verified": None,
+                    "peak_rss_mb": rss.mb}
         wall = time.perf_counter() - started
-        keep_overrun_log(instance, time_limit, wall, False, completed.stdout)
 
         if not stats_path.exists():
             capped = (f" (under the {MEMORY_LIMIT_GB:g} GB memory cap)"
                       if memory_cap() is not None else "")
+            ending = f"exit {completed.returncode}{capped}"
+            keep_overrun_log(instance, time_limit, wall, False, completed.stdout, died=ending)
             return {"status": "crashed" if completed.returncode not in (0, 1) else "no_output",
-                    "message": (completed.stderr.strip()[:260]
-                                + f" [exit {completed.returncode}{capped}]"),
-                    "wall_seconds": wall, "verified": None}
+                    "message": completed.stderr.strip()[:260] + f" [{ending}]",
+                    "wall_seconds": wall, "verified": None, "peak_rss_mb": rss.mb}
+        keep_overrun_log(instance, time_limit, wall, False, completed.stdout)
 
         blob = json.loads(stats_path.read_text())
         result = blob.get("result", {})
@@ -449,6 +518,7 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             "read_seconds": model.get("read_seconds", ""),
             "incumbent_trace": effort.get("incumbent_trace", []),
             "wall_seconds": wall,
+            "peak_rss_mb": rss.mb,
             "verified": None,
             "certificate": None,
             "certificate_check_seconds": None,
@@ -793,6 +863,7 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
         "solver_seconds": blob.get("solver_seconds", ""),
         "read_seconds": blob.get("read_seconds", ""),
         "memory_limit_gb": "" if memory_cap() is None else f"{MEMORY_LIMIT_GB:g}",
+        "peak_rss_mb": "" if blob.get("peak_rss_mb") is None else f"{blob['peak_rss_mb']:.0f}",
         "git_commit": commit,
         "solver_options": solver_options,
         "threads": threads,
