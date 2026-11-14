@@ -390,7 +390,9 @@ TEST(CmirCuts, AStopEndsSeparationWithTheFirstOfTheCutsItWouldHaveFound) {
           EXPECT_EQ(part[k].coeff, full[k].coeff) << "trial " << trial << " cut " << k;
           EXPECT_EQ(part[k].rhs, full[k].rhs) << "trial " << trial << " cut " << k;
         }
-        if (allowed == 0) EXPECT_TRUE(part.empty()) << "stopped before the first row";
+        if (allowed == 0) {
+          EXPECT_TRUE(part.empty()) << "stopped before the first row";
+        }
         if (part.size() < full.size()) ++stopped_short;
         ++compared;
       }
