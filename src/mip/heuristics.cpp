@@ -645,9 +645,10 @@ bool resolve_switch(const Options& options, const char* name, bool master) {
 
 HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   HeuristicSchedule s;
-  s.until_incumbent =
-      options.get_bool("mip_heuristics_until_incumbent") && !options.get_bool("mip_heuristics");
-  const bool master = options.get_bool("mip_heuristics") || s.until_incumbent;
+  // mip_heuristics: true (always), false (never), auto (only until the first incumbent).
+  const std::string& mode = options.get_string("mip_heuristics");
+  s.until_incumbent = mode == "auto";
+  const bool master = mode != "false";
   s.lock_rounding = resolve_switch(options, "mip_heur_lock_rounding", master);
   s.repair = resolve_switch(options, "mip_heur_repair", master);
   s.pump = resolve_switch(options, "mip_heur_pump", master);

@@ -84,8 +84,7 @@ static_assert(kDiveGuided - kDiveFractional + 1 == kDiveRules);
 Options sub_mip_options(const Options& base, Count node_limit, double time_limit) {
   Options sub = base;
   sub.set_bool("log_to_console", false);
-  sub.set_bool("mip_heuristics", false);
-  sub.set_bool("mip_heuristics_until_incumbent", false);
+  sub.set_string("mip_heuristics", "false");
   for (const char* name :
        {"mip_heur_lock_rounding", "mip_heur_repair", "mip_heur_pump", "mip_heur_rins",
         "mip_heur_rens", "mip_heur_fj", "mip_heur_parity", "mip_heur_prop_dive",
@@ -164,7 +163,7 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
 
   // LOCK ROUNDING, every node: O(nonzeros), no LP, and it succeeds exactly where nearest
   // rounding fails for the reason locks see - a covering row rounded the wrong way.
-  // mip_heuristics_until_incumbent: with an incumbent in hand the optional heuristics
+  // mip_heuristics=auto: with an incumbent in hand the optional heuristics
   // below stand down, so a search that has a point spends what the default schedule does.
   const bool spend = !schedule_.until_incumbent || !have_incumbent_;
   if (schedule_.lock_rounding && spend) {
@@ -297,7 +296,7 @@ void BranchAndBound::run_dives(Index node_index, const std::vector<double>& x) {
   const bool due = node_index == 0 || (schedule_.dive_frequency > 0 &&
                                        nodes_explored_ % schedule_.dive_frequency == 0);
   if (!due) return;
-  // mip_heuristics_until_incumbent: with an incumbent, the default schedule - the
+  // mip_heuristics=auto: with an incumbent, the default schedule - the
   // fractional dive at the root and nothing below it.
   const bool stand_down = schedule_.until_incumbent && have_incumbent_;
   if (stand_down && node_index != 0) return;
@@ -338,7 +337,7 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
   int lp_resolves = 0;
   bool backtracked = false;
 
-  // mip_heuristics_until_incumbent: a dive that starts with an incumbent in hand is the
+  // mip_heuristics=auto: a dive that starts with an incumbent in hand is the
   // default dive - the options' own re-solve cap and backtrack. On gesa2, which has a
   // point from Feasibility Jump before the root LP, the deeper backtracking root dive
   // alone cost the proof on all three seeds (bench.yml run 43160544582).

@@ -667,41 +667,30 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          {"always", "switched-flows", "flow-covers", "auto"}});
     s.push_back({"mip_heuristics",
-                 OptionType::Bool,
-                 false,
-                 "The master switch for the primal heuristics (#290, #414): every heuristic "
-                 "whose own mip_heur_* option is auto follows it. On, that is lock rounding "
-                 "at every node, a repair search and RENS at the root, the feasibility pump "
-                 "at the root when nothing else found an incumbent, RINS on "
-                 "mip_rins_frequency, and the coefficient, vector length and guided dives "
-                 "beside the fractional one. Rounding at every node, the fractional root "
-                 "dive, Feasibility Jump (mip_heur_fj=on) and parity (mip_heur_parity=on) run "
-                 "either way. Every candidate is checked against the original model before "
-                 "it can become the incumbent. "
-                 "OFF until the per-heuristic MIPLIB A/B "
-                 "on main, alone on the machine, says which earn their place; a default is a "
-                 "measurement here.",
-                 0.0,
-                 0.0,
-                 {}});
-    s.push_back({"mip_heuristics_until_incumbent",
-                 OptionType::Bool,
-                 true,
-                 "Run the optional primal heuristics (everything mip_heuristics switches on, "
-                 "less RINS and local branching, which need an incumbent) only while the search "
-                 "has NO incumbent, with dives of up to tol::kDivingNoIncumbentLpResolves LP "
-                 "re-solves repeated every tol::kDivingNoIncumbentFrequency nodes and the "
-                 "one-level backtrack (Achterberg 2007, sec. 9.2; Berthold 2006). Once a point "
-                 "is in hand the schedule is the default one again, so a search that finds a "
-                 "point early spends nothing more. mip_heuristics=true overrides it. On by "
-                 "default since the A/B at c77bc4f "
-                 "(bench/results/option-ab-miplib3-until-incumbent-c77bc4f.csv and "
+                 OptionType::String,
+                 std::string("auto"),
+                 "The primal heuristics beyond the four that always run (rounding at every node, "
+                 "the fractional root dive, Feasibility Jump and parity): lock rounding at every "
+                 "node, a repair search and RENS at the root, the feasibility pump at the root "
+                 "when nothing else found an incumbent, the coefficient, vector length and "
+                 "guided dives, the propagation dive, and, with an incumbent, RINS and local "
+                 "branching (#290, #414). Every heuristic whose own mip_heur_* option is auto "
+                 "follows this. auto (the default): they run only while the search has NO "
+                 "incumbent, with dives of up to tol::kDivingNoIncumbentLpResolves LP re-solves "
+                 "repeated every tol::kDivingNoIncumbentFrequency nodes and the one-level "
+                 "backtrack (Achterberg 2007, sec. 9.2; Berthold 2006), and stand down at the "
+                 "first incumbent, so a search that finds a point early spends nothing more; "
+                 "RINS and local branching, which need an incumbent, do not run. true: always. "
+                 "false: never, the four above only. Every candidate is checked against the "
+                 "original model before it can become the incumbent. auto since the A/B at "
+                 "c77bc4f (bench/results/option-ab-miplib3-until-incumbent-c77bc4f.csv and "
                  "option-ab-miplib-tier1-until-incumbent-c77bc4f.csv: no proof and no verified "
                  "point lost, air04 proved; first-incumbent-fa83dfe.csv: a point on 6 of the 13 "
-                 "models that had 3).",
+                 "models that had 3); true lost a proof on each set "
+                 "(option-ab-*-heuristics-all-66b38df.csv).",
                  0.0,
                  0.0,
-                 {}});
+                 {"auto", "true", "false"}});
     s.push_back({"mip_rins_frequency",
                  OptionType::Int,
                  std::int64_t{100},
@@ -3307,8 +3296,23 @@ bool Options::set_string_checked(const std::string& raw_name, const std::string&
   return true;
 }
 
+bool Options::takes_true_and_false(const std::string& name) {
+  const OptionSpec* spec = find_spec(name);
+  if (spec == nullptr || spec->type != OptionType::String) return false;
+  const auto has = [spec](const char* v) {
+    return std::find(spec->allowed.begin(), spec->allowed.end(), v) != spec->allowed.end();
+  };
+  return has("true") && has("false");
+}
+
 void Options::set_bool(const std::string& name, bool value) {
   OptionValue& slot = mutable_value_of(name);
+  // A string option whose values include true and false (mip_heuristics, a bool until it
+  // gained auto) still takes a bool, so a caller written against the bool keeps working.
+  if (std::holds_alternative<std::string>(slot) && takes_true_and_false(name)) {
+    slot = std::string(value ? "true" : "false");
+    return;
+  }
   assert(std::holds_alternative<bool>(slot) && "option is not a bool");
   slot = value;
 }

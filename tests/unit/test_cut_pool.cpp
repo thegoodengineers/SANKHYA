@@ -89,7 +89,6 @@ Model integer_model(const oracle::GeneratedLp& lp) {
 Options pool_options(bool pooling) {
   Options options;
   options.set_bool("log_to_console", false);
-  options.set_bool("mip_heuristics_until_incumbent", false);  // the tree as these were measured
   options.set_bool("presolve", false);
   options.set_bool("enable_root_cuts", true);
   options.set_bool("root_cut_loop", false);

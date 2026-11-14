@@ -96,6 +96,10 @@ class Options {
   [[nodiscard]] double get_double(const std::string& name) const;
   [[nodiscard]] const std::string& get_string(const std::string& name) const;
 
+  /// True for a string option whose allowed values include true and false: set_bool() and
+  /// the C API's bool setter write it as well as the string setters.
+  [[nodiscard]] static bool takes_true_and_false(const std::string& name);
+
   /// True when the option exists in the registry.
   [[nodiscard]] static bool exists(const std::string& name);
 

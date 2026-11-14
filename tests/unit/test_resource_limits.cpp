@@ -376,7 +376,6 @@ TEST(ResourceLimits, ALimitedSearchWithNoIncumbentReportsNoPoint) {
 
   Options options = quiet();
   options.set_bool("mip_heuristics", false);
-  options.set_bool("mip_heuristics_until_incumbent", false);
   options.set_int("node_limit", 4);
   const Solution stopped = solve(model, options);
   ASSERT_EQ(stopped.status, SolveStatus::kNodeLimit) << stopped.message;

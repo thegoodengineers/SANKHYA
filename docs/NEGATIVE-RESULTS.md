@@ -291,7 +291,7 @@ On the 13 MIPLIB models where a committed run ended without a point or away from
 | MIPLIB 3 (`option-ab-miplib3-heuristics-all-66b38df.csv`) | 45 / 44 | 46 / 49 | qiu | mas76, pk1, rout |
 | MIPLIB 2017 tier 1 (`option-ab-miplib-tier1-heuristics-all-66b38df.csv`) | 12 / 11 | 20 / 22 | enlight8 | neos-5140963-mincio, pk1 |
 
-The heuristics pay where the search has no point and cost proving time where it has one. What was adopted is the same schedule only while there is no incumbent (`mip_heuristics_until_incumbent`), which loses no proof on either set; `mip_heuristics` itself stays off.
+The heuristics pay where the search has no point and cost proving time where it has one. What was adopted is the same schedule only while there is no incumbent (`mip_heuristics=auto`, the default since), which loses no proof on either set; `mip_heuristics=true` stays a choice, not the default. The 66b38df and c77bc4f CSVs record the options under the names they had then (`mip_heuristics=true` with the dive options; `mip_heuristics_until_incumbent=true`, since folded into `mip_heuristics=auto`).
 
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
 

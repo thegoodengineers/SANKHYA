@@ -221,7 +221,7 @@ TEST(ObjectiveBranching, AResumedSearchReachesTheEnumeratedOptimum) {
   // The tree as this was measured: with the no-incumbent heuristics most of these small
   // models close before a quarter of their nodes, and there is nothing left to resume.
   Options base = quiet();
-  base.set_bool("mip_heuristics_until_incumbent", false);
+  base.set_string("mip_heuristics", "false");
   for (int trial = 0; trial < 40; ++trial) {
     const Model m = random_model(rng, trial);
     const Solution whole = solve(m, base);

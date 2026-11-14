@@ -337,7 +337,6 @@ TEST(PdhgHeuristics, TheSearchWithBothOnAgreesWithTheExactOracle) {
   // a root LP that is integral or infeasible - so the other heuristics are off and 600 trials
   // run.
   options.set_bool("mip_heuristics", false);
-  options.set_bool("mip_heuristics_until_incumbent", false);
   // The models here are a few columns, so every root cut is "dense" and the admission
   // (#496) would close them at the root; pinned off, since the tree is what is tested.
   options.set_int("cut_dense_max", 0);

@@ -623,6 +623,17 @@ still open, it goes on for half as many nodes again and reports a proof if the t
 the gap target's verdict otherwise (`mip_gap_target_extension`, 0.5 by default since #1212;
 0 restores the plain stop).
 
+A MILP always runs four primal heuristics: rounding at every node, a fractional dive at the
+root, Feasibility Jump and parity. The rest (lock rounding, repair, RENS, the feasibility
+pump, the other dives) follow `mip_heuristics`: `auto`, the default, runs them only while the
+search has no incumbent and stands them down at the first one; `true` runs them throughout;
+`false` never runs them. The log's `MILP composition` line names what will run. On the 13
+MIPLIB models where a committed run had ended without a point or away from the optimum,
+`auto` finds a point on 6 where `false` finds one on 3, with no proof and no verified point
+lost on MIPLIB 3 or tier 1 (`bench/results/first-incumbent-fa83dfe.csv`,
+`option-ab-miplib3-until-incumbent-c77bc4f.csv`,
+`option-ab-miplib-tier1-until-incumbent-c77bc4f.csv`).
+
 A MILP also reports a **solution pool** (#225): up to `pool_size` (default 10) integer plans
 the search found, each a different integer assignment, the solution first and the rest best
 first, written to the `.sol` file's `pool` section (integer columns only) and checked by

@@ -28,14 +28,14 @@ TEST(MilpComponents, DefaultsMatchWhatBranchAndBoundActuallyDefaultsTo) {
   // bench/results/miplib-841-parity-default-*-seeds3-fa9e8b4d.csv); Feasibility Jump
   // since the #506 A/B (#930).
   EXPECT_TRUE(parts.heuristics_enabled);
-  // The rest only while the search has no incumbent (mip_heuristics_until_incumbent, on
+  // The rest only while the search has no incumbent (mip_heuristics=auto, the default
   // since the A/B at c77bc4f).
   EXPECT_EQ(parts.heuristics,
             "rounding, feasibility jump, parity, propagation dive, lock rounding, repair, "
             "fractional diving, coefficient diving, vector length diving, guided diving, "
             "feasibility pump, RENS; beyond the first four, only until the first incumbent");
   Options plain;
-  plain.set_bool("mip_heuristics_until_incumbent", false);
+  plain.set_string("mip_heuristics", "false");
   EXPECT_EQ(describe_components(plain).heuristics,
             "rounding, feasibility jump, parity, fractional diving")
       << "the four that run once there is an incumbent, and nothing else";
@@ -46,7 +46,7 @@ TEST(MilpComponents, OneHeuristicOnByNameReadsAsHeuristicsOn) {
   // #414: a single mip_heur_* switch set to on, with the master switch untouched, is what
   // a one-heuristic A/B runs, and the composition report must say so.
   Options options;
-  options.set_bool("mip_heuristics_until_incumbent", false);
+  options.set_string("mip_heuristics", "false");
   options.set_string("mip_heur_rens", "on");
   const MilpComponents parts = describe_components(options);
   EXPECT_TRUE(parts.heuristics_enabled);
