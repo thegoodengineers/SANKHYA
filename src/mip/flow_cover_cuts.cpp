@@ -365,9 +365,15 @@ std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& so
       std::fill(used.begin(), used.end(), 0);
       used[ui] = 1;
 
-      std::optional<Cut> best;
-      double best_violation = 0.0;
-      bool best_lifted = false;
+      // TWO CUTS A ROW SIDE AT MOST: the best from the row alone (slot 0) and the best from
+      // its aggregates (slot 1), which are different inequalities and are not ranked against
+      // each other here. With one slot the more violated won, and a column bound tightened in
+      // presolve (probing, coefficient tightening) made the single-row cut the more violated
+      // one on modglob: its 58 round-1 cuts, all from aggregates, became 48 from single rows,
+      // and the root loop closed less (#1158). The filter and the selection choose.
+      std::optional<Cut> best[2];
+      double best_violation[2] = {0.0, 0.0};
+      bool best_lifted[2] = {false, false};
       int best_depth = 0;
       for (int depth = 0; depth <= tol::kRowAggregationDepth; ++depth) {
         const std::optional<FlowSet> set =
@@ -376,13 +382,14 @@ std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& so
           if (depth == 0) ++s.flow_rows;
           bool lifted = false;
           double violation = 0.0;
+          const int slot = depth == 0 ? 0 : 1;
           if (std::optional<Cut> cut =
                   separate_flow_set(model, *set, lift, &s.covers, &lifted, &violation)) {
-            if (!best || violation > best_violation) {
-              best = std::move(cut);
-              best_violation = violation;
-              best_lifted = lifted;
-              best_depth = depth;
+            if (!best[slot] || violation > best_violation[slot]) {
+              best[slot] = std::move(cut);
+              best_violation[slot] = violation;
+              best_lifted[slot] = lifted;
+              if (slot == 1) best_depth = depth;
             }
           }
         } else if (depth == 0) {
@@ -406,12 +413,16 @@ std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& so
         }
         if (!extended) break;
       }
-      if (!best) continue;
-      cuts.push_back(std::move(*best));
-      ++s.cuts;
-      if (best_lifted) ++s.lifted;
-      if (best_depth > 0) ++s.aggregated;
-      s.deepest = std::max(s.deepest, best_depth);
+      for (int slot = 0; slot < 2; ++slot) {
+        if (!best[slot]) continue;
+        cuts.push_back(std::move(*best[slot]));
+        ++s.cuts;
+        if (best_lifted[slot]) ++s.lifted;
+        if (slot == 1) {
+          ++s.aggregated;
+          s.deepest = std::max(s.deepest, best_depth);
+        }
+      }
     }
   }
   return cuts;
