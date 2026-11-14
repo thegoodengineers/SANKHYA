@@ -741,6 +741,10 @@ class Simplex {
   /// refactorization (refactorize() sets it), in phase 1 (its costs move with the basic
   /// positions), and when a pivot's row entry was too small to update through.
   bool reduced_costs_stale_ = true;
+  /// True while reduced_cost_ holds values moved by update_reduced_costs_through_pivot_row
+  /// since the last recomputation: the state in which the primal loop re-derives the
+  /// entering column's price from its own FTRAN before pivoting on it.
+  bool reduced_costs_updated_ = false;
   /// The nonbasic columns in no particular order, for the breakpoint scan of a dense pivot
   /// row (#1006), and each column's place on it (-1 when basic).
   std::vector<Index> nonbasic_list_;

@@ -755,6 +755,7 @@ void Simplex::compute_reduced_costs(bool phase_one) {
     const double own_cost = phase_one ? 0.0 : cost_[static_cast<std::size_t>(k)];
     reduced_cost_[static_cast<std::size_t>(k)] = own_cost - dot;
   }
+  reduced_costs_updated_ = false;
 }
 
 void Simplex::update_reduced_costs_through_pivot_row(Index entering, Index leaving_slot,
@@ -784,6 +785,7 @@ void Simplex::update_reduced_costs_through_pivot_row(Index entering, Index leavi
   }
   reduced_cost_[e] = 0.0;
   reduced_cost_[static_cast<std::size_t>(leaving)] = -theta;
+  reduced_costs_updated_ = true;
 }
 
 Index Simplex::price(bool bland, int* direction) const {
@@ -1625,6 +1627,7 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       const ProfileScope timed(logger_.profiler(), "primal pricing", ProfileMode::kDetailed);
       entering = price(bland, &direction);
     }
+    const bool priced_on_updates = entering >= 0 && !phase_one && reduced_costs_updated_;
 
     if (entering < 0) {
       if (phase_one) {
@@ -1744,6 +1747,38 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       }
       const double weight = devex_weight_[static_cast<std::size_t>(entering)];
       if (weight > kDevexAccuracyFactor * gamma) reset_devex();
+    }
+
+    // A PRICE CARRIED BY UPDATES IS RE-DERIVED FROM THE COLUMN BEFORE IT IS PIVOTED ON.
+    // Since #888 the reduced costs move through the pivot row from pivot to pivot, and the
+    // error each update leaves is carried by the next. alpha = B^-1 a_q is in hand, so the
+    // entering column's own reduced cost is one dot product away, c_q - c_B . alpha, with
+    // no solve (Maros, "Computational Techniques of the Simplex Method", 2003, sec. 9.2,
+    // the check on the updated d_q). If that value no longer prices the column as
+    // improving, the updates have drifted across the decision they are there to make: the
+    // reduced costs are recomputed from a BTRAN and the iteration is priced again, as
+    // every iteration was before #888. The check runs only on prices that came through
+    // updates, so the recomputed ones are pivoted on as they are and it cannot repeat.
+    // On the stress set's scaled degen3 the unchecked updates took the loop through
+    // 409,219 iterations to the 60 s limit where the recomputation finishes in 64,579.
+    if (priced_on_updates) {
+      const auto q = static_cast<std::size_t>(entering);
+      double carried = 0.0;
+      for (Index slot = 0; slot < m_; ++slot) {
+        const auto s = static_cast<std::size_t>(slot);
+        carried += cost_[static_cast<std::size_t>(basis_[s])] * alpha_[s];
+      }
+      const double derived = cost_[q] - carried;
+      const bool still_improving =
+          direction > 0 ? derived < -dual_tolerance_ : derived > dual_tolerance_;
+      if (!still_improving) {
+        logger_.verbose(
+            "iteration {}: the entering column prices {:.3e} through the updates and "
+            "{:.3e} through its own column; reduced costs recomputed",
+            iterations, reduced_cost_[q], derived);
+        reduced_costs_stale_ = true;
+        continue;
+      }
     }
 
     // Periodically ask whether the updated factors still represent the basis, and rebuild
