@@ -425,12 +425,19 @@ jobs:
               # profile is a diagnosis, not a benchmark claim.
               profile-nodes|ab-profile-nodes)
                 nodes="$1"; shift
+                # A token with '=' is a solver option for every solve, e.g.
+                # mip_node_factor_cache=8; the rest are model names.
+                extra=(); models=()
+                for token in "$@"; do
+                  if [[ "$token" == *=* ]]; then extra+=(--option "$token"); else models+=("$token"); fi
+                done
+                set -- "${models[@]}"
                 arms=("new:build/sankhya")
                 [ "$SUITE" = ab-profile-nodes ] && arms+=("base:.base/build/sankhya")
                 for model in "$@"; do
                   for arm in "${arms[@]}"; do
                     tag="$model-${arm%%:*}"
-                    valgrind --tool=callgrind --callgrind-out-file="$out/callgrind-$tag.out"                       "${arm#*:}" solve "data/miplib3/$model.mps" --option mip_threads=1                       --option node_limit="$nodes" --option log_to_console=false                       > "$out/profile-$tag.log" 2>&1 || true
+                    valgrind --tool=callgrind --callgrind-out-file="$out/callgrind-$tag.out"                       "${arm#*:}" solve "data/miplib3/$model.mps" --option mip_threads=1                       --option node_limit="$nodes" --option log_to_console=false ${extra[@]+"${extra[@]}"}                       > "$out/profile-$tag.log" 2>&1 || true
                     tail -5 "$out/profile-$tag.log"
                     callgrind_annotate --inclusive=yes "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-inclusive.txt"
                     callgrind_annotate "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-self.txt"
