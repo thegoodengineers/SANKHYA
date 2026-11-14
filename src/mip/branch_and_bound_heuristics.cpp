@@ -229,8 +229,8 @@ void BranchAndBound::run_node_heuristics(Index node_index, const Solution& relax
   // the solve is deterministic, its TIME at a tenth of the solve's. The node cap alone was
   // not enough: on pk1 a sub-MIP node cost seven main nodes, and 601 of them - inside the
   // node cap - took 8.8 s of a 20 s solve.
-  if (schedule_.rins && !schedule_.until_incumbent && schedule_.rins_frequency > 0 &&
-      have_incumbent_ && node_index > 0 && nodes_explored_ % schedule_.rins_frequency == 0) {
+  if (schedule_.rins && schedule_.rins_frequency > 0 && have_incumbent_ && node_index > 0 &&
+      nodes_explored_ % schedule_.rins_frequency == 0) {
     HeuristicStats& s = heuristic_stats_[kRins];
     const Count budget = std::max<Count>(
         schedule_.rins_nodes,
@@ -619,9 +619,7 @@ void BranchAndBound::run_root_lns(const Solution& relaxation) {
   if (integer_columns_.empty() || (seed_ != nullptr && !seed_->is_root)) return;
   if (schedule_.prop_dive && !have_incumbent_)
     propagation_dive(kPropDive, relaxation.col_value);
-  if (schedule_.local_branching && !schedule_.until_incumbent) {
-    local_branching(kLocalBranching, relaxation.col_value);
-  }
+  if (schedule_.local_branching) local_branching(kLocalBranching, relaxation.col_value);
 }
 
 void BranchAndBound::report_heuristics() {

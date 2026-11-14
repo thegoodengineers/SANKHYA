@@ -686,6 +686,10 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
     // Deeper dives, repeated through the tree, with the one-level backtrack: only while
     // there is no incumbent (BranchAndBound::run_dives), so an explicit setting wins.
     s.dive_backtrack = true;
+    // RINS and local branching start from an incumbent, which is when this mode stands
+    // down; only an explicit `on` keeps them.
+    s.rins = options.get_string("mip_heur_rins") == "on";
+    s.local_branching = options.get_string("mip_heur_local_branching") == "on";
     s.dive_lp_resolves = std::max(s.dive_lp_resolves, tol::kDivingNoIncumbentLpResolves);
     if (s.dive_frequency == 0) s.dive_frequency = tol::kDivingNoIncumbentFrequency;
   }
@@ -720,6 +724,7 @@ std::string HeuristicSchedule::names() const {
   add(fix_and_propagate, "fix-and-propagate");
   add(rins, "RINS");
   add(rens, "RENS");
+  if (until_incumbent) out += "; beyond the first four, only until the first incumbent";
   return out;
 }
 

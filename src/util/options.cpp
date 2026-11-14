@@ -688,17 +688,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Bool,
                  true,
                  "Run the optional primal heuristics (everything mip_heuristics switches on, "
-                 "less RINS and local branching, which need an incumbent) only while the "
-                 "search has NO incumbent, with dives of up to "
-                 "tol::kDivingNoIncumbentLpResolves LP re-solves repeated every "
-                 "tol::kDivingNoIncumbentFrequency nodes and the one-level backtrack "
-                 "(Achterberg 2007, sec. 9.2; Berthold 2006). Once a point is in hand the "
-                 "schedule is the default one again, so a search that finds a point early "
-                 "spends nothing more. mip_heuristics=true overrides it. On by default since the "
-                 "A/B at c77bc4f (bench/results/option-ab-miplib3-until-incumbent-c77bc4f.csv "
-                 "and option-ab-miplib-tier1-until-incumbent-c77bc4f.csv: no proof and no "
-                 "verified point lost, air04 proved; first-incumbent-fa83dfe.csv: a point on 6 "
-                 "of the 13 models that had 3).",
+                 "less RINS and local branching, which need an incumbent) only while the search "
+                 "has NO incumbent, with dives of up to tol::kDivingNoIncumbentLpResolves LP "
+                 "re-solves repeated every tol::kDivingNoIncumbentFrequency nodes and the "
+                 "one-level backtrack (Achterberg 2007, sec. 9.2; Berthold 2006). Once a point "
+                 "is in hand the schedule is the default one again, so a search that finds a "
+                 "point early spends nothing more. mip_heuristics=true overrides it. On by "
+                 "default since the A/B at c77bc4f "
+                 "(bench/results/option-ab-miplib3-until-incumbent-c77bc4f.csv and "
+                 "option-ab-miplib-tier1-until-incumbent-c77bc4f.csv: no proof and no verified "
+                 "point lost, air04 proved; first-incumbent-fa83dfe.csv: a point on 6 of the 13 "
+                 "models that had 3).",
                  0.0,
                  0.0,
                  {}});
