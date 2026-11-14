@@ -100,6 +100,47 @@ with tempfile.TemporaryDirectory() as tmp:
     check(result["status"] == "hang" and result["wall_seconds"] < 10,
           "a solve past the limit plus the margin is killed and recorded hang", str(result))
 
+print("the overrun log")
+with tempfile.TemporaryDirectory() as tmp:
+    talker = Path(tmp) / "talker.py"
+    talker.write_text("import sys, time\nprint('Presolve: done', flush=True)\n"
+                      "print('Symmetry: searching', flush=True)\ntime.sleep(30)\n",
+                      encoding="utf-8")
+    logs = Path(tmp) / "logs"
+    saved_margin, saved_dir = miplib.HANG_MARGIN_SECONDS, miplib.OVERRUN_LOG_DIR
+    miplib.HANG_MARGIN_SECONDS, miplib.OVERRUN_LOG_DIR = 1.5, logs
+    try:
+        import subprocess  # noqa: PLC0415
+        real_run = subprocess.run
+        seen = {}
+
+        def fake_run(command, **kwargs):
+            seen["command"] = command
+            return real_run([sys.executable, str(talker)], **kwargs)
+
+        subprocess.run = fake_run
+        result = miplib.solve(Path("unused"), Path("big-model.mps.gz"), 0.5, False)
+    finally:
+        subprocess.run = real_run
+        miplib.HANG_MARGIN_SECONDS, miplib.OVERRUN_LOG_DIR = saved_margin, saved_dir
+    kept = logs / "big-model.log"
+    text = kept.read_text(encoding="utf-8") if kept.exists() else ""
+    check(result["status"] == "hang" and "killed at the hang margin" in text
+          and text.rstrip().endswith("Symmetry: searching"),
+          "a killed run leaves its log, and the last line names the phase it was in", text)
+    check("log_to_console=true" in seen["command"], "the solver logs to its console then")
+    miplib.keep_overrun_log(Path("quick.mps"), 60.0, 61.0, False, "all fine")
+    saved_dir = miplib.OVERRUN_LOG_DIR
+    miplib.OVERRUN_LOG_DIR = logs
+    try:
+        miplib.keep_overrun_log(Path("quick.mps"), 60.0, 61.0, False, "all fine")
+        miplib.keep_overrun_log(Path("late.mps"), 60.0, 66.0, False, b"Root cuts: filtering")
+    finally:
+        miplib.OVERRUN_LOG_DIR = saved_dir
+    check(not (logs / "quick.log").exists() and "returned late" in
+          (logs / "late.log").read_text(encoding="utf-8"),
+          "a run within 5 s of its limit leaves none; one past it does, bytes or text")
+
 print("HiGHS reads a .mps.gz")
 with tempfile.TemporaryDirectory() as tmp:
     source = Path(tmp) / "tiny.mps.gz"
