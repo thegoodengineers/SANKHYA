@@ -181,6 +181,34 @@ On the models it hurts, the root closes less gap after the tightening (modglob 0
 File: `bench/results/option-ab-miplib3-coef-tightening-d4bb701.csv` (the `arm` column).
 What would earn a default: tightening that leaves the rows the flow-cover and MIR separators read as they were, for example applied only to all-binary rows, then this A/B again.
 
+### Reduced-cost fixing as a default (`mip_reduced_cost_fixing`, #418, #1158)
+
+Bound tightening from the root's reduced costs and the incumbent (Nemhauser and Wolsey 1988; Achterberg 2007, ch. 7), expected to help nw04 and the set-partitioning models. Off: `mip_reduced_cost_fixing = false`.
+
+Both arms one binary in one job, 3 seeds, 60 s, `mip_threads=1`.
+
+MIPLIB 3, 65 models, main `3e7436d` (bench.yml run 43062830840):
+
+| arm | seed 0 m/p/v | seed 1 m/p/v | seed 2 m/p/v | all m/p/v | sgm time (s) |
+|---|---|---|---|---|---:|
+| off | 44/41/63 | 42/41/63 | 44/42/63 | 130/124/189 | 9.22 |
+| on | 45/41/63 | 43/41/63 | 44/42/63 | 132/124/189 | 8.98 |
+
+MIPLIB tier 1, 30 models, main `c73be5e` (bench.yml run 43135684987):
+
+| arm | seed 0 m/p/v | seed 1 m/p/v | seed 2 m/p/v | all m/p/v | sgm time (s) |
+|---|---|---|---|---|---:|
+| off | 18/11/30 | 19/11/30 | 17/10/30 | 54/32/90 | 17.06 |
+| on | 18/11/30 | 19/10/30 | 17/11/30 | 54/32/90 | 16.72 |
+
+- **Fails the rule on tier 1:** seed 1 proves one fewer. enlight8 seed 1 goes from a proof in 55.1 s (412,295 nodes) to no proof in 60 s (424,537 nodes). The fixing acted on that run (one bound tightened), and the search explored more nodes without closing, so this is the option and not the clock.
+- **Gained on tier 1:** enlight8 seed 2, unproved at 60 s (445,306 nodes) to proved in 43.4 s (316,595 nodes). One tightened bound moves that tree either way.
+- **MIPLIB 3 passes and proves nothing new:** nw04 seeds 0 and 1 reach the optimum 16862 (from 16970 and 16976) and stay unproved. No proof or verified point changes.
+- The models it was expected to prove did not move: nw04 and air05 are proved on no seed more than before, and irp and neos-3083819-nubu are in neither set.
+
+Files: `bench/results/option-ab-miplib3-reduced-cost-fixing-3e7436d.csv`, `option-ab-tier1-reduced-cost-fixing-c73be5e.csv` (the `arm` column).
+What would earn a default: fixed columns that leave the node LP, so the fixing buys node speed on nw04 and not only a smaller box (after the fixing, 79,000 of nw04's 87,482 columns are fixed and every pivot still prices them), then this A/B again.
+
 ### PDHG feasibility polishing as a default (`pdhg_feasibility_polish`, #483, #1177)
 
 First-order feasibility polishing after Applegate, Hinder, Lu & Lubin (arXiv:2501.07018): PDHG on the zero-objective and the zero-bound problem, so a first-order answer is primal feasible to 1e-8 with its gap measured. Off: `pdhg_feasibility_polish = false`.
