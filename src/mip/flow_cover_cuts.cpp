@@ -181,8 +181,15 @@ std::optional<FlowSet> read_flow_set(const Model& model, const Solution& solutio
 /// lifted inequality, the more violated kept. `violation` is relative to the right-hand
 /// side; nothing when no cover with lambda > 0 exists, the cut is not violated, or it fails
 /// the dynamism filter. `covers` counts a cover found, `lifted` says the lifted form won.
+///
+/// `always_on_in_cover` false leaves the always-on inflows out of the cover's first pass
+/// (they still enter if the switched arcs alone do not cover b). An always-on arc costs the
+/// cover nothing at the LP point but adds its whole capacity to lambda, and a loose bound
+/// from presolve's propagation or probing makes lambda swallow the (u_j - lambda)^+ terms.
+/// The caller separates both covers and keeps the more violated cut.
 std::optional<Cut> separate_flow_set(const Model& model, const FlowSet& set, bool lift,
-                                     int* covers, bool* lifted, double* violation) {
+                                     bool always_on_in_cover, int* covers, bool* lifted,
+                                     double* violation) {
   const std::vector<Arc>& arcs = set.arcs;
   const double b = set.b;
   const Index n = model.num_cols();
@@ -203,6 +210,7 @@ std::optional<Cut> separate_flow_set(const Model& model, const FlowSet& set, boo
   double covered = 0.0;
   for (const std::size_t k : ranked) {
     if (arcs[k].y_star < 0.5) continue;
+    if (!always_on_in_cover && arcs[k].indicator < 0) continue;
     in_cover[k] = 1;
     covered += arcs[k].capacity;
   }
@@ -380,16 +388,26 @@ std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& so
             read_flow_set(model, solution, col_lower, col_upper, vub, base);
         if (set) {
           if (depth == 0) ++s.flow_rows;
-          bool lifted = false;
-          double violation = 0.0;
           const int slot = depth == 0 ? 0 : 1;
-          if (std::optional<Cut> cut =
-                  separate_flow_set(model, *set, lift, &s.covers, &lifted, &violation)) {
-            if (!best[slot] || violation > best_violation[slot]) {
-              best[slot] = std::move(cut);
-              best_violation[slot] = violation;
-              best_lifted[slot] = lifted;
-              if (slot == 1) best_depth = depth;
+          // Both covers when the set has an always-on inflow that could be in one (see
+          // separate_flow_set); the second counts no cover of its own in the statistics.
+          const bool has_always_on =
+              std::any_of(set->arcs.begin(), set->arcs.end(), [](const Arc& arc) {
+                return arc.inflow && arc.indicator < 0 && std::isfinite(arc.capacity);
+              });
+          for (int pass = 0; pass < (has_always_on ? 2 : 1); ++pass) {
+            bool lifted = false;
+            double violation = 0.0;
+            int second_covers = 0;
+            if (std::optional<Cut> cut = separate_flow_set(
+                    model, *set, lift, pass == 0, pass == 0 ? &s.covers : &second_covers,
+                    &lifted, &violation)) {
+              if (!best[slot] || violation > best_violation[slot]) {
+                best[slot] = std::move(cut);
+                best_violation[slot] = violation;
+                best_lifted[slot] = lifted;
+                if (slot == 1) best_depth = depth;
+              }
             }
           }
         } else if (depth == 0) {
