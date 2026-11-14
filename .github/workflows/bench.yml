@@ -330,8 +330,11 @@ jobs:
                 shard="${OPTIONS:-1/1}"; k="${shard%/*}"; n="${shard#*/}"
                 mapfile -t names < "data/miplib2017-bench/shard-${k}-of-${n}.txt"
                 tag="${TIME_LIMIT:-60}s-shard${k}of${n}-${sha}"
+                # 12 GB of the runner's 16 per solve: radiationm40-10-02 twice took the
+                # runner down mid-shard and lost the job's other 39 results (#1199).
                 python3 bench/runners/miplib.py --binary build/sankhya --set miplib2017-bench \
-                  --threads 1 --machine-kind "github-actions ubuntu-24.04" \
+                  --threads 1 --memory-limit-gb 12 \
+                  --machine-kind "github-actions ubuntu-24.04" \
                   ${limit[@]+"${limit[@]}"} --instances "${names[@]}" \
                   --out "bench/results/miplib2017-bench-${tag}.csv"
                 python3 bench/runners/compare.py --suite miplib2017-bench \

@@ -64,6 +64,7 @@ import hashlib
 import json
 import math
 import re
+import os
 import shutil
 import subprocess
 import sys
@@ -92,6 +93,25 @@ HANG_MARGIN_SECONDS = 60.0
 # that returned more than OVERRUN_SLACK_SECONDS past its limit, is kept, so the phase that
 # ignored the deadline can be read off a CI run. None: logs are not captured, as before.
 OVERRUN_LOG_DIR: Path | None = None
+# --memory-limit-gb G (#1199): the address space each solve may take, set on the solver's
+# process alone (RLIMIT_AS, POSIX only). Without it one model can take the whole job down:
+# radiationm40-10-02 twice ended a bench.yml shard with "the runner has received a shutdown
+# signal" 33 models in, and every result of that job was lost. With it the solver's own
+# out-of-memory path answers, or the process dies alone and the row says so. None: no cap.
+MEMORY_LIMIT_GB: float | None = None
+
+
+def memory_cap():
+    """The preexec_fn that applies MEMORY_LIMIT_GB to the child, or None when there is no
+    cap or no RLIMIT_AS to set (Windows)."""
+    if MEMORY_LIMIT_GB is None or os.name != "posix":
+        return None
+    limit = int(MEMORY_LIMIT_GB * 1024 ** 3)
+
+    def apply() -> None:
+        import resource  # noqa: PLC0415 - POSIX only
+        resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+    return apply
 OVERRUN_SLACK_SECONDS = 5.0
 
 
@@ -260,6 +280,9 @@ CSV_COLUMNS = [
     # #1199, last: the solver's own time to read the model file, which time_limit does not
     # cover; beside solver_seconds, so an overrun is judged on the solve's clock.
     "read_seconds",
+    # #1199: the address-space cap the solve ran under (--memory-limit-gb); blank when
+    # there was none, or on a platform that cannot set one.
+    "memory_limit_gb",
 ]
 
 PROBING_COLUMNS = ("probing_fixings", "probing_tightenings", "probing_implications",
@@ -373,7 +396,8 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
         started = time.perf_counter()
         try:
             completed = subprocess.run(command, capture_output=True, text=True,
-                                       timeout=time_limit + HANG_MARGIN_SECONDS)
+                                       timeout=time_limit + HANG_MARGIN_SECONDS,
+                                       preexec_fn=memory_cap())
         except subprocess.TimeoutExpired as expired:
             keep_overrun_log(instance, time_limit, time.perf_counter() - started, True,
                              expired.stdout)
@@ -385,8 +409,11 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
         keep_overrun_log(instance, time_limit, wall, False, completed.stdout)
 
         if not stats_path.exists():
+            capped = (f" (under the {MEMORY_LIMIT_GB:g} GB memory cap)"
+                      if memory_cap() is not None else "")
             return {"status": "crashed" if completed.returncode not in (0, 1) else "no_output",
-                    "message": completed.stderr.strip()[:300],
+                    "message": (completed.stderr.strip()[:260]
+                                + f" [exit {completed.returncode}{capped}]"),
                     "wall_seconds": wall, "verified": None}
 
         blob = json.loads(stats_path.read_text())
@@ -568,11 +595,18 @@ def main() -> int:
     parser.add_argument("--profile", action="store_true",
                         help="run with profile=detailed and record the branching and batched-"
                              "PDHG seconds (#520)")
+    parser.add_argument("--memory-limit-gb", type=float, default=None, metavar="G",
+                        help="cap each solve's address space at G GB (POSIX; #1199), so a "
+                             "model that would exhaust the machine fails alone instead of "
+                             "taking the job down; recorded in the CSV")
     parser.add_argument("--overrun-logs", type=Path, default=None, metavar="DIR",
                         help="keep the solver's console log of every run killed at the hang "
                              "margin or returned more than 5 s past its limit, as "
                              "DIR/<instance>.log (#1199); the solver then logs to its console")
     args = parser.parse_args()
+    if args.memory_limit_gb is not None:
+        global MEMORY_LIMIT_GB
+        MEMORY_LIMIT_GB = args.memory_limit_gb
     if args.overrun_logs is not None:
         global OVERRUN_LOG_DIR
         OVERRUN_LOG_DIR = (REPO_ROOT / args.overrun_logs).resolve()
@@ -758,6 +792,7 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
         "wall_seconds": f"{blob['wall_seconds']:.6f}",
         "solver_seconds": blob.get("solver_seconds", ""),
         "read_seconds": blob.get("read_seconds", ""),
+        "memory_limit_gb": "" if memory_cap() is None else f"{MEMORY_LIMIT_GB:g}",
         "git_commit": commit,
         "solver_options": solver_options,
         "threads": threads,
