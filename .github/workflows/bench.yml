@@ -24,6 +24,11 @@
 # `--data-dir data/netlib --instances all --scheme averaged --seeds 0 --iteration-limit 100000`
 # (data/kennington and data/refinery work the same way).
 # decomposition (#525, #1048) runs bench/runners/decomposition.py over the refinery ladder.
+# profile-nodes (#1158) runs callgrind on node-limited, one-thread MIPLIB 3 solves:
+# options="2000 mas76 pk1" (a node limit, then model names; a name=value token is a solver
+# option). ab-profile-nodes profiles base_ref's binary on the same solves. The artifact holds
+# each solve's inclusive and self-cost tables and the callgrind file; callgrind counts
+# instructions, so two runs compare exactly whatever the runner. It writes no CSV.
 
 name: bench
 
@@ -62,6 +67,8 @@ on:
           - decomposition
           - fj-share-refinery
           - fj-share-miplib
+          - profile-nodes
+          - ab-profile-nodes
         required: true
       ref:
         description: commit (short or full sha), branch or tag to build and run (ab-* - the new arm)
@@ -136,6 +143,12 @@ jobs:
       - name: Install the refinery rivals
         if: inputs.suite == 'refinery' || inputs.suite == 'head-to-head-refinery-qp'
         run: pip install numpy highspy pyscipopt
+
+      # #1158: callgrind for the per-node cost profile; it counts instructions, so the shares
+      # do not depend on the runner's speed or on what else it is doing.
+      - name: Install valgrind for the node profile
+        if: inputs.suite == 'profile-nodes' || inputs.suite == 'ab-profile-nodes'
+        run: scripts/ci_apt.sh valgrind
 
       # #1158: HiGHS beside SANKHYA on the same 65 MIPLIB 3 models, same job, same machine.
       - name: Install HiGHS for the MIPLIB 3 head-to-head
@@ -223,7 +236,7 @@ jobs:
             # every file's sha256. Untracked, so the -dirty check below is not affected.
             head-to-head-refinery-qp)
               python3 bench/refinery/generate.py --qp ;;
-            miplib3|head-to-head-miplib3)
+            miplib3|head-to-head-miplib3|profile-nodes|ab-profile-nodes)
               python3 bench/runners/fetch_miplib3.py
               git checkout -- data/miplib3/manifest.json ;;
             # #1199: options is the shard, K/N; the fetch writes its names beside the models.
@@ -409,6 +422,33 @@ jobs:
               pdhg-step-weight-ab)
                 python3 bench/runners/pdhg_step_weight_ab.py --binary build/sankhya \
                   --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #1158: where a branch-and-bound node's instructions go. options: a node
+              # limit, then MIPLIB 3 model names, e.g. "20000 mas76 pk1". One thread; the
+              # inclusive and the self-cost tables per model go into the artifact. As
+              # ab-profile-nodes the base arm's binary is profiled on the same solves, and
+              # callgrind counts instructions, so the two tables compare exactly. No CSV: a
+              # profile is a diagnosis, not a benchmark claim.
+              profile-nodes|ab-profile-nodes)
+                nodes="$1"; shift
+                # A token with '=' is a solver option for every solve, e.g.
+                # mip_node_factor_cache=8; the rest are model names.
+                extra=(); models=()
+                for token in "$@"; do
+                  if [[ "$token" == *=* ]]; then extra+=(--option "$token"); else models+=("$token"); fi
+                done
+                set -- "${models[@]}"
+                arms=("new:build/sankhya")
+                [ "$SUITE" = ab-profile-nodes ] && arms+=("base:.base/build/sankhya")
+                for model in "$@"; do
+                  for arm in "${arms[@]}"; do
+                    tag="$model-${arm%%:*}"
+                    valgrind --tool=callgrind --callgrind-out-file="$out/callgrind-$tag.out"                       "${arm#*:}" solve "data/miplib3/$model.mps" --option mip_threads=1                       --option node_limit="$nodes" --option log_to_console=false ${extra[@]+"${extra[@]}"}                       > "$out/profile-$tag.log" 2>&1 || true
+                    tail -5 "$out/profile-$tag.log"
+                    callgrind_annotate --inclusive=yes "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-inclusive.txt"
+                    callgrind_annotate "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-self.txt"
+                    head -45 "$out/profile-$tag-self.txt"
+                  done
+                done ;;
               # #525, #1048: the refinery ladder, decomposed against monolithic.
               decomposition)
                 python3 bench/runners/decomposition.py --binary build/sankhya \
