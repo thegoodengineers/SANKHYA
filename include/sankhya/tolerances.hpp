@@ -272,6 +272,12 @@ inline constexpr double kFillInCancellation = 1e-11;
 /// 0.01 is the standard simplex compromise between sparsity and stability (Suhl & Suhl).
 inline constexpr double kMarkowitzThreshold = 0.01;
 
+/// The LU's elimination workspace is kept per thread between factorizations of different
+/// bases (#1158, src/la/lu.hpp) when the basis has at most this many rows. Above it the
+/// workspace is freed with its SparseLu as before: a large LP solved once should not leave
+/// 4m vectors behind, and there the elimination, not the allocation, is the cost.
+inline constexpr Index kLuSpareWorkspaceRows = 4096;
+
 /// Column substitution from equality rows (presolve_substitution, src/presolve/
 /// substitute.cpp). The eliminated column's coefficient must be at least this fraction of
 /// the largest entry of its row and of its column: the same stability argument as a
