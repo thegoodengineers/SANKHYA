@@ -75,6 +75,11 @@ inline constexpr int kDivingMaxDepth = 50;
 /// and a dive that backtracks (mip_dive_backtrack, #414) re-solves without fixing a new
 /// column.
 inline constexpr int kDivingMaxLpResolves = 50;
+/// mip_heuristics_until_incumbent: while the search has no incumbent a dive may spend this
+/// many LP re-solves and the dives run every this many nodes below the root (Achterberg
+/// 2007, sec. 9.2; Berthold 2006, ch. 3: dives repeated through the tree).
+inline constexpr int kDivingNoIncumbentLpResolves = 1000;
+inline constexpr int kDivingNoIncumbentFrequency = 50;
 
 /// Sub-MIP heuristics (RINS #290, RENS #414): the least fraction of the integer columns the
 /// sub-model must fix for the neighbourhood to be one. Below it the sub-MIP is nearly the
