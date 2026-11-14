@@ -910,6 +910,11 @@ class BranchAndBound {
     policy.support_floor = static_cast<Index>(options_.get_int("cut_support_floor"));
     policy.efficacy = options_.get_bool("cut_efficacy_test");
     policy.test_dense = root && options_.get_int("cut_dense_max") > 0;
+    // The filter is the one long loop of a cut round that is not an LP (#1199).
+    policy.stop = [this] {
+      return (control_ != nullptr && control_->interruption_requested()) ||
+             limits_.exhausted(timer_.elapsed_seconds(), 0, 0) != LimitReason::kNone;
+    };
     return policy;
   }
   /// #496: accept the most efficacious of the cuts in `filtered` refused for density
