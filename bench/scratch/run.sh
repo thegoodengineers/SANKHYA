@@ -8,9 +8,9 @@ one() { # label commit model
   echo "RUN $1 $3 | phase-1 completions $(grep -c 'Phase 1 complete' "$log"), refactorized $(grep -c '^refactorized at' "$log")"
   [ -f "$OUT/$1-$3.sol" ] && python3 tools/verify_solution.py data/stress/$3.mps "$OUT/$1-$3.sol" 2>&1 | grep -E "VERIFIED|REJECTED" | sed "s/^/RUN $1 $3 | verifier /"
 }
-one V0 5c0df2dac2f02adefa7263289065c94c4ed82a4b scaled_degen3
-one V1 ea9a56a8bc86095c6552d4b83546a13d28622d5d scaled_degen3
-one V0 5c0df2dac2f02adefa7263289065c94c4ed82a4b scaled_pilot.ja
-one V1 ea9a56a8bc86095c6552d4b83546a13d28622d5d scaled_pilot.ja
-python3 bench/runners/stress.py --binary .b/331f646d9dc8f2d4152121e7e969981fbd3baa68/build/sankhya --machine scratch --solvers sankhya --out "$OUT/results/stress-R.csv" 2>&1 | grep -E "^(scaled_|sankhya )" | grep -v " correct " | sed "s/^/STRESS-R /"
-python3 bench/runners/stress.py --binary .b/ea9a56a8bc86095c6552d4b83546a13d28622d5d/build/sankhya --machine scratch --solvers sankhya --out "$OUT/results/stress-V1.csv" 2>&1 | grep -E "^(scaled_|sankhya )" | grep -v " correct " | sed "s/^/STRESS-V1 /"
+one V0 05aa1462f0ddf127a78b1fe22fe20d3f1c5636a6 scaled_degen3
+one V1 4c76441906f8ba9a63acc4f60f604a338284d336 scaled_degen3
+one V0 05aa1462f0ddf127a78b1fe22fe20d3f1c5636a6 scaled_pilot.ja
+one V1 4c76441906f8ba9a63acc4f60f604a338284d336 scaled_pilot.ja
+python3 bench/runners/stress.py --binary .b/726a47d7820277500e6543834af12ab07a35908f/build/sankhya --machine scratch --solvers sankhya --out "$OUT/results/stress-R.csv" 2>&1 | grep -E "^(scaled_|sankhya )" | grep -v " correct " | sed "s/^/STRESS-R /"
+python3 bench/runners/stress.py --binary .b/4c76441906f8ba9a63acc4f60f604a338284d336/build/sankhya --machine scratch --solvers sankhya --out "$OUT/results/stress-V1.csv" 2>&1 | grep -E "^(scaled_|sankhya )" | grep -v " correct " | sed "s/^/STRESS-V1 /"
