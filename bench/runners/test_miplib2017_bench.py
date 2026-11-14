@@ -12,6 +12,7 @@ import csv
 import fnmatch
 import gzip
 import json
+import os
 import re
 import sys
 import tempfile
@@ -143,6 +144,109 @@ with tempfile.TemporaryDirectory() as tmp:
     check(not (logs / "quick.log").exists() and "returned late" in
           (logs / "late.log").read_text(encoding="utf-8"),
           "a run within 5 s of its limit leaves none; one past it does, bytes or text")
+
+print("the memory cap")
+check(miplib.memory_cap() is None, "no cap unless asked for")
+with tempfile.TemporaryDirectory() as tmp:
+    hog = Path(tmp) / "hog.py"
+    hog.write_text("block = bytearray(3 * 1024 ** 3)\nprint(len(block))\n", encoding="utf-8")
+    saved_cap = miplib.MEMORY_LIMIT_GB
+    miplib.MEMORY_LIMIT_GB = 1.0
+    try:
+        import subprocess  # noqa: PLC0415
+        real_run = subprocess.run
+        seen = {}
+
+        def fake_run(command, **kwargs):
+            seen.update(kwargs)
+            return real_run([sys.executable, str(hog)], **kwargs)
+
+        subprocess.run = fake_run
+        result = miplib.solve(Path("unused"), Path("unused.mps"), 20.0, False)
+    finally:
+        subprocess.run = real_run
+        miplib.MEMORY_LIMIT_GB = saved_cap
+    if os.name == "posix":
+        check(callable(seen.get("preexec_fn")) and result["status"] in ("crashed", "no_output")
+              and "1 GB memory cap" in result["message"],
+              "a solve past the cap dies alone, and the row says under which cap", str(result))
+    else:
+        check(seen.get("preexec_fn") is None,
+              "no RLIMIT_AS on this platform: no cap is applied, and none is claimed")
+row = miplib.make_row("p", {"published_optimal": 3.0}, 3.0,
+                      {"status": "optimal", "objective": 3.0, "verified": True,
+                       "wall_seconds": 1.0}, "abc1234", "", 1, "box", "now")
+check(row["memory_limit_gb"] == "", "the CSV's memory_limit_gb is blank with no cap")
+
+print("peak memory, and the log of a run that died")
+with tempfile.TemporaryDirectory() as tmp:
+    eater = Path(tmp) / "eater.py"
+    eater.write_text("import time\nblock = bytearray(200 * 1024 ** 2)\n"
+                     "for i in range(0, len(block), 4096):\n    block[i] = 1\n"
+                     "print('Root cuts: separating', flush=True)\ntime.sleep(1.5)\n"
+                     "raise SystemExit(7)\n", encoding="utf-8")
+    logs = Path(tmp) / "logs"
+    saved_dir = miplib.OVERRUN_LOG_DIR
+    miplib.OVERRUN_LOG_DIR = logs
+    try:
+        import subprocess  # noqa: PLC0415
+        real_run = subprocess.run
+
+        def fake_run(command, **kwargs):
+            return real_run([sys.executable, str(eater)], **kwargs)
+
+        subprocess.run = fake_run
+        result = miplib.solve(Path("unused"), Path("eater.mps"), 30.0, False)
+    finally:
+        subprocess.run = real_run
+        miplib.OVERRUN_LOG_DIR = saved_dir
+    kept = logs / "eater.log"
+    text = kept.read_text(encoding="utf-8") if kept.exists() else ""
+    check(result["status"] == "crashed" and "[exit 7]" in result["message"]
+          and "ended with no answer: exit 7" in text
+          and text.rstrip().endswith("Root cuts: separating"),
+          "a run that dies with no answer leaves its log, the last line where it was", text)
+    if Path("/proc/self/status").exists():
+        check(result["peak_rss_mb"] is not None and 200 <= result["peak_rss_mb"] < 400,
+              "its peak resident memory is the kernel's high-water mark", str(result))
+    else:
+        check(result["peak_rss_mb"] is None, "no /proc here: no peak is claimed")
+with tempfile.TemporaryDirectory() as tmp:
+    # A solver that answers in time, with an error status: its log is kept too.
+    answerer = Path(tmp) / "answerer.py"
+    answerer.write_text(
+        "import json, sys\n"
+        "stats = sys.argv[sys.argv.index('--stats') + 1]\n"
+        "print('knapsack covers: 9 supported row(s)', flush=True)\n"
+        "json.dump({'result': {'status': 'numerical_error', 'message': 'out of memory'},"
+        " 'model': {}, 'effort': {}}, open(stats, 'w'))\n", encoding="utf-8")
+    logs = Path(tmp) / "logs"
+    saved_dir = miplib.OVERRUN_LOG_DIR
+    miplib.OVERRUN_LOG_DIR = logs
+    try:
+        import subprocess  # noqa: PLC0415
+        real_run = subprocess.run
+
+        def fake_run(command, **kwargs):
+            if "--stats" not in command:
+                return real_run(command, **kwargs)
+            return real_run([sys.executable, str(answerer), *command[1:]], **kwargs)
+
+        subprocess.run = fake_run
+        result = miplib.solve(Path("unused"), Path("oom.mps"), 30.0, False)
+    finally:
+        subprocess.run = real_run
+        miplib.OVERRUN_LOG_DIR = saved_dir
+    text = (logs / "oom.log").read_text(encoding="utf-8") if (logs / "oom.log").exists() else ""
+    check(result["status"] == "numerical_error"
+          and "ended with no answer: status numerical_error" in text
+          and text.rstrip().endswith("knapsack covers: 9 supported row(s)"),
+          "an error status that comes back on time keeps its log too", text or str(result))
+row = miplib.make_row("p", {"published_optimal": 3.0}, 3.0,
+                      {"status": "optimal", "objective": 3.0, "verified": True,
+                       "wall_seconds": 1.0, "peak_rss_mb": 1234.4}, "abc1234", "", 1, "box",
+                      "now")
+check(row["peak_rss_mb"] == "1234", "the CSV carries it in MB")
 
 print("HiGHS reads a .mps.gz")
 with tempfile.TemporaryDirectory() as tmp:
