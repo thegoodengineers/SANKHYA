@@ -1125,6 +1125,7 @@ class BranchAndBound {
   Count root_cut_rounds_ = 0;      ///< #495: rounds that appended rows at the root
   int root_loop_wanted_ = -1;      ///< root_cut_loop_wanted()'s answer once taken; -1 not yet
   std::string cut_filter_report_;  ///< the root filter's verdicts per family and reason (#496)
+  std::string root_flow_diag_;  // diagnostic branch only
   Count dense_cuts_admitted_ = 0;  ///< #496: dense cuts admitted at the root
   Count dense_nonzeros_admitted_ = 0;  ///< their nonzeros, against the budget
   Count root_model_nonzeros_ = -1;     ///< the model's nonzeros before the first cut row

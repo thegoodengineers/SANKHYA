@@ -218,6 +218,28 @@ void BranchAndBound::add_combinatorial_cuts(const Solution& relaxation,
           flow.flow_rows, flow.covers, flow.cuts, flow.lifted);
     }
     candidates->insert(candidates->end(), covers.begin(), covers.end());
+    // DIAGNOSTIC BRANCH ONLY (#1158, never merged): the separator's own counts and the
+    // bounds it read, carried out through the cut filter report into the bench CSV.
+    if (root && root_flow_diag_.empty()) {
+      int fixed_int = 0, binaries = 0, cont_ub = 0, cont_lb = 0;
+      for (Index j = 0; j < working_.num_cols(); ++j) {
+        const auto u = static_cast<std::size_t>(j);
+        const double lo = global_lower_[u];
+        const double hi = global_upper_[u];
+        if (working_.col_type[u] == VarType::kInteger) {
+          if (lo == hi) ++fixed_int;
+          if (lo == 0.0 && hi == 1.0) ++binaries;
+        } else {
+          if (hi < kInfinity) ++cont_ub;
+          if (lo != 0.0) ++cont_lb;
+        }
+      }
+      root_flow_diag_ = fmt::format(
+          "; DIAG vub_rows {} flow_rows {} covers {} cuts {} lifted {} aggregated {} deepest {} "
+          "fixed_int {} binaries {} cont_finite_ub {} cont_lb_nonzero {}",
+          flow.vub_rows, flow.flow_rows, flow.covers, flow.cuts, flow.lifted, flow.aggregated,
+          flow.deepest, fixed_int, binaries, cont_ub, cont_lb);
+    }
   }
 }
 
@@ -362,7 +384,7 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   admit_dense_root_cuts(&filtered, initial_relaxation);
   // WHAT THE FILTER DID, per family and reason (#496): the answer to "why 0 root cuts on
   // opt1217", carried on the Solution into the stats and the MIPLIB CSV.
-  cut_filter_report_ = describe_cut_filter(filtered);
+  cut_filter_report_ = describe_cut_filter(filtered) + root_flow_diag_;
   logger_.verbose("root cut filter: {}", cut_filter_report_);
   // HOW DENSE THE REFUSED ONES WERE (#496): whether any support cap could admit them. The
   // counts say "too_dense"; only the supports say whether that is 20 nonzeros over a cap of
