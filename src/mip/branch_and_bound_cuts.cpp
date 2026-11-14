@@ -286,14 +286,19 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
   }
   // Between the separators the deadline is asked again (#1199): what was found so far is
   // returned, and the filter marks what it has no time left to examine.
-  if (solve_must_stop() || cap_cut_candidates(&candidates, "the knapsack covers")) {
+  // The cap first, whatever the clock says: a round out of time still holds no more than
+  // its budget.
+  if (cap_cut_candidates(&candidates, "the knapsack covers") || solve_must_stop()) {
     return candidates;
   }
-  std::vector<Cut> gmi = generate_gmi_cuts(working_, relaxation,
-                                           options_.get_bool("gmi_safety"), certificate_mode());
+  GmiLimits gmi_limits;
+  gmi_limits.max_cuts = cap - candidates.size();  // what the round has room for
+  gmi_limits.stop = [this] { return solve_must_stop(); };
+  std::vector<Cut> gmi = generate_gmi_cuts(
+      working_, relaxation, options_.get_bool("gmi_safety"), certificate_mode(), gmi_limits);
   candidates.insert(candidates.end(), std::make_move_iterator(gmi.begin()),
                     std::make_move_iterator(gmi.end()));
-  if (solve_must_stop() || cap_cut_candidates(&candidates, "the Gomory cuts")) {
+  if (cap_cut_candidates(&candidates, "the Gomory cuts") || solve_must_stop()) {
     return candidates;
   }
   // Implied-bound cuts (#499): the line through a two-variable row's two binary cases,
@@ -314,7 +319,7 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
     candidates.insert(candidates.end(), std::make_move_iterator(mir.begin()),
                       std::make_move_iterator(mir.end()));
   }
-  if (solve_must_stop() || cap_cut_candidates(&candidates, "the MIR cuts")) return candidates;
+  if (cap_cut_candidates(&candidates, "the MIR cuts") || solve_must_stop()) return candidates;
   // Clique and {0,1/2}-Chvatal-Gomory cuts (#358): the families built for the pure-integer,
   // unit-coefficient covering and packing rows MIR cannot separate. Derived under the
   // GLOBAL bounds, so they hold at every node.

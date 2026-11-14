@@ -231,8 +231,19 @@ struct RootGmiContext {
 /// is within kGmiMinFractionality of an integer gives no cut, and every cut's rhs is loosened
 /// by kGmiRhsRelaxAbsolute + kGmiRhsRelaxRelative * |rhs|. With `derive` (certificate mode,
 /// #518) each cut carries the split it rests on.
+///
+/// `limits` (#1199): at most `max_cuts` cuts are returned, the first by basis slot, and
+/// `stop` is asked before every source row. Each cut is one coefficient per column and each
+/// source row a solve with the basis: on radiationm40-10-02 the root's 9,397 fractional
+/// basic columns made 8 GB of cuts and ran 17 s past the time limit before anything else
+/// in the round could look at either.
+struct GmiLimits {
+  std::size_t max_cuts = static_cast<std::size_t>(-1);
+  std::function<bool()> stop;
+};
 [[nodiscard]] std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution,
-                                                 bool safe = false, bool derive = false);
+                                                 bool safe = false, bool derive = false,
+                                                 const GmiLimits& limits = {});
 
 // =========================================================================================
 // Cut Filtering and Deduplication (Stage 4C)

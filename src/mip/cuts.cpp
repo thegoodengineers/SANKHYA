@@ -1074,7 +1074,7 @@ std::optional<detail::ReconstructedTableauRow> RootGmiContext::tableau_row(
 }
 
 std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution, bool safe,
-                                   bool derive) {
+                                   bool derive, const GmiLimits& limits) {
   std::vector<Cut> cuts;
   RootGmiContext context(model, solution);
   if (!context.is_valid) return cuts;
@@ -1092,6 +1092,8 @@ std::vector<Cut> generate_gmi_cuts(const Model& model, const Solution& solution,
     // f0 or 1 - f0, so a source row this close to integral magnifies its own rounding.
     const double away = safe ? tol::kGmiMinFractionality : tol::kIntegrality;
     if (f0 <= away || f0 >= 1.0 - away) continue;
+    // The round's room and the solve's deadline (#1199), before the tableau row is built.
+    if (cuts.size() >= limits.max_cuts || (limits.stop && limits.stop())) break;
 
     auto row_opt = context.tableau_row(model, solution, slot);
     if (!row_opt) continue;
