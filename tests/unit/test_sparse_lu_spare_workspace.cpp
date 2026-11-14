@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <random>
 #include <thread>
 #include <vector>
@@ -52,7 +53,7 @@ Matrix random_matrix(Index m, double density, std::uint32_t seed) {
   std::mt19937 rng(seed);
   std::uniform_real_distribution<double> coin(0.0, 1.0);
   std::uniform_int_distribution<int> pick(0, 3);
-  const double small[] = {1.0, -1.0, 2.0, 0.5};
+  const double off_diagonal[] = {1.0, -1.0, 2.0, 0.5};
   Matrix a;
   a.m = m;
   a.rows.resize(static_cast<std::size_t>(m));
@@ -64,7 +65,7 @@ Matrix random_matrix(Index m, double density, std::uint32_t seed) {
         a.values[static_cast<std::size_t>(j)].push_back(8.0 + static_cast<double>(pick(rng)));
       } else if (coin(rng) < density) {
         a.rows[static_cast<std::size_t>(j)].push_back(i);
-        a.values[static_cast<std::size_t>(j)].push_back(small[pick(rng)]);
+        a.values[static_cast<std::size_t>(j)].push_back(off_diagonal[pick(rng)]);
       }
     }
   }
@@ -129,11 +130,11 @@ TEST(SparseLuSpareWorkspace, AWorkspaceAboveTheRowBoundIsNotKept) {
   // is that a basis above it still factorizes the same way before and after another.
   const Index big = tol::kLuSpareWorkspaceRows + 8;
   const Matrix large = random_matrix(big, 2.0 / static_cast<double>(big), 7);
-  const Matrix small = random_matrix(20, 0.4, 8);
+  const Matrix little = random_matrix(20, 0.4, 8);
   Outcome fresh_small;
-  std::thread([&] { fresh_small = factorize_and_solve(small); }).join();
+  std::thread([&] { fresh_small = factorize_and_solve(little); }).join();
   const Outcome first_large = factorize_and_solve(large);
-  const Outcome after_large = factorize_and_solve(small);
+  const Outcome after_large = factorize_and_solve(little);
   const Outcome second_large = factorize_and_solve(large);
   ASSERT_TRUE(first_large.ok);
   ASSERT_TRUE(fresh_small.ok);
