@@ -111,12 +111,15 @@ jobs:
         env:
           MODELS: ${{ inputs.time_limit }}
         run: |
-          set -uo pipefail
+          set +e
+          set -u
           out="$RUNNER_TEMP/out"; mkdir -p "$out/results"
           echo "out=$out" >> "$GITHUB_ENV"
           cpu="$(lscpu | sed -n 's/^Model name: *//p' | head -1)"
           machine="github-actions ubuntu-24.04 $(nproc) vCPU ${cpu}"
-          for c in $OPTIONS; do
+          for spec in $OPTIONS; do
+            c="${spec%%:*}"; models="$MODELS"
+            case "$spec" in *:*) models="$(echo "${spec#*:}" | tr ',' ' ')" ;; esac
             full="$(git rev-parse --verify "$c^{commit}")" || { echo "BISECT $c unknown"; continue; }
             git worktree add -q --detach ".b/$c" "$full"
             if ! ( cd ".b/$c" && scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF > "$out/build-$c.log" 2>&1 && cmake --build build -j >> "$out/build-$c.log" 2>&1 ); then
@@ -124,10 +127,10 @@ jobs:
             fi
             bin=".b/$c/build/sankhya"
             "$bin" version || true
-            if [ -z "$MODELS" ]; then
+            if [ -z "$models" ]; then
               python3 bench/runners/stress.py --binary "$bin" --machine "$machine" --solvers sankhya --out "$out/results/stress-bisect-$c.csv" --instances scaled_degen3 scaled_greenbeb scaled_maros-r7 scaled_pilot.we 2>&1 | tee "$out/run-$c.log" | grep -E '^scaled_' | sed "s/^/BISECT $c /"
             else
-              for m in $MODELS; do
+              for m in $models; do
                 log="$out/log-$c-$m.txt"
                 start=$(date +%s.%N)
                 timeout 200 "$bin" solve "data/stress/$m.mps" --time-limit 60 --option log_level=debug > "$log" 2>&1
