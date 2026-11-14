@@ -257,6 +257,9 @@ CSV_COLUMNS = [
     # Objective branching (#418): nodes split on the objective row rather than a column, from
     # the stats JSON; zero unless mip_objective_branching is on. Last, for the same reason.
     "objective_branches",
+    # #1199, last: the solver's own time to read the model file, which time_limit does not
+    # cover; beside solver_seconds, so an overrun is judged on the solve's clock.
+    "read_seconds",
 ]
 
 PROBING_COLUMNS = ("probing_fixings", "probing_tightenings", "probing_implications",
@@ -414,6 +417,9 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             "root_bound": as_number(effort.get("root_bound")),
             "root_bound_after_cuts": as_number(effort.get("root_bound_after_cuts")),
             "solver_seconds": effort.get("solve_seconds", ""),
+            # How long the solver took to read the file (#1199): outside time_limit, and
+            # ten seconds or more on the largest models. Blank from a binary that predates it.
+            "read_seconds": model.get("read_seconds", ""),
             "incumbent_trace": effort.get("incumbent_trace", []),
             "wall_seconds": wall,
             "verified": None,
@@ -751,6 +757,7 @@ def make_row(name, entry, published, blob, commit, solver_options, threads, mach
         "root_gap_closed": "" if closed is None else f"{closed:.4f}",
         "wall_seconds": f"{blob['wall_seconds']:.6f}",
         "solver_seconds": blob.get("solver_seconds", ""),
+        "read_seconds": blob.get("read_seconds", ""),
         "git_commit": commit,
         "solver_options": solver_options,
         "threads": threads,

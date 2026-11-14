@@ -112,8 +112,14 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
 /// `options`, when given, adds the "limits" block: the limits the solve was CONFIGURED with
 /// beside the counters it reached, so a record that says node_limit can be read without the
 /// command line that produced it (#289).
+///
+/// `read_seconds`, when not negative, is written as model.read_seconds: how long the caller
+/// took to read the model file (#1199). time_limit covers solve(), not the read, and on a
+/// model of ten million nonzeros the read is ten seconds or more; with both numbers in the
+/// record nobody has to infer the one from wall time minus the other.
 bool write_stats_json(const std::string& path, const Model& model, const Solution& solution,
-                      std::string* error, const Options* options = nullptr);
+                      std::string* error, const Options* options = nullptr,
+                      double read_seconds = -1.0);
 
 // -----------------------------------------------------------------------------------------
 // Model writers (inverse of the readers above)

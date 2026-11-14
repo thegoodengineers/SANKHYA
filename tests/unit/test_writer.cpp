@@ -435,6 +435,22 @@ TEST(StatsWriter, ObjectiveSurvivesTheJsonRoundTrip) {
   EXPECT_DOUBLE_EQ(blob["result"]["dual_bound"].get<double>(), solution.dual_bound);
 }
 
+TEST(StatsWriter, ReadSecondsAreWrittenOnlyWhenTheCallerMeasuredThem) {
+  // #1199: the time to read the model file, beside the solve's own clock. time_limit covers
+  // the solve and not the read; a record with both needs no inference from wall time.
+  const Model model = make_model();
+  const Solution solution = solve_it(model);
+  const TempFile file("", ".json");
+  std::string error;
+  ASSERT_TRUE(io::write_stats_json(file.path(), model, solution, &error, nullptr, 1.25))
+      << error;
+  nlohmann::json blob = nlohmann::json::parse(slurp(file.path()));
+  EXPECT_DOUBLE_EQ(blob["model"]["read_seconds"].get<double>(), 1.25);
+  ASSERT_TRUE(io::write_stats_json(file.path(), model, solution, &error)) << error;
+  blob = nlohmann::json::parse(slurp(file.path()));
+  EXPECT_FALSE(blob["model"].contains("read_seconds")) << "not measured, so not claimed";
+}
+
 TEST(StatsWriter, NonFiniteNumbersStayRecoverable) {
   // JSON has no literal for infinity, and nlohmann's answer is to emit `null` - silently,
   // with no error, producing valid JSON. An interrupted solve sets its dual bound to an

@@ -37,6 +37,7 @@
 #include "nlp/nl_reader.hpp"
 #include "nonlinear_cli.hpp"
 #include "sankhya/solve_control.hpp"
+#include "sankhya/timer.hpp"
 #include "sankhya/version.hpp"
 #include "scenarios_cli.hpp"
 
@@ -448,7 +449,11 @@ int main(int argc, char** argv) {
     // starts, the names and the writers.
     const bool global = options.get_string("nonconvex") == "global";
     sankhya::QcqpModel qcqp;
+    // Timed apart from the solve (#1199): time_limit covers solve(), not this, and the
+    // stats file says how long each took.
+    const sankhya::Timer read_clock;
     if (!load_qcqp_model(model_path, options, &qcqp)) return 3;
+    const double read_seconds = read_clock.elapsed_seconds();
     const bool conic = !global && (qcqp.has_quadratic_rows() || qcqp.has_cones());
     // Copied only when a quadratic engine still needs `qcqp`; an LP or MILP is moved, so a
     // large model is not held twice.
@@ -673,8 +678,8 @@ int main(int argc, char** argv) {
       fmt::print(stderr, "error: {}\n", error);
       return 4;
     }
-    if (!stats_path.empty() &&
-        !sankhya::io::write_stats_json(stats_path, model, solution, &error, &options)) {
+    if (!stats_path.empty() && !sankhya::io::write_stats_json(stats_path, model, solution,
+                                                              &error, &options, read_seconds)) {
       fmt::print(stderr, "error: {}\n", error);
       return 4;
     }
