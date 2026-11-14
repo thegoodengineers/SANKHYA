@@ -519,7 +519,7 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
 }
 
 bool write_stats_json(const std::string& path, const Model& model, const Solution& solution,
-                      std::string* error, const Options* options) {
+                      std::string* error, const Options* options, double read_seconds) {
   // These key names are consumed by bench/runners/*.py. Renaming one silently breaks the
   // benchmark CSVs, which are the project's only evidence, so treat them as an interface.
   nlohmann::json blob;
@@ -539,6 +539,7 @@ bool write_stats_json(const std::string& path, const Model& model, const Solutio
                    // Model identity (#288): two records carrying the same fingerprint were
                    // produced from the same numbers, whatever the file was called.
                    {"fingerprint", fmt::format("{:016x}", model.fingerprint())}};
+  if (read_seconds >= 0.0) blob["model"]["read_seconds"] = read_seconds;  // #1199
   blob["result"] = {{"status", to_string(solution.status)},
                     {"algorithm", solution.algorithm},
                     {"engine_rule", solution.engine_rule},

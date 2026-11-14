@@ -615,7 +615,10 @@ arrives without one (a model presolve proved infeasible, say) is visible as such
 
 A MILP stopped by a gap target (`--option mip_relative_gap=0.01`) reports *optimal within
 the gap* and the file records the gap it was asked for (#188); a run that stops on a limit
-reports the incumbent as what it is. Time limits reach inside the sparse LDL^T factorization
+reports the incumbent as what it is. `--time-limit` covers the solve (presolve, the engine
+and postsolve), not reading the model file or writing the answer; `--stats` records the two
+apart, as `model.read_seconds` and `effort.solve_seconds`, and on a model of ten million
+nonzeros the read alone is ten seconds or more. Time limits reach inside the sparse LDL^T factorization
 (#197), so an interior-point solve on a model whose factor is too large stops on time
 rather than when the factorization happens to finish; the sparse LU used by the simplex
 honours it too since #240 (#208, closed). When a search meets its gap target with the tree
