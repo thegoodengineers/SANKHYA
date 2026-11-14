@@ -430,7 +430,7 @@ jobs:
                 for model in "$@"; do
                   for arm in "${arms[@]}"; do
                     tag="$model-${arm%%:*}"
-                    valgrind --tool=callgrind --callgrind-out="$out/callgrind-$tag.out"                       "${arm#*:}" solve "data/miplib3/$model.mps" --option mip_threads=1                       --option node_limit="$nodes" --option log_to_console=false                       > "$out/profile-$tag.log" 2>&1 || true
+                    valgrind --tool=callgrind --callgrind-out-file="$out/callgrind-$tag.out"                       "${arm#*:}" solve "data/miplib3/$model.mps" --option mip_threads=1                       --option node_limit="$nodes" --option log_to_console=false                       > "$out/profile-$tag.log" 2>&1 || true
                     tail -5 "$out/profile-$tag.log"
                     callgrind_annotate --inclusive=yes "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-inclusive.txt"
                     callgrind_annotate "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-self.txt"
