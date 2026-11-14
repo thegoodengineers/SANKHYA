@@ -14,8 +14,11 @@ import highspy  # noqa: E402
 INF = 1e29
 
 
-def own(model: Path) -> None:
+def own(model: Path, regularization: float | None = None) -> None:
     h = highspy.Highs()
+    if regularization is not None:
+        print(f"  -- again with qp_regularization_value = {regularization}")
+        h.setOptionValue("qp_regularization_value", regularization)
     for key, value in (("output_flag", False), ("time_limit", 60.0), ("threads", 1),
                        ("primal_feasibility_tolerance", 1e-7),
                        ("dual_feasibility_tolerance", 1e-7)):
@@ -62,6 +65,11 @@ def own(model: Path) -> None:
             for p in range(start[j], start[j + 1]):
                 recomputed[j] -= value[p] * y[index[p]]
         stationarity = max(abs(recomputed[j] - d[j]) for j in range(n))
+        at = max(range(n), key=lambda j: abs(recomputed[j] - d[j]))
+        print(f"  by index: the residual is largest on {lp.col_names_[at]}: x = {x[at]!r}, "
+              f"residual {recomputed[at] - d[at]!r}, residual / x = "
+              f"{(recomputed[at] - d[at]) / x[at] if x[at] else float('nan')!r}; max |x| = "
+              f"{max(abs(v) for v in x)!r}")
         worst, worst_j, comp, comp_j = 0.0, -1, 0.0, -1
         for j in range(n):
             below = d[j] < 0 and (up[j] >= INF or up[j] - x[j] > 1e-7 * max(1.0, abs(up[j])))
@@ -97,5 +105,5 @@ for instance in sys.argv[1:]:
     path = ROOT / "data" / "maros-meszaros" / f"{instance}.qps"
     print(f"== {instance}", flush=True)
     own(path)
-    harness(path)
+    own(path, 0.0)
     sys.stdout.flush()
