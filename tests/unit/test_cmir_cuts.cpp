@@ -356,5 +356,49 @@ TEST(CmirCuts, TheExactOptimumSatisfiesEveryCutAndTheSearchFindsIt) {
       compared, with_cuts, static_cast<long long>(cuts_applied));
 }
 
+TEST(CmirCuts, AStopEndsSeparationWithTheFirstOfTheCutsItWouldHaveFound) {
+  // #1199: the generator loops over every row of the model and read no clock. `stop` is
+  // asked before every base row; what comes back after it is exactly the first cuts of the
+  // full answer, in order, and with a stop that never fires the answer is unchanged. Plain
+  // MIR and c-MIR, on the random fixed-charge networks of the sweep above.
+  std::mt19937_64 rng(11990);
+  int stopped_short = 0;
+  int compared = 0;
+  for (int trial = 0; trial < 60; ++trial) {
+    const FixedCharge fc = random_network(rng, 4 + trial % 3, 2 + trial % 2, 1);
+    const Model model = model_of(fc.lp);
+    const Solution relaxed = lp_relaxation(model);
+    if (relaxed.status != SolveStatus::kOptimal) continue;
+    for (const bool cmir : {false, true}) {
+      mip::MirOptions all;
+      all.cmir = cmir;
+      const std::vector<Cut> full = mip::generate_mir_cuts(model, relaxed, model.col_lower,
+                                                           model.col_upper, nullptr, all);
+      mip::MirOptions never = all;
+      never.stop = [] { return false; };
+      const std::vector<Cut> same = mip::generate_mir_cuts(model, relaxed, model.col_lower,
+                                                           model.col_upper, nullptr, never);
+      ASSERT_EQ(same.size(), full.size()) << "trial " << trial;
+      for (int allowed = 0; allowed <= 3; ++allowed) {
+        int asked = 0;
+        mip::MirOptions some = all;
+        some.stop = [&asked, allowed] { return asked++ >= allowed; };
+        const std::vector<Cut> part = mip::generate_mir_cuts(model, relaxed, model.col_lower,
+                                                             model.col_upper, nullptr, some);
+        ASSERT_LE(part.size(), full.size()) << "trial " << trial;
+        for (std::size_t k = 0; k < part.size(); ++k) {
+          EXPECT_EQ(part[k].coeff, full[k].coeff) << "trial " << trial << " cut " << k;
+          EXPECT_EQ(part[k].rhs, full[k].rhs) << "trial " << trial << " cut " << k;
+        }
+        if (allowed == 0) EXPECT_TRUE(part.empty()) << "stopped before the first row";
+        if (part.size() < full.size()) ++stopped_short;
+        ++compared;
+      }
+    }
+  }
+  EXPECT_GT(compared, 100);
+  EXPECT_GT(stopped_short, 0) << "the stop should have cut separation short somewhere";
+}
+
 }  // namespace
 }  // namespace sankhya

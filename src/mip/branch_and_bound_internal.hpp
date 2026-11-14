@@ -894,8 +894,15 @@ class BranchAndBound {
   void drop_cuts_from(std::size_t pool_before);
 
   /// How MIR separates (#498): c-MIR when `mir_cmir` is set.
+  /// The solve's limits are exhausted or the caller interrupted it (#1199): what every loop
+  /// that can run long between two nodes asks, so that the deadline holds inside it too.
+  [[nodiscard]] bool solve_must_stop() const {
+    return (control_ != nullptr && control_->interruption_requested()) ||
+           limits_.exhausted(timer_.elapsed_seconds(), 0, 0) != LimitReason::kNone;
+  }
   [[nodiscard]] MirOptions mir_options() const {
     MirOptions mir;
+    mir.stop = [this] { return solve_must_stop(); };
     // c-MIR states no derivation (#518), so a certificate's search uses the plain MIR.
     mir.cmir = options_.get_bool("mir_cmir") && certificate_path_.empty();
     mir.derive = !certificate_path_.empty();
@@ -911,10 +918,7 @@ class BranchAndBound {
     policy.efficacy = options_.get_bool("cut_efficacy_test");
     policy.test_dense = root && options_.get_int("cut_dense_max") > 0;
     // The filter is the one long loop of a cut round that is not an LP (#1199).
-    policy.stop = [this] {
-      return (control_ != nullptr && control_->interruption_requested()) ||
-             limits_.exhausted(timer_.elapsed_seconds(), 0, 0) != LimitReason::kNone;
-    };
+    policy.stop = [this] { return solve_must_stop(); };
     return policy;
   }
   /// #496: accept the most efficacious of the cuts in `filtered` refused for density
