@@ -4,8 +4,10 @@
 // Every solve is checked by multiplying back in exact arithmetic: B x must equal b and B^T y
 // must equal c to the last bit, which no ordering, permutation or eta bug can pass by luck.
 
+#include <chrono>
 #include <cstddef>
 #include <random>
+#include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -152,6 +154,32 @@ TEST(ExactLu, ANearlySingularMatrixTheFloatOrderRefusesIsStillFactorised) {
   EXPECT_EQ(lu.hinted_steps(), 0);
   const std::vector<Rational> b = {Rational(1), Rational(-3)};
   std::vector<Rational> x = b;
+  lu.solve(x);
+  EXPECT_EQ(times(columns, x), b);
+}
+
+TEST(ExactLu, TheSolvesHonourTheBudgetTheFactorizationWasGiven) {
+  // Only the elimination used to ask the clock. On the stress set's scaled maros-r7 one
+  // solve through the factors of a 3,136-row basis ran for more than 110 s after its 30 s
+  // budget, behind a solve that had already returned its optimum. A factorization inside
+  // the budget, then a solve after it has passed: the solve declines, as the elimination
+  // would have.
+  const std::vector<RationalColumn> columns = {
+      {{0, Rational(2)}, {1, Rational(1)}},
+      {{0, Rational(1)}, {1, Rational(3)}},
+  };
+  ExactLu lu;
+  ASSERT_TRUE(lu.factorize(pointers(columns), 2, Deadline(0.05)));
+  std::this_thread::sleep_for(std::chrono::milliseconds(120));
+  std::vector<Rational> x = {Rational(1), Rational(1)};
+  EXPECT_THROW(lu.solve(x), ExactBudgetExceeded);
+  std::vector<Rational> y = {Rational(1), Rational(1)};
+  EXPECT_THROW(lu.solve_transpose(y), ExactBudgetExceeded);
+
+  // A later factorization sets its own budget: the same factors solve again.
+  ASSERT_TRUE(lu.factorize(pointers(columns), 2, Deadline(60.0)));
+  const std::vector<Rational> b = {Rational(3), Rational(4)};
+  x = b;
   lu.solve(x);
   EXPECT_EQ(times(columns, x), b);
 }
