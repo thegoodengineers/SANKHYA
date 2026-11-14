@@ -3783,28 +3783,28 @@ SANKHYA included.
 
 ### 4a.1 Netlib LP
 
-Source CSV: `bench/results/head-to-head-netlib-ab3f4a1.csv`  
-Commit `ab3f4a1` · machine `github-actions ubuntu-24.04; AMD EPYC 7763 64-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`  
+Source CSV: `bench/results/head-to-head-netlib-d1d0d52.csv`  
+Commit `d1d0d52` · machine `github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64`  
 94 instances · time limit 120 s · 1 thread per solver · every solver a separate process
 
 **The 92 LPs netlib.org ships as EMPS files:**
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | ab3f4a1 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.304 s |
-| HiGHS | 1.15.1 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.158 s |
-| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.380 s |
-| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.348 s |
-| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.472 s |
+| SANKHYA | d1d0d52 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.245 s |
+| HiGHS | 1.16.0 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.127 s |
+| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.312 s |
+| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.312 s |
+| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.436 s |
 
 **Instance by instance, SANKHYA against each rival:**
 
 | against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
 |---|---:|---:|---:|---:|---:|---:|
-| HiGHS | 92 | 6 | 78 | 8 | 1.00x | 0.77x |
-| SCIP | 92 | 23 | 66 | 3 | 1.00x | 0.30x |
-| CBC/Clp | 92 | 7 | 77 | 8 | 1.00x | 0.61x |
-| GLPK | 92 | 16 | 71 | 5 | 1.00x | 0.61x |
+| HiGHS | 92 | 4 | 82 | 6 | 1.00x | 0.85x |
+| SCIP | 92 | 19 | 70 | 3 | 1.00x | 0.31x |
+| CBC/Clp | 92 | 6 | 79 | 7 | 1.00x | 0.60x |
+| GLPK | 92 | 12 | 77 | 3 | 1.00x | 0.70x |
 
 *A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
 
@@ -3812,11 +3812,11 @@ Commit `ab3f4a1` · machine `github-actions ubuntu-24.04; AMD EPYC 7763 64-Core 
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | ab3f4a1 | 2 | 2 | 1 | 2 | 2 | primal+dual | 2.266 s |
-| HiGHS | 1.15.1 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.477 s |
-| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 2.294 s |
-| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.211 s |
-| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.895 s |
+| SANKHYA | d1d0d52 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.751 s |
+| HiGHS | 1.16.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.207 s |
+| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 1.688 s |
+| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 0.953 s |
+| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.603 s |
 
 `matched` grades against the readme's optimum and `matched exact` against Koch's exact rational optimum (`data/netlib/koch_exact.json`, #747); the timing counts the exact grade. Where the two differ the readme is the one that is wrong: on 80bau3b, ganges, greenbea, greenbeb, nesm, pilot, pilot.we, scrs8 and stocfor3 every solver here agrees with Koch.
 
@@ -4344,23 +4344,31 @@ section 4a.1 breaks down and the stress row the CSV of section 5b. On the stress
 Clp's and GLPK's `infeasible` and `unbounded` are graded on the status alone, since their
 adapters read no certificate, where SANKHYA's and HiGHS's must pass the verifier.
 
-**SANKHYA against the four open-source solvers the problem statement names** (HiGHS, SCIP, COIN-OR CBC, GLPK). Each row is one job: all five solvers on the same machine, one thread each, the same time limit, each a separate process, every point checked by `tools/verify_solution.py`. A cell is **proved / matched / verified / wrong**: the solver's own claim of an optimum (on the stress set, of any verdict); that claim at the published optimum (on the stress set, graded correct); the point accepted by the verifier; and a wrong answer - an optimum off the published value by more than the solver was asked for, or a verdict the model contradicts. A rejected point with the right objective is not counted wrong: it is the gap between proved and verified. CBC is its `cbc` binary on MILPs and its LP engine, the `clp` binary, on LPs.
+**SANKHYA against the four open-source solvers the problem statement names** (HiGHS, SCIP, COIN-OR CBC, GLPK). Each row is one job: all five solvers on the same machine, one thread each, the same time limit, each a separate process, every point checked by `tools/verify_solution.py`. A cell is **proved / matched / verified / wrong**: the solver's own claim of an optimum (on the stress set, of any verdict); that claim at the published optimum (on the stress set, graded correct); the point accepted by the verifier; and a wrong answer - an optimum off the published value by more than the solver was asked for, or a verdict the model contradicts. A rejected point with the right objective is not counted wrong: it is the gap between proved and verified. CBC is its `cbc` binary on MILPs and its LP engine, the `clp` binary, on LPs. CBC and GLPK take no quadratic objective, so the Maros-Meszaros row is the other three.
 
 | suite | instances | limit | SANKHYA | HiGHS | SCIP | CBC | GLPK | CSV | commit |
 |---|---:|---:|---|---|---|---|---|---|---|
-| Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-ab3f4a1.csv` | `ab3f4a1` |
-| MIPLIB 3 MILP | 65 | 60 s | 45 / 41 / 45 / 0 | 52 / 51 / 52 / 0 | 52 / 47 / 52 / 0 | 51 / 50 / 51 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-ab3f4a1.csv` | `ab3f4a1` |
-| Stress set LP | 126 | 60 s | 114 / 114 / 115 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-09ea411.csv` | `09ea411` |
-| Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | - | 87 / 85 / 60 / 2 | - | - | `bench/results/head-to-head-maros-meszaros-partial-ab3f4a1.csv` | `ab3f4a1` |
+| Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-d1d0d52.csv` | `d1d0d52` |
+| MIPLIB 3 MILP | 65 | 60 s | 42 / 41 / 42 / 0 | 52 / 49 / 52 / 0 | 50 / 45 / 50 / 0 | 49 / 48 / 49 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-d1d0d52.csv` | `d1d0d52` |
+| Stress set LP | 126 | 60 s | 114 / 114 / 116 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-e4eb1cf.csv` | `e4eb1cf` |
+| Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 102 / 94 / 28 / 8 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-e4eb1cf.csv` | `e4eb1cf` |
 
-Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 51, CBC 50, SCIP 47, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 114, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58.
+Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 49, CBC 48, SCIP 45, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 114, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58, HiGHS 28.
 
-Versions, as each solver reported them in those runs: HiGHS 1.15.1 and 1.16.0, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
+Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
 
 **Every wrong answer counted above** (the stress set's are named, with every rejection, in section 5b):
 
+- Maros-Meszaros QP, HiGHS on `cont-101`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.500e-06 relative to its magnitudes on C---8389; [FAIL] strong duality              primal 1.955290889685e-01  dual 1.800909169287e-01  gap 1.544e
+- Maros-Meszaros QP, HiGHS on `dpklo1`: optimal; [FAIL] row activity                worst violation 3.653e+01 (3.653e+01 relative to the row's terms) on 53
 - Maros-Meszaros QP, SCIP on `dualc1`: optimal; relative gap 6.75066400474483e-06
+- Maros-Meszaros QP, HiGHS on `gouldqp2`: optimal; [FAIL] strong duality              primal 1.882025166267e-04  dual 1.595588328168e-04  gap 2.864e-05 (relative 2.864e-05), 8.526e-06 of it from per-item violations accepted above
 - Maros-Meszaros QP, SANKHYA on `hues-mod`: optimal; relative gap 6.493285498031229e-06
+- Maros-Meszaros QP, HiGHS on `liswet8`: optimal; [FAIL] dual feasibility (columns)  worst 5.955e-04 (5.955e-04 relative) on C---9549; [FAIL] complementary slackness     worst /multiplier/ * slack = 5.955e-04 relative to its magnitudes on C---9549
+- Maros-Meszaros QP, HiGHS on `primalc8`: optimal; [FAIL] dual feasibility (columns)  worst 3.311e-03 (3.311e-03 relative) on C------1; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.096e+02 relative to its magnitudes on C------1
+- Maros-Meszaros QP, HiGHS on `qbore3d`: optimal; [FAIL] dual feasibility (columns)  worst 8.437e-04 (8.437e-04 relative) on IUT.KWXI; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.118e+00 relative to its magnitudes on IUT.KWXI
+- Maros-Meszaros QP, HiGHS on `qfffff80`: optimal; [FAIL] dual feasibility (columns)  worst 2.469e-02 (2.469e-02 relative) on YP.DWLGS; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.098e+03 relative to its magnitudes on YP.DWLGS
+- Maros-Meszaros QP, HiGHS on `qshare1b`: optimal; [FAIL] dual feasibility (columns)  worst 2.606e-02 (2.606e-02 relative) on CCC023; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.791e+03 relative to its magnitudes on CCC023
 - Maros-Meszaros QP, SCIP on `yao`: optimal; relative gap 0.007724452152089034
 
 **Every other answer the verifier rejected** (proved, not verified):
@@ -4371,50 +4379,116 @@ Versions, as each solver reported them in those runs: HiGHS 1.15.1 and 1.16.0, S
 - Netlib LP, CBC/Clp on `pilot.we`: optimal; [FAIL] column bounds               worst violation 1.000e-05 (1.000e-05 relative) on UOSE03
 - Netlib LP, CBC/Clp on `pilotnov`: optimal; [FAIL] column bounds               worst violation 1.538e-05 (1.538e-05 relative) on USLB06
 - MIPLIB 3 MILP, GLPK on `dsbmip`: optimal; [FAIL] row activity        worst violation 1.653e-05 (1.653e-05 relative to the row's terms) on CIL20019
+- Maros-Meszaros QP, HiGHS on `aug3d`: optimal; [FAIL] dual feasibility (columns)  worst 2.006e-07 (2.006e-07 relative) on C---3696; [FAIL] strong duality              primal 5.540677257925e+02  dual 5.540682388161e+02  gap 5.130e-04 (relative 9.259e-07), 2.7
+- Maros-Meszaros QP, HiGHS on `aug3dc`: optimal; [FAIL] dual feasibility (columns)  worst 1.828e-07 (1.828e-07 relative) on C---3697; [FAIL] strong duality              primal 7.712624386890e+02  dual 7.712628998920e+02  gap 4.612e-04 (relative 5.980e-07), 2.2
+- Maros-Meszaros QP, HiGHS on `aug3dcqp`: optimal; [FAIL] dual feasibility (columns)  worst 1.991e-07 (1.991e-07 relative) on C---2885; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.096e-06 relative to its magnitudes on C---2067; [FAIL] stron
+- Maros-Meszaros QP, HiGHS on `aug3dqp`: optimal; [FAIL] dual feasibility (columns)  worst 2.222e-07 (2.222e-07 relative) on C---3652; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.186e-06 relative to its magnitudes on C---2067
+- Maros-Meszaros QP, HiGHS on `cont-050`: optimal; [FAIL] strong duality              primal -4.563850868314e+00  dual -4.564606145095e+00  gap 7.553e-04 (relative 1.655e-04), 5.197e-04 of it from per-item violations accepted above
 - Maros-Meszaros QP, SCIP on `cont-050`: optimal; [FAIL] objective           recomputed -4.563850907011e+00, solver said -4.563850922358e+00, difference 1.535e-08
+- Maros-Meszaros QP, HiGHS on `cont-100`: optimal; [FAIL] strong duality              primal -4.644397375959e+00  dual -4.646823585569e+00  gap 2.426e-03 (relative 5.224e-04), 1.950e-03 of it from per-item violations accepted above
+- Maros-Meszaros QP, HiGHS on `cvxqp1l`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 4.408e-06 relative to its magnitudes on C----899
+- Maros-Meszaros QP, HiGHS on `cvxqp2l`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.500e-06 relative to its magnitudes on C---1023
+- Maros-Meszaros QP, HiGHS on `cvxqp2m`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.263e-06 relative to its magnitudes on C----111
+- Maros-Meszaros QP, HiGHS on `cvxqp2s`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.168e-06 relative to its magnitudes on C------9
+- Maros-Meszaros QP, HiGHS on `cvxqp3m`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.316e-06 relative to its magnitudes on C-----42
 - Maros-Meszaros QP, SCIP on `dpklo1`: optimal; [FAIL] objective           recomputed 3.700962171143e-01, solver said 3.700962071807e-01, difference 9.934e-09
 - Maros-Meszaros QP, SCIP on `dual1`: optimal; [FAIL] objective           recomputed 3.501296435026e-02, solver said 3.501295306576e-02, difference 1.128e-08
 - Maros-Meszaros QP, SCIP on `dual4`: optimal; [FAIL] objective           recomputed 7.460908117710e-01, solver said 7.460907969306e-01, difference 1.484e-08
+- Maros-Meszaros QP, HiGHS on `exdata`: optimal; [FAIL] dual feasibility (columns)  worst 1.000e-06 (1.000e-06 relative) on bs161; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.000e-05 relative to its magnitudes on bs161
 - Maros-Meszaros QP, SCIP on `genhs28`: optimal; [FAIL] objective           recomputed 9.271736937664e-01, solver said 9.271736837764e-01, difference 9.990e-09
+- Maros-Meszaros QP, HiGHS on `gouldqp3`: optimal; [FAIL] strong duality              primal 2.062783971764e+00  dual 2.062776572639e+00  gap 7.399e-06 (relative 3.587e-06), 6.220e-06 of it from per-item violations accepted above
+- Maros-Meszaros QP, HiGHS on `hs118`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.591e-04 relative to its magnitudes on C------8; [FAIL] strong duality              primal 6.648204500000e+02  dual 6.648187602000e+02  gap 1.690e
+- Maros-Meszaros QP, HiGHS on `hs268`: optimal; [FAIL] dual feasibility (columns)  worst 4.000e-07 (4.000e-07 relative) on C------5; [FAIL] strong duality              primal 0.000000000000e+00  dual 3.100096364506e-06  gap 3.100e-06 (relative 3.100e-06), 0.0
+- Maros-Meszaros QP, HiGHS on `hs35`: optimal; [FAIL] dual feasibility (columns)  worst 1.333e-07 (1.333e-07 relative) on C------1
 - Maros-Meszaros QP, SCIP on `hs35`: optimal; [FAIL] objective           recomputed 1.111111045050e-01, solver said 1.111110945017e-01, difference 1.000e-08
+- Maros-Meszaros QP, HiGHS on `hs35mod`: optimal; [FAIL] dual feasibility (columns)  worst 1.500e-07 (1.500e-07 relative) on C------1
 - Maros-Meszaros QP, SCIP on `hs35mod`: optimal; [FAIL] objective           recomputed 2.500000020587e-01, solver said 2.499999900145e-01, difference 1.204e-08
+- Maros-Meszaros QP, HiGHS on `hs51`: optimal; [FAIL] dual feasibility (columns)  worst 1.000e-07 (1.000e-07 relative) on C------2; [FAIL] strong duality              primal 8.881784197001e-16  dual 4.999999925204e-07  gap 5.000e-07 (relative 5.000e-07), 4.0
 - Maros-Meszaros QP, SCIP on `hs51`: optimal; [FAIL] objective           recomputed 0.000000000000e+00, solver said -9.075448303975e-08, difference 9.075e-08
 - Maros-Meszaros QP, SCIP on `hs53`: optimal; [FAIL] objective           recomputed 4.093023255814e+00, solver said 4.093023245915e+00, difference 9.899e-09
+- Maros-Meszaros QP, HiGHS on `hs76`: optimal; [FAIL] dual feasibility (columns)  worst 2.091e-07 (2.091e-07 relative) on C------2
 - Maros-Meszaros QP, SCIP on `hs76`: optimal; [FAIL] objective           recomputed -4.681818221798e+00, solver said -4.681818231789e+00, difference 9.990e-09
 - Maros-Meszaros QP, SCIP on `ksip`: optimal; [FAIL] objective           recomputed 5.757979899730e-01, solver said 5.757978923372e-01, difference 9.764e-08
+- Maros-Meszaros QP, HiGHS on `liswet1`: optimal; [FAIL] dual feasibility (columns)  worst 7.482e-06 (7.482e-06 relative) on C--10002; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.482e-06 relative to its magnitudes on C--10002; [FAIL] stron
+- Maros-Meszaros QP, HiGHS on `liswet10`: optimal; [FAIL] dual feasibility (columns)  worst 4.389e-04 (4.389e-04 relative) on C---8399; [FAIL] complementary slackness     worst /multiplier/ * slack = 4.389e-04 relative to its magnitudes on C---8399; [FAIL] stron
+- Maros-Meszaros QP, HiGHS on `liswet12`: optimal; [FAIL] dual feasibility (columns)  worst 7.400e-05 (7.400e-05 relative) on C---8482; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.400e-05 relative to its magnitudes on C---8482
+- Maros-Meszaros QP, HiGHS on `liswet2`: optimal; [FAIL] dual feasibility (columns)  worst 1.456e-07 (1.456e-07 relative) on C--10001; [FAIL] strong duality              primal 2.499807610290e+01  dual 2.499840954945e+01  gap 3.334e-04 (relative 1.334e-05), 3.3
+- Maros-Meszaros QP, HiGHS on `liswet3`: optimal; [FAIL] dual feasibility (columns)  worst 6.080e-03 (6.080e-03 relative) on C---9530; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.080e-03 relative to its magnitudes on C---9530; [FAIL] stron
+- Maros-Meszaros QP, HiGHS on `liswet4`: optimal; [FAIL] dual feasibility (columns)  worst 9.154e-03 (9.154e-03 relative) on C---9662; [FAIL] complementary slackness     worst /multiplier/ * slack = 9.154e-03 relative to its magnitudes on C---9662; [FAIL] stron
+- Maros-Meszaros QP, HiGHS on `liswet5`: optimal; [FAIL] dual feasibility (columns)  worst 4.613e-03 (4.613e-03 relative) on C---9555; [FAIL] complementary slackness     worst /multiplier/ * slack = 4.613e-03 relative to its magnitudes on C---9555; [FAIL] stron
+- Maros-Meszaros QP, HiGHS on `liswet6`: optimal; [FAIL] dual feasibility (columns)  worst 2.800e-03 (2.800e-03 relative) on C---9153; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.800e-03 relative to its magnitudes on C---9153; [FAIL] stron
+- Maros-Meszaros QP, HiGHS on `liswet7`: optimal; [FAIL] dual feasibility (columns)  worst 7.272e-07 (7.272e-07 relative) on C--10002
+- Maros-Meszaros QP, HiGHS on `liswet9`: optimal; [FAIL] dual feasibility (columns)  worst 5.203e-05 (5.203e-05 relative) on C---3182; [FAIL] complementary slackness     worst /multiplier/ * slack = 5.203e-05 relative to its magnitudes on C---3182
+- Maros-Meszaros QP, HiGHS on `lotschd`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.516e-05 relative to its magnitudes on C------5
+- Maros-Meszaros QP, HiGHS on `powell20`: optimal; [FAIL] dual feasibility (columns)  worst 2.501e-04 (1.000e-07 relative) on C---5002; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.499e-04 relative to its magnitudes on C--10000
 - Maros-Meszaros QP, SCIP on `primal1`: optimal; [FAIL] objective           recomputed -3.501295974008e-02, solver said -3.501298447112e-02, difference 2.473e-08
 - Maros-Meszaros QP, SCIP on `primal2`: optimal; [FAIL] objective           recomputed -3.373366797028e-02, solver said -3.373369384926e-02, difference 2.588e-08
 - Maros-Meszaros QP, SCIP on `primal3`: optimal; [FAIL] objective           recomputed -1.357558326444e-01, solver said -1.357558555116e-01, difference 2.287e-08
 - Maros-Meszaros QP, SCIP on `primal4`: optimal; [FAIL] objective           recomputed -7.460908386962e-01, solver said -7.460908596746e-01, difference 2.098e-08
+- Maros-Meszaros QP, HiGHS on `primalc1`: optimal; [FAIL] dual feasibility (columns)  worst 1.032e-03 (1.032e-03 relative) on C------1; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.066e+01 relative to its magnitudes on C------1; [FAIL] stron
+- Maros-Meszaros QP, HiGHS on `primalc2`: optimal; [FAIL] dual feasibility (columns)  worst 4.725e-04 (4.725e-04 relative) on C------1; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.233e+00 relative to its magnitudes on C------1
+- Maros-Meszaros QP, HiGHS on `primalc5`: optimal; [FAIL] dual feasibility (columns)  worst 4.601e-05 (4.601e-05 relative) on C------1; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.117e-02 relative to its magnitudes on C------1
+- Maros-Meszaros QP, HiGHS on `qadlittl`: optimal; [FAIL] dual feasibility (columns)  worst 5.276e-06 (5.276e-06 relative) on ...142; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.484e-02 relative to its magnitudes on ...175
+- Maros-Meszaros QP, HiGHS on `qafiro`: optimal; [FAIL] dual feasibility (columns)  worst 2.552e-06 (2.552e-06 relative) on X37; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.515e-05 relative to its magnitudes on X37
 - Maros-Meszaros QP, SCIP on `qafiro`: optimal; [FAIL] objective           recomputed -1.590782842719e+00, solver said -1.590782851654e+00, difference 8.936e-09
+- Maros-Meszaros QP, HiGHS on `qbandm`: optimal; [FAIL] dual feasibility (columns)  worst 8.433e-05 (8.433e-05 relative) on MC90PT; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.111e-02 relative to its magnitudes on MC90PT
+- Maros-Meszaros QP, HiGHS on `qbeaconf`: optimal; [FAIL] dual feasibility (columns)  worst 2.792e-04 (2.792e-04 relative) on 10144; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.795e-01 relative to its magnitudes on 10144
+- Maros-Meszaros QP, HiGHS on `qbrandy`: optimal; [FAIL] dual feasibility (columns)  worst 3.532e-04 (3.531e-04 relative) on 100002; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.248e+00 relative to its magnitudes on 100002
+- Maros-Meszaros QP, HiGHS on `qe226`: optimal; [FAIL] dual feasibility (columns)  worst 1.100e-05 (1.100e-05 relative) on .VN1ER; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.210e-03 relative to its magnitudes on .VN1ER
 - Maros-Meszaros QP, SCIP on `qe226`: optimal; [FAIL] row activity        worst violation 1.105e-07 (1.105e-07 relative to the row's terms) on ...054
+- Maros-Meszaros QP, HiGHS on `qetamacr`: optimal; [FAIL] dual feasibility (columns)  worst 1.393e-06 (1.393e-06 relative) on KAPSTK65; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.144e-04 relative to its magnitudes on PCPETG00
+- Maros-Meszaros QP, HiGHS on `qforplan`: optimal; [FAIL] activity agreement          max /ours - solver's/ = 1.544e-06; [FAIL] dual feasibility (columns)  worst 1.604e-03 (1.604e-03 relative) on DEDO3 82; [FAIL] complementary slackness     worst /multiplier/ * 
+- Maros-Meszaros QP, HiGHS on `qgfrdxpn`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.510e+02 relative to its magnitudes on XJ2DZ2
+- Maros-Meszaros QP, HiGHS on `qisrael`: optimal; [FAIL] dual feasibility (columns)  worst 6.064e-04 (6.064e-04 relative) on A373; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.677e+00 relative to its magnitudes on A373
 - Maros-Meszaros QP, SCIP on `qisrael`: optimal; [FAIL] row activity        worst violation 9.990e-07 (9.990e-07 relative to the row's terms) on B173
 - Maros-Meszaros QP, SCIP on `qpcblend`: optimal; [FAIL] objective           recomputed -7.842855006777e-03, solver said -7.842864304416e-03, difference 9.298e-09
+- Maros-Meszaros QP, HiGHS on `qpcboei1`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.254e-02 relative to its magnitudes on C-----69
+- Maros-Meszaros QP, HiGHS on `qpcboei2`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.700e-02 relative to its magnitudes on C------9
 - Maros-Meszaros QP, SCIP on `qpcboei2`: optimal; [FAIL] row activity        worst violation 4.114e-07 (4.114e-07 relative to the row's terms) on R-----49
 - Maros-Meszaros QP, SCIP on `qptest`: optimal; [FAIL] objective           recomputed 4.371874914510e+00, solver said 4.371874904520e+00, difference 9.990e-09
+- Maros-Meszaros QP, HiGHS on `qrecipe`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 4.000e-05 relative to its magnitudes on JAL1IOBE; [FAIL] strong duality              primal -2.666160000000e+02  dual -2.666175010000e+02  gap 1.50
 - Maros-Meszaros QP, SCIP on `qsc205`: optimal; [FAIL] objective           recomputed -5.813959148495e-03, solver said -5.813968995113e-03, difference 9.847e-09
+- Maros-Meszaros QP, HiGHS on `qscagr25`: optimal; [FAIL] dual feasibility (columns)  worst 2.298e-03 (1.531e-04 relative) on COL00491; [FAIL] complementary slackness     worst /multiplier/ * slack = 5.279e+01 relative to its magnitudes on COL00491
+- Maros-Meszaros QP, HiGHS on `qscagr7`: optimal; [FAIL] dual feasibility (columns)  worst 1.600e-04 (1.600e-04 relative) on COL00073; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.529e+00 relative to its magnitudes on COL00131
+- Maros-Meszaros QP, HiGHS on `qscfxm1`: optimal; [FAIL] dual feasibility (columns)  worst 1.547e-03 (1.545e-03 relative) on 1RMCST; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.395e+01 relative to its magnitudes on 1RMCST
+- Maros-Meszaros QP, HiGHS on `qscfxm2`: optimal; [FAIL] dual feasibility (columns)  worst 1.564e-03 (1.561e-03 relative) on 1RMCST; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.445e+01 relative to its magnitudes on 1RMCST
+- Maros-Meszaros QP, HiGHS on `qscfxm3`: optimal; [FAIL] dual feasibility (columns)  worst 1.564e-03 (1.561e-03 relative) on 1RMCST; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.445e+01 relative to its magnitudes on 1RMCST
+- Maros-Meszaros QP, HiGHS on `qscorpio`: optimal; [FAIL] dual feasibility (columns)  worst 2.677e-07 (1.834e-07 relative) on X0337
+- Maros-Meszaros QP, HiGHS on `qscrs8`: optimal; [FAIL] dual feasibility (columns)  worst 2.103e-05 (2.103e-05 relative) on NELEDM75; [FAIL] complementary slackness     worst /multiplier/ * slack = 4.424e-03 relative to its magnitudes on NELEDM75
+- Maros-Meszaros QP, HiGHS on `qsctap1`: optimal; [FAIL] dual feasibility (columns)  worst 1.000e-06 (1.818e-07 relative) on Z4ZZ7ZZ5; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.000e-05 relative to its magnitudes on Z4ZZ7ZZ4
 - Maros-Meszaros QP, SCIP on `qsctap1`: optimal; [FAIL] row activity        worst violation 7.073e-07 (7.073e-07 relative to the row's terms) on ACZZ9ZZ2
 - Maros-Meszaros QP, SCIP on `qsctap2`: optimal; [FAIL] row activity        worst violation 7.097e-07 (7.097e-07 relative to the row's terms) on ACZ39ZZ2
 - Maros-Meszaros QP, SCIP on `qsctap3`: optimal; [FAIL] row activity        worst violation 7.088e-07 (7.088e-07 relative to the row's terms) on ACZ32ZZ2
+- Maros-Meszaros QP, HiGHS on `qseba`: optimal; [FAIL] dual feasibility (columns)  worst 7.896e-04 (7.896e-04 relative) on C0172000; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.235e+00 relative to its magnitudes on C0172000
+- Maros-Meszaros QP, HiGHS on `qshare2b`: optimal; [FAIL] dual feasibility (columns)  worst 6.000e-06 (6.000e-06 relative) on 010520; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.600e-04 relative to its magnitudes on 010520
+- Maros-Meszaros QP, HiGHS on `qshell`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.132e+03 relative to its magnitudes on C10010
+- Maros-Meszaros QP, HiGHS on `qship04l`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.357e-04 relative to its magnitudes on PREG0101
+- Maros-Meszaros QP, HiGHS on `qship04s`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.438e-04 relative to its magnitudes on PREG0101
+- Maros-Meszaros QP, HiGHS on `qship08l`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.585e-04 relative to its magnitudes on PREG0203
+- Maros-Meszaros QP, HiGHS on `qship08s`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.589e-04 relative to its magnitudes on PREG0203
+- Maros-Meszaros QP, HiGHS on `qship12s`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 8.517e-04 relative to its magnitudes on PREG0407
+- Maros-Meszaros QP, HiGHS on `qstandat`: optimal; [FAIL] dual feasibility (columns)  worst 9.830e-05 (9.829e-05 relative) on FTR.....; [FAIL] complementary slackness     worst /multiplier/ * slack = 9.663e-02 relative to its magnitudes on FTR.....
+- Maros-Meszaros QP, HiGHS on `s268`: optimal; [FAIL] dual feasibility (columns)  worst 4.000e-07 (4.000e-07 relative) on C------5; [FAIL] strong duality              primal 0.000000000000e+00  dual 3.100096364506e-06  gap 3.100e-06 (relative 3.100e-06), 0.0
+- Maros-Meszaros QP, HiGHS on `stadat2`: optimal; [FAIL] dual feasibility (columns)  worst 1.414e-06 (1.414e-06 relative) on C---2001; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.414e-06 relative to its magnitudes on C---2001; [FAIL] stron
 - Maros-Meszaros QP, SCIP on `tame`: optimal; [FAIL] objective           recomputed 5.187246390146e-23, solver said -9.985476434923e-09, difference 9.985e-09
 - Maros-Meszaros QP, SCIP on `zecevic2`: optimal; [FAIL] objective           recomputed -4.125000039990e+00, solver said -4.125000049982e+00, difference 9.992e-09
 
-**MIPLIB 3 in detail** (`bench/results/head-to-head-miplib3-60s-ab3f4a1.csv`, machine `github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`). Every solver stops at a relative gap of 0.0001, SANKHYA's default and HiGHS's, set explicitly for SCIP, CBC and GLPK; everything else is each solver's default. SANKHYA runs once, at its default seed, where section 2a reports the best of three seeds. The time is the shifted geometric mean of each solver's own clock (shift 10 s), a run that is not proved, matched and verified charged the 60 s limit.
+**MIPLIB 3 in detail** (`bench/results/head-to-head-miplib3-60s-d1d0d52.csv`, machine `github-actions ubuntu-24.04; INTEL(R) XEON(R) PLATINUM 8573C; 4 cores; 16 GiB RAM; Linux-x86_64`). Every solver stops at a relative gap of 0.0001, SANKHYA's default and HiGHS's, set explicitly for SCIP, CBC and GLPK; everything else is each solver's default. SANKHYA runs once, at its default seed, where section 2a reports the best of three seeds. The time is the shifted geometric mean of each solver's own clock (shift 10 s), a run that is not proved, matched and verified charged the 60 s limit.
 
 | solver | version | proved | matched | proved, matched and verified | wrong | not proved, and how | SGM time |
 |---|---|---:|---:|---:|---:|---|---:|
-| SANKHYA | ab3f4a1 | 45 | 41 | 41 | 0 | 18 feasible, 2 time_limit | 16.25 s |
-| HiGHS | 1.15.1 | 52 | 51 | 51 | 0 | 13 time_limit | 8.91 s |
-| SCIP | 10.0.2 | 52 | 47 | 47 | 0 | 13 time_limit | 11.36 s |
-| CBC | 2.10.11 | 51 | 50 | 50 | 0 | 14 time_limit | 8.86 s |
-| GLPK | 5.0 | 33 | 32 | 31 | 0 | 32 time_limit | 20.74 s |
+| SANKHYA | d1d0d52 | 42 | 41 | 41 | 0 | 21 feasible, 2 time_limit | 15.71 s |
+| HiGHS | 1.16.0 | 52 | 49 | 49 | 0 | 13 time_limit | 10.64 s |
+| SCIP | 10.0.2 | 50 | 45 | 45 | 0 | 15 time_limit | 12.91 s |
+| CBC | 2.10.11 | 49 | 48 | 48 | 0 | 16 time_limit | 10.15 s |
+| GLPK | 5.0 | 33 | 32 | 31 | 0 | 32 time_limit | 21.98 s |
 
 Instance by instance, proved, matched and verified:
 
-- HiGHS and not SANKHYA (10): `10teams`, `dcmulti`, `gesa2_o`, `harp2`, `mitre`, `mod011`, `nw04`, `p2756`, `rout`, `set1ch`. SANKHYA and not HiGHS (0): none.
-- SCIP and not SANKHYA (9): `10teams`, `dcmulti`, `mas76`, `mitre`, `noswot`, `nw04`, `p2756`, `rout`, `set1ch`. SANKHYA and not SCIP (3): `gesa3`, `gesa3_o`, `misc06`.
-- CBC and not SANKHYA (10): `10teams`, `dcmulti`, `gesa2_o`, `mas76`, `mitre`, `mod011`, `nw04`, `p2756`, `pk1`, `rout`. SANKHYA and not CBC (1): `qiu`.
-- GLPK and not SANKHYA (1): `dcmulti`. SANKHYA and not GLPK (11): `air04`, `air05`, `dsbmip`, `gesa2`, `gt2`, `modglob`, `pp08a`, `pp08aCUTS`, `qiu`, `vpm1`, `vpm2`.
+- HiGHS and not SANKHYA (9): `10teams`, `air04`, `air05`, `mitre`, `mod011`, `noswot`, `nw04`, `p2756`, `rout`. SANKHYA and not HiGHS (1): `bell5`.
+- SCIP and not SANKHYA (8): `10teams`, `air04`, `air05`, `mitre`, `noswot`, `nw04`, `p2756`, `rout`. SANKHYA and not SCIP (4): `gesa2_o`, `gesa3`, `gesa3_o`, `misc06`.
+- CBC and not SANKHYA (8): `10teams`, `air05`, `mas76`, `mitre`, `mod011`, `nw04`, `p2756`, `pk1`. SANKHYA and not CBC (1): `set1ch`.
+- GLPK and not SANKHYA (0): none. SANKHYA and not GLPK (10): `dsbmip`, `gesa2`, `gesa2_o`, `gt2`, `modglob`, `pp08a`, `pp08aCUTS`, `set1ch`, `vpm1`, `vpm2`.
 
 ---
 
@@ -4492,7 +4566,7 @@ row of the file as written and most of its certificates failing to prove the fil
 (each failing check is named below); Klee-Minty from n = 30, whose last right-hand sides
 reach 5^29 > 1e20, comes back unbounded.
 
-Measured on SANKHYA commit `09ea411` against HiGHS 1.16.0 (highspy, separate process) and cbc-clp 1.17.9, glpk 5.0, scip 10.0.2 (bench/runners/rivals.py; an `infeasible` or `unbounded` from one of these is graded on the status alone), machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 7763 64-Core Processor 15 GiB RAM`, 126 instances. Source: `stress-09ea411.csv`.
+Measured on SANKHYA commit `e4eb1cf` against HiGHS 1.16.0 (highspy, separate process) and cbc-clp 1.17.9, glpk 5.0, scip 10.0.2 (bench/runners/rivals.py; an `infeasible` or `unbounded` from one of these is graded on the status alone), machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 9V74 80-Core Processor 15 GiB RAM`, 126 instances. Source: `stress-e4eb1cf.csv`.
 
 | family | instances | sankhya correct / wrong / failed | cbc-clp correct / wrong / failed | glpk correct / wrong / failed | highs correct / wrong / failed | scip correct / wrong / failed |
 |---|---|---|---|---|---|---|
@@ -4508,18 +4582,18 @@ Measured on SANKHYA commit `09ea411` against HiGHS 1.16.0 (highspy, separate pro
 
 **sankhya, failed** (12):
 
-- `scaled_80bau3b`: no verdict: time_limit (time limit 59.4574s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned nume)
-- `scaled_bnl2`: no verdict: time_limit (time limit 59.9984s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_d2q06c`: no verdict: time_limit (time limit 59.9972s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_degen3`: no verdict: time_limit (stopped at the time limit of 59.9981s after 60.00s, 362359 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_dfl001`: no verdict: time_limit (stopped at the time limit of 59.995s after 60.00s, 58815 iterations, 0 nodes; route: the scaled attempt returned time_li)
-- `scaled_greenbeb`: no verdict: time_limit (time limit 59.9968s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_bnl2`: no verdict: time_limit (stopped at the time limit of 59.9985s after 60.00s, 142248 iterations, 0 nodes; route: the scaled attempt returned time_)
+- `scaled_d2q06c`: no verdict: time_limit (stopped at the time limit of 59.9972s after 60.00s, 29786 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_degen3`: no verdict: time_limit (time limit 59.9982s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_dfl001`: no verdict: time_limit (time limit 59.9958s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_greenbeb`: no verdict: time_limit (time limit 59.9971s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 - `scaled_maros-r7`: no verdict: killed (no exit within 3x the time limit)
-- `scaled_perold`: no verdict: time_limit (time limit 59.9993s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot`: no verdict: time_limit (time limit 59.9961s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_perold`: no verdict: time_limit (stopped at the time limit of 59.9993s after 60.00s, 64970 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_pilot`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 1.945e+09 from a least of 4.884e+01, which cannot happen on faithf)
+- `scaled_pilot.ja`: no verdict: time_limit (time limit 59.9985s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 - `scaled_pilot.we`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 2.959e+07 from a least of 1.841e-03, which cannot happen on faithf)
-- `scaled_pilot87`: no verdict: time_limit (time limit 59.9922s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_stair`: no verdict: time_limit (time limit 59.9996s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot87`: no verdict: time_limit (time limit 59.992s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
+- `scaled_stair`: no verdict: time_limit (time limit 59.9997s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 
 **cbc-clp, wrong** (67):
 

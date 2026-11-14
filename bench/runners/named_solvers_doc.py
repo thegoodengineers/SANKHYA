@@ -43,11 +43,13 @@ SUITES = (("netlib", "Netlib LP", "head-to-head-netlib-*.csv", "head-to-head-net
           ("miplib3", "MIPLIB 3 MILP", "head-to-head-miplib3-60s-*.csv",
            "head-to-head-miplib3-60s"),
           ("stress", "Stress set LP", "stress-*.csv", "stress"),
-          # SCIP is the one of the four that takes a quadratic objective and is not already
-          # in section 4a.3's nine-solver run at a current commit: SANKHYA and SCIP alone.
+          # HiGHS and SCIP are the two of the four that take a quadratic objective; CBC and
+          # GLPK do not, and their cells say so (NO_QP).
           ("maros-meszaros", "Maros-Meszaros QP", "head-to-head-maros-meszaros-partial-*.csv",
            "head-to-head-maros-meszaros-partial"))
 TITLE = "SANKHYA against the four open-source solvers the problem statement names"
+# The solvers with nothing to run on a suite, and what their cell reads instead of counts.
+NO_QP = {"maros-meszaros": ("cbc", "glpk")}
 
 
 def paths() -> dict[str, Path | None]:
@@ -108,7 +110,8 @@ def table(found: dict[str, Path | None]) -> list[str]:
            "wrong answer - an optimum off the published value by more than the solver was "
            "asked for, or a verdict the model contradicts. A rejected point with the right "
            "objective is not counted wrong: it is the gap between proved and verified. CBC is its `cbc` binary on MILPs and its LP engine, the "
-           "`clp` binary, on LPs.", "",
+           "`clp` binary, on LPs. CBC and GLPK take no quadratic objective, so the "
+           "Maros-Meszaros row is the other three.", "",
            "| suite | instances | limit | " + " | ".join(rivals.LABELS[s] for s in SOLVERS)
            + " | CSV | commit |", "|---|---:|---:|" + "---|" * len(SOLVERS) + "---|---|"]
     versions: dict[str, set[str]] = {}
@@ -124,7 +127,7 @@ def table(found: dict[str, Path | None]) -> list[str]:
         for solver in SOLVERS:
             mine = [r for r in rows if r["solver"] == solver]
             if not mine:
-                cells.append("-")
+                cells.append("no QP" if solver in NO_QP.get(key, ()) else "-")
                 continue
             if solver != "sankhya":
                 versions.setdefault(mine[0]["engine"], set()).update(
