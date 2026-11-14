@@ -23,7 +23,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIFT_SECONDS = 10.0  # Mittelmann's shift for these tables
 # The convex QP comparators (#983) run on Maros-Meszaros only; a suite without them simply
 # has no rows for them.
-ORDER = ("sankhya", "highs", "scip", "cbc-clp", "glpk", "osqp", "clarabel", "piqp", "scs")
+ORDER = ("sankhya", "highs", "highs-qp-regularization-0", "scip", "cbc-clp", "glpk", "osqp",
+         "clarabel", "piqp", "scs")
 TITLES = {"netlib": "Netlib LP", "kennington": "Kennington LP",
           "maros-meszaros": "Maros-Meszaros QP"}
 # Netlib's two models that netlib.org ships as Fortran generators, not EMPS files (#745):

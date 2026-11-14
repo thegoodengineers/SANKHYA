@@ -42,7 +42,12 @@ LABELS = {"sankhya": "SANKHYA", "sankhya-condat-vu": "SANKHYA CV",
           "sankhya-condat-vu-relative": "SANKHYA CV-rel", "highs": "HiGHS", "scip": "SCIP",
           "cbc-clp": "CBC/Clp", "cbc": "CBC",
           "glpk": "GLPK", "osqp": "OSQP", "clarabel": "Clarabel", "piqp": "PIQP",
-          "scs": "SCS"}
+          "scs": "SCS", "highs-qp-regularization-0": "HiGHS, QP regularization 0"}
+# HiGHS with an option moved off its default, as a second arm beside `highs`: never in place
+# of it. `highs-qp-regularization-0` sets qp_regularization_value, 1e-7 by default in HiGHS's
+# manual, to zero: at the default HiGHS's point misses the stationarity of the QP the file
+# states, c + Qx - A'y = d, by 1e-7 |x_j| (#1237). QP only.
+HIGHS_ARMS = {"highs-qp-regularization-0": {"qp_regularization_value": 0.0}}
 # osqp, clarabel, piqp and scs (#983) are the convex QP comparators Maros-Meszaros is
 # published against. Each is a pip package, imported only inside its own worker process
 # (QP_PYTHON_SOLVERS), exactly like highspy and pyscipopt above: never a build or test
@@ -80,6 +85,8 @@ def supports(solver: str, kind: str) -> bool:
     LP/MIP engines, so they are excluded from the LP and MIP suites rather than run there
     on Q=0 and reported as if that were a fair comparison."""
     if solver == "glpk" and kind == "qp":
+        return False
+    if solver in HIGHS_ARMS and kind != "qp":
         return False
     # `cbc` is the branch-and-cut binary and runs the MIP suites; on an LP or a QP COIN-OR is
     # represented by its LP engine, the `clp` binary (`cbc-clp`), which solves no MIP.
@@ -207,7 +214,8 @@ def _mps_path(model: Path, tmp: Path) -> Path:
     return link
 
 
-def _worker_highs(model: Path, time_limit: float, sol: Path) -> dict:
+def _worker_highs(model: Path, time_limit: float, sol: Path,
+                  options: dict | None = None) -> dict:
     """HiGHS on `model` as the file states it: an LP, a QP, or a MIP when the file has
     INTORG markers (MIPLIB 3, #761), which readModel reads as integrality, so the MIP is
     solved and not its relaxation. mip_feasibility_tolerance, the row and integrality
@@ -225,6 +233,8 @@ def _worker_highs(model: Path, time_limit: float, sol: Path) -> dict:
                        ("threads", 1), ("primal_feasibility_tolerance", FEASIBILITY_TOLERANCE),
                        ("dual_feasibility_tolerance", FEASIBILITY_TOLERANCE),
                        ("mip_feasibility_tolerance", FEASIBILITY_TOLERANCE)):
+        h.setOptionValue(key, value)
+    for key, value in (options or {}).items():  # a HIGHS_ARMS arm, stated in solver_options
         h.setOptionValue(key, value)
     with tempfile.TemporaryDirectory() as tmp:
         log = Path(tmp) / "highs.log"
@@ -246,7 +256,8 @@ def _worker_highs(model: Path, time_limit: float, sol: Path) -> dict:
            "objective": info.objective_function_value if mapped == "optimal" else None,
            "duals": bool(solution.dual_valid), "version": h.version(),
            "nodes": getattr(info, "mip_node_count", None),
-           "dual_bound": getattr(info, "mip_dual_bound", None), "root_bound": root_bound}
+           "dual_bound": getattr(info, "mip_dual_bound", None), "root_bound": root_bound,
+           "solver_options": ",".join(f"{k}={v:g}" for k, v in (options or {}).items())}
     if out["nodes"] in (None, -1):  # an LP or a QP: HighsInfo's MIP fields are -1 / inf
         out["nodes"], out["dual_bound"], out["root_bound"] = None, None, None
     # A MIP stopped by the limit with an incumbent (#1199): the point is written `feasible`
@@ -916,7 +927,7 @@ def run(solver: str, model: Path, kind: str, time_limit: float, sol: Path) -> di
     if not supports(solver, kind):
         return {"status": "unsupported", "message": f"{LABELS[solver]} is not run on a {kind}",
                 "seconds": None, "wall_seconds": None, "duals": False}
-    if solver in ("highs", "scip"):
+    if solver in ("highs", "scip") or solver in HIGHS_ARMS:
         return _python_rival(solver, model, time_limit, sol)
     if solver in ("cbc-clp", "cbc"):
         return _clp(model, kind, time_limit, sol)
@@ -929,8 +940,11 @@ def run(solver: str, model: Path, kind: str, time_limit: float, sol: Path) -> di
 
 def _worker(argv: list[str]) -> int:
     solver, model, time_limit, sol, report = argv
-    runner = {"highs": _worker_highs, "scip": _worker_scip}[solver]
-    out = runner(Path(model), float(time_limit), Path(sol))
+    if solver in HIGHS_ARMS:
+        out = _worker_highs(Path(model), float(time_limit), Path(sol), HIGHS_ARMS[solver])
+    else:
+        runner = {"highs": _worker_highs, "scip": _worker_scip}[solver]
+        out = runner(Path(model), float(time_limit), Path(sol))
     Path(report).write_text(json.dumps(out), encoding="utf-8")
     return 0
 
