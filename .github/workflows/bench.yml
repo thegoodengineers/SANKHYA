@@ -63,6 +63,7 @@ on:
           - fj-share-refinery
           - fj-share-miplib
           - profile-nodes
+          - ab-profile-nodes
         required: true
       ref:
         description: commit (short or full sha), branch or tag to build and run (ab-* - the new arm)
@@ -141,7 +142,7 @@ jobs:
       # #1158: callgrind for the per-node cost profile; it counts instructions, so the shares
       # do not depend on the runner's speed or on what else it is doing.
       - name: Install valgrind for the node profile
-        if: inputs.suite == 'profile-nodes'
+        if: inputs.suite == 'profile-nodes' || inputs.suite == 'ab-profile-nodes'
         run: scripts/ci_apt.sh valgrind
 
       # #1158: HiGHS beside SANKHYA on the same 65 MIPLIB 3 models, same job, same machine.
@@ -230,7 +231,7 @@ jobs:
             # every file's sha256. Untracked, so the -dirty check below is not affected.
             head-to-head-refinery-qp)
               python3 bench/refinery/generate.py --qp ;;
-            miplib3|head-to-head-miplib3|profile-nodes)
+            miplib3|head-to-head-miplib3|profile-nodes|ab-profile-nodes)
               python3 bench/runners/fetch_miplib3.py
               git checkout -- data/miplib3/manifest.json ;;
             # #1199: options is the shard, K/N; the fetch writes its names beside the models.
@@ -418,16 +419,23 @@ jobs:
                   --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
               # #1158: where a branch-and-bound node's instructions go. options: a node
               # limit, then MIPLIB 3 model names, e.g. "20000 mas76 pk1". One thread; the
-              # inclusive and the self-cost tables per model go into the artifact. No CSV: a
+              # inclusive and the self-cost tables per model go into the artifact. As
+              # ab-profile-nodes the base arm's binary is profiled on the same solves, and
+              # callgrind counts instructions, so the two tables compare exactly. No CSV: a
               # profile is a diagnosis, not a benchmark claim.
-              profile-nodes)
+              profile-nodes|ab-profile-nodes)
                 nodes="$1"; shift
+                arms=("new:build/sankhya")
+                [ "$SUITE" = ab-profile-nodes ] && arms+=("base:.base/build/sankhya")
                 for model in "$@"; do
-                  valgrind --tool=callgrind --callgrind-out="$out/callgrind-$model.out"                     build/sankhya solve "data/miplib3/$model.mps" --option mip_threads=1                     --option node_limit="$nodes" --option log_to_console=false                     > "$out/profile-$model.log" 2>&1 || true
-                  tail -5 "$out/profile-$model.log"
-                  callgrind_annotate --inclusive=yes "$out/callgrind-$model.out"                     | head -150 > "$out/profile-$model-inclusive.txt"
-                  callgrind_annotate "$out/callgrind-$model.out"                     | head -150 > "$out/profile-$model-self.txt"
-                  head -45 "$out/profile-$model-self.txt"
+                  for arm in "${arms[@]}"; do
+                    tag="$model-${arm%%:*}"
+                    valgrind --tool=callgrind --callgrind-out="$out/callgrind-$tag.out"                       "${arm#*:}" solve "data/miplib3/$model.mps" --option mip_threads=1                       --option node_limit="$nodes" --option log_to_console=false                       > "$out/profile-$tag.log" 2>&1 || true
+                    tail -5 "$out/profile-$tag.log"
+                    callgrind_annotate --inclusive=yes "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-inclusive.txt"
+                    callgrind_annotate "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-self.txt"
+                    head -45 "$out/profile-$tag-self.txt"
+                  done
                 done ;;
               # #525, #1048: the refinery ladder, decomposed against monolithic.
               decomposition)
