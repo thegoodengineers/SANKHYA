@@ -12,6 +12,7 @@ import csv
 import fnmatch
 import gzip
 import json
+import os
 import re
 import sys
 import tempfile
@@ -143,6 +144,39 @@ with tempfile.TemporaryDirectory() as tmp:
     check(not (logs / "quick.log").exists() and "returned late" in
           (logs / "late.log").read_text(encoding="utf-8"),
           "a run within 5 s of its limit leaves none; one past it does, bytes or text")
+
+print("the memory cap")
+check(miplib.memory_cap() is None, "no cap unless asked for")
+with tempfile.TemporaryDirectory() as tmp:
+    hog = Path(tmp) / "hog.py"
+    hog.write_text("block = bytearray(3 * 1024 ** 3)\nprint(len(block))\n", encoding="utf-8")
+    saved_cap = miplib.MEMORY_LIMIT_GB
+    miplib.MEMORY_LIMIT_GB = 1.0
+    try:
+        import subprocess  # noqa: PLC0415
+        real_run = subprocess.run
+        seen = {}
+
+        def fake_run(command, **kwargs):
+            seen.update(kwargs)
+            return real_run([sys.executable, str(hog)], **kwargs)
+
+        subprocess.run = fake_run
+        result = miplib.solve(Path("unused"), Path("unused.mps"), 20.0, False)
+    finally:
+        subprocess.run = real_run
+        miplib.MEMORY_LIMIT_GB = saved_cap
+    if os.name == "posix":
+        check(callable(seen.get("preexec_fn")) and result["status"] in ("crashed", "no_output")
+              and "1 GB memory cap" in result["message"],
+              "a solve past the cap dies alone, and the row says under which cap", str(result))
+    else:
+        check(seen.get("preexec_fn") is None,
+              "no RLIMIT_AS on this platform: no cap is applied, and none is claimed")
+row = miplib.make_row("p", {"published_optimal": 3.0}, 3.0,
+                      {"status": "optimal", "objective": 3.0, "verified": True,
+                       "wall_seconds": 1.0}, "abc1234", "", 1, "box", "now")
+check(row["memory_limit_gb"] == "", "the CSV's memory_limit_gb is blank with no cap")
 
 print("HiGHS reads a .mps.gz")
 with tempfile.TemporaryDirectory() as tmp:
