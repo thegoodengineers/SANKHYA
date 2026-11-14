@@ -46,6 +46,7 @@ add_executable(sankhya_tests
   unit/test_ft_file.cpp
   unit/test_sparse_lu.cpp
   unit/test_sparse_lu_singletons.cpp
+  unit/test_sparse_lu_spare_workspace.cpp
   unit/test_sparse_lu_hyper.cpp
   unit/test_ldl.cpp
   unit/test_ldl_supernodal.cpp
