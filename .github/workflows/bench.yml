@@ -104,21 +104,45 @@ jobs:
           python3 bench/runners/stress_instances.py
       # Scratch, never merged: the harness of this branch against a binary built from each
       # commit in `options`, on the four scaled models that had a verdict at d32b3847.
-      - name: Build each commit and run the four models
+      # Scratch, never merged. `options`: the commits. `time_limit`: empty for the four
+      # models through stress.py (the bisect), or a list of stress models to solve directly
+      # with the solver's own log kept (why a commit loses a model).
+      - name: Build each commit and run the models
+        env:
+          MODELS: ${{ inputs.time_limit }}
         run: |
           set -uo pipefail
           out="$RUNNER_TEMP/out"; mkdir -p "$out/results"
+          echo "out=$out" >> "$GITHUB_ENV"
           cpu="$(lscpu | sed -n 's/^Model name: *//p' | head -1)"
           machine="github-actions ubuntu-24.04 $(nproc) vCPU ${cpu}"
           for c in $OPTIONS; do
             full="$(git rev-parse --verify "$c^{commit}")" || { echo "BISECT $c unknown"; continue; }
             git worktree add -q --detach ".b/$c" "$full"
-            ( cd ".b/$c" && scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF                 > "$out/build-$c.log" 2>&1 && cmake --build build -j >> "$out/build-$c.log" 2>&1 )               || { echo "BISECT $c build failed"; tail -5 "$out/build-$c.log"; continue; }
-            ".b/$c/build/sankhya" version || true
-            python3 bench/runners/stress.py --binary ".b/$c/build/sankhya" --machine "$machine"               --solvers sankhya --out "$out/results/stress-bisect-$c.csv"               --instances scaled_degen3 scaled_greenbeb scaled_maros-r7 scaled_pilot.we               2>&1 | tee "$out/run-$c.log" | grep -E '^scaled_' | sed "s/^/BISECT $c /"
+            if ! ( cd ".b/$c" && scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF > "$out/build-$c.log" 2>&1 && cmake --build build -j >> "$out/build-$c.log" 2>&1 ); then
+              echo "BISECT $c build failed"; tail -5 "$out/build-$c.log"; continue
+            fi
+            bin=".b/$c/build/sankhya"
+            "$bin" version || true
+            if [ -z "$MODELS" ]; then
+              python3 bench/runners/stress.py --binary "$bin" --machine "$machine" --solvers sankhya --out "$out/results/stress-bisect-$c.csv" --instances scaled_degen3 scaled_greenbeb scaled_maros-r7 scaled_pilot.we 2>&1 | tee "$out/run-$c.log" | grep -E '^scaled_' | sed "s/^/BISECT $c /"
+            else
+              for m in $MODELS; do
+                log="$out/log-$c-$m.txt"
+                start=$(date +%s.%N)
+                timeout 200 "$bin" solve "data/stress/$m.mps" --time-limit 60 --option log_level=debug > "$log" 2>&1
+                code=$?
+                if [ "$(wc -l < "$log")" -lt 5 ]; then
+                  timeout 200 "$bin" solve "data/stress/$m.mps" --time-limit 60 > "$log" 2>&1; code=$?
+                fi
+                end=$(date +%s.%N)
+                echo "LOG $c $m exit $code wall $(echo "$end - $start" | bc) lines $(wc -l < "$log")"
+                grep -E "^(Result|Presolve|Dual reductions|Scaling|Engine selection|Basis|status|algorithm|iterations|solve seconds|primal infeas|dual infeas)|time by phase|refactorizations|re-solv|tighter|threshold|singular|declined|unsafe|numerical|diverged|restart|fallback|Markowitz|LU " "$log" | cut -c1-330 | sed "s/^/LOG $c $m | /" | head -80
+                grep -c "refactorized at iteration" "$log" | sed "s/^/LOG $c $m | refactorized lines: /"
+              done
+            fi
             rm -rf ".b/$c/build"
           done
-          echo "out=$out" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
