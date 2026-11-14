@@ -129,6 +129,9 @@ with tempfile.TemporaryDirectory() as tmp:
           and text.rstrip().endswith("Symmetry: searching"),
           "a killed run leaves its log, and the last line names the phase it was in", text)
     check("log_to_console=true" in seen["command"], "the solver logs to its console then")
+    import shutil  # noqa: PLC0415
+    check((seen["command"][:2] == ["stdbuf", "-oL"]) == bool(shutil.which("stdbuf")),
+          "and line-buffered where stdbuf exists, so a killed run keeps what it printed")
     miplib.keep_overrun_log(Path("quick.mps"), 60.0, 61.0, False, "all fine")
     saved_dir = miplib.OVERRUN_LOG_DIR
     miplib.OVERRUN_LOG_DIR = logs
