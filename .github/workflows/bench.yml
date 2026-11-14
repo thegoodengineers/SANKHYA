@@ -62,6 +62,7 @@ on:
           - decomposition
           - fj-share-refinery
           - fj-share-miplib
+          - profile-nodes
         required: true
       ref:
         description: commit (short or full sha), branch or tag to build and run (ab-* - the new arm)
@@ -136,6 +137,12 @@ jobs:
       - name: Install the refinery rivals
         if: inputs.suite == 'refinery' || inputs.suite == 'head-to-head-refinery-qp'
         run: pip install numpy highspy pyscipopt
+
+      # #1158: callgrind for the per-node cost profile; it counts instructions, so the shares
+      # do not depend on the runner's speed or on what else it is doing.
+      - name: Install valgrind for the node profile
+        if: inputs.suite == 'profile-nodes'
+        run: scripts/ci_apt.sh valgrind
 
       # #1158: HiGHS beside SANKHYA on the same 65 MIPLIB 3 models, same job, same machine.
       - name: Install HiGHS for the MIPLIB 3 head-to-head
@@ -223,7 +230,7 @@ jobs:
             # every file's sha256. Untracked, so the -dirty check below is not affected.
             head-to-head-refinery-qp)
               python3 bench/refinery/generate.py --qp ;;
-            miplib3|head-to-head-miplib3)
+            miplib3|head-to-head-miplib3|profile-nodes)
               python3 bench/runners/fetch_miplib3.py
               git checkout -- data/miplib3/manifest.json ;;
             # #1199: options is the shard, K/N; the fetch writes its names beside the models.
@@ -409,6 +416,19 @@ jobs:
               pdhg-step-weight-ab)
                 python3 bench/runners/pdhg_step_weight_ab.py --binary build/sankhya \
                   --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
+              # #1158: where a branch-and-bound node's instructions go. options: a node
+              # limit, then MIPLIB 3 model names, e.g. "20000 mas76 pk1". One thread; the
+              # inclusive and the self-cost tables per model go into the artifact. No CSV: a
+              # profile is a diagnosis, not a benchmark claim.
+              profile-nodes)
+                nodes="$1"; shift
+                for model in "$@"; do
+                  valgrind --tool=callgrind --callgrind-out="$out/callgrind-$model.out"                     build/sankhya solve "data/miplib3/$model.mps" --option mip_threads=1                     --option node_limit="$nodes" --option log_to_console=false                     > "$out/profile-$model.log" 2>&1 || true
+                  tail -5 "$out/profile-$model.log"
+                  callgrind_annotate --inclusive=yes "$out/callgrind-$model.out"                     | head -150 > "$out/profile-$model-inclusive.txt"
+                  callgrind_annotate "$out/callgrind-$model.out"                     | head -150 > "$out/profile-$model-self.txt"
+                  head -45 "$out/profile-$model-self.txt"
+                done ;;
               # #525, #1048: the refinery ladder, decomposed against monolithic.
               decomposition)
                 python3 bench/runners/decomposition.py --binary build/sankhya \
