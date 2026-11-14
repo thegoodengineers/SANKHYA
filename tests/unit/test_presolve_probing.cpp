@@ -27,6 +27,7 @@
 #include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/tolerances.hpp"
 
 namespace sankhya {
 namespace {
@@ -359,10 +360,16 @@ TEST(PresolveProbing, ContinuousBoundsAreWrittenOnlyWhenAsked) {
   EXPECT_EQ(integer_only, off) << "probing wrote a bound on a continuous column by default";
   EXPECT_LT(all, off) << "with the option, probing's bound on x was not written";
   EXPECT_GE(all, 3.0 - 1e-9) << "a bound tighter than probing can deduce";
-  for (const Options& options : {with_probing(false), with_probing(true), written}) {
-    const Solution s = solve(model, options);
-    ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
-    EXPECT_NEAR(s.objective, -3.0, 1e-9);
+  // The optimum to the primal feasibility tolerance, not tighter: probing loosens a continuous
+  // bound by a small margin, and a point feasible to 1e-7 on x + 4 y <= 7 can sit that far
+  // past x = 3 (CI: -3.000000013 on one of the three, a row violation of 1.3e-8).
+  const char* names[] = {"probing off", "probing, integer bounds only", "probing, all bounds"};
+  const Options sets[] = {with_probing(false), with_probing(true), written};
+  for (int k = 0; k < 3; ++k) {
+    const Solution s = solve(model, sets[k]);
+    ASSERT_EQ(s.status, SolveStatus::kOptimal) << names[k] << ": " << s.message;
+    EXPECT_NEAR(s.objective, -3.0, tol::kPrimalFeasibility) << names[k];
+    EXPECT_LE(s.primal_infeasibility, tol::kPrimalFeasibility) << names[k];
   }
 }
 
