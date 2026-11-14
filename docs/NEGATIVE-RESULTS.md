@@ -282,6 +282,17 @@ Measured on GitHub Actions with `bench.yml`'s `ab-option` suite and `--base-bina
 
 Forty-one instances lose their verified point, 21 to the time limit and 20 to the first-order engine's iteration ceiling before the relative request is met (the cont, boyd and LISWET families, most of the Netlib-derived q* models), and none gains one; huestis goes from feasible to optimal and is verified in both arms. The route pays on a large, well-scaled, staircase QP and not in general, so the default stays the interior point and `qp_relative_stop` stays an option, off.
 
+### The optional primal heuristics always on, with deeper and repeated dives (PR #1227's first candidate)
+
+On the 13 MIPLIB models where a committed run ended without a point or away from the optimum (`bench/runners/first_incumbent.json`), `mip_heuristics=true` with dives of 1,000 LP re-solves every 50 nodes and the one-level backtrack finds a point on 6 where the defaults find one on 3; deeper or repeated fractional dives without the other heuristics find nothing new (bench.yml runs 43063155433 and 43081881428). As an always-on default it fails the gate. Same job, `--base-binary`, `main` at `66b38df`, 3 seeds, 60 s, one thread:
+
+| set | proved, best of 3, off / on | matched, off / on | proofs lost | matches gained |
+|---|---|---|---|---|
+| MIPLIB 3 (`option-ab-miplib3-heuristics-all-66b38df.csv`) | 45 / 44 | 46 / 49 | qiu | mas76, pk1, rout |
+| MIPLIB 2017 tier 1 (`option-ab-miplib-tier1-heuristics-all-66b38df.csv`) | 12 / 11 | 20 / 22 | enlight8 | neos-5140963-mincio, pk1 |
+
+The heuristics pay where the search has no point and cost proving time where it has one. What was adopted is the same schedule only while there is no incumbent (`mip_heuristics_until_incumbent`), which loses no proof on either set; `mip_heuristics` itself stays off.
+
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
 
 These decisions were made on numbers that are not in `bench/results/`. They are recorded as such, and each names the re-run that would move it to section 1.
