@@ -209,6 +209,46 @@ MIPLIB tier 1, 30 models, main `c73be5e` (bench.yml run 43135684987):
 Files: `bench/results/option-ab-miplib3-reduced-cost-fixing-3e7436d.csv`, `option-ab-tier1-reduced-cost-fixing-c73be5e.csv` (the `arm` column).
 What would earn a default: fixed columns that leave the node LP, so the fixing buys node speed on nw04 and not only a smaller box (after the fixing, 79,000 of nw04's 87,482 columns are fixed and every pivot still prices them), then this A/B again.
 
+### More cuts a root round (`cut_max_per_round` above 30, #1158)
+
+A root round takes the 30 best candidates, far fewer than the filter accepts on models such as mitre. Tried at 100 and 300, all 65 MIPLIB 3 models x 3 seeds, 60 s, `mip_threads=1`, both arms one binary in one job (m/p/v is matched / proved / verified):
+
+| cap | commit, run | seed 0 m/p/v | seed 1 m/p/v | seed 2 m/p/v | all m/p/v | sgm time (s) |
+|---|---|---|---|---|---|---:|
+| 30 | `3e7436d`, 43062815542 | 44/40/63 | 42/41/62 | 43/41/62 | 129/122/187 | 16.63 |
+| 100 | the same | 44/40/63 | 43/41/62 | 44/42/62 | 131/123/187 | 16.77 |
+| 30 | `66b38df`, 43135732275 | 44/41/63 | 43/42/63 | 44/43/62 | 131/126/188 | 15.70 |
+| 300 | the same | 43/40/62 | 44/41/62 | 44/42/62 | 131/123/186 | 16.10 |
+
+- **100 fails the rule:** it loses the proofs of 10teams seed 1 (no feasible point in 60 s) and misc07 seed 0. Its gain was gesa2 on every seed, which `root_cut_loop_when=auto` (#1214) has since delivered in about 3 s against 29-37 s here.
+- **300 fails on every seed:** it loses the proofs of misc07 seed 0 and stein45 seeds 1 and 2, and the feasible points of 10teams seed 0 and arki001 seed 1; nothing is newly proved.
+- **mitre,** the model it was aimed at: at 100 the root bound moves from 114740.52 to 114740.63 against an optimum of 115155, and no seed finds a feasible point.
+
+Files: `bench/results/option-ab-miplib3-cut-cap-100-3e7436d.csv`, `option-ab-miplib3-cut-cap-300-66b38df.csv`. The MIPLIB 2017 models named for it (neos-3381206-awhea, pg) were not run, the default being ruled out already.
+What would earn a default: nothing at a flat cap; a cap that grows only where the extra rows are tight at the next root LP.
+
+### Probing in presolve as a default (`presolve_probing`, #512, #1158)
+
+Binary probing (Savelsbergh 1994): fixings and bounds that hold in both branches of a binary, written into the reduced model. Off: `presolve_probing = false`.
+
+All 65 MIPLIB 3 models x 3 seeds, 60 s, `mip_threads=1`, both arms the `66b38df` binary in one job (run 43149854825):
+
+| arm | seed 0 m/p/v | seed 1 m/p/v | seed 2 m/p/v | all m/p/v | sgm time (s) |
+|---|---|---|---|---|---:|
+| off | 44/41/63 | 43/42/63 | 44/43/62 | 131/126/188 | 15.70 |
+| on | 45/42/63 | 42/40/62 | 40/38/60 | 127/120/185 | 16.71 |
+
+- **Fails the rule:** fewer proofs on seeds 1 and 2, and verified points lost.
+- **Lost:** modglob on every seed; rentacar, 10teams and bell5 on seed 2; gesa2_o seed 1; air05 and qiu on seed 2. arki001 finds no feasible point on any seed, and rentacar seed 2 none.
+- **Gained:** mitre is proved on seed 0 in 44 s, its root after cuts at 115141.0 against 114740.5 without probing (optimum 115155); misc07 seed 2 and qiu seed 0.
+
+It is not a dead end, which is why this is recorded with its other half:
+- **The roots it closes.** On the two drayage models of the MIPLIB 2017 benchmark set (`9d479e5`, run 43170308061, 3 seeds) the root bound goes from 11714.14 to 103333.87, the published optimum of drayage-100-23, and to 99718.79 against 101282.65 on drayage-25-23. Neither is proved: no seed finds the optimal point in 60 s.
+- **The loss shares a cause with coefficient tightening's** (the entry above). On modglob both leave the Gomory and MIR candidates and the root LP bound as they were and cut the round-1 flow covers from 58 to 48, on every seed. What the two have in common is the tightened column bounds they write, not the coefficients.
+
+Files: `bench/results/option-ab-miplib3-probing-66b38df.csv`, `option-ab-miplib2017-drayage-probing-9d479e5.csv` (the `arm` column).
+What would earn a default: the flow cover separator keeping its covers under the tightened bounds, then this A/B again.
+
 ### PDHG feasibility polishing as a default (`pdhg_feasibility_polish`, #483, #1177)
 
 First-order feasibility polishing after Applegate, Hinder, Lu & Lubin (arXiv:2501.07018): PDHG on the zero-objective and the zero-bound problem, so a first-order answer is primal feasible to 1e-8 with its gap measured. Off: `pdhg_feasibility_polish = false`.
@@ -240,7 +280,7 @@ Measured on GitHub Actions with `bench.yml`'s `ab-option` suite and `--base-bina
 | today's default (interior point) | 128 | 127 | 132 | 0 | 474 |
 | first-order route | 88 | 86 | 91 | 0 | 2,165 |
 
-Forty-three instances are lost, to the time limit or the first-order engine's iteration ceiling before the relative request is met (the cont, boyd and LISWET families, most of the Netlib-derived q* models), and one is gained (huestis). The route pays on a large, well-scaled, staircase QP and not in general, so the default stays the interior point and `qp_relative_stop` stays an option, off.
+Forty-one instances lose their verified point, 21 to the time limit and 20 to the first-order engine's iteration ceiling before the relative request is met (the cont, boyd and LISWET families, most of the Netlib-derived q* models), and none gains one; huestis goes from feasible to optimal and is verified in both arms. The route pays on a large, well-scaled, staircase QP and not in general, so the default stays the interior point and `qp_relative_stop` stays an option, off.
 
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
 
