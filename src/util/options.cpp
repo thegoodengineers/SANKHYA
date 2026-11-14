@@ -669,24 +669,25 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"mip_heuristics",
                  OptionType::String,
                  std::string("auto"),
-                 "The primal heuristics beyond the four that always run (rounding at every node, "
-                 "the fractional root dive, Feasibility Jump and parity): lock rounding at every "
-                 "node, a repair search and RENS at the root, the feasibility pump at the root "
-                 "when nothing else found an incumbent, the coefficient, vector length and "
-                 "guided dives, the propagation dive, and, with an incumbent, RINS and local "
-                 "branching (#290, #414). Every heuristic whose own mip_heur_* option is auto "
-                 "follows this. auto (the default): they run only while the search has NO "
-                 "incumbent, with dives of up to tol::kDivingNoIncumbentLpResolves LP re-solves "
-                 "repeated every tol::kDivingNoIncumbentFrequency nodes and the one-level "
-                 "backtrack (Achterberg 2007, sec. 9.2; Berthold 2006), and stand down at the "
-                 "first incumbent, so a search that finds a point early spends nothing more; "
-                 "RINS and local branching, which need an incumbent, do not run. true: always. "
+                 "The primal heuristics beyond the four that always run (rounding at every "
+                 "node, the fractional root dive, Feasibility Jump and parity): lock "
+                 "rounding at every node, a repair search and RENS at the root, the "
+                 "feasibility pump at the root when nothing else found an incumbent, the "
+                 "coefficient, vector length and guided dives, the propagation dive, and, "
+                 "with an incumbent, RINS and local branching (#290, #414). Every heuristic "
+                 "whose own mip_heur_* option is auto follows this. auto (the default): they "
+                 "run only while the search has NO incumbent, with dives of up to "
+                 "tol::kDivingNoIncumbentLpResolves LP re-solves repeated every "
+                 "tol::kDivingNoIncumbentFrequency nodes and the one-level backtrack "
+                 "(Achterberg 2007, sec. 9.2; Berthold 2006), and stand down at the first "
+                 "incumbent, so a search that finds a point early spends nothing more; RINS "
+                 "and local branching, which need an incumbent, do not run. true: always. "
                  "false: never, the four above only. Every candidate is checked against the "
                  "original model before it can become the incumbent. auto since the A/B at "
                  "c77bc4f (bench/results/option-ab-miplib3-until-incumbent-c77bc4f.csv and "
-                 "option-ab-miplib-tier1-until-incumbent-c77bc4f.csv: no proof and no verified "
-                 "point lost, air04 proved; first-incumbent-fa83dfe.csv: a point on 6 of the 13 "
-                 "models that had 3); true lost a proof on each set "
+                 "option-ab-miplib-tier1-until-incumbent-c77bc4f.csv: no proof and no "
+                 "verified point lost, air04 proved; first-incumbent-fa83dfe.csv: a point on "
+                 "6 of the 13 models that had 3); true lost a proof on each set "
                  "(option-ab-*-heuristics-all-66b38df.csv).",
                  0.0,
                  0.0,
@@ -3300,7 +3301,7 @@ bool Options::takes_true_and_false(const std::string& name) {
   const OptionSpec* spec = find_spec(name);
   if (spec == nullptr || spec->type != OptionType::String) return false;
   const auto has = [spec](const char* v) {
-    return std::find(spec->allowed.begin(), spec->allowed.end(), v) != spec->allowed.end();
+    return std::find(spec->choices.begin(), spec->choices.end(), v) != spec->choices.end();
   };
   return has("true") && has("false");
 }

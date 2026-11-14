@@ -458,7 +458,8 @@ TEST(BranchAndBound, StopsOnALooseRelativeGapAndReportsOptimalWithinIt) {
                 {1.0, 1.0, 1.0, 1.0}, {true, true, true, true});
 
   // Baseline: default (tight) gaps close the tree completely and prove optimality. Without
-  // the no-incumbent heuristics, which find the optimum at the root and leave no gap to stop on.
+  // the no-incumbent heuristics, which find the optimum at the root and leave no gap to
+  // stop on.
   Options base = mip_options();
   base.set_string("mip_heuristics", "false");
   const Solution tight = solve(model, base);
