@@ -172,6 +172,7 @@ def memory_cap():
         resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
     return apply
 OVERRUN_SLACK_SECONDS = 5.0
+ERROR_STATUSES = ("numerical_error", "model_error", "not_solved")
 
 
 def keep_overrun_log(instance: Path, time_limit: float, wall: float, killed: bool,
@@ -483,10 +484,14 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
             return {"status": "crashed" if completed.returncode not in (0, 1) else "no_output",
                     "message": completed.stderr.strip()[:260] + f" [{ending}]",
                     "wall_seconds": wall, "verified": None, "peak_rss_mb": rss.mb}
-        keep_overrun_log(instance, time_limit, wall, False, completed.stdout)
-
         blob = json.loads(stats_path.read_text())
         result = blob.get("result", {})
+        # An answer that is an error (out of memory, a numerical or model error) keeps its
+        # log like a run that died: radiationm40-10-02 ran out of memory on time, and its
+        # last line was the only record of which phase had the memory (#1199).
+        ended = result.get("status", "")
+        keep_overrun_log(instance, time_limit, wall, False, completed.stdout,
+                         died=f"status {ended}" if ended in ERROR_STATUSES else "")
         model = blob.get("model", {})
         effort = blob.get("effort", {})
         flat = {

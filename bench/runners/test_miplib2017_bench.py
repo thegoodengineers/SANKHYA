@@ -211,6 +211,37 @@ with tempfile.TemporaryDirectory() as tmp:
               "its peak resident memory is the kernel's high-water mark", str(result))
     else:
         check(result["peak_rss_mb"] is None, "no /proc here: no peak is claimed")
+with tempfile.TemporaryDirectory() as tmp:
+    # A solver that answers in time, with an error status: its log is kept too.
+    answerer = Path(tmp) / "answerer.py"
+    answerer.write_text(
+        "import json, sys\n"
+        "stats = sys.argv[sys.argv.index('--stats') + 1]\n"
+        "print('knapsack covers: 9 supported row(s)', flush=True)\n"
+        "json.dump({'result': {'status': 'numerical_error', 'message': 'out of memory'},"
+        " 'model': {}, 'effort': {}}, open(stats, 'w'))\n", encoding="utf-8")
+    logs = Path(tmp) / "logs"
+    saved_dir = miplib.OVERRUN_LOG_DIR
+    miplib.OVERRUN_LOG_DIR = logs
+    try:
+        import subprocess  # noqa: PLC0415
+        real_run = subprocess.run
+
+        def fake_run(command, **kwargs):
+            if "--stats" not in command:
+                return real_run(command, **kwargs)
+            return real_run([sys.executable, str(answerer), *command[1:]], **kwargs)
+
+        subprocess.run = fake_run
+        result = miplib.solve(Path("unused"), Path("oom.mps"), 30.0, False)
+    finally:
+        subprocess.run = real_run
+        miplib.OVERRUN_LOG_DIR = saved_dir
+    text = (logs / "oom.log").read_text(encoding="utf-8") if (logs / "oom.log").exists() else ""
+    check(result["status"] == "numerical_error"
+          and "ended with no answer: status numerical_error" in text
+          and text.rstrip().endswith("knapsack covers: 9 supported row(s)"),
+          "an error status that comes back on time keeps its log too", text or str(result))
 row = miplib.make_row("p", {"published_optimal": 3.0}, 3.0,
                       {"status": "optimal", "objective": 3.0, "verified": True,
                        "wall_seconds": 1.0, "peak_rss_mb": 1234.4}, "abc1234", "", 1, "box",
