@@ -74,6 +74,7 @@ BigInt common_denominator(const std::vector<Rational>& v, std::vector<BigInt>* n
 
 bool ExactLu::factorize(const std::vector<const RationalColumn*>& columns, Index m,
                         const Deadline& deadline) {
+  deadline_ = deadline;
   m_ = m;
   const auto sm = static_cast<Sz>(m);
   pivot_row_.assign(sm, -1);
@@ -211,6 +212,7 @@ bool ExactLu::factorize(const std::vector<const RationalColumn*>& columns, Index
 void ExactLu::solve(std::vector<Rational>& b) const {
   const auto sm = static_cast<Sz>(m_);
   for (Sz k = 0; k < sm; ++k) {
+    deadline_.check();
     const Rational& br = b[static_cast<Sz>(pivot_row_[k])];
     if (br.is_zero()) continue;
     const Rational top = br;
@@ -218,6 +220,7 @@ void ExactLu::solve(std::vector<Rational>& b) const {
   }
   std::vector<Rational> x(sm, Rational(0));
   for (Sz k = sm; k-- > 0;) {
+    deadline_.check();
     const Rational& v = b[static_cast<Sz>(pivot_row_[k])];
     if (v.is_zero()) continue;
     const Rational xk = v / pivot_value_[k];
@@ -227,6 +230,7 @@ void ExactLu::solve(std::vector<Rational>& b) const {
     x[static_cast<Sz>(pivot_position_[k])] = xk;
   }
   for (Sz e = 0; e < eta_.size(); ++e) {
+    deadline_.check();
     const auto p = static_cast<Sz>(eta_position_[e]);
     if (x[p].is_zero()) continue;
     Rational pivot(0);
@@ -245,6 +249,7 @@ void ExactLu::solve(std::vector<Rational>& b) const {
 void ExactLu::solve_transpose(std::vector<Rational>& c) const {
   const auto sm = static_cast<Sz>(m_);
   for (Sz e = eta_.size(); e-- > 0;) {
+    deadline_.check();
     const auto p = static_cast<Sz>(eta_position_[e]);
     Rational sum = c[p];
     Rational pivot(0);
@@ -260,6 +265,7 @@ void ExactLu::solve_transpose(std::vector<Rational>& c) const {
   }
   std::vector<Rational> w(sm, Rational(0));
   for (Sz k = 0; k < sm; ++k) {
+    deadline_.check();
     Rational sum = c[static_cast<Sz>(pivot_position_[k])];
     for (const auto& [j, u] : upper_[k]) {
       const Rational& wj = w[static_cast<Sz>(pivot_row_[static_cast<Sz>(j)])];
@@ -268,6 +274,7 @@ void ExactLu::solve_transpose(std::vector<Rational>& c) const {
     if (!sum.is_zero()) w[static_cast<Sz>(pivot_row_[k])] = sum / pivot_value_[k];
   }
   for (Sz k = sm; k-- > 0;) {
+    deadline_.check();
     const auto r = static_cast<Sz>(pivot_row_[k]);
     for (const auto& [i, l] : lower_[k]) {
       const Rational& wi = w[static_cast<Sz>(i)];

@@ -45,13 +45,16 @@ BigInt common_denominator(const std::vector<Rational>& v, std::vector<BigInt>* n
 class ExactLu {
  public:
   /// Factorise the m x m matrix whose column p is `*columns[p]` (row indices 0..m-1).
-  /// False when it is exactly singular. Checks `deadline` once per elimination step.
+  /// False when it is exactly singular. Checks `deadline` once per elimination step, and
+  /// keeps it: the solves below check it once per step too.
   [[nodiscard]] bool factorize(const std::vector<const RationalColumn*>& columns, Index m,
                                const Deadline& deadline);
 
   /// B x = b, in place: `b` by row in, x by basis position out. Dense, m entries.
+  /// Throws ExactBudgetExceeded past the deadline factorize() was given.
   void solve(std::vector<Rational>& b) const;
   /// B^T y = c, in place: `c` by basis position in, y by row out. Dense, m entries.
+  /// Throws ExactBudgetExceeded past the deadline factorize() was given.
   void solve_transpose(std::vector<Rational>& c) const;
 
   /// The basis column at `position` is replaced by the column a whose alpha = B^{-1} a (by
@@ -82,6 +85,12 @@ class ExactLu {
   std::vector<RationalColumn> eta_;
   Index hinted_steps_ = 0;
   Index factor_nonzeros_ = 0;
+  /// The budget of the factorization, held for the solves. One solve through the factors of
+  /// a 3,136-row basis (the stress set's scaled maros-r7, numerators thousands of digits
+  /// long) ran for more than 110 s after a 30 s budget had passed, because only the
+  /// elimination asked the clock: the exact repair went on for minutes behind a solve that
+  /// had finished, optimal, in 47.6 s. Unlimited until a factorization sets it.
+  Deadline deadline_{std::numeric_limits<double>::infinity()};
 };
 
 }  // namespace sankhya::exact
