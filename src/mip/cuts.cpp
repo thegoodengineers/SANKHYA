@@ -1177,7 +1177,7 @@ std::string describe_cut_filter(const std::vector<FilteredCut>& filtered) {
 
 std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
                                                      const Solution& root_solution,
-                                                     const std::vector<Cut>& candidates,
+                                                     std::vector<Cut> candidates,
                                                      const CutFilterPolicy& policy) {
   std::vector<FilteredCut> results;
   results.reserve(candidates.size());
@@ -1192,23 +1192,24 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
   if (n < 0) return results;  // Safety check
 
   bool out_of_time = false;
-  for (const Cut& c : candidates) {
+  for (Cut& candidate : candidates) {
     FilteredCut fc;
-    fc.cut = c;  // Copy candidate (filtering never modifies coefficients or RHS)
+    fc.cut = std::move(candidate);  // moved, not copied (#1199); never modified below
+    const Cut& c = fc.cut;          // read through the result that now owns it
     fc.reason = CutFilterReason::kAccepted;
 
     // 0. The solve's limit (#1199), asked once per candidate and remembered.
     if (!out_of_time && policy.stop && policy.stop()) out_of_time = true;
     if (out_of_time) {
       fc.reason = CutFilterReason::kNotExamined;
-      results.push_back(fc);
+      results.push_back(std::move(fc));
       continue;
     }
 
     // 1. Finite-value check
     if (!std::isfinite(c.rhs)) {
       fc.reason = CutFilterReason::kNonfinite;
-      results.push_back(fc);
+      results.push_back(std::move(fc));
       continue;
     }
     bool is_finite = true;
@@ -1220,7 +1221,7 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
     }
     if (!is_finite) {
       fc.reason = CutFilterReason::kNonfinite;
-      results.push_back(fc);
+      results.push_back(std::move(fc));
       continue;
     }
 
@@ -1240,7 +1241,7 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
 
     if (nonzero_count == 0) {
       fc.reason = CutFilterReason::kEmptySupport;
-      results.push_back(fc);
+      results.push_back(std::move(fc));
       continue;
     }
 
@@ -1256,7 +1257,7 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
     const bool too_dense = density > tol::kCutMaxDensity && !under_floor;
     if (too_dense && !policy.test_dense) {
       fc.reason = CutFilterReason::kTooDense;
-      results.push_back(fc);
+      results.push_back(std::move(fc));
       continue;
     }
 
@@ -1264,7 +1265,7 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
     double ratio = max_abs / min_abs;
     if (ratio > tol::kCutMaxCoefficientRatio) {
       fc.reason = CutFilterReason::kCoefficientRatio;
-      results.push_back(fc);
+      results.push_back(std::move(fc));
       continue;
     }
 
@@ -1282,12 +1283,12 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
       for (double val : c.coeff) norm_sq += val * val;
       if (violation / std::sqrt(norm_sq) <= tol::kCutMinEfficacy) {
         fc.reason = CutFilterReason::kInsufficientViolation;
-        results.push_back(fc);
+        results.push_back(std::move(fc));
         continue;
       }
     } else if (violation <= tol::kCutViolationTolerance) {
       fc.reason = CutFilterReason::kInsufficientViolation;
-      results.push_back(fc);
+      results.push_back(std::move(fc));
       continue;
     }
 
@@ -1331,7 +1332,7 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
 
     if (is_duplicate) {
       fc.reason = CutFilterReason::kDuplicate;
-      results.push_back(fc);
+      results.push_back(std::move(fc));
       continue;
     }
 
@@ -1350,7 +1351,7 @@ std::vector<FilteredCut> filter_and_deduplicate_cuts(const Model& model,
         }
       }
     }
-    results.push_back(fc);
+    results.push_back(std::move(fc));
   }
 
   return results;

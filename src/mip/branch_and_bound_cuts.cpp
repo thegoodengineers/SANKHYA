@@ -49,6 +49,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <vector>
 
@@ -226,15 +227,38 @@ bool BranchAndBound::is_pooled_duplicate(const Cut& cut) const {
                      [&cut](const Cut& pooled) { return same_cut(pooled, cut); });
 }
 
+// THE ROUND'S MEMORY (#1199). A candidate is a dense vector, one coefficient per column, and
+// nothing bounded how many a round held: radiationm40-10-02 (111,203 rows by 109,613 columns
+// after presolve, 0.88 MB a cut) went from 227 MB with root cuts off to past a 12 GB cap in
+// the first separator of the round, and took a 16 GB machine down. The round now holds at
+// most cut_candidate_cap() candidates; a separator stops at the cap, what a separator
+// returned past it is dropped, and the log says where. Fewer candidates is a weaker round,
+// never a wrong one: every cut that remains is as valid as it was.
+bool BranchAndBound::cap_cut_candidates(std::vector<Cut>* candidates, const char* after) {
+  const std::size_t cap = cut_candidate_cap();
+  if (candidates->size() < cap) return false;
+  if (!cut_candidates_capped_) {
+    logger_.info(
+        "Cut candidates: the round is at its memory budget after {} ({} candidates of {} "
+        "columns, cut_candidate_memory_mb={}); separation stops adding candidates",
+        after, cap, working_.num_cols(), options_.get_int("cut_candidate_memory_mb"));
+    cut_candidates_capped_ = true;
+  }
+  candidates->resize(cap);
+  return true;
+}
+
 std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxation,
                                                           Index model_rows) {
   std::vector<Cut> candidates;
+  const std::size_t cap = cut_candidate_cap();
   KnapsackCoverStats cover_stats;
   // Covers from the model's own rows only: a cut row is valid but is not a knapsack of the
   // model, and the first round never had any.
   for (Index i = 0; i < model_rows; ++i) {
     // The deadline, every 256 rows (#1199): this loop too is over every row of the model.
     if ((i & 255) == 0 && solve_must_stop()) return candidates;
+    if (candidates.size() >= cap) break;  // #1199: the round's memory budget
     auto cover = generate_knapsack_cover_cut(working_, i, &relaxation.col_value, &cover_stats);
     if (cover.has_value()) {
       Cut cut;
@@ -262,29 +286,40 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
   }
   // Between the separators the deadline is asked again (#1199): what was found so far is
   // returned, and the filter marks what it has no time left to examine.
-  if (solve_must_stop()) return candidates;
+  if (solve_must_stop() || cap_cut_candidates(&candidates, "the knapsack covers")) {
+    return candidates;
+  }
   std::vector<Cut> gmi = generate_gmi_cuts(working_, relaxation,
                                            options_.get_bool("gmi_safety"), certificate_mode());
-  candidates.insert(candidates.end(), gmi.begin(), gmi.end());
-  if (solve_must_stop()) return candidates;
+  candidates.insert(candidates.end(), std::make_move_iterator(gmi.begin()),
+                    std::make_move_iterator(gmi.end()));
+  if (solve_must_stop() || cap_cut_candidates(&candidates, "the Gomory cuts")) {
+    return candidates;
+  }
   // Implied-bound cuts (#499): the line through a two-variable row's two binary cases,
   // tighter than the row when the continuous column's own bound caps one case.
   if (options_.get_bool("mip_implied_bound_cuts") && !certificate_mode()) {
     std::vector<Cut> implied = implied_bound_cuts(working_, relaxation.col_value);
-    candidates.insert(candidates.end(), implied.begin(), implied.end());
+    candidates.insert(candidates.end(), std::make_move_iterator(implied.begin()),
+                      std::make_move_iterator(implied.end()));
+    if (cap_cut_candidates(&candidates, "the implied-bound cuts")) return candidates;
   }
   // MIR cuts from the model's own rows (#221): built from original coefficients rather
   // than tableau rows, so they carry none of the Gomory cuts' numerical fragility.
   if (options_.get_bool("enable_mir_cuts")) {
+    MirOptions mir_with_room = mir_options();
+    mir_with_room.max_cuts = cap - candidates.size();  // what the round has room for
     std::vector<Cut> mir = generate_mir_cuts(working_, relaxation, working_.col_lower,
-                                             working_.col_upper, nullptr, mir_options());
-    candidates.insert(candidates.end(), mir.begin(), mir.end());
+                                             working_.col_upper, nullptr, mir_with_room);
+    candidates.insert(candidates.end(), std::make_move_iterator(mir.begin()),
+                      std::make_move_iterator(mir.end()));
   }
-  if (solve_must_stop()) return candidates;
+  if (solve_must_stop() || cap_cut_candidates(&candidates, "the MIR cuts")) return candidates;
   // Clique and {0,1/2}-Chvatal-Gomory cuts (#358): the families built for the pure-integer,
   // unit-coefficient covering and packing rows MIR cannot separate. Derived under the
   // GLOBAL bounds, so they hold at every node.
   add_combinatorial_cuts(relaxation, &candidates, /*root=*/true);
+  (void)cap_cut_candidates(&candidates, "the clique and zero-half cuts");
   return candidates;
 }
 
@@ -364,8 +399,8 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
     debug_check_cuts(candidates, -1);  // #500: every candidate, before the filter
   }
 
-  auto filtered = filter_and_deduplicate_cuts(working_, initial_relaxation, candidates,
-                                              cut_filter_policy(/*root=*/true));
+  auto filtered = filter_and_deduplicate_cuts(
+      working_, initial_relaxation, std::move(candidates), cut_filter_policy(/*root=*/true));
   admit_dense_root_cuts(&filtered, initial_relaxation);
   // WHAT THE FILTER DID, per family and reason (#496): the answer to "why 0 root cuts on
   // opt1217", carried on the Solution into the stats and the MIPLIB CSV.
@@ -469,8 +504,9 @@ void BranchAndBound::tree_cut_round(Index depth, Solution* relaxation) {
     debug_round_ = fmt::format("tree round {} (depth {})", tree_cut_rounds_ + 1, depth);
     debug_check_cuts(candidates, -1);  // #500: every candidate, before the filter
   }
-  auto filtered =
-      filter_and_deduplicate_cuts(working_, *relaxation, candidates, cut_filter_policy());
+  (void)cap_cut_candidates(&candidates, "a tree round's separators");
+  auto filtered = filter_and_deduplicate_cuts(working_, *relaxation, std::move(candidates),
+                                              cut_filter_policy());
   logger_.verbose("tree cut filter at depth {}: {}", depth, describe_cut_filter(filtered));
   std::vector<Cut> passing;
   for (auto& fc : filtered) {

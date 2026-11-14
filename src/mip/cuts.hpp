@@ -286,8 +286,11 @@ struct CutFilterPolicy {
   std::function<bool()> stop;
 };
 
+/// `candidates` is taken by value and each one is MOVED into its result (#1199): the filter
+/// used to copy every candidate, so a round held its candidates twice. A caller that is
+/// done with them passes std::move(candidates); one that passes an lvalue keeps its copy.
 [[nodiscard]] std::vector<FilteredCut> filter_and_deduplicate_cuts(
-    const Model& model, const Solution& root_solution, const std::vector<Cut>& candidates,
+    const Model& model, const Solution& root_solution, std::vector<Cut> candidates,
     const CutFilterPolicy& policy = {});
 
 [[nodiscard]] const char* cut_filter_reason_name(CutFilterReason reason) noexcept;

@@ -1309,6 +1309,18 @@ const std::vector<OptionSpec>& Options::registry() {
          1e9,
          {}});
     s.push_back(
+        {"cut_candidate_memory_mb",
+         OptionType::Int,
+         std::int64_t{1024},
+         "The memory one cut round's candidates may take, in MB (#1199). A candidate cut is "
+         "held as one coefficient per column, so on a model of 110,000 columns each is "
+         "0.9 MB and a round over its rows asked for more than 12 GB; separation now stops "
+         "adding candidates at this budget (at least one is always allowed) and the round "
+         "goes on with those it has. It binds only where columns times candidates is large.",
+         1.0,
+         1e9,
+         {}});
+    s.push_back(
         {"cut_dense_max",
          OptionType::Int,
          std::int64_t{10},

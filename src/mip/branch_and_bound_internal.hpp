@@ -900,8 +900,20 @@ class BranchAndBound {
     return (control_ != nullptr && control_->interruption_requested()) ||
            limits_.exhausted(timer_.elapsed_seconds(), 0, 0) != LimitReason::kNone;
   }
+  /// How many candidate cuts one round may hold (#1199): cut_candidate_memory_mb over the
+  /// eight bytes per column a dense cut takes, never fewer than one.
+  [[nodiscard]] std::size_t cut_candidate_cap() const {
+    const double bytes =
+        static_cast<double>(options_.get_int("cut_candidate_memory_mb")) * 1024.0 * 1024.0;
+    const double per_cut = 8.0 * static_cast<double>(std::max<Index>(1, working_.num_cols()));
+    return static_cast<std::size_t>(std::max(1.0, bytes / per_cut));
+  }
+  /// Drop the candidates past the round's cap and say so once (#1199). Returns true when
+  /// the round is at its cap and no separator should add more.
+  bool cap_cut_candidates(std::vector<Cut>* candidates, const char* after);
   [[nodiscard]] MirOptions mir_options() const {
     MirOptions mir;
+    mir.max_cuts = cut_candidate_cap();
     mir.stop = [this] { return solve_must_stop(); };
     // c-MIR states no derivation (#518), so a certificate's search uses the plain MIR.
     mir.cmir = options_.get_bool("mir_cmir") && certificate_path_.empty();
@@ -1151,6 +1163,7 @@ class BranchAndBound {
   Index first_cut_row_ = -1;
   /// Every cut appended so far, in the order appended; never shrinks except by a rollback.
   std::vector<Cut> pool_cuts_;
+  bool cut_candidates_capped_ = false;  ///< the cap's log line was written (#1199)
   /// Per pool entry: node solves slack in a row, and whether the cut is out of force (freed
   /// in place, or with cut_removal_ removed from working_ and held in the pool alone).
   std::vector<Count> cut_row_slack_;

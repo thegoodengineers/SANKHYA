@@ -402,5 +402,36 @@ TEST(CmirCuts, AStopEndsSeparationWithTheFirstOfTheCutsItWouldHaveFound) {
   EXPECT_GT(stopped_short, 0) << "the stop should have cut separation short somewhere";
 }
 
+TEST(CmirCuts, MaxCutsReturnsTheFirstOfTheCutsAndNoMore) {
+  // #1199: a round has a memory budget for its candidates, and MIR is told how many it has
+  // room for. What comes back is the first max_cuts cuts of the full answer.
+  std::mt19937_64 rng(11991);
+  int capped = 0;
+  for (int trial = 0; trial < 40; ++trial) {
+    const FixedCharge fc = random_network(rng, 4 + trial % 3, 2 + trial % 2, 1);
+    const Model model = model_of(fc.lp);
+    const Solution relaxed = lp_relaxation(model);
+    if (relaxed.status != SolveStatus::kOptimal) continue;
+    mip::MirOptions all;
+    all.cmir = trial % 2 == 0;
+    const std::vector<Cut> full =
+        mip::generate_mir_cuts(model, relaxed, model.col_lower, model.col_upper, nullptr, all);
+    for (std::size_t room = 0; room <= 2; ++room) {
+      mip::MirOptions some = all;
+      some.max_cuts = room;
+      const std::vector<Cut> part = mip::generate_mir_cuts(model, relaxed, model.col_lower,
+                                                           model.col_upper, nullptr, some);
+      // One base row can return a cut for each of its two sides, so a call may overshoot
+      // its room by one; never by more, and never past what the full answer holds.
+      ASSERT_LE(part.size(), std::min(full.size(), room + 1)) << "trial " << trial;
+      for (std::size_t k = 0; k < part.size(); ++k) {
+        EXPECT_EQ(part[k].coeff, full[k].coeff) << "trial " << trial << " cut " << k;
+      }
+      if (part.size() < full.size()) ++capped;
+    }
+  }
+  EXPECT_GT(capped, 0) << "the cap should have bound somewhere";
+}
+
 }  // namespace
 }  // namespace sankhya

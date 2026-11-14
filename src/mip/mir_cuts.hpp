@@ -23,6 +23,7 @@
 // (Marchand & Wolsey 2001, sec. 3); the most violated cut over all depths is kept.
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <vector>
 
@@ -66,6 +67,9 @@ struct MirOptions {
   /// row of the model, and on rd-rplusc-21 (125,511 rows) it ran a minute past a 60 s time
   /// limit that nothing in it read. The search passes its own limits and interrupt.
   std::function<bool()> stop;
+  /// At most this many cuts are returned (#1199): each is one coefficient per column, and
+  /// the caller's round has a memory budget for its candidates.
+  std::size_t max_cuts = static_cast<std::size_t>(-1);
 };
 
 [[nodiscard]] std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
