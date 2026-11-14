@@ -1716,6 +1716,8 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       for (Index j = 0; j < reduced.num_cols(); ++j) {
         const auto u = static_cast<std::size_t>(j);
         if (!continuous && reduced.col_type[u] != VarType::kInteger) continue;
+        // EXPERIMENT (#1158, not for merge): binaries only, a general integer keeps its bounds.
+        if (!continuous && !(reduced.col_lower[u] == 0.0 && reduced.col_upper[u] == 1.0)) continue;
         reduced.col_lower[u] = probing.col_lower[u];
         reduced.col_upper[u] = probing.col_upper[u];
       }
