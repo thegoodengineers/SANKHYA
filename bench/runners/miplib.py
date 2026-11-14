@@ -87,6 +87,27 @@ SETS = ("miplib2017", "miplib3", "miplib2017-bench")
 # A solve that has not answered by the time limit plus this is killed and recorded `hang`,
 # the margin rivals.py gives every rival (#1199: the benchmark set's largest models).
 HANG_MARGIN_SECONDS = 60.0
+# --overrun-logs DIR (#1199): where the solver's console log of a run that was killed, or
+# that returned more than OVERRUN_SLACK_SECONDS past its limit, is kept, so the phase that
+# ignored the deadline can be read off a CI run. None: logs are not captured, as before.
+OVERRUN_LOG_DIR: Path | None = None
+OVERRUN_SLACK_SECONDS = 5.0
+
+
+def keep_overrun_log(instance: Path, time_limit: float, wall: float, killed: bool,
+                     output) -> None:
+    """Write `output` (the solver's stdout, text or bytes, possibly partial when it was
+    killed) to OVERRUN_LOG_DIR/<instance>.log under a one-line header, when the run was
+    killed or returned more than the slack past its limit."""
+    if OVERRUN_LOG_DIR is None or not (killed or wall > time_limit + OVERRUN_SLACK_SECONDS):
+        return
+    text = output.decode(errors="replace") if isinstance(output, bytes) else (output or "")
+    stem = instance.name.removesuffix(".gz").removesuffix(".mps")
+    OVERRUN_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    header = (f"# {stem}: time limit {time_limit:g} s, wall {wall:.1f} s, "
+              f"{'killed at the hang margin' if killed else 'returned late'}\n")
+    (OVERRUN_LOG_DIR / f"{stem}.log").write_text(header + text, encoding="utf-8",
+                                                  newline="\n")
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
 VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
 CERTIFICATE_CHECKER = REPO_ROOT / "tools" / "verify_certificate.py"
@@ -330,7 +351,9 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
                    "--stats", str(stats_path),
                    "--write-sol", str(sol_path),
                    # Under a certificate the log carries the leaf counts (#756).
-                   "--option", f"log_to_console={'true' if certificate else 'false'}"]
+                   # ... and with --overrun-logs it is what is kept of a late run (#1199).
+                   "--option", "log_to_console="
+                   f"{'true' if certificate or OVERRUN_LOG_DIR is not None else 'false'}"]
         for option in solver_options or []:
             command += ["--option", option]
         proof_path = Path(tmp) / "proof.vipr"
@@ -343,12 +366,15 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
         try:
             completed = subprocess.run(command, capture_output=True, text=True,
                                        timeout=time_limit + HANG_MARGIN_SECONDS)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as expired:
+            keep_overrun_log(instance, time_limit, time.perf_counter() - started, True,
+                             expired.stdout)
             return {"status": "hang",
                     "message": f"no answer within the time limit plus {HANG_MARGIN_SECONDS:g} s; "
                                "killed",
                     "wall_seconds": time.perf_counter() - started, "verified": None}
         wall = time.perf_counter() - started
+        keep_overrun_log(instance, time_limit, wall, False, completed.stdout)
 
         if not stats_path.exists():
             return {"status": "crashed" if completed.returncode not in (0, 1) else "no_output",
@@ -531,7 +557,14 @@ def main() -> int:
     parser.add_argument("--profile", action="store_true",
                         help="run with profile=detailed and record the branching and batched-"
                              "PDHG seconds (#520)")
+    parser.add_argument("--overrun-logs", type=Path, default=None, metavar="DIR",
+                        help="keep the solver's console log of every run killed at the hang "
+                             "margin or returned more than 5 s past its limit, as "
+                             "DIR/<instance>.log (#1199); the solver then logs to its console")
     args = parser.parse_args()
+    if args.overrun_logs is not None:
+        global OVERRUN_LOG_DIR
+        OVERRUN_LOG_DIR = (REPO_ROOT / args.overrun_logs).resolve()
     if args.seeds < 1:
         parser.error("--seeds must be at least 1")
     if args.set_name != "miplib2017" and args.tier != 1:
