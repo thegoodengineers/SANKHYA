@@ -1924,7 +1924,11 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       if (!reduced_costs_stale_) {
         const ProfileScope timed(logger_.profiler(), "primal dual update",
                                  ProfileMode::kDetailed);
-        update_reduced_costs_through_pivot_row(entering, ratio.leaving_position, leaving);
+        if (perturbed_) {
+          reduced_costs_stale_ = true;  // scratch: recompute while the bounds are perturbed
+        } else {
+          update_reduced_costs_through_pivot_row(entering, ratio.leaving_position, leaving);
+        }
       }
 
       basis_position_[l] = -1;
