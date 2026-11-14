@@ -85,7 +85,8 @@ SUITES = {
     "maros-meszaros": {"dir": "maros-meszaros", "suffix": ".qps", "kind": "qp",
                        "reference": "reference_objective", "with_constant": True,
                        "time_limit": 60.0,
-                       "solvers": tuple(s for s in ALL_SOLVERS if s != "cbc")},
+                       "solvers": tuple(s for s in ALL_SOLVERS if s != "cbc")
+                       + tuple(rivals.HIGHS_ARMS)},
     # The classic MIPLIB 3 set (#761), fetched by fetch_miplib3.py. HiGHS only: SANKHYA's
     # runs on this set are miplib.py's (`--set miplib3`, three seeds), and the Clp and GLPK
     # paths here read an LP's basic solution, so on a MIP they would grade a relaxation.
@@ -370,7 +371,8 @@ def run_suite(args) -> int:
     names = sorted(args.instances or manifest)
     allowed = suite.get("solvers", ALL_SOLVERS)
     solvers = args.solvers.split(",") if args.solvers else list(allowed)
-    unknown = [s for s in solvers if s not in ALL_SOLVERS and s not in SANKHYA_ARMS]
+    unknown = [s for s in solvers if s not in ALL_SOLVERS and s not in SANKHYA_ARMS
+               and s not in rivals.HIGHS_ARMS]
     if unknown:
         raise SystemExit(f"unknown solver(s): {', '.join(unknown)}")
     refused = [s for s in solvers if s not in allowed]

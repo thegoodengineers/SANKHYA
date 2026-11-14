@@ -100,6 +100,37 @@ def counts(key: str, rows: list[dict]) -> tuple[int, int, int, int]:
             sum(is_wrong(key, r) for r in rows))
 
 
+def non_default_arms(found: dict[str, Path | None]) -> list[str]:
+    """One sentence per HiGHS arm run off its defaults (rivals.HIGHS_ARMS) in the
+    Maros-Meszaros job: its own cell, never the HiGHS column's, with what did not end
+    optimal counted by status."""
+    path = found.get("maros-meszaros")
+    if path is None:
+        return []
+    rows = read_rows(path)
+    out = []
+    for arm, options in rivals.HIGHS_ARMS.items():
+        mine = [r for r in rows if r["solver"] == arm]
+        if not mine:
+            continue
+        proved, matched, verified, wrong = counts("maros-meszaros", mine)
+        both = sum(r["counted_for_time"] == "1" for r in mine)
+        other: dict[str, int] = {}
+        for r in mine:
+            if r["status"] != "optimal":
+                other[r["status"]] = other.get(r["status"], 0) + 1
+        setting = ", ".join(f"`{k} = {v:g}`" for k, v in options.items())
+        out += ["", f"**HiGHS off its defaults, {setting}** (same job, same files, not the "
+                "HiGHS column above): at its defaults HiGHS solves a regularized QP "
+                "(`qp_regularization_value = 1e-7` in its manual) and its point misses the "
+                "stationarity of the QP as stated by 1e-7 |x_j|; with the regularization off "
+                f"it reads **{proved} / {matched} "
+                f"/ {verified} / {wrong}**, {both} matched and verified, of {len(mine)}"
+                + ("; not optimal: " + ", ".join(f"{n} `{s}`" for s, n in sorted(other.items()))
+                   if other else "") + "."]
+    return out
+
+
 def table(found: dict[str, Path | None]) -> list[str]:
     out = [f"**{TITLE}** (HiGHS, SCIP, COIN-OR CBC, GLPK). Each row is one job: all five "
            "solvers on the same machine, one thread each, the same time limit, each a "
@@ -145,6 +176,7 @@ def table(found: dict[str, Path | None]) -> list[str]:
         ranking.append(f"{title}, {what}: " + ", ".join(
             f"{label} {n}" for n, label in sorted(scores, key=lambda s: -s[0])) + ".")
     out += ["", " ".join(ranking)]
+    out += non_default_arms(found)
     if versions:
         out += ["", "Versions, as each solver reported them in those runs: " + ", ".join(
             f"{'Clp' if engine == 'cbc-clp' else rivals.LABELS[engine]} "
