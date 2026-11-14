@@ -354,8 +354,20 @@ class SparseLu {
   /// keep their capacity. Building them afresh was two thirds of a refactorization: on fit2p
   /// (m = 3000) 2.06 s of allocation against 0.60 s of elimination over 234 factorizations.
   /// A copy of a SparseLu (the node factor cache stores them) starts with none.
+  ///
+  /// ONE IS ALSO KEPT PER THREAD, BETWEEN SparseLu OBJECTS (#1158). A branch-and-bound node
+  /// LP builds a fresh simplex, and with it a fresh SparseLu, for every solve, so the
+  /// capacity kept above died with each solve: on MIPLIB 3 pk1 (45 rows) a factorization
+  /// made 421 heap allocations and on mas76 (12 rows) 131, and allocating and freeing them
+  /// was about a tenth of all instructions of a 2,000-node search (callgrind, bench.yml run
+  /// 43585844176). The destructor hands a workspace of at most tol::kLuSpareWorkspaceRows
+  /// rows to the thread's spare slot when that is empty, and factorize() takes the spare
+  /// before it builds one. Workspace::init() sets everything the elimination reads, as it
+  /// already had to for a second factorize() on one object, so the factors are the same.
   struct WorkspaceCache {
     std::unique_ptr<Workspace> ptr;
+    /// The thread's spare workspace, or nullptr; the caller owns what it gets.
+    [[nodiscard]] static std::unique_ptr<Workspace> take_spare() noexcept;
     WorkspaceCache() noexcept;
     ~WorkspaceCache();
     WorkspaceCache(const WorkspaceCache&) noexcept;
