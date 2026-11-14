@@ -3776,7 +3776,11 @@ instances, but with no exact value published the row is graded against it and no
 names, differently from our reader and the other three solvers (50 right-hand sides differ;
 matrix, costs and bounds are identical), so it solves another model and the verifier rejects
 its point. Most rival rejections below are not wrong answers but conditions missed by more
-than the verifier allows: complementary slackness and dual feasibility at 1e-7 (HiGHS), or a
+than the verifier allows: complementary slackness and dual feasibility at 1e-7 (HiGHS, whose QP
+solver regularizes by default - `qp_regularization_value` 1e-7 in its manual - so that
+c + Qx - A'y misses its reduced cost by 1e-7 |x_j|, 2.6e-2 on `qshare1b`; CI runs 43597813857
+and 43598188261, read from its own arrays by index, and six of its optima off the reference
+are at it with the regularization at zero), or a
 stated objective that differs from the one recomputed at the solver's own point by more than
 1e-9 relative (Clp, SCIP). The verifier and its tolerances are the same for every solver,
 SANKHYA included.
