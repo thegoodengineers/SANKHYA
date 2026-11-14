@@ -85,6 +85,7 @@ Options sub_mip_options(const Options& base, Count node_limit, double time_limit
   Options sub = base;
   sub.set_bool("log_to_console", false);
   sub.set_bool("mip_heuristics", false);
+  sub.set_bool("mip_heuristics_until_incumbent", false);
   for (const char* name :
        {"mip_heur_lock_rounding", "mip_heur_repair", "mip_heur_pump", "mip_heur_rins",
         "mip_heur_rens", "mip_heur_fj", "mip_heur_parity", "mip_heur_prop_dive",
@@ -337,7 +338,16 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
   int lp_resolves = 0;
   bool backtracked = false;
 
-  while (depth < tol::kDivingMaxDepth && lp_resolves < schedule_.dive_lp_resolves) {
+  // mip_heuristics_until_incumbent: a dive that starts with an incumbent in hand is the
+  // default dive - the options' own re-solve cap and backtrack. On gesa2, which has a
+  // point from Feasibility Jump before the root LP, the deeper backtracking root dive
+  // alone cost the proof on all three seeds (bench.yml run 43160544582).
+  const bool stood_down = schedule_.until_incumbent && have_incumbent_;
+  const int resolve_cap =
+      stood_down ? schedule_.base_dive_lp_resolves : schedule_.dive_lp_resolves;
+  const bool may_backtrack =
+      stood_down ? schedule_.base_dive_backtrack : schedule_.dive_backtrack;
+  while (depth < tol::kDivingMaxDepth && lp_resolves < resolve_cap) {
     const DiveChoice choice = choose_dive_column(original_, locks_, integer_columns_, x, rule,
                                                  guide, integrality_tolerance_);
     if (choice.column < 0) {
@@ -359,7 +369,7 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
     ++depth;
     Solution probe = solve_node();
     ++lp_resolves;
-    if (probe.status != SolveStatus::kOptimal && schedule_.dive_backtrack && !backtracked) {
+    if (probe.status != SolveStatus::kOptimal && may_backtrack && !backtracked) {
       // ONE backtrack (Achterberg 2007, sec. 9.2): undo the fix and try the other side of
       // the column once; a second dead end ends the dive.
       backtracked = true;

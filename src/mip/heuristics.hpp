@@ -157,6 +157,10 @@ struct HeuristicSchedule {
   /// mip_heuristics_until_incumbent: the optional heuristics run only while the search
   /// has no incumbent; once it has one the schedule is the default one again.
   bool until_incumbent = false;
+  /// What a dive may spend once that mode has stood down: the options' own values, so
+  /// the root dive of a search that already has a point is exactly the default one.
+  int base_dive_lp_resolves = 0;
+  bool base_dive_backtrack = false;
   Count rins_frequency = 0;
   Count rins_nodes = 0;
   Count rens_nodes = 0;

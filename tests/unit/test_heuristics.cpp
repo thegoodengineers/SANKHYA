@@ -413,6 +413,9 @@ TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   EXPECT_TRUE(s.dive_backtrack);
   EXPECT_EQ(s.dive_lp_resolves, tol::kDivingNoIncumbentLpResolves);
   EXPECT_EQ(s.dive_frequency, tol::kDivingNoIncumbentFrequency);
+  // Once it stands down a dive is the default one: the options' own cap, no backtrack.
+  EXPECT_EQ(s.base_dive_lp_resolves, tol::kDivingMaxLpResolves);
+  EXPECT_FALSE(s.base_dive_backtrack);
   until.set_bool("mip_heuristics", true);
   EXPECT_FALSE(HeuristicSchedule::from(until).until_incumbent);
 

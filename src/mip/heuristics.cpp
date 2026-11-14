@@ -680,6 +680,8 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   s.pdhg_pump_rounds = static_cast<int>(options.get_int("gpu_pump_max_iter"));
   s.fix_and_propagate_backtracks = static_cast<int>(options.get_int("gpu_fix_backtrack"));
   s.seconds_budgets = !options.get_bool("deterministic");
+  s.base_dive_lp_resolves = s.dive_lp_resolves;
+  s.base_dive_backtrack = s.dive_backtrack;
   if (s.until_incumbent) {
     // Deeper dives, repeated through the tree, with the one-level backtrack: only while
     // there is no incumbent (BranchAndBound::run_dives), so an explicit setting wins.
