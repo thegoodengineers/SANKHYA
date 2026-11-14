@@ -322,6 +322,8 @@ check(named_solvers_doc.counts("stress", [
     {"status": "crashed", "verdict": "failed", "verified": ""}]) == (3, 1, 1, 1),
     "the stress set's cell: a verdict, graded correct, accepted, and wrong; a rejected file "
     "at the known optimum is not a wrong answer")
+check(named_solvers_doc.NO_QP == {"maros-meszaros": ("cbc", "glpk")},
+      "CBC and GLPK have no QP: the Maros-Meszaros row says so instead of a blank")
 
 print(f"\n{'all passed' if FAILURES == 0 else f'{FAILURES} FAILED'}")
 sys.exit(1 if FAILURES else 0)

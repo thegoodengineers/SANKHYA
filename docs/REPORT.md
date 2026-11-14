@@ -103,7 +103,7 @@ the one stamped in the file's rows, the build that produced it.
 | measurement | CSV | commit |
 |---|---|---|
 | Netlib LP, full set: 94 of 94 within 1e-6 of Koch's exact optimum and verified; 83 match the readme; 94 accepted by the independent verifier | `bench/results/netlib-full-945cb4f.csv` | `945cb4f` |
-| Head-to-head, Netlib LP, 92 instances: SGM10 0.304 s against HiGHS 0.158 s; against HiGHS faster on 6, tie on 78, slower on 8 | `bench/results/head-to-head-netlib-ab3f4a1.csv` | `ab3f4a1` |
+| Head-to-head, Netlib LP, 92 instances: SGM10 0.245 s against HiGHS 0.127 s; against HiGHS faster on 4, tie on 82, slower on 6 | `bench/results/head-to-head-netlib-d1d0d52.csv` | `d1d0d52` |
 | Head-to-head, Kennington LP, 16 instances: SGM10 9.430 s against HiGHS 1.855 s; against HiGHS faster on 3, tie on 2, slower on 11 | `bench/results/head-to-head-kennington-1860864.csv` | `1860864` |
 | Head-to-head, Maros-Meszaros QP, 138 instances: SGM10 4.066 s against HiGHS 35.808 s; against HiGHS faster on 91, tie on 26, slower on 3 | `bench/results/head-to-head-maros-meszaros-d0eb672.csv` | `d0eb672` |
 | Safe bounds on Netlib: 93 of 94 optimal answers certified to 1e-6 by a rigorous bound, 0 with no finite bound (with `certified_gap_seconds=120`) | `bench/results/certified-gap-netlib-full-81b812c.csv` | `81b812c` |
@@ -115,7 +115,7 @@ the one stamped in the file's rows, the build that produced it.
 | Maros-Meszaros convex QP: 127 of 138 at the published objective, 132 verifier-accepted, 0 optimal answers rejected | `bench/results/maros-meszaros-c766eae.csv` | `c766eae` |
 | Hock-Schittkowski NLP: 64 of 70 at the published objective, 70 accepted by the checker | `bench/results/nlp-hs-ad57c03.csv` | `ad57c03` |
 | Convex MINLPLib: 14 of 17 at the published objective, 16 accepted by the checker | `bench/results/nlp-minlplib-ad57c03.csv` | `ad57c03` |
-| Stress set, 126 badly scaled and adversarial LPs: SANKHYA 114 correct / 0 wrong / 12 declined; HiGHS on its defaults 28 / 88 / 10 | `bench/results/stress-09ea411.csv` | `09ea411` |
+| Stress set, 126 badly scaled and adversarial LPs: SANKHYA 114 correct / 0 wrong / 12 declined; HiGHS on its defaults 28 / 88 / 10 | `bench/results/stress-e4eb1cf.csv` | `e4eb1cf` |
 | `sankhya scenarios`: 1130 of 1130 scenarios verified | `bench/results/scenarios-de0f393a.csv` | `de0f393a` |
 | A million rows on the CPU: 2 of 9 engine runs optimal and verified (transport 1,000,000 rows by `pdhg` in 119 s; refinery 1,007,400 rows by `pdhg` in 2,336 s) | `bench/results/million-cpu-b561fba.csv` | `b561fba` |
 | HiGHS agreement, medium Netlib tier: objectives agree on 50 of 50 | `bench/results/compare-highs-medium-ad57c03.csv` | `ad57c03` |
@@ -130,25 +130,25 @@ that is optimal, at the published optimum and verified counts for time. The meth
 
 ### Netlib LP
 
-`bench/results/head-to-head-netlib-ab3f4a1.csv`, commit `ab3f4a1`, 120 s limit, machine
-`github-actions ubuntu-24.04; AMD EPYC 7763 64-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`.
+`bench/results/head-to-head-netlib-d1d0d52.csv`, commit `d1d0d52`, 120 s limit, machine
+`github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64`.
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | ab3f4a1 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.304 s |
-| HiGHS | 1.15.1 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.158 s |
-| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.380 s |
-| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.348 s |
-| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.472 s |
+| SANKHYA | d1d0d52 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.245 s |
+| HiGHS | 1.16.0 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.127 s |
+| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.312 s |
+| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.312 s |
+| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.436 s |
 
 **Instance by instance, SANKHYA against each rival:**
 
 | against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
 |---|---:|---:|---:|---:|---:|---:|
-| HiGHS | 92 | 6 | 78 | 8 | 1.00x | 0.77x |
-| SCIP | 92 | 23 | 66 | 3 | 1.00x | 0.30x |
-| CBC/Clp | 92 | 7 | 77 | 8 | 1.00x | 0.61x |
-| GLPK | 92 | 16 | 71 | 5 | 1.00x | 0.61x |
+| HiGHS | 92 | 4 | 82 | 6 | 1.00x | 0.85x |
+| SCIP | 92 | 19 | 70 | 3 | 1.00x | 0.31x |
+| CBC/Clp | 92 | 6 | 79 | 7 | 1.00x | 0.60x |
+| GLPK | 92 | 12 | 77 | 3 | 1.00x | 0.70x |
 
 *A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
 
@@ -223,7 +223,7 @@ machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores
   it accepts 94 of 94 answers, and 94 of 94 are
   within 1e-6 of Koch's exact rational optimum (`bench/results/netlib-full-945cb4f.csv`, `docs/BENCHMARKS.md`
   section 1c). In the head-to-head run the same verifier rejected 5
-  rival answers on Netlib (`bench/results/head-to-head-netlib-ab3f4a1.csv`, section 4a.1).
+  rival answers on Netlib (`bench/results/head-to-head-netlib-d1d0d52.csv`, section 4a.1).
 - **Certificates of infeasibility.** 28 of 29 of Netlib's
   infeasible LPs end with a Farkas certificate the verifier accepts (`bench/results/netlib-infeasible-5a39fb2.csv`,
   section 3a). A verdict with no certificate is not counted.
@@ -240,16 +240,16 @@ machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores
 
 ## 6. Honest limits
 
-- **Speed against HiGHS.** Netlib SGM 0.304 s against
-  0.158 s; Kennington 9.430 s against
+- **Speed against HiGHS.** Netlib SGM 0.245 s against
+  0.127 s; Kennington 9.430 s against
   1.855 s, slower on 11 of
-  16 instances (`bench/results/head-to-head-netlib-ab3f4a1.csv`, `bench/results/head-to-head-kennington-1860864.csv`).
+  16 instances (`bench/results/head-to-head-netlib-d1d0d52.csv`, `bench/results/head-to-head-kennington-1860864.csv`).
 - **Large LPs.** Mittelmann: 5 of 12 inside the limit
   (`bench/results/mittelmann-72123ff.csv`, `docs/BENCHMARKS.md` section 1d).
 - **MILP proofs.** 11 of 30 MIPLIB instances proved, 14
   at the published optimum (`bench/results/miplib-ad57c03.csv`, section 2).
 - **Declined instances.** Stress set: 12 of 126 declined,
-  0 wrong (`bench/results/stress-09ea411.csv`, section 5b). Maros-Meszaros: 128
+  0 wrong (`bench/results/stress-e4eb1cf.csv`, section 5b). Maros-Meszaros: 128
   of 138 optimal (`bench/results/maros-meszaros-c766eae.csv`, section 2b). Safe bounds: 0 of
   94 with no finite bound (`bench/results/certified-gap-netlib-full-81b812c.csv`).
 - **No real industrial model.** Every refinery number is from a generated model.
@@ -347,13 +347,13 @@ Every solve writes a `.sol` file, and `tools/verify_solution.py`, a separate Pyt
 
 Three independent anchors. The Netlib answers are graded against Koch's optima, computed in exact rational arithmetic: 94 of 94 within 1e-6. The same verifier judges the rivals' answers in the head-to-head run and rejected 5 of theirs on Netlib, each named with the violated condition. And HiGHS, as a separate process, agrees on the objective on 50 of 50 medium-tier instances.
 
-*Evidence: `bench/results/netlib-full-945cb4f.csv`; `bench/results/head-to-head-netlib-ab3f4a1.csv` and `docs/BENCHMARKS.md` section 4a.1; `bench/results/compare-highs-medium-ad57c03.csv` and section 4.*
+*Evidence: `bench/results/netlib-full-945cb4f.csv`; `bench/results/head-to-head-netlib-d1d0d52.csv` and `docs/BENCHMARKS.md` section 4a.1; `bench/results/compare-highs-medium-ad57c03.csv` and section 4.*
 
 **Q5. How fast is it against HiGHS on Netlib?**
 
-Slower in the aggregate. Shifted geometric mean with a 10 s shift over 92 instances: SANKHYA 0.304 s, HiGHS 0.158 s. Instance by instance, SANKHYA is faster on 6, ties on 78 (within 10%, or both under 0.1 s) and is slower on 8. We do not headline a win count: most pairs are ties, because most Netlib instances finish in milliseconds.
+Slower in the aggregate. Shifted geometric mean with a 10 s shift over 92 instances: SANKHYA 0.245 s, HiGHS 0.127 s. Instance by instance, SANKHYA is faster on 4, ties on 82 (within 10%, or both under 0.1 s) and is slower on 6. We do not headline a win count: most pairs are ties, because most Netlib instances finish in milliseconds.
 
-*Evidence: `bench/results/head-to-head-netlib-ab3f4a1.csv` at `ab3f4a1`; `docs/BENCHMARKS.md` section 4a.1.*
+*Evidence: `bench/results/head-to-head-netlib-d1d0d52.csv` at `d1d0d52`; `docs/BENCHMARKS.md` section 4a.1.*
 
 **Q6. And on larger LPs?**
 
@@ -419,13 +419,13 @@ With the `exact` option the duals, reduced costs and ranges are re-derived from 
 
 On 126 scaled-Netlib and adversarial LPs SANKHYA is correct on 114, wrong on 0 and declines 12. HiGHS 1.16.0 on its default options is 28 correct, 88 wrong, 10 failed on the same files; its defaults drop the tiny coefficients these files carry, so this measures defaults on extreme scaling, not HiGHS in general.
 
-*Evidence: `bench/results/stress-09ea411.csv` at `09ea411`; `docs/BENCHMARKS.md` section 5b.*
+*Evidence: `bench/results/stress-e4eb1cf.csv` at `e4eb1cf`; `docs/BENCHMARKS.md` section 5b.*
 
 **Q17. What does the solver do when it cannot solve a model?**
 
 It declines: the status is a limit, `numerical_error` or `feasible`, never `optimal`. The 12 stress-set runs above and the Maros-Meszaros runs short of `optimal` (128 of 138 are optimal) are named instance by instance.
 
-*Evidence: `bench/results/stress-09ea411.csv`; `bench/results/maros-meszaros-c766eae.csv`; `docs/ARCHITECTURE.md` section 8 (resource limits and what each one means).*
+*Evidence: `bench/results/stress-e4eb1cf.csv`; `bench/results/maros-meszaros-c766eae.csv`; `docs/ARCHITECTURE.md` section 8 (resource limits and what each one means).*
 
 **Q18. Does it handle non-convex QP?**
 
