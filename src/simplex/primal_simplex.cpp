@@ -2178,8 +2178,9 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   // disagree about which method they are running.
   // `factors` is handed only to the scaled attempt: its matrix is the one cache.id names.
   // The unscaled retry factorizes the caller's matrix, which no id identifies.
+  // The scaled model itself, whichever of the scratch and the local below holds it.
+  const Model* scaled_attempt = nullptr;
   const Model* scaled_model = nullptr;  // the scratch's scaled model, once it is set up
-  const Model* scaled_attempt = nullptr;  // the scaled model itself, whichever holds it
   const CsrView* scaled_rows = nullptr;
   const auto run_engine_from = [&](const Model& problem, const Options& problem_options,
                                    NodeFactorCache* reuse, const WarmStart* start) {

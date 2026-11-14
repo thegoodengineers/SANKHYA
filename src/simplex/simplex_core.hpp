@@ -733,7 +733,8 @@ class Simplex {
   /// built once per solve; pivot_row_touched_ names the entries the last scatter wrote so
   /// the next can zero them without a pass over every column.
   CsrView by_row_;
-  bool quality_left_to_caller_ = false;  ///< see leave_quality_to_caller()
+  /// See leave_quality_to_caller().
+  bool quality_left_to_caller_ = false;
   const CsrView* shared_rows_ = nullptr;  ///< the caller's copy, when it holds one (#1158)
   [[nodiscard]] const CsrView& rows_view() const noexcept {
     return shared_rows_ != nullptr ? *shared_rows_ : by_row_;
