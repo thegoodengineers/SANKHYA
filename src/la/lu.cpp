@@ -94,8 +94,34 @@ constexpr Index kFtFileSlack = 4;
 
 }  // namespace
 
+namespace {
+// The thread's spare slot (#1158, lu.hpp). `spare_slot_gone` outlives the slot: it is a
+// trivially destructible thread_local, so a SparseLu destroyed after the slot (at thread
+// or program exit) sees the flag and frees its workspace instead of touching the slot.
+thread_local bool spare_slot_gone = false;
+template <typename W>
+struct SpareSlot {
+  std::unique_ptr<W> kept;
+  ~SpareSlot() { spare_slot_gone = true; }
+};
+template <typename W>
+SpareSlot<W>& spare_slot() {
+  thread_local SpareSlot<W> slot;
+  return slot;
+}
+}  // namespace
+
+std::unique_ptr<SparseLu::Workspace> SparseLu::WorkspaceCache::take_spare() noexcept {
+  if (spare_slot_gone) return nullptr;
+  return std::move(spare_slot<Workspace>().kept);
+}
+
 SparseLu::WorkspaceCache::WorkspaceCache() noexcept = default;
-SparseLu::WorkspaceCache::~WorkspaceCache() = default;
+SparseLu::WorkspaceCache::~WorkspaceCache() {
+  if (!ptr || spare_slot_gone || ptr->m > tol::kLuSpareWorkspaceRows) return;
+  auto& slot = spare_slot<Workspace>();
+  if (!slot.kept) slot.kept = std::move(ptr);
+}
 SparseLu::WorkspaceCache::WorkspaceCache(const WorkspaceCache& /*other*/) noexcept {}
 SparseLu::WorkspaceCache& SparseLu::WorkspaceCache::operator=(
     const WorkspaceCache& /*other*/) noexcept {
@@ -152,6 +178,7 @@ bool SparseLu::factorize(const std::vector<LuColumn>& columns, Index m, double p
   if (m == 0) return true;
   if (static_cast<Index>(columns.size()) != m) return false;
 
+  if (!workspace_.ptr) workspace_.ptr = WorkspaceCache::take_spare();  // #1158
   if (!workspace_.ptr) workspace_.ptr = std::make_unique<Workspace>();
   Workspace& w = *workspace_.ptr;
   w.init(m);
