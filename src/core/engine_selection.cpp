@@ -57,6 +57,26 @@ EngineSelection rule_table_selection(const Model& model, const Options& options,
         shape, normal_bound, kNormalEquationsCeiling);
     return s;
   }
+  // The average can hide a dense column; the pattern bound on A A^T is what one inflates.
+  const bool network = normal_affordable && s.columns >= s.rows &&
+                       s.rows < kNetworkRowCeiling &&
+                       static_cast<double>(s.nonzeros) <
+                           kNetworkNonzerosPerColumn * static_cast<double>(s.columns);
+  const bool sized_off_the_dual =
+      s.rows >= kDualSimplexRowLimit ||
+      (s.nonzeros >= kIpmNonzeroFloor && s.rows >= kIpmDensityRowFloor);
+  if (!gpu_available && !device_factor && network && sized_off_the_dual) {
+    s.algorithm = "dual-simplex";
+    s.rule = "network:dual-simplex";
+    s.reason = fmt::format(
+        "{}: under {:g} nonzeros per column with at least as many columns as rows, a "
+        "network shape whose simplex solves stay hyper-sparse; the Kennington LPs the size "
+        "and density rules sent elsewhere are all faster on the dual simplex (ken-18 25 s "
+        "against 213 s, pds-10 1.7 s against 29 s; "
+        "option-ab-kennington-dual-simplex-88a9f90.csv)",
+        shape, kNetworkNonzerosPerColumn);
+    return s;
+  }
   if (s.rows >= kPdhgRowFloor) {
     s.algorithm = "pdhg";
     if (gpu_available && !gpu_device.empty()) {

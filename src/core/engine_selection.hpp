@@ -91,6 +91,31 @@ inline constexpr Index kPdhgRowFloor = 100000;
 inline constexpr double kNormalEquationsCeiling = 1e8;
 inline constexpr double kSimplexWorkCeiling = 3e8;
 
+/// THE NETWORK RULE, on a CPU build (no GPU, no device factor): a model with at least as many
+/// columns as rows, fewer than kNetworkNonzerosPerColumn nonzeros per column on average, a
+/// normal-equations bound under kNormalEquationsCeiling and fewer than kNetworkRowCeiling rows
+/// stays on the dual simplex, ahead of the size and density rules above. The bound is there
+/// because an average hides a dense column: chromaticindex1024-7 averages 3.67 per column but
+/// one column holds 12,289 entries (bound 6.0e8), and on it the dual simplex hits 300 s where
+/// PDHG is optimal in 21 s (`option-ab-mittelmann-dual-simplex-88a9f90.csv`); normal:pdhg keeps
+/// it. Such a model is network-shaped - a column is an arc in a node-balance row or two, plus
+/// perhaps a joint-capacity row - so its bases are close to triangular and the simplex's FTRAN
+/// and BTRAN stay hyper-sparse (Hall and McKinnon, "Hyper-sparsity in the revised simplex
+/// method and how to exploit it", Comput. Optim. Appl. 32 (2005)), while the coupling rows fill
+/// the interior point's normal equations. Measured on the 16 Kennington LPs at 88a9f90
+/// (`option-ab-kennington-dual-simplex-88a9f90.csv`, one job, 300 s): every one the size and
+/// density rules sent off the dual simplex is faster on it - pds-20 ends at 21 s (feasible:
+/// complementarity 1.07e-6, over the 1e-6 gate) where the interior point hits the limit, ken-18
+/// 25 s against 213 s on PDHG, pds-10 1.7 s against 29 s, cre-b 1.4 s against 18 s, cre-d 0.9 s
+/// against 16 s, ken-13 1.7 s against 4.6 s; their averages are 2.2 to 3.5 nonzeros per column.
+/// The generated shapes the size rule rests on have 5.0 (staircase, random) and 8.25
+/// (refinery), maros-r7 15.4. The row ceiling stays under the 1,000,000-row transport model
+/// (2.0 per column), which PDHG solves in 109 s and the dual simplex was never measured on
+/// (`million-cpu-b561fba.csv`); ken-18, at 105,127 rows, is the largest network model measured
+/// on it.
+inline constexpr double kNetworkNonzerosPerColumn = 4.0;
+inline constexpr Index kNetworkRowCeiling = 200000;
+
 /// Decide the LP engine for `model` under `options`. An explicit `algorithm` other than
 /// "auto" is honoured as given (rule "requested"); a starting basis forces a simplex
 /// (rule "warm-start"), because only a simplex can use one.

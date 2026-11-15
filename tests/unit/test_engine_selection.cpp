@@ -205,6 +205,36 @@ TEST(EngineSelection, KenningtonsKen11StaysOnTheDualSimplexWithoutADeviceFactor)
   }
 }
 
+TEST(EngineSelection, ANetworkShapedModelStaysOnTheDualSimplexOnTheCpu) {
+  // pds-20 (33,874 x 105,728, 230,200 nonzeros), past the row limit, and cre-b (9,648 x
+  // 72,447, 256,095), past the nonzero floor: both network-shaped, both the dual simplex's.
+  for (const Model& m : {shaped_lp(33874, 105728, 230200), shaped_lp(9648, 72447, 256095)}) {
+    const EngineSelection s = select_engine(m, auto_options(), false);
+    EXPECT_EQ(s.algorithm, "dual-simplex") << s.reason;
+    EXPECT_EQ(s.rule, "network:dual-simplex");
+    // A GPU build keeps its measured device rules.
+    EXPECT_NE(select_engine(m, auto_options(), false, true, "Test GPU").rule,
+              "network:dual-simplex");
+  }
+  // The generated staircase's shape, 5 per column, keeps the size rule; so does a network
+  // shape at the row ceiling, and a small one keeps the default's name.
+  EXPECT_EQ(select_engine(shaped_lp(20000, 20000, 100000), auto_options(), false).rule,
+            "size:ipm");
+  EXPECT_EQ(select_engine(shaped_lp(kNetworkRowCeiling, kNetworkRowCeiling,
+                                    2 * static_cast<Count>(kNetworkRowCeiling)),
+                          auto_options(), false)
+                .rule,
+            "size:pdhg");
+  EXPECT_EQ(select_engine(shaped_lp(2000, 5000, 6000), auto_options(), false).rule,
+            "default:dual-simplex");
+  // chromaticindex1024-7's situation: a low average over one dense column, which the
+  // normal-equations bound sees and the average does not; PDHG keeps it.
+  EXPECT_EQ(
+      select_engine(with_dense_column(33874, 105728, 230200, 12000), auto_options(), false)
+          .rule,
+      "normal:pdhg");
+}
+
 TEST(EngineSelection, TheAnswerCarriesTheRuleAndTheReason) {
   // End to end: a small LP under `auto` is solved by the dual simplex, and the Solution
   // says which rule chose it, through presolve and all.
