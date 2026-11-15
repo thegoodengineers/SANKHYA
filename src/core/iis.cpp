@@ -126,6 +126,10 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
   if (solution->status != SolveStatus::kInfeasible) return;
   if (solution->farkas_dual.empty()) return;
   if (!options.get_bool("compute_iis")) return;
+  // An exact certificate (option exact_phase1) proves what floating point cannot resolve:
+  // a filter of floating-point trial solves would replace it with a subsystem's certificate
+  // that does not clear the verifier's margin, and its trials cannot tell the members apart.
+  if (!solution->exact_repair_farkas.empty()) return;
   ProfileScope timed(logger.profiler(), "iis");  // #285, after the reasons not to run
 
   const Index m = model.num_rows();

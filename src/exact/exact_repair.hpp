@@ -61,8 +61,12 @@ struct RepairResult {
   std::vector<double> col_value, col_dual, row_dual;
   /// On kFailed for exact infeasibility: the Farkas multipliers w, one per row with a nonzero
   /// value, as (row, "numerator/denominator"). w^T [A | -I] z = 0 for every z the rows allow,
-  /// and its range over the variables' bounds excludes 0.
+  /// and its range over the variables' bounds excludes 0. From prove_infeasible_exact they
+  /// are oriented as Solution::farkas_dual (include/sankhya/certificate.hpp): w_i > 0 leans
+  /// on row i's lower bound, w_i < 0 on its upper.
   std::vector<std::pair<Index, std::string>> farkas_row;
+  /// prove_infeasible_exact only: the same multipliers rounded once to double, one per row.
+  std::vector<double> farkas_dual;
 };
 
 /// `solution` must be an optimal plain LP with a basis. Declines otherwise.
@@ -74,5 +78,18 @@ struct RepairResult {
 /// calls it under option "exact" before the exact check and the certified sensitivity.
 /// Returns true when the reported basis was replaced.
 bool apply_exact_repair(const Model& model, Solution* solution, Logger& logger, double seconds);
+
+/// THE EXACT PHASE 1: is `model`, as read into doubles, infeasible? `elastic` is its elastic
+/// LP (core/elastic_certificate.hpp: every column, cost 0, plus a cost-1 slack on every finite
+/// row side, after the original columns) and `elastic_solution` that LP's floating-point
+/// optimum with a basis. The elastic LP is feasible and bounded below by 0, so the repair
+/// above takes that basis to an exactly optimal one (Koch, Oper. Res. Letters 32, 2004;
+/// Applegate, Cook, Dash and Espinoza, Oper. Res. Letters 35, 2007). Its exact optimum is the
+/// least total violation of the rows: 0 is kVerified (the model is feasible); above 0 is
+/// kFailed, and the exact row duals, a Farkas certificate by strong duality and checked as
+/// one before they are returned, are in farkas_row and farkas_dual. Declines otherwise.
+[[nodiscard]] RepairResult prove_infeasible_exact(const Model& model, const Model& elastic,
+                                                  const Solution& elastic_solution,
+                                                  double seconds = kInfinity);
 
 }  // namespace sankhya::exact

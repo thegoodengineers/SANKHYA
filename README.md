@@ -74,9 +74,11 @@ as regenerable backups.
 | Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-d1d0d52.csv` | `d1d0d52` |
 | MIPLIB 3 MILP | 65 | 60 s | 42 / 41 / 42 / 0 | 52 / 49 / 52 / 0 | 50 / 45 / 50 / 0 | 49 / 48 / 49 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-d1d0d52.csv` | `d1d0d52` |
 | Stress set LP | 126 | 60 s | 115 / 115 / 117 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-7119598.csv` | `7119598` |
-| Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 102 / 94 / 28 / 8 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-e4eb1cf.csv` | `e4eb1cf` |
+| Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 101 / 94 / 28 / 7 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-4981e56.csv` | `4981e56` |
 
 Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 49, CBC 48, SCIP 45, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 115, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58, HiGHS 28.
+
+**HiGHS off its defaults, `qp_regularization_value = 0`** (same job, same files, not the HiGHS column above): at its defaults HiGHS solves a regularized QP (`qp_regularization_value = 1e-7` in its manual) and its point misses the stationarity of the QP as stated by 1e-7 |x_j|; with the regularization off it reads **106 / 103 / 84 / 3**, 84 matched and verified, of 138; not optimal: 1 `crashed`, 11 `solve error`, 20 `time_limit`.
 
 Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
 <!-- scoreboard:end -->
@@ -527,7 +529,12 @@ pip install https://github.com/thegoodengineers/SANKHYA/releases/download/v1.0.0
 python -c "import sankhya; print(sankhya.version())"
 ```
 
-Nothing is on PyPI.
+Nothing is on PyPI. The `v1.0.0-rc5` wheels carry the CLI inside the package but put no
+command on PATH (`python -c "import sankhya; print(sankhya.locate_executable())"` names it).
+Wheels built after it declare a `sankhya` console script, so on Windows as on Linux the one
+`pip install` above is the whole install and `sankhya solve model.mps` runs the bundled CLI;
+the release workflow's wheel test runs `sankhya version` through that command on every
+Python it installs into.
 
 The container image (the CUDA build, the verifier and the demo models) is public at
 `ghcr.io/thegoodengineers/sankhya:v1.0.0-rc5`:
@@ -563,6 +570,48 @@ CDU throughput window, a diesel commitment and a sulphur specification. It ships
 and LP so the two readers can be checked against each other, and it exercises the format
 features most likely to be misread - a `RANGES` entry on a `G` row, an equality row,
 `OBJSENSE MAX`, and `LO`/`UP` bounds.
+
+**From PuLP or Pyomo.** A model already written in either changes its solver call, not its
+model: `sankhya.adapters.pulp_solver` is a PuLP solver class and `sankhya.adapters.pyomo_plugin`
+registers `"sankhya"` with Pyomo's `SolverFactory`. Both build the model in memory through the
+Python bindings and return the status, objective and values, and on an LP solved to optimal the
+duals and reduced costs (PuLP's `pi` and `dj`, Pyomo's `dual` and `rc` suffixes). PuLP and
+Pyomo stay optional: `import sankhya` imports neither. CI runs both examples below, as written
+here, under PuLP 3 and 4 and Pyomo (`bindings/python/test_adapters.py`).
+
+<!-- example: pulp -->
+```python
+import pulp
+import sankhya.adapters.pulp_solver as sankhya_pulp
+
+prob = pulp.LpProblem("blend", pulp.LpMaximize)
+x = prob.add_variable("x", lowBound=0, upBound=3)
+y = prob.add_variable("y", lowBound=0)
+prob += 3 * x + 2 * y
+prob += x + y <= 4, "crude"
+prob += x + 3 * y <= 9, "sulphur"
+prob.solve(sankhya_pulp.SANKHYA(msg=False))
+print(pulp.value(prob.objective), x.varValue, y.varValue, prob.get_constraint_by_name("crude").pi)
+```
+
+<!-- example: pyomo -->
+```python
+import pyomo.environ as pyo
+import sankhya.adapters.pyomo_plugin  # registers "sankhya"
+
+m = pyo.ConcreteModel()
+m.x = pyo.Var(bounds=(0, 3))
+m.y = pyo.Var(bounds=(0, None))
+m.obj = pyo.Objective(expr=3 * m.x + 2 * m.y, sense=pyo.maximize)
+m.crude = pyo.Constraint(expr=m.x + m.y <= 4)
+m.sulphur = pyo.Constraint(expr=m.x + 3 * m.y <= 9)
+m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+pyo.SolverFactory("sankhya").solve(m)
+print(pyo.value(m.obj), pyo.value(m.x), pyo.value(m.y), m.dual[m.crude])
+```
+
+The `crude` dual is what one more unit of that limit adds to the objective; the test checks
+it against the hand-worked optimum, and both answers against a direct solve.
 
 `sankhya diagnose` answers "what am I about to solve?" before committing to it: size, the
 mix of row and column kinds, sparsity, the coefficient magnitude spread with a scaling-risk

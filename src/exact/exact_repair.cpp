@@ -276,6 +276,55 @@ BasisStatus status_of(const Problem& problem, Nb nb, Sz k) {
   return BasisStatus::kUnknown;
 }
 
+/// Runs `body`, turning each way an exact computation stops early into the verdict and the
+/// message; the step counts of a run that stopped early are not reported.
+template <typename Body>
+void guarded(RepairResult* result, double seconds, Body&& body) {
+  try {
+    body();
+    return;
+  } catch (const Declined& declined) {
+    result->verdict = ExactVerdict::kDeclined;
+    result->message = declined.why;
+  } catch (const Failed& failed) {
+    result->verdict = ExactVerdict::kFailed;
+    result->message = failed.why;
+  } catch (const ExactBudgetExceeded&) {
+    result->verdict = ExactVerdict::kDeclined;
+    result->message = fmt::format(
+        "the exact repair ran past its {} s budget (option exact_seconds)", seconds);
+  } catch (const RationalOverflow&) {
+    result->verdict = ExactVerdict::kDeclined;
+    result->message = "no exact rational result: a non-finite value in the data";
+  }
+  result->dual_pivots = result->primal_pivots = result->bound_flips = result->shifted_costs = 0;
+}
+
+/// Whether row multipliers y prove `problem`'s model infeasible, exactly: every feasible
+/// point satisfies (A^T y) x >= S, S the sum of y_i times row i's lower bound (y_i > 0) or
+/// upper bound (y_i < 0), and over the column bounds (A^T y) x is at most M. M < S is the
+/// proof; a multiplier on a missing row side, or an aggregate unbounded over the box, is not.
+bool farkas_holds(const Problem& problem, const std::vector<Rational>& y) {
+  const auto n = static_cast<Sz>(problem.n);
+  Rational required(0);
+  for (Sz i = 0; i < y.size(); ++i) {
+    if (y[i].is_zero()) continue;
+    const bool lower = y[i].sign() > 0;
+    if (!(lower ? problem.has_lower[n + i] : problem.has_upper[n + i])) return false;
+    required += y[i] * (lower ? problem.lower[n + i] : problem.upper[n + i]);
+  }
+  Rational reachable(0);
+  for (Sz j = 0; j < n; ++j) {
+    Rational d(0);
+    for (const auto& [row, a] : problem.columns[j]) d += y[static_cast<Sz>(row)] * a;
+    if (d.is_zero()) continue;
+    const bool upper = d.sign() > 0;
+    if (!(upper ? problem.has_upper[j] : problem.has_lower[j])) return false;
+    reachable += d * (upper ? problem.upper[j] : problem.lower[j]);
+  }
+  return reachable < required;
+}
+
 }  // namespace
 
 RepairResult repair_basis_exact(const Model& model, const Solution& solution, double seconds) {
@@ -296,20 +345,20 @@ RepairResult repair_basis_exact(const Model& model, const Solution& solution, do
     result.message = "the engine produced no basis";
     return result;
   }
-  try {
+  guarded(&result, seconds, [&] {
     Problem problem(model);
     Basis basis;
     const LoadResult loaded = load_basis(model, solution, problem, deadline, &basis);
     if (!loaded.message.empty()) {
       result.verdict = loaded.verdict;
       result.message = loaded.message;
-      return result;
+      return;
     }
     Repair(&problem, &basis, &result, deadline).run();
     const std::string why = not_optimal(problem, basis);
     if (!why.empty()) {
       result.message = "the repair stopped short of an exactly optimal basis: " + why;
-      return result;
+      return;
     }
     result.verdict = ExactVerdict::kVerified;
     const auto sn = static_cast<Sz>(n);
@@ -329,22 +378,7 @@ RepairResult repair_basis_exact(const Model& model, const Solution& solution, do
       result.row_status[i] = status_of(problem, basis.status[sn + i], sn + i);
       result.row_dual[i] = sense * basis.y[i].to_double();
     }
-    return result;
-  } catch (const Declined& declined) {
-    result.verdict = ExactVerdict::kDeclined;
-    result.message = declined.why;
-  } catch (const Failed& failed) {
-    result.verdict = ExactVerdict::kFailed;
-    result.message = failed.why;
-  } catch (const ExactBudgetExceeded&) {
-    result.verdict = ExactVerdict::kDeclined;
-    result.message = fmt::format(
-        "the exact repair ran past its {} s budget (option exact_seconds)", seconds);
-  } catch (const RationalOverflow&) {
-    result.verdict = ExactVerdict::kDeclined;
-    result.message = "no exact rational result: a non-finite value in the data";
-  }
-  result.dual_pivots = result.primal_pivots = result.bound_flips = result.shifted_costs = 0;
+  });
   return result;
 }
 
@@ -383,6 +417,65 @@ bool apply_exact_repair(const Model& model, Solution* solution, Logger& logger,
   solution->row_dual = std::move(repair.row_dual);
   solution->recompute_quality(model);
   return true;
+}
+
+RepairResult prove_infeasible_exact(const Model& model, const Model& elastic,
+                                    const Solution& elastic_solution, double seconds) {
+  RepairResult result;
+  const Deadline deadline(seconds);
+  if (model.hessian.num_nonzeros() > 0 || model.num_integer_columns() > 0) {
+    result.message = "the exact phase 1 covers plain LPs only";
+    return result;
+  }
+  if (elastic_solution.status != SolveStatus::kOptimal ||
+      elastic_solution.col_status.size() != static_cast<Sz>(elastic.num_cols()) ||
+      elastic_solution.row_status.size() != static_cast<Sz>(elastic.num_rows())) {
+    result.message = "the elastic LP did not end optimal with a basis";
+    return result;
+  }
+  guarded(&result, seconds, [&] {
+    Problem problem(elastic);
+    Basis basis;
+    const LoadResult loaded = load_basis(elastic, elastic_solution, problem, deadline, &basis);
+    if (!loaded.message.empty()) throw Declined{"the elastic basis: " + loaded.message};
+    Repair(&problem, &basis, &result, deadline).run();
+    const std::string why = not_optimal(problem, basis);
+    if (!why.empty()) throw Declined{"the elastic LP's repair stopped short: " + why};
+    // The exact optimum, the least total violation of the rows: every elastic column has
+    // cost 1, every original column cost 0.
+    Rational violation(0);
+    for (Sz k = static_cast<Sz>(model.num_cols()); k < static_cast<Sz>(problem.n); ++k) {
+      violation += basis.value[k];
+    }
+    const int pivots = result.dual_pivots + result.primal_pivots;
+    if (violation.is_zero()) {
+      result.verdict = ExactVerdict::kVerified;
+      result.message = fmt::format(
+          "the model as read into doubles is exactly feasible: its elastic LP's exact "
+          "optimum is 0 ({} exact pivot(s) from the floating-point basis)",
+          pivots);
+      return;
+    }
+    // y >= 0 on an active lower row side and <= 0 on an upper one (exact_basis.hpp), the
+    // orientation of farkas_dual; by strong duality its contradiction is the violation.
+    const auto m = static_cast<Sz>(model.num_rows());
+    const std::vector<Rational> y(basis.y.begin(), basis.y.begin() + static_cast<long>(m));
+    if (!farkas_holds(Problem(model), y)) {
+      throw Declined{"the elastic LP's exact duals do not prove infeasibility"};
+    }
+    result.farkas_dual.assign(m, 0.0);
+    for (Sz i = 0; i < m; ++i) {
+      if (y[i].is_zero()) continue;
+      result.farkas_row.emplace_back(static_cast<Index>(i), y[i].to_string());
+      result.farkas_dual[i] = y[i].to_double();
+    }
+    throw Failed{fmt::format(
+        "the model as read into doubles is exactly infeasible: its elastic LP's exact "
+        "optimum, the least total violation of its rows, is {:.6e} > 0 ({} exact pivot(s) "
+        "from the floating-point basis), and its exact row duals are a Farkas proof, checked",
+        violation.to_double(), pivots)};
+  });
+  return result;
 }
 
 }  // namespace sankhya::exact

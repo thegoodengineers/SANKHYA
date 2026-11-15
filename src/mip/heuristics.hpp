@@ -130,7 +130,8 @@ bool rens_submodel(const Model& model, const std::vector<Index>& integer_columns
 /// The feasibility pump from an LP point `start`. Returns the first point whose integer
 /// columns are integral and which the pump's own LP says is feasible, or an empty vector.
 /// `lp_solves` reports the LP projections spent. `lp_options` is what each projection is
-/// solved with; the caller sets its limits.
+/// solved with; the caller sets its limits. Its time_limit is the pump's in
+/// total: each projection gets what is left of it.
 [[nodiscard]] std::vector<double> feasibility_pump(const Model& model,
                                                    const std::vector<Index>& integer_columns,
                                                    const std::vector<double>& start,

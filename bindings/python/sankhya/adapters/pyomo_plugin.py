@@ -29,6 +29,13 @@ expression's terms too, but mapping them onto ``Model.set_quadratic`` correctly 
 lower-triangular, 0.5-factor convention `include/sankhya/model.hpp` documents) needs
 dedicated testing this pass did not have time for, so a quadratic objective or constraint
 is refused with a clear message rather than silently solved as if it were linear.
+
+DUALS. On an LP solved to ``optimal``, ``get_duals`` and ``get_reduced_costs`` (and so the
+``dual`` and ``rc`` import suffixes) report SANKHYA's row duals and reduced costs, in the
+model's own sense: the rate at which the objective moves as the constraint's bound (or the
+variable's active bound) is raised. A MILP, or a solve that did not reach ``optimal``, raises
+Pyomo's own ``NoDualsError`` / ``NoReducedCostsError``: the LP duals of a branch-and-bound
+leaf are not the model's, and an empty answer could be mistaken for a zero dual.
 """
 
 from __future__ import annotations
@@ -39,7 +46,7 @@ from pyomo.contrib.solver.common.base import SolverBase
 from pyomo.contrib.solver.common.factory import SolverFactory
 from pyomo.contrib.solver.common.results import Results, SolutionStatus, TerminationCondition
 from pyomo.contrib.solver.common.solution_loader import SolutionLoader
-from pyomo.contrib.solver.common.util import NoSolutionError
+from pyomo.contrib.solver.common.util import NoDualsError, NoReducedCostsError, NoSolutionError
 from pyomo.repn.standard_repn import generate_standard_repn
 
 import sankhya
@@ -48,18 +55,14 @@ __all__ = ["SankhyaSolver"]
 
 
 class _SolutionLoader(SolutionLoader):
-    """Reports the primal values `solve()` already wrote onto the model.
+    """Reports the primal values `solve()` already wrote onto the model, and on an optimal LP
+    its duals and reduced costs (see the module docstring's DUALS note)."""
 
-    Duals and reduced costs are not reported (`Solution.row_duals` / `.reduced_costs` exist
-    on the SANKHYA side; wiring them through `get_duals`/`get_reduced_costs` is future work
-    for this adapter, not attempted this pass) - a caller that asks for them gets
-    `NoSolutionError`, the same exception Pyomo's own loaders raise for data they were never
-    given, rather than an empty answer that could be mistaken for a zero dual.
-    """
-
-    def __init__(self, pyomo_model, primals: dict | None) -> None:
+    def __init__(self, pyomo_model, primals: dict | None, duals=None, reduced=None) -> None:
         self._pyomo_model = pyomo_model
         self._primals = primals
+        self._duals = duals
+        self._reduced = reduced
 
     def get_number_of_solutions(self) -> int:
         return 1 if self._primals is not None else 0
@@ -74,12 +77,19 @@ class _SolutionLoader(SolutionLoader):
         return ComponentMap((v, self._primals[v]) for v in vars_to_load)
 
     def get_duals(self, cons_to_load=None):
-        raise NoSolutionError(
-            "SANKHYA's Pyomo adapter does not report constraint duals yet")
+        if self._duals is None:
+            raise NoDualsError("SANKHYA reports duals for an LP solved to optimal only")
+        if cons_to_load is None:
+            return ComponentMap(self._duals.items())
+        return ComponentMap((c, self._duals[c]) for c in cons_to_load)
 
     def get_reduced_costs(self, vars_to_load=None):
-        raise NoSolutionError(
-            "SANKHYA's Pyomo adapter does not report reduced costs yet")
+        if self._reduced is None:
+            raise NoReducedCostsError(
+                "SANKHYA reports reduced costs for an LP solved to optimal only")
+        if vars_to_load is None:
+            return ComponentMap(self._reduced.items())
+        return ComponentMap((v, self._reduced[v]) for v in vars_to_load)
 
 _TERMINATION = {
     "optimal": TerminationCondition.convergenceCriteriaSatisfied,
@@ -129,7 +139,7 @@ class SankhyaSolver(SolverBase):
         return tuple(int(part) for part in sankhya.version().split()[0].split("."))
 
     def solve(self, model, **kwargs) -> Results:
-        sankhya_model, variables, columns = _build_model(model)
+        sankhya_model, variables, columns, constraints = _build_model(model)
         options = dict(kwargs)
         # The legacy path - pyo.SolverFactory("sankhya").solve(model, options={...},
         # timelimit=...) - stores the caller's options in self.config.solver_options and
@@ -163,8 +173,16 @@ class SankhyaSolver(SolverBase):
             for variable, value in primals.items():
                 variable.set_value(value, skip_validation=True)
 
+        duals = reduced = None
+        if result.status == "optimal" and not any(v.is_integer() or v.is_binary()
+                                                  for v in variables):
+            row_duals, reduced_costs = result.row_duals, result.reduced_costs
+            duals = ComponentMap(zip(constraints, row_duals))
+            reduced = ComponentMap(
+                (variable, reduced_costs[columns[id(variable)]]) for variable in variables)
+
         results = Results()
-        results.solution_loader = _SolutionLoader(model, primals)
+        results.solution_loader = _SolutionLoader(model, primals, duals, reduced)
         results.termination_condition = _TERMINATION.get(result.status,
                                                           TerminationCondition.unknown)
         # A limit that stopped before any point (#562) is not a feasible solution, whatever
@@ -218,7 +236,8 @@ def _build_model(model: "pyo.BlockData"):
         sankhya_model.set_cost(columns[id(var)], float(coeff))
     sankhya_model.set_objective_offset(float(obj_repn.constant))
 
-    for constraint in model.component_data_objects(pyo.Constraint, active=True):
+    constraints = list(model.component_data_objects(pyo.Constraint, active=True))
+    for constraint in constraints:
         repn = generate_standard_repn(constraint.body, quadratic=True)
         if repn.quadratic_vars:
             raise ValueError(
@@ -236,4 +255,4 @@ def _build_model(model: "pyo.BlockData"):
         upper = None if constraint.upper is None else float(constraint.upper) - repn.constant
         sankhya_model.add_row(coefficients, lower=lower, upper=upper, name=constraint.name)
 
-    return sankhya_model, variables, columns
+    return sankhya_model, variables, columns, constraints

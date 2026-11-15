@@ -79,6 +79,9 @@ def main(build: Path, platform_tag: str, out: Path, extras: list[Path]) -> Path:
             add(archive, name, source.read_bytes(), not name.endswith(".py"))
         add(archive, f"{dist_info}/METADATA", metadata.encode(), False)
         add(archive, f"{dist_info}/WHEEL", wheel.encode(), False)
+        # `sankhya` on PATH: pip turns this into a launcher that runs the bundled CLI.
+        add(archive, f"{dist_info}/entry_points.txt",
+            b"[console_scripts]\nsankhya = sankhya._executable:main\n", False)
         record.append(f"{dist_info}/RECORD,,")
         archive.writestr(zipfile.ZipInfo(f"{dist_info}/RECORD", date_time=(1980, 1, 1, 0, 0, 0)),
                          "\n".join(record) + "\n")

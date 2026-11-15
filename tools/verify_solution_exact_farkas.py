@@ -67,3 +67,61 @@ def check_exact_repair_farkas(model, solution, report) -> None:
     ok, detail = farkas_proves_infeasible(model, solution.exact_repair_farkas)
     report.check(ok, "exact repair: the model as read into doubles is infeasible (Farkas row)",
                  detail)
+
+
+def verify_farkas_exact(model, solution, report) -> bool:
+    """The infeasibility proof of an `infeasible` verdict whose .sol carries exact multipliers.
+
+    The exact phase 1 (src/exact/exact_repair.hpp) proves infeasibility with multipliers that
+    are rationals, and on a model infeasible by less than floating point can resolve (Netlib
+    cplex2) their rounded copy cannot clear verify_farkas()'s 1e-9 margin. This is the same
+    check as verify_farkas(), oriented the same way (y_i > 0 leans on row i's lower bound,
+    y_i < 0 on its upper), done in `Fraction` arithmetic with no tolerance anywhere: every
+    coefficient, bound and multiplier is exact, a coefficient of the aggregate is zero only
+    when it is exactly zero, and the contradiction must be strictly positive. So it is at
+    least as strict as the floating-point check.
+
+    Returns whether the farkas section is these multipliers rounded. When it is not (the IIS
+    filter may replace it by its subsystem's certificate), it is a second claim, and the
+    caller checks it as well, in floating point, as it would any other.
+    """
+    y: dict[int, Fraction] = {}
+    for name, text in solution.exact_repair_farkas.items():
+        if name not in model.row_index:
+            report.check(False, "infeasibility proof",
+                         f"exact multiplier on {name}, which is not a row of the model")
+            return False
+        if Fraction(text):
+            y[model.row_index[name]] = Fraction(text)
+    borrowed = [model.row_names[i] for i, v in y.items()
+                if (v > 0 and model.row_lower[i] == -INF) or (v < 0 and model.row_upper[i] == INF)]
+    if report.check(not borrowed, "certificate uses only real bounds",
+                    "every exact multiplier leans on a finite row bound" if not borrowed
+                    else f"{len(borrowed)} lean on an infinite bound: "
+                    + ", ".join(borrowed[:5])):
+        required = sum((v * Fraction(model.row_lower[i] if v > 0 else model.row_upper[i])
+                        for i, v in y.items()), Fraction(0))
+        reachable = Fraction(0)
+        free = []
+        for j, entries in enumerate(model.entries):
+            d = sum((y[i] * Fraction(v) for i, v in entries if i in y), Fraction(0))
+            if d == 0:
+                continue
+            bound = model.col_upper[j] if d > 0 else model.col_lower[j]
+            if bound in (INF, -INF):
+                free.append(model.col_names[j])
+            else:
+                reachable += d * Fraction(bound)
+        if report.check(not free, "aggregate is bounded above",
+                        "every column the aggregate uses is bounded in that direction"
+                        if not free else f"{len(free)} unbounded in the direction used, so "
+                        "the aggregate proves nothing: " + ", ".join(free[:5])):
+            report.check(reachable < required, "infeasibility proof",
+                         f"the rows aggregate to at least {float(required):.12e}, the column "
+                         f"bounds allow at most {float(reachable):.12e}, a contradiction of "
+                         f"{float(required - reachable):.3e}, in exact rational arithmetic")
+            report.note("certificate size",
+                        f"{len(y)} of {model.num_rows} rows carry an exact multiplier")
+    rounded = {model.row_index[n]: v for n, v in solution.farkas.items() if n in model.row_index}
+    return all(abs(rounded.get(i, 0.0) - float(y.get(i, 0))) <= 1e-12 * abs(float(y.get(i, 0)))
+               for i in set(y) | set(rounded))

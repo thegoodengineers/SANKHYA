@@ -98,7 +98,11 @@ Each adapter builds a `sankhya.Model` from the calling library's own in-memory m
 by writing an MPS file and reading it back - and is entirely optional: `pulp`, `pyomo` and
 `cvxpy` are never imported by `sankhya` itself, only by the adapter module you import.
 LP and MILP are covered; a QP objective or constraint is refused with a clear message
-rather than silently solved as if it were linear. See the module docstring in each
+rather than silently solved as if it were linear. On an LP solved to optimal the PuLP and
+Pyomo adapters also return the duals and reduced costs, in the model's own sense (PuLP's
+`pi` and `dj`; Pyomo's `dual` and `rc` suffixes, or `get_duals` / `get_reduced_costs`); a
+MILP's are not reported. The top-level README's *Use* section has a runnable example of each,
+and `test_adapters.py` runs those examples as written. See the module docstring in each
 `sankhya/adapters/*.py` file for what public interface of that library it targets and why.
 
 ```bash

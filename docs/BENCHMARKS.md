@@ -4355,9 +4355,11 @@ adapters read no certificate, where SANKHYA's and HiGHS's must pass the verifier
 | Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-d1d0d52.csv` | `d1d0d52` |
 | MIPLIB 3 MILP | 65 | 60 s | 42 / 41 / 42 / 0 | 52 / 49 / 52 / 0 | 50 / 45 / 50 / 0 | 49 / 48 / 49 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-d1d0d52.csv` | `d1d0d52` |
 | Stress set LP | 126 | 60 s | 115 / 115 / 117 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-7119598.csv` | `7119598` |
-| Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 102 / 94 / 28 / 8 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-e4eb1cf.csv` | `e4eb1cf` |
+| Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 101 / 94 / 28 / 7 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-4981e56.csv` | `4981e56` |
 
 Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 49, CBC 48, SCIP 45, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 115, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58, HiGHS 28.
+
+**HiGHS off its defaults, `qp_regularization_value = 0`** (same job, same files, not the HiGHS column above): at its defaults HiGHS solves a regularized QP (`qp_regularization_value = 1e-7` in its manual) and its point misses the stationarity of the QP as stated by 1e-7 |x_j|; with the regularization off it reads **106 / 103 / 84 / 3**, 84 matched and verified, of 138; not optimal: 1 `crashed`, 11 `solve error`, 20 `time_limit`.
 
 Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
 
@@ -4365,13 +4367,15 @@ Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2,
 
 - Maros-Meszaros QP, HiGHS on `cont-101`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.500e-06 relative to its magnitudes on C---8389; [FAIL] strong duality              primal 1.955290889685e-01  dual 1.800909169287e-01  gap 1.544e
 - Maros-Meszaros QP, HiGHS on `dpklo1`: optimal; [FAIL] row activity                worst violation 3.653e+01 (3.653e+01 relative to the row's terms) on 53
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `dpklo1`: optimal; [FAIL] row activity                worst violation 3.653e+01 (3.653e+01 relative to the row's terms) on 53
 - Maros-Meszaros QP, SCIP on `dualc1`: optimal; relative gap 6.75066400474483e-06
 - Maros-Meszaros QP, HiGHS on `gouldqp2`: optimal; [FAIL] strong duality              primal 1.882025166267e-04  dual 1.595588328168e-04  gap 2.864e-05 (relative 2.864e-05), 8.526e-06 of it from per-item violations accepted above
 - Maros-Meszaros QP, SANKHYA on `hues-mod`: optimal; relative gap 6.493285498031229e-06
-- Maros-Meszaros QP, HiGHS on `liswet8`: optimal; [FAIL] dual feasibility (columns)  worst 5.955e-04 (5.955e-04 relative) on C---9549; [FAIL] complementary slackness     worst /multiplier/ * slack = 5.955e-04 relative to its magnitudes on C---9549
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet8`: optimal; [FAIL] dual feasibility (columns)  worst 3.624e-03 (3.624e-03 relative) on C---9662; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.624e-03 relative to its magnitudes on C---9662
 - Maros-Meszaros QP, HiGHS on `primalc8`: optimal; [FAIL] dual feasibility (columns)  worst 3.311e-03 (3.311e-03 relative) on C------1; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.096e+02 relative to its magnitudes on C------1
 - Maros-Meszaros QP, HiGHS on `qbore3d`: optimal; [FAIL] dual feasibility (columns)  worst 8.437e-04 (8.437e-04 relative) on IUT.KWXI; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.118e+00 relative to its magnitudes on IUT.KWXI
 - Maros-Meszaros QP, HiGHS on `qfffff80`: optimal; [FAIL] dual feasibility (columns)  worst 2.469e-02 (2.469e-02 relative) on YP.DWLGS; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.098e+03 relative to its magnitudes on YP.DWLGS
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `qgrow15`: optimal; [FAIL] row activity                worst violation 6.687e+02 (1.997e-02 relative to the row's terms) on PRI0102; [FAIL] activity agreement          max /ours - solver's/ = 7.874e+02
 - Maros-Meszaros QP, HiGHS on `qshare1b`: optimal; [FAIL] dual feasibility (columns)  worst 2.606e-02 (2.606e-02 relative) on CCC023; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.791e+03 relative to its magnitudes on CCC023
 - Maros-Meszaros QP, SCIP on `yao`: optimal; relative gap 0.007724452152089034
 
@@ -4391,6 +4395,7 @@ Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2,
 - Maros-Meszaros QP, SCIP on `cont-050`: optimal; [FAIL] objective           recomputed -4.563850907011e+00, solver said -4.563850922358e+00, difference 1.535e-08
 - Maros-Meszaros QP, HiGHS on `cont-100`: optimal; [FAIL] strong duality              primal -4.644397375959e+00  dual -4.646823585569e+00  gap 2.426e-03 (relative 5.224e-04), 1.950e-03 of it from per-item violations accepted above
 - Maros-Meszaros QP, HiGHS on `cvxqp1l`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 4.408e-06 relative to its magnitudes on C----899
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `cvxqp1l`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.024e-04 relative to its magnitudes on C---2039
 - Maros-Meszaros QP, HiGHS on `cvxqp2l`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.500e-06 relative to its magnitudes on C---1023
 - Maros-Meszaros QP, HiGHS on `cvxqp2m`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.263e-06 relative to its magnitudes on C----111
 - Maros-Meszaros QP, HiGHS on `cvxqp2s`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.168e-06 relative to its magnitudes on C------9
@@ -4414,15 +4419,25 @@ Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2,
 - Maros-Meszaros QP, SCIP on `hs76`: optimal; [FAIL] objective           recomputed -4.681818221798e+00, solver said -4.681818231789e+00, difference 9.990e-09
 - Maros-Meszaros QP, SCIP on `ksip`: optimal; [FAIL] objective           recomputed 5.757979899730e-01, solver said 5.757978923372e-01, difference 9.764e-08
 - Maros-Meszaros QP, HiGHS on `liswet1`: optimal; [FAIL] dual feasibility (columns)  worst 7.482e-06 (7.482e-06 relative) on C--10002; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.482e-06 relative to its magnitudes on C--10002; [FAIL] stron
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet1`: optimal; [FAIL] dual feasibility (columns)  worst 5.779e-05 (5.779e-05 relative) on C--10001; [FAIL] complementary slackness     worst /multiplier/ * slack = 5.779e-05 relative to its magnitudes on C--10001; [FAIL] stron
 - Maros-Meszaros QP, HiGHS on `liswet10`: optimal; [FAIL] dual feasibility (columns)  worst 4.389e-04 (4.389e-04 relative) on C---8399; [FAIL] complementary slackness     worst /multiplier/ * slack = 4.389e-04 relative to its magnitudes on C---8399; [FAIL] stron
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet10`: optimal; [FAIL] dual feasibility (columns)  worst 1.247e-02 (1.247e-02 relative) on C---9712; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.247e-02 relative to its magnitudes on C---9712; [FAIL] stron
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet11`: optimal; [FAIL] dual feasibility (columns)  worst 2.187e-03 (2.187e-03 relative) on C---5854; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.187e-03 relative to its magnitudes on C---5854
 - Maros-Meszaros QP, HiGHS on `liswet12`: optimal; [FAIL] dual feasibility (columns)  worst 7.400e-05 (7.400e-05 relative) on C---8482; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.400e-05 relative to its magnitudes on C---8482
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet12`: optimal; [FAIL] dual feasibility (columns)  worst 2.358e-05 (2.358e-05 relative) on C--10001; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.358e-05 relative to its magnitudes on C--10001
 - Maros-Meszaros QP, HiGHS on `liswet2`: optimal; [FAIL] dual feasibility (columns)  worst 1.456e-07 (1.456e-07 relative) on C--10001; [FAIL] strong duality              primal 2.499807610290e+01  dual 2.499840954945e+01  gap 3.334e-04 (relative 1.334e-05), 3.3
 - Maros-Meszaros QP, HiGHS on `liswet3`: optimal; [FAIL] dual feasibility (columns)  worst 6.080e-03 (6.080e-03 relative) on C---9530; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.080e-03 relative to its magnitudes on C---9530; [FAIL] stron
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet3`: optimal; [FAIL] dual feasibility (columns)  worst 1.707e-02 (1.707e-02 relative) on C---9511; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.707e-02 relative to its magnitudes on C---9511; [FAIL] stron
 - Maros-Meszaros QP, HiGHS on `liswet4`: optimal; [FAIL] dual feasibility (columns)  worst 9.154e-03 (9.154e-03 relative) on C---9662; [FAIL] complementary slackness     worst /multiplier/ * slack = 9.154e-03 relative to its magnitudes on C---9662; [FAIL] stron
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet4`: optimal; [FAIL] dual feasibility (columns)  worst 2.541e-02 (2.541e-02 relative) on C---9662; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.541e-02 relative to its magnitudes on C---9662; [FAIL] stron
 - Maros-Meszaros QP, HiGHS on `liswet5`: optimal; [FAIL] dual feasibility (columns)  worst 4.613e-03 (4.613e-03 relative) on C---9555; [FAIL] complementary slackness     worst /multiplier/ * slack = 4.613e-03 relative to its magnitudes on C---9555; [FAIL] stron
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet5`: optimal; [FAIL] dual feasibility (columns)  worst 2.002e-02 (2.002e-02 relative) on C---9555; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.002e-02 relative to its magnitudes on C---9555; [FAIL] stron
 - Maros-Meszaros QP, HiGHS on `liswet6`: optimal; [FAIL] dual feasibility (columns)  worst 2.800e-03 (2.800e-03 relative) on C---9153; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.800e-03 relative to its magnitudes on C---9153; [FAIL] stron
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet6`: optimal; [FAIL] dual feasibility (columns)  worst 1.225e-02 (1.225e-02 relative) on C---9153; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.225e-02 relative to its magnitudes on C---9153; [FAIL] stron
 - Maros-Meszaros QP, HiGHS on `liswet7`: optimal; [FAIL] dual feasibility (columns)  worst 7.272e-07 (7.272e-07 relative) on C--10002
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet7`: optimal; [FAIL] dual feasibility (columns)  worst 2.440e-04 (2.440e-04 relative) on C--10002; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.560e-04 relative to its magnitudes on C--10001; [FAIL] stron
 - Maros-Meszaros QP, HiGHS on `liswet9`: optimal; [FAIL] dual feasibility (columns)  worst 5.203e-05 (5.203e-05 relative) on C---3182; [FAIL] complementary slackness     worst /multiplier/ * slack = 5.203e-05 relative to its magnitudes on C---3182
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet9`: optimal; [FAIL] dual feasibility (columns)  worst 2.717e-04 (2.717e-04 relative) on C---9788; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.717e-04 relative to its magnitudes on C---9788
 - Maros-Meszaros QP, HiGHS on `lotschd`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.516e-05 relative to its magnitudes on C------5
 - Maros-Meszaros QP, HiGHS on `powell20`: optimal; [FAIL] dual feasibility (columns)  worst 2.501e-04 (1.000e-07 relative) on C---5002; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.499e-04 relative to its magnitudes on C--10000
 - Maros-Meszaros QP, SCIP on `primal1`: optimal; [FAIL] objective           recomputed -3.501295974008e-02, solver said -3.501298447112e-02, difference 2.473e-08
@@ -4438,23 +4453,30 @@ Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2,
 - Maros-Meszaros QP, HiGHS on `qbandm`: optimal; [FAIL] dual feasibility (columns)  worst 8.433e-05 (8.433e-05 relative) on MC90PT; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.111e-02 relative to its magnitudes on MC90PT
 - Maros-Meszaros QP, HiGHS on `qbeaconf`: optimal; [FAIL] dual feasibility (columns)  worst 2.792e-04 (2.792e-04 relative) on 10144; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.795e-01 relative to its magnitudes on 10144
 - Maros-Meszaros QP, HiGHS on `qbrandy`: optimal; [FAIL] dual feasibility (columns)  worst 3.532e-04 (3.531e-04 relative) on 100002; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.248e+00 relative to its magnitudes on 100002
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `qcapri`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.152e-06 relative to its magnitudes on VALRES
 - Maros-Meszaros QP, HiGHS on `qe226`: optimal; [FAIL] dual feasibility (columns)  worst 1.100e-05 (1.100e-05 relative) on .VN1ER; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.210e-03 relative to its magnitudes on .VN1ER
 - Maros-Meszaros QP, SCIP on `qe226`: optimal; [FAIL] row activity        worst violation 1.105e-07 (1.105e-07 relative to the row's terms) on ...054
 - Maros-Meszaros QP, HiGHS on `qetamacr`: optimal; [FAIL] dual feasibility (columns)  worst 1.393e-06 (1.393e-06 relative) on KAPSTK65; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.144e-04 relative to its magnitudes on PCPETG00
 - Maros-Meszaros QP, HiGHS on `qforplan`: optimal; [FAIL] activity agreement          max /ours - solver's/ = 1.544e-06; [FAIL] dual feasibility (columns)  worst 1.604e-03 (1.604e-03 relative) on DEDO3 82; [FAIL] complementary slackness     worst /multiplier/ * 
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `qforplan`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 5.382e-02 relative to its magnitudes on DEDO5 22
 - Maros-Meszaros QP, HiGHS on `qgfrdxpn`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.510e+02 relative to its magnitudes on XJ2DZ2
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `qgfrdxpn`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.897e-06 relative to its magnitudes on XJ2DZ2
 - Maros-Meszaros QP, HiGHS on `qisrael`: optimal; [FAIL] dual feasibility (columns)  worst 6.064e-04 (6.064e-04 relative) on A373; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.677e+00 relative to its magnitudes on A373
 - Maros-Meszaros QP, SCIP on `qisrael`: optimal; [FAIL] row activity        worst violation 9.990e-07 (9.990e-07 relative to the row's terms) on B173
 - Maros-Meszaros QP, SCIP on `qpcblend`: optimal; [FAIL] objective           recomputed -7.842855006777e-03, solver said -7.842864304416e-03, difference 9.298e-09
 - Maros-Meszaros QP, HiGHS on `qpcboei1`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.254e-02 relative to its magnitudes on C-----69
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `qpcboei1`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.986e-06 relative to its magnitudes on C----234
 - Maros-Meszaros QP, HiGHS on `qpcboei2`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.700e-02 relative to its magnitudes on C------9
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `qpcboei2`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.309e-06 relative to its magnitudes on C----102
 - Maros-Meszaros QP, SCIP on `qpcboei2`: optimal; [FAIL] row activity        worst violation 4.114e-07 (4.114e-07 relative to the row's terms) on R-----49
 - Maros-Meszaros QP, SCIP on `qptest`: optimal; [FAIL] objective           recomputed 4.371874914510e+00, solver said 4.371874904520e+00, difference 9.990e-09
 - Maros-Meszaros QP, HiGHS on `qrecipe`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 4.000e-05 relative to its magnitudes on JAL1IOBE; [FAIL] strong duality              primal -2.666160000000e+02  dual -2.666175010000e+02  gap 1.50
 - Maros-Meszaros QP, SCIP on `qsc205`: optimal; [FAIL] objective           recomputed -5.813959148495e-03, solver said -5.813968995113e-03, difference 9.847e-09
 - Maros-Meszaros QP, HiGHS on `qscagr25`: optimal; [FAIL] dual feasibility (columns)  worst 2.298e-03 (1.531e-04 relative) on COL00491; [FAIL] complementary slackness     worst /multiplier/ * slack = 5.279e+01 relative to its magnitudes on COL00491
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `qscagr25`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.435e-04 relative to its magnitudes on COL00178
 - Maros-Meszaros QP, HiGHS on `qscagr7`: optimal; [FAIL] dual feasibility (columns)  worst 1.600e-04 (1.600e-04 relative) on COL00073; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.529e+00 relative to its magnitudes on COL00131
 - Maros-Meszaros QP, HiGHS on `qscfxm1`: optimal; [FAIL] dual feasibility (columns)  worst 1.547e-03 (1.545e-03 relative) on 1RMCST; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.395e+01 relative to its magnitudes on 1RMCST
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `qscfxm1`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 4.237e-06 relative to its magnitudes on 1D2YK
 - Maros-Meszaros QP, HiGHS on `qscfxm2`: optimal; [FAIL] dual feasibility (columns)  worst 1.564e-03 (1.561e-03 relative) on 1RMCST; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.445e+01 relative to its magnitudes on 1RMCST
 - Maros-Meszaros QP, HiGHS on `qscfxm3`: optimal; [FAIL] dual feasibility (columns)  worst 1.564e-03 (1.561e-03 relative) on 1RMCST; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.445e+01 relative to its magnitudes on 1RMCST
 - Maros-Meszaros QP, HiGHS on `qscorpio`: optimal; [FAIL] dual feasibility (columns)  worst 2.677e-07 (1.834e-07 relative) on X0337
@@ -4466,6 +4488,7 @@ Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2,
 - Maros-Meszaros QP, HiGHS on `qseba`: optimal; [FAIL] dual feasibility (columns)  worst 7.896e-04 (7.896e-04 relative) on C0172000; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.235e+00 relative to its magnitudes on C0172000
 - Maros-Meszaros QP, HiGHS on `qshare2b`: optimal; [FAIL] dual feasibility (columns)  worst 6.000e-06 (6.000e-06 relative) on 010520; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.600e-04 relative to its magnitudes on 010520
 - Maros-Meszaros QP, HiGHS on `qshell`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.132e+03 relative to its magnitudes on C10010
+- Maros-Meszaros QP, HiGHS, QP regularization 0 on `qshell`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 2.009e-04 relative to its magnitudes on C10010
 - Maros-Meszaros QP, HiGHS on `qship04l`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.357e-04 relative to its magnitudes on PREG0101
 - Maros-Meszaros QP, HiGHS on `qship04s`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 6.438e-04 relative to its magnitudes on PREG0101
 - Maros-Meszaros QP, HiGHS on `qship08l`: optimal; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.585e-04 relative to its magnitudes on PREG0203

@@ -2024,6 +2024,24 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          kNoLimit,
          {}});
+    s.push_back(
+        {"exact_phase1",
+         OptionType::Bool,
+         true,
+         "When a plain LP ends numerical_error after every retry, ask exact rational "
+         "arithmetic whether it is infeasible: its elastic LP (a cost-1 slack on every finite "
+         "row side) is solved in floating point by the simplex, and that basis is repaired "
+         "to an exactly optimal one as option exact_repair does (Koch, Oper. Res. Letters "
+         "32, 2004; Applegate, Cook, Dash and Espinoza, Oper. Res. Letters 35, 2007), within "
+         "exact_seconds and the time_limit left. A positive exact optimum proves the model, "
+         "as read into doubles, infeasible: the answer becomes infeasible with the exact row "
+         "duals as its Farkas certificate, exact in the .sol's exact_repair_farkas section "
+         "and rounded in its farkas section. Any other outcome leaves the answer as it was. "
+         "Only for the solve the caller made, not one solve() makes inside another; "
+         "independent of option exact.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"engine_race",
                  OptionType::Bool,
                  false,

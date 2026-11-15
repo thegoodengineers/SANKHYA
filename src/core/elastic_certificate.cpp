@@ -6,9 +6,16 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <string>
+#include <utility>
 #include <vector>
 
+#include <fmt/format.h>
+
+#include "exact/exact_repair.hpp"
+#include "sankhya/certificate.hpp"
 #include "sankhya/sparse.hpp"
+#include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 #include "sankhya/types.hpp"
 
@@ -63,6 +70,31 @@ Model build_elastic(const Model& model) {
   return elastic;
 }
 
+/// The elastic LP's options: a plain LP solve of a model feasible by construction, so
+/// nothing in it may recurse into another certificate search, write a file, or print.
+Options elastic_options(const Options& options, double seconds) {
+  Options sub = options;
+  sub.set_bool("log_to_console", false);
+  sub.set_bool("compute_iis", false);
+  sub.set_bool("certificate_elastic", false);
+  sub.set_bool("engine_race", false);
+  sub.set_bool("exact", false);
+  sub.set_bool("exact_phase1", false);
+  sub.set_string("progress_out", "");
+  sub.set_string("write_certificate", "");
+  sub.set_string("algorithm", "auto");
+  sub.set_double("time_limit", seconds);
+  return sub;
+}
+
+bool crossed_column_bounds(const Model& model) {
+  for (Index j = 0; j < model.num_cols(); ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    if (model.col_lower[u] > model.col_upper[u]) return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 std::vector<double> farkas_from_elastic(const Model& model, const Options& options,
@@ -71,25 +103,10 @@ std::vector<double> farkas_from_elastic(const Model& model, const Options& optio
   if (m == 0 || !(seconds > 0.0)) return {};
   // The elastic LP cannot repair a column whose own bounds cross; that contradiction needs no
   // row multipliers and is not what this is for.
-  for (Index j = 0; j < model.num_cols(); ++j) {
-    const auto u = static_cast<std::size_t>(j);
-    if (model.col_lower[u] > model.col_upper[u]) return {};
-  }
+  if (crossed_column_bounds(model)) return {};
 
   const Model elastic = build_elastic(model);
-  // A plain LP solve of a model that is feasible by construction: nothing below may recurse
-  // into another certificate search, write a file, or print.
-  Options sub = options;
-  sub.set_bool("log_to_console", false);
-  sub.set_bool("compute_iis", false);
-  sub.set_bool("certificate_elastic", false);
-  sub.set_bool("engine_race", false);
-  sub.set_bool("exact", false);
-  sub.set_string("progress_out", "");
-  sub.set_string("write_certificate", "");
-  sub.set_string("algorithm", "auto");
-  sub.set_double("time_limit", seconds);
-  const Solution solved = solve(elastic, sub, nullptr);
+  const Solution solved = solve(elastic, elastic_options(options, seconds), nullptr);
   if (solved.status != SolveStatus::kOptimal) return {};
   // A positive optimal total violation is what the certificate proves; at rounding size
   // there is nothing to certify.
@@ -111,6 +128,44 @@ std::vector<double> farkas_from_elastic(const Model& model, const Options& optio
   }
   if (std::none_of(y.begin(), y.end(), [](double v) { return v != 0.0; })) return {};
   return y;
+}
+
+bool prove_infeasible_exactly(const Model& model, Solution* solution, const Options& options,
+                              Logger& logger, double seconds) {
+  if (model.num_rows() == 0 || !(seconds > 0.0) || crossed_column_bounds(model)) return false;
+  const Timer timer;
+  const Model elastic = build_elastic(model);
+  // Without presolve and by the simplex, so the answer carries a basis of this very model
+  // for the exact repair to start from.
+  Options sub = elastic_options(options, seconds);
+  sub.set_bool("presolve", false);
+  sub.set_string("algorithm", "simplex");
+  const Solution solved = solve(elastic, sub, nullptr);
+  exact::RepairResult proof = exact::prove_infeasible_exact(
+      model, elastic, solved, std::max(0.0, seconds - timer.elapsed_seconds()));
+  if (proof.verdict != exact::ExactVerdict::kFailed || proof.farkas_row.empty()) {
+    logger.info("Exact phase 1: no proof of infeasibility (the elastic LP ended {}): {}",
+                to_string(solved.status), proof.message);
+    return false;
+  }
+  std::string why;
+  const bool in_double = farkas_proves_infeasible(model, proof.farkas_dual, &why);
+  logger.info(
+      "Exact phase 1: {}; rounded to double, the {} multipliers {} the "
+      "floating-point check",
+      proof.message, proof.farkas_row.size(), in_double ? "also pass" : "do not pass");
+  solution->message = fmt::format(
+      "proved infeasible in exact rational arithmetic: {}; the {} multipliers are written "
+      "exact (exact_repair_farkas) and rounded (farkas), and rounded they {} the "
+      "floating-point check; the floating-point solve had ended numerical_error: {}",
+      proof.message, proof.farkas_row.size(), in_double ? "also pass" : "do not pass",
+      solution->message);
+  solution->status = SolveStatus::kInfeasible;
+  solution->farkas_dual = std::move(proof.farkas_dual);
+  solution->exact_repair_farkas = std::move(proof.farkas_row);
+  solution->col_value.clear();
+  solution->row_activity.clear();
+  return true;
 }
 
 }  // namespace sankhya::detail

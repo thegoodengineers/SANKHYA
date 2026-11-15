@@ -39,4 +39,12 @@ with tempfile.TemporaryDirectory() as tmp:
                      if line.split()[:1] == ["objective"])
 assert abs(objective - result.objective) <= 1e-9 * max(1.0, abs(objective)), (objective,
                                                                              result.objective)
+
+# The console script pip wrote from the wheel's entry point, beside this interpreter: the
+# one-command install puts `sankhya` on PATH, and it must run the wheel's CLI.
+launcher = Path(sys.executable).parent / ("sankhya.exe" if sys.platform == "win32" else "sankhya")
+assert launcher.is_file(), f"no sankhya command installed at {launcher}"
+banner = subprocess.run([str(launcher), "version"], capture_output=True, text=True, check=True)
+assert banner.stdout.startswith("SANKHYA "), banner.stdout
+print("console script:", launcher, "->", banner.stdout.splitlines()[0])
 print("wheel smoke: verified, objective", objective)

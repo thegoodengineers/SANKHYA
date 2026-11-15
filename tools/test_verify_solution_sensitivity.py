@@ -265,8 +265,49 @@ def _exact_repair_farkas(check) -> None:
     check(not proved, "exact repair Farkas row: a multiplier on no row is refused", detail)
 
 
+def _exact_phase1_proof(check) -> None:
+    """x + y = 1 with x <= 1 - 2^-40 and y <= 2^-41: infeasible by 2^-41, below what the
+    floating-point check's 1e-9 margin resolves, as Netlib cplex2 is. The exact multipliers
+    prove it with no tolerance; the same multiplier without them is refused; the wrong sign,
+    and the same multiplier on the feasible model (y <= 2^-40), prove nothing."""
+    import re
+    import verify_solution_checks as checks
+    proof_line = re.compile(r"\[PASS\] infeasibility proof\s+the rows aggregate to at least")
+
+    def attempt(y_upper: float, exact: dict[str, str], rounded: dict[str, float]):
+        model = vs.Model()
+        for name in ("x", "y"):
+            model.add_column(name, False)
+        model.col_cost = [0.0, 0.0]
+        model.col_upper = [1.0 - 2.0 ** -40, y_upper]
+        model.row_names = ["r"]
+        model.row_index = {"r": 0}
+        model.row_lower = [1.0]
+        model.row_upper = [1.0]
+        model.entries = [[(0, 1.0)], [(0, 1.0)]]
+        solution = vs.Solution()
+        solution.exact_repair_farkas = exact
+        solution.farkas = rounded
+        report = checks.verify_farkas(model, solution, vs.Report())
+        return report.failures == 0 and bool(proof_line.search(report.render())), report
+
+    ok, report = attempt(2.0 ** -41, {"r": "1/1"}, {"r": 1.0})
+    check(ok, "exact phase 1: an infeasibility of 2^-41 is proved exactly", report.render())
+    ok, report = attempt(2.0 ** -41, {}, {"r": 1.0})
+    check(not ok, "exact phase 1: the same multiplier in floating point is refused",
+          report.render())
+    ok, report = attempt(2.0 ** -41, {"r": "-1/1"}, {"r": -1.0})
+    check(not ok, "exact phase 1: the wrong orientation proves nothing", report.render())
+    ok, report = attempt(2.0 ** -40, {"r": "1/1"}, {"r": 1.0})
+    check(not ok, "exact phase 1: a feasible model is not proved infeasible", report.render())
+    ok, report = attempt(2.0 ** -41, {"r": "1/1"}, {"r": 2.0})
+    check(not ok, "exact phase 1: a farkas section that is not their rounding is checked too",
+          report.render())
+
+
 def run(check) -> None:
     _exact_repair_farkas(check)
+    _exact_phase1_proof(check)
     _lu_matches_its_definition(check)
     _shadow_price_interval_at_a_degenerate_optimum(check)
     _a_non_optimal_basis_is_declined(check)
