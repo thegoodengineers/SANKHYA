@@ -1462,6 +1462,24 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           fmt::format("; certificate from the elastic LP's row duals; proof: {}", why);
       logger.info("Elastic certificate (#559): {}", why);
     };
+    // THE EXACT PHASE 1: an LP left without a verdict, or with presolve's verdict and no
+    // certificate, asks rational arithmetic whether it is infeasible (core/
+    // elastic_certificate.hpp), within exact_seconds and the time left. Only a proof changes
+    // the answer; the IIS starts from it. Only for the one solve in flight: the IIS trials,
+    // the heuristics' LPs and every other solve() made inside a solve are not the caller's
+    // question.
+    const auto certify_exactly = [&] {
+      if (race || warm_answer || model.has_integrality() || model.has_quadratic_objective() ||
+          !options.get_bool("exact_phase1") || g_solves_in_flight.load() != 1) {
+        return;
+      }
+      double seconds = options.get_double("exact_seconds");
+      if (limits.has_time_limit()) {
+        seconds = std::min(seconds, limits.remaining_seconds(timer.elapsed_seconds()));
+      }
+      detail::prove_infeasible_exactly(model, &solution, options, logger, seconds);
+      solution.solve_seconds = timer.elapsed_seconds();
+    };
     if (presolve_proved_it) {
       // #559: presolve's own infeasibility detection (a reduction that concludes a row or
       // column bound has crossed) does not yet build a certificate for every reduction that
@@ -1479,6 +1497,9 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
             "against the original model and this is that retry's result");
       }
       certify_by_elastic();
+      if (solution.status == SolveStatus::kInfeasible && solution.farkas_dual.empty()) {
+        certify_exactly();
+      }
       // The certificate the two lines above recovered is what the IIS filter starts from;
       // returning here without it gave an empty IIS whenever presolve was on (#1038).
       compute_iis(model, &solution, options, logger);
@@ -1613,21 +1634,7 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         }
       }
     }
-    // THE EXACT PHASE 1: an LP every retry above left without a verdict asks rational
-    // arithmetic whether it is infeasible (core/elastic_certificate.hpp), within
-    // exact_seconds and the time left. Only a proof changes the answer; the IIS below
-    // starts from it. Only for the one solve in flight: the IIS trials, the heuristics' LPs
-    // and every other solve() made inside a solve are not the caller's question.
-    if (solution.status == SolveStatus::kNumericalError && !race && !warm_answer &&
-        !model.has_integrality() && !model.has_quadratic_objective() &&
-        options.get_bool("exact_phase1") && g_solves_in_flight.load() == 1) {
-      double seconds = options.get_double("exact_seconds");
-      if (limits.has_time_limit()) {
-        seconds = std::min(seconds, limits.remaining_seconds(timer.elapsed_seconds()));
-      }
-      detail::prove_infeasible_exactly(model, &solution, options, logger, seconds);
-      solution.solve_seconds = timer.elapsed_seconds();
-    }
+    if (solution.status == SolveStatus::kNumericalError) certify_exactly();
     // Sensitivity ranging runs on the ORIGINAL model after postsolve so the vectors are
     // full-size and the basis is expressed in terms of original column and row indices.
     detail::compute_ranging(model, options, logger, solution);

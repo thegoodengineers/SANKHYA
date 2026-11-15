@@ -2016,7 +2016,8 @@ const std::vector<OptionSpec>& Options::registry() {
         {"exact_phase1",
          OptionType::Bool,
          true,
-         "When a plain LP ends numerical_error after every retry, ask exact rational "
+         "When a plain LP ends numerical_error after every retry, or infeasible by presolve "
+         "with no certificate, ask exact rational "
          "arithmetic whether it is infeasible: its elastic LP (a cost-1 slack on every finite "
          "row side) is solved in floating point by the simplex, and that basis is repaired "
          "to an exactly optimal one as option exact_repair does (Koch, Oper. Res. Letters "

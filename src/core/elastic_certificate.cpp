@@ -157,9 +157,9 @@ bool prove_infeasible_exactly(const Model& model, Solution* solution, const Opti
   solution->message = fmt::format(
       "proved infeasible in exact rational arithmetic: {}; the {} multipliers are written "
       "exact (exact_repair_farkas) and rounded (farkas), and rounded they {} the "
-      "floating-point check; the floating-point solve had ended numerical_error: {}",
+      "floating-point check; the floating-point solve had ended {}: {}",
       proof.message, proof.farkas_row.size(), in_double ? "also pass" : "do not pass",
-      solution->message);
+      to_string(solution->status), solution->message);
   solution->status = SolveStatus::kInfeasible;
   solution->farkas_dual = std::move(proof.farkas_dual);
   solution->exact_repair_farkas = std::move(proof.farkas_row);
