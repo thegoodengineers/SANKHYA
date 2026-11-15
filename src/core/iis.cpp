@@ -277,8 +277,9 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
   // the working system less the candidate, and every working element that certificate does
   // not lean on can go at once: the system without them is infeasible by the same vector.
   // Checked, not assumed - the pruned system must be proved infeasible by it, and found
-  // infeasible by a solve of its own, before the pruning is kept. The deletion filter alone takes one solve per candidate, and a dense
-  // starting certificate (an elastic LP's duals, as on Netlib gran) makes that thousands.
+  // infeasible by a solve of its own, before the pruning is kept. The deletion filter alone
+  // takes one solve per candidate, and a dense starting certificate (an elastic LP's duals, as
+  // on Netlib gran) makes that thousands.
   const auto prune = [&](const Solution& trial) {
     if (trial.status != SolveStatus::kInfeasible ||
         trial.farkas_dual.size() != static_cast<std::size_t>(m)) {
