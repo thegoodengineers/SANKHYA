@@ -4,7 +4,9 @@
 
 The subset is first_incumbent.json: MIPLIB models on which a committed run ended without a
 point, or with a dual bound at the optimum and an incumbent away from it, each with the CSV
-that says so. For every arm (the defaults, then each --arm NAME=opt=val,opt=val) this calls
+that says so. A case is a model and the options every arm of it runs with (the closed-root
+group runs with presolve_probing), so one model can be two cases; the CSV's `case` column
+names it and `group` says which of the three groups it belongs to. For every arm (the defaults, then each --arm NAME=opt=val,opt=val) this calls
 miplib.py once per set on those instances, so every row is graded, verified and stamped
 exactly as a tier run's is, and joins the rows into one CSV with an `arm` column. It then
 prints, per instance and arm, the status, the time to the first feasible point and the
@@ -65,7 +67,9 @@ def main() -> int:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--time-limit", type=float, default=60.0)
     parser.add_argument("--arm", action="append", default=[], metavar="NAME=opt=val[,..]")
-    parser.add_argument("--instances", nargs="*", help="a part of the subset")
+    parser.add_argument("--instances", nargs="*", help="a part of the subset, by case name")
+    parser.add_argument("--groups", nargs="*",
+                        help="only these groups: no-incumbent, bound-at-optimum, closed-root")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--logs", type=Path, default=None)
     parser.add_argument("--machine-kind", default=None)
@@ -74,16 +78,25 @@ def main() -> int:
     subset = json.loads(SUBSET.read_text(encoding="utf-8"))["instances"]
     if args.instances:
         subset = {name: entry for name, entry in subset.items() if name in args.instances}
+    if args.groups:
+        subset = {name: entry for name, entry in subset.items()
+                  if entry.get("group") in args.groups}
+    model_of = {case: entry.get("instance", case) for case, entry in subset.items()}
+    # One miplib.py call per (set, the case's own options): the cases that share both.
+    batches: dict[tuple, list[str]] = {}
+    for case, entry in subset.items():
+        batches.setdefault((entry["set"], tuple(entry.get("options", []))), []).append(case)
     arms = [("defaults", [])] + [parse_arm(a) for a in args.arm]
     rows: list[dict] = []
     for arm, options in arms:
-        for set_name in DIRS:
-            names = sorted(n for n, e in subset.items() if e["set"] == set_name)
-            if not names:
-                continue
-            for row in run_arm(args.binary, set_name, names, options, args.time_limit,
+        for (set_name, case_options), cases in sorted(batches.items()):
+            case_of = {model_of[case]: case for case in cases}
+            for row in run_arm(args.binary, set_name, sorted(case_of),
+                               list(case_options) + options, args.time_limit,
                                args.machine_kind):
-                rows.append({"arm": arm, "set": set_name, **row})
+                case = case_of[row["instance"]]
+                rows.append({"arm": arm, "set": set_name, "case": case,
+                             "group": subset[case].get("group", ""), **row})
         args.out.parent.mkdir(parents=True, exist_ok=True)
         if rows:
             with args.out.open("w", newline="", encoding="utf-8") as handle:
@@ -91,9 +104,9 @@ def main() -> int:
                 writer.writeheader()
                 writer.writerows(rows)
 
-    by = {(r["arm"], r["instance"]): r for r in rows}
-    print(f"\n{'instance':<24}" + "".join(f"{arm:>34}" for arm, _ in arms))
-    for name in sorted(subset):
+    by = {(r["arm"], r["case"]): r for r in rows}
+    print(f"\n{'case':<24}" + "".join(f"{arm:>34}" for arm, _ in arms))
+    for name in sorted(subset, key=lambda n: (subset[n].get("group", ""), n)):
         cells = []
         for arm, _ in arms:
             r = by.get((arm, name))
@@ -104,22 +117,25 @@ def main() -> int:
             point = f"first {float(first):.1f}s" if first else "no point"
             cells.append(f"{r['status']}, {point}, m{r['matched_published']}")
         print(f"{name:<24}" + "".join(f"{c:>34}" for c in cells))
-    for arm, _ in arms:
-        mine = [r for r in rows if r["arm"] == arm]
-        print(f"{arm}: a point on {sum(bool(r.get('time_to_first_feasible')) for r in mine)} "
-              f"of {len(mine)}, matched {sum(r['matched_published'] == '1' for r in mine)}, "
-              f"proved {sum(r['proved_optimal'] == '1' for r in mine)}")
+    for group in sorted({e.get("group", "") for e in subset.values()}):
+        for arm, _ in arms:
+            mine = [r for r in rows if r["arm"] == arm and r["group"] == group]
+            print(f"{group or 'all'} / {arm}: a point on "
+                  f"{sum(bool(r.get('time_to_first_feasible')) for r in mine)} of {len(mine)}, "
+                  f"matched {sum(r['matched_published'] == '1' for r in mine)}, "
+                  f"proved {sum(r['proved_optimal'] == '1' for r in mine)}")
     print(f"wrote {args.out}")
 
     if args.logs is not None:
         args.logs.mkdir(parents=True, exist_ok=True)
         for name, entry in sorted(subset.items()):
             folder, suffix = DIRS[entry["set"]]
-            model = REPO_ROOT / folder / f"{name}{suffix}"
+            model = REPO_ROOT / folder / f"{model_of[name]}{suffix}"
+            extra = [part for option in entry.get("options", []) for part in ("--option", option)]
             with (args.logs / f"{name}.log").open("w", encoding="utf-8") as log:
                 subprocess.run([str(args.binary), "solve", str(model), "--time-limit",
                                 str(args.time_limit), "--option", "mip_threads=1",
-                                "--option", "log_level=verbose"],
+                                "--option", "log_level=verbose", *extra],
                                stdout=log, stderr=subprocess.STDOUT, check=False)
     return 0
 

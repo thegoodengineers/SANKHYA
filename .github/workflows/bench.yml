@@ -248,7 +248,8 @@ jobs:
               python3 - <<'PY' > "$RUNNER_TEMP/first-incumbent-names.txt"
           import json
           subset = json.load(open('bench/runners/first_incumbent.json'))['instances']
-          print(' '.join(n for n, e in sorted(subset.items()) if e['set'] == 'miplib2017-bench'))
+          print(' '.join(sorted({e.get('instance', n) for n, e in subset.items()
+                                 if e['set'] == 'miplib2017-bench'})))
           PY
               # shellcheck disable=SC2046  # names are split on spaces on purpose
               python3 bench/runners/fetch_miplib.py --benchmark $(cat "$RUNNER_TEMP/first-incumbent-names.txt")

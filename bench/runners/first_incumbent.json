@@ -1,22 +1,102 @@
 {
-  "about": "Models on which a committed run ended with no incumbent, or with the dual bound at the optimum and the incumbent away from it. bench/runners/first_incumbent.py runs them, one arm per option.",
+  "about": "Models on which a committed run ended with no incumbent, or with the dual bound at the optimum and the incumbent away from it. bench/runners/first_incumbent.py runs them, one arm per option. A case is an instance and the options every arm of it runs with; `instance` names the model when the case's own name is not it.",
   "sources": {
     "miplib2017-bench": "bench/results/miplib2017-bench-60s-24e0196.csv against bench/results/highs-miplib2017-bench-60s-24e0196.csv",
-    "miplib3": "the MIPLIB 3 head-to-head at ab3f4a1"
+    "miplib3": "the MIPLIB 3 head-to-head at ab3f4a1",
+    "closed-root": "the root-bound work of draft PR #1244: with presolve_probing the root bound is at or near the optimum and no matching point is found"
   },
   "instances": {
-    "neos-3381206-awhea": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
-    "nursesched-sprint02": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
-    "h80x6320d": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
-    "app1-1": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
-    "roll3000": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
-    "piperout-08": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
-    "piperout-27": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
-    "neos-950242": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
-    "ns1208400": {"set": "miplib2017-bench", "why": "no incumbent at the limit"},
-    "decomp2": {"set": "miplib2017-bench", "why": "dual bound at the optimum, incumbent away from it"},
-    "neos-827175": {"set": "miplib2017-bench", "why": "dual bound at the optimum, incumbent away from it"},
-    "mitre": {"set": "miplib3", "why": "no incumbent at the limit"},
-    "cap6000": {"set": "miplib3", "why": "dual bound at the optimum, incumbent inside the 1e-4 gap but away from it"}
+    "neos-3381206-awhea": {
+      "set": "miplib2017-bench",
+      "why": "no incumbent at the limit",
+      "group": "no-incumbent"
+    },
+    "nursesched-sprint02": {
+      "set": "miplib2017-bench",
+      "why": "no incumbent at the limit",
+      "group": "no-incumbent"
+    },
+    "h80x6320d": {
+      "set": "miplib2017-bench",
+      "why": "no incumbent at the limit",
+      "group": "no-incumbent"
+    },
+    "app1-1": {
+      "set": "miplib2017-bench",
+      "why": "no incumbent at the limit",
+      "group": "no-incumbent"
+    },
+    "roll3000": {
+      "set": "miplib2017-bench",
+      "why": "no incumbent at the limit",
+      "group": "no-incumbent"
+    },
+    "piperout-08": {
+      "set": "miplib2017-bench",
+      "why": "no incumbent at the limit",
+      "group": "no-incumbent"
+    },
+    "piperout-27": {
+      "set": "miplib2017-bench",
+      "why": "no incumbent at the limit",
+      "group": "no-incumbent"
+    },
+    "neos-950242": {
+      "set": "miplib2017-bench",
+      "why": "no incumbent at the limit",
+      "group": "no-incumbent"
+    },
+    "ns1208400": {
+      "set": "miplib2017-bench",
+      "why": "no incumbent at the limit",
+      "group": "no-incumbent"
+    },
+    "decomp2": {
+      "set": "miplib2017-bench",
+      "why": "dual bound at the optimum, incumbent away from it",
+      "group": "bound-at-optimum"
+    },
+    "neos-827175": {
+      "set": "miplib2017-bench",
+      "why": "dual bound at the optimum, incumbent away from it",
+      "group": "bound-at-optimum"
+    },
+    "mitre": {
+      "set": "miplib3",
+      "why": "no incumbent at the limit",
+      "group": "no-incumbent"
+    },
+    "cap6000": {
+      "set": "miplib3",
+      "why": "dual bound at the optimum, incumbent inside the 1e-4 gap but away from it",
+      "group": "bound-at-optimum"
+    },
+    "drayage-100-23+probing": {
+      "instance": "drayage-100-23",
+      "set": "miplib2017-bench",
+      "group": "closed-root",
+      "options": [
+        "presolve_probing=true"
+      ],
+      "why": "root bound 103333.87, the published optimum, on every seed; best incumbent 128423"
+    },
+    "drayage-25-23+probing": {
+      "instance": "drayage-25-23",
+      "set": "miplib2017-bench",
+      "group": "closed-root",
+      "options": [
+        "presolve_probing=true"
+      ],
+      "why": "root bound 99718.79 against the optimum 101282.65; incumbent 114467"
+    },
+    "mitre+probing": {
+      "instance": "mitre",
+      "set": "miplib3",
+      "group": "closed-root",
+      "options": [
+        "presolve_probing=true"
+      ],
+      "why": "root bound 115141.0 against the optimum 115155; no feasible point on two of three seeds"
+    }
   }
 }
