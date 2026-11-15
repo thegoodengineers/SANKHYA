@@ -86,6 +86,7 @@ constexpr double kFtRowEtaBound = 1e6;
 /// is real and this sits well inside it. The time-based break-even in the simplex normally
 /// fires first; this is the backstop for a model whose solves are so cheap that it does not.
 constexpr Index kMaxEtaCount = 128;
+static_assert(kMaxEtaCount == SparseLu::kDefaultUpdateLimit, "lu_update_limit's default");
 
 /// Room ft_init() leaves in each row and column list of U beyond its entries, for the fill
 /// the Forrest-Tomlin updates add before the list has to move (lu_ft_file.hpp). A storage
@@ -369,8 +370,8 @@ bool SparseLu::should_refactorize() const noexcept {
   // replaced by the simplex's measured break-even (see primal_simplex.cpp): a fill ratio
   // assumes a fixed relationship between eta size and eta cost that no single constant
   // captured across instances.
-  if (ft_active_) return static_cast<Index>(ft_reta_pivot_step_.size()) >= kMaxEtaCount;
-  return eta_count() >= kMaxEtaCount;
+  if (ft_active_) return static_cast<Index>(ft_reta_pivot_step_.size()) >= update_limit_;
+  return eta_count() >= update_limit_;
 }
 
 // =========================================================================================

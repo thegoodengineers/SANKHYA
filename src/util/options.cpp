@@ -283,6 +283,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"product-form", "forrest-tomlin"}});
+    s.push_back({"lu_update_limit",
+                 OptionType::Int,
+                 std::int64_t{128},
+                 "Simplex basis updates after which the factors are rebuilt whatever the "
+                 "eta file's size, the backstop behind the work-based break-even "
+                 "(refactor_work_ratio). 128 since #68, where a sweep to 512 failed d2q06c; "
+                 "kept as the default until an A/B on main says otherwise. On ken-18 this "
+                 "cap, not the break-even, sets the pace: 406 factorizations in 51,643 "
+                 "iterations, 32% of the solve's instructions (#1269).",
+                 1.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"lu_hyper_sparse",
                  OptionType::Bool,
                  true,
