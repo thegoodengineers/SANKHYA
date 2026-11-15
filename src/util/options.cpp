@@ -411,6 +411,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"presolve_probing_fixed_share",
+                 OptionType::Double,
+                 0.0,
+                 "With presolve_probing off and this above 0, presolve probes the binaries "
+                 "anyway and writes the integer columns' fixings and bounds only when probing "
+                 "fixed at least this share of the integer columns; the search's clique "
+                 "conflicts stay off. 0, the default, probes only under presolve_probing. "
+                 "Probing as a default lost MIPLIB 3 proofs where it fixes 6% of the "
+                 "integer columns or fewer, and proves mitre, where it fixes 36% (#1158).",
+                 0.0,
+                 1.0,
+                 {}});
     s.push_back({"presolve_probing_continuous_bounds",
                  OptionType::Bool,
                  false,
