@@ -135,19 +135,25 @@ bool prove_infeasible_exactly(const Model& model, Solution* solution, const Opti
   if (model.num_rows() == 0 || !(seconds > 0.0) || crossed_column_bounds(model)) return false;
   const Timer timer;
   const Model elastic = build_elastic(model);
-  // Without presolve and by the simplex, so the answer carries a basis of this very model
-  // for the exact repair to start from.
-  Options sub = elastic_options(options, seconds);
-  sub.set_bool("presolve", false);
-  sub.set_string("algorithm", "simplex");
-  const Solution solved = solve(elastic, sub, nullptr);
-  exact::RepairResult proof = exact::prove_infeasible_exact(
-      model, elastic, solved, std::max(0.0, seconds - timer.elapsed_seconds()));
-  if (proof.verdict != exact::ExactVerdict::kFailed || proof.farkas_row.empty()) {
-    logger.info("Exact phase 1: no proof of infeasibility (the elastic LP ended {}): {}",
-                to_string(solved.status), proof.message);
-    return false;
+  // The repair needs a basis of this very model to start from: first without presolve by
+  // the primal simplex; when that ends with none (Netlib gran's elastic LP ends
+  // numerical_error so), through presolve by the dual simplex, whose postsolved basis the
+  // repair reads as it reads any other.
+  exact::RepairResult proof;
+  for (const bool presolve : {false, true}) {
+    const double left = seconds - timer.elapsed_seconds();
+    if (!(left > 0.0)) break;
+    Options sub = elastic_options(options, left);
+    sub.set_bool("presolve", presolve);
+    sub.set_string("algorithm", presolve ? "dual-simplex" : "simplex");
+    const Solution solved = solve(elastic, sub, nullptr);
+    proof = exact::prove_infeasible_exact(model, elastic, solved,
+                                          std::max(0.0, seconds - timer.elapsed_seconds()));
+    logger.info("Exact phase 1, elastic LP {} presolve: it ended {}; {}",
+                presolve ? "with" : "without", to_string(solved.status), proof.message);
+    if (proof.verdict != exact::ExactVerdict::kDeclined) break;
   }
+  if (proof.verdict != exact::ExactVerdict::kFailed || proof.farkas_row.empty()) return false;
   std::string why;
   const bool in_double = farkas_proves_infeasible(model, proof.farkas_dual, &why);
   logger.info(
