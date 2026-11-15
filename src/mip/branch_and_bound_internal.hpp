@@ -1063,6 +1063,7 @@ class BranchAndBound {
   Count cold_node_iterations_ = 0;
   /// Of those, the propagating dives' (mip_dive_propagate), and the rule they run next.
   Count dive_lp_iterations_ = 0;
+  Count dive_propagation_work_ = 0;  ///< their propagation passes, in nonzero visits
   std::size_t next_dive_rule_ = 0;
 
   std::vector<TreeNode> nodes_;

@@ -21,7 +21,7 @@
 // The dives share one budget in LP iterations, a share of the search's node LP iterations
 // plus an offset (Achterberg 2007, sec. 9.2, holds diving to a quotient of the node LP
 // iterations), and every re-solve's iteration limit is what is left, so a single slow LP
-// cannot overrun it; its propagation passes are held to kPropagationDiveWork nonzero visits.
+// cannot overrun it; their propagation passes share kPropagationDiveWork nonzero visits.
 // The rules take turns: the root runs every enabled one, a node below it the next. Every bound
 // a dive fixes, its own or propagated, is undone before it returns.
 
@@ -74,17 +74,17 @@ void BranchAndBound::propagating_dive(std::size_t slot, DiveRule rule,
     return (!is_finite_bound(working_.col_lower[u]) || v >= working_.col_lower[u] - 1e-9) &&
            (!is_finite_bound(working_.col_upper[u]) || v <= working_.col_upper[u] + 1e-9);
   };
-  // Fix column u at v and propagate; false when propagation proves the box empty. The
-  // propagation passes are held to the propagation dive's work budget in nonzero visits;
-  // past it a fix is taken unpropagated, as dive() takes every fix.
-  const Count passes = std::max<Count>(
-      1, tol::kPropagationDiveWork / std::max<Count>(1, working_.matrix.num_nonzeros()));
-  Count propagations = 0;
-  const auto fix = [this, passes, &propagations](std::size_t u, double v) {
+  // Fix column u at v and propagate; false when propagation proves the box empty. All the
+  // dives' propagation passes together are held to kPropagationDiveWork nonzero visits over
+  // the search; past it a fix is taken unpropagated, as dive() takes every fix. Per dive it
+  // was not enough: on neos-950242 (104,160 nonzeros) four root dives of 1,923 passes each
+  // ran a 60 s solve to the runner's kill at 120 s (bench run 43673306061).
+  const Count pass_work = std::max<Count>(1, working_.matrix.num_nonzeros());
+  const auto fix = [this, pass_work](std::size_t u, double v) {
     tighten_lower(u, v);
     tighten_upper(u, v);
-    if (propagations >= passes) return true;
-    ++propagations;
+    if (dive_propagation_work_ >= tol::kPropagationDiveWork) return true;
+    dive_propagation_work_ += pass_work;
     return propagate();
   };
   const auto stopped = [this]() {
@@ -126,7 +126,7 @@ void BranchAndBound::propagating_dive(std::size_t slot, DiveRule rule,
       batch_size = 0;
       bool dead = false;
       for (const DiveChoice& c : ranked) {
-        if (batch_size == cap) break;
+        if (batch_size == cap || stopped()) break;
         const auto u = static_cast<std::size_t>(c.column);
         // Propagation from this batch has fixed the column, or ruled its value out: it waits
         // for the next LP point.
