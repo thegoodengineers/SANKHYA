@@ -311,13 +311,6 @@ void Simplex::note_slot(Index slot) {
   infeasible_slots_.push_back(slot);
 }
 
-void Simplex::collect_alpha_support() {
-  alpha_support_.clear();
-  for (Index i = 0; i < m_; ++i) {
-    if (alpha_[static_cast<std::size_t>(i)] != 0.0) alpha_support_.push_back(i);
-  }
-}
-
 Index Simplex::choose_leaving_row() {
   // The basic variable furthest outside its bounds, in the dual devex metric: infeasibility
   // squared over the row's reference weight. The weight approximates the norm of row r of
@@ -361,21 +354,23 @@ constexpr double kSparsePivotRowFraction = 0.1;
 
 void Simplex::compute_pivot_row(Index leaving_slot) {
   Timer clock;
-  std::fill(rho_.begin(), rho_.end(), 0.0);
+  // Cleared over the last rho's nonzeros when they are known (Hall and McKinnon 2005), and
+  // e_r's one nonzero handed to the BTRAN as its support.
+  clear_on(rho_, rho_support_, rho_support_exact_);
   rho_[static_cast<std::size_t>(leaving_slot)] = 1.0;
-  lu_.solve_transpose(rho_.data(), &row_history_);
+  rho_support_.assign(1, leaving_slot);
+  const bool known = lu_.solve_transpose(rho_.data(), &row_history_, &rho_support_);
   pivot_row_btran_seconds_ += clock.elapsed_seconds();
   clock.reset();
 
   // rho's support, in ascending order, and what a row-wise pass over it would cost: one
   // entry per nonzero of each row it touches, plus the row's logical column. The passes
   // below, and the dual update in the loop, read the support rather than every row.
-  rho_support_.clear();
+  settle_support(rho_, known, &rho_support_);
+  rho_support_exact_ = true;
   double row_work = 0.0;
   const std::vector<Index>& row_starts = rows_view().row_starts();
-  for (Index i = 0; i < m_; ++i) {
-    if (rho_[static_cast<std::size_t>(i)] == 0.0) continue;
-    rho_support_.push_back(i);
+  for (const Index i : rho_support_) {
     row_work += 1.0 + static_cast<double>(row_starts[static_cast<std::size_t>(i) + 1] -
                                           row_starts[static_cast<std::size_t>(i)]);
   }
@@ -490,10 +485,23 @@ void Simplex::update_dual_weights(Index leaving_slot, double pivot) {
     // e_r^T B^-1 from this iteration's BTRAN and alpha_ is B^-1 a_q from its FTRAN, both
     // off the same factors, and the basis has not changed yet. w_r is read off rho itself
     // so the row that leaves corrects any drift in its stored weight.
+    // Over rho's nonzeros, ascending: the full sum's terms in its order, less its zeros.
     double weight_r = 0.0;
-    for (const double v : rho_) weight_r += v * v;
-    tau_ = rho_;
-    lu_.solve(tau_.data(), &tau_history_);  // tau = B^-1 rho_r: the cross terms rho_i . rho_r
+    for (const Index i : rho_support_) {
+      const double v = rho_[static_cast<std::size_t>(i)];
+      weight_r += v * v;
+    }
+    if (tau_.size() != static_cast<std::size_t>(m_)) {
+      tau_.assign(static_cast<std::size_t>(m_), 0.0);
+      tau_support_exact_ = false;
+    }
+    clear_on(tau_, tau_support_, tau_support_exact_);
+    for (const Index i : rho_support_)
+      tau_[static_cast<std::size_t>(i)] = rho_[static_cast<std::size_t>(i)];
+    tau_support_ = rho_support_;
+    // tau = B^-1 rho_r: the cross terms rho_i . rho_r. Its support is kept for the next
+    // clear only; the update below reads tau_ on alpha's support.
+    tau_support_exact_ = lu_.solve(tau_.data(), &tau_history_, &tau_support_);
     const double inverse_pivot = 1.0 / pivot;
     bool healthy = std::isfinite(weight_r) && weight_r > 0.0;
     for (const Index slot : alpha_support_) {
@@ -553,6 +561,9 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   pivot_row_marked_.assign(static_cast<std::size_t>(total_), 0);
   pivot_row_touched_.clear();
   pivot_row_held_sparse_ = false;
+  // Whatever ran before this loop may have written rho_ without its list (the primal's devex
+  // update does): the first pivot row clears it whole.
+  rho_support_exact_ = false;
   dual_row_rejected_.assign(static_cast<std::size_t>(m_), 0);
   dual_rows_rejected_now_ = 0;
   // Once per solve; the pattern never changes (#243). Not at all when the caller holds it.
@@ -786,7 +797,19 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     // values by B^-1 of the flipped columns times their changes: one FTRAN of a vector with
     // a few columns' worth of entries, against a pass over every nonzero of the model plus
     // the same FTRAN. The recomputation returns at the next refactorization, below.
-    if (!ratio.flips.empty()) flip_rhs_.assign(static_cast<std::size_t>(m_), 0.0);
+    if (!ratio.flips.empty()) {
+      // Cleared over the last flips' support when it is known, and this one's rows
+      // collected, each once, for the solve (Hall and McKinnon 2005).
+      if (flip_rhs_.size() != static_cast<std::size_t>(m_)) {
+        flip_rhs_.assign(static_cast<std::size_t>(m_), 0.0);
+        flip_support_exact_ = false;
+      }
+      clear_on(flip_rhs_, flip_support_, flip_support_exact_);
+      flip_support_.clear();
+      if (slot_mark_.size() != static_cast<std::size_t>(m_)) {
+        slot_mark_.assign(static_cast<std::size_t>(m_), 0);
+      }
+    }
     for (const Index k : ratio.flips) {
       const auto u = static_cast<std::size_t>(k);
       const double before = nonbasic_value_[u];
@@ -799,12 +822,20 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       }
       const double change = nonbasic_value_[u] - before;
       for_each_entry(k, [&](Index row, double coefficient) {
-        flip_rhs_[static_cast<std::size_t>(row)] -= coefficient * change;
+        const auto r = static_cast<std::size_t>(row);
+        flip_rhs_[r] -= coefficient * change;
+        if (slot_mark_[r] == 0) {
+          slot_mark_[r] = 1;
+          flip_support_.push_back(row);
+        }
       });
       ++bound_flips_;
     }
     if (!ratio.flips.empty()) {
-      lu_.solve(flip_rhs_.data(), &flip_history_);
+      for (const Index i : flip_support_) slot_mark_[static_cast<std::size_t>(i)] = 0;
+      const bool known = lu_.solve(flip_rhs_.data(), &flip_history_, &flip_support_);
+      settle_support(flip_rhs_, known, &flip_support_);
+      flip_support_exact_ = true;
       // ONE PASS, ON THE SLOTS THE FLIPS MOVED. This used to add the whole vector to x_B
       // and then rebuild the infeasibility list from every slot - m calls of
       // slot_infeasibility() per flipping iteration, 10-13% of stocfor3 and fit2p in the
@@ -814,9 +845,8 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       // x_B does below (simplex_core.hpp). The set of infeasible slots on the list is the
       // one the rebuild produced, and choose_leaving_row() does not read the list's order,
       // so the leaving row is the same.
-      for (Index i = 0; i < m_; ++i) {
+      for (const Index i : flip_support_) {
         const auto s = static_cast<std::size_t>(i);
-        if (flip_rhs_[s] == 0.0) continue;
         x_basic_[s] += flip_rhs_[s];
         note_slot(i);
       }
@@ -899,8 +929,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
 
     const Index entering = ratio.entering;
     const auto e = static_cast<std::size_t>(entering);
-    ftran_entering_column(entering);
-    collect_alpha_support();
+    ftran_entering_column(entering);  // alpha_support_ comes with it
     charge(3);
     const double pivot = alpha_[static_cast<std::size_t>(leaving_slot)];
     const double pivot_by_row = pivot_row_[e];
@@ -942,8 +971,8 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
           }
           --bound_flips_;
         }
-        // flip_rhs_ still holds B^-1 times the flips' change to -N x_N.
-        for (Index i = 0; i < m_; ++i) {
+        // flip_rhs_ still holds B^-1 times the flips' change to -N x_N, on flip_support_.
+        for (const Index i : flip_support_) {
           x_basic_[static_cast<std::size_t>(i)] -= flip_rhs_[static_cast<std::size_t>(i)];
         }
         rebuild_infeasible_list();
@@ -1061,7 +1090,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     // The same update-or-refactorize policy as the primal loop, for the same reasons; see
     // the primal loop for the evidence behind each trigger.
     const bool trust_update = !basis_needed_stricter_threshold_;
-    // Over alpha's support, which collect_alpha_support() has in hand: the same eta,
+    // Over alpha's support, which ftran_entering_column() has in hand: the same eta,
     // without two passes over all m slots of a vector that is mostly zeros (#1006).
     const bool updated =
         trust_update && lu_.update(leaving_slot, alpha_.data(), alpha_support_);

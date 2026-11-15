@@ -393,8 +393,18 @@ void SparseLu::forward_l(double* b) const {
 }
 
 void SparseLu::apply_etas(double* b) const {
+  apply_etas(b, nullptr);
+}
+
+void SparseLu::apply_etas(double* b, std::vector<Index>* support) const {
   // Then the recorded updates, OLDEST FIRST: x = E_k^-1 ... E_1^-1 (B_0^-1 b). Applying
-  // E^-1 is z_p = y_p / alpha_p followed by z_i = y_i - alpha_i z_p.
+  // E^-1 is z_p = y_p / alpha_p followed by z_i = y_i - alpha_i z_p. With `support`, the
+  // positions an eta writes join it (hs_mark_, all zero between calls, marks its members):
+  // a pivot position comes out nonzero only when it went in nonzero, so only an eta's own
+  // rows can be new.
+  if (support != nullptr) {
+    for (const Index i : *support) hs_mark_[static_cast<std::size_t>(i)] = 1;
+  }
   const Index etas = eta_count();
   for (Index k = 0; k < etas; ++k) {
     const auto uk = static_cast<std::size_t>(k);
@@ -406,14 +416,42 @@ void SparseLu::apply_etas(double* b) const {
     const Index end = eta_start_[uk + 1];
     for (Index t = begin; t < end; ++t) {
       const auto ut = static_cast<std::size_t>(t);
-      b[static_cast<std::size_t>(eta_rows_[ut])] -= eta_values_[ut] * scaled;
+      const auto row = static_cast<std::size_t>(eta_rows_[ut]);
+      b[row] -= eta_values_[ut] * scaled;
+      if (support != nullptr && hs_mark_[row] == 0) {
+        hs_mark_[row] = 1;
+        support->push_back(eta_rows_[ut]);
+      }
     }
+  }
+  if (support != nullptr) {
+    for (const Index i : *support) hs_mark_[static_cast<std::size_t>(i)] = 0;
   }
 }
 
 void SparseLu::solve(double* b, DensityHistory* history) const {
   solve_base(b, attempt_hyper(history));
   remember(history);
+}
+
+bool SparseLu::solve(double* b, DensityHistory* history, std::vector<Index>* support) const {
+  if (m_ == 0) {
+    support->clear();
+    return true;
+  }
+  if (ft_active_ || !attempt_hyper(history)) {
+    solve(b, history);
+    return false;
+  }
+  // The product-form path of solve_base(), with the support carried through.
+  const bool hyper = solve_hyper(b, support);
+  if (hyper) {
+    apply_etas(b, support);
+  } else {
+    solve_base(b, false);
+  }
+  remember(history);
+  return hyper;
 }
 
 void SparseLu::solve_entering(double* b, DensityHistory* history) const {
@@ -447,6 +485,24 @@ void SparseLu::keep_spike() const {
 void SparseLu::solve_transpose(double* b, DensityHistory* history) const {
   solve_transpose_base(b, attempt_hyper(history));
   remember(history);
+}
+
+bool SparseLu::solve_transpose(double* b, DensityHistory* history,
+                               std::vector<Index>* support) const {
+  if (m_ == 0) {
+    support->clear();
+    return true;
+  }
+  if (ft_active_ || !attempt_hyper(history)) {
+    solve_transpose(b, history);
+    return false;
+  }
+  // The product-form path of solve_transpose_base(), with the support carried through.
+  apply_etas_transposed(b, support);
+  const bool hyper = solve_transpose_hyper(b, support);
+  if (!hyper) solve_transpose_after_etas(b);
+  remember(history);
+  return hyper;
 }
 
 void SparseLu::solve_base(double* b, bool try_hyper) const {
@@ -549,9 +605,17 @@ void SparseLu::solve_reference(double* b) const {
 }
 
 void SparseLu::apply_etas_transposed(double* b) const {
+  apply_etas_transposed(b, nullptr);
+}
+
+void SparseLu::apply_etas_transposed(double* b, std::vector<Index>* support) const {
   // The updates come FIRST here and in the REVERSE order to FTRAN:
   // x = B_0^-T (E_1^-T ... E_k^-T b). Applying E^-T touches one component,
-  // v_p <- (v_p - sum_{i != p} alpha_i v_i) / alpha_p, leaving the rest alone.
+  // v_p <- (v_p - sum_{i != p} alpha_i v_i) / alpha_p, leaving the rest alone. With
+  // `support`, a pivot position that comes out nonzero joins it.
+  if (support != nullptr) {
+    for (const Index i : *support) hs_mark_[static_cast<std::size_t>(i)] = 1;
+  }
   for (Index k = eta_count() - 1; k >= 0; --k) {
     const auto uk = static_cast<std::size_t>(k);
     const Index begin = eta_start_[uk];
@@ -563,6 +627,13 @@ void SparseLu::apply_etas_transposed(double* b) const {
     }
     const auto pivot_index = static_cast<std::size_t>(eta_pivot_position_[uk]);
     b[pivot_index] = (b[pivot_index] - accumulated) / eta_pivot_value_[uk];
+    if (support != nullptr && b[pivot_index] != 0.0 && hs_mark_[pivot_index] == 0) {
+      hs_mark_[pivot_index] = 1;
+      support->push_back(eta_pivot_position_[uk]);
+    }
+  }
+  if (support != nullptr) {
+    for (const Index i : *support) hs_mark_[static_cast<std::size_t>(i)] = 0;
   }
 }
 
@@ -630,19 +701,32 @@ void SparseLu::solve_transpose_base(double* b, bool try_hyper) const {
     apply_etas_transposed(b);
     // #464: the same passes over the reached steps alone, when the reach is small enough.
     if (try_hyper && solve_transpose_hyper(b)) return;
-
-    // work_ is indexed by step from here to the end: the right-hand side enters through the
-    // pivot columns and the answer leaves through the pivot rows, and both triangular
-    // passes run in step space in between, so nothing is scattered to row order and
-    // gathered back.
-    for (Index k = 0; k < m_; ++k) {
-      work_[static_cast<std::size_t>(k)] =
-          b[static_cast<std::size_t>(pivot_col_[static_cast<std::size_t>(k)])];
-    }
-    forward_u_transposed();
+    solve_transpose_after_etas(b);
+    return;
   }
 
-  // The L^T pass (lr_, untouched by either update scheme) and the final scatter are shared.
+  // The L^T pass (lr_, untouched by either update scheme) and the final scatter, as in
+  // solve_transpose_after_etas().
+  apply_transposed_l();
+  Index nonzeros = 0;
+  for (Index k = 0; k < m_; ++k) {
+    const double value = work_[static_cast<std::size_t>(k)];
+    nonzeros += value != 0.0 ? 1 : 0;
+    b[static_cast<std::size_t>(pivot_row_[static_cast<std::size_t>(k)])] = value;
+  }
+  record_density(stats_.btran_bins, nonzeros, m_);
+}
+
+void SparseLu::solve_transpose_after_etas(double* b) const {
+  // work_ is indexed by step from here to the end: the right-hand side enters through the
+  // pivot columns and the answer leaves through the pivot rows, and both triangular passes
+  // run in step space in between, so nothing is scattered to row order and gathered back.
+  for (Index k = 0; k < m_; ++k) {
+    work_[static_cast<std::size_t>(k)] =
+        b[static_cast<std::size_t>(pivot_col_[static_cast<std::size_t>(k)])];
+  }
+  forward_u_transposed();
+  // The L^T pass (lr_, untouched by either update scheme) and the final scatter.
   apply_transposed_l();
   Index nonzeros = 0;
   for (Index k = 0; k < m_; ++k) {

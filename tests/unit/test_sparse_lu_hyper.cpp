@@ -132,6 +132,33 @@ void expect_same_solves(const SparseLu& full, const SparseLu& hyper,
     ASSERT_EQ(x_full[i], x_hyper[i]) << where << ": FTRAN entry " << i;
     ASSERT_EQ(y_full[i], y_hyper[i]) << where << ": BTRAN entry " << i;
   }
+  // The same solves told the right-hand side's support, listed backwards so that no
+  // ordering is assumed: the same bits, and on a true return a support with no repeats that
+  // holds every nonzero of the result.
+  for (const bool transpose : {false, true}) {
+    std::vector<double> z = rhs;
+    std::vector<Index> support;
+    for (Index i = static_cast<Index>(rhs.size()) - 1; i >= 0; --i) {
+      if (rhs[static_cast<std::size_t>(i)] != 0.0) support.push_back(i);
+    }
+    const bool known = transpose ? hyper.solve_transpose(z.data(), nullptr, &support)
+                                 : hyper.solve(z.data(), nullptr, &support);
+    const std::vector<double>& expected = transpose ? y_full : x_full;
+    std::vector<char> listed(rhs.size(), 0);
+    if (known) {
+      for (const Index i : support) {
+        ASSERT_EQ(listed[static_cast<std::size_t>(i)], 0) << where << ": repeated " << i;
+        listed[static_cast<std::size_t>(i)] = 1;
+      }
+    }
+    for (std::size_t i = 0; i < rhs.size(); ++i) {
+      ASSERT_EQ(z[i], expected[i])
+          << where << (transpose ? ": BTRAN" : ": FTRAN") << " with a support, entry " << i;
+      if (known && z[i] != 0.0) {
+        ASSERT_EQ(listed[i], 1) << where << ": nonzero " << i << " not in the support";
+      }
+    }
+  }
   if (basis == nullptr) return;
   // The residual is a guard against a mistake the two paths would share, which shows as an
   // O(1) residual, not a measure of accuracy: threshold pivoting at tau = 0.01 allows element

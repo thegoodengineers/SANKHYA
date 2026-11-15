@@ -299,8 +299,6 @@ class Simplex {
   /// (or rebuild_infeasible_list()) after every change to x_basic_[slot], to basis_[slot]
   /// or to the bounds, or the pricing reads a stale value.
   void note_slot(Index slot);
-  /// alpha_support_ = the nonzero slots of alpha_, ascending.
-  void collect_alpha_support();
   /// rho_ = B^-T e_r and pivot_row_[j] = rho . a_j for every nonbasic column j.
   void compute_pivot_row(Index leaving_slot);
   /// The primal loop's reduced costs after the pivot (entering, leaving_slot), through the
@@ -720,12 +718,29 @@ class Simplex {
   std::vector<Index> infeasible_slots_;
   std::vector<char> slot_listed_;
   std::vector<double> slot_infeasibility_;
-  std::vector<Index> alpha_support_;  ///< nonzero slots of alpha_ (collect_alpha_support)
-  std::vector<double> dual_weight_;   ///< dual devex weight per basic slot, or the exact
-                                      ///< steepest-edge norm under pricing=dual-steepest-edge
-  bool dual_steepest_edge_ = false;   ///< #411: the exact update, one FTRAN more per pivot
-  std::vector<double> tau_;           ///< B^-1 rho, the steepest-edge update's cross term
-  std::vector<double> pivot_row_;     ///< row r of B^-1 [A | -I] over every column
+  std::vector<Index> alpha_support_;  ///< nonzero slots of alpha_, ascending (see below)
+  /// HYPER-SPARSE VECTORS (Hall and McKinnon 2005, sec. 3). Each work vector of the dual
+  /// iteration keeps the list of the positions it may be nonzero at, so that clearing it,
+  /// scanning it and handing it to the next solve cost its nonzeros rather than m. A flag
+  /// says whether the list is exact (the vector is zero off it); a writer that does not keep
+  /// the list clears the flag and the next user clears the whole vector, as before.
+  bool alpha_support_exact_ = false;
+  bool rho_support_exact_ = false;
+  std::vector<Index> tau_support_;
+  bool tau_support_exact_ = false;
+  std::vector<Index> flip_support_;
+  bool flip_support_exact_ = false;
+  std::vector<char> slot_mark_;  ///< per slot, all zero between uses
+  /// After a solve with a support: keep its nonzeros, ascending (the order every pass over
+  /// the vector used, so sums over it round as they did); after one without, scan for them.
+  void settle_support(const std::vector<double>& v, bool known, std::vector<Index>* support);
+  /// Zero `v` where it may be nonzero: over `support` when `exact`, else everywhere.
+  static void clear_on(std::vector<double>& v, const std::vector<Index>& support, bool exact);
+  std::vector<double> dual_weight_;  ///< dual devex weight per basic slot, or the exact
+                                     ///< steepest-edge norm under pricing=dual-steepest-edge
+  bool dual_steepest_edge_ = false;  ///< #411: the exact update, one FTRAN more per pivot
+  std::vector<double> tau_;          ///< B^-1 rho, the steepest-edge update's cross term
+  std::vector<double> pivot_row_;    ///< row r of B^-1 [A | -I] over every column
   /// THE PIVOT ROW, ROW-WISE (#243). pivot_row_[k] = rho . a_k is a gather over every
   /// nonbasic column, O(nnz(A)) per iteration however sparse rho is. When rho is sparse -
   /// and on a planning model it is - the same numbers come from rho's support: for each
