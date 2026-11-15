@@ -109,7 +109,7 @@ the one stamped in the file's rows, the build that produced it.
 | Safe bounds on Netlib: 93 of 94 optimal answers certified to 1e-6 by a rigorous bound, 0 with no finite bound (with `certified_gap_seconds=120`) | `bench/results/certified-gap-netlib-full-81b812c.csv` | `81b812c` |
 | Netlib infeasible set, verdict with a verified Farkas certificate: 29 of 29 | `bench/results/netlib-infeasible-0aa5301.csv` | `0aa5301` |
 | Exact sensitivity: 69 of 96 LPs with every dual, reduced cost and range re-derived in rational arithmetic; 4,479 of 431,730 floating-point values corrected | `bench/results/exact-sensitivity-60455ce.csv` | `60455ce` |
-| Kennington LP, matched and verified: 16 of 16 | `bench/results/kennington-full-9463fd7.csv` | `9463fd7` |
+| Kennington LP, matched and verified: 16 of 16 | `bench/results/kennington-full-b192fa8.csv` | `b192fa8` |
 | Mittelmann LP, solved and verified inside the limit: 5 of 12 | `bench/results/mittelmann-72123ff.csv` | `72123ff` |
 | MIPLIB 2017 easy set: 14 of 30 reach the published optimum, 11 prove it | `bench/results/miplib-ad57c03.csv` | `ad57c03` |
 | Maros-Meszaros convex QP: 127 of 138 at the published objective, 132 verifier-accepted, 0 optimal answers rejected | `bench/results/maros-meszaros-c766eae.csv` | `c766eae` |
