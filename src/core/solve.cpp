@@ -694,17 +694,20 @@ void reconcile_status_with_measurement(const Model& model, Solution* solution,
   // model keeps the absolute product, which is never the looser of the two. The point is
   // usable, so a failure is reported feasible, not wrong.
   const bool pure_lp = !model.has_quadratic_objective() && !model.has_integrality();
+  std::string worst_item;
   const double complementarity =
       pure_lp && solution->complementarity_violation > tol::kComplementarity
-          ? worst_relative_complementarity(model, *solution)
+          ? worst_relative_complementarity(model, *solution, &worst_item)
           : solution->complementarity_violation;
   if (check_dual && solution->status == SolveStatus::kOptimal &&
       complementarity > tol::kComplementarity) {
+    // The item is named so that a refuted claim says where to look, not only how far off.
     const std::string detail = fmt::format(
         "engine reported optimal but the largest |multiplier| * slack is {:.3e} ({:.3e} "
-        "relative to its magnitudes), above the {:.1e} the independent verifier accepts; "
+        "relative to its magnitudes{}), above the {:.1e} the independent verifier accepts; "
         "reporting a feasible point rather than a proof",
-        solution->complementarity_violation, complementarity, tol::kComplementarity);
+        solution->complementarity_violation, complementarity,
+        worst_item.empty() ? std::string() : ": " + worst_item, tol::kComplementarity);
     solution->status = SolveStatus::kFeasible;
     solution->message = solution->message.empty() ? detail : solution->message + "; " + detail;
     logger.warning("{}", detail);

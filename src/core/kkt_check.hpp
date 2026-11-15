@@ -64,7 +64,11 @@ struct KktVerdict {
 /// difference of (#806; tol::kComplementarity and tol::kComplementarityRounding). The status
 /// guard in solve() judges an optimality claim by this, exactly as check_lp_optimality() and
 /// tools/verify_solution.py do. Infinity when the answer's vectors are not the model's size.
+/// With `where`, it is also given one line naming the item that sets the worst product:
+/// "row R" or "column C", its value or activity, the bound it is measured from and the
+/// multiplier, for the message an optimality claim it refutes leaves behind.
 [[nodiscard]] double worst_relative_complementarity(const Model& model,
-                                                    const Solution& solution);
+                                                    const Solution& solution,
+                                                    std::string* where = nullptr);
 
 }  // namespace sankhya

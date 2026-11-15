@@ -94,7 +94,8 @@ double relative_complementarity(double multiplier, double value, double lower, d
 
 }  // namespace
 
-double worst_relative_complementarity(const Model& model, const Solution& s) {
+double worst_relative_complementarity(const Model& model, const Solution& s,
+                                      std::string* where) {
   const Index n = model.num_cols();
   const Index m = model.num_rows();
   if (s.col_value.size() != static_cast<std::size_t>(n) ||
@@ -117,20 +118,41 @@ double worst_relative_complementarity(const Model& model, const Solution& s) {
     }
   }
   double worst = 0.0;
+  // The item that set `worst`: a row index, or n + a column index; -1 for none.
+  Index worst_at = -1;
   for (Index i = 0; i < m; ++i) {
     const auto u = static_cast<std::size_t>(i);
     if (model.row_lower[u] == model.row_upper[u]) continue;
-    worst = std::max(
-        worst, relative_complementarity(sigma * s.row_dual[u], activity[u], model.row_lower[u],
-                                        model.row_upper[u], row_scale[u]));
+    const double r =
+        relative_complementarity(sigma * s.row_dual[u], activity[u], model.row_lower[u],
+                                 model.row_upper[u], row_scale[u]);
+    if (r > worst) {
+      worst = r;
+      worst_at = i;
+    }
   }
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
     if (model.col_lower[u] == model.col_upper[u]) continue;
     const double x = s.col_value[u];
-    worst =
-        std::max(worst, relative_complementarity(sigma * s.col_dual[u], x, model.col_lower[u],
-                                                 model.col_upper[u], std::fabs(x)));
+    const double r = relative_complementarity(sigma * s.col_dual[u], x, model.col_lower[u],
+                                              model.col_upper[u], std::fabs(x));
+    if (r > worst) {
+      worst = r;
+      worst_at = m + j;
+    }
+  }
+  if (where != nullptr && worst_at >= 0) {
+    const bool row = worst_at < m;
+    const auto u = static_cast<std::size_t>(row ? worst_at : worst_at - m);
+    const std::vector<std::string>& names = row ? model.row_names : model.col_names;
+    const std::string name =
+        u < names.size() ? names[u] : std::to_string(row ? worst_at : worst_at - m);
+    *where = fmt::format("{} {} at {:.17g} in [{:.17g}, {:.17g}], multiplier {:.17g}",
+                         row ? "row" : "column", name, row ? activity[u] : s.col_value[u],
+                         row ? model.row_lower[u] : model.col_lower[u],
+                         row ? model.row_upper[u] : model.col_upper[u],
+                         sigma * (row ? s.row_dual[u] : s.col_dual[u]));
   }
   return worst;
 }
