@@ -28,7 +28,8 @@
 # options="2000 mas76 pk1" (a node limit, then model names; a name=value token is a solver
 # option). ab-profile-nodes profiles base_ref's binary on the same solves. The artifact holds
 # each solve's inclusive and self-cost tables and the callgrind file; callgrind counts
-# instructions, so two runs compare exactly whatever the runner. It writes no CSV.
+# instructions, so two runs compare exactly whatever the runner. It writes no CSV. A model
+# given as a path, e.g. "1 data/netlib/pilot87.mps", profiles that LP's solve instead.
 
 name: bench
 
@@ -238,7 +239,9 @@ jobs:
               python3 bench/refinery/generate.py --qp ;;
             miplib3|head-to-head-miplib3|profile-nodes|ab-profile-nodes)
               python3 bench/runners/fetch_miplib3.py
-              git checkout -- data/miplib3/manifest.json ;;
+              git checkout -- data/miplib3/manifest.json
+              # A profiled LP named by its path under data/kennington needs that set.
+              case " $OPTIONS " in *" data/kennington/"*) python3 bench/runners/fetch_kennington.py ;; esac ;;
             # #1199: options is the shard, K/N; the fetch writes its names beside the models.
             miplib2017-bench)
               python3 bench/runners/fetch_miplib.py --benchmark --shard "${OPTIONS:-1/1}" ;;
@@ -445,8 +448,12 @@ jobs:
                 [ "$SUITE" = ab-profile-nodes ] && arms+=("base:.base/build/sankhya")
                 for model in "$@"; do
                   for arm in "${arms[@]}"; do
-                    tag="$model-${arm%%:*}"
-                    valgrind --tool=callgrind --callgrind-out-file="$out/callgrind-$tag.out"                       "${arm#*:}" solve "data/miplib3/$model.mps" --option mip_threads=1                       --option node_limit="$nodes" --option log_to_console=false ${extra[@]+"${extra[@]}"}                       > "$out/profile-$tag.log" 2>&1 || true
+                    # A name with a '/' is a model path (an LP from data/netlib or
+                    # data/kennington, for the LP engine's profile); the node limit is then
+                    # an unused option.
+                    file="data/miplib3/$model.mps"; [[ "$model" == */* ]] && file="$model"
+                    tag="$(basename "$model" .mps)-${arm%%:*}"
+                    valgrind --tool=callgrind --callgrind-out-file="$out/callgrind-$tag.out"                       "${arm#*:}" solve "$file" --option mip_threads=1                       --option node_limit="$nodes" --option log_to_console=false ${extra[@]+"${extra[@]}"}                       > "$out/profile-$tag.log" 2>&1 || true
                     tail -5 "$out/profile-$tag.log"
                     callgrind_annotate --inclusive=yes "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-inclusive.txt"
                     callgrind_annotate "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-self.txt"
