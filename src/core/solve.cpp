@@ -1601,6 +1601,19 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
         }
       }
     }
+    // THE EXACT PHASE 1: an LP every retry above left without a verdict asks rational
+    // arithmetic whether it is infeasible (src/exact/exact_repair.hpp), within exact_seconds
+    // and the time left. Only a proof changes the answer; the IIS below starts from it.
+    if (solution.status == SolveStatus::kNumericalError && !race && !warm_answer &&
+        !model.has_integrality() && !model.has_quadratic_objective() &&
+        options.get_bool("exact_phase1")) {
+      double seconds = options.get_double("exact_seconds");
+      if (limits.has_time_limit()) {
+        seconds = std::min(seconds, limits.remaining_seconds(timer.elapsed_seconds()));
+      }
+      if (seconds > 0.0) exact::apply_exact_phase1(model, &solution, logger, seconds);
+      solution.solve_seconds = timer.elapsed_seconds();
+    }
     // Sensitivity ranging runs on the ORIGINAL model after postsolve so the vectors are
     // full-size and the basis is expressed in terms of original column and row indices.
     detail::compute_ranging(model, options, logger, solution);

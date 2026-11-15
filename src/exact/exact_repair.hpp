@@ -61,8 +61,11 @@ struct RepairResult {
   std::vector<double> col_value, col_dual, row_dual;
   /// On kFailed for exact infeasibility: the Farkas multipliers w, one per row with a nonzero
   /// value, as (row, "numerator/denominator"). w^T [A | -I] z = 0 for every z the rows allow,
-  /// and its range over the variables' bounds excludes 0.
+  /// and its range over the variables' bounds excludes 0. Oriented as Solution::farkas_dual
+  /// (include/sankhya/certificate.hpp): w_i > 0 leans on row i's lower bound, < 0 its upper.
   std::vector<std::pair<Index, std::string>> farkas_row;
+  /// The same multipliers rounded once to double, one per row (0 off the support).
+  std::vector<double> farkas_dual;
 };
 
 /// `solution` must be an optimal plain LP with a basis. Declines otherwise.
@@ -74,5 +77,24 @@ struct RepairResult {
 /// calls it under option "exact" before the exact check and the certified sensitivity.
 /// Returns true when the reported basis was replaced.
 bool apply_exact_repair(const Model& model, Solution* solution, Logger& logger, double seconds);
+
+/// THE EXACT PHASE 1: is the model, as read into doubles, infeasible? With every cost set to
+/// 0 any basis is dual feasible, so the repair's dual simplex (step 1, Bland's rule, finite)
+/// runs from the reported basis - or, when it has none that loads, the slack basis - until
+/// the basis is exactly primal feasible (kVerified: the model is feasible) or a tableau row
+/// has no entering variable and its range over the bounds excludes 0 (kFailed, with the
+/// Farkas multipliers in farkas_row and farkas_dual). This is the exact phase 1 of Applegate,
+/// Cook, Dash and Espinoza (Oper. Res. Letters 35, 2007) and the infeasibility proofs of
+/// Koch's exact Netlib run (Oper. Res. Letters 32, 2004), started from a floating-point
+/// basis. Declines past `seconds` or kMaxRepairSteps pivots.
+[[nodiscard]] RepairResult prove_infeasible_exact(const Model& model, const Solution& solution,
+                                                  double seconds = kInfinity);
+
+/// prove_infeasible_exact; on a proof, `solution` becomes kInfeasible with farkas_dual (the
+/// rounded multipliers) and exact_repair_farkas (the exact ones), its point dropped and its
+/// message saying how. solve() calls it, under option exact_phase1, on a plain LP that ended
+/// numerical_error. Written for Netlib cplex2, an infeasible model whose floating-point phase
+/// 1 stalls 4.1e-6 from feasibility with no certificate. Returns true on a proof.
+bool apply_exact_phase1(const Model& model, Solution* solution, Logger& logger, double seconds);
 
 }  // namespace sankhya::exact

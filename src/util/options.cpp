@@ -2012,6 +2012,21 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          kNoLimit,
          {}});
+    s.push_back(
+        {"exact_phase1",
+         OptionType::Bool,
+         true,
+         "When a plain LP ends numerical_error after every retry, run phase 1 in exact "
+         "rational arithmetic - every cost 0, the dual simplex under Bland's rule - from the "
+         "engine's basis (the slack basis when it has none), within exact_seconds and the "
+         "time_limit left (Applegate, Cook, Dash and Espinoza, Oper. Res. Letters 35, 2007). "
+         "A tableau row that cannot reach 0 over the bounds proves the model, as read into "
+         "doubles, infeasible: the answer becomes infeasible with those Farkas multipliers, "
+         "exact in the .sol's exact_repair_farkas section and rounded in its farkas section. "
+         "Any other outcome leaves the answer as it was. Independent of option exact.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"engine_race",
                  OptionType::Bool,
                  false,
