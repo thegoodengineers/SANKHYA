@@ -285,13 +285,13 @@ const std::vector<OptionSpec>& Options::registry() {
                  {"product-form", "forrest-tomlin"}});
     s.push_back({"lu_update_limit",
                  OptionType::Int,
-                 std::int64_t{128},
+                 std::int64_t{512},
                  "Simplex basis updates after which the factors are rebuilt whatever the "
                  "eta file's size, the backstop behind the work-based break-even "
-                 "(refactor_work_ratio). 128 since #68, where a sweep to 512 failed d2q06c; "
-                 "kept as the default until an A/B on main says otherwise. On ken-18 this "
-                 "cap, not the break-even, sets the pace: 406 factorizations in 51,643 "
-                 "iterations, 32% of the solve's instructions (#1269).",
+                 "(refactor_work_ratio). 512 from its A/B on main (bench/results/"
+                 "option-ab-{netlib,kennington}-update-limit-512-fad4df2.csv): Netlib 94 of "
+                 "94 optimal, exact and verified in both arms, ken-18 9.4 s -> 6.0 s. It was "
+                 "128 from #68, where 512 failed d2q06c on the code of that time.",
                  1.0,
                  kNoLimit,
                  {}});

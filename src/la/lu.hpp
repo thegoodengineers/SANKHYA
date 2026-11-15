@@ -154,7 +154,7 @@ class SparseLu {
   void use_hyper_sparse(bool on) noexcept { hyper_sparse_ = on; }
   /// The eta-count backstop of should_refactorize() (option lu_update_limit; lu.cpp's
   /// kMaxEtaCount is the default and says what it rests on). Sticky across factorize().
-  static constexpr Index kDefaultUpdateLimit = 128;
+  static constexpr Index kDefaultUpdateLimit = 512;
   void set_update_limit(Index limit) noexcept { update_limit_ = limit < 1 ? 1 : limit; }
   [[nodiscard]] bool hyper_sparse() const noexcept { return hyper_sparse_; }
   /// Result densities of every solve since construction, whichever path took it.

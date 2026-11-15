@@ -81,11 +81,14 @@ constexpr double kFtRowEtaBound = 1e6;
 /// Refactorize once the eta file reaches this many updates, whatever its size. Bounds the
 /// worst-case drift by bounding how long any single factorization is trusted.
 ///
-/// Measured (#68): 128 passes every correctness gate - 320 unit tests and the rational
-/// oracle at 0 mismatches - while a sweep to 512 made d2q06c fail outright, so the ceiling
-/// is real and this sits well inside it. The time-based break-even in the simplex normally
-/// fires first; this is the backstop for a model whose solves are so cheap that it does not.
-constexpr Index kMaxEtaCount = 128;
+/// Measured (#68): 128 passed every correctness gate while a sweep to 512 made d2q06c fail
+/// outright. Re-measured on main after the pivot-agreement refactorization, the fresh-factor
+/// optimality claim and Harris (option lu_update_limit, bench/results/option-ab-{netlib,
+/// kennington}-update-limit-512-fad4df2.csv): 512 keeps Netlib at 94 of 94 optimal, exact and
+/// verified with d2q06c optimal in 4,772 iterations, and takes ken-18 from 9.4 s to 6.0 s,
+/// where 128, not the work-based break-even, had set the pace (406 factorizations in 51,643
+/// iterations). The break-even still fires first wherever the eta file is the dearer part.
+constexpr Index kMaxEtaCount = 512;
 static_assert(kMaxEtaCount == SparseLu::kDefaultUpdateLimit, "lu_update_limit's default");
 
 /// Room ft_init() leaves in each row and column list of U beyond its entries, for the fill
