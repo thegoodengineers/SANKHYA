@@ -32,16 +32,15 @@ namespace sankhya::detail {
                                                       const Options& options, double seconds);
 
 /// THE EXACT PHASE 1 (option exact_phase1): asks rational arithmetic whether `model`, a plain
-/// LP whose solve ended numerical_error (or infeasible by presolve, with no certificate), is
-/// infeasible as read into doubles. Its elastic LP (above) is solved in floating point without
-/// presolve and by the simplex, for a basis, and exact::prove_infeasible_exact
-/// (src/exact/exact_repair.hpp) repairs that basis to an exactly optimal one; a positive exact
-/// optimum is a proof, and its exact row duals the certificate. On a proof `solution` becomes
-/// kInfeasible with farkas_dual (the multipliers rounded) and exact_repair_farkas (exact), its
-/// point dropped and its message saying how, and true is returned; otherwise `solution` is
-/// untouched. All within `seconds`. Written for Netlib cplex2, infeasible with a floating-point
-/// phase 1 that stalls 4.1e-6 from feasibility and an elastic optimum below the 1e-7 tolerance,
-/// so no floating certificate.
+/// LP whose solve ended numerical_error, is infeasible as read into doubles. Its elastic LP
+/// (above) is solved in floating point without presolve and by the simplex, for a basis,
+/// and exact::prove_infeasible_exact (src/exact/exact_repair.hpp) repairs that basis to an
+/// exactly optimal one; a positive exact optimum is a proof, and its exact row duals the
+/// certificate. On a proof `solution` becomes kInfeasible with farkas_dual (the multipliers
+/// rounded) and exact_repair_farkas (exact), its point dropped and its message saying how,
+/// and true is returned; otherwise `solution` is untouched. All within `seconds`. Written
+/// for Netlib cplex2, infeasible with a floating-point phase 1 that stalls 4.1e-6 from
+/// feasibility and an elastic optimum below the 1e-7 tolerance, so no floating certificate.
 bool prove_infeasible_exactly(const Model& model, Solution* solution, const Options& options,
                               Logger& logger, double seconds);
 
