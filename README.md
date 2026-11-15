@@ -71,7 +71,7 @@ as regenerable backups.
 
 | suite | instances | limit | SANKHYA | HiGHS | SCIP | CBC | GLPK | CSV | commit |
 |---|---:|---:|---|---|---|---|---|---|---|
-| Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-d1d0d52.csv` | `d1d0d52` |
+| Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-8eaf18c.csv` | `8eaf18c` |
 | MIPLIB 3 MILP | 65 | 60 s | 42 / 41 / 42 / 0 | 52 / 49 / 52 / 0 | 50 / 45 / 50 / 0 | 49 / 48 / 49 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-d1d0d52.csv` | `d1d0d52` |
 | Stress set LP | 126 | 60 s | 115 / 115 / 117 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-7119598.csv` | `7119598` |
 | Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 101 / 94 / 28 / 7 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-4981e56.csv` | `4981e56` |
@@ -169,7 +169,14 @@ of 0.575 s against HiGHS 1.15.1's 0.163 s, and instance by instance SANKHYA fast
 on 72 (within 10%, or both under 0.1 s) and HiGHS faster on 17; on the 16 Kennington LPs
 (`head-to-head-kennington-1860864.csv`) 9.430 s against 1.855 s, faster on 3, tied on 2, slower
 on 11. The per-instance split is stated the way rivals state theirs, and the SGM is the number
-to read: most Netlib pairs are ties because most instances finish in milliseconds.
+to read: most Netlib pairs are ties because most instances finish in milliseconds. On `main` at
+`8eaf18c`, after network-shaped LPs stopped going to the interior point and PDHG (#1257) and the
+dual iteration stopped paying O(m) per vector (#1259), one GitHub-hosted job each with HiGHS
+1.16.0, one thread, 120 s: the 16 Kennington LPs take an SGM of **1.558 s against HiGHS's
+0.867 s**, faster on 1, tied on 8, slower on 7, and 15 of 16 `optimal` and verified, `pds-20`
+ending `feasible` (`head-to-head-kennington-8eaf18c.csv`); all 94 Netlib LPs take 0.225 s
+against 0.109 s, faster on 3, tied on 83, slower on 8, 94 of 94 `optimal` and verified
+(`head-to-head-netlib-8eaf18c.csv`).
 
 **The refinery suite (#1004, `docs/BENCHMARKS.md` section 4c).** Ten models of known structure
 from published formulations - crude and product blending, Haverly's pooling problem as its

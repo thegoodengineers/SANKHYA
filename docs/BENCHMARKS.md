@@ -3854,28 +3854,28 @@ SANKHYA included.
 
 ### 4a.1 Netlib LP
 
-Source CSV: `bench/results/head-to-head-netlib-d1d0d52.csv`  
-Commit `d1d0d52` · machine `github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64`  
+Source CSV: `bench/results/head-to-head-netlib-8eaf18c.csv`  
+Commit `8eaf18c` · machine `github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`  
 94 instances · time limit 120 s · 1 thread per solver · every solver a separate process
 
 **The 92 LPs netlib.org ships as EMPS files:**
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | d1d0d52 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.245 s |
-| HiGHS | 1.16.0 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.127 s |
-| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.312 s |
-| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.312 s |
-| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.436 s |
+| SANKHYA | 8eaf18c | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.206 s |
+| HiGHS | 1.16.0 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.096 s |
+| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.273 s |
+| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.292 s |
+| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.406 s |
 
 **Instance by instance, SANKHYA against each rival:**
 
 | against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
 |---|---:|---:|---:|---:|---:|---:|
-| HiGHS | 92 | 4 | 82 | 6 | 1.00x | 0.85x |
-| SCIP | 92 | 19 | 70 | 3 | 1.00x | 0.31x |
-| CBC/Clp | 92 | 6 | 79 | 7 | 1.00x | 0.60x |
-| GLPK | 92 | 12 | 77 | 3 | 1.00x | 0.70x |
+| HiGHS | 92 | 3 | 82 | 7 | 1.00x | 0.76x |
+| SCIP | 92 | 19 | 70 | 3 | 1.00x | 0.29x |
+| CBC/Clp | 92 | 5 | 82 | 5 | 1.00x | 0.50x |
+| GLPK | 92 | 14 | 75 | 3 | 1.00x | 0.65x |
 
 *A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
 
@@ -3883,11 +3883,11 @@ Commit `d1d0d52` · machine `github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | d1d0d52 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.751 s |
-| HiGHS | 1.16.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.207 s |
-| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 1.688 s |
-| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 0.953 s |
-| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.603 s |
+| SANKHYA | 8eaf18c | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.161 s |
+| HiGHS | 1.16.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 0.745 s |
+| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 1.513 s |
+| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 0.679 s |
+| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.125 s |
 
 `matched` grades against the readme's optimum and `matched exact` against Koch's exact rational optimum (`data/netlib/koch_exact.json`, #747); the timing counts the exact grade. Where the two differ the readme is the one that is wrong: on 80bau3b, ganges, greenbea, greenbeb, nesm, pilot, pilot.we, scrs8 and stocfor3 every solver here agrees with Koch.
 
@@ -3910,26 +3910,26 @@ What the verifier rejected:
 
 ### 4a.2 Kennington LP
 
-Source CSV: `bench/results/head-to-head-kennington-1860864.csv`  
-Commit `1860864` · machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores; 16 GiB RAM; Linux-x86_64`  
+Source CSV: `bench/results/head-to-head-kennington-8eaf18c.csv`  
+Commit `8eaf18c` · machine `github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`  
 16 instances · time limit 120 s · 1 thread per solver · every solver a separate process
 
 | solver | version | runs | solved | matched | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---|---:|
-| SANKHYA | 1860864 | 16 | 15 | 15 | 15 | primal+dual | 9.430 s |
-| HiGHS | 1.15.1 | 16 | 16 | 16 | 16 | primal+dual | 1.855 s |
-| SCIP | 10.0.2 | 16 | 15 | 15 | 15 | primal-only | 10.899 s |
-| CBC/Clp | 1.17.9 | 16 | 16 | 16 | 16 | primal+dual | 0.795 s |
-| GLPK | 5.0 | 16 | 15 | 15 | 15 | primal+dual | 7.345 s |
+| SANKHYA | 8eaf18c | 16 | 15 | 15 | 15 | primal+dual | 3.060 s |
+| HiGHS | 1.16.0 | 16 | 16 | 16 | 16 | primal+dual | 0.867 s |
+| SCIP | 10.0.2 | 16 | 15 | 15 | 15 | primal-only | 6.920 s |
+| CBC/Clp | 1.17.9 | 16 | 16 | 16 | 16 | primal+dual | 0.358 s |
+| GLPK | 5.0 | 16 | 15 | 15 | 15 | primal+dual | 4.623 s |
 
 **Instance by instance, SANKHYA against each rival:**
 
 | against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
 |---|---:|---:|---:|---:|---:|---:|
-| HiGHS | 16 | 3 | 2 | 11 | 2.83x | 3.12x |
-| SCIP | 16 | 6 | 1 | 9 | 1.25x | 1.25x |
-| CBC/Clp | 16 | 1 | 2 | 13 | 2.86x | 4.39x |
-| GLPK | 16 | 9 | 1 | 6 | 0.98x | 0.74x |
+| HiGHS | 16 | 1 | 8 | 7 | 1.08x | 1.29x |
+| SCIP | 16 | 13 | 2 | 1 | 0.30x | 0.26x |
+| CBC/Clp | 16 | 0 | 4 | 12 | 1.74x | 1.74x |
+| GLPK | 16 | 11 | 2 | 3 | 0.65x | 0.44x |
 
 *A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
 
@@ -3939,7 +3939,7 @@ Commit `1860864` · machine `cloud container (docker); Intel(R) Xeon(R) Processo
 
 Every run that did not count, by solver:
 
-- **SANKHYA**, 1: `pds-20` (time_limit)
+- **SANKHYA**, 1: `pds-20` (feasible)
 - **SCIP**, 1: `osa-60` (time_limit)
 - **GLPK**, 1: `ken-18` (time_limit)
 
@@ -4419,7 +4419,7 @@ adapters read no certificate, where SANKHYA's and HiGHS's must pass the verifier
 
 | suite | instances | limit | SANKHYA | HiGHS | SCIP | CBC | GLPK | CSV | commit |
 |---|---:|---:|---|---|---|---|---|---|---|
-| Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-d1d0d52.csv` | `d1d0d52` |
+| Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-8eaf18c.csv` | `8eaf18c` |
 | MIPLIB 3 MILP | 65 | 60 s | 42 / 41 / 42 / 0 | 52 / 49 / 52 / 0 | 50 / 45 / 50 / 0 | 49 / 48 / 49 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-d1d0d52.csv` | `d1d0d52` |
 | Stress set LP | 126 | 60 s | 115 / 115 / 117 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-7119598.csv` | `7119598` |
 | Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 101 / 94 / 28 / 7 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-4981e56.csv` | `4981e56` |
