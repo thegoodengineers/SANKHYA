@@ -10,6 +10,7 @@
 
 #include "sankhya/logging.hpp"
 #include "sankhya/sparse.hpp"
+#include "sankhya/timer.hpp"
 #include "sankhya/tolerances.hpp"
 
 namespace sankhya::mip {
@@ -200,9 +201,18 @@ std::vector<double> feasibility_pump(const Model& model,
   lp.hessian.reset(model.num_cols(), model.num_cols());
   lp.hessian.finalize();
 
+  // The caller's time limit is the pump's, not each projection's: handed to every solve
+  // whole, 20 projections of neos-950242 took 198 s of a 60 s solve, each within the
+  // 0.2 x 50 s it was given (bench run 43677353607).
+  Options projection_options = lp_options;
+  const double seconds = lp_options.get_double("time_limit");
+  const Timer clock;
   std::vector<double> x = start;
   std::vector<double> previous_rounding;
   for (int round = 0; round < max_rounds; ++round) {
+    const double left = seconds - clock.elapsed_seconds();  // no limit stays none
+    if (left <= 0.0) return {};
+    projection_options.set_double("time_limit", left);
     // Round, and test whether the LP point is already integral on the integer columns.
     std::vector<double> rounding(x.size(), 0.0);
     bool integral = true;
@@ -251,7 +261,7 @@ std::vector<double> feasibility_pump(const Model& model,
         lp.col_cost[u] = -1.0;
       }
     }
-    const Solution projected = solve(lp, lp_options);
+    const Solution projected = solve(lp, projection_options);
     ++*lp_solves;
     if (projected.status != SolveStatus::kOptimal) return {};
     x = projected.col_value;
