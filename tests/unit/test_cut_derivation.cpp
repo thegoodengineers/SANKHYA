@@ -150,6 +150,36 @@ TEST(CutDerivation, GomoryCutsFromTheRootTableauAreSplitsTheProofReaches) {
   for (const Cut& cut : plain) EXPECT_EQ(cut.derivation, nullptr);
 }
 
+TEST(CutDerivation, GomoryLimitsReturnTheFirstCutsAndStopWhenAsked) {
+  // #1199: the generator is given the round's room and the solve's deadline. With room for
+  // k cuts it returns the first k of the full answer; a stop before the first source row
+  // returns none; a stop that never fires changes nothing.
+  const Model m = make_model({{2, 2, 0}, {-2, 2, 0}, {3, 1, -1}}, {-kInf, -kInf, -kInf},
+                             {3, 1, 4}, {0, 0, 0}, {10, 10, 5}, {true, true, false});
+  Model with_cost = m;
+  with_cost.col_cost = {-1, -2, 0};
+  const Solution root = lp_solution(with_cost);
+  ASSERT_EQ(root.status, SolveStatus::kOptimal);
+  const std::vector<Cut> full = generate_gmi_cuts(with_cost, root);
+  ASSERT_FALSE(full.empty());
+  for (std::size_t room = 0; room <= full.size(); ++room) {
+    GmiLimits limits;
+    limits.max_cuts = room;
+    const std::vector<Cut> part = generate_gmi_cuts(with_cost, root, false, false, limits);
+    ASSERT_EQ(part.size(), room);
+    for (std::size_t k = 0; k < room; ++k) {
+      EXPECT_EQ(part[k].coeff, full[k].coeff) << k;
+      EXPECT_EQ(part[k].rhs, full[k].rhs) << k;
+    }
+  }
+  GmiLimits at_once;
+  at_once.stop = [] { return true; };
+  EXPECT_TRUE(generate_gmi_cuts(with_cost, root, false, false, at_once).empty());
+  GmiLimits never;
+  never.stop = [] { return false; };
+  EXPECT_EQ(generate_gmi_cuts(with_cost, root, false, false, never).size(), full.size());
+}
+
 TEST(CutDerivation, ZeroHalfCutsAreRoundingsOfHalfTheirRows) {
   // The odd triangle: x0 + x1 <= 1, x1 + x2 <= 1, x0 + x2 <= 1 gives sum x <= 1.
   const Model m = make_model({{1, 1, 0}, {0, 1, 1}, {1, 0, 1}}, {-kInf, -kInf, -kInf},

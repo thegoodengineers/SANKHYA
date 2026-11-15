@@ -2687,5 +2687,37 @@ TEST(CutFiltering, AStopLeavesTheRestNotExaminedAndAcceptsNothingAfterIt) {
   for (const FilteredCut& fc : all) EXPECT_NE(fc.reason, CutFilterReason::kNotExamined);
 }
 
+TEST(CutFiltering, CandidatesHandedOverAreMovedAndTheVerdictsAreTheSame) {
+  // #1199: the filter took its candidates by reference and copied each, so a round held
+  // them twice. Handed over with std::move they are moved into the results; kept by the
+  // caller they are copied as before. The verdicts and the cuts are the same either way.
+  Model model;
+  model.col_cost.assign(4, 0.0);
+  Solution sol;
+  sol.col_value.assign(4, 1.0);
+  std::vector<Cut> candidates;
+  for (int k = 0; k < 5; ++k) {
+    Cut c;
+    c.coeff.assign(4, 0.0);
+    c.coeff[static_cast<std::size_t>(k % 4)] = 1.0 + (k == 4 ? 0.0 : k);  // 4 repeats 0
+    c.rhs = 0.5;
+    candidates.push_back(c);
+  }
+  CutFilterPolicy policy;
+  policy.support_floor = 4;
+  const std::vector<Cut> kept = candidates;
+  const auto copied = filter_and_deduplicate_cuts(model, sol, candidates, policy);
+  ASSERT_EQ(candidates.size(), kept.size());
+  for (std::size_t k = 0; k < kept.size(); ++k) EXPECT_EQ(candidates[k].coeff, kept[k].coeff);
+  const auto moved = filter_and_deduplicate_cuts(model, sol, std::move(candidates), policy);
+  ASSERT_EQ(moved.size(), copied.size());
+  for (std::size_t k = 0; k < moved.size(); ++k) {
+    EXPECT_EQ(moved[k].reason, copied[k].reason) << k;
+    EXPECT_EQ(moved[k].cut.coeff, kept[k].coeff) << k;
+    EXPECT_EQ(moved[k].cut.rhs, kept[k].rhs) << k;
+  }
+  EXPECT_EQ(moved[4].reason, CutFilterReason::kDuplicate);
+}
+
 }  // namespace
 }  // namespace sankhya

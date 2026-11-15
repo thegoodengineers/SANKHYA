@@ -273,6 +273,7 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
     const RowEntries& row = rows[static_cast<std::size_t>(i)];
     if (row.columns.empty() || !row_has_fractional[static_cast<std::size_t>(i)]) continue;
     if (options.stop && options.stop()) break;
+    if (cuts.size() >= options.max_cuts) break;
     const auto ui = static_cast<std::size_t>(i);
     // Both senses of the row are base inequalities: sum a x <= upper, and sum -a x <= -lower.
     for (int side = 0; side < 2; ++side) {
