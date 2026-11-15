@@ -107,7 +107,7 @@ the one stamped in the file's rows, the build that produced it.
 | Head-to-head, Kennington LP, 16 instances: SGM10 3.060 s against HiGHS 0.867 s; against HiGHS faster on 1, tie on 8, slower on 7 | `bench/results/head-to-head-kennington-8eaf18c.csv` | `8eaf18c` |
 | Head-to-head, Maros-Meszaros QP, 138 instances: SGM10 4.066 s against HiGHS 35.808 s; against HiGHS faster on 91, tie on 26, slower on 3 | `bench/results/head-to-head-maros-meszaros-d0eb672.csv` | `d0eb672` |
 | Safe bounds on Netlib: 93 of 94 optimal answers certified to 1e-6 by a rigorous bound, 0 with no finite bound (with `certified_gap_seconds=120`) | `bench/results/certified-gap-netlib-full-81b812c.csv` | `81b812c` |
-| Netlib infeasible set, verdict with a verified Farkas certificate: 29 of 29 | `bench/results/netlib-infeasible-557494c.csv` | `557494c` |
+| Netlib infeasible set, verdict with a verified Farkas certificate: 29 of 29 | `bench/results/netlib-infeasible-0aa5301.csv` | `0aa5301` |
 | Exact sensitivity: 69 of 96 LPs with every dual, reduced cost and range re-derived in rational arithmetic; 4,479 of 431,730 floating-point values corrected | `bench/results/exact-sensitivity-60455ce.csv` | `60455ce` |
 | Kennington LP, matched and verified: 16 of 16 | `bench/results/kennington-full-9463fd7.csv` | `9463fd7` |
 | Mittelmann LP, solved and verified inside the limit: 5 of 12 | `bench/results/mittelmann-72123ff.csv` | `72123ff` |
@@ -225,7 +225,7 @@ machine `github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core Processor; 4 cores; 
   section 1c). In the head-to-head run the same verifier rejected 5
   rival answers on Netlib (`bench/results/head-to-head-netlib-8eaf18c.csv`, section 4a.1).
 - **Certificates of infeasibility.** 29 of 29 of Netlib's
-  infeasible LPs end with a Farkas certificate the verifier accepts (`bench/results/netlib-infeasible-557494c.csv`,
+  infeasible LPs end with a Farkas certificate the verifier accepts (`bench/results/netlib-infeasible-0aa5301.csv`,
   section 3a). A verdict with no certificate is not counted.
 - **Safe bounds.** 93 of 94 optimal Netlib answers carry a
   Neumaier-Shcherbina bound within 1e-6 of the objective, re-derived exactly by the
@@ -401,7 +401,7 @@ Behind mature solvers, and reported that way. On the MIPLIB 2017 easy instances 
 
 A Farkas certificate, written to the solution file and checked by the verifier: a verdict without a certificate is not counted as a pass. On Netlib's infeasible set 29 of 29 verdicts carry a certificate the verifier accepts.
 
-*Evidence: `bench/results/netlib-infeasible-557494c.csv` at `557494c`; `docs/BENCHMARKS.md` section 3a.*
+*Evidence: `bench/results/netlib-infeasible-0aa5301.csv` at `0aa5301`; `docs/BENCHMARKS.md` section 3a.*
 
 **Q14. What is a "safe bound", and why does it matter to a planner?**
 
