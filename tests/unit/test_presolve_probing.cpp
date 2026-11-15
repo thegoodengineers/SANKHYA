@@ -313,6 +313,7 @@ Options with_probing(bool on) {
   options.set_bool("log_to_console", false);
   options.set_bool("presolve", true);
   options.set_bool("presolve_probing", on);
+  options.set_double("presolve_probing_fixed_share", 0.0);  // off means off
   options.set_int("node_limit", 100000);
   return options;
 }

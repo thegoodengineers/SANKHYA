@@ -882,6 +882,13 @@ inline constexpr double kProbingMaxBound = 1e9;
 /// propagating, which only means it deduces less.
 inline constexpr std::int64_t kProbingWorkLimit = 20000000;
 inline constexpr std::int64_t kProbingProbeWorkLimit = 1000000;
+/// presolve_probing_fixed_share's default: with presolve_probing off, probing's integer
+/// bounds are written when it fixes at least this share of the integer columns. On MIPLIB 3
+/// only mitre reaches it (36%; misc03 is next at 9.4%), and the same-job A/B against main
+/// proved mitre on seed 0 and lost nothing on MIPLIB 3 or tier 1 (runs 43689623563 and
+/// 43694331338, option-ab-miplib3-probing-share-9605693.csv and
+/// option-ab-miplib-tier1-probing-share-9605693.csv).
+inline constexpr double kProbingFixedShare = 0.2;
 
 // ---------------------------------------------------------------------------------------
 // Spatial branch and bound for products of columns (#514, src/global/)

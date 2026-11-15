@@ -249,6 +249,8 @@ It is not a dead end, which is why this is recorded with its other half:
 Files: `bench/results/option-ab-miplib3-probing-66b38df.csv`, `option-ab-miplib2017-drayage-probing-9d479e5.csv` (the `arm` column).
 What would earn a default: the flow cover separator keeping its covers under the tightened bounds, then this A/B again.
 
+**What did become a default (#1264):** probing's integer bounds written only where probing fixes at least a fifth of the integer columns (`presolve_probing_fixed_share = 0.2`), the clique conflicts left off. On MIPLIB 3 only mitre reaches that share; the same-job A/B (run 43689623563, `option-ab-miplib3-probing-share-9605693.csv`) proved mitre on seed 0 and lost nothing, and tier 1 (run 43694331338, `option-ab-miplib-tier1-probing-share-9605693.csv`) was identical in its counts. Full probing as a default stays where this entry leaves it.
+
 ### PDHG feasibility polishing as a default (`pdhg_feasibility_polish`, #483, #1177)
 
 First-order feasibility polishing after Applegate, Hinder, Lu & Lubin (arXiv:2501.07018): PDHG on the zero-objective and the zero-bound problem, so a first-order answer is primal feasible to 1e-8 with its gap measured. Off: `pdhg_feasibility_polish = false`.

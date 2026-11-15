@@ -1698,9 +1698,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   // Model has nowhere to carry them. A probe that proves the model infeasible changes
   // nothing here: the engine proves it with a certificate this reduction does not build.
   //
-  // presolve_probing_fixed_share > 0 with presolve_probing off probes as well, and writes
-  // the fixings and integer bounds only when probing FIXED at least that share of the integer
-  // columns; the search's clique conflicts stay off. Probing as a default lost proofs on
+  // presolve_probing_fixed_share > 0 (the default, tol::kProbingFixedShare) with
+  // presolve_probing off probes as well, and writes the fixings and integer bounds only when
+  // probing FIXED at least that share of the integer columns; the search's clique conflicts
+  // stay off. Probing as a default lost proofs on
   // MIPLIB 3 (10teams, air05, bell5 on seed 2, #1244's run 43596402813), where it fixes
   // 0.3%, 0.7% and 5.2% of the integer columns, and it is what proves mitre, where it fixes
   // 36% (3,867 of 10,724 on seed 0; no other MIPLIB 3 model above misc03's 9.4%,
