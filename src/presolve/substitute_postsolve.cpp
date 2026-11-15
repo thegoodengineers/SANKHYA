@@ -8,6 +8,7 @@
 // each step reads only values the steps before it have already restored, and a chain of
 // substitutions needs nothing beyond what one substitution needs.
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -179,8 +180,22 @@ Solution undo_substitution(const SubstitutionResult& result, const Model& input,
     for (Index j = 0; j < n; ++j) {
       double d = input.col_cost[static_cast<std::size_t>(j)];
       const ColumnView view = input.matrix.column(j);
+      double terms = std::fabs(d);
       for (Index p = 0; p < view.size; ++p) {
-        d -= view.values[p] * y[static_cast<std::size_t>(view.rows[p])];
+        const double term = view.values[p] * y[static_cast<std::size_t>(view.rows[p])];
+        d -= term;
+        terms = std::max(terms, std::fabs(term));
+      }
+      // A BASIC COLUMN'S REDUCED COST IS ZERO by the definition of y (B^T y = c_B); what the
+      // difference above leaves is the rounding of its terms. On pds-20 that was 2^-36 on a
+      // column at 73,201 whose terms are of order 1e5, a product of 1.07e-6 that refuted the
+      // optimality claim. A remainder within kComplementarityRounding of the terms - the
+      // rounding allowance the complementarity measure already grants a slack - is reported
+      // as the zero it is; a larger one is kept, and the verifier's own d = c - A^T y check
+      // still judges the vector reported.
+      if (has_basis && out.col_status[static_cast<std::size_t>(j)] == BasisStatus::kBasic &&
+          std::fabs(d) <= tol::kComplementarityRounding * terms) {
+        d = 0.0;
       }
       out.col_dual[static_cast<std::size_t>(j)] = d;
     }
