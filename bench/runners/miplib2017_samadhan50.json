@@ -15,7 +15,7 @@
  "their_claim": {
   "proved": 8,
   "their_highs_proved": 20,
-  "grading": "their own: status optimal, objective compared with HiGHS's (obj_rel_diff), no published optima or independent verifier"
+  "grading": "a status of optimal, the objective compared with its own HiGHS run (obj_rel_diff); no published optima, no independent verifier"
  },
  "instances": {
   "30n20b8": {
