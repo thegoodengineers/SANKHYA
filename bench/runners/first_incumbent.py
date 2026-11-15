@@ -12,8 +12,8 @@ exactly as a tier run's is, and joins the rows into one CSV with an `arm` column
 prints, per instance and arm, the status, the time to the first feasible point and the
 objective, and per arm how many instances got a point.
 
-With --logs DIR it also solves each instance once more under the defaults at
-log_level=verbose and keeps the log there: what each heuristic did, in the solver's words.
+With --logs DIR it also solves each instance once more under the defaults (or the arm
+--log-arm names) at log_level=verbose and keeps the log there: what each heuristic did, in the solver's words.
 
     python bench/runners/first_incumbent.py --binary build/sankhya --time-limit 60 \\
         --arm heuristics=mip_heuristics=true --arm local-mip=mip_local_mip=true \\
@@ -72,6 +72,8 @@ def main() -> int:
                         help="only these groups: no-incumbent, bound-at-optimum, closed-root")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--logs", type=Path, default=None)
+    parser.add_argument("--log-arm", default="defaults",
+                        help="the arm whose options the --logs solves run with")
     parser.add_argument("--machine-kind", default=None)
     args = parser.parse_args()
 
@@ -131,7 +133,8 @@ def main() -> int:
         for name, entry in sorted(subset.items()):
             folder, suffix = DIRS[entry["set"]]
             model = REPO_ROOT / folder / f"{model_of[name]}{suffix}"
-            extra = [part for option in entry.get("options", []) for part in ("--option", option)]
+            extra = [part for option in entry.get("options", []) + dict(arms)[args.log_arm]
+                     for part in ("--option", option)]
             with (args.logs / f"{name}.log").open("w", encoding="utf-8") as log:
                 subprocess.run([str(args.binary), "solve", str(model), "--time-limit",
                                 str(args.time_limit), "--option", "mip_threads=1",
