@@ -41,6 +41,7 @@ on:
         options:
           - netlib-full
           - netlib-certified
+          - netlib-infeasible
           - maros-meszaros
           - head-to-head-maros-meszaros
           - head-to-head-netlib
@@ -229,6 +230,9 @@ jobs:
               python3 bench/runners/fetch_qplib.py --qcqp
               git checkout -- data/qplib/reference_qcqp.json ;;
             kennington) python3 bench/runners/fetch_kennington.py ;;
+            # Netlib's infeasible collection (#529): the fetch writes untracked models and
+            # the reference.json the -dirty check below leaves aside.
+            netlib-infeasible) python3 bench/runners/fetch_netlib_infeasible.py ;;
             miplib-tier1|fj-share-miplib) python3 bench/runners/fetch_miplib.py ;;
             # #1158: the fetch rewrites the tracked manifest; the committed one is put back.
             # The convex-cost refinery QPs: generated here, not committed (the largest is
@@ -296,6 +300,9 @@ jobs:
                 python3 bench/runners/netlib.py --binary build/sankhya --machine "$machine" \
                   --out "bench/results/certified-gap-netlib-full-${sha}.csv" \
                   ${limit[@]+"${limit[@]}"} "$@" ;;
+              netlib-infeasible)
+                python3 bench/runners/netlib_infeasible.py --binary build/sankhya \
+                  --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
               maros-meszaros)
                 python3 bench/runners/maros_meszaros.py --binary build/sankhya \
                   --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
