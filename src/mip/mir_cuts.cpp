@@ -264,9 +264,15 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
   }
 
   std::vector<char> used(static_cast<std::size_t>(model.num_rows()), 0);
+  // The rows marked in `used` by the aggregation in hand, so that it is cleared by
+  // unmarking those few and not by refilling the whole array (#1199): the refill was once
+  // per row and side, quadratic in the rows, and on rd-rplusc-21's 125,511 rows that alone
+  // outlasted the solve's time limit by a minute.
+  std::vector<Index> marked;
   for (Index i = 0; i < model.num_rows(); ++i) {
     const RowEntries& row = rows[static_cast<std::size_t>(i)];
     if (row.columns.empty() || !row_has_fractional[static_cast<std::size_t>(i)]) continue;
+    if (options.stop && options.stop()) break;
     const auto ui = static_cast<std::size_t>(i);
     // Both senses of the row are base inequalities: sum a x <= upper, and sum -a x <= -lower.
     for (int side = 0; side < 2; ++side) {
@@ -280,8 +286,10 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
       base.rhs = sign * bound;
       base.multipliers = {{i, sign}};
 
-      std::fill(used.begin(), used.end(), 0);
+      for (const Index r : marked) used[static_cast<std::size_t>(r)] = 0;
+      marked.clear();
       used[ui] = 1;
+      marked.push_back(i);
       std::optional<Cut> best;
       double best_violation = 0.0;
       int best_depth = 0;
@@ -314,6 +322,7 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
           BaseRow trial = base;
           if (!aggregate_row(model, rows, other, eliminate, &trial)) continue;
           used[uo] = 1;
+          marked.push_back(other);
           base = std::move(trial);
           extended = true;
         }

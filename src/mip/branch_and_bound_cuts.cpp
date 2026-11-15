@@ -233,6 +233,8 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
   // Covers from the model's own rows only: a cut row is valid but is not a knapsack of the
   // model, and the first round never had any.
   for (Index i = 0; i < model_rows; ++i) {
+    // The deadline, every 256 rows (#1199): this loop too is over every row of the model.
+    if ((i & 255) == 0 && solve_must_stop()) return candidates;
     auto cover = generate_knapsack_cover_cut(working_, i, &relaxation.col_value, &cover_stats);
     if (cover.has_value()) {
       Cut cut;
@@ -258,9 +260,13 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
         cover_stats.supported_rows, cover_stats.covers_found, cover_stats.exact_separations,
         cover_stats.cuts_returned, cover_stats.best_base_violation);
   }
+  // Between the separators the deadline is asked again (#1199): what was found so far is
+  // returned, and the filter marks what it has no time left to examine.
+  if (solve_must_stop()) return candidates;
   std::vector<Cut> gmi = generate_gmi_cuts(working_, relaxation,
                                            options_.get_bool("gmi_safety"), certificate_mode());
   candidates.insert(candidates.end(), gmi.begin(), gmi.end());
+  if (solve_must_stop()) return candidates;
   // Implied-bound cuts (#499): the line through a two-variable row's two binary cases,
   // tighter than the row when the continuous column's own bound caps one case.
   if (options_.get_bool("mip_implied_bound_cuts") && !certificate_mode()) {
@@ -274,6 +280,7 @@ std::vector<Cut> BranchAndBound::separate_root_candidates(const Solution& relaxa
                                              working_.col_upper, nullptr, mir_options());
     candidates.insert(candidates.end(), mir.begin(), mir.end());
   }
+  if (solve_must_stop()) return candidates;
   // Clique and {0,1/2}-Chvatal-Gomory cuts (#358): the families built for the pure-integer,
   // unit-coefficient covering and packing rows MIR cannot separate. Derived under the
   // GLOBAL bounds, so they hold at every node.

@@ -23,6 +23,7 @@
 // (Marchand & Wolsey 2001, sec. 3); the most violated cut over all depths is kept.
 #pragma once
 
+#include <functional>
 #include <vector>
 
 #include "cuts.hpp"
@@ -60,6 +61,11 @@ struct MirOptions {
   /// Certificate mode (#518): each plain MIR cut carries the split it rests on
   /// (cut_derivation.hpp). c-MIR cuts carry none.
   bool derive = false;
+  /// Asked before every base row (#1199); once true, separation ends with the cuts found
+  /// so far, which are the first of the cuts it would have returned. The loop is over every
+  /// row of the model, and on rd-rplusc-21 (125,511 rows) it ran a minute past a 60 s time
+  /// limit that nothing in it read. The search passes its own limits and interrupt.
+  std::function<bool()> stop;
 };
 
 [[nodiscard]] std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
