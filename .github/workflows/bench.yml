@@ -180,9 +180,12 @@ jobs:
           dpkg-query -W coinor-clp coinor-cbc glpk-utils
           pip list 2>/dev/null | grep -iE 'highspy|pyscipopt'
 
+      # A profile build carries debug information, so callgrind_annotate can attribute the
+      # instructions to source lines; -g does not change the code GCC generates.
       - name: Build
         run: |
-          scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF
+          debug=(); [[ "$SUITE" == *profile-nodes ]] && debug=(-DCMAKE_CXX_FLAGS=-g)
+          scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF ${debug[@]+"${debug[@]}"}
           cmake --build build -j
           build/sankhya version
 
@@ -190,7 +193,8 @@ jobs:
         if: startsWith(inputs.suite, 'ab-')
         working-directory: .base
         run: |
-          scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF
+          debug=(); [[ "$SUITE" == *profile-nodes ]] && debug=(-DCMAKE_CXX_FLAGS=-g)
+          scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF ${debug[@]+"${debug[@]}"}
           cmake --build build -j
           build/sankhya version
 
@@ -457,6 +461,8 @@ jobs:
                     tail -5 "$out/profile-$tag.log"
                     callgrind_annotate --inclusive=yes "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-inclusive.txt"
                     callgrind_annotate "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-self.txt"
+                    # Per source line, for the files that carry the cost.
+                    callgrind_annotate --auto=yes --threshold=99 "$out/callgrind-$tag.out"                       > "$out/profile-$tag-lines.txt" 2>&1 || true
                     head -45 "$out/profile-$tag-self.txt"
                   done
                 done ;;
