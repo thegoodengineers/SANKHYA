@@ -9,6 +9,11 @@ the status, the objective, the independent verifier's verdict on the certificate
 relative difference. A row is a PASS when the status is optimal, the verifier accepts the
 answer, and (if HiGHS ran) the two objectives agree to 1e-6 relative.
 
+The set is data/mittelmann/reference.json's twelve and the LPfeas-14 of
+bench/runners/lpfeas14.json (#759), sixteen in all: the ten both name are the same files, byte
+for byte. HiGHS's own run time is recorded beside its objective (`highs_seconds`), so the two
+solvers' times come from the same job on the same machine.
+
 These instances are far larger than Netlib's; the benchmark page allows 15,000 s each.
 This runner states the limit it used in every row and in the summary, reports the shifted
 geometric mean of the solve times over the instances that finished, and NAMES every one
@@ -25,6 +30,7 @@ import datetime
 import hashlib
 import json
 import math
+import os
 import platform
 import subprocess
 import sys
@@ -40,6 +46,10 @@ RESULTS_DIR = REPO_ROOT / "bench" / "results"
 VERIFIER = REPO_ROOT / "tools" / "verify_solution.py"
 SHIFT_SECONDS = 10.0  # Mittelmann's own convention for LP benchmarks
 AGREEMENT_TOLERANCE = 1e-6
+LPFEAS14 = Path(__file__).resolve().parent / "lpfeas14.json"
+# A solve still running this long past its own limit is killed and recorded `hung`, so one
+# overrun cannot hold a bench.yml job until the job's own timeout loses every row.
+HANG_MARGIN_SECONDS = 300.0
 
 CSV_COLUMNS = [
     "instance", "instance_sha256", "rows", "columns", "nonzeros", "status", "message",
@@ -48,6 +58,8 @@ CSV_COLUMNS = [
     "time_limit", "git_commit", "machine", "timestamp_utc", "solver_options",
     # The relative-KKT crossings, seconds then iterations (#486, kkt_crossings.py).
     *kkt_crossings.ALL_COLUMNS,
+    # HiGHS's own clock on the same file (highs_timed), blank when it did not run.
+    "highs_seconds", "memory_limit_gb",
 ]
 
 
@@ -111,8 +123,19 @@ def highs_objective(mps: Path, time_limit: float) -> tuple[float | None, str]:
     return value, status
 
 
+def memory_cap(gigabytes: float | None):
+    """The preexec_fn capping the solver's address space (RLIMIT_AS, POSIX only; miplib.py's
+    rule, #1199), so a model too big for the runner fails alone and the row says so instead
+    of the job going down with every result; None when there is no cap to set."""
+    if gigabytes is None or os.name != "posix":
+        return None
+    import resource  # noqa: PLC0415 - POSIX only
+    limit = int(gigabytes * 1024 ** 3)
+    return lambda: resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+
+
 def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
-            solver_options: list[str]) -> dict:
+            solver_options: list[str], memory_limit_gb: float | None = None) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         stats_path = Path(tmp) / "stats.json"
         sol_path = Path(tmp) / "solution.sol"
@@ -122,13 +145,21 @@ def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
         for option in solver_options:
             command += ["--option", option]
         started = time.perf_counter()
-        completed = subprocess.run(command, capture_output=True, text=True)
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True,
+                                       timeout=time_limit + HANG_MARGIN_SECONDS,
+                                       preexec_fn=memory_cap(memory_limit_gb))
+        except subprocess.TimeoutExpired:
+            return {"status": "hung", "wall_seconds": time.perf_counter() - started,
+                    "message": f"no exit within {time_limit + HANG_MARGIN_SECONDS:g} s"}
         wall = time.perf_counter() - started
         if not stats_path.exists():
             stderr = completed.stderr.strip()
             status = ("read_error" if "error:" in stderr
                       else "crashed" if completed.returncode not in (0, 1) else "no_output")
-            return {"status": status, "wall_seconds": wall, "message": stderr[:300]}
+            capped = (f" [exit {completed.returncode} under the {memory_limit_gb:g} GB "
+                      f"memory cap]" if memory_cap(memory_limit_gb) else "")
+            return {"status": status, "wall_seconds": wall, "message": stderr[:260] + capped}
         blob = json.loads(stats_path.read_text())
         result, model, effort = blob.get("result", {}), blob.get("model", {}), blob.get("effort", {})
         flat = {
@@ -166,6 +197,8 @@ def main() -> int:
     parser.add_argument("--no-verify", action="store_true")
     parser.add_argument("--no-highs", action="store_true", help="skip the HiGHS cross-check")
     parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE")
+    parser.add_argument("--memory-limit-gb", type=float, default=None, metavar="G",
+                        help="cap each solve's address space at G GB (POSIX), recorded per row")
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--machine", default=None,
                         help="machine tag for the CSV (default: the OS and architecture)")
@@ -175,7 +208,9 @@ def main() -> int:
     if not manifest_path.exists():
         raise SystemExit("no data/mittelmann/reference.json; run bench/runners/fetch_mittelmann.py")
     manifest = json.loads(manifest_path.read_text())
-    instances = manifest["instances"]
+    # LPfeas-14's entries for the four reference.json does not name; reference.json's win.
+    instances = {**json.loads(LPFEAS14.read_text(encoding="utf-8"))["instances"],
+                 **manifest["instances"]}
     names = args.instances or sorted(instances)
     binary = args.binary or default_binary()
     commit = git_commit(args.binary)
@@ -194,6 +229,15 @@ def main() -> int:
           f"{'HiGHS':>20s}{'rel diff':>10s}{'time':>9s}  ver  result")
     print("-" * 122)
     rows: list[dict] = []
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = args.out or (RESULTS_DIR / f"mittelmann-{commit}.csv")
+
+    def write_csv() -> None:  # after every instance, so a lost job keeps what it finished
+        with out_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
+            writer.writeheader()
+            writer.writerows(rows)
+
     for name in names:
         entry = instances.get(name)
         mps = DATA_DIR / f"{name}.mps"
@@ -201,11 +245,12 @@ def main() -> int:
             print(f"{name:22s} MISSING (run fetch_mittelmann.py)")
             continue
         sha = entry.get("mps_sha256") or sha256_of(mps)
-        flat = run_one(binary, mps, args.time_limit, not args.no_verify, args.solver_option)
+        flat = run_one(binary, mps, args.time_limit, not args.no_verify, args.solver_option,
+                       args.memory_limit_gb)
         ours = flat.get("objective")
-        highs_value, highs_status = (None, "")
+        highs_value, highs_status, highs_seconds = (None, "", None)
         if have_highs:
-            highs_value, highs_status = highs_objective(mps, args.time_limit)
+            highs_value, highs_status, highs_seconds = highs_timed(mps, args.time_limit)
         rel = ""
         agree = True
         if isinstance(ours, (int, float)) and highs_value is not None:
@@ -225,7 +270,10 @@ def main() -> int:
             "time_limit": args.time_limit, "git_commit": commit, "machine": machine,
             "timestamp_utc": timestamp, "solver_options": solver_options,
             **{k: flat.get(k, "") for k in kkt_crossings.ALL_COLUMNS},
+            "highs_seconds": highs_seconds if highs_seconds is not None else "",
+            "memory_limit_gb": args.memory_limit_gb if memory_cap(args.memory_limit_gb) else "",
         })
+        write_csv()
         ours_text = f"{ours:.12e}" if isinstance(ours, (int, float)) else "-"
         highs_text = (f"{highs_value:.12e}" if highs_value is not None else (highs_status or "-"))
         rel_text = f"{rel:.1e}" if rel != "" else "-"
@@ -247,12 +295,7 @@ def main() -> int:
     if failed:
         print(f"failed: {', '.join(failed)}")
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = args.out or (RESULTS_DIR / f"mittelmann-{commit}.csv")
-    with out_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
-        writer.writeheader()
-        writer.writerows(rows)
+    write_csv()
     print(f"wrote {out_path}")
     return 0 if rows and not failed else 1
 
