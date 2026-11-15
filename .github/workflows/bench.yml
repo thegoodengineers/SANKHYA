@@ -28,7 +28,8 @@
 # options="2000 mas76 pk1" (a node limit, then model names; a name=value token is a solver
 # option). ab-profile-nodes profiles base_ref's binary on the same solves. The artifact holds
 # each solve's inclusive and self-cost tables and the callgrind file; callgrind counts
-# instructions, so two runs compare exactly whatever the runner. It writes no CSV.
+# instructions, so two runs compare exactly whatever the runner. It writes no CSV. A model
+# given as a path, e.g. "1 data/netlib/pilot87.mps", profiles that LP's solve instead.
 
 name: bench
 
@@ -180,9 +181,12 @@ jobs:
           dpkg-query -W coinor-clp coinor-cbc glpk-utils
           pip list 2>/dev/null | grep -iE 'highspy|pyscipopt'
 
+      # A profile build carries debug information, so callgrind_annotate can attribute the
+      # instructions to source lines; -g does not change the code GCC generates.
       - name: Build
         run: |
-          scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF
+          debug=(); [[ "$SUITE" == *profile-nodes ]] && debug=(-DCMAKE_CXX_FLAGS=-g)
+          scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF ${debug[@]+"${debug[@]}"}
           cmake --build build -j
           build/sankhya version
 
@@ -190,7 +194,8 @@ jobs:
         if: startsWith(inputs.suite, 'ab-')
         working-directory: .base
         run: |
-          scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF
+          debug=(); [[ "$SUITE" == *profile-nodes ]] && debug=(-DCMAKE_CXX_FLAGS=-g)
+          scripts/configure.sh build Release -DSANKHYA_BUILD_TESTS=OFF ${debug[@]+"${debug[@]}"}
           cmake --build build -j
           build/sankhya version
 
@@ -242,7 +247,9 @@ jobs:
               python3 bench/refinery/generate.py --qp ;;
             miplib3|head-to-head-miplib3|profile-nodes|ab-profile-nodes)
               python3 bench/runners/fetch_miplib3.py
-              git checkout -- data/miplib3/manifest.json ;;
+              git checkout -- data/miplib3/manifest.json
+              # A profiled LP named by its path under data/kennington needs that set.
+              case " $OPTIONS " in *" data/kennington/"*) python3 bench/runners/fetch_kennington.py ;; esac ;;
             # #1199: options is the shard, K/N; the fetch writes its names beside the models.
             # options=samadhan50: the 50 models of bench/runners/miplib2017_samadhan50.json.
             miplib2017-bench)
@@ -470,11 +477,17 @@ jobs:
                 [ "$SUITE" = ab-profile-nodes ] && arms+=("base:.base/build/sankhya")
                 for model in "$@"; do
                   for arm in "${arms[@]}"; do
-                    tag="$model-${arm%%:*}"
-                    valgrind --tool=callgrind --callgrind-out-file="$out/callgrind-$tag.out"                       "${arm#*:}" solve "data/miplib3/$model.mps" --option mip_threads=1                       --option node_limit="$nodes" --option log_to_console=false ${extra[@]+"${extra[@]}"}                       > "$out/profile-$tag.log" 2>&1 || true
+                    # A name with a '/' is a model path (an LP from data/netlib or
+                    # data/kennington, for the LP engine's profile); the node limit is then
+                    # an unused option.
+                    file="data/miplib3/$model.mps"; [[ "$model" == */* ]] && file="$model"
+                    tag="$(basename "$model" .mps)-${arm%%:*}"
+                    valgrind --tool=callgrind --callgrind-out-file="$out/callgrind-$tag.out"                       "${arm#*:}" solve "$file" --option mip_threads=1                       --option node_limit="$nodes" --option log_to_console=false ${extra[@]+"${extra[@]}"}                       > "$out/profile-$tag.log" 2>&1 || true
                     tail -5 "$out/profile-$tag.log"
                     callgrind_annotate --inclusive=yes "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-inclusive.txt"
                     callgrind_annotate "$out/callgrind-$tag.out"                       | head -150 > "$out/profile-$tag-self.txt"
+                    # Per source line, for the files that carry the cost.
+                    callgrind_annotate --auto=yes --threshold=99 "$out/callgrind-$tag.out"                       > "$out/profile-$tag-lines.txt" 2>&1 || true
                     head -45 "$out/profile-$tag-self.txt"
                   done
                 done ;;
