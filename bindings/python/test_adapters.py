@@ -501,6 +501,142 @@ def test_pyomo_infeasible_is_reported() -> None:
           str(results.solver.termination_condition))
 
 
+# ---- Duals, and the README's own examples ------------------------------------------------
+#
+#   maximise 3x + 2y  s.t.  crude: x + y <= 4,  sulphur: x + 3y <= 9,  0 <= x <= 3,  y >= 0
+#
+# Worked by hand: x = 3 at its bound, y = 1, objective 11. Basic: y and the sulphur slack
+# (3), neither at a bound, so the duals are unique: crude 2 (one more unit of crude buys one
+# more y, worth 2), sulphur 0 (slack), x's reduced cost 3 - 2 = 1 (raising its bound by one
+# trades one y for one x), y's 0 (basic). In the model's own sense, as both layers report.
+_DUAL_ANSWER = {"objective": 11.0, "x": 3.0, "y": 1.0, "crude": 2.0, "sulphur": 0.0,
+                "dj_x": 1.0, "dj_y": 0.0}
+
+
+def _direct_dual_lp() -> "sankhya.Result":
+    model = sankhya.Model(maximize=True)
+    x = model.add_column(cost=3.0, upper=3.0, name="x")
+    y = model.add_column(cost=2.0, name="y")
+    model.add_row({x: 1.0, y: 1.0}, upper=4.0, name="crude")
+    model.add_row({x: 1.0, y: 3.0}, upper=9.0, name="sulphur")
+    return model.solve(log_to_console=False)
+
+
+def _check_duals(layer: str, got: dict[str, float]) -> None:
+    reference = _direct_dual_lp()
+    direct = {"objective": reference.objective, "x": reference.x[0], "y": reference.x[1],
+              "crude": reference.row_duals[0], "sulphur": reference.row_duals[1],
+              "dj_x": reference.reduced_costs[0], "dj_y": reference.reduced_costs[1]}
+    for key, expected in _DUAL_ANSWER.items():
+        check(near(got[key], expected) and near(direct[key], expected),
+              f"{layer} {key} is the hand-worked {expected} and the direct solve's",
+              f"{layer} {got[key]}, direct {direct[key]}")
+
+
+def _readme_example(tag: str) -> str:
+    """The python block that follows `<!-- example: TAG -->` in the top-level README."""
+    text = (Path(__file__).resolve().parents[2] / "README.md").read_text(encoding="utf-8")
+    after = text.split(f"<!-- example: {tag} -->", 1)[1]
+    return after.split("```python\n", 1)[1].split("```", 1)[0]
+
+
+def test_pulp_reports_lp_duals() -> None:
+    try:
+        import pulp
+    except ImportError as error:
+        skip("test_pulp_reports_lp_duals", str(error))
+        return
+    import sankhya.adapters.pulp_solver as sankhya_pulp
+
+    prob = pulp.LpProblem("duals", pulp.LpMaximize)
+    x = _add_var(pulp, prob, "x", lowBound=0, upBound=3)
+    y = _add_var(pulp, prob, "y", lowBound=0)
+    prob += 3 * x + 2 * y
+    prob += x + y <= 4, "crude"
+    prob += x + 3 * y <= 9, "sulphur"
+    prob.solve(sankhya_pulp.SANKHYA(msg=False))
+    _check_duals("PuLP", {"objective": pulp.value(prob.objective), "x": x.varValue,
+                          "y": y.varValue, "crude": prob.get_constraint_by_name("crude").pi,
+                          "sulphur": prob.get_constraint_by_name("sulphur").pi,
+                          "dj_x": x.dj, "dj_y": y.dj})
+
+
+def test_pyomo_reports_lp_duals() -> None:
+    try:
+        import pyomo.environ as pyo
+    except ImportError as error:
+        skip("test_pyomo_reports_lp_duals", str(error))
+        return
+    import sankhya.adapters.pyomo_plugin  # noqa: F401
+
+    m = pyo.ConcreteModel()
+    m.x = pyo.Var(bounds=(0, 3))
+    m.y = pyo.Var(bounds=(0, None))
+    m.obj = pyo.Objective(expr=3 * m.x + 2 * m.y, sense=pyo.maximize)
+    m.crude = pyo.Constraint(expr=m.x + m.y <= 4)
+    m.sulphur = pyo.Constraint(expr=m.x + 3 * m.y <= 9)
+    m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+    m.rc = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+    pyo.SolverFactory("sankhya").solve(m)
+    _check_duals("Pyomo", {"objective": pyo.value(m.obj), "x": pyo.value(m.x),
+                           "y": pyo.value(m.y), "crude": m.dual[m.crude],
+                           "sulphur": m.dual[m.sulphur], "dj_x": m.rc[m.x], "dj_y": m.rc[m.y]})
+
+
+def test_pyomo_milp_reports_no_duals() -> None:
+    """A MILP's duals are refused with Pyomo's own error, not reported as zeros."""
+    try:
+        import pyomo.environ as pyo
+        from pyomo.contrib.solver.common.util import NoDualsError
+    except ImportError as error:
+        skip("test_pyomo_milp_reports_no_duals", str(error))
+        return
+    from sankhya.adapters.pyomo_plugin import SankhyaSolver
+
+    m = pyo.ConcreteModel()
+    m.a = pyo.Var(domain=pyo.Binary)
+    m.obj = pyo.Objective(expr=m.a, sense=pyo.maximize)
+    m.c = pyo.Constraint(expr=2 * m.a <= 3)
+    results = SankhyaSolver().solve(m)
+    try:
+        results.solution_loader.get_duals()
+        refused = False
+    except NoDualsError:
+        refused = True
+    check(refused, "Pyomo MILP duals are refused with NoDualsError")
+
+
+def test_readme_pulp_example_runs() -> None:
+    try:
+        import pulp
+    except ImportError as error:
+        skip("test_readme_pulp_example_runs", str(error))
+        return
+    scope: dict = {}
+    exec(compile(_readme_example("pulp"), "README.md (PuLP example)", "exec"), scope)
+    prob, x, y = scope["prob"], scope["x"], scope["y"]
+    _check_duals("README PuLP example", {
+        "objective": pulp.value(prob.objective), "x": x.varValue, "y": y.varValue,
+        "crude": prob.get_constraint_by_name("crude").pi,
+        "sulphur": prob.get_constraint_by_name("sulphur").pi, "dj_x": x.dj, "dj_y": y.dj})
+
+
+def test_readme_pyomo_example_runs() -> None:
+    try:
+        import pyomo.environ as pyo
+    except ImportError as error:
+        skip("test_readme_pyomo_example_runs", str(error))
+        return
+    scope: dict = {}
+    exec(compile(_readme_example("pyomo"), "README.md (Pyomo example)", "exec"), scope)
+    m = scope["m"]
+    got = {"objective": pyo.value(m.obj), "x": pyo.value(m.x), "y": pyo.value(m.y),
+           "crude": m.dual[m.crude], "sulphur": m.dual[m.sulphur]}
+    for key in got:
+        check(near(got[key], _DUAL_ANSWER[key]), f"README Pyomo example {key}",
+              f"{got[key]} vs {_DUAL_ANSWER[key]}")
+
+
 def main() -> int:
     print(f"SANKHYA adapter bindings, against solver version {sankhya.version()}")
     try:

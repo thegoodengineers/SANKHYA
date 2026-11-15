@@ -566,6 +566,48 @@ and LP so the two readers can be checked against each other, and it exercises th
 features most likely to be misread - a `RANGES` entry on a `G` row, an equality row,
 `OBJSENSE MAX`, and `LO`/`UP` bounds.
 
+**From PuLP or Pyomo.** A model already written in either changes its solver call, not its
+model: `sankhya.adapters.pulp_solver` is a PuLP solver class and `sankhya.adapters.pyomo_plugin`
+registers `"sankhya"` with Pyomo's `SolverFactory`. Both build the model in memory through the
+Python bindings and return the status, objective and values, and on an LP solved to optimal the
+duals and reduced costs (PuLP's `pi` and `dj`, Pyomo's `dual` and `rc` suffixes). PuLP and
+Pyomo stay optional: `import sankhya` imports neither. CI runs both examples below, as written
+here, under PuLP 3 and 4 and Pyomo (`bindings/python/test_adapters.py`).
+
+<!-- example: pulp -->
+```python
+import pulp
+import sankhya.adapters.pulp_solver as sankhya_pulp
+
+prob = pulp.LpProblem("blend", pulp.LpMaximize)
+x = prob.add_variable("x", lowBound=0, upBound=3)
+y = prob.add_variable("y", lowBound=0)
+prob += 3 * x + 2 * y
+prob += x + y <= 4, "crude"
+prob += x + 3 * y <= 9, "sulphur"
+prob.solve(sankhya_pulp.SANKHYA(msg=False))
+print(pulp.value(prob.objective), x.varValue, y.varValue, prob.get_constraint_by_name("crude").pi)
+```
+
+<!-- example: pyomo -->
+```python
+import pyomo.environ as pyo
+import sankhya.adapters.pyomo_plugin  # registers "sankhya"
+
+m = pyo.ConcreteModel()
+m.x = pyo.Var(bounds=(0, 3))
+m.y = pyo.Var(bounds=(0, None))
+m.obj = pyo.Objective(expr=3 * m.x + 2 * m.y, sense=pyo.maximize)
+m.crude = pyo.Constraint(expr=m.x + m.y <= 4)
+m.sulphur = pyo.Constraint(expr=m.x + 3 * m.y <= 9)
+m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+pyo.SolverFactory("sankhya").solve(m)
+print(pyo.value(m.obj), pyo.value(m.x), pyo.value(m.y), m.dual[m.crude])
+```
+
+The `crude` dual is what one more unit of that limit adds to the objective; the test checks
+it against the hand-worked optimum, and both answers against a direct solve.
+
 `sankhya diagnose` answers "what am I about to solve?" before committing to it: size, the
 mix of row and column kinds, sparsity, the coefficient magnitude spread with a scaling-risk
 verdict, the problem class (and, for a QP, the convexity test's own answer), what presolve
