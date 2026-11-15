@@ -259,6 +259,20 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
             column_max = w.col_max[uj];
             value = w.row_values[ui][p];
             found = true;
+          } else if (w.fast && w.col_max_valid[uj] != 0) {
+            // The maximum is cached and is the scan's own number (active_column_max), so
+            // only the entry is looked for, and the scan stops at it: on pilot87 this scan
+            // read whole columns at every step and was a quarter of eliminate() (#1006's
+            // profile, re-taken with line numbers).
+            column_max = w.col_max[uj];
+            const std::vector<Index>& rows = w.col_rows[uj];
+            for (std::size_t t = 0; t < rows.size(); ++t) {
+              if (rows[t] != i) continue;
+              if (w.row_active[static_cast<std::size_t>(i)] == 0) break;
+              value = w.col_values[uj][t];
+              found = true;
+              break;
+            }
           } else {
             for (std::size_t t = 0; t < w.col_rows[uj].size(); ++t) {
               const Index r = w.col_rows[uj][t];
@@ -519,8 +533,14 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
       // dropped here, as the gather dropped them).
       double pivot_row_value = 0.0;
       bool pivot_row_present = false;
-      w.old_rows.clear();
-      w.old_values.clear();
+      // Written by index into storage that only grows, so the pass has no push_back's
+      // capacity test per entry; the kept entries' maximum is taken on the way.
+      if (w.old_rows.size() < rows.size()) {
+        w.old_rows.resize(rows.size());
+        w.old_values.resize(rows.size());
+      }
+      std::size_t old_count = 0;
+      double old_max = 0.0;
       for (std::size_t t = 0; t < rows.size(); ++t) {
         const Index i = rows[t];
         const auto ui = static_cast<std::size_t>(i);
@@ -535,8 +555,10 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
           w.acc_present[ui] = 1;
           continue;
         }
-        w.old_rows.push_back(i);
-        w.old_values.push_back(values[t]);
+        w.old_rows[old_count] = i;
+        w.old_values[old_count] = values[t];
+        old_max = std::max(old_max, std::fabs(values[t]));
+        ++old_count;
       }
 
       if (!pivot_row_present || pivot_row_value == 0.0) {
@@ -592,11 +614,12 @@ bool SparseLu::eliminate(Workspace& w, double pivot_tolerance, double threshold,
         values.push_back(value);
         column_max = std::max(column_max, std::fabs(value));
       }
-      // Then the rows the pivot column did not touch, unchanged and in their old order.
-      rows.insert(rows.end(), w.old_rows.begin(), w.old_rows.end());
-      values.insert(values.end(), w.old_values.begin(), w.old_values.end());
-      for (const double value : w.old_values)
-        column_max = std::max(column_max, std::fabs(value));
+      // Then the rows the pivot column did not touch, unchanged and in their old order. The
+      // maximum is order-free, so taking theirs during the first pass changes nothing.
+      const auto old_end = static_cast<std::ptrdiff_t>(old_count);
+      rows.insert(rows.end(), w.old_rows.begin(), w.old_rows.begin() + old_end);
+      values.insert(values.end(), w.old_values.begin(), w.old_values.begin() + old_end);
+      column_max = std::max(column_max, old_max);
       if (w.fast) {
         w.col_max[uj] = column_max;
         w.col_max_valid[uj] = 1;
