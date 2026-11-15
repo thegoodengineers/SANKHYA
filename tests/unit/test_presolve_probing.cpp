@@ -27,6 +27,7 @@
 #include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/tolerances.hpp"
 
 namespace sankhya {
 namespace {
@@ -331,6 +332,45 @@ TEST(PresolveProbing, TheOptionReachesPresolveAndOffMeansOff) {
   ASSERT_EQ(without.status, SolveStatus::kOptimal) << without.message;
   EXPECT_NEAR(with.objective, without.objective, 1e-9);
   EXPECT_LE(with.primal_infeasibility, 1e-9);
+}
+
+TEST(PresolveProbing, ContinuousBoundsAreWrittenOnlyWhenAsked) {
+  // y binary, x >= 0 continuous: x - 5 y <= 0 and x + 4 y <= 7. The rows alone give x <= 5;
+  // probing gives x <= 3 (y = 0: x <= 0; y = 1: x <= 7 - 4). By default that bound on the
+  // continuous column is not written (#1158: it changed the flow covers on modglob), so the
+  // reduced model's x has the bound it has without probing; with
+  // presolve_probing_continuous_bounds it has probing's. The optimum is the same all three
+  // ways.
+  Model model =
+      build({{-5, 1}, {4, 1}}, {-kInf, -kInf}, {0.0, 7.0}, {0, 0}, {1, kInf}, {true, false});
+  model.col_cost = {0, -1};
+  Logger logger(nullptr);
+  const auto upper_of_x = [](const presolve::Result& result) {
+    for (std::size_t j = 0; j < result.col_to_original.size(); ++j) {
+      if (result.col_to_original[j] == 1) return result.model.col_upper[j];
+    }
+    return std::numeric_limits<double>::quiet_NaN();
+  };
+  Options written = with_probing(true);
+  written.set_bool("presolve_probing_continuous_bounds", true);
+  const double off = upper_of_x(presolve::presolve(model, with_probing(false), logger));
+  const double integer_only = upper_of_x(presolve::presolve(model, with_probing(true), logger));
+  const double all = upper_of_x(presolve::presolve(model, written, logger));
+  ASSERT_FALSE(std::isnan(off)) << "presolve removed x: the model no longer tests this";
+  EXPECT_EQ(integer_only, off) << "probing wrote a bound on a continuous column by default";
+  EXPECT_LT(all, off) << "with the option, probing's bound on x was not written";
+  EXPECT_GE(all, 3.0 - 1e-9) << "a bound tighter than probing can deduce";
+  // The optimum to the primal feasibility tolerance, not tighter: probing loosens a continuous
+  // bound by a small margin, and a point feasible to 1e-7 on x + 4 y <= 7 can sit that far
+  // past x = 3 (CI: -3.000000013 on one of the three, a row violation of 1.3e-8).
+  const char* names[] = {"probing off", "probing, integer bounds only", "probing, all bounds"};
+  const Options sets[] = {with_probing(false), with_probing(true), written};
+  for (int k = 0; k < 3; ++k) {
+    const Solution s = solve(model, sets[k]);
+    ASSERT_EQ(s.status, SolveStatus::kOptimal) << names[k] << ": " << s.message;
+    EXPECT_NEAR(s.objective, -3.0, tol::kPrimalFeasibility) << names[k];
+    EXPECT_LE(s.primal_infeasibility, tol::kPrimalFeasibility) << names[k];
+  }
 }
 
 bool agree(const oracle::OracleResult& exact, const Solution& got, std::string* why) {

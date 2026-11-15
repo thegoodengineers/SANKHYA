@@ -1706,8 +1706,19 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           "  presolve: probing found both values of a binary infeasible; the model "
           "is left for the engine to prove infeasible");
     } else {
-      reduced.col_lower = probing.col_lower;
-      reduced.col_upper = probing.col_upper;
+      // Every deduction is implied by the model on its own, so any subset may be written.
+      // By default only the integer columns' are (presolve_probing_continuous_bounds): a
+      // finite bound probing puts on a continuous column changes which flow cover the
+      // separator returns for a row, and on modglob that turned its 58 round-1 covers, all
+      // from aggregated rows, into 48 from single rows and lost the proof on every seed
+      // (#1158, bench/results/option-ab-miplib3-probing-66b38df.csv).
+      const bool continuous = options.get_bool("presolve_probing_continuous_bounds");
+      for (Index j = 0; j < reduced.num_cols(); ++j) {
+        const auto u = static_cast<std::size_t>(j);
+        if (!continuous && reduced.col_type[u] != VarType::kInteger) continue;
+        reduced.col_lower[u] = probing.col_lower[u];
+        reduced.col_upper[u] = probing.col_upper[u];
+      }
     }
     if (probing.work_limit_reached) {
       logger.verbose("  presolve: probing stopped at its work limit after {} binaries",

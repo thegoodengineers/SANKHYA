@@ -411,6 +411,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"presolve_probing_continuous_bounds",
+                 OptionType::Bool,
+                 false,
+                 "With presolve_probing: also write the bounds probing deduces on continuous "
+                 "columns into the reduced model. Off, only the integer columns' fixings and "
+                 "bounds are written. A finite bound on a continuous column changes which "
+                 "flow cover the separator returns for a row: on modglob it took the 58 "
+                 "round-1 covers, all from aggregated rows, to 48 from single rows, and the "
+                 "proof with them on every seed (#1158).",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"presolve_dominated_columns",
                  OptionType::Bool,
                  false,
