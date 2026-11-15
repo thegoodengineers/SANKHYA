@@ -74,9 +74,11 @@ as regenerable backups.
 | Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-d1d0d52.csv` | `d1d0d52` |
 | MIPLIB 3 MILP | 65 | 60 s | 42 / 41 / 42 / 0 | 52 / 49 / 52 / 0 | 50 / 45 / 50 / 0 | 49 / 48 / 49 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-d1d0d52.csv` | `d1d0d52` |
 | Stress set LP | 126 | 60 s | 115 / 115 / 117 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-7119598.csv` | `7119598` |
-| Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 102 / 94 / 28 / 8 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-e4eb1cf.csv` | `e4eb1cf` |
+| Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 101 / 94 / 28 / 7 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-4981e56.csv` | `4981e56` |
 
 Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 49, CBC 48, SCIP 45, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 115, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58, HiGHS 28.
+
+**HiGHS off its defaults, `qp_regularization_value = 0`** (same job, same files, not the HiGHS column above): at its defaults HiGHS solves a regularized QP (`qp_regularization_value = 1e-7` in its manual) and its point misses the stationarity of the QP as stated by 1e-7 |x_j|; with the regularization off it reads **106 / 103 / 84 / 3**, 84 matched and verified, of 138; not optimal: 1 `crashed`, 11 `solve error`, 20 `time_limit`.
 
 Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
 <!-- scoreboard:end -->
