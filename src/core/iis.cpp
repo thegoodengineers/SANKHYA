@@ -5,8 +5,8 @@
 // sets in linear programs", ORSA Journal on Computing 3(2) (1991), pp. 157-168.
 //
 // The algorithm is O(k) solves where k is the cardinality of the Farkas certificate support
-// (the rows and column bounds the engine named). In practice k << m, so each re-solve is on
-// a small, quickly-decided infeasible system.
+// (the rows and column bounds the engine named), fewer with the sensitivity filter below,
+// which drops at once every element an infeasible trial's own certificate leaves out.
 
 #include "core/iis.hpp"
 
@@ -75,6 +75,29 @@ bool witness_holds(const Model& model, const std::vector<IisElement>& iis, std::
     if (e == self ? v <= tolerance : v > tolerance) return false;
   }
   return true;
+}
+
+/// The aggregate d = A'y of a Farkas vector, with the zero of each column judged against the
+/// terms its sum was built from: the rule farkas_proves_infeasible() applies (#762).
+void aggregate(const Model& model, const std::vector<double>& y, std::vector<double>* d,
+               std::vector<double>* threshold) {
+  const Index n = model.num_cols();
+  double largest_y = 0.0;
+  for (const double v : y) largest_y = std::max(largest_y, std::fabs(v));
+  d->assign(static_cast<std::size_t>(n), 0.0);
+  threshold->assign(static_cast<std::size_t>(n), 0.0);
+  for (Index j = 0; j < n; ++j) {
+    const ColumnView col = model.matrix.column(j);
+    const auto u = static_cast<std::size_t>(j);
+    for (Index k = 0; k < col.size; ++k) {
+      const double multiplier = y[static_cast<std::size_t>(col.rows[k])];
+      (*d)[u] += col.values[k] * multiplier;
+      if (multiplier != 0.0) {
+        (*threshold)[u] =
+            std::max((*threshold)[u], tol::kZeroDrop * largest_y * std::fabs(col.values[k]));
+      }
+    }
+  }
 }
 
 /// A witness for `self` from the IIS `sub` with `self` removed and every other element pulled
@@ -146,22 +169,9 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
   // Zero is judged column by column against the terms each sum was built from, the rule
   // farkas_proves_infeasible() applies (#762), so every bound the verified certificate leans
   // on is a candidate here.
-  double largest_y = 0.0;
-  for (const double v : y) largest_y = std::max(largest_y, std::fabs(v));
-  std::vector<double> d(static_cast<std::size_t>(n), 0.0);
-  std::vector<double> threshold(static_cast<std::size_t>(n), 0.0);
-  for (Index j = 0; j < n; ++j) {
-    const ColumnView col = model.matrix.column(j);
-    const auto u = static_cast<std::size_t>(j);
-    for (Index k = 0; k < col.size; ++k) {
-      const double multiplier = y[static_cast<std::size_t>(col.rows[k])];
-      d[u] += col.values[k] * multiplier;
-      if (multiplier != 0.0) {
-        threshold[u] =
-            std::max(threshold[u], tol::kZeroDrop * largest_y * std::fabs(col.values[k]));
-      }
-    }
-  }
+  std::vector<double> d;
+  std::vector<double> threshold;
+  aggregate(model, y, &d, &threshold);
 
   std::vector<bool> row_in(static_cast<std::size_t>(m), false);
   std::vector<bool> col_lo_in(static_cast<std::size_t>(n), false);
@@ -262,6 +272,52 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
     return false;
   };
 
+  // CHINNECK'S SENSITIVITY FILTER (Chinneck, Feasibility and Infeasibility in Optimization,
+  // Springer 2008, ch. 6). A trial that ends infeasible carries its own Farkas certificate of
+  // the working system less the candidate, and every working element that certificate does
+  // not lean on can go at once: the system without them is infeasible by the same vector.
+  // Checked, not assumed - the pruned system must be proved infeasible by it before the
+  // pruning is kept. The deletion filter alone takes one solve per candidate, and a dense
+  // starting certificate (an elastic LP's duals, as on Netlib gran) makes that thousands.
+  const auto prune = [&](const Solution& trial) {
+    if (trial.status != SolveStatus::kInfeasible ||
+        trial.farkas_dual.size() != static_cast<std::size_t>(m)) {
+      return;
+    }
+    const std::vector<double>& w = trial.farkas_dual;
+    std::vector<double> dw;
+    std::vector<double> dw_threshold;
+    aggregate(sub, w, &dw, &dw_threshold);
+    Model pruned = sub;
+    std::vector<bool> rows = row_in;
+    std::vector<bool> lows = col_lo_in;
+    std::vector<bool> highs = col_hi_in;
+    for (Index i = 0; i < m; ++i) {
+      const auto u = static_cast<std::size_t>(i);
+      if (rows[u] && w[u] == 0.0) {
+        rows[u] = false;
+        pruned.row_lower[u] = -kInfinity;
+        pruned.row_upper[u] = +kInfinity;
+      }
+    }
+    for (Index j = 0; j < n; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      if (lows[u] && !(dw[u] < -dw_threshold[u])) {
+        lows[u] = false;
+        pruned.col_lower[u] = -kInfinity;
+      }
+      if (highs[u] && !(dw[u] > dw_threshold[u])) {
+        highs[u] = false;
+        pruned.col_upper[u] = +kInfinity;
+      }
+    }
+    if (!farkas_proves_infeasible(pruned, w)) return;
+    sub = std::move(pruned);
+    row_in = std::move(rows);
+    col_lo_in = std::move(lows);
+    col_hi_in = std::move(highs);
+  };
+
   // Row candidates.
   for (Index i = 0; i < m; ++i) {
     const auto u = static_cast<std::size_t>(i);
@@ -276,6 +332,7 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
     const Solution trial = solve(sub, sub_opts);
     if (is_redundant(trial, "row", u)) {
       row_in[u] = false;
+      prune(trial);
     } else {
       sub.row_lower[u] = saved_lo;
       sub.row_upper[u] = saved_hi;
@@ -294,6 +351,7 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
     const Solution trial = solve(sub, sub_opts);
     if (is_redundant(trial, "col_lo", u)) {
       col_lo_in[u] = false;
+      prune(trial);
     } else {
       sub.col_lower[u] = saved_lo;
       if (claims_a_point(trial.status)) lo_witness[u] = trial.col_value;
@@ -311,6 +369,7 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
     const Solution trial = solve(sub, sub_opts);
     if (is_redundant(trial, "col_hi", u)) {
       col_hi_in[u] = false;
+      prune(trial);
     } else {
       sub.col_upper[u] = saved_hi;
       if (claims_a_point(trial.status)) hi_witness[u] = trial.col_value;
