@@ -785,7 +785,21 @@ class Simplex {
   /// passed over by choose_leaving_row() until the next refactorization (see the loop).
   std::vector<char> dual_row_rejected_;
   Count dual_rows_rejected_now_ = 0;  ///< how many are set, since the last refactorization
-  Count dual_row_rejections_ = 0;     ///< over the whole solve, for the log
+  /// HYPER-SPARSE CHUZR (Hall and McKinnon 2005, sec. 4). A full pass over the infeasibility
+  /// list keeps its kChuzrKept best eligible slots and the score of the next one; until the
+  /// next full pass, a slot's score can change only if note_slot() saw it (its value or its
+  /// weight moved, both on alpha's support and the leaving slot) or the whole state was reset
+  /// (invalidate_chuzr()). So the best of the kept slots and the noted ones, when its score is
+  /// strictly above that next score, is the full pass's choice; otherwise the full pass runs.
+  static constexpr std::size_t kChuzrKept = 16;
+  std::array<Index, kChuzrKept> chuzr_kept_{};
+  std::size_t chuzr_kept_count_ = 0;
+  double chuzr_bound_ = 0.0;        ///< the best score among the eligible slots not kept
+  bool chuzr_valid_ = false;        ///< the kept slots and the bound describe the list
+  std::vector<Index> chuzr_noted_;  ///< slots note_slot() saw since the last full pass
+  std::vector<char> chuzr_noted_mark_;
+  void invalidate_chuzr();
+  Count dual_row_rejections_ = 0;  ///< over the whole solve, for the log
   Count dual_weight_resets_ = 0;
 };
 

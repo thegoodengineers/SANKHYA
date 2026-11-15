@@ -250,6 +250,7 @@ void Simplex::remove_artificial_bounds() {
 // -----------------------------------------------------------------------------------------
 
 void Simplex::reset_dual_weights() {
+  invalidate_chuzr();  // every weight moves
   dual_weight_.assign(static_cast<std::size_t>(m_), 1.0);
   ++dual_weight_resets_;
   // Steepest edge starts from the truth where that is affordable (#411): the slack basis
@@ -260,6 +261,7 @@ void Simplex::reset_dual_weights() {
 }
 
 void Simplex::compute_exact_dual_weights() {
+  invalidate_chuzr();
   dual_weight_ = exact_dual_weights_for_testing();
 }
 
@@ -288,7 +290,14 @@ double Simplex::slot_infeasibility(Index slot) const {
   return 0.0;
 }
 
+void Simplex::invalidate_chuzr() {
+  chuzr_valid_ = false;
+  for (const Index slot : chuzr_noted_) chuzr_noted_mark_[static_cast<std::size_t>(slot)] = 0;
+  chuzr_noted_.clear();
+}
+
 void Simplex::rebuild_infeasible_list() {
+  invalidate_chuzr();  // every slot is noted below; the next pricing is a full pass
   infeasible_slots_.clear();
   slot_listed_.assign(static_cast<std::size_t>(m_), 0);
   slot_infeasibility_.assign(static_cast<std::size_t>(m_), 0.0);
@@ -306,6 +315,10 @@ void Simplex::note_slot(Index slot) {
   const auto s = static_cast<std::size_t>(slot);
   const double infeasibility = slot_infeasibility(slot);
   slot_infeasibility_[s] = infeasibility;
+  if (chuzr_valid_ && chuzr_noted_mark_[s] == 0) {
+    chuzr_noted_mark_[s] = 1;
+    chuzr_noted_.push_back(slot);
+  }
   if (slot_listed_[s] != 0 || infeasibility == 0.0) return;
   slot_listed_[s] = 1;
   infeasible_slots_.push_back(slot);
@@ -323,6 +336,62 @@ Index Simplex::choose_leaving_row() {
   Index best = -1;
   double best_score = 0.0;
   const bool any_rejected = dual_rows_rejected_now_ > 0;
+  const auto consider = [&](Index slot) {
+    const auto s = static_cast<std::size_t>(slot);
+    const double infeasibility = slot_infeasibility_[s];
+    if (infeasibility == 0.0 || (any_rejected && dual_row_rejected_[s] != 0)) return;
+    const double score = infeasibility * infeasibility / dual_weight_[s];
+    if (score > best_score || (score == best_score && best >= 0 && slot < best)) {
+      best_score = score;
+      best = slot;
+    }
+  };
+  // The kept slots and the noted ones (see chuzr_kept_), when the noted ones are few. A slot
+  // in both is weighed twice, which picks nothing different.
+  if (chuzr_valid_ && 4 * chuzr_noted_.size() < infeasible_slots_.size()) {
+    for (std::size_t k = 0; k < chuzr_kept_count_; ++k) consider(chuzr_kept_[k]);
+    for (const Index slot : chuzr_noted_) consider(slot);
+    if (best >= 0 && best_score > chuzr_bound_) {
+#ifndef NDEBUG
+      // The debug builds hold the shortcut to the full pass's answer on every pricing.
+      const Index shortcut = best;
+      best = -1;
+      best_score = 0.0;
+      for (const Index slot : infeasible_slots_) consider(slot);
+      assert(best == shortcut && "hyper-sparse CHUZR chose another row than the full pass");
+#endif
+      return best;
+    }
+    best = -1;
+    best_score = 0.0;
+  }
+  // The full pass, keeping the kChuzrKept best eligible slots (score descending, ties to the
+  // lower slot) and the score of the best one not kept.
+  std::array<double, kChuzrKept> kept_score{};
+  chuzr_kept_count_ = 0;
+  chuzr_bound_ = 0.0;
+  const auto keep = [&](Index slot, double score) {
+    std::size_t at = chuzr_kept_count_;
+    while (at > 0 && (score > kept_score[at - 1] ||
+                      (score == kept_score[at - 1] && slot < chuzr_kept_[at - 1]))) {
+      --at;
+    }
+    if (at == kChuzrKept) {
+      chuzr_bound_ = std::max(chuzr_bound_, score);
+      return;
+    }
+    if (chuzr_kept_count_ == kChuzrKept) {
+      chuzr_bound_ = std::max(chuzr_bound_, kept_score[kChuzrKept - 1]);
+    } else {
+      ++chuzr_kept_count_;
+    }
+    for (std::size_t k = chuzr_kept_count_ - 1; k > at; --k) {
+      chuzr_kept_[k] = chuzr_kept_[k - 1];
+      kept_score[k] = kept_score[k - 1];
+    }
+    chuzr_kept_[at] = slot;
+    kept_score[at] = score;
+  };
   std::size_t kept = 0;
   for (std::size_t at = 0; at < infeasible_slots_.size(); ++at) {
     const Index slot = infeasible_slots_[at];
@@ -342,8 +411,14 @@ Index Simplex::choose_leaving_row() {
       best_score = score;
       best = slot;
     }
+    keep(slot, score);
   }
   infeasible_slots_.resize(kept);
+  invalidate_chuzr();
+  if (chuzr_noted_mark_.size() != static_cast<std::size_t>(m_)) {
+    chuzr_noted_mark_.assign(static_cast<std::size_t>(m_), 0);
+  }
+  chuzr_valid_ = true;
   return best;
 }
 
@@ -525,6 +600,7 @@ void Simplex::update_dual_weights(Index leaving_slot, double pivot) {
     if (!healthy) {
       // A weight that is not a number is not a weight: back to Devex's start of 1 for
       // every row, counted as a reset, rather than pricing on it.
+      invalidate_chuzr();
       dual_weight_.assign(static_cast<std::size_t>(m_), 1.0);
       ++dual_weight_resets_;
     }
