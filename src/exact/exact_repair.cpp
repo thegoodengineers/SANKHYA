@@ -20,7 +20,6 @@
 
 #include "exact/exact_basis.hpp"
 #include "exact/rational.hpp"
-#include "sankhya/certificate.hpp"
 #include "sankhya/types.hpp"
 
 namespace sankhya::exact {
@@ -150,25 +149,19 @@ class Repair {
       // The claim is checked on its own terms before it is made: row p of B^{-1} [A | -I]
       // is an exact consequence of the rows, x_p + sum_k alpha_k x_k = 0, and over every
       // variable's own bounds its left side must be unable to reach 0 (a Farkas proof).
-      const int side = row_excludes_zero(p);
-      if (side == 0) {
+      if (!row_excludes_zero(p)) {
         throw Declined{fmt::format(
             "the dual simplex found no entering variable for variable {}, but the tableau "
             "row does not prove infeasibility",
             leaving)};
       }
       // The multipliers themselves, e_p^T B^{-1} by row, go to the .sol so that
-      // tools/verify_solution.py can re-derive the proof with its own arithmetic. They are
-      // oriented as farkas_dual is (include/sankhya/certificate.hpp): the row is negated
-      // when its LEAST value is the one above 0, so its greatest value is below 0.
+      // tools/verify_solution.py can re-derive the proof with its own arithmetic.
       std::vector<Rational> w;
       (void)basis_.tableau_row(problem_, p, &w);
-      result_.farkas_dual.assign(w.size(), 0.0);
       for (Sz i = 0; i < w.size(); ++i) {
-        if (w[i].is_zero()) continue;
-        if (side > 0) w[i] = -w[i];
-        result_.farkas_row.emplace_back(static_cast<Index>(i), w[i].to_string());
-        result_.farkas_dual[i] = w[i].to_double();
+        if (!w[i].is_zero())
+          result_.farkas_row.emplace_back(static_cast<Index>(i), w[i].to_string());
       }
       throw Failed{fmt::format(
           "the model as read into doubles is exactly infeasible: the tableau row of variable "
@@ -185,8 +178,8 @@ class Repair {
   /// Whether x_p + sum over nonbasic k of alpha_pk x_k, which the rows force to be 0, has a
   /// range over the variables' bounds that excludes 0: the least and greatest values of each
   /// term are taken at its bounds, an infinite bound with a nonzero coefficient leaving that
-  /// side unbounded. +1 when the least value is above 0, -1 when the greatest is below, else 0.
-  [[nodiscard]] int row_excludes_zero(Sz p) const {
+  /// side unbounded.
+  [[nodiscard]] bool row_excludes_zero(Sz p) const {
     std::vector<std::pair<Sz, Rational>> terms = basis_.tableau_row(problem_, p);
     terms.emplace_back(static_cast<Sz>(basis_.basic[p]), Rational(1));
     Rational least(0);
@@ -207,8 +200,7 @@ class Repair {
         greatest_finite = false;
       }
     }
-    if (least_finite && least.sign() > 0) return 1;
-    return greatest_finite && greatest.sign() < 0 ? -1 : 0;
+    return (least_finite && least.sign() > 0) || (greatest_finite && greatest.sign() < 0);
   }
 
   /// One primal simplex step on the dual infeasible nonbasic variable q (Bland): a pivot, or
@@ -300,12 +292,37 @@ void guarded(RepairResult* result, double seconds, Body&& body) {
   } catch (const ExactBudgetExceeded&) {
     result->verdict = ExactVerdict::kDeclined;
     result->message = fmt::format(
-        "the exact computation ran past its {} s budget (option exact_seconds)", seconds);
+        "the exact repair ran past its {} s budget (option exact_seconds)", seconds);
   } catch (const RationalOverflow&) {
     result->verdict = ExactVerdict::kDeclined;
     result->message = "no exact rational result: a non-finite value in the data";
   }
   result->dual_pivots = result->primal_pivots = result->bound_flips = result->shifted_costs = 0;
+}
+
+/// Whether row multipliers y prove `problem`'s model infeasible, exactly: every feasible
+/// point satisfies (A^T y) x >= S, S the sum of y_i times row i's lower bound (y_i > 0) or
+/// upper bound (y_i < 0), and over the column bounds (A^T y) x is at most M. M < S is the
+/// proof; a multiplier on a missing row side, or an aggregate unbounded over the box, is not.
+bool farkas_holds(const Problem& problem, const std::vector<Rational>& y) {
+  const auto n = static_cast<Sz>(problem.n);
+  Rational required(0);
+  for (Sz i = 0; i < y.size(); ++i) {
+    if (y[i].is_zero()) continue;
+    const bool lower = y[i].sign() > 0;
+    if (!(lower ? problem.has_lower[n + i] : problem.has_upper[n + i])) return false;
+    required += y[i] * (lower ? problem.lower[n + i] : problem.upper[n + i]);
+  }
+  Rational reachable(0);
+  for (Sz j = 0; j < n; ++j) {
+    Rational d(0);
+    for (const auto& [row, a] : problem.columns[j]) d += y[static_cast<Sz>(row)] * a;
+    if (d.is_zero()) continue;
+    const bool upper = d.sign() > 0;
+    if (!(upper ? problem.has_upper[j] : problem.has_lower[j])) return false;
+    reachable += d * (upper ? problem.upper[j] : problem.lower[j]);
+  }
+  return reachable < required;
 }
 
 }  // namespace
@@ -402,78 +419,63 @@ bool apply_exact_repair(const Model& model, Solution* solution, Logger& logger,
   return true;
 }
 
-RepairResult prove_infeasible_exact(const Model& model, const Solution& solution,
-                                    double seconds) {
+RepairResult prove_infeasible_exact(const Model& model, const Model& elastic,
+                                    const Solution& elastic_solution, double seconds) {
   RepairResult result;
   const Deadline deadline(seconds);
   if (model.hessian.num_nonzeros() > 0 || model.num_integer_columns() > 0) {
     result.message = "the exact phase 1 covers plain LPs only";
     return result;
   }
+  if (elastic_solution.status != SolveStatus::kOptimal ||
+      elastic_solution.col_status.size() != static_cast<Sz>(elastic.num_cols()) ||
+      elastic_solution.row_status.size() != static_cast<Sz>(elastic.num_rows())) {
+    result.message = "the elastic LP did not end optimal with a basis";
+    return result;
+  }
   guarded(&result, seconds, [&] {
-    Problem problem(model);
-    for (Rational& cost : problem.cost) cost = Rational(0);
-    const auto n = static_cast<Sz>(model.num_cols());
-    const auto m = static_cast<Sz>(model.num_rows());
+    Problem problem(elastic);
     Basis basis;
-    const bool reported = solution.col_status.size() == n && solution.row_status.size() == m &&
-                          solution.col_value.size() == n && solution.row_activity.size() == m;
-    const char* start = "the reported basis";
-    if (!reported || !load_basis(model, solution, problem, deadline, &basis).message.empty()) {
-      start = "the slack basis";
-      basis.basic.clear();
-      basis.status.assign(n + m, Nb::kBasic);
-      for (Sz j = 0; j < n; ++j) {
-        basis.status[j] = problem.has_lower[j]   ? Nb::kLower
-                          : problem.has_upper[j] ? Nb::kUpper
-                                                 : Nb::kFree;
-      }
-      for (Sz i = 0; i < m; ++i) basis.basic.push_back(static_cast<Index>(n + i));
-      if (!basis.build(problem, deadline))
-        throw Declined{"the slack basis is exactly singular"};
-    }
-    // With every cost 0 every reduced cost is 0, so any basis is dual feasible and the
-    // repair's step 1 alone runs: the dual simplex under Bland's rule, to a primal feasible
-    // basis or to a tableau row that proves there is none (it throws Failed with the row).
+    const LoadResult loaded = load_basis(elastic, elastic_solution, problem, deadline, &basis);
+    if (!loaded.message.empty()) throw Declined{"the elastic basis: " + loaded.message};
     Repair(&problem, &basis, &result, deadline).run();
     const std::string why = not_optimal(problem, basis);
-    if (!why.empty()) throw Declined{"the exact phase 1 stopped short: " + why};
-    result.verdict = ExactVerdict::kVerified;
-    result.message = fmt::format(
-        "the model as read into doubles is exactly feasible: phase 1 from {} reached a "
-        "feasible basis in {} exact dual pivot(s)",
-        start, result.dual_pivots);
+    if (!why.empty()) throw Declined{"the elastic LP's repair stopped short: " + why};
+    // The exact optimum, the least total violation of the rows: every elastic column has
+    // cost 1, every original column cost 0.
+    Rational violation(0);
+    for (Sz k = static_cast<Sz>(model.num_cols()); k < static_cast<Sz>(problem.n); ++k) {
+      violation += basis.value[k];
+    }
+    const int pivots = result.dual_pivots + result.primal_pivots;
+    if (violation.is_zero()) {
+      result.verdict = ExactVerdict::kVerified;
+      result.message = fmt::format(
+          "the model as read into doubles is exactly feasible: its elastic LP's exact "
+          "optimum is 0 ({} exact pivot(s) from the floating-point basis)",
+          pivots);
+      return;
+    }
+    // y >= 0 on an active lower row side and <= 0 on an upper one (exact_basis.hpp), the
+    // orientation of farkas_dual; by strong duality its contradiction is the violation.
+    const auto m = static_cast<Sz>(model.num_rows());
+    const std::vector<Rational> y(basis.y.begin(), basis.y.begin() + static_cast<long>(m));
+    if (!farkas_holds(Problem(model), y)) {
+      throw Declined{"the elastic LP's exact duals do not prove infeasibility"};
+    }
+    result.farkas_dual.assign(m, 0.0);
+    for (Sz i = 0; i < m; ++i) {
+      if (y[i].is_zero()) continue;
+      result.farkas_row.emplace_back(static_cast<Index>(i), y[i].to_string());
+      result.farkas_dual[i] = y[i].to_double();
+    }
+    throw Failed{fmt::format(
+        "the model as read into doubles is exactly infeasible: its elastic LP's exact "
+        "optimum, the least total violation of its rows, is {:.6e} > 0 ({} exact pivot(s) "
+        "from the floating-point basis), and its exact row duals are a Farkas proof, checked",
+        violation.to_double(), pivots)};
   });
   return result;
-}
-
-bool apply_exact_phase1(const Model& model, Solution* solution, Logger& logger,
-                        double seconds) {
-  RepairResult proof = prove_infeasible_exact(model, *solution, seconds);
-  if (proof.verdict != ExactVerdict::kFailed || proof.farkas_row.empty()) {
-    logger.info("Exact phase 1: no proof of infeasibility; {}", proof.message);
-    return false;
-  }
-  std::string why;
-  const bool in_double = farkas_proves_infeasible(model, proof.farkas_dual, &why);
-  logger.info(
-      "Exact phase 1: {} ({} multipliers; rounded to double they {} the "
-      "floating-point check{})",
-      proof.message, proof.farkas_row.size(), in_double ? "also pass" : "do not pass",
-      in_double ? "" : ": " + why);
-  solution->message = fmt::format(
-      "proved infeasible by phase 1 in exact rational arithmetic (the dual simplex, Bland's "
-      "rule): {}; the {} Farkas multipliers are exact "
-      "(exact_repair_farkas), and rounded to double they {} the floating-point check; the "
-      "floating-point solve had ended numerical_error: {}",
-      proof.message, proof.farkas_row.size(), in_double ? "also pass" : "do not pass",
-      solution->message);
-  solution->status = SolveStatus::kInfeasible;
-  solution->farkas_dual = std::move(proof.farkas_dual);
-  solution->exact_repair_farkas = std::move(proof.farkas_row);
-  solution->col_value.clear();
-  solution->row_activity.clear();
-  return true;
 }
 
 }  // namespace sankhya::exact

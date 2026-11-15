@@ -2016,14 +2016,17 @@ const std::vector<OptionSpec>& Options::registry() {
         {"exact_phase1",
          OptionType::Bool,
          true,
-         "When a plain LP ends numerical_error after every retry, run phase 1 in exact "
-         "rational arithmetic - every cost 0, the dual simplex under Bland's rule - from the "
-         "engine's basis (the slack basis when it has none), within exact_seconds and the "
-         "time_limit left (Applegate, Cook, Dash and Espinoza, Oper. Res. Letters 35, 2007). "
-         "A tableau row that cannot reach 0 over the bounds proves the model, as read into "
-         "doubles, infeasible: the answer becomes infeasible with those Farkas multipliers, "
-         "exact in the .sol's exact_repair_farkas section and rounded in its farkas section. "
-         "Any other outcome leaves the answer as it was. Independent of option exact.",
+         "When a plain LP ends numerical_error after every retry, ask exact rational "
+         "arithmetic whether it is infeasible: its elastic LP (a cost-1 slack on every finite "
+         "row side) is solved in floating point by the simplex, and that basis is repaired "
+         "to an exactly optimal one as option exact_repair does (Koch, Oper. Res. Letters "
+         "32, 2004; Applegate, Cook, Dash and Espinoza, Oper. Res. Letters 35, 2007), within "
+         "exact_seconds and the time_limit left. A positive exact optimum proves the model, "
+         "as read into doubles, infeasible: the answer becomes infeasible with the exact row "
+         "duals as its Farkas certificate, exact in the .sol's exact_repair_farkas section "
+         "and rounded in its farkas section. Any other outcome leaves the answer as it was. "
+         "Only for the solve the caller made, not one solve() makes inside another; "
+         "independent of option exact.",
          0.0,
          0.0,
          {}});

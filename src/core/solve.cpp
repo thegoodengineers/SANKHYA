@@ -35,6 +35,7 @@
 // pipeline and so cannot assume this file already did.
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <functional>
@@ -124,6 +125,16 @@ using engine::ProblemClass;
 std::vector<std::string> registered_lp_algorithms() {
   return engine::SolverRegistry::builtin().algorithm_names();
 }
+
+/// How many solve() calls are running, across threads. 1 at a step that asks it means this
+/// is the caller's own solve, not one made inside another (an IIS trial, a heuristic's LP).
+std::atomic<int> g_solves_in_flight{0};
+struct SolveInFlight {
+  SolveInFlight() { ++g_solves_in_flight; }
+  ~SolveInFlight() { --g_solves_in_flight; }
+  SolveInFlight(const SolveInFlight&) = delete;
+  SolveInFlight& operator=(const SolveInFlight&) = delete;
+};
 
 }  // namespace
 
@@ -769,6 +780,7 @@ void report_profile(Profiler& profiler, const Options& options, const Solution& 
 }  // namespace
 
 Solution solve(const Model& model, const Options& requested_options, SolveControl* control) {
+  const SolveInFlight in_flight;
   Timer timer;
   {
     Solution solution;
@@ -1602,16 +1614,18 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
       }
     }
     // THE EXACT PHASE 1: an LP every retry above left without a verdict asks rational
-    // arithmetic whether it is infeasible (src/exact/exact_repair.hpp), within exact_seconds
-    // and the time left. Only a proof changes the answer; the IIS below starts from it.
+    // arithmetic whether it is infeasible (core/elastic_certificate.hpp), within
+    // exact_seconds and the time left. Only a proof changes the answer; the IIS below
+    // starts from it. Only for the one solve in flight: the IIS trials, the heuristics' LPs
+    // and every other solve() made inside a solve are not the caller's question.
     if (solution.status == SolveStatus::kNumericalError && !race && !warm_answer &&
         !model.has_integrality() && !model.has_quadratic_objective() &&
-        options.get_bool("exact_phase1")) {
+        options.get_bool("exact_phase1") && g_solves_in_flight.load() == 1) {
       double seconds = options.get_double("exact_seconds");
       if (limits.has_time_limit()) {
         seconds = std::min(seconds, limits.remaining_seconds(timer.elapsed_seconds()));
       }
-      if (seconds > 0.0) exact::apply_exact_phase1(model, &solution, logger, seconds);
+      detail::prove_infeasible_exactly(model, &solution, options, logger, seconds);
       solution.solve_seconds = timer.elapsed_seconds();
     }
     // Sensitivity ranging runs on the ORIGINAL model after postsolve so the vectors are

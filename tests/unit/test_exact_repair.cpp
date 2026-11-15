@@ -13,6 +13,7 @@
 
 #include <gtest/gtest.h>
 
+#include "core/elastic_certificate.hpp"
 #include "exact/exact_repair.hpp"
 #include "exact/exact_verify.hpp"
 #include "sankhya/logging.hpp"
@@ -220,43 +221,40 @@ TEST(ExactRepair, SolveWithExactReportsTheRepairedBasisAndVerifiesIt) {
 }
 
 // THE EXACT PHASE 1. x + y = 1, x <= 1 - 2^-40, y <= 2^-41: infeasible by 2^-41, far inside
-// the 1e-7 feasibility tolerance, so no floating-point phase 1 can tell. From the slack basis
-// (no basis reported) the zero-cost dual simplex must find the row and prove it: the one
-// multiplier on r, oriented so that it leans on r's lower bound (x + y >= 1 cannot be met
-// when x + y is at most 1 - 2^-41).
-TEST(ExactPhase1, ProvesAnInfeasibilityFarInsideTheToleranceFromTheSlackBasis) {
+// the 1e-7 feasibility tolerance, so the floating-point elastic LP's optimum looks like 0.
+// Its exact repair must find the true least violation, 2^-41, and the exact row dual on r,
+// oriented to lean on r's lower bound (x + y >= 1 cannot hold when x + y <= 1 - 2^-41).
+TEST(ExactPhase1, ProvesAnInfeasibilityFarInsideTheTolerance) {
   const Model model = make_lp({{1.0, 1.0}}, {1.0}, {1.0}, {0.0, 1.0}, {0.0, 0.0},
                               {1.0 - kTiny, std::ldexp(1.0, -41)});
-  Solution none;
-  none.status = SolveStatus::kNumericalError;
-  const RepairResult proof = prove_infeasible_exact(model, none);
-  ASSERT_EQ(proof.verdict, ExactVerdict::kFailed) << proof.message;
-  ASSERT_EQ(proof.farkas_row.size(), 1U);
-  EXPECT_EQ(proof.farkas_row[0].first, 0);
-  ASSERT_EQ(proof.farkas_dual.size(), 1U);
-  EXPECT_GT(proof.farkas_dual[0], 0.0);
-
-  Solution answer = none;
+  Solution answer;
+  answer.status = SolveStatus::kNumericalError;
+  Options options;
+  options.set_bool("log_to_console", false);
   Logger logger(nullptr);
-  ASSERT_TRUE(apply_exact_phase1(model, &answer, logger, kInfinity));
+  ASSERT_TRUE(detail::prove_infeasible_exactly(model, &answer, options, logger, 30.0))
+      << answer.message;
   EXPECT_EQ(answer.status, SolveStatus::kInfeasible);
-  EXPECT_EQ(answer.exact_repair_farkas.size(), 1U);
+  ASSERT_EQ(answer.exact_repair_farkas.size(), 1U);
+  EXPECT_EQ(answer.exact_repair_farkas[0].first, 0);
+  ASSERT_EQ(answer.farkas_dual.size(), 1U);
+  EXPECT_GT(answer.farkas_dual[0], 0.0);
 }
 
-// The same model with y <= 2^-40 is feasible (x = 1 - 2^-40, y = 2^-40): no proof, and the
-// answer handed in is left exactly as it was.
-TEST(ExactPhase1, AFeasibleModelIsReportedFeasibleAndTheAnswerIsUntouched) {
+// The same model with y <= 2^-40 is feasible (x = 1 - 2^-40, y = 2^-40): the exact optimum
+// of its elastic LP is 0, so there is no proof and the answer is left as it was.
+TEST(ExactPhase1, AFeasibleModelIsNotProvedInfeasible) {
   const Model model =
       make_lp({{1.0, 1.0}}, {1.0}, {1.0}, {0.0, 1.0}, {0.0, 0.0}, {1.0 - kTiny, kTiny});
-  Solution none;
-  none.status = SolveStatus::kNumericalError;
-  const RepairResult proof = prove_infeasible_exact(model, none);
-  EXPECT_EQ(proof.verdict, ExactVerdict::kVerified) << proof.message;
-  EXPECT_TRUE(proof.farkas_row.empty());
+  Solution answer;
+  answer.status = SolveStatus::kNumericalError;
+  Options options;
+  options.set_bool("log_to_console", false);
   Logger logger(nullptr);
-  EXPECT_FALSE(apply_exact_phase1(model, &none, logger, kInfinity));
-  EXPECT_EQ(none.status, SolveStatus::kNumericalError);
-  EXPECT_TRUE(none.farkas_dual.empty());
+  EXPECT_FALSE(detail::prove_infeasible_exactly(model, &answer, options, logger, 30.0));
+  EXPECT_EQ(answer.status, SolveStatus::kNumericalError);
+  EXPECT_TRUE(answer.farkas_dual.empty());
+  EXPECT_TRUE(answer.exact_repair_farkas.empty());
 }
 
 }  // namespace
