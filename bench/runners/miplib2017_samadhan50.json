@@ -1,0 +1,422 @@
+{
+ "what": "The 50 MIPLIB 2017 benchmark-set models SAMADHAN (a rival SIH 2026 PS26119 entry) reports on, with its claimed result per model, read from its README and results JSON only. bench.yml suite=miplib2017-bench options=samadhan50 runs exactly these.",
+ "source_repo": "https://github.com/NAMAN-THAKUR-1944/SIH2026-SIH26119-SAMADHAN",
+ "source_commit": "6efadbac61641a0f0f94d0c8beda25d31ffe3814",
+ "source_results": "https://github.com/NAMAN-THAKUR-1944/SIH2026-SIH26119-SAMADHAN/blob/6efadbac61641a0f0f94d0c8beda25d31ffe3814/results/milp_miplib2017.json",
+ "source_results_sha256": "160fb4822a91dc2092234a43ea64ef00d59408d63e5ab89bf03b304e50840cb9",
+ "source_readme": "https://github.com/NAMAN-THAKUR-1944/SIH2026-SIH26119-SAMADHAN/blob/6efadbac61641a0f0f94d0c8beda25d31ffe3814/README.md",
+ "read_on": "2026-11-15",
+ "their_settings": {
+  "time_limit_seconds": 60,
+  "threads": 1,
+  "relative_gap": 0.0001,
+  "note": "README: 50 models of the current benchmark set, 60 s, one thread, gap 1e-4; their runs were six models at a time on a laptop"
+ },
+ "their_claim": {
+  "proved": 8,
+  "their_highs_proved": 20,
+  "grading": "a status of optimal, the objective compared with its own HiGHS run (obj_rel_diff); no published optima, no independent verifier"
+ },
+ "instances": {
+  "30n20b8": {
+   "claimed_status": "no_solution_found",
+   "claimed_objective": null,
+   "claimed_seconds": 60.01,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 553.0,
+   "their_highs_seconds": 60.02
+  },
+  "50v-10": {
+   "claimed_status": "no_solution_found",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 3553.439985334874,
+   "their_highs_seconds": 60.01
+  },
+  "air05": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 26402.000000000015,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 26374.00000000001,
+   "their_highs_seconds": 28.79
+  },
+  "beasleyC3": {
+   "claimed_status": "optimal",
+   "claimed_objective": 754.0,
+   "claimed_seconds": 1.64,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 754.0000000000001,
+   "their_highs_seconds": 21.62
+  },
+  "binkar10_1": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 6746.760023000002,
+   "claimed_seconds": 60.01,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 6742.200024000088,
+   "their_highs_seconds": 22.05
+  },
+  "bppc4-08": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 57.0,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 53.00000000000001,
+   "their_highs_seconds": 60.01
+  },
+  "dano3_3": {
+   "claimed_status": "time_limit",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 576.3446330306433,
+   "their_highs_seconds": 59.69
+  },
+  "dano3_5": {
+   "claimed_status": "time_limit",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 577.7448683126966,
+   "their_highs_seconds": 60.04
+  },
+  "eil33-2": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 1028.5641710000027,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 987.6741330000004,
+   "their_highs_seconds": 60.02
+  },
+  "enlight_hard": {
+   "claimed_status": "no_solution_found",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 37.0,
+   "their_highs_seconds": 12.78
+  },
+  "ex9": {
+   "claimed_status": "time_limit",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 81.0,
+   "their_highs_seconds": 4.8
+  },
+  "gen-ip054": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 6851.468919197002,
+   "claimed_seconds": 60.13,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 6858.262906058062,
+   "their_highs_seconds": 60.01
+  },
+  "glass4": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 1966683600.0000036,
+   "claimed_seconds": 60.05,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 1800017500.0,
+   "their_highs_seconds": 60.0
+  },
+  "graph20-20-1rand": {
+   "claimed_status": "time_limit",
+   "claimed_objective": -7.9999999999999964,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": -8.00000000000211,
+   "their_highs_seconds": 60.01
+  },
+  "h80x6320d": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 6436.343036999996,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 6382.09904999995,
+   "their_highs_seconds": 17.01
+  },
+  "markshare_4_0": {
+   "claimed_status": "optimal",
+   "claimed_objective": 1.0,
+   "claimed_seconds": 16.28,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 1.0,
+   "their_highs_seconds": 60.01
+  },
+  "mas74": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 11801.185728999995,
+   "claimed_seconds": 60.03,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 12014.89237909993,
+   "their_highs_seconds": 60.0
+  },
+  "mas76": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 40005.054142,
+   "claimed_seconds": 60.02,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 40005.054141,
+   "their_highs_seconds": 60.01
+  },
+  "mik-250-20-75-4": {
+   "claimed_status": "time_limit",
+   "claimed_objective": -52266.0,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": -52301.00000000001,
+   "their_highs_seconds": 15.82
+  },
+  "n5-3": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 8443.0,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 8105.000000000003,
+   "their_highs_seconds": 38.6
+  },
+  "neos-662469": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 1215872.5,
+   "claimed_seconds": 60.01,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 1722996.5,
+   "their_highs_seconds": 60.03
+  },
+  "neos-787933": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 43.0,
+   "claimed_seconds": 60.01,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 34.0,
+   "their_highs_seconds": 60.08
+  },
+  "neos-860300": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 4165.0,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 3200.999999999999,
+   "their_highs_seconds": 16.37
+  },
+  "neos-911970": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 57.02,
+   "claimed_seconds": 60.03,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 54.76000000000019,
+   "their_highs_seconds": 11.25
+  },
+  "neos-933966": {
+   "claimed_status": "time_limit",
+   "claimed_objective": null,
+   "claimed_seconds": 60.01,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 324.0,
+   "their_highs_seconds": 60.02
+  },
+  "neos-957323": {
+   "claimed_status": "time_limit",
+   "claimed_objective": -233.76390123699989,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": -234.763086422,
+   "their_highs_seconds": 60.05
+  },
+  "neos17": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 0.43229094905094956,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 0.15000257742257742,
+   "their_highs_seconds": 9.28
+  },
+  "neos5": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 15.0,
+   "claimed_seconds": 60.01,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 14.999999999982984,
+   "their_highs_seconds": 60.0
+  },
+  "neos8": {
+   "claimed_status": "optimal",
+   "claimed_objective": -3719.0,
+   "claimed_seconds": 1.81,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": -3718.9999999999995,
+   "their_highs_seconds": 3.81
+  },
+  "net12": {
+   "claimed_status": "no_solution_found",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 214.0,
+   "their_highs_seconds": 60.02
+  },
+  "ns1830653": {
+   "claimed_status": "no_solution_found",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 25808.0,
+   "their_highs_seconds": 60.02
+  },
+  "nu25-pr12": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 53905.0,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 53904.99999999999,
+   "their_highs_seconds": 6.3
+  },
+  "nw04": {
+   "claimed_status": "optimal",
+   "claimed_objective": 16861.999999998265,
+   "claimed_seconds": 2.61,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 16862.000000000004,
+   "their_highs_seconds": 51.33
+  },
+  "p200x1188c": {
+   "claimed_status": "optimal",
+   "claimed_objective": 15078.0,
+   "claimed_seconds": 0.09,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 15078.0,
+   "their_highs_seconds": 0.94
+  },
+  "pg": {
+   "claimed_status": "time_limit",
+   "claimed_objective": -8636.45260895097,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": -8674.342607117029,
+   "their_highs_seconds": 6.06
+  },
+  "pg5_34": {
+   "claimed_status": "time_limit",
+   "claimed_objective": -14263.056367533236,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": -14324.34079587945,
+   "their_highs_seconds": 60.01
+  },
+  "pk1": {
+   "claimed_status": "optimal",
+   "claimed_objective": 10.999999999999988,
+   "claimed_seconds": 35.87,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 13.999999999999915,
+   "their_highs_seconds": 60.01
+  },
+  "qap10": {
+   "claimed_status": "time_limit",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 348.0,
+   "their_highs_seconds": 67.2
+  },
+  "rail507": {
+   "claimed_status": "no_solution_found",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 174.99999999999991,
+   "their_highs_seconds": 60.07
+  },
+  "ran14x18-disj-8": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 4062.999999813493,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 3743.9999981304313,
+   "their_highs_seconds": 60.01
+  },
+  "rmatr100-p10": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 423.0,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 425.99999999999955,
+   "their_highs_seconds": 60.01
+  },
+  "rococoC10-001000": {
+   "claimed_status": "no_solution_found",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 11515.0,
+   "their_highs_seconds": 60.01
+  },
+  "roi2alpha3n4": {
+   "claimed_status": "time_limit",
+   "claimed_objective": -49.1756375911,
+   "claimed_seconds": 60.01,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": -59.04268138447983,
+   "their_highs_seconds": 60.33
+  },
+  "sct2": {
+   "claimed_status": "time_limit",
+   "claimed_objective": -228.24917854228337,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": -230.51551323597155,
+   "their_highs_seconds": 60.02
+  },
+  "seymour1": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 411.30492052494253,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 410.7637013945249,
+   "their_highs_seconds": 60.01
+  },
+  "sp150x300d": {
+   "claimed_status": "optimal",
+   "claimed_objective": 68.99999999999989,
+   "claimed_seconds": 3.53,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 69.0,
+   "their_highs_seconds": 0.07
+  },
+  "swath1": {
+   "claimed_status": "optimal",
+   "claimed_objective": 379.07129574999993,
+   "claimed_seconds": 36.26,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 379.0712957499999,
+   "their_highs_seconds": 18.3
+  },
+  "swath3": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 401.6966559258261,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 399.33256844999806,
+   "their_highs_seconds": 60.03
+  },
+  "timtab1": {
+   "claimed_status": "no_solution_found",
+   "claimed_objective": null,
+   "claimed_seconds": 60.0,
+   "their_highs_status": "Optimal",
+   "their_highs_objective": 764773.9999997794,
+   "their_highs_seconds": 53.54
+  },
+  "tr12-30": {
+   "claimed_status": "time_limit",
+   "claimed_objective": 133127.0,
+   "claimed_seconds": 60.01,
+   "their_highs_status": "Time limit reached",
+   "their_highs_objective": 130624.0,
+   "their_highs_seconds": 60.0
+  }
+ }
+}

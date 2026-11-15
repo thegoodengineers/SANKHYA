@@ -240,8 +240,16 @@ jobs:
               python3 bench/runners/fetch_miplib3.py
               git checkout -- data/miplib3/manifest.json ;;
             # #1199: options is the shard, K/N; the fetch writes its names beside the models.
+            # options=samadhan50: the 50 models of bench/runners/miplib2017_samadhan50.json.
             miplib2017-bench)
-              python3 bench/runners/fetch_miplib.py --benchmark --shard "${OPTIONS:-1/1}" ;;
+              if [ "$OPTIONS" = samadhan50 ]; then
+                python3 -c 'import json; print("\n".join(sorted(json.load(open("bench/runners/miplib2017_samadhan50.json"))["instances"])))' \
+                  > data/miplib2017-bench/samadhan50.txt
+                mapfile -t names < data/miplib2017-bench/samadhan50.txt
+                python3 bench/runners/fetch_miplib.py --benchmark "${names[@]}"
+              else
+                python3 bench/runners/fetch_miplib.py --benchmark --shard "${OPTIONS:-1/1}"
+              fi ;;
             # The subset of bench/runners/first_incumbent.json: its MIPLIB 2017 models by
             # name, and MIPLIB 3 whole (the manifest put back, as for miplib3).
             first-incumbent)
@@ -327,21 +335,31 @@ jobs:
                 python3 bench/runners/first_incumbent.py --binary build/sankhya \
                   --machine-kind "github-actions ubuntu-24.04" ${limit[@]+"${limit[@]}"} \
                   --out "bench/results/first-incumbent-${sha}.csv" --logs "$out/logs" "$@" ;;
+              # options=samadhan50: SAMADHAN's 50 at their settings (60 s, one thread, gap
+              # 1e-4, the solvers' default), three seeds for us, HiGHS once.
               miplib2017-bench)
-                shard="${OPTIONS:-1/1}"; k="${shard%/*}"; n="${shard#*/}"
-                mapfile -t names < "data/miplib2017-bench/shard-${k}-of-${n}.txt"
-                tag="${TIME_LIMIT:-60}s-shard${k}of${n}-${sha}"
+                seeds=1
+                if [ "$OPTIONS" = samadhan50 ]; then
+                  mapfile -t names < data/miplib2017-bench/samadhan50.txt
+                  seeds=3; prefix="miplib2017-samadhan50"
+                  tag="${TIME_LIMIT:-60}s-seeds3-${sha}"; htag="${TIME_LIMIT:-60}s-${sha}"
+                else
+                  shard="${OPTIONS:-1/1}"; k="${shard%/*}"; n="${shard#*/}"
+                  mapfile -t names < "data/miplib2017-bench/shard-${k}-of-${n}.txt"
+                  prefix="miplib2017-bench"
+                  tag="${TIME_LIMIT:-60}s-shard${k}of${n}-${sha}"; htag="$tag"
+                fi
                 # 12 GB of the runner's 16 per solve: radiationm40-10-02 twice took the
                 # runner down mid-shard and lost the job's other 39 results (#1199).
                 python3 bench/runners/miplib.py --binary build/sankhya --set miplib2017-bench \
-                  --threads 1 --memory-limit-gb 12 \
+                  --threads 1 --memory-limit-gb 12 --seeds "$seeds" \
                   --machine-kind "github-actions ubuntu-24.04" \
                   ${limit[@]+"${limit[@]}"} --instances "${names[@]}" \
-                  --out "bench/results/miplib2017-bench-${tag}.csv"
+                  --out "bench/results/${prefix}-${tag}.csv"
                 python3 bench/runners/compare.py --suite miplib2017-bench \
                   --sankhya-binary build/sankhya --machine-kind "github-actions ubuntu-24.04" \
                   ${limit[@]+"${limit[@]}"} --instances "${names[@]}" \
-                  --out "bench/results/highs-miplib2017-bench-${tag}.csv" ;;
+                  --out "bench/results/highs-${prefix}-${htag}.csv" ;;
               # SANKHYA, HiGHS, SCIP, CBC and GLPK in one job, each one thread, graded by the
               # same rule and tools/verify_solution.py: Netlib (120 s), the 65 MIPLIB 3 models
               # (60 s) and the stress set (60 s).
