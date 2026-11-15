@@ -13,6 +13,7 @@
 
 #include <gtest/gtest.h>
 
+#include "core/elastic_certificate.hpp"
 #include "exact/exact_repair.hpp"
 #include "exact/exact_verify.hpp"
 #include "sankhya/logging.hpp"
@@ -217,6 +218,43 @@ TEST(ExactRepair, SolveWithExactReportsTheRepairedBasisAndVerifiesIt) {
   options.set_bool("exact_repair", false);
   const Solution unrepaired = solve(model, options);
   EXPECT_EQ(unrepaired.exact_repair_status, Solution::ExactVerification::kNotAttempted);
+}
+
+// THE EXACT PHASE 1. x + y = 1, x <= 1 - 2^-40, y <= 2^-41: infeasible by 2^-41, far inside
+// the 1e-7 feasibility tolerance, so the floating-point elastic LP's optimum looks like 0.
+// Its exact repair must find the true least violation, 2^-41, and the exact row dual on r,
+// oriented to lean on r's lower bound (x + y >= 1 cannot hold when x + y <= 1 - 2^-41).
+TEST(ExactPhase1, ProvesAnInfeasibilityFarInsideTheTolerance) {
+  const Model model = make_lp({{1.0, 1.0}}, {1.0}, {1.0}, {0.0, 1.0}, {0.0, 0.0},
+                              {1.0 - kTiny, std::ldexp(1.0, -41)});
+  Solution answer;
+  answer.status = SolveStatus::kNumericalError;
+  Options options;
+  options.set_bool("log_to_console", false);
+  Logger logger(nullptr);
+  ASSERT_TRUE(detail::prove_infeasible_exactly(model, &answer, options, logger, 30.0))
+      << answer.message;
+  EXPECT_EQ(answer.status, SolveStatus::kInfeasible);
+  ASSERT_EQ(answer.exact_repair_farkas.size(), 1U);
+  EXPECT_EQ(answer.exact_repair_farkas[0].first, 0);
+  ASSERT_EQ(answer.farkas_dual.size(), 1U);
+  EXPECT_GT(answer.farkas_dual[0], 0.0);
+}
+
+// The same model with y <= 2^-40 is feasible (x = 1 - 2^-40, y = 2^-40): the exact optimum
+// of its elastic LP is 0, so there is no proof and the answer is left as it was.
+TEST(ExactPhase1, AFeasibleModelIsNotProvedInfeasible) {
+  const Model model =
+      make_lp({{1.0, 1.0}}, {1.0}, {1.0}, {0.0, 1.0}, {0.0, 0.0}, {1.0 - kTiny, kTiny});
+  Solution answer;
+  answer.status = SolveStatus::kNumericalError;
+  Options options;
+  options.set_bool("log_to_console", false);
+  Logger logger(nullptr);
+  EXPECT_FALSE(detail::prove_infeasible_exactly(model, &answer, options, logger, 30.0));
+  EXPECT_EQ(answer.status, SolveStatus::kNumericalError);
+  EXPECT_TRUE(answer.farkas_dual.empty());
+  EXPECT_TRUE(answer.exact_repair_farkas.empty());
 }
 
 }  // namespace

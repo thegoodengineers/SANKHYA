@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import math
 
+from verify_solution_exact_farkas import verify_farkas_exact
+
+
 def bound_contribution(multiplier: float, lower: float, upper: float) -> float:
     """The Lagrangian term a bound contributes to the dual objective, in minimize space.
 
@@ -198,6 +201,10 @@ def verify_farkas(model: Model, solution: Solution, report: Report) -> Report:
     leans on a bound the row does not have (infinite), and a column free in the direction d
     prefers, which makes M infinite and proves nothing.
     """
+    # Exact multipliers (the exact phase 1): the same proof in rational arithmetic, with no
+    # tolerance. The farkas section is checked below too unless it is just their rounding.
+    if solution.exact_repair_farkas and verify_farkas_exact(model, solution, report):
+        return report
     y = [solution.farkas.get(name, 0.0) for name in model.row_names]
     # Scaled to unit infinity-norm: a certificate proves the same at any positive scale, and
     # the zero floor below is absolute (max(1, ...)), so a tiny vector would otherwise
