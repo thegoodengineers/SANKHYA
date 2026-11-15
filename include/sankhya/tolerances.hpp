@@ -81,6 +81,17 @@ inline constexpr int kDivingMaxLpResolves = 50;
 inline constexpr int kDivingNoIncumbentLpResolves = 1000;
 inline constexpr int kDivingNoIncumbentFrequency = 50;
 
+/// The propagating dive (mip_dive_propagate): the share of the fractional columns of an LP
+/// point one batch fixes before the next re-solve (at least one); the retries one dive may
+/// spend on an infeasible LP or fix (Achterberg 2007, sec. 9.2, allows one; a batch makes
+/// more dead ends); and the LP iterations all dives together may spend, a share of the
+/// search's node LP iterations plus an offset (Achterberg 2007, sec. 9.2: diving is held to a
+/// quotient of the node LP iterations). Each re-solve's iteration limit is what is left.
+inline constexpr double kDivePropagateFixShare = 0.1;
+inline constexpr int kDivePropagateBacktracks = 5;
+inline constexpr double kDivePropagateLpShare = 0.3;
+inline constexpr Count kDivePropagateLpOffset = 2000;
+
 /// Sub-MIP heuristics (RINS #290, RENS #414): the least fraction of the integer columns the
 /// sub-model must fix for the neighbourhood to be one. Below it the sub-MIP is nearly the
 /// whole model, and the search would be paying for a second search; Danna, Rothberg and

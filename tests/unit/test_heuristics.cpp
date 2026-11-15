@@ -267,9 +267,10 @@ TEST(Heuristics, TheSearchWithEveryHeuristicForcedOnAgreesWithBruteForce) {
       any = true;
     }
 
-    // Three arms: the master switch on, off, and every switch forced on by name with the
-    // dives at every node, the backtrack and RENS (#414), so every path is exercised.
-    for (int arm = 0; arm < 3; ++arm) {
+    // Four arms: the master switch on, off, every switch forced on by name with the dives
+    // at every node, the backtrack and RENS (#414), so every path is exercised, and that
+    // again with the propagating dives (mip_dive_propagate).
+    for (int arm = 0; arm < 4; ++arm) {
       const bool heuristics = arm != 1;
       Options options;
       options.set_bool("log_to_console", false);
@@ -277,8 +278,9 @@ TEST(Heuristics, TheSearchWithEveryHeuristicForcedOnAgreesWithBruteForce) {
       options.set_bool("mip_heuristics", arm == 0);
       options.set_int("mip_rins_frequency", 1);
       options.set_int("mip_pump_rounds", 30);
-      if (arm == 2) {
+      if (arm >= 2) {
         for (const char* name : kEverySwitch) options.set_string(name, "on");
+        options.set_bool("mip_dive_propagate", arm == 3);
         options.set_int("mip_dive_frequency", 1);
         options.set_bool("mip_dive_backtrack", true);
         options.set_int("mip_rens_nodes", 3);
@@ -298,7 +300,7 @@ TEST(Heuristics, TheSearchWithEveryHeuristicForcedOnAgreesWithBruteForce) {
       EXPECT_TRUE(feasible(m, solved.col_value)) << "trial " << trial;
     }
   }
-  EXPECT_EQ(compared, 360);
+  EXPECT_EQ(compared, 480);
   EXPECT_LT(infeasible, compared);
 }
 
@@ -476,14 +478,50 @@ TEST(Heuristics, DeterministicRunsRepeatWithEveryHeuristicOn) {
   options.set_bool("mip_dive_backtrack", true);
   options.set_int("mip_rins_frequency", 1);
   options.set_int("mip_rens_nodes", 5);
-  const Solution first = solve(m, options);
-  const Solution second = solve(m, options);
-  ASSERT_EQ(first.status, SolveStatus::kOptimal) << first.message;
-  ASSERT_EQ(second.status, first.status);
-  EXPECT_EQ(second.objective, first.objective);
-  EXPECT_EQ(second.nodes, first.nodes);
-  EXPECT_EQ(second.col_value, first.col_value);
-  EXPECT_TRUE(feasible(m, first.col_value));
+  for (const bool propagating : {false, true}) {
+    options.set_bool("mip_dive_propagate", propagating);
+    const Solution first = solve(m, options);
+    const Solution second = solve(m, options);
+    ASSERT_EQ(first.status, SolveStatus::kOptimal) << first.message;
+    ASSERT_EQ(second.status, first.status);
+    EXPECT_EQ(second.objective, first.objective) << propagating;
+    EXPECT_EQ(second.nodes, first.nodes) << propagating;
+    EXPECT_EQ(second.col_value, first.col_value) << propagating;
+    EXPECT_TRUE(feasible(m, first.col_value));
+  }
+}
+
+TEST(Heuristics, RankDiveColumnsStartsWithTheColumnChooseDiveColumnPicks) {
+  // The propagating dive fixes a batch in rank_dive_columns() order: every fractional
+  // column once, best first, and its first entry is what choose_dive_column() picks.
+  const Model m =
+      integer_model({{1, 1, 0}, {1, 0, 1}}, {-kInf, 0.0}, {1.0, kInf}, {1, 1, 1}, 0.0, 1.0);
+  const Locks locks = compute_locks(m);
+  const std::vector<Index> cols = all_columns(m);
+  const std::vector<double> none;
+  const std::vector<double> x = {0.3, 0.45, 0.9};
+  for (const DiveRule rule :
+       {DiveRule::kFractional, DiveRule::kCoefficient, DiveRule::kVectorLength}) {
+    const std::vector<DiveChoice> ranked =
+        rank_dive_columns(m, locks, cols, x, rule, none, 1e-6);
+    ASSERT_EQ(ranked.size(), 3u) << to_string(rule);
+    const DiveChoice best = choose_dive_column(m, locks, cols, x, rule, none, 1e-6);
+    EXPECT_EQ(ranked[0].column, best.column) << to_string(rule);
+    EXPECT_EQ(ranked[0].value, best.value) << to_string(rule);
+  }
+  // Fractional: x2 (0.1 from 1), then x0 (0.3 from 0), then x1 (0.45 from 0).
+  const std::vector<DiveChoice> f =
+      rank_dive_columns(m, locks, cols, x, DiveRule::kFractional, none, 1e-6);
+  EXPECT_EQ(f[0].column, 2);
+  EXPECT_EQ(f[0].value, 1.0);
+  EXPECT_EQ(f[1].column, 0);
+  EXPECT_EQ(f[1].value, 0.0);
+  EXPECT_EQ(f[2].column, 1);
+  // Integral, or guided with no incumbent: nothing to fix.
+  EXPECT_TRUE(
+      rank_dive_columns(m, locks, cols, {0.0, 1.0, 1.0}, DiveRule::kFractional, none, 1e-6)
+          .empty());
+  EXPECT_TRUE(rank_dive_columns(m, locks, cols, x, DiveRule::kGuided, none, 1e-6).empty());
 }
 
 }  // namespace

@@ -322,6 +322,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/branch_and_bound_heuristics.cpp
   src/mip/branch_and_bound_parity.cpp
   src/mip/branch_and_bound_lns.cpp
+  src/mip/branch_and_bound_dive.cpp
   src/mip/branch_and_bound_restart.cpp
   src/mip/branch_and_bound_safe.cpp
   src/mip/branch_and_bound_sos.cpp

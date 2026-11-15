@@ -910,6 +910,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"mip_dive_propagate",
+                 OptionType::Bool,
+                 false,
+                 "The dives propagate the rows after every fix, fix a batch of columns per "
+                 "LP re-solve, flip an infeasible fix on a small backtrack budget, and spend "
+                 "LP iterations from a share of the search's node LP iterations, the rules "
+                 "taking turns below the root (Achterberg 2007, sec. 9.2; Berthold 2006, "
+                 "ch. 3). A dive that runs after mip_heuristics=auto has stood down is the "
+                 "default one. OFF by default until measured.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_dive_frequency",
                  OptionType::Int,
                  std::int64_t{0},

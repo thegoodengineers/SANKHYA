@@ -300,6 +300,10 @@ void BranchAndBound::run_dives(Index node_index, const std::vector<double>& x) {
   // fractional dive at the root and nothing below it.
   const bool stand_down = schedule_.until_incumbent && have_incumbent_;
   if (stand_down && node_index != 0) return;
+  if (schedule_.dive_propagate && !stand_down && !quadratic_) {
+    run_propagating_dives(node_index, x, kDiveFractional);
+    return;
+  }
   for (std::size_t r = 0; r < kDiveRules; ++r) {
     if (!schedule_.dive[r]) continue;
     if (stand_down && r != static_cast<std::size_t>(DiveRule::kFractional)) continue;

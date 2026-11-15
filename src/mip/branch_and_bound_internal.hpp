@@ -478,6 +478,15 @@ class BranchAndBound {
   /// backtracked if mip_dive_backtrack is set) or the budget runs out. Leaves working_'s
   /// bounds as it found them.
   void dive(std::size_t slot, DiveRule rule, const std::vector<double>& start_x);
+  /// mip_dive_propagate (branch_and_bound_dive.cpp): the dives run_dives() starts instead,
+  /// every enabled rule at the root and the next in turn below it, while the LP-iteration
+  /// budget lasts, rule r counted against slot first_slot + r; and one such dive, with the
+  /// contract of dive().
+  void run_propagating_dives(Index node_index, const std::vector<double>& x,
+                             std::size_t first_slot);
+  void propagating_dive(std::size_t slot, DiveRule rule, const std::vector<double>& start_x);
+  /// What the propagating dives may still spend in LP iterations; zero or less is none.
+  [[nodiscard]] Count dive_lp_budget_left() const;
   /// Restore the bounds saved_ holds beyond `mark` and drop those entries: leave() for the
   /// tail of the stack only.
   void unwind_to(std::size_t mark);
@@ -1052,6 +1061,9 @@ class BranchAndBound {
   Count cold_fallbacks_ = 0;
   Count warm_node_iterations_ = 0;
   Count cold_node_iterations_ = 0;
+  /// Of those, the propagating dives' (mip_dive_propagate), and the rule they run next.
+  Count dive_lp_iterations_ = 0;
+  std::size_t next_dive_rule_ = 0;
 
   std::vector<TreeNode> nodes_;
   std::vector<Index> open_;
