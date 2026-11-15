@@ -364,6 +364,8 @@ bool write_solution(const std::string& path, const Model& model, const Solution&
           write_witness("col_hi", column_name(model, j));
       }
     }
+    // The exact phase 1's proof of an infeasible verdict (core/elastic_certificate.hpp).
+    write_exact_repair_farkas(out, model, solution);
 
     const bool closed = std::fclose(out) == 0;
     if (!closed && error != nullptr) *error = fmt::format("{}: write failed", path);
