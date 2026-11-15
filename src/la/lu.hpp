@@ -161,6 +161,21 @@ class SparseLu {
 
   /// Solve B^T z = b in place. BTRAN. `history` as for solve().
   void solve_transpose(double* b, DensityHistory* history = nullptr) const;
+
+  /// solve() and solve_transpose() told where the right-hand side's nonzeros are, and
+  /// telling where the result's can be (Hall & McKinnon 2005, sec. 3: a hyper-sparse
+  /// iteration keeps each vector with its index list, so that no operation costs O(m)). On
+  /// entry `support` lists every position b may be nonzero at, without repeats, in any
+  /// order. On a true return the hyper-sparse path ran and `support` lists every position
+  /// the result may be nonzero at, without repeats, in any order; the seeds were read from
+  /// it rather than from a pass over all of b. On a false return the full loops ran and
+  /// `support` is unspecified. The arithmetic, and so every result bit, is the two-argument
+  /// form's. Product-form factors only: under an active Forrest-Tomlin update the full
+  /// solve runs and the answer is false.
+  [[nodiscard]] bool solve(double* b, DensityHistory* history,
+                           std::vector<Index>* support) const;
+  [[nodiscard]] bool solve_transpose(double* b, DensityHistory* history,
+                                     std::vector<Index>* support) const;
   /// The same solve with the transposed elimination factors applied as a gather over every
   /// entry of L, kept as the reference the hyper-sparse push form is tested against (#243).
   /// Tests only.
@@ -397,10 +412,18 @@ class SparseLu {
   mutable LuSolveStats stats_;
   void build_step_inverses();
   /// The FTRAN (base factors only; the caller applies the etas) over the reached steps.
-  /// Returns false, having touched nothing, when the reach is too dense to pay.
-  [[nodiscard]] bool solve_hyper(double* b) const;
+  /// Returns false, having touched nothing, when the reach is too dense to pay. With
+  /// `support` (see the public solve() that takes one) the seeds are read from it and, on
+  /// success, it is replaced by the result's positions.
+  [[nodiscard]] bool solve_hyper(double* b, std::vector<Index>* support = nullptr) const;
   /// The BTRAN after the etas, over the reached steps; false, touching nothing, as above.
-  [[nodiscard]] bool solve_transpose_hyper(double* b) const;
+  [[nodiscard]] bool solve_transpose_hyper(double* b,
+                                           std::vector<Index>* support = nullptr) const;
+  /// The product-form etas, adding to `support` every position they make nonzero.
+  void apply_etas(double* b, std::vector<Index>* support) const;
+  void apply_etas_transposed(double* b, std::vector<Index>* support) const;
+  /// The full BTRAN loops on product-form factors, after the etas.
+  void solve_transpose_after_etas(double* b) const;
   /// The same two, over an active Forrest-Tomlin factorization (#1042): L, the row etas and
   /// the folded U, over the steps the right-hand side reaches through them.
   [[nodiscard]] bool ft_solve_hyper(double* b) const;
