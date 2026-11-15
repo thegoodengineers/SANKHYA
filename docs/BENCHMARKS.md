@@ -4354,10 +4354,10 @@ adapters read no certificate, where SANKHYA's and HiGHS's must pass the verifier
 |---|---:|---:|---|---|---|---|---|---|---|
 | Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-d1d0d52.csv` | `d1d0d52` |
 | MIPLIB 3 MILP | 65 | 60 s | 42 / 41 / 42 / 0 | 52 / 49 / 52 / 0 | 50 / 45 / 50 / 0 | 49 / 48 / 49 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-d1d0d52.csv` | `d1d0d52` |
-| Stress set LP | 126 | 60 s | 114 / 114 / 116 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-e4eb1cf.csv` | `e4eb1cf` |
+| Stress set LP | 126 | 60 s | 115 / 115 / 117 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-7119598.csv` | `7119598` |
 | Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 102 / 94 / 28 / 8 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-e4eb1cf.csv` | `e4eb1cf` |
 
-Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 49, CBC 48, SCIP 45, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 114, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58, HiGHS 28.
+Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 49, CBC 48, SCIP 45, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 115, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58, HiGHS 28.
 
 Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2, Clp 1.17.9, GLPK 5.0, CBC 2.10.11.
 
@@ -4570,33 +4570,32 @@ row of the file as written and most of its certificates failing to prove the fil
 (each failing check is named below); Klee-Minty from n = 30, whose last right-hand sides
 reach 5^29 > 1e20, comes back unbounded.
 
-Measured on SANKHYA commit `e4eb1cf` against HiGHS 1.16.0 (highspy, separate process) and cbc-clp 1.17.9, glpk 5.0, scip 10.0.2 (bench/runners/rivals.py; an `infeasible` or `unbounded` from one of these is graded on the status alone), machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 9V74 80-Core Processor 15 GiB RAM`, 126 instances. Source: `stress-e4eb1cf.csv`.
+Measured on SANKHYA commit `7119598` against HiGHS 1.16.0 (highspy, separate process) and cbc-clp 1.17.9, glpk 5.0, scip 10.0.2 (bench/runners/rivals.py; an `infeasible` or `unbounded` from one of these is graded on the status alone), machine `github-actions ubuntu-24.04 4 vCPU Intel(R) Xeon(R) 6973P-C 15 GiB RAM`, 126 instances. Source: `stress-7119598.csv`.
 
 | family | instances | sankhya correct / wrong / failed | cbc-clp correct / wrong / failed | glpk correct / wrong / failed | highs correct / wrong / failed | scip correct / wrong / failed |
 |---|---|---|---|---|---|---|
 | `degenerate` | 5 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 |
 | `klee_minty` | 7 | 7 / 0 / 0 | 4 / 3 / 0 | 6 / 1 / 0 | 4 / 3 / 0 | 4 / 3 / 0 |
 | `near_singular` | 8 | 8 / 0 / 0 | 7 / 1 / 0 | 8 / 0 / 0 | 8 / 0 / 0 | 6 / 0 / 2 |
-| `scaled_netlib` | 94 | 82 / 0 / 12 | 35 / 59 / 0 | 14 / 80 / 0 | 0 / 84 / 10 | 0 / 67 / 27 |
+| `scaled_netlib` | 94 | 83 / 0 / 11 | 35 / 59 / 0 | 14 / 80 / 0 | 0 / 84 / 10 | 0 / 67 / 27 |
 | `thin_infeasible` | 8 | 8 / 0 / 0 | 4 / 4 / 0 | 8 / 0 / 0 | 8 / 0 / 0 | 8 / 0 / 0 |
 | `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 | 4 / 0 / 0 | 3 / 1 / 0 | 4 / 0 / 0 |
-| **all** | 126 | 114 / 0 / 12 | 59 / 67 / 0 | 45 / 81 / 0 | 28 / 88 / 10 | 27 / 70 / 29 |
+| **all** | 126 | 115 / 0 / 11 | 59 / 67 / 0 | 45 / 81 / 0 | 28 / 88 / 10 | 27 / 70 / 29 |
 
 **Reported `optimal` and wrong**, the headline count (#750): sankhya **0**, cbc-clp **64**, glpk **71**, highs **30**, scip **17**.
 
-**sankhya, failed** (12):
+**sankhya, failed** (11):
 
-- `scaled_bnl2`: no verdict: time_limit (stopped at the time limit of 59.9985s after 60.00s, 142248 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_d2q06c`: no verdict: time_limit (stopped at the time limit of 59.9972s after 60.00s, 29786 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_degen3`: no verdict: time_limit (time limit 59.9982s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_dfl001`: no verdict: time_limit (time limit 59.9958s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_greenbeb`: no verdict: time_limit (time limit 59.9971s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_maros-r7`: no verdict: killed (no exit within 3x the time limit)
-- `scaled_perold`: no verdict: time_limit (stopped at the time limit of 59.9993s after 60.00s, 64970 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_bnl2`: no verdict: time_limit (time limit 59.9987s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_d2q06c`: no verdict: time_limit (time limit 59.9977s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_degen3`: no verdict: time_limit (stopped at the time limit of 59.9986s after 60.00s, 445054 iterations, 0 nodes; route: the scaled attempt returned time_)
+- `scaled_dfl001`: no verdict: time_limit (stopped at the time limit of 59.9965s after 60.00s, 83608 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_greenbeb`: no verdict: time_limit (time limit 59.9974s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_perold`: no verdict: time_limit (time limit 59.9994s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 - `scaled_pilot`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 1.945e+09 from a least of 4.884e+01, which cannot happen on faithf)
 - `scaled_pilot.ja`: no verdict: time_limit (time limit 59.9985s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 - `scaled_pilot.we`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 2.959e+07 from a least of 1.841e-03, which cannot happen on faithf)
-- `scaled_pilot87`: no verdict: time_limit (time limit 59.992s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_)
+- `scaled_pilot87`: no verdict: time_limit (stopped at the time limit of 59.9931s after 59.99s, 38696 iterations, 0 nodes; route: the scaled attempt returned time_l)
 - `scaled_stair`: no verdict: time_limit (time limit 59.9997s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 
 **cbc-clp, wrong** (67):
