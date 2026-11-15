@@ -2184,6 +2184,77 @@ Points the verifier rejected: none. SANKHYA reported optimal away from the refer
 | `var-smallemery-m6j6` | -149.37501 | feasible, verified, 60.9 s | time_limit, verified, 60.0 s |
 | `wachplan` | -8 | time_limit, 60.1 s | time_limit, verified, 60.0 s |
 
+### SAMADHAN's 50: the same models as a rival's claim, at its settings
+
+The 50 benchmark-set models SAMADHAN reports on, read from its README and results JSON at `6efadba` (`bench/runners/miplib2017_samadhan50.json`), at its settings: 60 s, one thread, gap 1e-4. Its claim: **8 proved** (its HiGHS 20), graded its own way: a status of optimal, the objective compared with its own HiGHS run (obj_rel_diff); no published optima, no independent verifier. Ours and HiGHS's below are graded as in section 2-all: against the published optima of `miplib2017-v28.solu`, every point checked by `tools/verify_solution.py`, both in the same bench.yml job. Seed 0 is the published file, seeds 1 and 2 permutations of it.
+
+Commit `ea9ae68`; SANKHYA `bench/results/miplib2017-samadhan50-60s-seeds3-ea9ae68.csv`, HiGHS `bench/results/highs-miplib2017-samadhan50-60s-ea9ae68.csv` (HiGHS 1.16.0).
+
+| run | instances | proved | matched | feasible and verified |
+|---|---:|---:|---:|---:|
+| SAMADHAN, its claim | 50 | 8 | - | - |
+| SANKHYA seed 0 | 50 | **7** | 10 | 45 |
+| SANKHYA seed 1 | 50 | **5** | 8 | 44 |
+| SANKHYA seed 2 | 50 | **5** | 8 | 45 |
+| SANKHYA, any of 3 seeds | 50 | **8** | 11 | 45 |
+| SANKHYA, all 3 seeds | 50 | 4 | - | - |
+| HiGHS, our runner | 50 | **25** | 25 | 50 |
+
+Points the verifier rejected: none. SANKHYA reported optimal within its 1e-4 gap target but away from the reference, so counted neither proved nor matched: `neos-957323` seed 1 (-237.75634074300007, bound -237.75677531199997).
+
+| instance | reference | SAMADHAN claim | SANKHYA seeds proved | SANKHYA seed 0 | HiGHS |
+|---|---:|---|---:|---|---|
+| `30n20b8` | 302 | no_solution_found | 0/3 | time_limit, 60.1 s | time_limit, verified, 60.0 s |
+| `50v-10` | 3311.1799841 | no_solution_found | 0/3 | feasible, verified, 60.0 s | time_limit, verified, 60.0 s |
+| `air05` | 26374 | time_limit, 26402 | 3/3 | optimal, proved, matched, verified, 53.0 s | optimal, proved, matched, verified, 14.4 s |
+| `beasleyC3` | 753.9999999999128 | optimal, 754 | 0/3 | feasible, verified, 60.1 s | optimal, proved, matched, verified, 8.6 s |
+| `binkar10_1` | 6742.1998835 | time_limit, 6746.760023 | 0/3 | feasible, verified, 60.1 s | optimal, proved, matched, verified, 20.9 s |
+| `bppc4-08` | 53 | time_limit, 57 | 0/3 | feasible, verified, 60.0 s | time_limit, verified, 60.0 s |
+| `dano3_3` | 576.34463303 | time_limit | 0/3 | time_limit, 60.0 s | optimal, proved, matched, verified, 33.6 s |
+| `dano3_5` | 576.9249159565619 | time_limit | 0/3 | time_limit, 60.0 s | time_limit, verified, 60.0 s |
+| `eil33-2` | 934.007915999999 | time_limit, 1028.564171 | 0/3 | feasible, verified, 60.0 s | time_limit, verified, 60.0 s |
+| `enlight_hard` | 37 | no_solution_found | 0/3 | feasible, matched, verified, 60.2 s | optimal, proved, matched, verified, 8.3 s |
+| `ex9` | 81 | time_limit | 0/3 | time_limit, 60.5 s | optimal, proved, matched, verified, 2.0 s |
+| `gen-ip054` | 6840.96564179 | time_limit, 6851.468919 | 0/3 | feasible, verified, 60.3 s | time_limit, verified, 60.0 s |
+| `glass4` | 1200012599.972384 | time_limit, 1966683600 | 0/3 | feasible, verified, 60.1 s | time_limit, verified, 60.0 s |
+| `graph20-20-1rand` | -9 | time_limit, -8 | 0/3 | feasible, verified, 60.0 s | time_limit, verified, 60.0 s |
+| `h80x6320d` | 6382.099048245999 | time_limit, 6436.343037 | 0/3 | feasible, verified, 60.0 s | optimal, proved, matched, verified, 12.8 s |
+| `markshare_4_0` | 1 | optimal, 1 | 1/3 | feasible, matched, verified, 60.2 s | time_limit, verified, 60.0 s |
+| `mas74` | 11801.18572 | time_limit, 11801.18573 | 0/3 | feasible, verified, 60.3 s | time_limit, verified, 60.0 s |
+| `mas76` | 40005.05398999999 | time_limit, 40005.05414 | 0/3 | feasible, verified, 60.2 s | time_limit, verified, 60.0 s |
+| `mik-250-20-75-4` | -52301 | time_limit, -52266 | 0/3 | feasible, verified, 60.2 s | optimal, proved, matched, verified, 13.8 s |
+| `n5-3` | 8104.999999993999 | time_limit, 8443 | 0/3 | feasible, verified, 60.0 s | optimal, proved, matched, verified, 10.9 s |
+| `neos-662469` | 184379.9999999999 | time_limit, 1215872.5 | 0/3 | feasible, verified, 60.1 s | time_limit, verified, 60.0 s |
+| `neos-787933` | 30 | time_limit, 43 | 0/3 | feasible, verified, 60.9 s | optimal, proved, matched, verified, 8.6 s |
+| `neos-860300` | 3200.999999999998 | time_limit, 4165 | 0/3 | feasible, verified, 60.2 s | optimal, proved, matched, verified, 9.8 s |
+| `neos-911970` | 54.76 | time_limit, 57.02 | 0/3 | feasible, verified, 60.0 s | optimal, proved, matched, verified, 5.4 s |
+| `neos-933966` | 318 | time_limit | 0/3 | feasible, verified, 60.2 s | optimal, proved, matched, verified, 33.0 s |
+| `neos-957323` | -237.7566815 | time_limit, -233.7639012 | 2/3 | optimal, proved, matched, verified, 20.4 s | optimal, proved, matched, verified, 41.5 s |
+| `neos17` | 0.1500025774 | time_limit, 0.4322909491 | 0/3 | feasible, verified, 60.1 s | optimal, proved, matched, verified, 5.4 s |
+| `neos5` | 15 | time_limit, 15 | 0/3 | feasible, matched, verified, 60.1 s | time_limit, verified, 60.0 s |
+| `neos8` | -3719 | optimal, -3719 | 3/3 | optimal, proved, matched, verified, 42.8 s | optimal, proved, matched, verified, 2.8 s |
+| `net12` | 214 | no_solution_found | 0/3 | feasible, verified, 60.1 s | time_limit, verified, 60.0 s |
+| `ns1830653` | 20622 | no_solution_found | 0/3 | time_limit, 60.0 s | time_limit, verified, 60.0 s |
+| `nu25-pr12` | 53904.99999999999 | time_limit, 53905 | 1/3 | optimal, proved, matched, verified, 29.0 s | optimal, proved, matched, verified, 3.1 s |
+| `nw04` | 16862 | optimal, 16862 | 0/3 | feasible, verified, 60.4 s | optimal, proved, matched, verified, 29.3 s |
+| `p200x1188c` | 15078 | optimal, 15078 | 0/3 | feasible, verified, 60.0 s | optimal, proved, matched, verified, 0.5 s |
+| `pg` | -8674.34260712 | time_limit, -8636.452609 | 0/3 | feasible, verified, 60.1 s | optimal, proved, matched, verified, 30.4 s |
+| `pg5_34` | -14339.35345 | time_limit, -14263.05637 | 0/3 | feasible, verified, 60.1 s | time_limit, verified, 60.0 s |
+| `pk1` | 11 | optimal, 11 | 0/3 | feasible, verified, 60.2 s | time_limit, verified, 60.0 s |
+| `qap10` | 339.9999999983871 | time_limit | 3/3 | optimal, proved, matched, verified, 48.7 s | time_limit, verified, 60.0 s |
+| `rail507` | 174 | no_solution_found | 0/3 | feasible, verified, 60.5 s | time_limit, verified, 60.0 s |
+| `ran14x18-disj-8` | 3712 | time_limit, 4063 | 0/3 | feasible, verified, 60.0 s | time_limit, verified, 60.0 s |
+| `rmatr100-p10` | 423 | time_limit, 423 | 0/3 | feasible, verified, 60.0 s | optimal, proved, matched, verified, 35.6 s |
+| `rococoC10-001000` | 11460 | no_solution_found | 0/3 | feasible, verified, 60.0 s | time_limit, verified, 60.0 s |
+| `roi2alpha3n4` | -63.20849503 | time_limit, -49.17563759 | 0/3 | feasible, verified, 60.5 s | time_limit, verified, 60.0 s |
+| `sct2` | -230.9891623 | time_limit, -228.2491785 | 0/3 | feasible, verified, 60.0 s | time_limit, verified, 60.0 s |
+| `seymour1` | 410.76370139 | time_limit, 411.3049205 | 0/3 | feasible, verified, 60.0 s | optimal, proved, matched, verified, 53.2 s |
+| `sp150x300d` | 69 | optimal, 69 | 3/3 | optimal, proved, matched, verified, 0.4 s | optimal, proved, matched, verified, 0.0 s |
+| `swath1` | 379.07129575 | optimal, 379.0712957 | 1/3 | optimal, proved, matched, verified, 18.0 s | optimal, proved, matched, verified, 14.6 s |
+| `swath3` | 397.76134365 | time_limit, 401.6966559 | 0/3 | feasible, verified, 60.1 s | time_limit, verified, 60.0 s |
+| `timtab1` | 764771.99999978 | no_solution_found | 0/3 | feasible, verified, 60.2 s | optimal, proved, matched, verified, 47.8 s |
+| `tr12-30` | 130595.9999999999 | time_limit, 133127 | 0/3 | feasible, verified, 60.0 s | time_limit, verified, 60.0 s |
+
 ---
 
 ## 2a. MIPLIB 3, the classic set beside MIPLIB 2017 (#761)
