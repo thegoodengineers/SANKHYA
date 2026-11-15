@@ -276,8 +276,8 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
   // Springer 2008, ch. 6). A trial that ends infeasible carries its own Farkas certificate of
   // the working system less the candidate, and every working element that certificate does
   // not lean on can go at once: the system without them is infeasible by the same vector.
-  // Checked, not assumed - the pruned system must be proved infeasible by it before the
-  // pruning is kept. The deletion filter alone takes one solve per candidate, and a dense
+  // Checked, not assumed - the pruned system must be proved infeasible by it, and found
+  // infeasible by a solve of its own, before the pruning is kept. The deletion filter alone takes one solve per candidate, and a dense
   // starting certificate (an elastic LP's duals, as on Netlib gran) makes that thousands.
   const auto prune = [&](const Solution& trial) {
     if (trial.status != SolveStatus::kInfeasible ||
@@ -289,6 +289,7 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
     std::vector<double> dw_threshold;
     aggregate(sub, w, &dw, &dw_threshold);
     Model pruned = sub;
+    bool drops = false;
     std::vector<bool> rows = row_in;
     std::vector<bool> lows = col_lo_in;
     std::vector<bool> highs = col_hi_in;
@@ -296,6 +297,7 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
       const auto u = static_cast<std::size_t>(i);
       if (rows[u] && w[u] == 0.0) {
         rows[u] = false;
+        drops = true;
         pruned.row_lower[u] = -kInfinity;
         pruned.row_upper[u] = +kInfinity;
       }
@@ -304,14 +306,20 @@ void compute_iis(const Model& model, Solution* solution, const Options& options,
       const auto u = static_cast<std::size_t>(j);
       if (lows[u] && !(dw[u] < -dw_threshold[u])) {
         lows[u] = false;
+        drops = true;
         pruned.col_lower[u] = -kInfinity;
       }
       if (highs[u] && !(dw[u] > dw_threshold[u])) {
         highs[u] = false;
+        drops = true;
         pruned.col_upper[u] = +kInfinity;
       }
     }
-    if (!farkas_proves_infeasible(pruned, w)) return;
+    // The vector's check has a tolerance, and on a model infeasible by less than it (Netlib
+    // gran) a pruned system it passes can solve feasible; then every later candidate looks
+    // necessary. So the pruned system is solved too, and kept only when that solve agrees.
+    if (!drops || !farkas_proves_infeasible(pruned, w)) return;
+    if (solve(pruned, sub_opts).status != SolveStatus::kInfeasible) return;
     sub = std::move(pruned);
     row_in = std::move(rows);
     col_lo_in = std::move(lows);
