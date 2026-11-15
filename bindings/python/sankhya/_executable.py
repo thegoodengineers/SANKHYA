@@ -8,12 +8,13 @@ library, ensuring python tooling and benchmark runners use the exact same discov
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 from ._library import SankhyaError
 
-__all__ = ["locate"]
+__all__ = ["locate", "main"]
 
 
 def _repository_root() -> Path:
@@ -73,3 +74,17 @@ def locate() -> Path:
         "Or set the SANKHYA_EXECUTABLE environment variable to its full path.\n\n"
         "Locations searched:\n  " + "\n  ".join(tried)
     )
+
+
+def main() -> int:
+    """The `sankhya` command an installed wheel puts on PATH: the bundled CLI, arguments and
+    exit code passed through. pip writes the launcher (Scripts/sankhya.exe on Windows) from
+    the wheel's console_scripts entry, so `pip install <wheel>` is the whole install."""
+    process = subprocess.Popen([str(locate()), *sys.argv[1:]])
+    while True:
+        try:
+            return process.wait()
+        except KeyboardInterrupt:
+            # The CLI got the same Ctrl-C and returns its best point as `interrupted`;
+            # waiting for it, rather than killing it, keeps that answer.
+            continue

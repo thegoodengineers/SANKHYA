@@ -529,7 +529,12 @@ pip install https://github.com/thegoodengineers/SANKHYA/releases/download/v1.0.0
 python -c "import sankhya; print(sankhya.version())"
 ```
 
-Nothing is on PyPI.
+Nothing is on PyPI. The `v1.0.0-rc5` wheels carry the CLI inside the package but put no
+command on PATH (`python -c "import sankhya; print(sankhya.locate_executable())"` names it).
+Wheels built after it declare a `sankhya` console script, so on Windows as on Linux the one
+`pip install` above is the whole install and `sankhya solve model.mps` runs the bundled CLI;
+the release workflow's wheel test runs `sankhya version` through that command on every
+Python it installs into.
 
 The container image (the CUDA build, the verifier and the demo models) is public at
 `ghcr.io/thegoodengineers/sankhya:v1.0.0-rc5`:
