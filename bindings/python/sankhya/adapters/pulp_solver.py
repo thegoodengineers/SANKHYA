@@ -36,6 +36,12 @@ inconclusive case. Only SANKHYA's ``optimal`` is ever reported as ``Optimal``.
 point is where the ray starts. PuLP 4 cannot clear a variable's value, so after a solve with
 no solution ``varValue`` keeps whatever an earlier solve left: read ``has_solution``, and
 ``LpSolveStats.objective`` is None in that case.
+
+DUALS. On an LP solved to ``optimal`` each constraint's ``pi`` is SANKHYA's row dual and each
+variable's ``dj`` its reduced cost, in the model's own sense: the rate at which the objective
+moves as the constraint's right-hand side (or the variable's active bound) is raised. That is
+what PuLP's own CBC backend reports. A MILP, or a solve that did not reach ``optimal``, leaves
+them as they were: the LP duals of a branch-and-bound leaf are not the model's.
 """
 
 from __future__ import annotations
@@ -84,7 +90,7 @@ class SANKHYA(pulp.LpSolver):
 
         # mip=False means "solve the LP relaxation": no column is marked integer, so the
         # model IS the relaxation rather than a MILP solve() would have to be told to relax.
-        model, var_index = _build_model(lp, relax_integers=not self.mip)
+        model, var_index, constraints = _build_model(lp, relax_integers=not self.mip)
 
         solver_options = dict(self._options)
         solver_options.setdefault("log_to_console", self.msg)
@@ -99,6 +105,14 @@ class SANKHYA(pulp.LpSolver):
         lp._sankhya_last_result = result
 
         _assign_values(lp, var_index, result)
+        integer = self.mip and any(v.cat in (pulp.LpInteger, pulp.LpBinary)
+                                   for v in lp.variables())
+        if result.status == "optimal" and not integer:
+            duals, reduced = result.row_duals, result.reduced_costs
+            for row, constraint in enumerate(constraints):
+                constraint.pi = duals[row]
+            for variable in lp.variables():
+                variable.dj = reduced[var_index[variable.name]]
 
         if _PULP4:
             status = _STATUS_TO_LPSOLVESTATUS.get(result.status, pulp.LpSolveStatus.Undefined)
@@ -237,7 +251,7 @@ def _build_model(lp: "pulp.LpProblem", relax_integers: bool = False):
         else:
             model.add_row(coefficients, lower=bound, upper=bound, name=name)
 
-    return model, var_index
+    return model, var_index, [constraint for _, constraint in constraints]
 
 
 def _assign_values(lp: "pulp.LpProblem", var_index: dict[str, int],
