@@ -103,8 +103,8 @@ the one stamped in the file's rows, the build that produced it.
 | measurement | CSV | commit |
 |---|---|---|
 | Netlib LP, full set: 94 of 94 within 1e-6 of Koch's exact optimum and verified; 83 match the readme; 94 accepted by the independent verifier | `bench/results/netlib-full-945cb4f.csv` | `945cb4f` |
-| Head-to-head, Netlib LP, 92 instances: SGM10 0.245 s against HiGHS 0.127 s; against HiGHS faster on 4, tie on 82, slower on 6 | `bench/results/head-to-head-netlib-d1d0d52.csv` | `d1d0d52` |
-| Head-to-head, Kennington LP, 16 instances: SGM10 9.430 s against HiGHS 1.855 s; against HiGHS faster on 3, tie on 2, slower on 11 | `bench/results/head-to-head-kennington-1860864.csv` | `1860864` |
+| Head-to-head, Netlib LP, 92 instances: SGM10 0.206 s against HiGHS 0.096 s; against HiGHS faster on 3, tie on 82, slower on 7 | `bench/results/head-to-head-netlib-8eaf18c.csv` | `8eaf18c` |
+| Head-to-head, Kennington LP, 16 instances: SGM10 3.060 s against HiGHS 0.867 s; against HiGHS faster on 1, tie on 8, slower on 7 | `bench/results/head-to-head-kennington-8eaf18c.csv` | `8eaf18c` |
 | Head-to-head, Maros-Meszaros QP, 138 instances: SGM10 4.066 s against HiGHS 35.808 s; against HiGHS faster on 91, tie on 26, slower on 3 | `bench/results/head-to-head-maros-meszaros-d0eb672.csv` | `d0eb672` |
 | Safe bounds on Netlib: 93 of 94 optimal answers certified to 1e-6 by a rigorous bound, 0 with no finite bound (with `certified_gap_seconds=120`) | `bench/results/certified-gap-netlib-full-81b812c.csv` | `81b812c` |
 | Netlib infeasible set, verdict with a verified Farkas certificate: 29 of 29 | `bench/results/netlib-infeasible-557494c.csv` | `557494c` |
@@ -130,25 +130,25 @@ that is optimal, at the published optimum and verified counts for time. The meth
 
 ### Netlib LP
 
-`bench/results/head-to-head-netlib-d1d0d52.csv`, commit `d1d0d52`, 120 s limit, machine
-`github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64`.
+`bench/results/head-to-head-netlib-8eaf18c.csv`, commit `8eaf18c`, 120 s limit, machine
+`github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`.
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | d1d0d52 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.245 s |
-| HiGHS | 1.16.0 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.127 s |
-| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.312 s |
-| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.312 s |
-| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.436 s |
+| SANKHYA | 8eaf18c | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.206 s |
+| HiGHS | 1.16.0 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.096 s |
+| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.273 s |
+| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.292 s |
+| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.406 s |
 
 **Instance by instance, SANKHYA against each rival:**
 
 | against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
 |---|---:|---:|---:|---:|---:|---:|
-| HiGHS | 92 | 4 | 82 | 6 | 1.00x | 0.85x |
-| SCIP | 92 | 19 | 70 | 3 | 1.00x | 0.31x |
-| CBC/Clp | 92 | 6 | 79 | 7 | 1.00x | 0.60x |
-| GLPK | 92 | 12 | 77 | 3 | 1.00x | 0.70x |
+| HiGHS | 92 | 3 | 82 | 7 | 1.00x | 0.76x |
+| SCIP | 92 | 19 | 70 | 3 | 1.00x | 0.29x |
+| CBC/Clp | 92 | 5 | 82 | 5 | 1.00x | 0.50x |
+| GLPK | 92 | 14 | 75 | 3 | 1.00x | 0.65x |
 
 *A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
 
@@ -157,25 +157,25 @@ that is optimal, at the published optimum and verified counts for time. The meth
 
 ### Kennington LP
 
-`bench/results/head-to-head-kennington-1860864.csv`, commit `1860864`, 120 s limit,
-machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores; 16 GiB RAM; Linux-x86_64`.
+`bench/results/head-to-head-kennington-8eaf18c.csv`, commit `8eaf18c`, 120 s limit,
+machine `github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`.
 
 | solver | version | runs | solved | matched | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---|---:|
-| SANKHYA | 1860864 | 16 | 15 | 15 | 15 | primal+dual | 9.430 s |
-| HiGHS | 1.15.1 | 16 | 16 | 16 | 16 | primal+dual | 1.855 s |
-| SCIP | 10.0.2 | 16 | 15 | 15 | 15 | primal-only | 10.899 s |
-| CBC/Clp | 1.17.9 | 16 | 16 | 16 | 16 | primal+dual | 0.795 s |
-| GLPK | 5.0 | 16 | 15 | 15 | 15 | primal+dual | 7.345 s |
+| SANKHYA | 8eaf18c | 16 | 15 | 15 | 15 | primal+dual | 3.060 s |
+| HiGHS | 1.16.0 | 16 | 16 | 16 | 16 | primal+dual | 0.867 s |
+| SCIP | 10.0.2 | 16 | 15 | 15 | 15 | primal-only | 6.920 s |
+| CBC/Clp | 1.17.9 | 16 | 16 | 16 | 16 | primal+dual | 0.358 s |
+| GLPK | 5.0 | 16 | 15 | 15 | 15 | primal+dual | 4.623 s |
 
 **Instance by instance, SANKHYA against each rival:**
 
 | against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
 |---|---:|---:|---:|---:|---:|---:|
-| HiGHS | 16 | 3 | 2 | 11 | 2.83x | 3.12x |
-| SCIP | 16 | 6 | 1 | 9 | 1.25x | 1.25x |
-| CBC/Clp | 16 | 1 | 2 | 13 | 2.86x | 4.39x |
-| GLPK | 16 | 9 | 1 | 6 | 0.98x | 0.74x |
+| HiGHS | 16 | 1 | 8 | 7 | 1.08x | 1.29x |
+| SCIP | 16 | 13 | 2 | 1 | 0.30x | 0.26x |
+| CBC/Clp | 16 | 0 | 4 | 12 | 1.74x | 1.74x |
+| GLPK | 16 | 11 | 2 | 3 | 0.65x | 0.44x |
 
 *A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
 
@@ -223,7 +223,7 @@ machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores
   it accepts 94 of 94 answers, and 94 of 94 are
   within 1e-6 of Koch's exact rational optimum (`bench/results/netlib-full-945cb4f.csv`, `docs/BENCHMARKS.md`
   section 1c). In the head-to-head run the same verifier rejected 5
-  rival answers on Netlib (`bench/results/head-to-head-netlib-d1d0d52.csv`, section 4a.1).
+  rival answers on Netlib (`bench/results/head-to-head-netlib-8eaf18c.csv`, section 4a.1).
 - **Certificates of infeasibility.** 29 of 29 of Netlib's
   infeasible LPs end with a Farkas certificate the verifier accepts (`bench/results/netlib-infeasible-557494c.csv`,
   section 3a). A verdict with no certificate is not counted.
@@ -240,10 +240,10 @@ machine `cloud container (docker); Intel(R) Xeon(R) Processor @ 2.10GHz; 4 cores
 
 ## 6. Honest limits
 
-- **Speed against HiGHS.** Netlib SGM 0.245 s against
-  0.127 s; Kennington 9.430 s against
-  1.855 s, slower on 11 of
-  16 instances (`bench/results/head-to-head-netlib-d1d0d52.csv`, `bench/results/head-to-head-kennington-1860864.csv`).
+- **Speed against HiGHS.** Netlib SGM 0.206 s against
+  0.096 s; Kennington 3.060 s against
+  0.867 s, slower on 7 of
+  16 instances (`bench/results/head-to-head-netlib-8eaf18c.csv`, `bench/results/head-to-head-kennington-8eaf18c.csv`).
 - **Large LPs.** Mittelmann: 5 of 12 inside the limit
   (`bench/results/mittelmann-72123ff.csv`, `docs/BENCHMARKS.md` section 1d).
 - **MILP proofs.** 11 of 30 MIPLIB instances proved, 14
@@ -347,19 +347,19 @@ Every solve writes a `.sol` file, and `tools/verify_solution.py`, a separate Pyt
 
 Three independent anchors. The Netlib answers are graded against Koch's optima, computed in exact rational arithmetic: 94 of 94 within 1e-6. The same verifier judges the rivals' answers in the head-to-head run and rejected 5 of theirs on Netlib, each named with the violated condition. And HiGHS, as a separate process, agrees on the objective on 50 of 50 medium-tier instances.
 
-*Evidence: `bench/results/netlib-full-945cb4f.csv`; `bench/results/head-to-head-netlib-d1d0d52.csv` and `docs/BENCHMARKS.md` section 4a.1; `bench/results/compare-highs-medium-ad57c03.csv` and section 4.*
+*Evidence: `bench/results/netlib-full-945cb4f.csv`; `bench/results/head-to-head-netlib-8eaf18c.csv` and `docs/BENCHMARKS.md` section 4a.1; `bench/results/compare-highs-medium-ad57c03.csv` and section 4.*
 
 **Q5. How fast is it against HiGHS on Netlib?**
 
-Slower in the aggregate. Shifted geometric mean with a 10 s shift over 92 instances: SANKHYA 0.245 s, HiGHS 0.127 s. Instance by instance, SANKHYA is faster on 4, ties on 82 (within 10%, or both under 0.1 s) and is slower on 6. We do not headline a win count: most pairs are ties, because most Netlib instances finish in milliseconds.
+Slower in the aggregate. Shifted geometric mean with a 10 s shift over 92 instances: SANKHYA 0.206 s, HiGHS 0.096 s. Instance by instance, SANKHYA is faster on 3, ties on 82 (within 10%, or both under 0.1 s) and is slower on 7. We do not headline a win count: most pairs are ties, because most Netlib instances finish in milliseconds.
 
-*Evidence: `bench/results/head-to-head-netlib-d1d0d52.csv` at `d1d0d52`; `docs/BENCHMARKS.md` section 4a.1.*
+*Evidence: `bench/results/head-to-head-netlib-8eaf18c.csv` at `8eaf18c`; `docs/BENCHMARKS.md` section 4a.1.*
 
 **Q6. And on larger LPs?**
 
-On the Kennington set HiGHS is clearly ahead: SGM 9.430 s against 1.855 s, SANKHYA faster on 3 of 16 and slower on 11, a median ratio of 2.83x. On Mittelmann's LPs SANKHYA finishes 5 of 12 inside the limit. Speed at size is the main open work.
+On the Kennington set HiGHS is clearly ahead: SGM 3.060 s against 0.867 s, SANKHYA faster on 1 of 16 and slower on 7, a median ratio of 1.08x. On Mittelmann's LPs SANKHYA finishes 5 of 12 inside the limit. Speed at size is the main open work.
 
-*Evidence: `bench/results/head-to-head-kennington-1860864.csv`, section 4a.2; `bench/results/mittelmann-72123ff.csv`, section 1d of `docs/BENCHMARKS.md`.*
+*Evidence: `bench/results/head-to-head-kennington-8eaf18c.csv`, section 4a.2; `bench/results/mittelmann-72123ff.csv`, section 1d of `docs/BENCHMARKS.md`.*
 
 **Q7. How does the QP engine compare?**
 
