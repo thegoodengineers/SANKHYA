@@ -81,6 +81,7 @@ TEST(Options, DefaultsComeFromTolerancesHeader) {
   EXPECT_DOUBLE_EQ(options.get_double("mip_absolute_gap"), tol::kMipAbsoluteGap);
   EXPECT_DOUBLE_EQ(options.get_double("pdhg_tolerance"), tol::kPdhgTight);
   EXPECT_EQ(options.get_int("mip_dive_lp_resolves"), tol::kDivingMaxLpResolves);
+  EXPECT_DOUBLE_EQ(options.get_double("presolve_probing_fixed_share"), tol::kProbingFixedShare);
 }
 
 TEST(Options, UnknownNameIsRejectedWithAMessage) {

@@ -9,6 +9,7 @@
 // separator is checked the same way with the probed conflicts fed in, and random MILPs are
 // solved with probing on against the exact rational branch and bound.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -312,6 +313,7 @@ Options with_probing(bool on) {
   options.set_bool("log_to_console", false);
   options.set_bool("presolve", true);
   options.set_bool("presolve_probing", on);
+  options.set_double("presolve_probing_fixed_share", 0.0);  // off means off
   options.set_int("node_limit", 100000);
   return options;
 }
@@ -332,6 +334,43 @@ TEST(PresolveProbing, TheOptionReachesPresolveAndOffMeansOff) {
   ASSERT_EQ(without.status, SolveStatus::kOptimal) << without.message;
   EXPECT_NEAR(with.objective, without.objective, 1e-9);
   EXPECT_LE(with.primal_infeasibility, 1e-9);
+}
+
+TEST(PresolveProbing, TheFixedShareWritesProbingOnlyWhenItFixesThatMuch) {
+  // presolve_probing_fixed_share with presolve_probing off: probing's fixings are written
+  // when they reach the share of the integer columns, and nothing is when they fall short.
+  Model model = build({{2, 1, 0}, {1, 1, 1}}, {1.5, -kInf}, {kInf, 1.5}, {0, 0, 0}, {1, 1, 1},
+                      {true, false, true});
+  model.col_cost = {1, 1, -1};
+  Logger logger(nullptr);
+  const presolve::Result always = presolve::presolve(model, with_probing(true), logger);
+  const Count fixed = always.report.probing_fixings;
+  const Index integers = always.model.num_integer_columns();
+  ASSERT_GT(fixed, 0);
+  ASSERT_GT(integers, 0);
+  const double share = static_cast<double>(fixed) / static_cast<double>(integers);
+  Options at = with_probing(false);
+  at.set_double("presolve_probing_fixed_share", share - 1e-9);  // x / n * n may round up
+  const presolve::Result reached = presolve::presolve(model, at, logger);
+  EXPECT_EQ(reached.report.probing_fixings, fixed);
+  EXPECT_EQ(reached.model.col_lower, always.model.col_lower);
+  EXPECT_EQ(reached.model.col_upper, always.model.col_upper);
+  if (share < 1.0) {
+    Options above = with_probing(false);
+    above.set_double("presolve_probing_fixed_share", std::min(1.0, share + 0.01));
+    const presolve::Result short_of = presolve::presolve(model, above, logger);
+    const presolve::Result off = presolve::presolve(model, with_probing(false), logger);
+    EXPECT_EQ(short_of.report.probing_fixings, 0);
+    EXPECT_EQ(short_of.model.col_lower, off.model.col_lower);
+    EXPECT_EQ(short_of.model.col_upper, off.model.col_upper);
+  }
+  for (const double gate : {0.0, share, 1.0}) {
+    Options options = with_probing(false);
+    options.set_double("presolve_probing_fixed_share", gate);
+    const Solution s = solve(model, options);
+    ASSERT_EQ(s.status, SolveStatus::kOptimal) << gate << ": " << s.message;
+    EXPECT_NEAR(s.objective, solve(model, with_probing(false)).objective, 1e-9) << gate;
+  }
 }
 
 TEST(PresolveProbing, ContinuousBoundsAreWrittenOnlyWhenAsked) {

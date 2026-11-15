@@ -1697,11 +1697,32 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   // probes its own model again to feed them to the clique separator, because the reduced
   // Model has nowhere to carry them. A probe that proves the model infeasible changes
   // nothing here: the engine proves it with a certificate this reduction does not build.
+  //
+  // presolve_probing_fixed_share > 0 (the default, tol::kProbingFixedShare) with
+  // presolve_probing off probes as well, and writes the fixings and integer bounds only when
+  // probing FIXED at least that share of the integer columns; the search's clique conflicts
+  // stay off. Probing as a default lost proofs on
+  // MIPLIB 3 (10teams, air05, bell5 on seed 2, #1244's run 43596402813), where it fixes
+  // 0.3%, 0.7% and 5.2% of the integer columns, and it is what proves mitre, where it fixes
+  // 36% (3,867 of 10,724 on seed 0; no other MIPLIB 3 model above misc03's 9.4%,
+  // bench/results/option-ab-miplib3-probing-66b38df.csv): mitre's root LP goes from 114740.5
+  // to 115135.0 before a single cut, and no clique cut is taken.
   ProbingResult probing;
-  if (options.get_bool("presolve_probing") && reduced.has_integrality()) {
+  const bool probe_always = options.get_bool("presolve_probing");
+  const double fixed_share = options.get_double("presolve_probing_fixed_share");
+  if ((probe_always || fixed_share > 0.0) && reduced.has_integrality()) {
     probing =
         probe_binaries(reduced, reduced.col_lower, reduced.col_upper, tol::kProbingWorkLimit);
-    if (probing.infeasible) {
+    const Index integers = reduced.num_integer_columns();
+    if (!probe_always && !probing.infeasible &&
+        static_cast<double>(probing.fixings) <
+            fixed_share * static_cast<double>(std::max<Index>(1, integers))) {
+      logger.verbose(
+          "  presolve: probing fixed {} of {} integer columns, under the share {:g} "
+          "presolve_probing_fixed_share asks for; nothing written",
+          probing.fixings, integers, fixed_share);
+      probing = ProbingResult{};  // nothing learned is kept, so nothing is reported
+    } else if (probing.infeasible) {
       logger.verbose(
           "  presolve: probing found both values of a binary infeasible; the model "
           "is left for the engine to prove infeasible");
