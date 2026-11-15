@@ -80,6 +80,10 @@ Options elastic_options(const Options& options, double seconds) {
   sub.set_bool("engine_race", false);
   sub.set_bool("exact", false);
   sub.set_bool("exact_phase1", false);
+  // The certificate is the elastic LP's row duals, and its forcing rows and dominated
+  // columns (#1164, on by default) cost Netlib gran its certificate: bisected on CI to that
+  // commit, and main with the stage off certifies gran from these duals again.
+  sub.set_bool("presolve_dual_reductions", false);
   sub.set_string("progress_out", "");
   sub.set_string("write_certificate", "");
   sub.set_string("algorithm", "auto");
