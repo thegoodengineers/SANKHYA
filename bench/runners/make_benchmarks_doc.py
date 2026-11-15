@@ -2906,6 +2906,11 @@ def main() -> int:
     benchmark_set_runs = (newest_option_run(miplib2017_bench_doc.sankhya_pattern(),
                                             "mip_threads=1"),
                           newest(miplib2017_bench_doc.highs_pattern()))
+    samadhan50_ours, samadhan50_highs = miplib2017_bench_doc.samadhan50_patterns()
+    samadhan50_doc = miplib2017_bench_doc.samadhan50_section(
+        newest_option_run(samadhan50_ours, "mip_threads=1"), newest(samadhan50_highs),
+        miplib2017_bench_doc.load_manifest(miplib2017_bench_doc.SAMADHAN50),
+        miplib2017_bench_doc.load_manifest())
     # prefix: pdhg-threads-*, pdhg-two-matvec-* and pdhg-478-* share the glob, and since #592
     # section 1e had been reading the thread-scaling CSV as its own (0 instances shown).
     pdhg_csv = newest("pdhg-*.csv", prefix="pdhg")
@@ -3380,6 +3385,9 @@ clock, ends the unproved runs, so a shared machine moves the time columns and no
 ## 2-all. MIPLIB 2017, the whole benchmark set: 240 models at 60 s (#1199)
 
 {miplib2017_bench_doc.section(*benchmark_set_runs, miplib2017_bench_doc.load_manifest())}
+### SAMADHAN's 50: the same models as a rival's claim, at its settings
+
+{samadhan50_doc}
 ---
 
 ## 2a. MIPLIB 3, the classic set beside MIPLIB 2017 (#761)

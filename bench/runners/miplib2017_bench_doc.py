@@ -149,3 +149,96 @@ def section(sankhya: Path | None, highs: Path | None, manifest: dict | None) -> 
                             rival.get("solver_seconds", "")) if rival else "no run") + " |")
     out.append("")
     return "\n".join(out)
+
+
+# SAMADHAN's 50 (bench/runners/miplib2017_samadhan50.json): the models a rival entry reports
+# on, run by bench.yml options=samadhan50 with its settings, three seeds for us.
+SAMADHAN50 = REPO_ROOT / "bench" / "runners" / "miplib2017_samadhan50.json"
+
+
+def samadhan50_patterns(limit: int = LIMIT) -> tuple[str, str]:
+    return (f"miplib2017-samadhan50-{limit}s-seeds3-[0-9a-f]*.csv",
+            f"highs-miplib2017-samadhan50-{limit}s-[0-9a-f]*.csv")
+
+
+def samadhan50_section(sankhya: Path | None, highs: Path | None, chosen: dict | None,
+                       manifest: dict | None) -> str:
+    """The rival's claim, our count per seed and on any seed, and HiGHS's, on its 50."""
+    if not chosen:
+        return "No list of the 50 models.\n"
+    names = sorted(chosen["instances"])
+    claim = chosen["their_claim"]
+    out = [f"The 50 benchmark-set models SAMADHAN reports on, read from its README and "
+           f"results JSON at `{chosen['source_commit'][:7]}` "
+           f"(`bench/runners/miplib2017_samadhan50.json`), at its settings: "
+           f"{chosen['their_settings']['time_limit_seconds']} s, one thread, gap 1e-4. "
+           f"Its claim: **{claim['proved']} proved** (its HiGHS {claim['their_highs_proved']}), "
+           f"graded its own way: {claim['grading']}. Ours and HiGHS's below are graded "
+           "as in section 2-all: against the published optima of `miplib2017-v28.solu`, "
+           "every point checked by `tools/verify_solution.py`, both in the same bench.yml "
+           "job. Seed 0 is the published file, seeds 1 and 2 permutations of it.", ""]
+    if sankhya is None and highs is None:
+        return "\n".join(out + ["Not yet run: bench.yml suite=miplib2017-bench "
+                                "options=samadhan50.", ""])
+    ours = [r for r in (read(sankhya) if sankhya else []) if r["instance"] in chosen["instances"]]
+    theirs = [r for r in (read(highs) if highs else []) if r["instance"] in chosen["instances"]]
+    first = (ours or theirs)[0]
+    out += [f"Commit `{first.get('git_commit', '?')}`; SANKHYA `bench/results/"
+            f"{sankhya.name if sankhya else '-'}`, HiGHS `bench/results/"
+            f"{highs.name if highs else '-'}`"
+            + (f" (HiGHS {theirs[0].get('solver_version', '?')})" if theirs else "") + ".", ""]
+    seeds = sorted({r.get("seed", "0") for r in ours}, key=int)
+    by_seed = {s: [r for r in ours if r.get("seed", "0") == s] for s in seeds}
+    out += ["| run | instances | proved | matched | feasible and verified |",
+            "|---|---:|---:|---:|---:|",
+            f"| SAMADHAN, its claim | {len(names)} | {claim['proved']} | - | - |"]
+    for s in seeds:
+        c = counts(by_seed[s], sankhya_verdicts)
+        out.append(f"| SANKHYA seed {s} | {c['instances']} | **{c['proved']}** | "
+                   f"{c['matched']} | {c['feasible']} |")
+    if len(seeds) > 1:
+        verdicts = {}
+        for r in ours:
+            for key, value in sankhya_verdicts(r).items():
+                verdicts.setdefault(r["instance"], {}).setdefault(key, []).append(value)
+        line = [sum(any(v[k]) for v in verdicts.values()) for k in ("proved", "matched",
+                                                                     "feasible")]
+        every = sum(all(v["proved"]) and len(v["proved"]) == len(seeds)
+                    for v in verdicts.values())
+        out.append(f"| SANKHYA, any of {len(seeds)} seeds | {len(verdicts)} | **{line[0]}** | "
+                   f"{line[1]} | {line[2]} |")
+        out.append(f"| SANKHYA, all {len(seeds)} seeds | {len(verdicts)} | {every} | - | - |")
+    if theirs:
+        c = counts(theirs, highs_verdicts)
+        out.append(f"| HiGHS, our runner | {c['instances']} | **{c['proved']}** | "
+                   f"{c['matched']} | {c['feasible']} |")
+    rejected = [f"`{r['instance']}` seed {r.get('seed', '0')}" for r in ours
+                if r.get("independently_verified") == "0"]
+    rejected += [f"`{r['instance']}` (HiGHS)" for r in theirs
+                 if r.get("independently_verified") == "0"]
+    away = [f"`{r['instance']}` seed {r.get('seed', '0')} ({r.get('our_objective')}, "
+            f"bound {r.get('dual_bound')})" for r in ours
+            if r.get("status") == "optimal" and r.get("matched_published") != "1"]
+    out += ["", f"Points the verifier rejected: {', '.join(rejected) or 'none'}. SANKHYA "
+            f"reported optimal within its 1e-4 gap target but away from the reference, so "
+            f"counted neither proved nor matched: {', '.join(away) or 'none'}."]
+    instances = (manifest or {}).get("instances", {})
+    out += ["", "| instance | reference | SAMADHAN claim | SANKHYA seeds proved | "
+            "SANKHYA seed 0 | HiGHS |", "|---|---:|---|---:|---|---|"]
+    for name in names:
+        entry, said = instances.get(name, {}), chosen["instances"][name]
+        reference = ("infeasible" if entry.get("solu_status") == "=inf="
+                     else entry.get("published_text") or "?")
+        mine = [r for r in ours if r["instance"] == name]
+        zero = next((r for r in mine if r.get("seed", "0") == "0"), None)
+        rival = next((r for r in theirs if r["instance"] == name), None)
+        objective = said["claimed_objective"]
+        out.append(f"| `{name}` | {reference} | {said['claimed_status']}"
+                   + (f", {objective:.10g}" if objective is not None else "") + " | "
+                   f"{sum(sankhya_verdicts(r)['proved'] for r in mine)}/{len(mine)} | "
+                   + (_cell(zero["status"], sankhya_verdicts(zero), zero.get("wall_seconds", ""))
+                      if zero else "no run") + " | "
+                   + (_cell(rival["status"], highs_verdicts(rival),
+                            rival.get("solver_seconds", "")) if rival else "no run") + " |")
+    out.append("")
+    return "\n".join(out)

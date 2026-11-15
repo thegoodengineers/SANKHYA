@@ -290,5 +290,37 @@ if COMMITTED.exists():
     check(all(re.fullmatch(r"[0-9a-f]{64}", e["gz_sha256"]) for e in entries.values()),
           "a sha256 for every model")
 
+print("SAMADHAN's 50")
+chosen = json.loads(doc.SAMADHAN50.read_text(encoding="utf-8"))
+check(len(chosen["instances"]) == 50 and chosen["their_claim"]["proved"] == 8,
+      "the list holds the 50 and the claim of 8")
+if COMMITTED.exists():
+    check(set(chosen["instances"]) <= set(real["instances"]), "all 50 are benchmark-set models")
+two = {"source_commit": "abc1234", "their_settings": {"time_limit_seconds": 60},
+       "their_claim": {"proved": 1, "their_highs_proved": 2, "grading": "g"},
+       "instances": {n: {"claimed_status": "optimal", "claimed_objective": 1.0}
+                     for n in ("a", "b")}}
+seeded = [dict(ours[0], seed="0"), dict(ours[0], seed="1"), dict(ours[2], instance="a", seed="2"),
+          dict(ours[1], instance="b", seed="0"), dict(ours[2], instance="b", seed="1"),
+          dict(ours[4], instance="b", seed="2"), dict(ours[0], instance="x", seed="0")]
+with tempfile.TemporaryDirectory() as tmp:
+    path = Path(tmp) / "miplib2017-samadhan50-60s-seeds3-abc1234.csv"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(seeded[0]) + ["wall_seconds"])
+        writer.writeheader()
+        writer.writerows(seeded)
+    text = doc.samadhan50_section(path, None, two, None)
+check("| SANKHYA seed 0 | 2 | **1** | 2 | 2 |" in text
+      and "| SANKHYA seed 2 | 2 | **0** | 0 | 1 |" in text
+      and "| SANKHYA, any of 3 seeds | 2 | **1** | 2 | 2 |" in text
+      and "| SANKHYA, all 3 seeds | 2 | 0 | - | - |" in text and "`x`" not in text,
+      "per seed, any seed and all seeds; a model outside the 50 is left out", text)
+check(all(fnmatch.fnmatch(n, g) for n, g in zip(
+          ("miplib2017-samadhan50-60s-seeds3-abc1234.csv",
+           "highs-miplib2017-samadhan50-60s-abc1234.csv"), doc.samadhan50_patterns()))
+      and not any(fnmatch.fnmatch(n, g) for n in names.values()
+                  for g in doc.samadhan50_patterns()),
+      "the 50's globs take its CSVs and none of the 240's")
+
 print(f"\n{'all passed' if FAILURES == 0 else f'{FAILURES} FAILED'}")
 sys.exit(1 if FAILURES else 0)
