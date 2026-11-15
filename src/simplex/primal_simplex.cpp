@@ -105,6 +105,8 @@ void Simplex::build_working_problem() {
   cost_basic_.assign(static_cast<std::size_t>(m_), 0.0);
   y_.assign(static_cast<std::size_t>(m_), 0.0);
   alpha_.assign(static_cast<std::size_t>(m_), 0.0);
+  alpha_support_.clear();
+  alpha_support_exact_ = true;
   reduced_cost_.assign(static_cast<std::size_t>(total_), 0.0);
   devex_weight_.assign(static_cast<std::size_t>(total_), 1.0);
   rho_.assign(static_cast<std::size_t>(m_), 0.0);
@@ -894,6 +896,7 @@ void Simplex::update_devex_weights(Index entering, Index leaving_row, double piv
   std::fill(rho_.begin(), rho_.end(), 0.0);
   rho_[static_cast<std::size_t>(leaving_row)] = 1.0;
   lu_.solve_transpose(rho_.data(), &row_history_);
+  rho_support_exact_ = false;  // the dual's list of rho's nonzeros no longer describes it
 
   const double inverse_pivot = 1.0 / pivot;
   const double scaled_weight_q = weight_q * inverse_pivot * inverse_pivot;
@@ -932,13 +935,50 @@ void Simplex::update_devex_weights(Index entering, Index leaving_row, double piv
 }
 
 void Simplex::ftran_entering_column(Index entering) {
-  std::fill(alpha_.begin(), alpha_.end(), 0.0);
+  // The only writer of alpha_, so alpha_support_ always lists its nonzeros, ascending, and
+  // clearing it costs the last column's nonzeros rather than m (Hall and McKinnon 2005).
+  clear_on(alpha_, alpha_support_, alpha_support_exact_);
+  alpha_support_.clear();
   for_each_entry(entering, [&](Index row, double value) {
     alpha_[static_cast<std::size_t>(row)] += value;
+    alpha_support_.push_back(row);  // a column's rows are distinct (SparseMatrix::finalize)
   });
   // The entering column: under the Forrest-Tomlin update its partial transform is kept for
-  // the update that follows (SparseLu::solve_entering); under the product form, solve().
-  lu_.solve_entering(alpha_.data(), &column_history_);
+  // the update that follows (SparseLu::solve_entering); under the product form, solve(),
+  // which carries the support through when its hyper-sparse path runs.
+  bool known = false;
+  if (lu_.forrest_tomlin()) {
+    lu_.solve_entering(alpha_.data(), &column_history_);
+  } else {
+    known = lu_.solve(alpha_.data(), &column_history_, &alpha_support_);
+  }
+  settle_support(alpha_, known, &alpha_support_);
+  alpha_support_exact_ = true;
+}
+
+void Simplex::settle_support(const std::vector<double>& v, bool known,
+                             std::vector<Index>* support) {
+  if (known) {
+    std::size_t kept = 0;
+    for (const Index i : *support) {
+      if (v[static_cast<std::size_t>(i)] != 0.0) (*support)[kept++] = i;
+    }
+    support->resize(kept);
+    std::sort(support->begin(), support->end());
+    return;
+  }
+  support->clear();
+  for (Index i = 0; i < static_cast<Index>(v.size()); ++i) {
+    if (v[static_cast<std::size_t>(i)] != 0.0) support->push_back(i);
+  }
+}
+
+void Simplex::clear_on(std::vector<double>& v, const std::vector<Index>& support, bool exact) {
+  if (!exact) {
+    std::fill(v.begin(), v.end(), 0.0);
+    return;
+  }
+  for (const Index i : support) v[static_cast<std::size_t>(i)] = 0.0;
 }
 
 double Simplex::ftran_residual(Index entering) const {

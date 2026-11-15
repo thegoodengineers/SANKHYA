@@ -113,22 +113,32 @@ void SparseLu::remember(DensityHistory* history) const noexcept {
   history->predicted += tol::kHyperSparseHistoryWeight * (last_density_ - history->predicted);
 }
 
-bool SparseLu::solve_hyper(double* b) const {
+bool SparseLu::solve_hyper(double* b, std::vector<Index>* support) const {
   const auto limit =
       static_cast<std::size_t>(tol::kHyperSparseDensity * static_cast<double>(m_));
 
   // SYMBOLIC. The seeds are the steps that retire the right-hand side's nonzero rows; L's
-  // step k feeds the steps retiring the rows its multipliers touch.
+  // step k feeds the steps retiring the rows its multipliers touch. The rows are read off
+  // `support` when the caller has it and off all of b otherwise: the same set of seeds
+  // either way, so the same reach, and the reach is sorted before any arithmetic.
   hs_first_.clear();
-  for (Index i = 0; i < m_; ++i) {
-    if (b[static_cast<std::size_t>(i)] == 0.0) continue;
+  const auto seed = [&](Index i) {
+    if (b[static_cast<std::size_t>(i)] == 0.0) return true;
     const Index step = step_of_row_[static_cast<std::size_t>(i)];
+    if (hs_mark_[static_cast<std::size_t>(step)] != 0) return true;  // a repeated position
     hs_mark_[static_cast<std::size_t>(step)] = 1;
     hs_first_.push_back(step);
-    if (hs_first_.size() > limit) {
-      clear_marks(hs_mark_, hs_first_);
-      return false;
-    }
+    return hs_first_.size() <= limit;
+  };
+  bool seeded = true;
+  if (support != nullptr) {
+    for (std::size_t t = 0; t < support->size() && seeded; ++t) seeded = seed((*support)[t]);
+  } else {
+    for (Index i = 0; i < m_ && seeded; ++i) seeded = seed(i);
+  }
+  if (!seeded) {
+    clear_marks(hs_mark_, hs_first_);
+    return false;
   }
   bool small = close_reach(hs_mark_, hs_first_, limit, [&](Index k, auto&& visit) {
     const auto uk = static_cast<std::size_t>(k);
@@ -188,27 +198,42 @@ bool SparseLu::solve_hyper(double* b) const {
     const auto uk = static_cast<std::size_t>(k);
     b[static_cast<std::size_t>(pivot_col_[uk])] = work_[uk];
   }
+  // Every row L reached was cleared above, so these positions are all b can be nonzero at.
+  if (support != nullptr) {
+    support->clear();
+    for (const Index k : hs_second_)
+      support->push_back(pivot_col_[static_cast<std::size_t>(k)]);
+  }
   record_density(stats_.ftran_bins, nonzeros, m_);
   ++stats_.ftran_hyper;
   return true;
 }
 
-bool SparseLu::solve_transpose_hyper(double* b) const {
+bool SparseLu::solve_transpose_hyper(double* b, std::vector<Index>* support) const {
   const auto limit =
       static_cast<std::size_t>(tol::kHyperSparseDensity * static_cast<double>(m_));
 
   // SYMBOLIC. The seeds are the steps that pivoted on the right-hand side's nonzero basis
-  // positions; U's row-wise step k feeds the later steps it has an entry at.
+  // positions; U's row-wise step k feeds the later steps it has an entry at. Read off
+  // `support` when given, as in solve_hyper().
   hs_first_.clear();
-  for (Index p = 0; p < m_; ++p) {
-    if (b[static_cast<std::size_t>(p)] == 0.0) continue;
+  const auto seed = [&](Index p) {
+    if (b[static_cast<std::size_t>(p)] == 0.0) return true;
     const Index step = step_of_position_[static_cast<std::size_t>(p)];
+    if (hs_mark_[static_cast<std::size_t>(step)] != 0) return true;  // a repeated position
     hs_mark_[static_cast<std::size_t>(step)] = 1;
     hs_first_.push_back(step);
-    if (hs_first_.size() > limit) {
-      clear_marks(hs_mark_, hs_first_);
-      return false;
-    }
+    return hs_first_.size() <= limit;
+  };
+  bool seeded = true;
+  if (support != nullptr) {
+    for (std::size_t t = 0; t < support->size() && seeded; ++t) seeded = seed((*support)[t]);
+  } else {
+    for (Index p = 0; p < m_ && seeded; ++p) seeded = seed(p);
+  }
+  if (!seeded) {
+    clear_marks(hs_mark_, hs_first_);
+    return false;
   }
   bool small = close_reach(hs_mark_, hs_first_, limit, [&](Index k, auto&& visit) {
     const auto uk = static_cast<std::size_t>(k);
@@ -273,6 +298,12 @@ bool SparseLu::solve_transpose_hyper(double* b) const {
     const double value = z[uk];
     nonzeros += value != 0.0 ? 1 : 0;
     b[static_cast<std::size_t>(pivot_row_[uk])] = value;
+  }
+  // The seeds' positions were cleared above, so these rows are all b can be nonzero at.
+  if (support != nullptr) {
+    support->clear();
+    for (const Index k : hs_second_)
+      support->push_back(pivot_row_[static_cast<std::size_t>(k)]);
   }
   record_density(stats_.btran_bins, nonzeros, m_);
   ++stats_.btran_hyper;
