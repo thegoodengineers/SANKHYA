@@ -159,6 +159,7 @@ add_executable(sankhya_tests
   unit/test_presolve_fill_in_pricing.cpp
   unit/test_dual_steepest_edge.cpp
   unit/test_node_factor_cache.cpp
+  unit/test_simplex_quality_once.cpp
   unit/test_objective_branching.cpp
   unit/test_branching_fixpoint.cpp
   unit/test_combinatorial_cuts.cpp

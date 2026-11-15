@@ -1316,7 +1316,7 @@ Solution Simplex::finish(SolveStatus status, const std::string& message, Count i
       status == SolveStatus::kIterationLimit || status == SolveStatus::kTimeLimit ||
       status == SolveStatus::kUnbounded || status == SolveStatus::kInterrupted;
   if (!have_point) {
-    solution.recompute_quality(model_);
+    if (!quality_left_to_caller_) solution.recompute_quality(model_);
     // An infeasible model's optimum is the worst value the objective can take: +inf when
     // minimizing, -inf when maximizing, and the bound sits there with it. Anything else
     // without a point (a numerical failure, say) has an unknown bound, which is the infinity
@@ -1361,7 +1361,12 @@ Solution Simplex::finish(SolveStatus status, const std::string& message, Count i
   } else {
     solution.dual_bound = model_.sense == ObjSense::kMaximize ? kInfinity : -kInfinity;
   }
-  solution.recompute_quality(model_);
+  // Measured here unless the caller measures it on its own model (#1158): the scaled attempt
+  // of solve_with_scaling() is unscaled and re-measured there, and until then every node LP
+  // of a tree had its quality computed twice, the first time on the scaled model for
+  // nobody (9.3% of the instructions of 2,000 mas76 nodes, 5.1% of pk1's; callgrind,
+  // bench.yml run 43585844176).
+  if (!quality_left_to_caller_) solution.recompute_quality(model_);
   return solution;
 }
 
@@ -2173,12 +2178,17 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   // disagree about which method they are running.
   // `factors` is handed only to the scaled attempt: its matrix is the one cache.id names.
   // The unscaled retry factorizes the caller's matrix, which no id identifies.
+  // The scaled model itself, whichever of the scratch and the local below holds it.
+  const Model* scaled_attempt = nullptr;
   const Model* scaled_model = nullptr;  // the scratch's scaled model, once it is set up
   const CsrView* scaled_rows = nullptr;
   const auto run_engine_from = [&](const Model& problem, const Options& problem_options,
                                    NodeFactorCache* reuse, const WarmStart* start) {
     Simplex simplex(problem, problem_options, logger, control);
     if (&problem == scaled_model) simplex.use_row_view(scaled_rows);
+    // Both solves on the scaled model below are followed at once by unscale(), which
+    // measures the answer on the caller's model.
+    if (&problem == scaled_attempt) simplex.leave_quality_to_caller();
     if (reuse != nullptr) simplex.use_factor_cache(reuse, cache.id);
     simplex.count_distinct_costs_on(&model.col_cost);
     return engine == Engine::kDual ? simplex.run_dual(start) : simplex.run(start);
@@ -2231,6 +2241,7 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   NodeScratch local;
   NodeScratch& scratch = warm != nullptr ? node_scratch : local;
   Model& scaled = scratch.scaled;
+  scaled_attempt = &scaled;
   const bool held = cache.id != 0 && scratch.id == cache.id &&
                     scratch.costed == rescaled_costs && scaled.num_cols() == model.num_cols() &&
                     scaled.num_rows() == model.num_rows() &&

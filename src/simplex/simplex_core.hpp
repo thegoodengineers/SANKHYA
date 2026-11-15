@@ -212,6 +212,13 @@ class Simplex {
   /// probe of a few pivots on an 87,482-column model paid it every time.
   void use_row_view(const CsrView* rows) { shared_rows_ = rows; }
 
+  /// The caller measures the answer itself (#1158): finish() then leaves the quality fields
+  /// of the Solution it returns unmeasured. For the scaled attempt of solve_with_scaling()
+  /// only, which unscales the point and calls Solution::recompute_quality() on the caller's
+  /// model straight after; that call overwrites every field the one in finish() wrote, and
+  /// nothing reads them in between.
+  void leave_quality_to_caller() { quality_left_to_caller_ = true; }
+
   /// The caller's own costs, before scaling, for the distinct-cost test of
   /// perturb_costs_at_start() (#465): column scaling turns {0, 1} into as many values as
   /// there are scale factors, and the test is about the model, not its scaling.
@@ -726,6 +733,8 @@ class Simplex {
   /// built once per solve; pivot_row_touched_ names the entries the last scatter wrote so
   /// the next can zero them without a pass over every column.
   CsrView by_row_;
+  /// See leave_quality_to_caller().
+  bool quality_left_to_caller_ = false;
   const CsrView* shared_rows_ = nullptr;  ///< the caller's copy, when it holds one (#1158)
   [[nodiscard]] const CsrView& rows_view() const noexcept {
     return shared_rows_ != nullptr ? *shared_rows_ : by_row_;
