@@ -33,6 +33,7 @@ sys.path.insert(0, str(HERE))
 import verify_global_certificate as vg  # noqa: E402
 
 FAILURES = 0
+ZERO_ = Fraction(0)
 
 
 def check(condition: bool, name: str, detail: str = "") -> None:
@@ -154,6 +155,106 @@ def layer_one() -> None:
             check("does not list" in str(why), "an unlisted product is rejected", str(why)[:70])
 
 
+# The shape of a pooling Q-formulation, cut down: proportions q1 + q2 = 1 (sumq), a flow f
+# under a capacity (cap), and the path flows v_i = q_i * f as quadratic rows (path1, path2).
+RLT_MODEL = """NAME rlt
+ROWS
+ N cost
+ E sumq
+ L cap
+ E path1
+ E path2
+COLUMNS
+ q1 sumq 1
+ q2 sumq 1
+ f cost -1
+ f cap 1
+ v1 cost 2
+ v1 path1 1
+ v2 cost 1
+ v2 path2 1
+RHS
+ rhs sumq 1
+ rhs cap 8
+BOUNDS
+ UP bnd q1 1
+ UP bnd q2 1
+ UP bnd f 10
+ UP bnd v1 10
+ UP bnd v2 10
+QCMATRIX path1
+ q1 f -0.5
+ f q1 -0.5
+QCMATRIX path2
+ q2 f -0.5
+ f q2 -0.5
+ENDATA
+"""
+# Columns q1 0, q2 1, f 2, v1 3, v2 4; rows sumq 0, cap 1, path1 2, path2 3.
+RLT_PRODUCTS = [(0, 2), (1, 2)]
+RLT_ROWS = [[0, 2, "eq"], [1, 0, "ul"], [1, 0, "uu"], [1, 1, "ul"], [1, 1, "uu"]]
+
+
+def layer_rlt() -> None:
+    print("the checker's RLT rows")
+    rng = random.Random(1995)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "rlt.mps"
+        path.write_text(RLT_MODEL)
+        problem = vg.Problem(path, RLT_PRODUCTS, RLT_ROWS)
+        first = problem.m + 4 * len(RLT_PRODUCTS)
+        check(problem.rows_total == first + len(RLT_ROWS), "one relaxation row per rlt entry",
+              f"{problem.rows_total} rows")
+        # The PQ-formulation's rows, read back: sum_i w_i = f, and w_1 <= 8 q1 (q1's lower
+        # bound is 0).
+        entries, rl, ru = problem.rlt_row(0, problem.col_lower, problem.col_upper)
+        check(entries == {5: 1, 6: 1, 2: -1} and rl == ru == 0, "sumq times f is w1 + w2 = f",
+              str(entries))
+        entries, rl, ru = problem.rlt_row(1, problem.col_lower, problem.col_upper)
+        check(entries == {5: 1, 0: -8} and rl == -vg.INF and ru == 0, "cap times q1 is w1 <= 8 q1",
+              str(entries))
+
+        # Every RLT row holds at every point of the model (rows sumq and cap) in every box.
+        violated = 0
+        points = 0
+        for _ in range(300):
+            lo = [Fraction(rng.randint(0, 50), 100) for _ in range(2)]
+            lo.append(Fraction(rng.randint(0, 9)))
+            hi = [lo[0] + Fraction(rng.randint(0, 50), 100),
+                  lo[1] + Fraction(rng.randint(0, 50), 100),
+                  lo[2] + Fraction(rng.randint(0, 10 - int(lo[2])))]
+            lo += [ZERO_, ZERO_]
+            hi += [Fraction(10), Fraction(10)]
+            for _ in range(20):
+                q1 = lo[0] + (hi[0] - lo[0]) * Fraction(rng.randint(0, 100), 100)
+                q2 = 1 - q1
+                f = lo[2] + (hi[2] - lo[2]) * Fraction(rng.randint(0, 100), 100)
+                if not (lo[1] <= q2 <= hi[1]) or f > 8:
+                    continue
+                points += 1
+                col = [q1, q2, f, q1 * f, q2 * f, q1 * f, q2 * f]
+                for r in range(first, problem.rows_total):
+                    entries, rl, ru = problem.row(r, lo, hi)
+                    activity = sum(a * col[c] for c, a in entries.items())
+                    if activity < rl or activity > ru:
+                        violated += 1
+        check(points > 100 and violated == 0, "every RLT row holds at every sampled model point",
+              f"{violated} violations at {points} points")
+
+        def rejected(entry, phrase: str, name: str) -> None:
+            try:
+                vg.Problem(path, RLT_PRODUCTS, [entry])
+                check(False, name)
+            except vg.Rejected as why:
+                check(phrase in str(why), name, str(why)[:80])
+
+        rejected([2, 0, "ll"], "not a linear row", "an RLT row over a quadratic row is rejected")
+        rejected([1, 2, "ul"], "does not list",
+                 "an RLT row needing an unlisted product is rejected")
+        rejected([1, 0, "eq"], "not an equality", "an inequality used as an equality is rejected")
+        rejected([1, 0, "lu"], "no such side", "a row side the row does not have is rejected")
+
+
 def find_binary() -> Path | None:
     env = os.environ.get("SANKHYA_BIN")
     if env and Path(env).exists():
@@ -239,6 +340,30 @@ def layer_two() -> None:
                 print("  [skip] no Farkas node in this certificate")
 
         if model.name == "haverly1_q.mps":
+            # global_rlt: the PQ rows the search adds to every relaxation are in the certificate,
+            # rebuilt by the checker, and an RLT row it cannot derive is rejected.
+            with tempfile.TemporaryDirectory() as tmp:
+                cert_path = Path(tmp) / "cert.json"
+                subprocess.run([str(binary), "solve", str(model), "--option", "nonconvex=global",
+                                "--option", "global_rlt=true",
+                                "--option", f"write_certificate={cert_path}",
+                                "--option", "log_to_console=false"], capture_output=True, text=True)
+                if not cert_path.exists():
+                    check(False, "the solver wrote a certificate under global_rlt")
+                    continue
+                code, out = run_checker(model, cert_path)
+                cert = json.loads(cert_path.read_text())
+                check(code == 0 and "VERIFIED" in out and len(cert.get("rlt", [])) > 0,
+                      "a global_rlt certificate with its RLT rows is verified",
+                      f"{len(cert.get('rlt', []))} rlt rows; {out.strip()[-80:]}")
+                names = vg.parse_mps(model).row_names
+                quadratic = next(i for i, name in enumerate(names) if name.startswith("path_"))
+                cert["rlt"][0][0] = quadratic
+                cert_path.write_text(json.dumps(cert))
+                code, out = run_checker(model, cert_path)
+                check(code == 1, "an RLT row over a quadratic row is rejected end to end",
+                      f"exit {code}: {out.strip().splitlines()[0][:90]}")
+
             # A search stopped after three nodes has a wide gap. Calling it optimal, with a gap
             # tolerance in the file wide enough to cover it, must not verify: the gap accepted
             # is the checker's own, not the certificate's.
@@ -267,6 +392,7 @@ def layer_two() -> None:
 
 def main() -> int:
     layer_one()
+    layer_rlt()
     layer_two()
     print(f"{'ALL PASSED' if FAILURES == 0 else str(FAILURES) + ' FAILED'}")
     return 0 if FAILURES == 0 else 1

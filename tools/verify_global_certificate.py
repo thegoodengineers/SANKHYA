@@ -37,6 +37,13 @@ is a claim the checker accepts:
     solver's default mip_absolute_gap and mip_relative_gap), as in verify_certificate.py; the gap
     the certificate states is printed but not used, since it is part of the file being checked.
 
+RLT ROWS (`global_rlt`). The certificate's "rlt" list names rows [model row r, column y, kind]
+that follow the envelope rows: a linear row of the model times a nonnegative bound factor of y
+(or an equality row times y), each x_k * y read as its product column. Each is checked to be
+well formed (r has no products, has the side its kind uses, and every x_k * y is a listed
+product) and rebuilt here from the model and the box, so it holds at every point of the model
+in the box and the relaxation stays a relaxation.
+
 The relaxation's row layout is the one stated in the certificate's own "layout" field. That, the
 products' numbering, and nothing else is shared with the solver; the products themselves are
 re-derived from the model, and a product the model has that the certificate does not list is
@@ -82,7 +89,7 @@ def exact(value: float):
 class Problem:
     """The model as the checker reads it, in minimisation form, with its products named."""
 
-    def __init__(self, path: Path, products: list[tuple[int, int]]):
+    def __init__(self, path: Path, products: list[tuple[int, int]], rlt: list | None = None):
         model = parse_mps(path)
         if any(model.col_integer):
             raise Rejected("the model has integer columns; the global method does not take them")
@@ -127,7 +134,36 @@ class Problem:
             p = self.index[key]
             self.objective_products[p] = (self.objective_products.get(p, ZERO)
                                           + self.sigma * weight * Fraction(value))
-        self.rows_total = self.m + 4 * len(self.products)
+        self.rlt = [self.rlt_entry(entry) for entry in (rlt or [])]
+        self.rows_total = self.m + 4 * len(self.products) + len(self.rlt)
+
+    def rlt_entry(self, entry):
+        """An RLT row [model row r, column y, kind] checked to be well formed: r has no products
+        and a finite side for its kind, and x_k * y is a listed product for every column k of r,
+        so the row is linear in the relaxation's columns. Returns (r, y, kind, product indices)."""
+        try:
+            r, y, kind = int(entry[0]), int(entry[1]), str(entry[2])
+        except (TypeError, ValueError, IndexError):
+            raise Rejected(f"a malformed rlt entry {entry!r}")
+        if not (0 <= r < self.m and 0 <= y < self.n):
+            raise Rejected(f"rlt entry {entry!r} names a row or column the model does not have")
+        if kind not in ("eq", "ll", "lu", "ul", "uu"):
+            raise Rejected(f"rlt entry {entry!r} has an unknown kind")
+        if self.row_products[r] or not self.linear[r]:
+            raise Rejected(f"rlt entry {entry!r}: row {r} is not a linear row")
+        lower, upper = self.row_lower[r], self.row_upper[r]
+        if kind == "eq" and not (lower == upper and not math.isinf(lower)):
+            raise Rejected(f"rlt entry {entry!r}: row {r} is not an equality")
+        if kind[0] == "l" and math.isinf(lower) or kind[0] == "u" and math.isinf(upper):
+            raise Rejected(f"rlt entry {entry!r}: row {r} has no such side")
+        products = []
+        for k, _ in self.linear[r]:
+            key = (min(k, y), max(k, y))
+            if key not in self.index:
+                raise Rejected(f"rlt entry {entry!r} needs the product x{key[0]} * x{key[1]}, "
+                               "which the certificate does not list")
+            products.append(self.index[key])
+        return r, y, kind, products
 
     # ---- the McCormick relaxation over a box, rebuilt from the definition --------------------
 
@@ -159,6 +195,8 @@ class Problem:
             for p, coefficient in self.row_products[r].items():
                 entries[self.n + p] = entries.get(self.n + p, ZERO) + coefficient
             return entries, self.row_lower[r], self.row_upper[r]
+        if r >= self.m + 4 * len(self.products):
+            return self.rlt_row(r - self.m - 4 * len(self.products), lo, hi)
         p, k = divmod(r - self.m, 4)
         a, b = self.products[p]
         w = self.n + p
@@ -175,6 +213,28 @@ class Problem:
             return {w: Fraction(1), a: -(la + ua)}, -INF, -la * ua
         t = (la, ua, (la + ua) / 2)[k - 1]
         return {w: Fraction(1), a: -2 * t}, -t * t, INF
+
+    def rlt_row(self, index: int, lo: list, hi: list):
+        """RLT row `index`, from its definition: (a'x - c)(y - d) = a'w - d a'x - c y + c d, the
+        sign chosen so both factors are the nonnegative slacks the kind names."""
+        r, y, kind, products = self.rlt[index]
+        entries: dict[int, Fraction] = {}
+        if kind == "eq":
+            c, d = self.row_lower[r], ZERO
+        else:
+            c = self.row_lower[r] if kind[0] == "l" else self.row_upper[r]
+            d = lo[y] if kind[1] == "l" else hi[y]
+            if math.isinf(d):
+                raise Rejected(f"rlt row {index} needs a bound column {y} does not have")
+        for (k, a), p in zip(self.linear[r], products):
+            entries[self.n + p] = entries.get(self.n + p, ZERO) + a
+            entries[k] = entries.get(k, ZERO) - d * a
+        entries[y] = entries.get(y, ZERO) - c
+        entries = {column: v for column, v in entries.items() if v != 0}
+        if kind == "eq":
+            return entries, ZERO, ZERO
+        rhs = -c * d
+        return (entries, rhs, INF) if kind[0] == kind[1] else (entries, -INF, rhs)
 
     def lagrangian(self, y: dict[int, Fraction], lo: list, hi: list, with_cost: bool):
         """The Lagrangian at y, or None when it needs a bound that is infinite."""
@@ -222,7 +282,7 @@ def read_certificate(path: Path) -> dict:
 
 
 def verify(problem_path: Path, cert: dict, feas_tol: float) -> dict:
-    problem = Problem(problem_path, [tuple(p) for p in cert["products"]])
+    problem = Problem(problem_path, [tuple(p) for p in cert["products"]], cert.get("rlt", []))
     if cert["columns"] != problem.n or cert["rows"] != problem.m:
         raise Rejected(f"the certificate is for a {cert['rows']} x {cert['columns']} model; "
                        f"this one is {problem.m} x {problem.n}")
