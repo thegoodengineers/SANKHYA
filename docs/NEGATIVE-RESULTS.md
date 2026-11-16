@@ -88,20 +88,27 @@ Same instances, same card, opposite movements at the two tolerances. The spread 
 
 ### The Forrest–Tomlin basis update (`basis_update=forrest-tomlin`)
 
-Landed in #279: the entering column folded into U with a sparse spike and one row eta, against the product-form default; #396 added Tomlin's loss-of-significance test (`kFtCancellationThreshold`), a row-eta bound and the pivot test after the fold was measured drifting 2.5e-3. Measured against the product form on the full Netlib set (94 instances), both sides the same binary built at `462fa39e`, alternated, 3 runs a side, `threads=1`, 600 s wall limit, on the shared Windows laptop at 100% CPU:
+Landed in #279; #396 added Tomlin's loss-of-significance test (`kFtCancellationThreshold`), a row-eta bound and the product form's own pivot test. Since then, under #1042: contiguous row and column files for U (#1043), the update over alpha's support (#1077), the spike kept from the entering column's FTRAN (#1101), hyper-sparse solves (#1134), and, in #1282, the dual iteration's index lists carried through every Forrest–Tomlin solve, the update's partial BTRAN over its reach and an O(1) move of the leaving step. #1282 took ken-18 under Forrest–Tomlin from 289.7 G to 53.7 G instructions on the same 51,462-iteration path (callgrind, bench run 43796138692).
+
+Measured against the product form after all of that, one binary, both arms in one job, GitHub-hosted runner:
 
 | | product form | Forrest–Tomlin |
 |---|---:|---:|
-| `pilot` | optimal, 9,900 iterations, 3 of 3 | **feasible, not optimal** (strong duality fails), 7,525 iterations, 3 of 3 |
-| `pilot87` | optimal, 21,163 iterations, 2 of 3 (the third stopped by the limit at 21,044) | **time limit** 2 of 3 at 23,727 and 26,150 iterations, **phase 1 diverged** in the third |
-| `dfl001` | optimal, 85,012 iterations | optimal, 70,654 iterations |
-| exact-grade matches (Koch), per run | 92, 92, 93 | 90, 91, 91 |
-| shifted geomean, 10 s, per-instance median | 1.000× | 1.025× |
+| Netlib, 94 x 3 repeats: optimal / exact (Koch) / verified / certified | 94 / 94 / 94 / 93 every repeat | 94 / 94 / 94 / 93 every repeat |
+| Netlib solver-seconds SGM (medians, 1 ms floor) | 1.000 | **1.103**, faster in 44 of 282 pairs |
+| `pilot` | 1.12 s, 5,694 iterations | 8.33 s, 6,255 (the scaled attempt ends `numerical_error`, the unscaled retry answers) |
+| `pilot87` | 8.62 s, 18,887 iterations | 105.9 s, 11,100 (the first attempt ends `numerical_error`, the equilibrated retry answers) |
+| `fit2p` / `truss` (wall) | 1.204 s / 1.331 s | 1.007 s / 1.200 s |
+| Kennington, 16 x 3 repeats: optimal and verified | 16 every repeat | 16 every repeat |
+| Kennington solver-seconds SGM | 1.000 | **1.107**, faster in 7 of 48 pairs |
+| `ken-18` | 5.47 s | 5.85 s |
 
-It takes fewer iterations and less time on many mid-size instances (`d2q06c`, `truss`, `greenbea`, `dfl001`), but it loses `pilot` outright and `pilot87` in every run, and a wrong answer scores zero. The product form stays the default.
+The pilot family no longer ends wrong or unsolved, as it did at `462fa39e` (feasible-not-optimal on `pilot`, time limits and a diverged phase 1 on `pilot87`), but it ends right only through the retry ladder, and the per-iteration gains do not carry the rest of the set past the product form.
 
-Files: `bench/results/lu-ft-ab-netlib-{product-form,forrest-tomlin}-462fa39e-r{1,2,3}.csv` and `lu-ft-ab-netlib-462fa39e-summary.csv`.
-What would earn the default: `pilot` and `pilot87` optimal under it in every run — the accuracy of the row-eta file on the pilot family, not its speed.
+Where the pilot family's time goes (#1042 step 4, a verbose solve log under callgrind, bench run 43878383727, main `1659c8b5`). On `pilot87` the scaled attempt runs 100,724 iterations with 2,245 refactorizations, 1,794 of them for an update declined as unsafe (1.8% of iterations) and 234 forced by the accuracy check; it passes over 1,526 rows whose pivot disagrees between the row and the column on **fresh** factors, repairs 41 singular bases, stalls in dual degeneracy at iteration 54,103, and ends in the primal at a primal infeasibility of 3.2e3. `pilot` does the same at a smaller scale (6,999 dual iterations, then 23 singular repairs in the primal). The decline rate is about the product form's on `pilot87` (366 declines in 18,887 iterations, the figure in #1042's step-4 brief, not re-measured in that run). Disagreement on fresh factors and singular repairs are properties of the bases the path visits, not of how the updates are represented. One run does not say why the Forrest–Tomlin path reaches those bases and the product form's does not, so no stability change was made and `kUpdatePivotThreshold` is unchanged.
+
+Files: `bench/results/option-ab-netlib-ft-vs-pf-c0e28b8.csv` and `option-ab-kennington-ft-vs-pf-55abeac.csv` (#1282; both stamps are that PR's branch commits, whose library code `main` carries as `1659c8b5` after the squash merge), and the earlier `lu-ft-ab-netlib-{product-form,forrest-tomlin}-462fa39e-r{1,2,3}.csv` with `lu-ft-ab-netlib-462fa39e-summary.csv`. The profile and the verbose logs are run artifacts, not CSVs: a diagnosis, not a benchmark claim.
+What would earn the default: the scaled attempt on `pilot` and `pilot87` ending optimal under it, then the Netlib and Kennington SGMs at or below 1.0. The next measurement is the split of the declines by which test refused them (the product form's pivot test, Tomlin's cancellation test, the row-eta bound), and the iteration at which the Forrest–Tomlin path first leaves the product form's.
 
 ### The primal heuristics that never earned a default (#414)
 
