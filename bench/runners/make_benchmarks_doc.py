@@ -838,13 +838,13 @@ def mittelmann_engines_section(default: Path | None, pdhg: Path | None,
                                ipm: Path | None) -> str:
     """All three continuous engines on the same eight instances (#216).
 
-    The default table above runs the dual simplex. This one puts the first-order engine
+    The default table above is algorithm=auto. This one puts the first-order engine
     and the interior point beside it, each from its own committed option run, so that the
     reader sees per instance which engine got closest rather than only that the default
     did not finish. `optimal` is the solver's word; the verifier's verdict is beside it,
     because a first-order `optimal` is a tolerance, not a vertex.
     """
-    runs = [("dual simplex", default), ("PDHG", pdhg), ("interior point", ipm)]
+    runs = [("default (auto)", default), ("PDHG", pdhg), ("interior point", ipm)]
     present = [(name, path) for name, path in runs if path is not None]
     if len(present) < 2:
         return ("The per-engine comparison needs the PDHG and interior-point option runs "
@@ -852,8 +852,14 @@ def mittelmann_engines_section(default: Path | None, pdhg: Path | None,
                 "`algorithm=ipm`); none is committed at this commit." + chr(10))
     tables = {name: {r["instance"]: r for r in read_csv(path)} for name, path in present}
     instances = sorted(set().union(*(t.keys() for t in tables.values())))
+    # Each run states its own limit: the default run and the per-engine option runs are
+    # separate files, not necessarily at one limit or one commit.
+    limits = {n: sorted({row.get("time_limit", "") for row in tables[n].values()} - {""})
+              for n, _ in present}
     out = ["Source CSVs: " + ", ".join(f"`bench/results/{p.name}` ({n})" for n, p in present)
-           + "  ", "Same 300 s limit per instance and engine; HiGHS is not re-run here.", ""]
+           + "  ", "Limit per instance: " + ", ".join(
+               f"{n} {'/'.join(f'{float(v):g}' for v in limits[n]) or '?'} s" for n, _ in present)
+           + "; HiGHS is not re-run here.", ""]
     head = "| instance | " + " | ".join(f"{n}: status · verified · time (s)" for n, _ in present) + " |"
     out += [head, "|---|" + "---|" * len(present)]
     finished = {n: 0 for n, _ in present}
@@ -873,7 +879,8 @@ def mittelmann_engines_section(default: Path | None, pdhg: Path | None,
             cells.append(f"{status} · {mark} · {'-' if seconds is None else f'{seconds:.1f}'}")
         out.append(f"| `{name}` | " + " | ".join(cells) + " |")
     out += ["", "Finished and verified inside the limit: "
-            + ", ".join(f"{engine} **{count} of {len(instances)}**" for engine, count in finished.items())
+            + ", ".join(f"{engine} **{count} of {len(tables[engine])}** run"
+                        for engine, count in finished.items())
             + "."]
     if "PDHG" in tables:
         out += kkt_crossings.feasibility_standard_table(tables["PDHG"])
