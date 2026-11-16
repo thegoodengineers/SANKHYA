@@ -54,6 +54,7 @@
 #include <cstdlib>
 #include <iterator>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -2225,7 +2226,13 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   const CsrView* scaled_rows = nullptr;
   const auto run_engine_from = [&](const Model& problem, const Options& problem_options,
                                    NodeFactorCache* reuse, const WarmStart* start) {
+    // profile=detailed only (#1278): what a strong-branching probe costs besides its
+    // pivots - the simplex's construction here, the scaled model's refresh and the
+    // unscaling below.
+    std::optional<ProfileScope> built(std::in_place, logger.profiler(), "simplex construction",
+                                      ProfileMode::kDetailed);
     Simplex simplex(problem, problem_options, logger, control);
+    built.reset();
     if (&problem == scaled_model) simplex.use_row_view(scaled_rows);
     // Both solves on the scaled model below are followed at once by unscale(), which
     // measures the answer on the caller's model.
@@ -2279,6 +2286,8 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   // LP on its own, or a root - runs on a local as it always did, so a large LP solved once
   // does not leave its scaled copy behind. release_node_solve_scratch() frees it when the
   // search ends.
+  std::optional<ProfileScope> refresh(std::in_place, logger.profiler(), "scaled model refresh",
+                                      ProfileMode::kDetailed);
   NodeScratch local;
   NodeScratch& scratch = warm != nullptr ? node_scratch : local;
   Model& scaled = scratch.scaled;
@@ -2339,6 +2348,7 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
   }
   // sense, objective_offset, col_type and the names are carried unchanged: a diagonal change
   // of variable leaves the objective VALUE alone, so no offset correction is needed.
+  refresh.reset();
 
   logger.debug("Scaling: entries {:.3e} to {:.3e} after {} Ruiz passes and one Pock-Chambolle",
                scaling.min_abs, scaling.max_abs, kRuizIterations);
@@ -2431,7 +2441,10 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
     // where the caller lives.
     result.recompute_quality(model);
   };
-  unscale(solution);
+  {
+    ProfileScope timed(logger.profiler(), "unscaling", ProfileMode::kDetailed);
+    unscale(solution);
+  }
 
   // FALL BACK WHEN SCALING DOES NOT PAY. Equilibration is a heuristic: it rescues models the
   // unscaled simplex cannot factorize at all, and on a handful of models it costs more
