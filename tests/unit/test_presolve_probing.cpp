@@ -373,6 +373,36 @@ TEST(PresolveProbing, TheFixedShareWritesProbingOnlyWhenItFixesThatMuch) {
   }
 }
 
+TEST(PresolveProbing, MoreRoundsFixAtLeastAsMuchAndKeepTheOptimum) {
+  // presolve_probing_rounds: a later round probes again under what the earlier found, so it
+  // fixes at least as many binaries as one round, and every round's deductions hold, so the
+  // optimum on random models is the one without probing.
+  std::mt19937_64 rng(1158);
+  std::uniform_int_distribution<int> cost(-4, 4);
+  Logger logger(nullptr);
+  Count one_round = 0, more_rounds = 0;
+  for (int trial = 0; trial < 400; ++trial) {
+    Model model = random_model(rng);
+    for (double& c : model.col_cost) c = cost(rng);
+    Options more = with_probing(true);
+    more.set_int("presolve_probing_rounds", 5);
+    const Count fixed_once =
+        presolve::presolve(model, with_probing(true), logger).report.probing_fixings;
+    const Count fixed_more = presolve::presolve(model, more, logger).report.probing_fixings;
+    ASSERT_GE(fixed_more, fixed_once) << "trial " << trial;
+    one_round += fixed_once;
+    more_rounds += fixed_more;
+    const Solution reference = solve(model, with_probing(false));
+    const Solution rounds = solve(model, more);
+    ASSERT_EQ(rounds.status, reference.status) << "trial " << trial << ": " << rounds.message;
+    if (reference.status == SolveStatus::kOptimal) {
+      ASSERT_NEAR(rounds.objective, reference.objective, 1e-6) << "trial " << trial;
+    }
+  }
+  std::printf("  fixings: %lld in one round, %lld in up to five\n",
+              static_cast<long long>(one_round), static_cast<long long>(more_rounds));
+}
+
 TEST(PresolveProbing, ContinuousBoundsAreWrittenOnlyWhenAsked) {
   // y binary, x >= 0 continuous: x - 5 y <= 0 and x + 4 y <= 7. The rows alone give x <= 5;
   // probing gives x <= 3 (y = 0: x <= 0; y = 1: x <= 7 - 4). By default that bound on the

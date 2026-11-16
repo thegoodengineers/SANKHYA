@@ -1722,11 +1722,40 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           "presolve_probing_fixed_share asks for; nothing written",
           probing.fixings, integers, fixed_share);
       probing = ProbingResult{};  // nothing learned is kept, so nothing is reported
-    } else if (probing.infeasible) {
+    } else if (!probing.infeasible) {
+      // MORE ROUNDS (presolve_probing_rounds), only once a round has been kept: a binary
+      // probed before a later fixing was found is probed again under it. One round's result
+      // depends on the order the binaries are probed in, which the seed's column permutation
+      // changes among equals: mitre fixes 3,867 on seed 0 (every binary probed) and 3,132
+      // and 3,175 on seeds 1 and 2, whose roots then sit at 115002.3 and 114943.4
+      // against 115135.0 and stay unproved (option-ab-miplib3-probing-share-9605693.csv).
+      // Every round's deductions hold at every feasible point, as the first's do.
+      const Count rounds = options.get_int("presolve_probing_rounds");
+      Count found = probing.fixings;
+      for (Count round = 1; round < rounds && found > 0 && !probing.work_limit_reached;
+           ++round) {
+        ProbingResult again = probe_binaries(reduced, probing.col_lower, probing.col_upper,
+                                             tol::kProbingWorkLimit);
+        probing.probed += again.probed;
+        if (again.infeasible) {
+          probing.infeasible = true;
+          break;
+        }
+        found = again.fixings;
+        probing.fixings += again.fixings;
+        probing.tightenings += again.tightenings;
+        probing.implications += again.implications;
+        probing.work_limit_reached = again.work_limit_reached;
+        probing.col_lower = std::move(again.col_lower);
+        probing.col_upper = std::move(again.col_upper);
+        logger.verbose("  presolve: probing round {} fixed {} more binaries", round + 1, found);
+      }
+    }
+    if (probing.infeasible) {
       logger.verbose(
           "  presolve: probing found both values of a binary infeasible; the model "
           "is left for the engine to prove infeasible");
-    } else {
+    } else if (probing.probed > 0) {
       // Every deduction is implied by the model on its own, so any subset may be written.
       // By default only the integer columns' are (presolve_probing_continuous_bounds): a
       // finite bound probing puts on a continuous column changes which flow cover the
