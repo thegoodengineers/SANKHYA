@@ -64,17 +64,18 @@ Range square_range(double l, double u) {
 
 }  // namespace
 
-Model build_relaxation(const Problem& problem, const Box& box) {
+Model build_relaxation(const Problem& problem, const Box& box, double cutoff) {
   const Index n = problem.n;
   const auto num_products = static_cast<Index>(problem.products.size());
   // Four rows per product: the McCormick envelope, or a secant and three tangents.
   const Index envelope_rows = 4 * num_products;
   const auto rlt_count = static_cast<Index>(problem.rlt.size());
+  const Index cutoff_rows = std::isfinite(cutoff) ? 1 : 0;
 
   Model lp;
   lp.name = "mccormick";
   lp.resize_columns(n + num_products);
-  lp.resize_rows(problem.m + envelope_rows + rlt_count);
+  lp.resize_rows(problem.m + envelope_rows + rlt_count + cutoff_rows);
   lp.objective_offset = problem.offset;
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
@@ -86,7 +87,7 @@ Model build_relaxation(const Problem& problem, const Box& box) {
     lp.col_cost[static_cast<std::size_t>(n + index)] += value;
   }
 
-  lp.matrix.reset(problem.m + envelope_rows + rlt_count, n + num_products);
+  lp.matrix.reset(problem.m + envelope_rows + rlt_count + cutoff_rows, n + num_products);
   for (Index i = 0; i < problem.m; ++i) {
     const auto u = static_cast<std::size_t>(i);
     lp.row_lower[u] = problem.row_lower[u];
@@ -175,6 +176,11 @@ Model build_relaxation(const Problem& problem, const Box& box) {
     } else {
       set_row(row++, -kInfinity, rhs);  // one factor negated
     }
+  }
+  if (cutoff_rows > 0) {
+    for (Index j = 0; j < lp.num_cols(); ++j)
+      add(row, j, lp.col_cost[static_cast<std::size_t>(j)]);
+    set_row(row++, -kInfinity, cutoff - lp.objective_offset);
   }
   // Every coefficient here is data the box determines, not arithmetic residue (#590).
   lp.matrix.finalize(0.0);

@@ -930,6 +930,16 @@ inline constexpr double kGlobalMinBranchWidth = 1e-9;
 /// to max(1, |x_a x_b|), is treated as satisfied when choosing where to branch.
 inline constexpr double kGlobalProductTolerance = 1e-9;
 
+/// OBBT at the root of the global search (`global_obbt`, src/global/global_obbt.cpp): a bound
+/// the LP multipliers prove is relaxed outward by kGlobalObbtSafety relative before it is
+/// applied (it is computed in floating point); it moves only by more than kFbbtMinImprovement
+/// relative; a column whose LP value is within kGlobalObbtAtBound relative of a bound is
+/// taken as at it (Gleixner et al. 2017's filter); and the LPs get at most
+/// kGlobalObbtTimeShare of the time left.
+inline constexpr double kGlobalObbtSafety = 1e-9;
+inline constexpr double kGlobalObbtAtBound = 1e-9;
+inline constexpr double kGlobalObbtTimeShare = 0.2;
+
 /// The alternating LP (src/global/local_search.cpp): at most this many LP solves per call,
 /// and it stops once a cycle through the sides improves the objective by less than
 /// kGlobalLocalSearchProgress relative.
