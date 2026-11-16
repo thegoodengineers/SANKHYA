@@ -279,8 +279,11 @@ class SparseLdl {
   // The supernodal path (#470, ldl_supernodal.cpp). Built from the analysis on first use.
   struct SupernodeWorkspace;
   void build_supernodes();
-  [[nodiscard]] bool factorize_supernodal(double regularization, const ShouldStop& should_stop);
-  void factor_supernode(Index s, double regularization, SupernodeWorkspace& ws);
+  // `signs` as factorize_signed() takes it: null for the positive-definite rule.
+  [[nodiscard]] bool factorize_supernodal(double regularization, const signed char* signs,
+                                          const ShouldStop& should_stop);
+  void factor_supernode(Index s, double regularization, const signed char* signs,
+                        SupernodeWorkspace& ws);
   bool supernodal_ = false;
   int threads_ = 0;
   bool supernodes_built_ = false;

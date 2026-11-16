@@ -35,7 +35,12 @@
 // is bit-for-bit the same under one thread and under eight.
 //
 // THE PIVOT RULE IS THE SCALAR ONE: a pivot not above `regularization` is replaced by it
-// (Altman & Gondzio 1999), counted, and the factorization goes on.
+// (Altman & Gondzio 1999), counted, and the factorization goes on. With `signs` (a
+// quasi-definite matrix, the proximal interior point's augmented system) the same rule on the
+// pivot's expected sign: a quasi-definite matrix has an LDL^T factorization with no
+// interchanges under ANY symmetric permutation, D taking the signs of its two diagonal
+// blocks (Vanderbei, "Symmetric quasidefinite matrices", SIAM J. Optim. 5 (1995)), so the
+// supernodal order and the dense blocks need no pivoting there either.
 
 #include <algorithm>
 #include <atomic>
@@ -170,7 +175,8 @@ void SparseLdl::build_supernodes() {
   supernodes_built_ = true;
 }
 
-void SparseLdl::factor_supernode(Index s, double regularization, SupernodeWorkspace& ws) {
+void SparseLdl::factor_supernode(Index s, double regularization, const signed char* signs,
+                                 SupernodeWorkspace& ws) {
   const auto us = static_cast<std::size_t>(s);
   const Index f = super_start_[us];
   const Index w = super_start_[us + 1] - f;
@@ -234,13 +240,18 @@ void SparseLdl::factor_supernode(Index s, double regularization, SupernodeWorksp
   for (Index k = 0; k < w; ++k) {
     double* column = block + static_cast<std::size_t>(k) * static_cast<std::size_t>(ld);
     double pivot = column[k];
-    if (!(pivot > regularization)) {
-      pivot = regularization;
+    const double sign =
+        signs == nullptr
+            ? 1.0
+            : static_cast<double>(
+                  signs[static_cast<std::size_t>(perm_[static_cast<std::size_t>(f + k)])]);
+    if (!(sign * pivot > regularization)) {
+      pivot = sign * regularization;
       ++ws.regularized;
     }
     d_[static_cast<std::size_t>(f + k)] = pivot;
-    ws.smallest = std::min(ws.smallest, pivot);
-    ws.largest = std::max(ws.largest, pivot);
+    ws.smallest = std::min(ws.smallest, sign * pivot);
+    ws.largest = std::max(ws.largest, sign * pivot);
     column[k] = 1.0;
     // Columns k+1 .. w-1 of the block lose L(:, k) d_k L(j, k); y = d_k L(j, k) is the
     // entry before scaling.
@@ -259,7 +270,8 @@ void SparseLdl::factor_supernode(Index s, double regularization, SupernodeWorksp
   }
 }
 
-bool SparseLdl::factorize_supernodal(double regularization, const ShouldStop& should_stop) {
+bool SparseLdl::factorize_supernodal(double regularization, const signed char* signs,
+                                     const ShouldStop& should_stop) {
   if (!supernodes_built_) build_supernodes();
   const auto supernodes = super_start_.size() - 1;
   if (blocks_.size() != block_start_[supernodes]) blocks_.resize(block_start_[supernodes]);
@@ -307,7 +319,7 @@ bool SparseLdl::factorize_supernodal(double regularization, const ShouldStop& sh
         if (abandoned.load() || next >= leaves.size()) return;
         s = leaves[next++];
       }
-      factor_supernode(s, regularization, ws);
+      factor_supernode(s, regularization, signs, ws);
       if (ws.work >= (std::size_t{1} << 16)) {
         ws.work = 0;
         if (should_stop && should_stop()) {

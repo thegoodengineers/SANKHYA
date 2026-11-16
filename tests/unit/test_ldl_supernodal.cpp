@@ -72,15 +72,21 @@ System random_spd(std::mt19937_64& rng, Index n, double density, double shift) {
 
 /// Factor `lower` both ways from the same analysis and compare everything stored.
 void expect_same_factor(const SparseMatrix& lower, double regularization,
-                        const std::string& what, double tolerance = 1e-12) {
+                        const std::string& what, double tolerance = 1e-12,
+                        const std::vector<signed char>& signs = {}) {
   SparseLdl scalar;
   SparseLdl blocked;
   blocked.set_supernodal(true);
   ASSERT_TRUE(scalar.analyze(lower)) << what;
   ASSERT_TRUE(blocked.analyze(lower)) << what;
   ASSERT_EQ(scalar.permutation(), blocked.permutation()) << what;
-  ASSERT_TRUE(scalar.factorize(lower, regularization)) << what;
-  ASSERT_TRUE(blocked.factorize(lower, regularization)) << what;
+  if (signs.empty()) {
+    ASSERT_TRUE(scalar.factorize(lower, regularization)) << what;
+    ASSERT_TRUE(blocked.factorize(lower, regularization)) << what;
+  } else {
+    ASSERT_TRUE(scalar.factorize_quasidefinite(lower, signs, regularization)) << what;
+    ASSERT_TRUE(blocked.factorize_quasidefinite(lower, signs, regularization)) << what;
+  }
   EXPECT_GT(blocked.supernode_count(), 0) << what;
   EXPECT_LE(blocked.supernode_count(), blocked.dimension()) << what;
   EXPECT_EQ(scalar.regularized_pivots(), blocked.regularized_pivots()) << what;
@@ -350,9 +356,9 @@ TEST(SupernodalLdl, ADeadlineStopsEveryThread) {
 
 TEST(SupernodalLdl, AQuasidefiniteFactorizationKeepsItsNegativePivots) {
   // [-E, A'; A, F] with E = diag(2, 3), F = diag(4, 5), A dense 2x2: quasi-definite, so D is
-  // negative on the first block and positive on the second (#614). The supernodal kernels know
-  // only the positive-definite rule, so the signed factorization must stay on the scalar path
-  // with the flag on (review of #624): same pivots, none regularized.
+  // negative on the first block and positive on the second (#614). The supernodal kernels
+  // apply the signed pivot rule (review of #624: the positive-definite rule alone would replace
+  // a correct negative pivot by +regularization): same pivots, none regularized.
   SparseMatrix k;
   k.reset(4, 4);
   k.add_entry(0, 0, -2.0);
@@ -375,7 +381,43 @@ TEST(SupernodalLdl, AQuasidefiniteFactorizationKeepsItsNegativePivots) {
   EXPECT_EQ(super.regularized_pivots(), 0);
   ASSERT_EQ(super.pivots().size(), scalar.pivots().size());
   for (std::size_t i = 0; i < scalar.pivots().size(); ++i) {
-    EXPECT_EQ(super.pivots()[i], scalar.pivots()[i]) << i;
+    EXPECT_DOUBLE_EQ(super.pivots()[i], scalar.pivots()[i]) << i;
+    EXPECT_EQ(super.pivots()[i] < 0.0,
+              signs[static_cast<std::size_t>(super.permutation()[i])] < 0)
+        << i;
+  }
+}
+
+TEST(SupernodalLdl, MatchesTheScalarFactorOnRandomQuasidefiniteMatrices) {
+  // [-(B B^T + I), C'; C, D] with C random and D diagonal positive: the shape of the proximal
+  // interior point's augmented system (#473). The supernodal path under the signed rule must
+  // give the scalar path's factor, pivot signs and solves.
+  std::mt19937_64 rng(473);
+  std::uniform_real_distribution<double> value(-2.0, 2.0);
+  std::uniform_real_distribution<double> unit(0.0, 1.0);
+  for (int trial = 0; trial < 30; ++trial) {
+    const Index n1 = 4 + static_cast<Index>(trial * 5 % 60);
+    const Index n2 = 3 + static_cast<Index>(trial * 7 % 50);
+    const double density = trial % 2 == 0 ? 0.1 : 0.4;
+    const System top = random_spd(rng, n1, density, 1.0);
+    SparseMatrix k;
+    k.reset(n1 + n2, n1 + n2);
+    for (Index j = 0; j < n1; ++j) {
+      for (Index i = j; i < n1; ++i) {
+        const double v = top.dense[static_cast<std::size_t>(i + j * n1)];
+        if (v != 0.0) k.add_entry(i, j, -v);
+      }
+    }
+    for (Index i = 0; i < n2; ++i) {
+      for (Index j = 0; j < n1; ++j) {
+        if (unit(rng) < density) k.add_entry(n1 + i, j, value(rng));
+      }
+      k.add_entry(n1 + i, n1 + i, 0.5 + unit(rng));
+    }
+    k.finalize(0.0);
+    std::vector<signed char> signs(static_cast<std::size_t>(n1 + n2), 1);
+    for (Index j = 0; j < n1; ++j) signs[static_cast<std::size_t>(j)] = -1;
+    expect_same_factor(k, 1e-12, "quasi-definite trial " + std::to_string(trial), 1e-12, signs);
   }
 }
 
