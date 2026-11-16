@@ -137,14 +137,25 @@ def memory_cap(gigabytes: float | None):
     return lambda: resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
 
 
+def keep_log(log_dir: Path | None, mps: Path, stdout, stderr) -> None:
+    if log_dir is None:
+        return
+    text = lambda b: b.decode(errors="replace") if isinstance(b, bytes) else (b or "")  # noqa: E731
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / f"{mps.stem}.log").write_text(text(stdout) + text(stderr), encoding="utf-8")
+
+
 def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
-            solver_options: list[str], memory_limit_gb: float | None = None) -> dict:
+            solver_options: list[str], memory_limit_gb: float | None = None,
+            log_dir: Path | None = None) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         stats_path = Path(tmp) / "stats.json"
         sol_path = Path(tmp) / "solution.sol"
+        # With log_dir the solver logs to its console and the log is kept as
+        # <log_dir>/<instance>.log, partial when the solve was killed.
         command = [str(binary), "solve", str(mps), "--stats", str(stats_path), "--write-sol",
                    str(sol_path), "--time-limit", str(time_limit), "--option",
-                   "log_to_console=false"]
+                   f"log_to_console={'true' if log_dir else 'false'}"]
         for option in solver_options:
             command += ["--option", option]
         started = time.perf_counter()
@@ -152,10 +163,12 @@ def run_one(binary: Path, mps: Path, time_limit: float, verify: bool,
             completed = subprocess.run(command, capture_output=True, text=True,
                                        timeout=time_limit + HANG_MARGIN_SECONDS,
                                        preexec_fn=memory_cap(memory_limit_gb))
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as killed:
+            keep_log(log_dir, mps, killed.stdout, killed.stderr)
             return {"status": "hung", "wall_seconds": time.perf_counter() - started,
                     "message": f"no exit within {time_limit + HANG_MARGIN_SECONDS:g} s"}
         wall = time.perf_counter() - started
+        keep_log(log_dir, mps, completed.stdout, completed.stderr)
         if not stats_path.exists():
             stderr = completed.stderr.strip()
             status = ("read_error" if "error:" in stderr
@@ -202,6 +215,8 @@ def main() -> int:
     parser.add_argument("--solver-option", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--memory-limit-gb", type=float, default=None, metavar="G",
                         help="cap each solve's address space at G GB (POSIX), recorded per row")
+    parser.add_argument("--log-dir", type=Path, default=None,
+                        help="keep each solve's console log as DIR/<instance>.log")
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--machine", default=None,
                         help="machine tag for the CSV (default: the OS and architecture)")
@@ -249,7 +264,7 @@ def main() -> int:
             continue
         sha = entry.get("mps_sha256") or sha256_of(mps)
         flat = run_one(binary, mps, args.time_limit, not args.no_verify, args.solver_option,
-                       args.memory_limit_gb)
+                       args.memory_limit_gb, args.log_dir)
         ours = flat.get("objective")
         highs_value, highs_status, highs_seconds = (None, "", None)
         if have_highs:

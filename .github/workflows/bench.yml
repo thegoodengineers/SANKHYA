@@ -457,9 +457,10 @@ jobs:
               # The sixteen Mittelmann LPs, then HiGHS on each file in the same job (its
               # objective and its own clock); `--instances irish-electricity` narrows it and
               # `--no-highs` skips HiGHS. 12 GB of the runner's 16 per solve, as for MIPLIB.
+              # Every solve's console log goes into the artifact (logs/<instance>.log).
               mittelmann)
                 python3 bench/runners/mittelmann.py --binary build/sankhya \
-                  --machine "$machine" --memory-limit-gb 12 ${limit[@]+"${limit[@]}"} "$@" ;;
+                  --machine "$machine" --memory-limit-gb 12 --log-dir "$out/logs"                   ${limit[@]+"${limit[@]}"} "$@" ;;
               # #1177: Mittelmann's LPfeas-14 on the CPU PDHG engine, ours alone (no card, no
               # cuOpt here), every solve's verbose log kept and its restart trace in the CSV.
               lpfeas14)
