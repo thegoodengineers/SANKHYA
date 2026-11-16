@@ -198,6 +198,20 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"global_obbt",
+         OptionType::Bool,
+         false,
+         "nonconvex=global (#514): optimality-based bound tightening at the root. After the "
+         "root's heuristic, every column of a product is minimized and maximized over the "
+         "McCormick relaxation plus the row objective <= incumbent, its bounds move to what "
+         "the LP multipliers prove, and the root is solved again over the tighter box (Zamora "
+         "and Grossmann 1999; Tawarmalani and Sahinidis 2004). At most a fifth of the time "
+         "left. Not used under write_certificate, whose checker does not re-derive a "
+         "tightening. Off until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"mip_branching",
                  OptionType::String,
                  std::string("reliability"),

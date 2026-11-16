@@ -92,7 +92,10 @@ struct Box {
 ///
 /// McCormick, "Computability of global solutions to factorable nonconvex programs: Part I -
 /// Convex underestimating problems", Math. Programming 10 (1976) 147-175.
-[[nodiscard]] Model build_relaxation(const Problem& problem, const Box& box);
+/// With a finite `cutoff`, one more row last: the relaxation's objective <= cutoff
+/// (minimization form), so the LP keeps only points that could beat an incumbent of that value.
+[[nodiscard]] Model build_relaxation(const Problem& problem, const Box& box,
+                                     double cutoff = kInfinity);
 
 /// Every RltRow the problem admits without a new product: for each model row with no products
 /// and a finite side, each column y that forms a product with every column of the row; an
@@ -120,6 +123,28 @@ struct FbbtOutcome {
 /// "Branching and bounds tightening techniques for non-convex MINLP", Optimization Methods
 /// and Software 24 (2009) 597-634, sec. 3.
 FbbtOutcome fbbt(const Problem& problem, double cutoff, double feasibility_tolerance, Box* box);
+
+// ---- global_obbt.cpp --------------------------------------------------------------------
+
+struct ObbtOutcome {
+  bool infeasible = false;  ///< the relaxation with the cutoff row is empty, proved by Farkas
+  Count lps = 0;
+  Count tightened = 0;
+  Count iterations = 0;
+};
+
+/// Optimality-based bound tightening: minimize and maximize every column of a product over the
+/// McCormick relaxation of `box` plus the row objective <= `cutoff`, and move its bounds to
+/// what the LP multipliers prove (relaxed outward by kGlobalObbtSafety). A column the last LP's
+/// point already holds at a bound is not solved for that bound. Stops after `seconds`. Zamora
+/// and Grossmann, "A branch and contract algorithm for problems with concave univariate,
+/// bilinear and linear fractional terms", J. Global Optim. 14 (1999) 217-249; Tawarmalani and
+/// Sahinidis, "Global optimization of mixed-integer nonlinear programs: a theoretical and
+/// computational study", Math. Programming 99 (2004) 563-591; Gleixner, Berthold, Muller and
+/// Weltge, "Three enhancements for optimization-based bound tightening", J. Global Optim. 67
+/// (2017) 731-757, for the filter.
+ObbtOutcome obbt(const Problem& problem, double cutoff, const Options& options, double seconds,
+                 Box* box);
 
 // ---- local_search.cpp -------------------------------------------------------------------
 

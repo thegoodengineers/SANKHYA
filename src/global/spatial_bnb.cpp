@@ -26,11 +26,12 @@
 //
 // SCOPE OF THIS FIRST SLICE: continuous columns, products in the rows and in the objective,
 // every column of a product bounded after FBBT at the root. Under `global_rlt` every
-// relaxation also carries the reformulation-linearization rows of relaxation.cpp. OBBT
-// (#515), other cuts beyond the McCormick envelope and integer columns are not here. A bound
+// relaxation also carries the reformulation-linearization rows of relaxation.cpp, and under
+// `global_obbt` the root box is tightened once by OBBT (global_obbt.cpp) after the root's
+// heuristic. Other cuts beyond the McCormick envelope and integer columns are not here. A bound
 // certificate is written under `write_certificate` (global_certificate.cpp), checked by
-// tools/verify_global_certificate.py; the search then uses no FBBT, since the checker does not
-// re-derive a tightening.
+// tools/verify_global_certificate.py; the search then uses neither FBBT nor OBBT, since the
+// checker does not re-derive a tightening.
 
 #include <algorithm>
 #include <cmath>
@@ -97,6 +98,7 @@ class Search {
     certify_ = !certificate_path_.empty();
     // `global_rlt`: the rows are structural, the same at every node, so they are found once.
     if (options.get_bool("global_rlt")) problem_.rlt = rlt_rows(problem_);
+    obbt_ = options.get_bool("global_obbt") && !certify_;
   }
 
   Solution run();
@@ -150,6 +152,7 @@ class Search {
   [[nodiscard]] BranchChoice choose_branch(const Box& box, const std::vector<double>& lp) const;
   [[nodiscard]] bool branchable(const Box& box, Index column) const;
   void process(std::unique_ptr<Node> node);
+  bool tighten_root(Box* box);
   Solution finish(LimitReason stopped_by);
   void write_certificate(const Solution& solution);
 
@@ -183,6 +186,12 @@ class Search {
   Count tightened_ = 0;
   Count heuristic_calls_ = 0;
   bool out_of_time_ = false;
+  /// `global_obbt`: run once, at the root, after its heuristic; the root is then solved again
+  /// over the tighter box, and that second solve's bound is the reported root bound.
+  bool obbt_ = false;
+  Count root_node_ = 1;
+  Count obbt_lps_ = 0;
+  Count obbt_tightened_ = 0;
   /// `write_certificate` (#514): the tree is recorded and, since the checker does not re-derive
   /// bound tightening, no FBBT is used.
   std::string certificate_path_;
@@ -310,7 +319,7 @@ void Search::process(std::unique_ptr<Node> node) {
     logger_.verbose("global: node {} relaxation ended {} ({}); parent bound kept", nodes_,
                     to_string(relaxed.status), relaxed.message);
   }
-  if (nodes_ == 1) root_bound_ = bound;
+  if (nodes_ == root_node_) root_bound_ = bound;
   if (bound >= prune_level()) {
     closed_bound_ = std::min(closed_bound_, bound);
     return;
@@ -332,6 +341,17 @@ void Search::process(std::unique_ptr<Node> node) {
       closed_bound_ = std::min(closed_bound_, bound);
       return;
     }
+  }
+  if (obbt_ && nodes_ == 1) {
+    // Empty: no point of the box beats the incumbent, and it is closed like an FBBT-empty box.
+    if (tighten_root(&node->box)) return;
+    root_ = node->box;
+    root_node_ = 2;
+    node->bound = bound;
+    node->col_status = relaxed.col_status;
+    node->row_status = relaxed.row_status;
+    push(std::move(node));  // solved again over the tighter box
+    return;
   }
 
   const BranchChoice choice = choose_branch(node->box, point);
@@ -368,6 +388,18 @@ void Search::process(std::unique_ptr<Node> node) {
   right->row_status = relaxed.row_status;
   push(std::move(left));
   push(std::move(right));
+}
+
+bool Search::tighten_root(Box* box) {
+  const ObbtOutcome outcome =
+      obbt(problem_, upper_, options_, tol::kGlobalObbtTimeShare * seconds_left(), box);
+  lp_iterations_ += outcome.iterations;
+  obbt_lps_ += outcome.lps;
+  obbt_tightened_ += outcome.tightened;
+  if (outcome.infeasible) return true;
+  const FbbtOutcome again = fbbt(problem_, upper_, tolerance_, box);
+  tightened_ += again.tightened;
+  return again.infeasible;
 }
 
 Solution Search::run() {
@@ -482,8 +514,9 @@ Solution Search::finish(LimitReason stopped_by) {
   solution.stopped_by = stopped_by;
   solution.solve_seconds = timer_.elapsed_seconds();
   const std::string effort = fmt::format(
-      "{} nodes, {} FBBT tightenings, {} alternating-LP calls{}{}{}", nodes_, tightened_,
+      "{} nodes, {} FBBT tightenings, {} alternating-LP calls{}{}{}{}", nodes_, tightened_,
       heuristic_calls_,
+      obbt_ ? fmt::format(", OBBT {} LPs and {} bounds", obbt_lps_, obbt_tightened_) : "",
       lp_failures_ > 0 ? fmt::format(", {} node LPs failed (parent bound kept)", lp_failures_)
                        : "",
       unsafe_bounds_ > 0
