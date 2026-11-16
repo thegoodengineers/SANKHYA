@@ -424,6 +424,14 @@ TEST(RootCutLoop, AutoGateKeepsTheRoundsThatBeatRoundOne) {
                 1e-9 * std::max(1.0, std::fabs(always.objective)))
         << "trial " << trial;
     if (probation.root_cut_rounds > 1) ++kept;
+    // charged (#1278): the same chains with every round charged for its rows; a round it
+    // rolls back must leave a root the tree still solves to the same optimum.
+    const Solution charged = solve_with(chain, "charged");
+    ASSERT_EQ(charged.status, SolveStatus::kOptimal) << "trial " << trial;
+    EXPECT_NEAR(charged.objective, always.objective,
+                1e-9 * std::max(1.0, std::fabs(always.objective)))
+        << "trial " << trial;
+    EXPECT_LE(charged.root_cut_rounds, always.root_cut_rounds) << "trial " << trial;
   }
   std::printf("[  INFO    ] probation: %d of 12 weak big-M chain(s) kept their rounds\n", kept);
   EXPECT_GT(kept, 0) << "no chain kept its rounds: the kept path was not run";
@@ -480,9 +488,9 @@ TEST(RootCutLoop, SwitchedFlowsGateEntersOnALotSizingChainAndNotOnAKnapsack) {
   ASSERT_EQ(gated_knapsack.status, SolveStatus::kOptimal);
   EXPECT_NEAR(gated_knapsack.objective, 11.0, 1e-9);  // x2 + x4 (5 + 6 > 9): x1 + x4 = 11
   EXPECT_LE(gated_knapsack.root_cut_rounds, 1) << "no switched flow: the single round only";
-  // auto (#1274): a model with no switched flow enters on probation too, and whether its
-  // rounds are kept or rolled back the optimum is the one the single round finds.
-  const Solution auto_knapsack = solve_with(knapsack, "auto");
+  // charged (#1278): a model with no switched flow enters on probation too, and whether its
+  // rounds are kept, charged or rolled back the optimum is the one the single round finds.
+  const Solution auto_knapsack = solve_with(knapsack, "charged");
   ASSERT_EQ(auto_knapsack.status, SolveStatus::kOptimal);
   EXPECT_NEAR(auto_knapsack.objective, 11.0, 1e-9);
 
