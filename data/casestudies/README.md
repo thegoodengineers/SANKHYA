@@ -141,7 +141,7 @@ it. The slope is invented, like the rest of the instance.
 
 ---
 
-## The Haverly pooling problem — `demo/pooling_haverly.mps` (not read)
+## The Haverly pooling problem — `demo/pooling_haverly.mps`
 
 ### Source
 
@@ -157,11 +157,41 @@ published global optimum is a profit of 400; the local optimum of 100 that recur
 finds from a poor start is the classic trap the paper is about.
 
 The bilinear terms are written in `QCMATRIX` sections, the CPLEX/Gurobi QPS extension for
-quadratic constraints, one per row with the full symmetric matrix listed. SANKHYA reads a
-quadratic *objective* only: the file is refused at read time, by name, with a message
-saying why — not skipped, which would solve the linear remainder and report it as this
-model. `demo/run_sih_demo.sh` section 3 shows the refusal. The data are the paper’s; the
-file is a transcription, not real MRPL data.
+quadratic constraints, one per row with the full symmetric matrix listed. By default
+SANKHYA refuses the file at read time, by name, with a message saying why — not skipped,
+which would solve the linear remainder and report it as this model; `demo/run_sih_demo.sh`
+section 3 shows the refusal. Under `--option nonconvex=global` (#514) it is solved by
+spatial branch and bound over McCormick relaxations to the global optimum, a profit of 400.
+The data are the paper’s; the file is a transcription, not real MRPL data.
+
+---
+
+## Refinery gasoline pooling — `refinery_pooling.mps`
+
+### Source
+
+Haverly (1978), above, for the problem; the P-formulation of Tawarmalani, M., Sahinidis,
+N.V. (2002). *Convexification and Global Optimization in Continuous and Mixed-Integer
+Nonlinear Programming*, Kluwer, ch. 9, written by the same generator as the standard pooling
+set (`bench/runners/pooling_models.py`, #516).
+
+Haverly's problem at refinery scale: five gasoline components (straight-run naphtha, FCC
+gasoline, reformate, isomerate, alkylate) blended into a regular (RON 91) and a premium
+(RON 95) grade, both at a 10 ppm sulphur limit. Naphtha and FCC gasoline share one rundown
+tank, reformate and isomerate another, and alkylate goes to the grades directly. Each tank's
+sulphur and octane are decisions, and the quality a tank carries into a grade is that
+quality times the flow: two qualities, two tanks and two grades give 8 bilinear products,
+in the tank balances and the grade specifications. Octane is a lower limit, so it is
+carried as -RON under an upper one. Blending is linear by volume for both qualities, a
+simplification for octane, and every number (costs, prices, qualities, capacities) is
+invented — not MRPL data.
+
+There is no published optimum to compare against, so the answer is proved instead. CI solves
+it with `--option nonconvex=global --option write_certificate=...`, and two tools that never
+link the solver check the two halves: `tools/verify_solution.py` shows the reported point
+satisfies every original row, products included, and `tools/verify_global_certificate.py`
+rebuilds every leaf's relaxation from the `.mps` in exact arithmetic and shows no point
+beats it by more than the gap.
 
 ---
 
@@ -174,6 +204,6 @@ operations." *Computers & Chemical Engineering*, 24(9–10), 2259–2276.
 
 This describes refinery production scheduling (as distinct from the blending decision
 `crude_blend.mps` covers). There is no case study in this repository that implements that
-formulation — `data/casestudies/` and `demo/` currently contain exactly the five models
-above, not a sixth. Recorded here rather than attached to an unrelated `.mps` file, in case
+formulation — `data/casestudies/` and `demo/` currently contain exactly the models above,
+none of them a schedule. Recorded here rather than attached to an unrelated `.mps` file, in case
 a scheduling case study is added later.
