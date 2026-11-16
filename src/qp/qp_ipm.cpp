@@ -408,6 +408,9 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   // #981, qp_ipm_adaptive_dual_regularization: the floor delta follows down to, lowered
   // whenever the step leaves the primal residual largely in place (see below).
   double dual_floor = rho;
+  // #1178: every row carries a slack column, so M = [A, -I] has full row rank and no dy with
+  // M'dy = 0 exists; see the cut below for what that allows.
+  const bool rows_full_rank = s.slacks == s.rows;
   // #1178: a trial iterate that is not finite is rejected - the last finite iterate restored
   // and the proximal parameters raised, at most tol::kQpIpmRegularizationAttempts times in a
   // run - so the iterate that leaves this loop is always finite.
@@ -893,6 +896,17 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
       }
       if (missed > tol::kQpIpmStepPrimalShare * needed) {
         dual_floor = std::max(tol::kQpIpmDualFloorMin, dual_floor * tol::kQpIpmDualFloorCut);
+        // #1178: delta itself only falls through min(delta, 0.1 mu) below, and on liswet8, 9
+        // and 12 mu rises after the cut, so the cut floor was never reached and the step kept
+        // its 1e-8 proximal term to the ceiling. Where M has full row rank (every row has a
+        // slack) delta is dropped to the floor at once: the Schur complement on y of the system
+        // is delta I + M (H + Theta^{-1} + rho I)^{-1} M', whose smallest eigenvalue does not
+        // vanish with delta, so the step stays bounded and tends to the unregularized Newton
+        // step as delta -> 0 (Friedlander & Orban 2012; Altman & Gondzio 1999). With
+        // an equality row M can be rank-deficient, dy then grows as 1/delta along
+        // the null space of M' (qfffff80: 5.4e7 to 2.4e11 over delta 1e-8 to 1e-12), and the
+        // unrestricted drop lost qgfrdxpn, qshare1b and qsierra (#1180, NEGATIVE-RESULTS).
+        if (rows_full_rank) delta = dual_floor;
       }
     }
     const double alpha =
