@@ -2855,8 +2855,9 @@ const std::vector<OptionSpec>& Options::registry() {
          "is met. On by default at the 1e-8 hand-off: the A/B on the branch of #1163 "
          "(option-ab-057e19b.csv) lost nothing verified on Netlib (86 of 94 both arms) "
          "or the refinery LPs (18 of 18) and cut the shifted geometric mean of iterations "
-         "from 71,389 to 62,251 and 8,678 to 6,486; at a 1e-4 hand-off the 50-iteration "
-         "polish fell short on agg and dfl001, so 1e-4 stays an explicit request.",
+         "from 71,389 to 62,251 and 8,678 to 6,486. 1e-4 stays an explicit request: with "
+         "the polish budget scaled to it (#1166) it verifies 90 of 94 Netlib against "
+         "86 at 1e-8, but loses dfl001 and qap15 (docs/NEGATIVE-RESULTS.md).",
          0.0,
          0.0,
          {}});
