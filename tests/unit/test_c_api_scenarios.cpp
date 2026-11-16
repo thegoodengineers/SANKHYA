@@ -96,7 +96,7 @@ TEST(CApiScenarios, EachAnswerEqualsAColdSolveOfTheEditedModel) {
           sankhya_model_set_objective_coefficient(m, kAL, 2.9);
           sankhya_model_set_row_bounds(m, kThruput, 90.0, 110.0);
         }};
-    for (int k = 0; k < 3; ++k) {
+    for (std::size_t k = 0; k < 3; ++k) {
       sankhya_solve_status cold_status = SANKHYA_NOT_SOLVED;
       const double cold = cold_objective(edits[k], &cold_status);
       ASSERT_EQ(cold_status, SANKHYA_OPTIMAL);
