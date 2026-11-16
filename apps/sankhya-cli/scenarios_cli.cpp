@@ -11,7 +11,9 @@
 //     rhs:ROW         every finite side of row ROW (both sides of an equality)
 //
 // An empty cell keeps the model's own value. Lines starting with '#' are comments. Plain
-// comma-separated values: no quoting, so names and values may not contain commas.
+// comma-separated values: no quoting, so names and values may not contain commas. Every
+// scenario edits the base model; scenarios do not accumulate. demo/crude_blend_prices.csv is
+// an example, and README.md ("Use") describes the run.
 
 #include "scenarios_cli.hpp"
 
@@ -19,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -190,6 +193,33 @@ std::string status_label(const sc::ScenarioResult& r) {
   return fmt::format("unverified-{}", to_string(r.solution.status));
 }
 
+/// NNNN-NAME, the stem of scenario k's files under --write-dir.
+std::string file_stem(std::size_t k, const std::string& name) {
+  std::string safe = name;
+  for (char& c : safe) {
+    const bool keep = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                      (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+    if (!keep) c = '_';
+  }
+  return fmt::format("{:04d}-{}", k + 1, safe);
+}
+
+/// Scenario k's own model and answer under `dir`; the .sol path, or empty after printing why.
+std::string write_scenario(const std::string& dir, std::size_t k, const sc::Scenario& scenario,
+                           const Model& model, const Solution& solution,
+                           const Options& options) {
+  const std::filesystem::path stem = std::filesystem::path(dir) / file_stem(k, scenario.name);
+  const std::string mps = stem.string() + ".mps";
+  const std::string sol = stem.string() + ".sol";
+  std::string error;
+  if (!io::write_mps(mps, model, &error) ||
+      !io::write_solution(sol, model, solution, options, &error)) {
+    fmt::print(stderr, "error: scenario {}: {}\n", scenario.name, error);
+    return "";
+  }
+  return sol;
+}
+
 std::string number(double v) {
   return std::isfinite(v) ? fmt::format("{:.12g}", v) : std::string("-");
 }
@@ -198,11 +228,24 @@ std::string number(double v) {
 
 int run_scenarios(const Model& model, const std::string& model_path,
                   const std::string& csv_path, const Options& options,
-                  const std::string& out_path, bool compare) {
+                  const std::string& out_path, bool compare, const std::string& write_dir) {
   std::vector<sc::Scenario> scenarios;
   if (!read_scenarios(csv_path, model, &scenarios)) return 3;
 
   const sc::BatchReport report = sc::solve_all(model, scenarios, options);
+
+  // Written after the batch, so its timings carry no file I/O.
+  std::vector<std::string> sol_files;
+  if (!write_dir.empty()) {
+    std::error_code made;
+    std::filesystem::create_directories(write_dir, made);
+    for (std::size_t k = 0; k < scenarios.size(); ++k) {
+      sol_files.push_back(write_scenario(write_dir, k, scenarios[k],
+                                         sc::apply(model, scenarios[k]),
+                                         report.results[k].solution, options));
+      if (sol_files.back().empty()) return 3;
+    }
+  }
 
   // The separate single solves, when asked: each re-reads the file and starts from nothing.
   std::vector<Solution> single(compare ? scenarios.size() : 0);
@@ -225,6 +268,7 @@ int run_scenarios(const Model& model, const std::string& model_path,
       "scenario,status,objective,safe_bound,verified,verdict,resolved_cold,iterations,seconds,"
       "binding,changed";
   if (compare) header += ",single_status,single_objective,single_seconds,rel_diff,agrees";
+  if (!write_dir.empty()) header += ",sol_file";
   std::vector<std::string> lines;
   std::size_t unverified = 0;
   std::size_t disagreements = 0;
@@ -254,6 +298,7 @@ int run_scenarios(const Model& model, const std::string& model_path,
                           claims_a_point(s) ? number(s.objective) : "-", single_wall[k], rel,
                           agrees ? "yes" : "no");
     }
+    if (!write_dir.empty()) line += "," + sol_files[k];
     lines.push_back(std::move(line));
   }
 

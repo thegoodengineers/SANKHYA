@@ -681,7 +681,18 @@ the device is not wired to scenarios yet.
 
 ```bash
 ./build/sankhya scenarios demo/crude_blend.mps demo/crude_blend_prices.csv --compare
+./build/sankhya scenarios demo/crude_blend.mps demo/crude_blend_prices.csv --write-dir out
+python tools/verify_solution.py out/0001-base.mps out/0001-base.sol   # each scenario's own
 ```
+
+`--write-dir` writes every scenario's own model and answer, so each one can go through
+`tools/verify_solution.py`; CI does that for every scenario of the demo set.
+`--option scenario_start=previous` restarts each scenario from the one before it (a demand
+ramped step by step), and `--option algorithm=simplex` restarts the primal simplex, which a
+pure price move leaves primal feasible. The same run is `sankhya_solve_scenarios` in the C API
+(the overrides as compressed rows: offsets, targets, indices, values) and
+`Model.solve_scenarios([[("cost", j, price)], [("rhs", i, demand)]])` in Python, each
+returning per scenario the solution, whether it was verified, and its safe bound.
 
 `sankhya engines` lists every engine in the build: the classes it solves, how it is reached
 (`algorithm=<name>`, `algorithm=pdhg` with `--gpu`, or the problem class alone), what its

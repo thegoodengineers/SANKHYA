@@ -198,6 +198,11 @@ def _declare(lib: ctypes.CDLL) -> None:
     lib.sankhya_solve_from.argtypes = [model_p, options_p, solution_p,
                                        ctypes.POINTER(ctypes.c_void_p)]
     lib.sankhya_solve_from.restype = ctypes.c_int
+    lib.sankhya_solve_scenarios.argtypes = [model_p, options_p, ctypes.c_int, c_int_p, c_int_p,
+                                            c_int_p, c_double_p,
+                                            ctypes.POINTER(ctypes.c_void_p), c_int_p,
+                                            c_double_p]
+    lib.sankhya_solve_scenarios.restype = ctypes.c_int
     lib.sankhya_solution_col_statuses.argtypes = [solution_p, ctypes.POINTER(ctypes.c_int),
                                                   ctypes.c_int]
     lib.sankhya_solution_col_statuses.restype = ctypes.c_int

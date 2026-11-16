@@ -325,11 +325,15 @@ int main(int argc, char** argv) {
   std::string scenarios_model;
   std::string scenarios_csv;
   std::string scenarios_out;
+  std::string scenarios_write_dir;
   bool scenarios_compare = false;
   scenarios_cmd->add_option("file", scenarios_model, "Model file (.mps, .lp)")->required();
   scenarios_cmd->add_option("scenarios", scenarios_csv, "Scenario CSV")->required();
   scenarios_cmd->add_option("--option", option_assignments, "Set a solver option (name=value)");
   scenarios_cmd->add_option("--out", scenarios_out, "Also write the table as CSV here");
+  scenarios_cmd->add_option("--write-dir", scenarios_write_dir,
+                            "Write each scenario's model (.mps) and answer (.sol) here, for "
+                            "tools/verify_solution.py");
   scenarios_cmd->add_flag("--compare", scenarios_compare,
                           "Also solve each scenario on its own and report the agreement");
   scenarios_cmd->add_flag("--gpu", use_gpu, "As for solve");
@@ -375,7 +379,7 @@ int main(int argc, char** argv) {
     sankhya::Model model;
     if (!load_model(scenarios_model, options, &model)) return 3;
     return sankhya::cli::run_scenarios(model, scenarios_model, scenarios_csv, options,
-                                       scenarios_out, scenarios_compare);
+                                       scenarios_out, scenarios_compare, scenarios_write_dir);
   }
 
   if (info_cmd->parsed()) {

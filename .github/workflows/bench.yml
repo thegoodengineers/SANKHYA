@@ -68,6 +68,7 @@ on:
           - structural-warm-start
           - ab-option
           - decomposition
+          - scenarios
           - fj-share-refinery
           - fj-share-miplib
           - profile-nodes
@@ -504,6 +505,14 @@ jobs:
                     head -45 "$out/profile-$tag-self.txt"
                   done
                 done ;;
+              # #752: one model under N cost or right-hand-side sets in one run against N
+              # single solves - the demo blend and the 365-day refinery year (crude prices,
+              # demand forecasts) - every answer through tools/verify_solution.py. options
+              # are the runner's, e.g. "--counts 10 100 1000 --refinery-counts 10 100
+              # --arm dual-previous:scenario_start=previous".
+              scenarios)
+                python3 bench/runners/scenarios.py --binary build/sankhya --machine "$machine" \
+                  --out "bench/results/scenarios-${sha}.csv" "$@" ;;
               # #525, #1048: the refinery ladder, decomposed against monolithic.
               decomposition)
                 python3 bench/runners/decomposition.py --binary build/sankhya \

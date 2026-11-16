@@ -399,6 +399,11 @@ jobs:
         if: matrix.name == 'Release'
         run: PYTHONPATH=bindings/python python3 bindings/python/test_nonlinear.py
 
+      - name: Python scenarios (#752)
+        # Release only, for the reason the Python bindings step gives.
+        if: matrix.name == 'Release'
+        run: PYTHONPATH=bindings/python python3 bindings/python/test_scenarios.py
+
       # The PuLP adapter runs under both PuLP majors (#690): 4.0 replaced the LpStatus*
       # constants with LpSolveStatus and made actualSolve return LpSolveStats, and the adapter
       # speaks both. Each leg asserts the major it installed, because a PuLP that fails to
@@ -743,7 +748,19 @@ jobs:
           echo 'MILP solved and independently verified'
 
           echo '--- ten crude price sets in one run, each verified and equal to its own solve (#752) ---'
-          ./build/sankhya scenarios demo/crude_blend.mps demo/crude_blend_prices.csv --compare
+          # Each scenario's own model and answer are written out and every answer goes
+          # through the independent verifier, which shares no code with the solver.
+          ./build/sankhya scenarios demo/crude_blend.mps demo/crude_blend_prices.csv --compare \
+            --write-dir scenarios-out
+          ./build/sankhya scenarios demo/crude_blend.mps demo/crude_blend_prices.csv \
+            --option scenario_start=previous
+          n=0
+          for sol in scenarios-out/*.sol; do
+            python3 tools/verify_solution.py --quiet "${sol%.sol}.mps" "$sol"
+            n=$((n + 1))
+          done
+          [ "$n" -eq 10 ] || { echo "expected 10 scenario answers, found $n"; exit 1; }
+          echo "all $n scenario answers independently verified"
 
           echo '--- the finale walk: solve, prove, plan, repair, bundle, prices (#758) ---'
           # Release only: step 4's repair drives the Python bindings, which cannot load an

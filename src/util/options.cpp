@@ -154,6 +154,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  // OptionsAndRegistry.AlgorithmChoicesAreAutoPlusTheRegistrysAlgorithmNames
                  // fails the moment the two disagree (#297).
                  {"auto", "simplex", "dual-simplex", "pdhg", "ipm"}});
+    s.push_back(
+        {"scenario_start",
+         OptionType::String,
+         std::string("base"),
+         "Scenario runs (`sankhya scenarios`, sankhya_solve_scenarios, #752): the basis "
+         "each scenario restarts from. base (default) - the base model's optimal "
+         "basis; previous - the basis of the scenario before it when that one was "
+         "verified optimal, else the base basis, which suits a sweep whose "
+         "neighbouring scenarios are close (a demand ramped step by step).",
+         0.0,
+         0.0,
+         {"base", "previous"}});
     s.push_back({"algorithm_selection",
                  OptionType::String,
                  std::string("rules"),

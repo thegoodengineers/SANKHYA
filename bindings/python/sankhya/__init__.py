@@ -42,9 +42,10 @@ Progress = collections.namedtuple("Progress", [
 ])
 
 from ._executable import locate as locate_executable
+from .scenarios import ScenarioResult
 
-__all__ = ["Model", "Options", "Result", "SankhyaError", "INFINITY", "version", "locate_executable",
-           "REPOSITORY", "REPOSITORY_URL"]
+__all__ = ["Model", "Options", "Result", "ScenarioResult", "SankhyaError", "INFINITY", "version",
+           "locate_executable", "REPOSITORY", "REPOSITORY_URL"]
 
 # The canonical repository (#538). The name SANKHYA is a common Sanskrit word and other
 # projects use it, so the package says which one it is.
@@ -739,6 +740,12 @@ class Model(NonlinearModelMixin):
             raise callback_exc
 
         return Result(handle.value, self.num_cols, self.num_rows + self.num_nonlinear_rows)
+
+    def solve_scenarios(self, scenarios, options: Options | None = None,
+                        **overrides: object) -> "list[ScenarioResult]":
+        """Solve once, then under every scenario from a basis (#752); see sankhya.scenarios."""
+        from .scenarios import solve_scenarios
+        return solve_scenarios(self, scenarios, options, **overrides)
 
     def __repr__(self) -> str:
         return (f"<sankhya.Model {self.num_rows} rows x {self.num_cols} columns, "

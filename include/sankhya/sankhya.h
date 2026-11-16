@@ -294,6 +294,52 @@ sankhya_status sankhya_solve(sankhya_model* model, const sankhya_options* option
 sankhya_status sankhya_solve_from(sankhya_model* model, const sankhya_options* options,
                                   const sankhya_solution* start, sankhya_solution** solution);
 
+/* ---- Scenarios: one LP under many cost, bound and right-hand-side sets (#752) ---------- */
+
+/** What one scenario override changes. RHS moves every finite side of a row to the value
+ *  (both sides of an equality), which is what "the demand is now 120" means for any row. */
+typedef enum sankhya_scenario_target {
+  SANKHYA_SCENARIO_COST = 0,      /**< the objective coefficient of a column */
+  SANKHYA_SCENARIO_COL_LOWER = 1, /**< a column's lower bound */
+  SANKHYA_SCENARIO_COL_UPPER = 2, /**< a column's upper bound */
+  SANKHYA_SCENARIO_ROW_LOWER = 3, /**< a row's lower bound */
+  SANKHYA_SCENARIO_ROW_UPPER = 4, /**< a row's upper bound */
+  SANKHYA_SCENARIO_RHS = 5        /**< every finite side of a row */
+} sankhya_scenario_target;
+
+/**
+ * Solve the model once, then under each of `count` scenarios, each restarted from a basis
+ * rather than solved cold (`sankhya scenarios` on the command line; same engine).
+ *
+ * Scenario k's overrides are entries begin[k] .. begin[k+1]-1 of `targets` (a
+ * sankhya_scenario_target), `indices` (a column for the COST / COL_* targets, a row
+ * otherwise) and `values`, so `begin` holds count + 1 offsets, starting at 0 - the layout
+ * of a compressed sparse row matrix. Each scenario edits the BASE model; scenarios do not
+ * accumulate. The model handle is not changed.
+ *
+ * `solutions[k]` receives a newly allocated handle, freed with sankhya_solution_free.
+ * `verified[k]` receives 1 when the answer was checked against scenario k's own model - the
+ * KKT conditions for an optimum, the Farkas certificate for an infeasibility - and 0
+ * otherwise; A SCENARIO WITH verified 0 IS NOT OPTIMAL, whatever its status says. An answer
+ * that fails its check is re-solved cold before it is reported unverified. `safe_bounds`
+ * may be NULL; otherwise safe_bounds[k] receives a bound on scenario k's optimum that holds
+ * whatever the duals' accuracy (Neumaier and Shcherbina), or NaN when none was proved.
+ *
+ * The restart is the dual simplex under algorithm=auto: a bound or right-hand-side change
+ * leaves the base basis dual feasible, and a cost change is repaired by its phase one. Set
+ * algorithm=simplex for the primal restart a pure cost change keeps primal feasible, and
+ * scenario_start=previous to restart each scenario from the one before it. LP only: a model
+ * with integer columns or a Hessian gets every scenario unverified.
+ *
+ * An index outside the model, a target outside the enum, or offsets that are not
+ * non-decreasing from 0 return SANKHYA_ERROR_ARGUMENT before anything is solved.
+ */
+sankhya_status sankhya_solve_scenarios(sankhya_model* model, const sankhya_options* options,
+                                       int count, const int* begin, const int* targets,
+                                       const int* indices, const double* values,
+                                       sankhya_solution** solutions, int* verified,
+                                       double* safe_bounds);
+
 void sankhya_solution_free(sankhya_solution* solution);
 
 sankhya_solve_status sankhya_solution_status(const sankhya_solution* solution);

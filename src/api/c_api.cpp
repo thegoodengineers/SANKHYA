@@ -107,19 +107,8 @@ sankhya_status check_option(const char* name, sankhya::OptionType wanted) {
 
 }  // namespace
 
-// The options and solution handles. Defined here so the header can keep them opaque; the
-// model handle is in c_api_internal.hpp, which c_api_nlp.cpp shares.
-struct sankhya_options {
-  sankhya::Options options;
-};
-
-struct sankhya_solution {
-  sankhya::Solution solution;
-  // The names of the model this solution is for, so sankhya_solve_from() can place its
-  // basis on a model whose rows and columns were added or removed since (#913).
-  std::vector<std::string> col_names;
-  std::vector<std::string> row_names;
-};
+// The handles are defined in c_api_internal.hpp, so the header can keep them opaque and
+// c_api_nlp.cpp and c_api_scenarios.cpp share them.
 
 // fail() and ok() write this file's thread-local error; declared in c_api_internal.hpp.
 namespace sankhya::capi {
@@ -353,7 +342,10 @@ int sankhya_model_num_nonzeros(const sankhya_model* model) {
   return pending > 0 ? pending : static_cast<int>(model->model.matrix.num_nonzeros());
 }
 
-namespace {
+}  // extern "C"
+
+// Outside extern "C": c_api_scenarios.cpp calls it with C++ linkage.
+namespace sankhya::capi {
 
 /// Materialise the pending triplets into the Model's frozen matrices.
 ///
@@ -386,7 +378,11 @@ void materialise(const sankhya_model& handle, sankhya::Model* out) {
   }
 }
 
-}  // namespace
+}  // namespace sankhya::capi
+
+using sankhya::capi::materialise;
+
+extern "C" {
 
 sankhya_status sankhya_model_validate(const sankhya_model* model) {
   if (model == nullptr) return fail(SANKHYA_ERROR_ARGUMENT, "model is null");
