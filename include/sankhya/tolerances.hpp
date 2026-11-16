@@ -475,6 +475,18 @@ inline constexpr double kCrossoverPivotsPerDimension = 10.0;
 inline constexpr double kFixAndSolveAtBound = 1e-6;
 inline constexpr double kPdhgTight = 1e-8;
 
+/// The interior-point polish's extra iterations per decade the PDHG hand-off
+/// (pdhg_tolerance) is looser than kPdhgTight (#1166). polish_iteration_limit, 50, is
+/// calibrated for a kPdhgTight start: from a 1e-8 point it finished every Netlib and refinery
+/// LP in the #1163 A/B, but from a 1e-4 point agg stopped at 50 iterations with gap 1.9e-6
+/// and dfl001 at relative infeasibility 8.5e-5. An interior point closes its duality measure
+/// by a roughly fixed factor per iteration (Wright, Primal-Dual Interior-Point Methods, 1997,
+/// ch. 6), so the iterations a warm start still owes grow with the decades it starts short,
+/// not with its value: 25 a decade makes 150 at 1e-4, about three times what the cold
+/// interior point spends on agg (57) and dfl001 (53) (ipm-mcc-ab-netlib-full-off-5a39fb2.csv).
+/// A hand-off at or tighter than kPdhgTight keeps polish_iteration_limit unchanged.
+inline constexpr double kPolishIterationsPerHandoffDecade = 25.0;
+
 /// The LP PDHG's restart criteria on the relative KKT error of the restart candidate
 /// (src/pdhg/pdhg.cpp; Applegate et al., PDLP, NeurIPS 2021, section 3.3): the candidate
 /// at or under kPdhgRestartSufficient times the error at the last restart restarts at once;

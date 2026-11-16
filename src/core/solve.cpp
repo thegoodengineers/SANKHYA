@@ -317,7 +317,17 @@ void polish_with_the_interior_point(Solution* first, const Model& model, const O
   // than quietly changing what --option pdhg_polish=true was measured to do.
   Logger quiet(nullptr);
   const ResourceLimits limits(options, quiet);
-  polish.set_int("iteration_limit", options.get_int("polish_iteration_limit"));
+  // The budget grows with the hand-off's looseness (#1166,
+  // tol::kPolishIterationsPerHandoffDecade): polish_iteration_limit at kPdhgTight, plus a fixed
+  // count per decade looser.
+  const double looser_decades =
+      std::max(0.0, std::log10(options.get_double("pdhg_tolerance") / tol::kPdhgTight));
+  const std::int64_t extra =
+      std::llround(looser_decades * tol::kPolishIterationsPerHandoffDecade);
+  const std::int64_t limit = options.get_int("polish_iteration_limit");
+  polish.set_int("iteration_limit", limit > std::numeric_limits<std::int64_t>::max() - extra
+                                        ? limit
+                                        : limit + extra);
   // THE POLISH HAS A CLOCK OF ITS OWN. The factor cap above catches a factor the ordering
   // has already sized, but on the random scale family at 20,000 rows the ORDERING is the
   // cost: it ran for the whole 1,200 s limit before it could report a factor too large to

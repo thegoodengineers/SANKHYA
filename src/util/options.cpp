@@ -2501,7 +2501,9 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"polish_iteration_limit",
                  OptionType::Int,
                  std::int64_t{50},
-                 "Interior-point iterations the polish may spend (#229).",
+                 "Interior-point iterations the polish may spend (#229) from a hand-off at "
+                 "pdhg_tolerance 1e-8 or tighter; a looser hand-off adds 25 for each decade "
+                 "(#1166: 150 at 1e-4).",
                  1.0,
                  kNoLimit,
                  {}});
