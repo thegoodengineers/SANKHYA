@@ -482,6 +482,27 @@ It changed no count: 2 proved, 10 matched and 54 verified in both arms, nothing 
 
 The CSV is not committed because it carries branch stamps. It is in the run's artifact.
 
+### c-MIR aggregation by variable-bound distance (PR #1296, draft)
+
+PR #1296 changed how the MIR row aggregation picks the column to eliminate. Before, it measured a continuous column's distance to its simple bounds only; with `mir_variable_bound_aggregation` it measures the distance to the closest simple or variable bound at the LP point (Marchand and Wolsey 2001, sec. 2). A flow sitting on its x <= u y is then left for the c-MIR bound substitution. The option also lets a network's flow balance rows start an aggregation.
+
+The target was the fixed-charge networks among the weak-root MIPLIB 2017 models. In run 43876593093 (#1297), p200x1188c's root closed 0.238 of the gap and beasleyC3's 0.637, even with `root_cut_loop_when=always` and 200 cuts a round; HiGHS's root closes 1.000 and 0.968.
+
+Setup: `bench.yml` `ab-option` at `d80f5cb`. Both arms on one runner, 60 s, one thread, 3 seeds.
+
+| gate | run | off: proved / matched / verified | on: proved / matched / verified |
+|---|---|---|---|
+| 25 MIPLIB 2017 targets | 43879990262 | 3 / 13 / 54 | 3 / 13 / 54 |
+| MIPLIB 3, 65 models | 43879997189 | 137 / - / 192 | 134 / - / 191 |
+
+- **Targets:** nothing gained. Only p200x1188c's root moved, from 0.224 to 0.318 of the gap closed.
+- **MIPLIB 3:** bell5 lost its proof on all three seeds. The cuts closed more of its root gap (0.144 to 0.867), but the root loop then kept 6 rounds and 103 cut rows instead of 1 round and 23. The tree went from about 19,000 nodes and a proof in 1.6-3.5 s to about 500,000 nodes at the 60 s limit.
+- **Tier-1:** not run.
+
+The CSVs are on the PR's branch, stamped `d80f5cb`, a branch commit: `option-ab-miplib2017-targets-vb-aggregation-d80f5cb.csv` and `option-ab-miplib3-vb-aggregation-d80f5cb.csv`.
+
+What would earn it a place: a separator that closes p200x1188c's root, and a loop gate that keeps bell5's rounds from costing its tree. The second is the root-loop gate's call (#1278), not this option's.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.

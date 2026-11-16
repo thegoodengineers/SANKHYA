@@ -316,12 +316,40 @@ std::optional<Cut> separate_flow_set(const Model& model, const FlowSet& set, boo
   return plain;
 }
 
+/// FLOW PATHS: the switched outflow of `base` (a negative coefficient in its `<=` form) that
+/// carries the most flow at the LP point and enters a row not yet used and not a variable
+/// upper bound, or -1.
+Index path_outflow(const Model& model, const Solution& solution,
+                   const std::vector<RowEntries>& rows, const std::vector<char>& used,
+                   const std::vector<char>& is_vub_row, const std::vector<char>& switched,
+                   const BaseRow& base) {
+  Index chosen = -1;
+  double most = tol::kRowAggregationInside;
+  for (std::size_t k = 0; k < base.columns.size(); ++k) {
+    const Index j = base.columns[k];
+    const auto uj = static_cast<std::size_t>(j);
+    if (switched[uj] == 0 || !(base.values[k] < -tol::kZeroDrop)) continue;
+    const double carried = -base.values[k] * solution.col_value[uj];
+    if (!(carried > most)) continue;
+    const ColumnView column = model.matrix.column(j);
+    bool enters = false;
+    for (Index r = 0; r < column.size && !enters; ++r) {
+      const auto ur = static_cast<std::size_t>(column.rows[r]);
+      enters = used[ur] == 0 && is_vub_row[ur] == 0 && rows[ur].columns.size() >= 2;
+    }
+    if (!enters) continue;
+    most = carried;
+    chosen = j;
+  }
+  return chosen;
+}
+
 }  // namespace
 
 std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& solution,
                                           const std::vector<double>& col_lower,
                                           const std::vector<double>& col_upper,
-                                          FlowCoverStats* stats, bool lift) {
+                                          FlowCoverStats* stats, bool lift, bool path_walk) {
   std::vector<Cut> cuts;
   const Index n = model.num_cols();
   const Index m = model.num_rows();
@@ -389,8 +417,10 @@ std::vector<Cut> generate_flow_cover_cuts(const Model& model, const Solution& so
           break;  // not a flow row: nothing to walk from
         }
         if (depth == tol::kRowAggregationDepth) break;
-        const Index eliminate =
+        Index eliminate =
             column_to_eliminate(model, solution, col_lower, col_upper, base, &keep);
+        if (eliminate < 0 && path_walk)
+          eliminate = path_outflow(model, solution, rows, used, is_vub_row, keep, base);
         if (eliminate < 0) break;
         const ColumnView column = model.matrix.column(eliminate);
         bool extended = false;

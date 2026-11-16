@@ -505,5 +505,124 @@ TEST(RootCutLoop, SwitchedFlowsGateEntersOnALotSizingChainAndNotOnAKnapsack) {
       static_cast<long long>(with.root_cut_rounds),
       static_cast<long long>(without.root_cut_rounds));
 }
+// ---- FLOW PATHS (`flow_cover_path_walk`): the same chain with SWITCHED path arcs ----------
+
+/// A chain of T nodes fed from outside, every arc switched: x_t (into node t, capacity u_t),
+/// then the path arcs z_t from node t to node t+1 (capacity w), then the switches of the x
+/// and of the z. Rows: the variable upper bounds, then the balances x_t + z_{t-1} - z_t = d_t.
+/// It is lot sizing whose stocks carry a fixed charge, a path of a fixed-charge network.
+Model switched_chain(const std::vector<std::int64_t>& u, const std::vector<std::int64_t>& d,
+                     std::int64_t w) {
+  const auto T = static_cast<Index>(u.size());
+  const Index n = 2 * (2 * T - 1);
+  const Index arcs = 2 * T - 1;
+  Model m;
+  m.resize_columns(n);
+  m.resize_rows(arcs + T);
+  m.matrix.reset(arcs + T, n);
+  for (Index a = 0; a < arcs; ++a) {
+    const double cap =
+        a < T ? static_cast<double>(u[static_cast<std::size_t>(a)]) : static_cast<double>(w);
+    m.col_upper[static_cast<std::size_t>(a)] = cap;
+    m.col_type[static_cast<std::size_t>(arcs + a)] = VarType::kInteger;
+    m.col_upper[static_cast<std::size_t>(arcs + a)] = 1.0;
+    m.matrix.add_entry(a, a, 1.0);
+    m.matrix.add_entry(a, arcs + a, -cap);
+    m.row_lower[static_cast<std::size_t>(a)] = -kInf;
+    m.row_upper[static_cast<std::size_t>(a)] = 0.0;
+  }
+  for (Index t = 0; t < T; ++t) {
+    const Index row = arcs + t;
+    m.matrix.add_entry(row, t, 1.0);
+    if (t > 0) m.matrix.add_entry(row, T + t - 1, 1.0);
+    if (t + 1 < T) m.matrix.add_entry(row, T + t, -1.0);
+    const double demand = static_cast<double>(d[static_cast<std::size_t>(t)]);
+    m.row_lower[static_cast<std::size_t>(row)] = demand;
+    m.row_upper[static_cast<std::size_t>(row)] = demand;
+  }
+  m.matrix.finalize();
+  m.hessian.reset(n, n);
+  m.hessian.finalize();
+  EXPECT_EQ(m.validate(), "");
+  return m;
+}
+
+TEST(FlowPathCuts, TheTwoNodePathCutNeedsThePathWalk) {
+  // The two-period example above with the stock switched (capacity 4): x = (3.5, 0.5),
+  // z = 1.5, switches (0.6, 0.1) and z / 4. Every arc is switched, so the walk without the
+  // option eliminates nothing and no cut spans both nodes; with it, the walk goes along z
+  // into node 2 and the aggregate x_1 + x_2 <= 4 gives the path cut, which the gate passes.
+  const Model m = switched_chain({6, 5}, {2, 2}, 4);
+  const Solution point = at({3.5, 0.5, 1.5, 0.6, 0.1, 0.375});
+  const auto spans = [](const std::vector<Cut>& cuts) {
+    return std::any_of(cuts.begin(), cuts.end(),
+                       [](const Cut& c) { return c.coeff[0] != 0.0 && c.coeff[1] != 0.0; });
+  };
+  FlowCoverStats without;
+  EXPECT_FALSE(spans(generate_flow_cover_cuts(m, point, m.col_lower, m.col_upper, &without)));
+  EXPECT_EQ(without.aggregated, 0);
+  FlowCoverStats with;
+  const std::vector<Cut> cuts =
+      generate_flow_cover_cuts(m, point, m.col_lower, m.col_upper, &with, true, true);
+  EXPECT_TRUE(spans(cuts)) << "no cut spans both nodes of the path";
+  EXPECT_GE(with.aggregated, 1);
+  for (const Cut& cut : cuts) {
+    int skipped = 0;
+    std::string why;
+    EXPECT_GT(exact_gate(m, cut, &skipped, &why), 0);
+    EXPECT_TRUE(why.empty()) << why;
+  }
+}
+
+TEST(FlowPathCuts, NoPathCutRemovesAnyFlowOfRandomSwitchedChainsExactly) {
+  std::mt19937 rng(1985);
+  std::uniform_int_distribution<int> capacity(3, 9);
+  std::uniform_int_distribution<int> demand(1, 4);
+  std::uniform_real_distribution<double> unit(0.0, 1.0);
+  int cuts_checked = 0;
+  int aggregated = 0;
+  int skipped = 0;
+  for (int trial = 0; trial < 120; ++trial) {
+    const std::size_t T = 2 + static_cast<std::size_t>(trial % 3);
+    std::vector<std::int64_t> u;
+    std::vector<std::int64_t> d;
+    for (std::size_t t = 0; t < T; ++t) {
+      u.push_back(capacity(rng));
+      d.push_back(demand(rng));
+    }
+    const std::int64_t w = capacity(rng);
+    const Model m = switched_chain(u, d, w);
+    // Switches anywhere, flows at a share of what they allow, path flows from the balances
+    // and clamped to their capacity: the cuts must hold at every feasible point whatever x*.
+    const std::size_t arcs = 2 * T - 1;
+    std::vector<double> x(2 * arcs, 0.0);
+    double carried = 0.0;
+    for (std::size_t t = 0; t < T; ++t) {
+      x[arcs + t] = unit(rng);
+      x[t] = unit(rng) * static_cast<double>(u[t]) * x[arcs + t];
+      carried =
+          std::clamp(carried + x[t] - static_cast<double>(d[t]), 0.0, static_cast<double>(w));
+      if (t + 1 < T) {
+        x[T + t] = carried;
+        x[arcs + T + t] = std::min(1.0, carried / static_cast<double>(w) + 0.5 * unit(rng));
+      }
+    }
+    FlowCoverStats stats;
+    const std::vector<Cut> cuts =
+        generate_flow_cover_cuts(m, at(x), m.col_lower, m.col_upper, &stats, true, true);
+    aggregated += stats.aggregated;
+    for (const Cut& cut : cuts) {
+      std::string why;
+      exact_gate(m, cut, &skipped, &why);
+      ASSERT_TRUE(why.empty()) << "trial " << trial << ": " << why;
+      ++cuts_checked;
+    }
+  }
+  EXPECT_GT(cuts_checked, 50) << "the sweep should exercise the separator";
+  EXPECT_GT(aggregated, 10) << "the sweep should exercise the path walk";
+  std::printf("[  INFO    ] flow path cuts on switched chains: %d cuts, %d from paths\n",
+              cuts_checked, aggregated);
+}
+
 }  // namespace
 }  // namespace sankhya::mip

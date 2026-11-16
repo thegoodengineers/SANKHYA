@@ -1482,6 +1482,19 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"flow_cover_path_walk",
+                 OptionType::Bool,
+                 false,
+                 "Flow path cuts (Van Roy and Wolsey, Oper. Res. Letters 4, 1985): when the "
+                 "flow cover aggregation has no unswitched column left to eliminate, it goes "
+                 "on along the switched outflow carrying the most flow at the LP point into "
+                 "the next node's balance row, so a fixed-charge network's balance rows are "
+                 "summed along a path and the flow cover of the path is separated. Only read "
+                 "when enable_flow_cover_cuts is set. Separator strength only; the root loop "
+                 "and its gate are unchanged. Off until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back(
         {"enable_root_cuts",
          OptionType::Bool,

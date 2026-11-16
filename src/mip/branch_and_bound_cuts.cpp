@@ -210,9 +210,9 @@ void BranchAndBound::add_combinatorial_cuts(const Solution& relaxation,
   // through variable-upper-bound rows, read under the GLOBAL bounds like the two above.
   if (options_.get_bool("enable_flow_cover_cuts") && !certify) {
     FlowCoverStats flow;
-    std::vector<Cut> covers =
-        generate_flow_cover_cuts(working_, relaxation, global_lower_, global_upper_, &flow,
-                                 options_.get_bool("flow_cover_lifting"));
+    std::vector<Cut> covers = generate_flow_cover_cuts(
+        working_, relaxation, global_lower_, global_upper_, &flow,
+        options_.get_bool("flow_cover_lifting"), options_.get_bool("flow_cover_path_walk"));
     if (flow.flow_rows > 0) {
       logger_.verbose(
           "flow cover cuts: {} switched row side(s), {} cover(s), {} cut(s), {} lifted",

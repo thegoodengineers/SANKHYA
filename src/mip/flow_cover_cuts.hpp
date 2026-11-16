@@ -54,6 +54,21 @@
 // cut is built both ways, unlifted with the cheaper outflow form and lifted, and the more
 // violated is kept.
 //
+// FLOW PATHS (`flow_cover_path_walk`). The aggregation walk eliminates only unswitched
+// columns (the stocks of lot sizing), and on a fixed-charge NETWORK every arc is switched, so
+// a node's balance row never grows into a path. Van Roy and Wolsey, "Valid inequalities and
+// separation for uncapacitated fixed charge networks", Operations Research Letters 4 (1985),
+// separate on the flow balance of a directed PATH of nodes: summing the balance rows of
+// nodes v_1..v_k cancels the arcs (v_t, v_{t+1}) between them, and what is left is a single-
+// node flow set whose inflows are the arcs entering the path from outside and whose outflows
+// are the arcs leaving it, with the demands of the path's nodes summed. The flow cover of that
+// set is a flow path inequality; with one inflow per node it is the (l, S) inequality of the
+// path (Barany, Van Roy and Wolsey 1984). With the option, when no unswitched column is left
+// to eliminate, the walk continues along the switched OUTFLOW carrying the most flow at the LP
+// point, into the balance row of the node it enters, which follows the LP's own flow down a
+// path. The path arc's switch drops out of the cut (its flow left the set), which costs the
+// cut nothing in validity: the aggregate is a valid inequality whatever the switch is.
+//
 // VALIDITY IS BY CONSTRUCTION AND CHECKED IN EXACT ARITHMETIC. tests/unit/test_flow_cover_cuts
 // fixes every indicator assignment of small random fixed-charge models and maximises each
 // cut's violation over the continuous part with the rational simplex oracle: the maximum
@@ -81,9 +96,11 @@ struct FlowCoverStats {
 /// Flow cover cuts violated at `solution.col_value`, from the rows whose inflows carry an
 /// indicator. `col_lower` / `col_upper` are the bounds the structure is read under: the
 /// GLOBAL ones, so a cut is valid at every node. `lift` builds the LIFTING form beside the
-/// unlifted one and keeps the more violated.
+/// unlifted one and keeps the more violated. `path_walk` lets the aggregation go on along a
+/// switched outflow (FLOW PATHS).
 [[nodiscard]] std::vector<Cut> generate_flow_cover_cuts(
     const Model& model, const Solution& solution, const std::vector<double>& col_lower,
-    const std::vector<double>& col_upper, FlowCoverStats* stats = nullptr, bool lift = true);
+    const std::vector<double>& col_upper, FlowCoverStats* stats = nullptr, bool lift = true,
+    bool path_walk = false);
 
 }  // namespace sankhya::mip
