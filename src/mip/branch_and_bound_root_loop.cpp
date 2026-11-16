@@ -258,10 +258,18 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
   // search runs as it does when the gate keeps the loop out: round 1's rows, no pool. The
   // rows of rounds 2.. are the last ones appended (nothing is removed before this point), so
   // dropping them from the pool and restoring the saved model is the whole of it.
+  // A round 1 that moved the bound by no more than the stall rule's share of its reference
+  // gives the comparison nothing to stand on: any later gain beats zero, and on misc07 seed
+  // 2 (MIPLIB 3) and neos859080 seed 1 (MIPLIB 2017), whose round 1 moved nothing, 3 to 20
+  // rounds were kept and the tree lost its proof (#1278's A/B at 587f58d). Such a root goes
+  // back to round 1 too.
   if (round_one.has_value()) {
     const double first_gain = std::max(bounds[1] - bounds[0], 0.0);
     const double later_gain = bounds.back() - bounds[1];
-    if (later_gain <= tol::kRootCutProbationGain * first_gain) {
+    const double reference = have_incumbent_ ? std::max(incumbent_internal_ - bounds[1], 0.0)
+                                             : std::max(1.0, std::fabs(bounds[1]));
+    if (later_gain <= tol::kRootCutProbationGain * first_gain ||
+        first_gain <= tol::kRootCutStallFraction * reference) {
       logger_.info(
           "Root cut loop: probation failed after {} round(s), bound {:.10g} to {:.10g} against "
           "{:.10g} after round 1; back to round 1 (root_cut_loop_when=auto), stopped on {}",

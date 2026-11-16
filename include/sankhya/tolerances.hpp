@@ -1028,7 +1028,9 @@ inline constexpr double kRootCutTailingOffFraction = 0.1;
 /// root goes back to its state after round 1. In A/B (c) (option-ab-miplib3-gated-recipe-
 /// 26204e0.csv) the rounds added 0.27 of round 1's gain on bell5 (gap closed 0.144 to 0.183),
 /// which then lost two proofs to the larger node LP, and 2.3 of it on gesa2 (0.297 to 0.971)
-/// and 7.6 on mod011 (0.051 to 0.439), which the rounds solved or proved.
+/// and 7.6 on mod011 (0.051 to 0.439), which the rounds solved or proved. A round 1 that
+/// moved the bound by at most kRootCutStallFraction of the stall rule's reference fails
+/// probation whatever the later rounds gain (#1278: misc07 seed 2, neos859080 seed 1).
 inline constexpr double kRootCutProbationGain = 1.0;
 /// And the loop stops once the solve has used this share of time_limit, so a root whose
 /// every round is slow leaves the tree most of the time it was given. 0.2 until the
