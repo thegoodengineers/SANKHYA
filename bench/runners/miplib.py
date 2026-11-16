@@ -283,6 +283,13 @@ CSV_COLUMNS = [
     # #1199: the address-space cap the solve ran under (--memory-limit-gb); blank when
     # there was none, or on a platform that cannot set one.
     "memory_limit_gb",
+    # Where the time went, blank unless --profile, inclusive seconds of the solver's profile
+    # regions: presolve, every node LP solve (the root's first solve included), the root cut
+    # rounds (separation, filtering and their re-solves) and the primal heuristics.
+    "presolve_seconds",
+    "node_lp_seconds",
+    "root_cuts_seconds",
+    "heuristics_seconds",
 ]
 
 PROBING_COLUMNS = ("probing_fixings", "probing_tightenings", "probing_implications",
@@ -305,7 +312,11 @@ LEAVES_LINE = re.compile(r"leaves: (\d+) from their own LP duals, (\d+) from an 
 # --profile's columns -> the profile region each one sums (src/mip/branch_and_bound*.cpp).
 PROFILE_REGIONS = {"branching_seconds": "branching",
                    "batch_strong_branching_seconds": "batched strong branching",
-                   "batch_node_bounds_seconds": "batched node bounds"}
+                   "batch_node_bounds_seconds": "batched node bounds",
+                   "presolve_seconds": "presolve",
+                   "node_lp_seconds": "node LP",
+                   "root_cuts_seconds": "root cuts",
+                   "heuristics_seconds": "heuristics"}
 
 SUMMARY_COLUMNS = [
     "instance", "seeds", "seeds_matched", "seeds_proved", "matched_seeds", "proved_seeds",
