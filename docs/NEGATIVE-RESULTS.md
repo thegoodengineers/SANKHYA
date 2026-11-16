@@ -429,6 +429,42 @@ What shipped later (#1178): the same drop restricted to a standard form in which
 
   These are WSL seed-0 logs at 60 s, one thread, not a CSV, and the change was not merged; the branch was never pushed. What does move p2756's root is #511's coefficient tightening (506 coefficients, 2698.95 to 2730.14 after cuts in the same setting), whose two-gate A/B is the re-run that decides it.
 
+### The 1e-4 PDHG hand-off as the default, with the polish budget scaled (#1166, PR #1280, default not flipped)
+
+#1163 left the default hand-off at `pdhg_tolerance` 1e-8. At 1e-4 the 50-iteration interior-point polish fell short on agg and dfl001. PR #1280 scales the polish budget with the hand-off: `polish_iteration_limit` from 1e-8 or tighter, plus `tol::kPolishIterationsPerHandoffDecade` (25) for each decade looser, so 150 at 1e-4. At the default 1e-8 the budget is unchanged. The A/B then put the 1e-4 hand-off against the current default.
+
+Setup: `bench.yml` `ab-option`, both arms on the `93bf260` binary in one job, `algorithm=pdhg`. The `off` arm is the default 1e-8 hand-off and the `on` arm is `pdhg_tolerance=1e-4`. Machine: 4 vCPU Xeon 6975P-C. CSV `option-ab-93bf260.csv` in each run's artifact.
+
+| set | run | arm | verified | optimal | passed | SGM iterations (shift 10) | solver s |
+|---|---|---|---:|---:|---:|---:|---:|
+| Netlib full, 94, 60 s, 100,000 PDHG iterations | 43788380408 | 1e-8 | 86 | 85 | 79 | 62,251 | 301.9 |
+| | | 1e-4 | **90** | 88 | 80 | 12,711 | 190.5 |
+| refinery LPs, 18, 600 s, same | 43788380408 | 1e-8 | 18 | 18 | 18 | 6,486 | 15.9 |
+| | | 1e-4 | 18 | 18 | 18 | 840 | 2.0 |
+| Mittelmann small, 8, 300 s, no HiGHS cross-check | 43788401903 | 1e-8 | **3** | 2 | 2 | 56,945 | 1,337.1 |
+| | | 1e-4 | 2 | 2 | 2 | 13,014 | 657.2 |
+
+The `off` rows reproduce #1163's 1e-8 arm exactly (86 / 85, SGM 62,251; 18 / 18, SGM 6,486), so the default path did not move.
+
+The larger budget is what finished four Netlib instances at 1e-4. Each was polished in more than the old 50 iterations:
+
+- agg: 60 iterations.
+- fffff800: 53 iterations.
+- forplan: 74 iterations.
+- pilot87: 57 iterations.
+
+The issue's acceptance holds on its two sets: verified counts are at least the 1e-8 hand-off's and total time is lower. The default still stays at 1e-8, for three reasons:
+
+- **dfl001 is lost.** At 1e-8 it is optimal and verified. At 1e-4 the polish reaches 68 iterations and then hits its own 30 s clock (`polish_max_seconds`), a limit the iteration budget does not touch.
+- **finnis drops from optimal to feasible.** It is still verified, but the reduced costs miss dual feasibility after the polish.
+- **The Mittelmann small set loses qap15.** At 1e-8 PDHG runs 242,120 iterations and qap15 ends feasible and verified at 178 s. At 1e-4 PDHG stops after 1,840 iterations at 31 s, the point is not primal feasible, and the polish does not finish it. irish-electricity, rmine15 and supportcase10 also stop at 31 to 79 s with most of their 300 s unused. Their 1e-8 arm runs to the time limit, so none of the three is verified in either arm.
+
+A default flips only when nothing verified is lost, so the default hand-off stays at 1e-8, and 1e-4 remains an explicit request that now finishes more instances.
+
+What would earn the flip: when the polish declines or cannot finish a 1e-4 point, PDHG resumes toward 1e-8 on the time that is left, and the polish's clock scales with the hand-off the same way its iteration budget does.
+
+The CSVs are not committed because they carry branch stamps. Each is in its run's artifact.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.

@@ -65,7 +65,9 @@ def instances_of(runner: str, set_name: str | None = None) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--runner", required=True, choices=sorted(MANIFESTS))
+    # #1166: several runners run one after the other in the same job, each over its own
+    # manifest, so two sets share one machine and one bench.yml dispatch.
+    parser.add_argument("--runner", required=True, nargs="+", choices=sorted(MANIFESTS))
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--option", action="append", default=[], metavar="KEY=VALUE",
                         help="the `on` arm's extra solver option; repeatable")
@@ -89,27 +91,30 @@ def main() -> int:
     if not args.option and args.base_binary is None:
         parser.error("nothing differs between the arms: give --option or --base-binary")
 
-    names = args.instances or instances_of(args.runner, args.set_name)
+    if args.instances and len(args.runner) > 1:
+        parser.error("--instances names one runner's instances: give a single --runner")
     arms = {"off": args.solver_option, "on": args.solver_option + args.option}
     binaries = {"off": args.base_binary or args.binary, "on": args.binary}
     work = Path(tempfile.mkdtemp(prefix="option-ab-"))
     rows: list[dict] = []
     fields: list[str] = []
+    jobs = [(runner, name) for runner in args.runner
+            for name in args.instances or instances_of(runner, args.set_name)]
     for repeat in range(1, args.repeats + 1):
-        for index, name in enumerate(names):
+        for index, (runner, name) in enumerate(jobs):
             order = ("off", "on") if (index + repeat) % 2 else ("on", "off")
             for arm in order:
                 out = work / f"{arm}-{repeat}-{name}.csv"
-                cmd = [sys.executable, f"bench/runners/{args.runner}", "--binary",
+                cmd = [sys.executable, f"bench/runners/{runner}", "--binary",
                        str(binaries[arm]), "--instances", name, "--out", str(out)]
                 # miplib.py builds its own tag (CPU model included) around a machine kind.
-                cmd += (["--machine-kind", args.machine] if args.runner == "miplib.py"
+                cmd += (["--machine-kind", args.machine] if runner == "miplib.py"
                         else ["--machine", args.machine])
                 if args.time_limit is not None:
                     cmd += ["--time-limit", f"{args.time_limit:g}"]
-                if args.seeds is not None and args.runner == "miplib.py":
+                if args.seeds is not None and runner == "miplib.py":
                     cmd += ["--seeds", str(args.seeds)]
-                if args.set_name is not None and args.runner == "miplib.py":
+                if args.set_name is not None and runner == "miplib.py":
                     cmd += ["--set", args.set_name]
                 for option in arms[arm]:
                     cmd += ["--solver-option", option]
@@ -136,7 +141,7 @@ def main() -> int:
         writer.writeheader()
         writer.writerows(rows)
     print(f"on arm: {args.binary} {' '.join(args.option)}; off arm: {binaries['off']}; "
-          f"{len(names)} instances x {args.repeats} "
+          f"{len(jobs)} instances x {args.repeats} "
           f"repeat(s); wrote {path}")
     return 0
 
