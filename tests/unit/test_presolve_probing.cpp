@@ -389,12 +389,17 @@ TEST(PresolveProbing, MoreRoundsFixAtLeastAsMuchAndKeepTheOptimum) {
     const Count fixed_once =
         presolve::presolve(model, with_probing(true), logger).report.probing_fixings;
     const Count fixed_more = presolve::presolve(model, more, logger).report.probing_fixings;
-    ASSERT_GE(fixed_more, fixed_once) << "trial " << trial;
-    one_round += fixed_once;
-    more_rounds += fixed_more;
     const Solution reference = solve(model, with_probing(false));
     const Solution rounds = solve(model, more);
     ASSERT_EQ(rounds.status, reference.status) << "trial " << trial << ": " << rounds.message;
+    // A later round can prove the model infeasible, which the report gives as no fixings
+    // (CI found one at trial 203: 3 fixings in one round, then infeasible); on a feasible
+    // model the rounds only add.
+    if (reference.status != SolveStatus::kInfeasible) {
+      ASSERT_GE(fixed_more, fixed_once) << "trial " << trial;
+    }
+    one_round += fixed_once;
+    more_rounds += fixed_more;
     if (reference.status == SolveStatus::kOptimal) {
       ASSERT_NEAR(rounds.objective, reference.objective, 1e-6) << "trial " << trial;
     }
