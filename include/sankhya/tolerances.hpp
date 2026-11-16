@@ -901,6 +901,13 @@ inline constexpr std::int64_t kProbingProbeWorkLimit = 1000000;
 /// 43694331338, option-ab-miplib3-probing-share-9605693.csv and
 /// option-ab-miplib-tier1-probing-share-9605693.csv).
 inline constexpr double kProbingFixedShare = 0.2;
+/// presolve_probing_rounds' default: probing rounds once a round is kept, each under what
+/// the earlier found, until one fixes nothing. On mitre every seed then fixes the same 4,505
+/// binaries (one round: 3,867, 3,132, 3,175) and is proved on all three; the same-job A/Bs
+/// lost nothing on MIPLIB 3 or tier 1 (runs 43796209669 and 43847190780,
+/// option-ab-miplib3-probing-rounds-3fb9f16.csv,
+/// option-ab-miplib-tier1-probing-rounds-f2704ac.csv).
+inline constexpr std::int64_t kProbingRounds = 5;
 
 // ---------------------------------------------------------------------------------------
 // Spatial branch and bound for products of columns (#514, src/global/)

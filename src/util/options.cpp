@@ -451,17 +451,19 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  1.0,
                  {}});
-    s.push_back({"presolve_probing_rounds",
-                 OptionType::Int,
-                 std::int64_t{1},
-                 "Probing rounds in presolve once a round is kept (presolve_probing, or "
-                 "presolve_probing_fixed_share reached): each further round probes the "
-                 "binaries left under the bounds the earlier ones found, and the rounds stop "
-                 "when one fixes nothing or the work limit is reached. One round's fixings "
-                 "depend on the order the binaries are probed in (#1158).",
-                 1.0,
-                 100.0,
-                 {}});
+    s.push_back(
+        {"presolve_probing_rounds",
+         OptionType::Int,
+         std::int64_t{tol::kProbingRounds},
+         "Probing rounds in presolve once a round is kept (presolve_probing, or "
+         "presolve_probing_fixed_share reached): each further round probes the "
+         "binaries left under the bounds the earlier ones found, and the rounds stop "
+         "when one fixes nothing or the work limit is reached. One round's fixings "
+         "depend on the order the binaries are probed in; the default, 5, makes mitre's "
+         "the same on every seed (#1158).",
+         1.0,
+         100.0,
+         {}});
     s.push_back({"presolve_probing_continuous_bounds",
                  OptionType::Bool,
                  false,

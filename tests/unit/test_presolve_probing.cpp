@@ -386,8 +386,9 @@ TEST(PresolveProbing, MoreRoundsFixAtLeastAsMuchAndKeepTheOptimum) {
     for (double& c : model.col_cost) c = cost(rng);
     Options more = with_probing(true);
     more.set_int("presolve_probing_rounds", 5);
-    const Count fixed_once =
-        presolve::presolve(model, with_probing(true), logger).report.probing_fixings;
+    Options once = with_probing(true);
+    once.set_int("presolve_probing_rounds", 1);
+    const Count fixed_once = presolve::presolve(model, once, logger).report.probing_fixings;
     const Count fixed_more = presolve::presolve(model, more, logger).report.probing_fixings;
     const Solution reference = solve(model, with_probing(false));
     const Solution rounds = solve(model, more);
