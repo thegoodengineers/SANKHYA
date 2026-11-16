@@ -836,6 +836,25 @@ jobs:
             python3 tools/verify_solution.py "data/casestudies/$case.mps" "$case.sol" --quiet
           done
 
+          echo '--- refinery pooling (#514): the global optimum, point and bound checked apart ---'
+          # Non-convex, so verify_solution.py only shows the point feasible; the certificate,
+          # checked in exact arithmetic from the .mps alone, shows nothing beats it by more
+          # than the gap. Both checkers read the model with their own parser.
+          ./build/sankhya solve data/casestudies/refinery_pooling.mps --time-limit 120 \
+            --option nonconvex=global --option write_certificate=refinery_pooling.cert.json \
+            --write-sol refinery_pooling.sol --stats refinery_pooling.json
+          python3 tools/verify_solution.py data/casestudies/refinery_pooling.mps \
+            refinery_pooling.sol --quiet
+          python3 tools/verify_global_certificate.py data/casestudies/refinery_pooling.mps \
+            refinery_pooling.cert.json
+          python3 - <<'PYEOF'
+          import json
+          result = json.load(open("refinery_pooling.json"))["result"]
+          assert result["status"] == "optimal", result
+          print(f"refinery pooling: optimum {result['objective']:.6f} k$/day, "
+                f"proved bound {result['dual_bound']:.6f}")
+          PYEOF
+
           echo '--- the MILP answer must agree with exhaustive enumeration ---'
           # verify_solution.py cannot prove a MILP optimum is unbeatable; only a second,
           # independent search can. Four units means sixteen commitment patterns.
