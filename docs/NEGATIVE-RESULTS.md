@@ -472,6 +472,16 @@ What would earn the flip: when the polish declines or cannot finish a 1e-4 point
 
 The CSVs are not committed because they carry branch stamps. Each is in its run's artifact.
 
+### A global strong-branching iteration budget (PR #1289, closed)
+
+On seven MIPLIB 2017 models HiGHS proves in 1 to 26 s, the profiled runs at `1b8af4e` put 33 to 53 s of 60 into `branching`: decomp2, drayage-100-23, drayage-25-23, irp, neos-3083819-nubu, neos-860300 and nw04. PR #1289 capped strong branching over the whole search: once the probes had spent more than 100,000 + 0.5 x the node LPs' own iterations, a node branched on its pseudocosts and probed nothing (Achterberg 2007, ch. 5).
+
+Setup: `bench.yml` `ab-option`, run 43847282121. The `off` arm is `1b8af4e` and the `on` arm `968b50e`, both in one job. 25 models x 3 seeds, 60 s, one thread.
+
+It changed no count: 2 proved, 10 matched and 54 verified in both arms, nothing gained or lost. On the drayage pair the budget bit: nodes went 1171 -> 3447 and 1238 -> 3978, and branching fell from 51.5 s to about 40 s, but the bound barely moved. On decomp2 and nw04 nothing changed: branching took 51.9 s and 36.6 s in both arms, at 328 and 184 nodes. decomp2's node LPs take 2.75 s in all, so the time inside `branching` is not the probes' simplex iterations, which is the only thing this budget limits. Finding what it is needs the nested profile per solve (`miplib.py --profile-dir`).
+
+The CSV is not committed because it carries branch stamps. It is in the run's artifact.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
