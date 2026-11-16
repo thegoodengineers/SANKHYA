@@ -7,6 +7,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdio>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -84,6 +87,74 @@ double largest_complementarity_product(
 namespace {
 
 enum class Pin : signed char { kFree, kLower, kUpper };
+
+// DIAGNOSTIC ONLY (#1178): appended to bench/results/qp-diag.txt, which the bench job uploads.
+template <typename... A>
+void diag(const char* format, A... a) {
+  if (FILE* f = std::fopen("bench/results/qp-diag.txt", "a")) {
+    std::fprintf(f, format, a...);
+    std::fclose(f);
+  }
+}
+
+void diag_worst_product(const char* tag, const Standard& s, const std::vector<bool>& has_lower,
+                        const std::vector<bool>& has_upper, const std::vector<double>& v,
+                        const std::vector<double>& y, const std::vector<double>& zl,
+                        const std::vector<double>& zu, const std::vector<double>& rp) {
+  const auto nc = static_cast<std::size_t>(s.cols);
+  double worst = 0.0, mult = 0.0, slack = 0.0, mag = 0.0;
+  const char* kind = "none";
+  std::size_t where = 0;
+  const auto take = [&](double product, const char* k, std::size_t j, double m, double sl,
+                        double g) {
+    if (product > worst) {
+      worst = product;
+      kind = k;
+      where = j;
+      mult = m;
+      slack = sl;
+      mag = g;
+    }
+  };
+  for (std::size_t j = 0; j < nc; ++j) {
+    if (has_lower[j]) {
+      take(std::fabs((v[j] - s.lower[j]) * zl[j]), "zl", j, zl[j], v[j] - s.lower[j],
+           std::fabs(v[j]));
+    }
+    if (has_upper[j]) {
+      take(std::fabs((s.upper[j] - v[j]) * zu[j]), "zu", j, zu[j], s.upper[j] - v[j],
+           std::fabs(v[j]));
+    }
+  }
+  std::vector<double> d(nc, 0.0), mty(nc, 0.0);
+  hessian_times(s.h, v, &d);
+  if (s.rows > 0) s.m.transpose_multiply_add(y.data(), mty.data());
+  for (std::size_t j = 0; j < nc; ++j) {
+    const double below = has_lower[j] ? v[j] - s.lower[j] : kInfinity;
+    const double above = has_upper[j] ? s.upper[j] - v[j] : kInfinity;
+    const double sl = std::min(below, above);
+    const double dj = d[j] + s.g[j] - mty[j];
+    if (std::isfinite(sl)) {
+      take(std::fabs(dj) * std::fabs(sl),
+           j < static_cast<std::size_t>(s.free_n) ? "dcol" : "dslack", j, dj, sl,
+           std::max({std::fabs(v[j]), std::fabs(d[j]), std::fabs(s.g[j]), std::fabs(mty[j])}));
+    }
+  }
+  for (Index k = 0; k < s.slacks; ++k) {
+    const auto uu = static_cast<std::size_t>(s.free_n + k);
+    const auto rr = static_cast<std::size_t>(s.slack_row[static_cast<std::size_t>(k)]);
+    const double activity = v[uu] - rp[rr];
+    double distance = kInfinity;
+    if (has_lower[uu]) distance = std::min(distance, std::fabs(activity - s.lower[uu]));
+    if (has_upper[uu]) distance = std::min(distance, std::fabs(s.upper[uu] - activity));
+    if (std::isfinite(distance)) {
+      take(std::fabs(y[rr]) * distance, "row", rr, y[rr], distance, std::fabs(activity));
+    }
+  }
+  diag("  %s worst=%.3e kind=%s at=%zu mult=%.6e slack=%.6e mag=%.3e gate_rel=%.3e\n", tag,
+       worst, kind, where, mult, slack, mag,
+       worst / std::max(1.0, 1e-6 * std::fabs(mult) * mag));
+}
 
 /// The dense product of the reduced system is at most this many entries (one QR of the
 /// active rows restricted to the free columns); above it the finish declines.
@@ -320,6 +391,13 @@ bool solve_reduced(const Standard& s, const std::vector<Pin>& pin,
 
 }  // namespace
 
+void diag_exit_point(const Standard& s, const std::vector<bool>& has_lower,
+                     const std::vector<bool>& has_upper, const std::vector<double>& v,
+                     const std::vector<double>& y, const std::vector<double>& zl,
+                     const std::vector<double>& zu, const std::vector<double>& rp) {
+  diag_worst_product("ipm-exit", s, has_lower, has_upper, v, y, zl, zu, rp);
+}
+
 bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
                        const std::vector<bool>& has_upper, double tolerance,
                        double primal_tolerance, double regularization_floor,
@@ -332,6 +410,8 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
   // The working set: a bound is active when the point sits within the scaled distance of it,
   // or when its slack is below its own (right-signed) multiplier.
   std::vector<Pin> pin(nc, Pin::kFree);
+  int diag_ind = 0;
+  std::string diag_list;
   for (std::size_t j = 0; j < nc; ++j) {
     const double dl = has_lower[j] ? (*v)[j] - s.lower[j] : kInfinity;
     const double du = has_upper[j] ? s.upper[j] - (*v)[j] : kInfinity;
@@ -344,7 +424,27 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
       pin[j] = Pin::kLower;
     } else if (has_upper[j] && (du <= near_upper)) {
       pin[j] = Pin::kUpper;
+    } else if (has_lower[j] && dl <= du && dl < (*zl)[j]) {
+      ++diag_ind;
+      if (g_finish_indicator) pin[j] = Pin::kLower;
+      if (diag_ind <= 12) {
+        diag_list += std::to_string(j) + ":L s=" + std::to_string(dl) +
+                     " z=" + std::to_string((*zl)[j]) + " ";
+      }
+    } else if (has_upper[j] && du < (*zu)[j]) {
+      ++diag_ind;
+      if (g_finish_indicator) pin[j] = Pin::kUpper;
+      if (diag_ind <= 12) {
+        diag_list += std::to_string(j) + ":U s=" + std::to_string(du) +
+                     " z=" + std::to_string((*zu)[j]) + " ";
+      }
     }
+  }
+  {
+    int pinned = 0;
+    for (const Pin p : pin) pinned += p != Pin::kFree;
+    diag("n=%zu m=%zu START ind=%d pinned=%d indicator_extra=%d [%s]\n", nc, nr,
+         int(g_finish_indicator), pinned, diag_ind, diag_list.c_str());
   }
 
   Candidate c;
@@ -398,15 +498,27 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
         if (r < 0.0 && has_upper[j]) consider(j, -r, Pin::kUpper);
       }
     }
+    {
+      int pinned = 0;
+      for (const Pin p : pin) pinned += p != Pin::kFree;
+      diag("n=%zu round=%d pinned=%d worst=%td from=%d to=%d size=%.3e v=%.6e\n", nc, round,
+           pinned, worst == nc ? std::ptrdiff_t{-1} : static_cast<std::ptrdiff_t>(worst),
+           worst == nc ? -9 : int(pin[worst]), int(to), worst_size,
+           worst == nc ? 0.0 : c.v[worst]);
+    }
     if (worst == nc) {
       settled = true;
     } else {
       // A column asked to change a third time is cycling (huestis: pinned, released, pinned
       // again on the same column): the working set is not converging, so stop.
-      if (++changes[worst] > 2) return false;
+      if (++changes[worst] > 2) {
+        diag("n=%zu CYCLE on %zu\n", nc, worst);
+        return false;
+      }
       pin[worst] = to;
     }
   }
+  diag("n=%zu settled=%d\n", nc, int(settled));
   if (!settled) return false;
 
   // ---- acceptance: never worse than the point the interior point already found -------------
@@ -419,15 +531,27 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
   const double primal_rel = inf_norm(rp) / (1.0 + std::max(inf_norm(mv), inf_norm(s.b)));
   const double dual_rel =
       inf_norm(rd) / (1.0 + std::max({inf_norm(hv), inf_norm(s.g), inf_norm(mty)}));
+  diag("n=%zu accept? primal_rel=%.3e dual_rel=%.3e tol=%.1e\n", nc, primal_rel, dual_rel,
+       tolerance);
+  diag_worst_product("candidate", s, has_lower, has_upper, c.v, c.y, c.zl, c.zu, rp);
   if (!(primal_rel <= tolerance) || !(dual_rel <= tolerance)) return false;
   for (std::size_t j = 0; j < nc; ++j) {
-    if (has_lower[j] && c.v[j] < s.lower[j] - primal_tolerance) return false;
-    if (has_upper[j] && c.v[j] > s.upper[j] + primal_tolerance) return false;
-    if (c.zl[j] < -primal_tolerance || c.zu[j] < -primal_tolerance) return false;
+    const bool bad = (has_lower[j] && c.v[j] < s.lower[j] - primal_tolerance) ||
+                     (has_upper[j] && c.v[j] > s.upper[j] + primal_tolerance) ||
+                     c.zl[j] < -primal_tolerance || c.zu[j] < -primal_tolerance;
+    if (bad) {
+      diag("  REJECT bound/sign at %zu v=%.6e l=%.3e u=%.3e zl=%.3e zu=%.3e pin=%d\n", j,
+           c.v[j], s.lower[j], s.upper[j], c.zl[j], c.zu[j], int(pin[j]));
+      return false;
+    }
   }
   const double largest_product =
       largest_complementarity_product(s, has_lower, has_upper, c.v, c.y, c.zl, c.zu, rp);
-  if (largest_product > tol::kQpIpmComplementarityShare * tol::kComplementarity) return false;
+  if (largest_product > tol::kQpIpmComplementarityShare * tol::kComplementarity) {
+    diag("  REJECT product %.3e\n", largest_product);
+    return false;
+  }
+  diag("  ACCEPT\n");
 
   *v = std::move(c.v);
   *y = std::move(c.y);

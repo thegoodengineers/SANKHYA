@@ -2460,6 +2460,10 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  10.0,
                  {}});
+    s.push_back({"qp_ipm_finish_indicator", OptionType::Bool, false,
+                 "DIAGNOSTIC ONLY (#1178): the finish also pins a bound whose slack is below "
+                 "its multiplier (El-Bakry, Tapia and Zhang 1994).",
+                 0.0, 0.0, {}});
     s.push_back(
         {"qp_ipm_finish",
          OptionType::Bool,

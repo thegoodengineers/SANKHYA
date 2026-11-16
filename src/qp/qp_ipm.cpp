@@ -74,6 +74,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <string>
 #include <vector>
@@ -955,6 +956,15 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     residuals();
     const double largest_product_at_exit =
         largest_complementarity_product(s, has_lower, has_upper, v, y, zl, zu, rp);
+    ipm_detail::g_finish_indicator = options.get_bool("qp_ipm_finish_indicator");
+    if (FILE* f = std::fopen("bench/results/qp-diag.txt", "a")) {  // DIAGNOSTIC ONLY (#1178)
+      std::fprintf(f, "EXIT ind=%d %s cols=%zu rows=%zu it=%lld mu=%.3e rho=%.1e delta=%.1e prod=%.3e\n",
+                   int(ipm_detail::g_finish_indicator), model.name.c_str(), nc, nr,
+                   static_cast<long long>(iterations), last_mu, rho,
+                   delta, largest_product_at_exit);
+      std::fclose(f);
+    }
+    ipm_detail::diag_exit_point(s, has_lower, has_upper, v, y, zl, zu, rp);
     if (largest_product_at_exit > tol::kQpIpmComplementarityShare * tol::kComplementarity) {
       const bool finished =
           active_set_finish(s, has_lower, has_upper, tolerance, primal_tolerance,

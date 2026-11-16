@@ -9,6 +9,13 @@
 
 namespace sankhya::qp::ipm_detail {
 
+inline bool g_finish_indicator = false;  // DIAGNOSTIC ONLY (#1178)
+void diag_exit_point(const Standard& s, const std::vector<bool>& has_lower,
+                     const std::vector<bool>& has_upper, const std::vector<double>& v,
+                     const std::vector<double>& y, const std::vector<double>& zl,
+                     const std::vector<double>& zu, const std::vector<double>& rp);
+
+
 /// The largest complementarity product of (v, y, zl, zu): every finite bound's distance times
 /// its multiplier, every column's derived reduced cost H v + g - M^T y times its distance to
 /// the nearer finite bound (the product the in-process gate prices), and every slack row's
