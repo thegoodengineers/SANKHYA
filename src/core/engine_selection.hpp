@@ -87,7 +87,11 @@ inline constexpr Index kPdhgRowFloor = 100000;
 ///   simplex solves them in about 2.5 s where CPU PDHG took 84 s and 35 s with no basis. The
 ///   largest Netlib product the dual simplex solves is dfl001 (6,071 x 35,632 = 2.2e8, 47 s),
 ///   and no other Netlib model is above 1.5e8 except maros-r7 (4.5e8), which kIpmNonzeroFloor
-///   already sends to the interior point.
+///   already sends to the interior point. On the CPU the rule fires too for a model that
+///   is NOT network shaped (the network rule's test below), as `work:pdhg`: ken-11 and
+///   pds-06 are network shaped (2.3 and 2.2 nonzeros per column) and stay, and qap15
+///   (4.26) hits 600 s on the dual simplex on a 4-vCPU runner (mittelmann-5c75a11.csv)
+///   where CPU PDHG with the polish is optimal in 93 s (mittelmann-pdhg-0fe40ba.csv).
 inline constexpr double kNormalEquationsCeiling = 1e8;
 inline constexpr double kSimplexWorkCeiling = 3e8;
 

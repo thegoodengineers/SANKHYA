@@ -178,10 +178,12 @@ TEST(EngineSelection, WithADeviceFactorLargeAffordableModelsGoToTheInteriorPoint
 TEST(EngineSelection, PastTheDualSimplexWorkCeilingTheDualSimplexIsLeft) {
   // qap15: 6,330 rows x 94,950 nonzeros = 6.0e8, under the row limit and the nonzero floor,
   // a time limit on the dual simplex (#417). With the device factor it goes to the interior
-  // point (23 s); without one it stays on the dual simplex (see the Kennington test below).
+  // point (23 s); without one, not network shaped (4.26 nonzeros per column), to CPU PDHG
+  // (93 s); the network-shaped Kennington pair stays (see the test below).
   const EngineSelection qap =
       select_engine(shaped_lp(6330, 22275, 94950), auto_options(), false);
-  EXPECT_EQ(qap.rule, "default:dual-simplex");
+  EXPECT_EQ(qap.algorithm, "pdhg") << qap.reason;
+  EXPECT_EQ(qap.rule, "work:pdhg");
   const EngineSelection device = select_engine(shaped_lp(6330, 22275, 94950), auto_options(),
                                                false, true, "Test GPU", /*device_factor=*/true);
   EXPECT_EQ(device.algorithm, "ipm");

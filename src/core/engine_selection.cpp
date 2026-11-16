@@ -144,6 +144,22 @@ EngineSelection rule_table_selection(const Model& model, const Options& options,
         shape, work, kSimplexWorkCeiling);
     return s;
   }
+  if (!device_factor && work >= kSimplexWorkCeiling && !network) {
+    // Without the device factor the Kennington pair above stays because it is network
+    // shaped (2.2 and 2.3 nonzeros per column; the network test is computed above), so
+    // the work rule can fire on the CPU for every other model: qap15 (4.26 per column)
+    // hits the 600 s limit on the dual simplex on a 4-vCPU runner
+    // (mittelmann-5c75a11.csv), and CPU PDHG with the polish is optimal and verified on it
+    // in 93 s (mittelmann-pdhg-0fe40ba.csv, mittelmann-pdhg-5c7efbc.csv).
+    s.algorithm = "pdhg";
+    s.rule = "work:pdhg";
+    s.reason = fmt::format(
+        "{}: rows x nonzeros is {:.3g}, over {:.0e}, and the model is not network shaped; "
+        "qap15 at 6.0e8 times out on the dual simplex at 600 s and is optimal on CPU PDHG "
+        "in 93 s, where the network-shaped ken-11 (7.2e8) stays on the dual simplex",
+        shape, work, kSimplexWorkCeiling);
+    return s;
+  }
   s.algorithm = "dual-simplex";
   s.rule = "default:dual-simplex";
   s.reason = fmt::format(
