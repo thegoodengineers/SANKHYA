@@ -85,6 +85,7 @@ bool Simplex::first_factorization() {
     // The copy carries the cached LU's own hyper-sparse flag; this solve's option decides
     // (#464).
     lu_.use_hyper_sparse(options_.get_bool("lu_hyper_sparse"));
+    lu_.set_update_limit(static_cast<Index>(options_.get_int("lu_update_limit")));
     basis_needed_stricter_threshold_ = false;
     last_factorization_plain_ = true;
     const double pivot = lu_.smallest_pivot();

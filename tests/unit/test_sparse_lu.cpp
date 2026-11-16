@@ -535,7 +535,7 @@ TEST(SparseLuUpdate, ManyUpdatesInSequenceStayCorrect) {
   int applied = 0;
 
   for (int step = 0; step < 25; ++step) {
-    const Index leaving = static_cast<Index>(step) % m;
+    const Index leaving = step % m;
     std::vector<double> entering(static_cast<std::size_t>(m));
     for (Index i = 0; i < m; ++i) {
       entering[static_cast<std::size_t>(i)] = value(rng) + (i == leaving ? 6.0 : 0.0);
@@ -605,8 +605,9 @@ TEST(SparseLuUpdate, AsksToRefactorizeOnceTheEtaFileGrows) {
   EXPECT_FALSE(lu.should_refactorize()) << "a fresh factorization should not ask immediately";
 
   std::uniform_real_distribution<double> value(-2.0, 2.0);
-  for (int step = 0; step < 500 && !lu.should_refactorize(); ++step) {
-    const Index leaving = static_cast<Index>(step) % m;
+  for (Index step = 0; step < 2 * SparseLu::kDefaultUpdateLimit && !lu.should_refactorize();
+       ++step) {
+    const Index leaving = step % m;
     std::vector<double> alpha(static_cast<std::size_t>(m));
     for (Index i = 0; i < m; ++i) {
       alpha[static_cast<std::size_t>(i)] = value(rng) + (i == leaving ? 8.0 : 0.0);
@@ -694,7 +695,7 @@ TEST(SparseLuForrestTomlin, ManyUpdatesInSequenceStayCorrect) {
   int applied = 0;
 
   for (int step = 0; step < 25; ++step) {
-    const Index leaving = static_cast<Index>(step) % m;
+    const Index leaving = step % m;
     std::vector<double> entering(static_cast<std::size_t>(m));
     for (Index i = 0; i < m; ++i) {
       entering[static_cast<std::size_t>(i)] = value(rng) + (i == leaving ? 6.0 : 0.0);
@@ -1047,8 +1048,9 @@ TEST(SparseLuForrestTomlin, AsksToRefactorizeOnceTheRowEtaFileGrows) {
   EXPECT_FALSE(lu.should_refactorize()) << "a fresh factorization should not ask immediately";
 
   std::uniform_real_distribution<double> value(-2.0, 2.0);
-  for (int step = 0; step < 500 && !lu.should_refactorize(); ++step) {
-    const Index leaving = static_cast<Index>(step) % m;
+  for (Index step = 0; step < 2 * SparseLu::kDefaultUpdateLimit && !lu.should_refactorize();
+       ++step) {
+    const Index leaving = step % m;
     std::vector<double> entering(static_cast<std::size_t>(m));
     for (Index i = 0; i < m; ++i) {
       entering[static_cast<std::size_t>(i)] = value(rng) + (i == leaving ? 8.0 : 0.0);

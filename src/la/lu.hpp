@@ -152,6 +152,10 @@ class SparseLu {
   /// without the search (#464). On by default in the simplex since its A/B; sticky across
   /// factorize().
   void use_hyper_sparse(bool on) noexcept { hyper_sparse_ = on; }
+  /// The eta-count backstop of should_refactorize() (option lu_update_limit; lu.cpp's
+  /// kMaxEtaCount is the default and says what it rests on). Sticky across factorize().
+  static constexpr Index kDefaultUpdateLimit = 512;
+  void set_update_limit(Index limit) noexcept { update_limit_ = limit < 1 ? 1 : limit; }
   [[nodiscard]] bool hyper_sparse() const noexcept { return hyper_sparse_; }
   /// Result densities of every solve since construction, whichever path took it.
   [[nodiscard]] const LuSolveStats& solve_stats() const noexcept { return stats_; }
@@ -398,6 +402,7 @@ class SparseLu {
   Index m_ = 0;
   bool stopped_early_ = false;  ///< the last failure was a deadline, not a singular basis
   bool hyper_sparse_ = false;   ///< see use_hyper_sparse()
+  Index update_limit_ = kDefaultUpdateLimit;  ///< see set_update_limit()
 
   // ---- hyper-sparse solves (#464, lu_hyper.cpp) ---------------------------------------
   /// Row -> the step that retired it, and basis position -> the step that pivoted on it:

@@ -1522,6 +1522,7 @@ std::optional<Solution> Simplex::prepare(const WarmStart* warm, const Timer& tim
   lu_.use_forrest_tomlin(basis_update == "forrest-tomlin");
   // Hyper-sparse FTRAN/BTRAN (#464): the same arithmetic over the reached steps only.
   lu_.use_hyper_sparse(options_.get_bool("lu_hyper_sparse"));
+  lu_.set_update_limit(static_cast<Index>(options_.get_int("lu_update_limit")));
 
   build_working_problem();
   warm_started_ = warm != nullptr && !warm->empty() && seed_basis(*warm);

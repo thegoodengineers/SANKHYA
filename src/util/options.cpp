@@ -283,6 +283,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"product-form", "forrest-tomlin"}});
+    s.push_back({"lu_update_limit",
+                 OptionType::Int,
+                 std::int64_t{512},
+                 "Simplex basis updates after which the factors are rebuilt whatever the "
+                 "eta file's size, the backstop behind the work-based break-even "
+                 "(refactor_work_ratio). 512 from its A/B on main (bench/results/"
+                 "option-ab-{netlib,kennington}-update-limit-512-fad4df2.csv): Netlib 94 of "
+                 "94 optimal, exact and verified in both arms, ken-18 9.4 s -> 6.0 s. It was "
+                 "128 from #68, where 512 failed d2q06c on the code of that time.",
+                 1.0,
+                 kNoLimit,
+                 {}});
     s.push_back({"lu_hyper_sparse",
                  OptionType::Bool,
                  true,
