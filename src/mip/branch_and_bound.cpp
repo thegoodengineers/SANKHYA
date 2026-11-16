@@ -810,6 +810,9 @@ Solution BranchAndBound::run() {
     // rows the first one added, and the cut machinery's root bookkeeping is built for one
     // root.
     if (node_index == 0 && restarts_ == 0 && options_.get_bool("enable_root_cuts")) {
+      // Its own region under profile=detailed: the separation, filtering and re-solves of
+      // every root round, so a run's time splits into presolve, LP, cuts and heuristics.
+      ProfileScope timed(logger_.profiler(), "root cuts", ProfileMode::kDetailed);
       root_cut_round(&relaxation);
     }
     // The root relaxation after cuts is what reduced-cost fixing (#418) reasons from: its
