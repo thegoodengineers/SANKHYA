@@ -2229,14 +2229,8 @@ Solution InteriorPoint::run() {
     // A dense row of A is a dense node of the augmented system; ordered last (#473, osa-60).
     ldl_.set_postpone_dense(true);
     purify_ldl_.set_ordering_budget(ldl_.ordering_budget());
-    // The supernodal kernel (#470) factors the positive-definite normal equations only; the
-    // signed quasi-definite factorization this path runs is the scalar one whatever the
-    // option says (la/ldl.cpp), and a user who set both is told so, once.
-    if (ldl_.supernodal()) {
-      logger_.info(
-          "interior point: ipm_supernodal does not apply to the augmented system of "
-          "ipm_proximal_regularization, whose signed factorization stays scalar");
-    }
+    // ipm_supernodal factors this quasi-definite system by supernodes too, under the same
+    // signed pivot rule as the scalar path (la/ldl_supernodal.cpp).
   }
   corrector_cap_ = static_cast<int>(options_.get_int("ipm_centrality_correctors"));
   logger_.verbose("interior point: built in {:.2f}s from the start of the solve",

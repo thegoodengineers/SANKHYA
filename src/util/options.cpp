@@ -2618,7 +2618,9 @@ const std::vector<OptionSpec>& Options::registry() {
         {"ipm_supernodal",
          OptionType::Bool,
          false,
-         "Factor the interior point's normal equations by supernodes (#470): the same "
+         "Factor the interior point's normal equations, or under "
+         "ipm_proximal_regularization its quasi-definite augmented system with the signed "
+         "pivot rule, by supernodes (#470): the same "
          "analysis, pivot rule and factor as the scalar LDL^T, computed column block by "
          "column block with dense kernels written here (no vendor BLAS), independent "
          "subtrees of the elimination tree on the `threads` workers at once; the factor "
