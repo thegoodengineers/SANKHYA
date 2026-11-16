@@ -153,6 +153,19 @@ inline constexpr int kStrongBranchingCandidates = 10;
 /// probe measures a lower estimate of the gain rather than nothing.
 inline constexpr int kStrongBranchingIterations = 50;
 
+/// Strong-branching budget over the whole search: once the probes have spent more than
+/// kStrongBranchIterationOffset + kStrongBranchIterationQuotient x the node LPs' own
+/// iterations, a node branches on the pseudocosts it has (partial or the global average)
+/// and probes nothing, until the node LPs have earned the probes more room. The rule is the
+/// global strong-branching iteration limit of reliability branching (Achterberg, Constraint
+/// Integer Programming, PhD thesis, TU Berlin 2007, ch. 5); the two values are the defaults
+/// the SCIP user documentation lists for it (sbiterquot 0.5, sbiterofs 100000). The root is
+/// never limited: the offset is far above what one node's probes cost. #1278's diagnosis:
+/// on decomp2, both drayage models, irp, neos-3083819-nubu, neos-860300 and nw04 branching
+/// took 33 to 53 s of 60 over 180 to 4,000 nodes, which HiGHS proves in 1 to 26 s.
+inline constexpr double kStrongBranchIterationQuotient = 0.5;
+inline constexpr Count kStrongBranchIterationOffset = 100000;
+
 /// Strong-branch fixing (#502, option mip_strong_branch_fix): a probe that proves one side of
 /// a column infeasible fixes the column to the other side, the node LP is re-solved, and the
 /// branching decision is taken again on the new point. At most this many such rounds per

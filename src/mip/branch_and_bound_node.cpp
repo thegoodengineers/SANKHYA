@@ -410,6 +410,16 @@ Index BranchAndBound::choose_branching_column(const std::vector<double>& x, doub
   if (to_probe.size() > static_cast<std::size_t>(tol::kStrongBranchingCandidates)) {
     to_probe.resize(static_cast<std::size_t>(tol::kStrongBranchingCandidates));
   }
+  // THE GLOBAL BUDGET (tolerances.hpp, kStrongBranchIterationQuotient): the probes may not
+  // outspend the node LPs by more than the quotient past a fixed offset. Probe iterations
+  // are counted in the node solves' totals as well, so they are taken out of those first.
+  const Count node_lp_iterations =
+      warm_node_iterations_ + cold_node_iterations_ - strong_branch_iterations_;
+  if (static_cast<double>(strong_branch_iterations_) >
+      static_cast<double>(tol::kStrongBranchIterationOffset) +
+          tol::kStrongBranchIterationQuotient * static_cast<double>(node_lp_iterations)) {
+    to_probe.clear();
+  }
 
   const WarmStart node_basis = current_warm_;
   std::vector<double> measured_down(candidates.size(), -1.0);
