@@ -465,6 +465,16 @@ inline constexpr double kCrossoverPushCeilingFactor = 1e3;
 /// pivots, 57 per row and column of its presolved model) is stopped at 38,920.
 inline constexpr double kCrossoverPivotsPerDimension = 10.0;
 
+/// From an OPTIMAL interior point the crossover may use at most this share of the time the
+/// limit has left when it starts. The answer it would improve already stands - optimal, and
+/// measured against the project's standard by the status guard - so the basis is the only
+/// thing at stake, and the solve never stakes more of its remaining budget on that than it
+/// keeps back. Half is that rule, not a fit: on the Mittelmann set the crossovers that ran
+/// to the clock (datt256_lp 575 s, s250r10 527 s after the interior point; run 43862371211)
+/// and the ones that ended in a numerical error (brazil3 246-332 s, qap15 367-370 s; run
+/// 43869978480) all left the interior point's answer as the result.
+inline constexpr double kCrossoverShareAfterOptimal = 0.5;
+
 /// How close to a bound, relative to the entry's own size, the fix-and-solve route (#888,
 /// core/pdhg_fix_and_solve.cpp) reads a first-order point as "at" it: such a column is fixed
 /// there and such a row snapped to an equality there before the restricted LP is solved.
