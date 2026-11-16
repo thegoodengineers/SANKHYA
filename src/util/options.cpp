@@ -2732,7 +2732,7 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Double,
                  tol::kPdhgTight,
                  "PDHG relative KKT termination tolerance: the point PDHG hands to the "
-                 "interior-point polish under pdhg_relative_stop (on by default). 1e-4 is "
+                 "interior-point polish under pdhg_relative_stop (off by default). 1e-4 is "
                  "the explicit loose request (the GPU demo path); with pdhg_relative_stop "
                  "off the loop runs on until the point meets the project's ABSOLUTE "
                  "tolerances, so a request looser than those then changes nothing (#180); "
@@ -2840,7 +2840,7 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back(
         {"pdhg_relative_stop",
          OptionType::Bool,
-         true,
+         false,
          "Stop the CPU LP PDHG on the relative KKT request alone - primal, dual and gap "
          "residuals all at or under pdhg_tolerance - which is PDLP's own termination "
          "(Applegate et al., NeurIPS 2021, section 2), and leave the verdict to the "
@@ -2854,7 +2854,13 @@ const std::vector<OptionSpec>& Options::registry() {
          "(option-ab-057e19b.csv) lost nothing verified on Netlib (86 of 94 both arms) "
          "or the refinery LPs (18 of 18) and cut the shifted geometric mean of iterations "
          "from 71,389 to 62,251 and 8,678 to 6,486; at a 1e-4 hand-off the 50-iteration "
-         "polish fell short on agg and dfl001, so 1e-4 stays an explicit request.",
+         "polish fell short on agg and dfl001, so 1e-4 stays an explicit request. Off by "
+         "default since the Mittelmann A/B (option-ab-5c80846.csv, run "
+         "43786521640, 600 s): stopped on the relative request, ex10 and savsched1 end "
+         "`feasible` with only the 1e-9 verified gap open and a polish that cannot finish "
+         "them; run on, both are optimal and verified (123 s and 41 s), and "
+         "chromaticindex1024-7 and graph40-40 reach the standard in PDHG itself in 0.8 s "
+         "and 6.5 s instead of 21 s and 32 s with the polish.",
          0.0,
          0.0,
          {}});
