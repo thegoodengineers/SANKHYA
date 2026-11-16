@@ -72,6 +72,10 @@ def slack_lp(model: Path, time_limit: float) -> None:
     h = highspy.Highs()
     h.setOptionValue("output_flag", False)
     h.setOptionValue("time_limit", float(time_limit))
+    # HiGHS's interior point: its simplex did not finish this LP on irish-electricity in
+    # 4000 s (run 43905800849). Only t* and the duals' sizes are read, so no crossover.
+    h.setOptionValue("solver", "ipm")
+    h.setOptionValue("run_crossover", "off")
     lower = [(-inf if not math.isfinite(v) else v) for v in m.col_lower] + [0.0]
     upper = [(inf if not math.isfinite(v) else v) for v in m.col_upper] + [1.0]
     cost = [0.0] * n + [-1.0]  # maximise t
