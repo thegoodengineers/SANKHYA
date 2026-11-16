@@ -83,21 +83,18 @@ bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
             "(root_cut_loop_when=flow-covers)");
       }
     } else if (wanted && when == "auto") {
-      // A flow cover in round 1 enters as under flow-covers. Without one, a model with a
-      // variable upper bound enters ON PROBATION (tolerances.hpp, kRootCutProbationGain):
-      // gesa2 and mod011 have the structure and take no cover in round 1, and so does
-      // bell5, which the rounds only cost; what tells them apart is what the rounds gain,
-      // and root_cut_loop() rolls the root back to round 1 when it is too little.
+      // A flow cover in round 1 enters as under flow-covers. Without one, every model
+      // enters ON PROBATION (tolerances.hpp, kRootCutProbationGain): gesa2 and mod011 take
+      // no cover in round 1 and the rounds solve them, bell5 neither and the rounds only
+      // cost it; what tells them apart is what the rounds gain, and root_cut_loop() rolls
+      // the root back to round 1, pool off, when it is too little. Until #1274's diagnosis
+      // only a model with a variable upper bound was let in, which kept out enlight_hard
+      // and mik-250-20-75-4, whose rounds gain several times round 1 (MIPLIB 2017 A/B at
+      // 9b0ec5d, root_cut_loop_when=always: enlight_hard's root gap 0.556 -> 0.199).
       const bool cover = std::any_of(round1.begin(), round1.end(), [](const Cut& cut) {
         return cut.family == CutFamily::kFlowCover;
       });
-      wanted = cover || find_variable_bounds(working_).rows > 0;
-      root_loop_probation_ = wanted && !cover;
-      if (!wanted) {
-        logger_.info(
-            "Root cut loop: not entered, round 1 took no flow cover and the model has no "
-            "variable upper bound (root_cut_loop_when=auto)");
-      }
+      root_loop_probation_ = !cover;
     } else if (wanted && when == "switched-flows") {
       // The rounds pay on fixed-charge and lot-sizing models, whose switched flows x <= u y
       // are what the aggregated flow covers and the c-MIR path cuts work on (#1158's A/B:

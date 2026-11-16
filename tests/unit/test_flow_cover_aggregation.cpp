@@ -480,6 +480,11 @@ TEST(RootCutLoop, SwitchedFlowsGateEntersOnALotSizingChainAndNotOnAKnapsack) {
   ASSERT_EQ(gated_knapsack.status, SolveStatus::kOptimal);
   EXPECT_NEAR(gated_knapsack.objective, 11.0, 1e-9);  // x2 + x4 (5 + 6 > 9): x1 + x4 = 11
   EXPECT_LE(gated_knapsack.root_cut_rounds, 1) << "no switched flow: the single round only";
+  // auto (#1274): a model with no switched flow enters on probation too, and whether its
+  // rounds are kept or rolled back the optimum is the one the single round finds.
+  const Solution auto_knapsack = solve_with(knapsack, "auto");
+  ASSERT_EQ(auto_knapsack.status, SolveStatus::kOptimal);
+  EXPECT_NEAR(auto_knapsack.objective, 11.0, 1e-9);
 
   // flow-covers: the chain enters only when the family is on and round 1 takes a cover.
   auto solve_covers = [](const Model& m, bool family) {
