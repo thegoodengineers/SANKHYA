@@ -32,6 +32,8 @@
 
 namespace sankhya::mip {
 
+struct VariableBounds;  // mir_cmir.hpp
+
 /// One row of the model in row-wise form: (column, coefficient) pairs.
 struct RowEntries {
   std::vector<Index> columns;
@@ -53,11 +55,18 @@ struct BaseRow {
 /// more than tol::kRowAggregationInside), or -1 when there is none. A column `skip` marks
 /// (non-null, one char per model column) is never chosen: the flow cover separator keeps the
 /// switched flows, whose variable upper bound is the structure it separates on.
+///
+/// With `variable_bounds` (non-null), a column's bounds include its VARIABLE bounds at the LP
+/// point, x <= u y* + c and x >= l y* + c: Marchand and Wolsey's bound distance (Operations
+/// Research 49(3), 2001, sec. 2). A flow sitting on its x <= u y is then at a bound and is
+/// left for c-MIR to substitute by u y, which puts the switch in the cut; only flows strictly
+/// inside every bound are eliminated, which walks the aggregation along the network's paths.
 [[nodiscard]] Index column_to_eliminate(const Model& model, const Solution& solution,
                                         const std::vector<double>& col_lower,
                                         const std::vector<double>& col_upper,
                                         const BaseRow& base,
-                                        const std::vector<char>* skip = nullptr);
+                                        const std::vector<char>* skip = nullptr,
+                                        const VariableBounds* variable_bounds = nullptr);
 
 /// Add lambda times row i (as `sum a x <= u` for lambda > 0, `sum a x >= l` for lambda < 0)
 /// to `base`, so that column `eliminate` cancels. Returns false when row i has no finite

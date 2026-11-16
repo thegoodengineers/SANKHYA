@@ -688,6 +688,20 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"mir_variable_bound_aggregation",
+                 OptionType::Bool,
+                 false,
+                 "With mir_cmir: the MIR row aggregation measures how far a continuous column "
+                 "sits inside its bounds against its VARIABLE bounds too (x <= u y + c at the "
+                 "LP point), so a flow on its switch's bound is substituted rather than "
+                 "eliminated, and a row with no fractional integer column may start an "
+                 "aggregation when a continuous column in it has a variable bound with a "
+                 "fractional switch (a network's flow balance rows). Marchand and Wolsey 2001, "
+                 "sec. 2. Separator strength only; the root loop and its gate are unchanged. "
+                 "Off until an A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"gmi_safety",
                  OptionType::Bool,
                  false,
