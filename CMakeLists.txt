@@ -300,6 +300,7 @@ set(SANKHYA_CORE_SOURCES
   src/la/lu.cpp
   src/la/lu_eliminate.cpp
   src/la/lu_hyper.cpp
+  src/la/lu_ft_hyper.cpp
   src/la/normal_pattern.cpp
   src/la/operator_norm.cpp
   src/la/scaling.cpp
