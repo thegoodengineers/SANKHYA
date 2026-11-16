@@ -47,6 +47,11 @@ mkdir -p "$STAGE/bindings" "$STAGE/bench/case_studies"
 cp -r "$REPO/bindings/python" "$STAGE/bindings/"
 cp -r "$REPO/bench/case_studies/refinery" "$STAGE/bench/case_studies/"
 cp "$REPO/bench/runners/stamp.py" "$STAGE/bench/runners/"
+# The committed CSVs the walkthrough notebook cites, so it runs from the archive as well.
+mkdir -p "$STAGE/bench/results"
+for csv in $(grep -oE '[A-Za-z0-9._-]+\.csv' "$REPO/notebooks/walkthrough.ipynb" | sort -u); do
+  cp "$REPO/bench/results/$csv" "$STAGE/bench/results/"
+done
 cp "$REPO/scripts/binary_provenance.sh" "$STAGE/scripts/"
 cp "$REPO/README.md" "$STAGE/"
 cp "$REPO/docs/PROVENANCE.md" "$REPO/docs/sbom.spdx.json" "$STAGE/docs/"
