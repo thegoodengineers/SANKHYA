@@ -327,8 +327,8 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
         if (depth == tol::kRowAggregationDepth) break;
         // Eliminate the continuous column furthest inside its bounds with an unused row that
         // contains it and has a finite bound on the side the multiplier needs.
-        const Index eliminate = column_to_eliminate(model, solution, col_lower, col_upper,
-                                                    base, nullptr, walk_bounds);
+        const Index eliminate = column_to_eliminate(model, solution, col_lower, col_upper, base,
+                                                    nullptr, walk_bounds);
         if (eliminate < 0) break;
         const ColumnView column = model.matrix.column(eliminate);
         bool extended = false;
