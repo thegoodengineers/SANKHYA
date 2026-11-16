@@ -18,6 +18,7 @@
 
 #include "nlp/nonlinear_model.hpp"
 #include "sankhya/model.hpp"
+#include "sankhya/options.hpp"
 #include "sankhya/sankhya.h"
 #include "sankhya/solve_control.hpp"
 
@@ -82,7 +83,22 @@ struct sankhya_model {
   sankhya_model() = default;
 };
 
+struct sankhya_options {
+  sankhya::Options options;
+};
+
+struct sankhya_solution {
+  sankhya::Solution solution;
+  // The names of the model this solution is for, so sankhya_solve_from() can place its
+  // basis on a model whose rows and columns were added or removed since (#913).
+  std::vector<std::string> col_names;
+  std::vector<std::string> row_names;
+};
+
 namespace sankhya::capi {
+
+/// The handle's pending triplets materialised into a Model, on a copy (c_api.cpp).
+void materialise(const sankhya_model& handle, sankhya::Model* out);
 
 /// The handle's nonlinear parts over `built`, validated: empty when there are none or they
 /// are well formed, else the first problem (c_api_nlp.cpp).

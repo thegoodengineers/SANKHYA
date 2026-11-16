@@ -70,7 +70,9 @@ struct BatchReport {
 /// `base` with the scenario's overrides applied.
 [[nodiscard]] Model apply(const Model& base, const Scenario& scenario);
 
-/// Solve the base model, then every scenario from its basis, checking each answer. An
+/// Solve the base model, then every scenario from its basis (or, with option
+/// scenario_start=previous, from the basis of the last scenario verified optimal before it),
+/// checking each answer. An
 /// explicit `algorithm` other than "auto" is used as given for every scenario (the starting
 /// basis is then only a hint the engine may ignore); "auto" restarts the dual simplex.
 /// Never throws on a numerical failure. LP only: a model with integer columns or a Hessian

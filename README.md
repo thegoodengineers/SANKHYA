@@ -681,7 +681,27 @@ the device is not wired to scenarios yet.
 
 ```bash
 ./build/sankhya scenarios demo/crude_blend.mps demo/crude_blend_prices.csv --compare
+./build/sankhya scenarios demo/crude_blend.mps demo/crude_blend_prices.csv --write-dir out
+python tools/verify_solution.py out/0001-base.mps out/0001-base.sol   # each scenario's own
 ```
+
+`--write-dir` writes every scenario's own model and answer, so each one can go through
+`tools/verify_solution.py`; CI does that for every scenario of the demo set.
+`--option scenario_start=previous` restarts each scenario from the one before it (a demand
+ramped step by step), and `--option algorithm=simplex` restarts the primal simplex, which a
+pure price move leaves primal feasible. The same run is `sankhya_solve_scenarios` in the C API
+(the overrides as compressed rows: offsets, targets, indices, values) and
+`Model.solve_scenarios([[("cost", j, price)], [("rhs", i, demand)]])` in Python, each
+returning per scenario the solution, whether it was verified, and its safe bound.
+
+On a GitHub-hosted runner at `f2c20f1` (bench run 43847211319,
+`bench/results/scenarios-f2c20f1.csv` and `scenario-summary-f2c20f1.csv`, 4 vCPU), all 3990
+scenario answers passed `tools/verify_solution.py` on their own written models and agreed with
+their single solves to 1e-8 relative. On the 365-day refinery year (15,695 rows), 100 demand
+forecasts took 3.76 s with the base solve against 71.88 s for 100 single solves (19.1x), and
+100 crude price sets 34.43 s against 74.08 s (2.15x); restarting from the previous scenario
+(`scenario_start=previous`) took 3.27 s and 27.36 s. The primal restart for the price sets
+lost to single solves (474.03 s), as #773 measured, so the dual restart stays the default.
 
 `sankhya engines` lists every engine in the build: the classes it solves, how it is reached
 (`algorithm=<name>`, `algorithm=pdhg` with `--gpu`, or the problem class alone), what its

@@ -84,9 +84,15 @@ BatchReport solve_all(const Model& base, const std::vector<Scenario>& scenarios,
   }
 
   const bool automatic = options.get_string("algorithm") == "auto";
+  const bool chain = options.get_string("scenario_start") == "previous";
   report.base = solve(base, options);
-  const bool have_basis = report.base.col_status.size() == base.col_cost.size() &&
-                          report.base.row_status.size() == base.row_lower.size();
+  const auto has_basis = [&](const Solution& s) {
+    return s.col_status.size() == base.col_cost.size() &&
+           s.row_status.size() == base.row_lower.size();
+  };
+  // The basis the next scenario restarts from: the base one, or with scenario_start=previous
+  // that of the last scenario verified optimal. Never one from an unverified answer.
+  const Solution* start = has_basis(report.base) ? &report.base : nullptr;
 
   for (std::size_t k = 0; k < scenarios.size(); ++k) {
     const Timer scenario_clock;
@@ -101,9 +107,9 @@ BatchReport solve_all(const Model& base, const std::vector<Scenario>& scenarios,
     // restart 127-296 pivots and a fraction of it.
     if (automatic) warm.set_string("algorithm", "dual-simplex");
     SolveControl control;
-    if (have_basis) {
-      control.start_col_status = report.base.col_status;
-      control.start_row_status = report.base.row_status;
+    if (start != nullptr) {
+      control.start_col_status = start->col_status;
+      control.start_row_status = start->row_status;
     }
     r.solution = solve(model, warm, &control);
     r.verified = check(model, r.solution, &r.verdict);
@@ -124,6 +130,10 @@ BatchReport solve_all(const Model& base, const std::vector<Scenario>& scenarios,
     }
     r.safe_bound = safe_objective_bound(model, r.solution);
     r.seconds = scenario_clock.elapsed_seconds();
+    if (chain && r.verified && r.solution.status == SolveStatus::kOptimal &&
+        has_basis(r.solution)) {
+      start = &r.solution;
+    }
   }
   report.seconds = clock.elapsed_seconds();
   return report;

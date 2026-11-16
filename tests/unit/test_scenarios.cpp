@@ -66,10 +66,10 @@ std::vector<sc::Scenario> spread(const Model& model) {
   return out;
 }
 
-void expect_agreement(const std::string& relative) {
+void expect_agreement(const std::string& relative, const Options& options = quiet()) {
   const Model model = read(relative);
   const std::vector<sc::Scenario> scenarios = spread(model);
-  const sc::BatchReport report = sc::solve_all(model, scenarios, quiet());
+  const sc::BatchReport report = sc::solve_all(model, scenarios, options);
   ASSERT_EQ(report.base.status, SolveStatus::kOptimal) << relative;
   ASSERT_EQ(report.results.size(), scenarios.size());
   for (std::size_t k = 0; k < scenarios.size(); ++k) {
@@ -103,6 +103,27 @@ TEST(Scenarios, AgreeWithSeparateSolvesOnNetlib) {
   for (const char* name : {"afiro", "adlittle", "share2b", "sc105"}) {
     expect_agreement(std::string("data/netlib/") + name + ".mps");
   }
+}
+
+TEST(Scenarios, RestartingFromThePreviousScenarioAgreesToo) {
+  // scenario_start=previous: each scenario restarts from the one before it when that one was
+  // verified optimal. The spread's neighbours move costs and sides in different directions,
+  // so this is the harder case for that restart; the answers must not change.
+  Options options = quiet();
+  options.set_string("scenario_start", "previous");
+  expect_agreement("demo/crude_blend.mps", options);
+  for (const char* name : {"afiro", "adlittle", "share2b", "sc105"}) {
+    expect_agreement(std::string("data/netlib/") + name + ".mps", options);
+  }
+}
+
+TEST(Scenarios, ThePrimalRestartAgreesToo) {
+  // algorithm=simplex: every scenario restarts the primal simplex from the base basis, which a
+  // pure cost move leaves primal feasible (Chvatal ch. 10).
+  Options options = quiet();
+  options.set_string("algorithm", "simplex");
+  expect_agreement("demo/crude_blend.mps", options);
+  expect_agreement("data/netlib/afiro.mps", options);
 }
 
 TEST(Scenarios, AnInfeasibleScenarioIsProvedAndNeverOptimal) {
