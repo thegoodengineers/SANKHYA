@@ -6,8 +6,9 @@
 // most flows exactly on x = u y, inside [0, u] but on their variable bound: those must be
 // left for c-MIR to substitute, and only the flows strictly inside every bound eliminated.
 // The tests: the choice itself, by hand; and every cut the separator returns on random
-// fixed-charge transshipment networks, with the option on, is checked against every switch
-// assignment by maximising the cut over the flows the assignment allows.
+// fixed-charge transshipment networks, with the option on, at the LP point and at random
+// points below the switch bounds, is checked against every switch assignment by maximising
+// the cut over the flows the assignment allows.
 
 #include <algorithm>
 #include <cmath>
@@ -165,18 +166,35 @@ TEST(CmirAggregation, NoCutRemovesAFeasibleFlowOfRandomNetworks) {
     const Solution lp = solve(relaxed, quiet_lp());
     if (lp.status != SolveStatus::kOptimal) continue;
     ++networks;
+    // The LP point puts every flow on its switch bound, x = u y, so nothing is inside every
+    // bound and the walk eliminates nothing there; random points below the switch bounds,
+    // where the separator must still return only valid cuts, exercise the walk itself.
+    std::vector<Solution> points{lp};
+    const auto k = arcs.size();
+    for (int probe = 0; probe < 2; ++probe) {
+      Solution p;
+      p.col_value.assign(2 * k, 0.0);
+      for (std::size_t a = 0; a < k; ++a) {
+        p.col_value[k + a] = unit(rng);
+        p.col_value[a] = unit(rng) * arcs[a].capacity * p.col_value[k + a];
+      }
+      points.push_back(p);
+    }
     mip::MirOptions options;
     options.cmir = true;
     options.variable_bound_aggregation = true;
-    mip::MirStats stats;
-    const std::vector<Cut> cuts =
-        mip::generate_mir_cuts(m, lp, m.col_lower, m.col_upper, &stats, options);
-    aggregated += stats.aggregated_cuts;
-    for (const Cut& cut : cuts) {
-      const double worst = worst_violation(m, static_cast<Index>(arcs.size()), cut);
-      ASSERT_LE(worst, 1e-7 * std::max(1.0, std::fabs(cut.rhs)))
-          << "trial " << trial << ": a switch assignment's flow violates the cut by " << worst;
-      ++cuts_checked;
+    for (const Solution& point : points) {
+      mip::MirStats stats;
+      const std::vector<Cut> cuts =
+          mip::generate_mir_cuts(m, point, m.col_lower, m.col_upper, &stats, options);
+      aggregated += stats.aggregated_cuts;
+      for (const Cut& cut : cuts) {
+        const double worst = worst_violation(m, static_cast<Index>(k), cut);
+        ASSERT_LE(worst, 1e-7 * std::max(1.0, std::fabs(cut.rhs)))
+            << "trial " << trial << ": a switch assignment's flow violates the cut by "
+            << worst;
+        ++cuts_checked;
+      }
     }
   }
   EXPECT_GT(networks, 20);
