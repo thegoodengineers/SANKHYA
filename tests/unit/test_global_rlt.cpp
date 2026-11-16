@@ -164,7 +164,9 @@ TEST(GlobalRlt, EveryRowHoldsAtEveryPointOfTheModelInAnyBox) {
 
 TEST(GlobalRlt, TightensTheRootAndProvesTheSameOptimum) {
   const QcqpModel model = read_or_fail(kHaverly1Q);
-  const Solution plain = solve_global(model, quiet());
+  Options without = quiet();
+  without.set_bool("global_rlt", false);
+  const Solution plain = solve_global(model, without);
   Options with_rlt = quiet();
   with_rlt.set_bool("global_rlt", true);
   const Solution rlt = solve_global(model, with_rlt);

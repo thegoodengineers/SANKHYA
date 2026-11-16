@@ -288,7 +288,10 @@ def layer_two() -> None:
         print(f"end to end: {model.name}")
         with tempfile.TemporaryDirectory() as tmp:
             cert_path = Path(tmp) / "cert.json"
+            # global_rlt=false: the plain McCormick tree, so haverly1_q still needs Farkas proofs
+            # (with the RLT rows it closes at the root); the RLT rows are checked below.
             subprocess.run([str(binary), "solve", str(model), "--option", "nonconvex=global",
+                            "--option", "global_rlt=false",
                             "--option", f"write_certificate={cert_path}",
                             "--option", "log_to_console=false"], capture_output=True, text=True)
             if not cert_path.exists():
@@ -370,6 +373,7 @@ def layer_two() -> None:
             with tempfile.TemporaryDirectory() as tmp:
                 cert_path = Path(tmp) / "cert.json"
                 subprocess.run([str(binary), "solve", str(model), "--option", "nonconvex=global",
+                                "--option", "global_rlt=false",
                                 "--option", f"write_certificate={cert_path}",
                                 "--option", "node_limit=3", "--option", "log_to_console=false"],
                                capture_output=True, text=True)

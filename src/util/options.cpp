@@ -185,7 +185,7 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back(
         {"global_rlt",
          OptionType::Bool,
-         false,
+         true,
          "nonconvex=global (#514): every McCormick relaxation also carries "
          "reformulation-linearization rows. A linear row whose columns each form a "
          "product with one column y is multiplied by y's bound factors over the node's "
@@ -193,7 +193,8 @@ const std::vector<OptionSpec>& Options::registry() {
          "column, so the relaxation couples the products the way the row does. Valid at "
          "every point of the model; on the Q-formulation of pooling these are the rows "
          "the PQ-formulation adds (Quesada and Grossmann 1995). The rows are listed in "
-         "the bound certificate and rebuilt by its checker. Off until an A/B on main.",
+         "the bound certificate and rebuilt by its checker. On by default since the A/B on "
+         "main at e8e8d40 (#514): 38 of 39 pooling runs optimal against 32, none lost.",
          0.0,
          0.0,
          {}});
