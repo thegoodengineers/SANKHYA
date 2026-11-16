@@ -16,6 +16,16 @@
 // envelope is the secant w <= (l + u) x - l u, and it is under-estimated by tangents, taken
 // here at l, u and the midpoint (Tawarmalani and Sahinidis 2002, ch. 4).
 //
+// RLT ROWS (`global_rlt`). The envelope sees one product at a time. A linear row a'x <= u
+// multiplied by a bound factor y - ly >= 0 of a column y gives (u - a'x)(y - ly) >= 0, which
+// is linear in x and the products x_k y; when every such product is already a column w, the
+// row couples the products the way the model does, which no single envelope can (Sherali and
+// Adams, "A Reformulation-Linearization Technique...", Kluwer 1999; Liberti, Int. Trans.
+// Oper. Res. 11, 2004). On the Q-formulation of pooling, sum_i q_il = 1 times f_lj and the pool
+// capacity times q_il are exactly the rows the PQ-formulation adds (Quesada and Grossmann,
+// Comput. Chem. Eng. 19, 1995; Tawarmalani and Sahinidis 2002, ch. 9). Each row holds at every
+// point of the model in the box, so the relaxation stays a relaxation.
+//
 // THE BOUND. The LP optimum is a lower bound on the box only if the LP was solved to
 // optimality exactly; a dual simplex stops on tolerances. dual_bound_from_multipliers()
 // instead evaluates the Lagrangian bound at the multipliers the LP returned, which is a
@@ -24,6 +34,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <map>
+#include <utility>
 #include <vector>
 
 #include "global/global_internal.hpp"
@@ -56,11 +69,12 @@ Model build_relaxation(const Problem& problem, const Box& box) {
   const auto num_products = static_cast<Index>(problem.products.size());
   // Four rows per product: the McCormick envelope, or a secant and three tangents.
   const Index envelope_rows = 4 * num_products;
+  const auto rlt_count = static_cast<Index>(problem.rlt.size());
 
   Model lp;
   lp.name = "mccormick";
   lp.resize_columns(n + num_products);
-  lp.resize_rows(problem.m + envelope_rows);
+  lp.resize_rows(problem.m + envelope_rows + rlt_count);
   lp.objective_offset = problem.offset;
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
@@ -72,7 +86,7 @@ Model build_relaxation(const Problem& problem, const Box& box) {
     lp.col_cost[static_cast<std::size_t>(n + index)] += value;
   }
 
-  lp.matrix.reset(problem.m + envelope_rows, n + num_products);
+  lp.matrix.reset(problem.m + envelope_rows + rlt_count, n + num_products);
   for (Index i = 0; i < problem.m; ++i) {
     const auto u = static_cast<std::size_t>(i);
     lp.row_lower[u] = problem.row_lower[u];
@@ -137,9 +151,89 @@ Model build_relaxation(const Problem& problem, const Box& box) {
       }
     }
   }
+  for (const RltRow& rlt : problem.rlt) {
+    const auto& linear = problem.row_linear[static_cast<std::size_t>(rlt.row)];
+    const double lower = problem.row_lower[static_cast<std::size_t>(rlt.row)];
+    const double upper = problem.row_upper[static_cast<std::size_t>(rlt.row)];
+    const double c = rlt.side == 'u' ? upper : lower;  // 'e': lower == upper == b
+    // (a'x - c)(y - d) = a'w - d a'x - c y + c d, times +1 or -1 to make both factors >= 0.
+    const double d = rlt.side == 'e'     ? 0.0
+                     : rlt.factor == 'l' ? box.lower[static_cast<std::size_t>(rlt.column)]
+                                         : box.upper[static_cast<std::size_t>(rlt.column)];
+    std::map<Index, double> entries;
+    for (std::size_t k = 0; k < linear.size(); ++k) {
+      entries[n + rlt.products[k]] += linear[k].second;
+      entries[linear[k].first] -= d * linear[k].second;
+    }
+    entries[rlt.column] -= c;
+    for (const auto& [column, value] : entries) add(row, column, value);
+    const double rhs = -c * d;
+    if (rlt.side == 'e') {
+      set_row(row++, 0.0, 0.0);
+    } else if ((rlt.side == 'l') == (rlt.factor == 'l')) {
+      set_row(row++, rhs, kInfinity);  // both factors as written, product >= 0
+    } else {
+      set_row(row++, -kInfinity, rhs);  // one factor negated
+    }
+  }
   // Every coefficient here is data the box determines, not arithmetic residue (#590).
   lp.matrix.finalize(0.0);
   return lp;
+}
+
+std::vector<RltRow> rlt_rows(const Problem& problem) {
+  std::map<std::pair<Index, Index>, Index> index_of;
+  std::vector<std::vector<Index>> partners(static_cast<std::size_t>(problem.n));
+  for (std::size_t p = 0; p < problem.products.size(); ++p) {
+    const Product& product = problem.products[p];
+    index_of.emplace(std::make_pair(product.a, product.b), static_cast<Index>(p));
+    partners[static_cast<std::size_t>(product.a)].push_back(product.b);
+    if (!product.square()) partners[static_cast<std::size_t>(product.b)].push_back(product.a);
+  }
+  for (std::vector<Index>& list : partners) std::sort(list.begin(), list.end());
+
+  // ponytail: every (row, y) pair is kept, which on a dense product graph is O(rows * n)
+  // rows of up to n entries; add a budget if a model with one ever matters.
+  std::vector<RltRow> out;
+  for (Index i = 0; i < problem.m; ++i) {
+    const auto u = static_cast<std::size_t>(i);
+    const auto& linear = problem.row_linear[u];
+    const double lower = problem.row_lower[u];
+    const double upper = problem.row_upper[u];
+    if (!problem.row_products[u].empty() || linear.empty()) continue;
+    if (!std::isfinite(lower) && !std::isfinite(upper)) continue;
+    std::vector<Index> candidates = partners[static_cast<std::size_t>(linear.front().first)];
+    for (std::size_t k = 1; k < linear.size() && !candidates.empty(); ++k) {
+      const auto& next = partners[static_cast<std::size_t>(linear[k].first)];
+      std::vector<Index> both;
+      std::set_intersection(candidates.begin(), candidates.end(), next.begin(), next.end(),
+                            std::back_inserter(both));
+      candidates = std::move(both);
+    }
+    for (const Index y : candidates) {
+      RltRow base;
+      base.row = i;
+      base.column = y;
+      for (const auto& term : linear) {
+        const Index k = term.first;
+        base.products.push_back(index_of.at(std::make_pair(std::min(k, y), std::max(k, y))));
+      }
+      if (lower == upper) {
+        out.push_back(base);
+        continue;
+      }
+      for (const char side : {'l', 'u'}) {
+        if (!std::isfinite(side == 'l' ? lower : upper)) continue;
+        for (const char factor : {'l', 'u'}) {
+          RltRow row = base;
+          row.side = side;
+          row.factor = factor;
+          out.push_back(std::move(row));
+        }
+      }
+    }
+  }
+  return out;
 }
 
 double dual_bound_from_multipliers(const Model& lp, const std::vector<double>& y) {

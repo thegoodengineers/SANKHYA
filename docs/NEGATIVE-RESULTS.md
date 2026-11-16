@@ -421,11 +421,49 @@ Measured on GitHub Actions with `bench.yml`'s `ab-option` suite and `--base-bina
 
 Netlib was identical per instance in both (runs 41425504073 and 41702169175). On the laptop build the keyed version held all three (qgfrdxpn feasible in 69 iterations, qshare1b optimal in 80, qsierra optimal in 27) and still gained the LISWET three, so the judgement passes the drop on one machine's rounding and not another's: on a rank-deficient row block `|dy|` grows as 1/delta after a drop (qfffff80: 5.4e7 to 5.4e9 to 2.4e11 over 1e-8, 1e-10, 1e-12) and whether the run recovers is a knife edge. Not merged, in either form. What did ship from the same PR is the step rejection it was built on - a non-finite trial iterate restores the last finite one and raises the regularization, so no engine is ever handed a non-finite point - which changed no row on the 138 or on Netlib (run 41702177032). The three LISWET instances converge with a flat `qp_ipm_regularization=1e-12`, which loses qforplan and cont-201 (#1150); they stay open on #1178. The A/B CSVs are not committed (branch stamps).
 
+What shipped later (#1178): the same drop restricted to a standard form in which every row carries a slack column. There M = [A, -I] has full row rank, the Schur complement on y stays positive definite as delta falls, and the 1/delta growth of dy above cannot occur; all three losses have equality rows, and in run 41425495840 every all-inequality model the drop touched (the LISWET family and yao) stayed optimal. Measured with `--base-binary`, base `ddf9913e`, new `53c580d8`, run 43788506503 (`bench/results/option-ab-maros-meszaros-qp-ipm-full-rank-drop-53c580d.csv`): 128 optimal / 127 matched / 132 verified to 131 / 129 / 135, liswet8, liswet9 and liswet12 gained (liswet8 at 714.47006, the erratum value), nothing lost, only LISWET and yao paths changed.
+
 - **Complemented knapsack covers do not move the MIPLIB 3 root bounds they were built for (#1158).** The lifted cover separator reads only `<=` rows with positive coefficients; on p2756 its 357 such rows give no violated cover at the root, and the knapsacks are the 375 mixed-sign rows. A `knapsack_cover_complement` option, which negated `>=` rows and complemented negative-coefficient binaries (Crowder, Johnson & Padberg 1983; it passed an exhaustive 0/1 validity check over 400 random rows), separated 65 violated covers on p2756 and 363 on mitre where there were none. The bound did not follow.
   - p2756, with the loop on and every candidate taken each round: 2702.75 with the covers and 2702.75 without; published optimum 3124.
   - mitre, the same setting: 114929 with them and 114984 without; published 115155. Neither arm found a feasible point in 60 s.
 
   These are WSL seed-0 logs at 60 s, one thread, not a CSV, and the change was not merged; the branch was never pushed. What does move p2756's root is #511's coefficient tightening (506 coefficients, 2698.95 to 2730.14 after cuts in the same setting), whose two-gate A/B is the re-run that decides it.
+
+### The 1e-4 PDHG hand-off as the default, with the polish budget scaled (#1166, PR #1280, default not flipped)
+
+#1163 left the default hand-off at `pdhg_tolerance` 1e-8. At 1e-4 the 50-iteration interior-point polish fell short on agg and dfl001. PR #1280 scales the polish budget with the hand-off: `polish_iteration_limit` from 1e-8 or tighter, plus `tol::kPolishIterationsPerHandoffDecade` (25) for each decade looser, so 150 at 1e-4. At the default 1e-8 the budget is unchanged. The A/B then put the 1e-4 hand-off against the current default.
+
+Setup: `bench.yml` `ab-option`, both arms on the `93bf260` binary in one job, `algorithm=pdhg`. The `off` arm is the default 1e-8 hand-off and the `on` arm is `pdhg_tolerance=1e-4`. Machine: 4 vCPU Xeon 6975P-C. CSV `option-ab-93bf260.csv` in each run's artifact.
+
+| set | run | arm | verified | optimal | passed | SGM iterations (shift 10) | solver s |
+|---|---|---|---:|---:|---:|---:|---:|
+| Netlib full, 94, 60 s, 100,000 PDHG iterations | 43788380408 | 1e-8 | 86 | 85 | 79 | 62,251 | 301.9 |
+| | | 1e-4 | **90** | 88 | 80 | 12,711 | 190.5 |
+| refinery LPs, 18, 600 s, same | 43788380408 | 1e-8 | 18 | 18 | 18 | 6,486 | 15.9 |
+| | | 1e-4 | 18 | 18 | 18 | 840 | 2.0 |
+| Mittelmann small, 8, 300 s, no HiGHS cross-check | 43788401903 | 1e-8 | **3** | 2 | 2 | 56,945 | 1,337.1 |
+| | | 1e-4 | 2 | 2 | 2 | 13,014 | 657.2 |
+
+The `off` rows reproduce #1163's 1e-8 arm exactly (86 / 85, SGM 62,251; 18 / 18, SGM 6,486), so the default path did not move.
+
+The larger budget is what finished four Netlib instances at 1e-4. Each was polished in more than the old 50 iterations:
+
+- agg: 60 iterations.
+- fffff800: 53 iterations.
+- forplan: 74 iterations.
+- pilot87: 57 iterations.
+
+The issue's acceptance holds on its two sets: verified counts are at least the 1e-8 hand-off's and total time is lower. The default still stays at 1e-8, for three reasons:
+
+- **dfl001 is lost.** At 1e-8 it is optimal and verified. At 1e-4 the polish reaches 68 iterations and then hits its own 30 s clock (`polish_max_seconds`), a limit the iteration budget does not touch.
+- **finnis drops from optimal to feasible.** It is still verified, but the reduced costs miss dual feasibility after the polish.
+- **The Mittelmann small set loses qap15.** At 1e-8 PDHG runs 242,120 iterations and qap15 ends feasible and verified at 178 s. At 1e-4 PDHG stops after 1,840 iterations at 31 s, the point is not primal feasible, and the polish does not finish it. irish-electricity, rmine15 and supportcase10 also stop at 31 to 79 s with most of their 300 s unused. Their 1e-8 arm runs to the time limit, so none of the three is verified in either arm.
+
+A default flips only when nothing verified is lost, so the default hand-off stays at 1e-8, and 1e-4 remains an explicit request that now finishes more instances.
+
+What would earn the flip: when the polish declines or cannot finish a 1e-4 point, PDHG resumes toward 1e-8 on the time that is left, and the polish's clock scales with the hand-off the same way its iteration budget does.
+
+The CSVs are not committed because they carry branch stamps. Each is in its run's artifact.
 
 ## 3. Built opt-in, awaiting the measurement
 

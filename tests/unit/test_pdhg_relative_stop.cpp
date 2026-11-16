@@ -2,10 +2,11 @@
 // SANKHYA - the LP PDHG's relative-KKT termination (option pdhg_relative_stop; Applegate et
 // al., PDLP, NeurIPS 2021, section 2).
 //
-// Pinned here: the option is on by default at the 1e-8 hand-off; with it on, PDHG alone never
-// claims `optimal` for a point short of the project's absolute standard; and through the
-// default pipeline (the interior-point polish on) the answer is a verified optimum agreeing
-// with the default path on committed Netlib instances.
+// Pinned here: the option is off by default (the Mittelmann A/B) and the hand-off stays
+// 1e-8; with it on, PDHG alone never claims `optimal` for a point short of the project's
+// absolute standard; and with it on through the pipeline (the interior-point polish on)
+// the answer is a verified optimum agreeing with the default path on committed Netlib
+// instances.
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -37,9 +38,9 @@ std::string netlib_path(const char* name) {
       .string();
 }
 
-TEST(PdhgRelativeStop, OnByDefaultAtTheTightHandOff) {
+TEST(PdhgRelativeStop, OffByDefaultWithTheTightHandOff) {
   const Options defaults;
-  EXPECT_TRUE(defaults.get_bool("pdhg_relative_stop"));
+  EXPECT_FALSE(defaults.get_bool("pdhg_relative_stop"));
   EXPECT_DOUBLE_EQ(defaults.get_double("pdhg_tolerance"), tol::kPdhgTight);
 }
 

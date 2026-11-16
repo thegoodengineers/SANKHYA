@@ -25,6 +25,8 @@ on:
       - scripts/package_release.sh
       - scripts/build_wheel.py
       - scripts/wheel_smoke.py
+      - scripts/notebook_download_smoke.py
+      - notebooks/walkthrough.ipynb
       - bindings/python/sankhya/**
       - Dockerfile
 
@@ -74,7 +76,8 @@ jobs:
         run: |
           docker run --rm -v "$PWD/dist:/dist" ubuntu:22.04 bash -c '
             set -euo pipefail
-            apt-get update -qq && apt-get install -y -qq python3 >/dev/null
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends python3 python3-pip >/dev/null
             if command -v g++ || command -v cc; then echo "a compiler is present"; exit 1; fi
             cd /tmp && tar -xzf /dist/sankhya-*-linux-x86_64-cpu.tar.gz && cd sankhya-*/
             start=$(date +%s%N)
@@ -83,7 +86,22 @@ jobs:
             python3 tools/verify_solution.py demo/crude_blend.mps /tmp/blend.sol
             PYTHONPATH=bindings/python python3 -c "import sankhya; print(sankhya.Model.read(\"demo/crude_blend.mps\").solve().objective)"
             echo "Linux x86-64 CPU archive, bare ubuntu:22.04 container: demo, verifier and bindings in $(( ($(date +%s%N) - start) / 1000000 )) ms" |
-              tee /dist/timing-linux-x86_64-cpu.txt'
+              tee /dist/timing-linux-x86_64-cpu.txt
+            # The walkthrough notebook, run from the archive: it finds build/ beside it and
+            # downloads nothing, so every cell runs against the binaries and package shipped.
+            pip3 install -q nbconvert nbclient ipykernel
+            if command -v g++ || command -v cc; then echo "a compiler is present"; exit 1; fi
+            python3 -m nbconvert --to notebook --execute --stdout notebooks/walkthrough.ipynb > /dev/null
+            echo "walkthrough notebook: every cell ran from the archive"'
+      - name: The notebook's download cell fetches and verifies the newest published release
+        # Option A of the notebook on its own, in an empty directory, against the releases as
+        # published now (the token only lifts the anonymous API rate limit).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir "$RUNNER_TEMP/fresh" && cd "$RUNNER_TEMP/fresh"
+          python3 "$GITHUB_WORKSPACE/scripts/notebook_download_smoke.py" \
+            "$GITHUB_WORKSPACE/notebooks/walkthrough.ipynb"
       - uses: actions/upload-artifact@v4
         with:
           name: sankhya-linux-x86_64-cpu
@@ -205,6 +223,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "bindings failed" }
           "Windows x64 CPU archive, windows-latest runner with no compiler on PATH: demo, verifier and bindings in {0:N2} s" -f $t.Elapsed.TotalSeconds |
             Tee-Object "$env:GITHUB_WORKSPACE\dist\timing-windows-x64-cpu.txt"
+      - name: The notebook's download cell fetches and verifies the newest published release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $fresh = New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP 'fresh')
+          Set-Location $fresh
+          python "$env:GITHUB_WORKSPACE\scripts\notebook_download_smoke.py" `
+            "$env:GITHUB_WORKSPACE\notebooks\walkthrough.ipynb"
+          if ($LASTEXITCODE -ne 0) { throw "notebook download smoke failed" }
       - name: Wheel
         shell: pwsh
         # Usually no extra libraries: the static MinGW link leaves only system DLLs to import.
