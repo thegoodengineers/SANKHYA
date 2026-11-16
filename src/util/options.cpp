@@ -182,6 +182,21 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"refuse", "global"}});
+    s.push_back(
+        {"global_rlt",
+         OptionType::Bool,
+         false,
+         "nonconvex=global (#514): every McCormick relaxation also carries "
+         "reformulation-linearization rows. A linear row whose columns each form a "
+         "product with one column y is multiplied by y's bound factors over the node's "
+         "box (an equality row by y itself), and each x_k * y is read as its product "
+         "column, so the relaxation couples the products the way the row does. Valid at "
+         "every point of the model; on the Q-formulation of pooling these are the rows "
+         "the PQ-formulation adds (Quesada and Grossmann 1995). The rows are listed in "
+         "the bound certificate and rebuilt by its checker. Off until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"mip_branching",
                  OptionType::String,
                  std::string("reliability"),
@@ -2501,7 +2516,9 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"polish_iteration_limit",
                  OptionType::Int,
                  std::int64_t{50},
-                 "Interior-point iterations the polish may spend (#229).",
+                 "Interior-point iterations the polish may spend (#229) from a hand-off at "
+                 "pdhg_tolerance 1e-8 or tighter; a looser hand-off adds 25 for each decade "
+                 "(#1166: 150 at 1e-4).",
                  1.0,
                  kNoLimit,
                  {}});
@@ -2853,8 +2870,9 @@ const std::vector<OptionSpec>& Options::registry() {
          "is met. On by default at the 1e-8 hand-off: the A/B on the branch of #1163 "
          "(option-ab-057e19b.csv) lost nothing verified on Netlib (86 of 94 both arms) "
          "or the refinery LPs (18 of 18) and cut the shifted geometric mean of iterations "
-         "from 71,389 to 62,251 and 8,678 to 6,486; at a 1e-4 hand-off the 50-iteration "
-         "polish fell short on agg and dfl001, so 1e-4 stays an explicit request. Off by "
+         "from 71,389 to 62,251 and 8,678 to 6,486. 1e-4 stays an explicit request: with "
+         "the polish budget scaled to it (#1166) it verifies 90 of 94 Netlib against "
+         "86 at 1e-8, but loses dfl001 and qap15 (docs/NEGATIVE-RESULTS.md). Off by "
          "default since the Mittelmann A/B (option-ab-5c80846.csv, run "
          "43786521640, 600 s): stopped on the relative request, ex10 and savsched1 end "
          "`feasible` with only the 1e-9 verified gap open and a polish that cannot finish "

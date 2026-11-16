@@ -31,6 +31,7 @@
 #include "core/resource_limits.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/tolerances.hpp"
 
 namespace sankhya {
 namespace {
@@ -258,6 +259,26 @@ TEST(ResourceLimits, TheTwoPhaseRouteSpendsTwoBudgetsAndSaysSo) {
   EXPECT_EQ(polished.iterations, 5 + polished.polish_iterations)
       << "the count is the sum of both phases: " << polished.message;
   EXPECT_NE(polished.algorithm.find("+ipm"), std::string::npos) << polished.algorithm;
+}
+
+TEST(ResourceLimits, TheLooserTheHandOffTheLargerThePolishBudget) {
+  // #1166: polish_iteration_limit is the budget from a 1e-8 hand-off; a 1e-4 hand-off gets
+  // tol::kPolishIterationsPerHandoffDecade more for each of its four looser decades.
+  const Model model = lp(25);
+  Options options = quiet();
+  options.set_string("algorithm", "pdhg");
+  options.set_bool("presolve", false);
+  options.set_bool("pdhg_polish", true);
+  options.set_int("iteration_limit", 5);
+  options.set_int("polish_iteration_limit", 1);
+  const Solution tight = solve(model, options);
+  EXPECT_LE(tight.polish_iterations, 1) << tight.message;
+  options.set_double("pdhg_tolerance", 1e-4);
+  const Solution loose = solve(model, options);
+  EXPECT_GT(loose.polish_iterations, 1) << loose.message;
+  EXPECT_LE(static_cast<double>(loose.polish_iterations),
+            1.0 + 4.0 * tol::kPolishIterationsPerHandoffDecade)
+      << loose.message;
 }
 
 TEST(ResourceLimits, EveryLpEngineReadsAZeroTimeLimitTheSameWay) {

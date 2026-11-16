@@ -17,7 +17,10 @@
 //
 // THE CHECKER, tools/verify_global_certificate.py, never links this code. It shares with it
 // only the layout of the relaxation's rows, which this file's header (in the certificate)
-// states: the model's rows, then four rows per product in the order relaxation.cpp builds them.
+// states: the model's rows, then four rows per product in the order relaxation.cpp builds them,
+// then one row per entry of "rlt" (`global_rlt`): [model row, column y, kind]. The checker
+// does not take an RLT row on trust either: it confirms the model row has no products and
+// that every product it needs is listed, and rebuilds the row from the model and the box.
 //
 // A certificate is written only for a search that used no bound tightening (FBBT removes boxes
 // by an argument the checker does not re-derive), which is what `write_certificate` selects.
@@ -59,11 +62,22 @@ std::string certificate_text(const CertificateInput& in) {
       "  \"layout\": \"relaxation rows: the model rows in order, then four per product; a "
       "bilinear product a<b gives w>=lb*xa+la*xb-la*lb, w>=ub*xa+ua*xb-ua*ub, "
       "w<=ub*xa+la*xb-la*ub, w<=lb*xa+ua*xb-ua*lb; a square gives the secant w<=(l+u)x-l*u, "
-      "then tangents w>=2tx-t*t at t=l, t=u, t=(l+u)/2; columns are x then one w per "
-      "product\",\n";
+      "then tangents w>=2tx-t*t at t=l, t=u, t=(l+u)/2; then one row per rlt entry [r, y, "
+      "kind] over model row r (l<=a'x<=u, no products): eq gives a'w_y-b*y=0, kind XY "
+      "multiplies the row slack X (l: a'x-l, u: u-a'x) by the bound factor Y of column y "
+      "(l: y-ly, u: uy-y) over the box, >= 0, with x_k*y read as product column w; columns "
+      "are x then one w per product\",\n";
   out += "  \"products\": [";
   for (std::size_t k = 0; k < p.products.size(); ++k) {
     out += fmt::format("{}[{}, {}]", k == 0 ? "" : ", ", p.products[k].a, p.products[k].b);
+  }
+  out += "],\n";
+  out += "  \"rlt\": [";
+  for (std::size_t k = 0; k < p.rlt.size(); ++k) {
+    const RltRow& row = p.rlt[k];
+    const std::string kind =
+        row.side == 'e' ? std::string("eq") : std::string{row.side, row.factor};
+    out += fmt::format("{}[{}, {}, \"{}\"]", k == 0 ? "" : ", ", row.row, row.column, kind);
   }
   out += "],\n";
   if (in.incumbent.empty()) {
