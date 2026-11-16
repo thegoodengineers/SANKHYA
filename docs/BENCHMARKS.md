@@ -472,63 +472,73 @@ instances of that size and name what happens. These are the eight smallest archi
 Mittelmann's LP test set (`bench/runners/fetch_mittelmann.py`, provenance in
 `data/mittelmann/reference.json`).
 
-Source CSV: `bench/results/mittelmann-72123ff.csv`  
-Commit `72123ff` · machine `Windows-AMD64` · time limit 300 s per instance, both solvers
+Source CSV: `bench/results/mittelmann-2e53805.csv`  
+Commit `2e53805` · machine `github-actions ubuntu-24.04 4 vCPU Intel(R) Xeon(R) 6975P-C 15 GiB RAM` · time limit 600 s per instance, both solvers
 
-**5 of 12** instances reached `optimal` inside the limit; **5 of 12** also passed the independent verifier and agree with HiGHS. HiGHS, run as a separate process under the same limit, finished **4 of 12**.
+**7 of 16** instances reached `optimal` inside the limit; **7 of 16** also passed the independent verifier and agree with HiGHS. HiGHS, run as a separate process under the same limit, finished **9 of 16**.
 
 These are the smallest archives in Mittelmann's LP directory; against Netlib's largest instance (dfl001, 6,071 rows, 35,632 nonzeros) they range from the same row count with 2.7x the nonzeros (qap15) to 62x the rows and 42x the nonzeros (bdry2). No published optimum exists for them, so there is no pass-against-a-number column: the outcome is the status, the verifier's verdict where a solution was written, and HiGHS's objective where HiGHS finished. `our objective` on a `time_limit` row is the last iterate's value, not a bound, and is printed only so that a later run can be compared with it.
 
 | instance | rows | cols | nonzeros | status | our objective | HiGHS objective | rel. diff | iters | solver time (s) | verified |
 |---|---:|---:|---:|---|---:|---:|---:|---:|---:|:--:|
-| `Linf_520c` | 93326 | 69004 | 566193 | time_limit | 0.7756970849 | Time limit reached | - | 24039 | 300.1 | - |
-| `bdry2` | 376500 | 250998 | 1500003 | time_limit | 0.001999991456 | Time limit reached | - | 7019 | 253.4 | - |
-| `brazil3` | 14646 | 23968 | 133184 | optimal | 2 | 2 | 3.7e-11 | 15 | 5.9 | yes |
-| `chromaticindex1024-7` | 67583 | 73728 | 270324 | optimal | 3 | 3 | 2.6e-12 | 560 | 57.9 | yes |
-| `datt256_lp` | 11077 | 262144 | 1503732 | optimal | 256 | Time limit reached | - | 10 | 153.0 | yes |
-| `ex10` | 69608 | 17680 | 1162000 | optimal | 100 | 100 | 3.0e-12 | 1480 | 77.6 | yes |
-| `irish-electricity` | 104259 | 61728 | 523257 | time_limit | 2454378.022 | Time limit reached | - | 36902 | 240.2 | - |
-| `physiciansched3-3` | 266227 | 79555 | 1062479 | time_limit | 1431579.932 | Time limit reached | - | 21399 | 216.8 | - |
-| `qap15` | 6330 | 22275 | 94950 | time_limit | 172.7930772 | Time limit reached | - | 23875 | 300.1 | - |
-| `rmine15` | 358395 | 42438 | 879732 | time_limit | -5042.486721 | Time limit reached | - | 20597 | 216.7 | - |
-| `s250r10` | 10962 | 273142 | 1318607 | optimal | -0.1726767184 | -0.1726770419 | 3.2e-07 | 116 | 185.0 | yes |
-| `supportcase10` | 165684 | 14770 | 555082 | time_limit | 3.383924801 | Time limit reached | - | 22080 | 220.7 | - |
+| `Linf_520c` | 93326 | 69004 | 566193 | time_limit | 0.1958250349 | 0.19886847 | - | 215387 | 422.7 | - |
+| `bdry2` | 376500 | 250998 | 1500003 | time_limit | 0.001999991446 | Time limit reached | - | 68744 | 426.2 | - |
+| `brazil3` | 14646 | 23968 | 133184 | optimal | 2 | 2 | 3.9e-11 | 15 | 332.9 | yes |
+| `chromaticindex1024-7` | 67583 | 73728 | 270324 | optimal | 3 | 3 | 1.2e-11 | 520 | 0.8 | yes |
+| `datt256_lp` | 11077 | 262144 | 1503732 | optimal | 256 | Time limit reached | - | 10 | 600.1 | yes |
+| `ex10` | 69608 | 17680 | 1162000 | optimal | 100 | 100 | 1.1e-11 | 1600 | 123.3 | yes |
+| `graph40-40` | 360900 | 102600 | 1260900 | optimal | -300 | Time limit reached | - | 1400 | 6.8 | yes |
+| `irish-electricity` | 104259 | 61728 | 523257 | time_limit | 2454384.171 | 2546254.563 | - | 349591 | 430.7 | - |
+| `neos-5251015` | 486531 | 136971 | 1955388 | time_limit | 0.1058 | Time limit reached | - | 89326 | 443.4 | - |
+| `physiciansched3-3` | 266227 | 79555 | 1062479 | time_limit | 2073465.404 | Time limit reached | - | 175551 | 426.2 | - |
+| `qap15` | 6330 | 22275 | 94950 | time_limit | 905.7691413 | 1040.994041 | - | 272875 | 600.0 | - |
+| `rmine15` | 358395 | 42438 | 879732 | time_limit | -5042.482905 | -5042.482963 | - | 123301 | 422.6 | - |
+| `s100` | 14733 | 364417 | 1777917 | feasible | -0.1710967589 | Time limit reached | - | 26099 | 600.1 | yes |
+| `s250r10` | 10962 | 273142 | 1318607 | optimal | -0.1726768597 | -0.1726770419 | 1.8e-07 | 94 | 600.0 | yes |
+| `savsched1` | 295989 | 328575 | 1770507 | optimal | 217.4035706 | Time limit reached | - | 5120 | 41.0 | yes |
+| `supportcase10` | 165684 | 14770 | 555082 | time_limit | 3.383923566 | 3.383923666 | - | 254618 | 426.1 | - |
 
-**Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `irish-electricity`, `physiciansched3-3`, `qap15`, `rmine15`, `supportcase10`.
+**Not solved inside the limit**, named rather than dropped: `Linf_520c`, `bdry2`, `irish-electricity`, `neos-5251015`, `physiciansched3-3`, `qap15`, `rmine15`, `s100`, `supportcase10`.
 
 Each one attributed to one cause (#417), read from the engine that ran and the solver's own message in the CSV, which is the log line quoted:
 
 | instance | status | engine | cause | the solver's message |
 |---|---|---|---|---|
-| `Linf_520c` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 8.439e-02, dual 2.181e-04, gap 9.999e-01 after 24039 iterations and 13 restarts (target 1.0e-04); no time left for the interior-point polish; the interior point declined (th |
-| `bdry2` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 6.027e-02, dual 4.566e-07, gap 9.911e-01 after 7019 iterations and 10 restarts (target 1.0e-04); the interior-point polish did not improve it (time_limit after 0 iterations: |
-| `irish-electricity` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 6.079e-06, dual 1.151e-04, gap 1.793e-06 after 36902 iterations and 16 restarts (target 1.0e-04); the interior-point polish did not improve it (time_limit after 11 iteration |
-| `physiciansched3-3` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 3.097e-04, dual 5.597e+00, gap 6.016e-02 after 21399 iterations and 14 restarts (target 1.0e-04); the interior-point polish did not improve it (not_solved after 0 iterations |
-| `qap15` | time_limit | simplex-dual+primal | too large for the simplex at this iteration cost | time limit 149.994s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time_limit after 150.0 s of its 150 s share; neither attempt produced a usable point |
-| `rmine15` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 1.508e-05, dual 0.000e+00, gap 5.528e-06 after 20597 iterations and 14 restarts (target 1.0e-04); the interior-point polish did not improve it (not_solved after 0 iterations |
-| `supportcase10` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 2.308e-08, dual 0.000e+00, gap 1.843e-05 after 22080 iterations and 13 restarts (target 1.0e-04); the interior-point polish did not improve it (not_solved after 0 iterations |
+| `Linf_520c` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 3.034e-03, dual 6.971e-05, gap 1.845e-02 after 215387 iterations and 20 restarts (target 1.0e-08); the interior-point polish did not improve it (not_solved after 0 iteration |
+| `bdry2` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 6.022e-02, dual 4.548e-07, gap 9.911e-01 after 68744 iterations and 16 restarts (target 1.0e-08); the interior-point polish did not improve it (not_solved after 0 iterations |
+| `irish-electricity` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 7.530e-08, dual 2.848e-05, gap 1.266e-07 after 349591 iterations and 21 restarts (target 1.0e-08); the interior-point polish did not improve it (iteration_limit after 50 ite |
+| `neos-5251015` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 1.573e-17, dual 5.753e-15, gap 5.506e-10 after 89326 iterations and 23 restarts (target 1.0e-08); the interior-point polish did not improve it (numerical_error after 0 itera |
+| `physiciansched3-3` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 6.621e-05, dual 2.648e+00, gap 4.666e-02 after 175551 iterations and 19 restarts (target 1.0e-08); the interior-point polish did not improve it (not_solved after 0 iteration |
+| `qap15` | time_limit | simplex-dual | too large for the simplex at this iteration cost | stopped at the time limit of 599.995s after 599.99s, 272875 iterations, 0 nodes; route: the scaled attempt returned time_limit after 600.0 s of its 600 s share; nothing was left for an unscaled retry |
+| `rmine15` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 1.043e-07, dual 0.000e+00, gap 3.769e-08 after 123301 iterations and 19 restarts (target 1.0e-08); the interior-point polish did not improve it (not_solved after 0 iteration |
+| `s100` | feasible | ipm+crossover | interior point does not converge inside the limit | crossover push: 1542 superbasic, 983 pivots in the push; crossover: 26015 pivots from the starting basis in 102.73s, after 84 interior point iterations; engine reported optimal but strong duality fail |
+| `supportcase10` | time_limit | pdhg-cpu | PDHG converges too slowly for the tolerance | stopped at relative primal 2.131e-09, dual 0.000e+00, gap 2.003e-07 after 254618 iterations and 21 restarts (target 1.0e-08); the interior-point polish did not improve it (not_solved after 0 iteration |
 
 #### The same eight under each engine
 
-Source CSVs: `bench/results/mittelmann-72123ff.csv` (dual simplex), `bench/results/mittelmann-pdhg-0fe40ba.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
-Same 300 s limit per instance and engine; HiGHS is not re-run here.
+Source CSVs: `bench/results/mittelmann-2e53805.csv` (default (auto)), `bench/results/mittelmann-pdhg-0fe40ba.csv` (PDHG), `bench/results/mittelmann-brazil3-ipm-xover-65eecbc.csv` (interior point)  
+Limit per instance: default (auto) 600 s, PDHG 300 s, interior point 300 s; HiGHS is not re-run here.
 
-| instance | dual simplex: status · verified · time (s) | PDHG: status · verified · time (s) | interior point: status · verified · time (s) |
+| instance | default (auto): status · verified · time (s) | PDHG: status · verified · time (s) | interior point: status · verified · time (s) |
 |---|---|---|---|
-| `Linf_520c` | time_limit · - · 300.1 | time_limit · - · 210.2 | not run |
-| `bdry2` | time_limit · - · 253.4 | time_limit · - · 210.5 | not run |
-| `brazil3` | optimal · yes · 5.9 | optimal · yes · 82.7 | optimal · yes · 2.7 |
-| `chromaticindex1024-7` | optimal · yes · 57.9 | optimal · yes · 0.8 | not run |
-| `datt256_lp` | optimal · yes · 153.0 | not run | not run |
-| `ex10` | optimal · yes · 77.6 | not run | not run |
-| `irish-electricity` | time_limit · - · 240.2 | time_limit · - · 240.1 | not run |
-| `physiciansched3-3` | time_limit · - · 216.8 | not run | not run |
-| `qap15` | time_limit · - · 300.1 | optimal · yes · 93.0 | not run |
-| `rmine15` | time_limit · - · 216.7 | time_limit · - · 216.3 | not run |
-| `s250r10` | optimal · yes · 185.0 | not run | not run |
-| `supportcase10` | time_limit · - · 220.7 | time_limit · - · 210.3 | not run |
+| `Linf_520c` | time_limit · - · 422.7 | time_limit · - · 210.2 | not run |
+| `bdry2` | time_limit · - · 426.2 | time_limit · - · 210.5 | not run |
+| `brazil3` | optimal · yes · 332.9 | optimal · yes · 82.7 | optimal · yes · 2.7 |
+| `chromaticindex1024-7` | optimal · yes · 0.8 | optimal · yes · 0.8 | not run |
+| `datt256_lp` | optimal · yes · 600.1 | not run | not run |
+| `ex10` | optimal · yes · 123.3 | not run | not run |
+| `graph40-40` | optimal · yes · 6.8 | not run | not run |
+| `irish-electricity` | time_limit · - · 430.7 | time_limit · - · 240.1 | not run |
+| `neos-5251015` | time_limit · - · 443.4 | not run | not run |
+| `physiciansched3-3` | time_limit · - · 426.2 | not run | not run |
+| `qap15` | time_limit · - · 600.0 | optimal · yes · 93.0 | not run |
+| `rmine15` | time_limit · - · 422.6 | time_limit · - · 216.3 | not run |
+| `s100` | feasible · yes · 600.1 | not run | not run |
+| `s250r10` | optimal · yes · 600.0 | not run | not run |
+| `savsched1` | optimal · yes · 41.0 | not run | not run |
+| `supportcase10` | time_limit · - · 426.1 | time_limit · - · 210.3 | not run |
 
-Finished and verified inside the limit: dual simplex **5 of 12**, PDHG **3 of 12**, interior point **1 of 12**.
+Finished and verified inside the limit: default (auto) **7 of 16** run, PDHG **3 of 8** run, interior point **1 of 1** run.
 
 **PDHG at the feasibility-page standard (#486).** The same PDHG runs, read at the standard Mittelmann's LP feasibility page uses: the relative KKT error at or under 1e-6, no basis, no polish (the crossing is taken in the first-order phase, before any polish). This is a first-order tolerance, **not an optimal basis** and not what `optimal` means elsewhere in this document; the last two columns are what the full run went on to report and the verifier's verdict on that point.
 

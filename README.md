@@ -54,7 +54,7 @@ as regenerable backups.
 | Netlib certified bounds | 94 | **93 of 94** (optimal answer within 1e-6 of a rigorous bound the verifier re-derives, with `certified_gap_seconds=120`) | - | `bench/results/certified-gap-netlib-full-81b812c.csv` | `81b812c` | 2026-10-21 |
 | Netlib infeasible | 29 | **29 of 29** (certified infeasible, `passed`) | - | `bench/results/netlib-infeasible-0aa5301.csv` | `0aa5301` | 2026-11-15 |
 | Kennington | 16 | **16 of 16** (matches published optimum and verified, `passed`) | - | `bench/results/kennington-full-b192fa8.csv` | `b192fa8` | 2026-11-15 |
-| Mittelmann | 12 | **5 of 12** (matches HiGHS's objective and verified, `passed`) | HiGHS (objective check) | `bench/results/mittelmann-72123ff.csv` | `72123ff` | 2026-09-24 |
+| Mittelmann | 16 | **7 of 16** (matches HiGHS's objective and verified, `passed`) | HiGHS (objective check) | `bench/results/mittelmann-2e53805.csv` | `2e53805` | 2026-11-16 |
 | MIPLIB 3 | 65 | **46 of 65** (proved the published optimum and verified, best of 3 seeds, 60 s, 1 thread) | HiGHS 50 of 65 (same job, same rule) | `bench/results/miplib3-60s-seeds3-243006f.csv` | `243006f` | 2026-11-16 |
 | MIPLIB 2017 | 30 | **14 of 30** (matched the published optimum and verified) | - | `bench/results/miplib-ad57c03.csv` | `ad57c03` | 2026-09-27 |
 | Maros-Meszaros (QP) | 138 | **127 of 138** (within relative 1e-6 of the reference and verified, `passed`) | - | `bench/results/maros-meszaros-c766eae.csv` | `c766eae` | 2026-10-22 |
@@ -311,7 +311,12 @@ the waiting pool - so `tree_cut_depth` stays 0. Before #415 the same root round 
 search finds good incumbents far more often than it closes the bound. For
 scale beyond what Netlib tests, `bench/runners/generate_large_lp.py` builds sparse LPs of
 any size with an exactly known analytic optimum, and `bench/runners/mittelmann.py` runs
-Mittelmann's LP set: on its eight smallest instances (6,330 to 376,500 rows) the result is
+Mittelmann's LP set. Since #1272 that is sixteen files, the twelve of
+`data/mittelmann/reference.json` and the fourteen of `bench/runners/lpfeas14.json` (ten in
+both), with HiGHS on each file in the same job: on `main` at `2e53805`, 600 s, a 4-vCPU
+GitHub-hosted runner, **7 of 16** are optimal, verified and agree with HiGHS
+(`bench/results/mittelmann-2e53805.csv`, section 1d of `docs/BENCHMARKS.md`, where every
+miss is named). Earlier runs, on the laptop at 300 s: on its eight smallest instances (6,330 to 376,500 rows) the result is
 **2 of 8** under `algorithm=auto` inside 300 s on `main` at `0018254`, alone on the machine
 and on AC, every failure named in section 1d of `docs/BENCHMARKS.md`
 (`bench/results/mittelmann-0018254.csv`): `brazil3` by the interior point in 3 s and

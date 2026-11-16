@@ -110,7 +110,7 @@ the one stamped in the file's rows, the build that produced it.
 | Netlib infeasible set, verdict with a verified Farkas certificate: 29 of 29 | `bench/results/netlib-infeasible-0aa5301.csv` | `0aa5301` |
 | Exact sensitivity: 69 of 96 LPs with every dual, reduced cost and range re-derived in rational arithmetic; 4,479 of 431,730 floating-point values corrected | `bench/results/exact-sensitivity-60455ce.csv` | `60455ce` |
 | Kennington LP, matched and verified: 16 of 16 | `bench/results/kennington-full-b192fa8.csv` | `b192fa8` |
-| Mittelmann LP, solved and verified inside the limit: 5 of 12 | `bench/results/mittelmann-72123ff.csv` | `72123ff` |
+| Mittelmann LP, solved and verified inside the limit: 7 of 16 | `bench/results/mittelmann-2e53805.csv` | `2e53805` |
 | MIPLIB 2017 easy set: 14 of 30 reach the published optimum, 11 prove it | `bench/results/miplib-ad57c03.csv` | `ad57c03` |
 | Maros-Meszaros convex QP: 127 of 138 at the published objective, 132 verifier-accepted, 0 optimal answers rejected | `bench/results/maros-meszaros-c766eae.csv` | `c766eae` |
 | Hock-Schittkowski NLP: 64 of 70 at the published objective, 70 accepted by the checker | `bench/results/nlp-hs-ad57c03.csv` | `ad57c03` |
@@ -244,8 +244,8 @@ machine `github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core Processor; 4 cores; 
   0.096 s; Kennington 3.060 s against
   0.867 s, slower on 7 of
   16 instances (`bench/results/head-to-head-netlib-8eaf18c.csv`, `bench/results/head-to-head-kennington-8eaf18c.csv`).
-- **Large LPs.** Mittelmann: 5 of 12 inside the limit
-  (`bench/results/mittelmann-72123ff.csv`, `docs/BENCHMARKS.md` section 1d).
+- **Large LPs.** Mittelmann: 7 of 16 inside the limit
+  (`bench/results/mittelmann-2e53805.csv`, `docs/BENCHMARKS.md` section 1d).
 - **MILP proofs.** 11 of 30 MIPLIB instances proved, 14
   at the published optimum (`bench/results/miplib-ad57c03.csv`, section 2).
 - **Declined instances.** Stress set: 11 of 126 declined,
@@ -357,9 +357,9 @@ Slower in the aggregate. Shifted geometric mean with a 10 s shift over 92 instan
 
 **Q6. And on larger LPs?**
 
-On the Kennington set HiGHS is clearly ahead: SGM 3.060 s against 0.867 s, SANKHYA faster on 1 of 16 and slower on 7, a median ratio of 1.08x. On Mittelmann's LPs SANKHYA finishes 5 of 12 inside the limit. Speed at size is the main open work.
+On the Kennington set HiGHS is clearly ahead: SGM 3.060 s against 0.867 s, SANKHYA faster on 1 of 16 and slower on 7, a median ratio of 1.08x. On Mittelmann's LPs SANKHYA finishes 7 of 16 inside the limit. Speed at size is the main open work.
 
-*Evidence: `bench/results/head-to-head-kennington-8eaf18c.csv`, section 4a.2; `bench/results/mittelmann-72123ff.csv`, section 1d of `docs/BENCHMARKS.md`.*
+*Evidence: `bench/results/head-to-head-kennington-8eaf18c.csv`, section 4a.2; `bench/results/mittelmann-2e53805.csv`, section 1d of `docs/BENCHMARKS.md`.*
 
 **Q7. How does the QP engine compare?**
 
