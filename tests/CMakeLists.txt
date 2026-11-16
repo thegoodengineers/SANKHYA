@@ -183,6 +183,7 @@ add_executable(sankhya_tests
   unit/test_minlp_minlplib.cpp
   unit/test_minlp_oa_minlplib.cpp
   unit/test_global.cpp
+  unit/test_global_rlt.cpp
   unit/test_conic.cpp
   unit/test_miqcp.cpp
   unit/test_fractional_integer_bounds.cpp

@@ -182,6 +182,21 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"refuse", "global"}});
+    s.push_back(
+        {"global_rlt",
+         OptionType::Bool,
+         false,
+         "nonconvex=global (#514): every McCormick relaxation also carries "
+         "reformulation-linearization rows. A linear row whose columns each form a "
+         "product with one column y is multiplied by y's bound factors over the node's "
+         "box (an equality row by y itself), and each x_k * y is read as its product "
+         "column, so the relaxation couples the products the way the row does. Valid at "
+         "every point of the model; on the Q-formulation of pooling these are the rows "
+         "the PQ-formulation adds (Quesada and Grossmann 1995). The rows are listed in "
+         "the bound certificate and rebuilt by its checker. Off until an A/B on main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"mip_branching",
                  OptionType::String,
                  std::string("reliability"),

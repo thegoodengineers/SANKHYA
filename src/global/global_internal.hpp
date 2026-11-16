@@ -28,6 +28,24 @@ struct Product {
   [[nodiscard]] bool square() const noexcept { return a == b; }
 };
 
+/// One reformulation-linearization row: model row `row`, which has no products, multiplied by
+/// a factor in column y = `column` whose product with each of the row's columns is one of the
+/// problem's products, so the result is linear in x and the product columns w. `side` 'e': the
+/// equality a'x = b times y, a'w_y - b y = 0. Otherwise `side` picks the row's nonnegative
+/// slack ('l': a'x - l, 'u': u - a'x) and `factor` the column's ('l': y - ly, 'u': uy - y,
+/// over the node's box), and their product is >= 0. Sherali and Adams, "A
+/// Reformulation-Linearization Technique for Solving Discrete and Continuous Nonconvex
+/// Problems" (Kluwer 1999), ch. 7; Liberti, "Reduction constraints for the global optimization
+/// of NLPs", Int. Trans. Oper. Res. 11 (2004) for the rows that need no new product.
+struct RltRow {
+  Index row = 0;
+  Index column = 0;
+  char side = 'e';
+  char factor = 'e';
+  /// The product index of (k, column) for each (k, a_k) of the row's linear part, in order.
+  std::vector<Index> products;
+};
+
 /// The model in MINIMIZATION form, row-wise, every product named once. The objective is
 /// sigma * (offset + c'x + 0.5 x'Hx) with sigma = +1 to minimize and -1 to maximize; every
 /// bound the search proves is on this, and is multiplied by sigma again on the way out.
@@ -50,6 +68,8 @@ struct Problem {
   std::vector<std::pair<Index, double>> objective_products;
   /// Columns that appear in at least one product.
   std::vector<char> in_product;
+  /// The reformulation-linearization rows every relaxation adds (empty unless `global_rlt`).
+  std::vector<RltRow> rlt;
 };
 
 [[nodiscard]] Problem build_problem(const QcqpModel& model);
@@ -67,12 +87,17 @@ struct Box {
 
 /// The McCormick relaxation of `problem` over `box` as an LP: columns x (n) then one w per
 /// product; the original rows with every product replaced by its w; four envelope rows per
-/// bilinear product and a secant plus three tangents per square. Every column in a product
-/// must have finite bounds in `box`.
+/// bilinear product and a secant plus three tangents per square; then one row per entry of
+/// problem.rlt. Every column in a product must have finite bounds in `box`.
 ///
 /// McCormick, "Computability of global solutions to factorable nonconvex programs: Part I -
 /// Convex underestimating problems", Math. Programming 10 (1976) 147-175.
 [[nodiscard]] Model build_relaxation(const Problem& problem, const Box& box);
+
+/// Every RltRow the problem admits without a new product: for each model row with no products
+/// and a finite side, each column y that forms a product with every column of the row; an
+/// equality row gives one row per y, an inequality two per finite side (both factors of y).
+[[nodiscard]] std::vector<RltRow> rlt_rows(const Problem& problem);
 
 /// A lower bound on the relaxation's minimum from ANY row multipliers y, by weak duality:
 /// sum_i y_i * (row_lower_i if y_i > 0, row_upper_i if y_i < 0) + sum_j min over the box of

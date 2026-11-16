@@ -25,10 +25,12 @@
 // held to - and otherwise the answer is `feasible` with the bound it did prove.
 //
 // SCOPE OF THIS FIRST SLICE: continuous columns, products in the rows and in the objective,
-// every column of a product bounded after FBBT at the root. OBBT (#515), cuts beyond the
-// McCormick envelope and integer columns are not here. A bound certificate is written under
-// `write_certificate` (global_certificate.cpp), checked by tools/verify_global_certificate.py;
-// the search then uses no FBBT, since the checker does not re-derive a tightening.
+// every column of a product bounded after FBBT at the root. Under `global_rlt` every
+// relaxation also carries the reformulation-linearization rows of relaxation.cpp. OBBT
+// (#515), other cuts beyond the McCormick envelope and integer columns are not here. A bound
+// certificate is written under `write_certificate` (global_certificate.cpp), checked by
+// tools/verify_global_certificate.py; the search then uses no FBBT, since the checker does not
+// re-derive a tightening.
 
 #include <algorithm>
 #include <cmath>
@@ -93,6 +95,8 @@ class Search {
     tolerance_ = options.get_double("primal_feasibility_tolerance");
     certificate_path_ = options.get_string("write_certificate");
     certify_ = !certificate_path_.empty();
+    // `global_rlt`: the rows are structural, the same at every node, so they are found once.
+    if (options.get_bool("global_rlt")) problem_.rlt = rlt_rows(problem_);
   }
 
   Solution run();
@@ -400,9 +404,10 @@ Solution Search::run() {
     }
   }
   logger_.info(
-      "global: {} columns, {} rows, {} products; spatial branch and bound over "
+      "global: {} columns, {} rows, {} products, {} RLT rows; spatial branch and bound over "
       "McCormick relaxations, gap target {:g} relative / {:g} absolute",
-      problem_.n, problem_.m, problem_.products.size(), relative_gap_, absolute_gap_);
+      problem_.n, problem_.m, problem_.products.size(), problem_.rlt.size(), relative_gap_,
+      absolute_gap_);
 
   auto root = std::make_unique<Node>();
   root->box = root_;
