@@ -81,6 +81,9 @@ class FtFile {
     return true;
   }
 
+  /// Empty step s's list; its span keeps its room.
+  void empty_list(Index s) { length_[static_cast<std::size_t>(s)] = 0; }
+
   /// Remove the entry for `other` from step s's list, the list's last entry taking its
   /// place. True when there was one.
   bool erase(Index s, Index other) {

@@ -443,17 +443,20 @@ bool SparseLu::solve(double* b, DensityHistory* history, std::vector<Index>* sup
     support->clear();
     return true;
   }
-  if (ft_active_ || !attempt_hyper(history)) {
+  if (!attempt_hyper(history)) {
     solve(b, history);
     return false;
   }
-  // The product-form path of solve_base(), with the support carried through.
-  const bool hyper = solve_hyper(b, support);
-  if (hyper) {
-    apply_etas(b, support);
+  // solve_base()'s two paths, with the support carried through. A reach that is abandoned
+  // has written nothing, so the full loops then start from the caller's b.
+  bool hyper = false;
+  if (ft_active_) {
+    hyper = ft_solve_hyper(b, support);
   } else {
-    solve_base(b, false);
+    hyper = solve_hyper(b, support);
+    if (hyper) apply_etas(b, support);
   }
+  if (!hyper) solve_base(b, false);
   remember(history);
   return hyper;
 }
@@ -463,23 +466,39 @@ void SparseLu::solve_entering(double* b, DensityHistory* history) const {
     solve(b, history);
     return;
   }
-  // The full passes, so that the spike is there to keep: the hyper-sparse path never
-  // gathers it, and under an active Forrest-Tomlin factorization it is not taken anyway.
+  // Every path keeps the spike: the full loops off all m steps, the reach (#1042) off the
+  // steps it reached, the same nonzeros in the same step order.
   keep_spike_ = true;
   kept_spike_valid_ = false;
-  solve_base(b, false);
+  solve(b, history);
   keep_spike_ = false;
-  remember(history);
 }
 
-void SparseLu::keep_spike() const {
+bool SparseLu::solve_entering(double* b, DensityHistory* history,
+                              std::vector<Index>* support) const {
+  if (!forrest_tomlin_) return solve(b, history, support);
+  keep_spike_ = true;
+  kept_spike_valid_ = false;
+  const bool known = solve(b, history, support);
+  keep_spike_ = false;
+  return known;
+}
+
+void SparseLu::keep_spike(const std::vector<Index>* steps) const {
   kept_spike_steps_.clear();
   kept_spike_values_.clear();
-  for (Index s = 0; s < m_; ++s) {
-    const double value = work_[static_cast<std::size_t>(s)];
-    if (value == 0.0) continue;
-    kept_spike_steps_.push_back(s);
-    kept_spike_values_.push_back(value);
+  if (steps == nullptr) {
+    for (Index s = 0; s < m_; ++s) {
+      if (work_[static_cast<std::size_t>(s)] != 0.0) kept_spike_steps_.push_back(s);
+    }
+  } else {
+    for (const Index s : *steps) {
+      if (work_[static_cast<std::size_t>(s)] != 0.0) kept_spike_steps_.push_back(s);
+    }
+    std::sort(kept_spike_steps_.begin(), kept_spike_steps_.end());
+  }
+  for (const Index s : kept_spike_steps_) {
+    kept_spike_values_.push_back(work_[static_cast<std::size_t>(s)]);
   }
   kept_spike_valid_ = true;
   kept_generation_ = generation_;
@@ -497,9 +516,15 @@ bool SparseLu::solve_transpose(double* b, DensityHistory* history,
     support->clear();
     return true;
   }
-  if (ft_active_ || !attempt_hyper(history)) {
+  if (!attempt_hyper(history)) {
     solve_transpose(b, history);
     return false;
+  }
+  if (ft_active_) {
+    const bool hyper = ft_solve_transpose_hyper(b, support);
+    if (!hyper) solve_transpose_base(b, false);
+    remember(history);
+    return hyper;
   }
   // The product-form path of solve_transpose_base(), with the support carried through.
   apply_etas_transposed(b, support);
@@ -846,16 +871,6 @@ void SparseLu::ft_init() {
   ft_active_ = true;
 }
 
-void SparseLu::ft_set(Index owner_step, Index referenced_step, double value) {
-  if (ft_row_.set(owner_step, referenced_step, value)) ++ft_row_fill_;
-  ft_col_.set(referenced_step, owner_step, value);
-}
-
-void SparseLu::ft_erase(Index owner_step, Index referenced_step) {
-  if (ft_row_.erase(owner_step, referenced_step)) --ft_row_fill_;
-  ft_col_.erase(referenced_step, owner_step);
-}
-
 void SparseLu::ft_btran_unit(Index step) const {
   // Clear exactly the entries the PREVIOUS call left nonzero, in O(prior nnz) rather than
   // O(m): a push out of this loop only ever reaches a position >= its source's own position
@@ -876,11 +891,17 @@ void SparseLu::ft_btran_unit(Index step) const {
   // step's own start at 0 and push nothing - not merely usually zero, but zero BY THE
   // INVARIANT above - so the loop starts there directly rather than discovering it m times
   // over (issue #279's follow-up: "the partial BTRAN started at the leaving position").
+  // #1042: over the steps reachable from `step` alone, in the same position order, when the
+  // reach is small (ft_btran_reach(); an unreached step holds the loop's zero and pushes
+  // nothing, so the values and the touched list are the loop's to the bit).
   const auto us0 = static_cast<std::size_t>(step);
   ft_btran_scratch_[us0] = 1.0;
-  for (Index k = ft_position_[us0]; k < m_; ++k) {
+  const bool reach = ft_btran_reach(step);
+  const auto end = static_cast<Index>(reach ? hs_first_.size() : ft_step_at_.size());
+  for (Index k = reach ? 0 : ft_position_[us0]; k < end; ++k) {
     const auto uk = static_cast<std::size_t>(k);
-    const Index occupant = ft_step_at_[uk];
+    const Index occupant = reach ? hs_first_[uk] : ft_step_at_[uk];
+    if (occupant < 0) continue;  // a hole left by an update's move
     const auto us = static_cast<std::size_t>(occupant);
     const double value = ft_btran_scratch_[us] / ft_diag_[us];
     ft_btran_scratch_[us] = value;
@@ -933,9 +954,10 @@ void SparseLu::ft_back_substitute(double* residual_by_step, double* solution_by_
   // step's value into the earlier-position steps that reference it (ft_col_), exactly as the
   // frozen uc_ push does when no update has touched U yet - both arrays are step-indexed
   // throughout; ft_step_at_ only ever decides WHICH step position k resolves.
-  for (Index k = m_ - 1; k >= 0; --k) {
+  for (auto k = static_cast<Index>(ft_step_at_.size()) - 1; k >= 0; --k) {
     const auto uk = static_cast<std::size_t>(k);
     const Index step = ft_step_at_[uk];
+    if (step < 0) continue;  // a hole left by an update's move
     const auto us = static_cast<std::size_t>(step);
     const double value = residual_by_step[us] / ft_diag_[us];
     solution_by_step[us] = value;
@@ -950,9 +972,11 @@ void SparseLu::ft_forward_substitute(double* z_by_step) const {
   // BTRAN's forward substitution, hyper-sparse: increasing position, pushing each resolved
   // step's value into the later-position steps its own row references (ft_row_), the mirror
   // image of the back-substitution above and of forward_u_transposed() before any update.
-  for (Index k = 0; k < m_; ++k) {
+  const auto positions = static_cast<Index>(ft_step_at_.size());
+  for (Index k = 0; k < positions; ++k) {
     const auto uk = static_cast<std::size_t>(k);
     const Index step = ft_step_at_[uk];
+    if (step < 0) continue;  // a hole left by an update's move
     const auto us = static_cast<std::size_t>(step);
     const double value = z_by_step[us] / ft_diag_[us];
     z_by_step[us] = value;
@@ -1141,45 +1165,48 @@ bool SparseLu::update_forrest_tomlin(Index leaving_position, const double* alpha
   // position's occupant, and R above is exactly what accounts for it - nothing else needs to
   // change to compensate, which is the point of computing r from it rather than rewriting
   // every step downstream by hand.
-  // Copied out first, in list order, because each erase reorders the list it walks.
-  ft_old_steps_.clear();
-  for (Index p = ft_row_.begin(s0); p < ft_row_.end(s0); ++p) {
-    ft_old_steps_.push_back(ft_row_.index(p));
-  }
-  for (const Index other_step : ft_old_steps_) ft_erase(s0, other_step);
+  // Each entry leaves its mirror in the column file, then the row is emptied in one go: the
+  // same erasures from the column file, in the same order, as erasing the row entry by
+  // entry made, without a search of the row per entry (#1042).
+  for (Index p = ft_row_.begin(s0); p < ft_row_.end(s0); ++p)
+    ft_col_.erase(ft_row_.index(p), s0);
+  ft_row_fill_ -= ft_row_.length(s0);
+  ft_row_.empty_list(s0);
 
   // Replace s0's old column (other steps' existing references to it): stale regardless of
-  // value, since column s0 is being replaced outright, not perturbed.
-  ft_old_steps_.clear();
+  // value, since column s0 is being replaced outright, not perturbed. Mirrored as above.
   for (Index p = ft_col_.begin(s0); p < ft_col_.end(s0); ++p) {
-    ft_old_steps_.push_back(ft_col_.index(p));
+    if (ft_row_.erase(ft_col_.index(p), s0)) --ft_row_fill_;
   }
-  for (const Index other_step : ft_old_steps_) ft_erase(other_step, s0);
+  ft_col_.empty_list(s0);
 
   // Install the new column: every OTHER step whose row now references s0, unchanged from
   // the spike (R^-1 never touched these). Valid regardless of position, once s0 is last. A
   // step outside ft_spike_touched_ has spike 0, so it would never pass the threshold below
   // anyway - walking the touched list instead of 0..m changes nothing this loop installs.
+  // No row holds s0 any more, so each entry is appended where a search for it would have
+  // found nothing and appended.
   for (Index step : ft_spike_touched_) {
     if (step == s0) continue;
     const double value = spike[static_cast<std::size_t>(step)];
-    if (std::fabs(value) >= kDropTolerance) ft_set(step, s0, value);
+    if (std::fabs(value) < kDropTolerance) continue;
+    ft_row_.append(step, s0, value);
+    ft_col_.append(s0, step, value);
+    ++ft_row_fill_;
   }
   ft_diag_[static_cast<std::size_t>(s0)] = new_diagonal;
 
-  // Move s0 to the last position, shifting every step between its old and new position down
-  // by one to keep the permutation a bijection. Every OTHER step's own row/column entries -
-  // untouched above - stay exactly as valid as they were: a uniform shift preserves every
-  // existing "referenced step's position >= referencing step's position" relationship (see
-  // lu.hpp), so this is pure relabelling, no arithmetic.
-  if (q < m - 1) {
-    for (Index c = q; c <= m - 2; ++c) {
-      const Index moving = ft_step_at_[static_cast<std::size_t>(c) + 1];
-      ft_step_at_[static_cast<std::size_t>(c)] = moving;
-      ft_position_[static_cast<std::size_t>(moving)] = c;
-    }
-    ft_step_at_[static_cast<std::size_t>(m - 1)] = s0;
-    ft_position_[static_cast<std::size_t>(s0)] = m - 1;
+  // Move s0 past every other position. Every OTHER step's own row/column entries -
+  // untouched above - stay exactly as valid as they were: their relative order is kept, so
+  // every existing "referenced step's position >= referencing step's position" relationship
+  // (see lu.hpp) holds, and this is pure relabelling, no arithmetic. The order is kept with
+  // a hole where s0 was rather than by shifting every later position down by one, which
+  // cost O(m) per update (#1042); the solves visit the steps in the same order either way.
+  const auto positions = static_cast<Index>(ft_step_at_.size());
+  if (q < positions - 1) {
+    ft_step_at_[static_cast<std::size_t>(q)] = -1;
+    ft_step_at_.push_back(s0);
+    ft_position_[static_cast<std::size_t>(s0)] = positions;
   }
 
   // File the row eta: R is applied between L and U on every later solve (ft_apply_retas() /

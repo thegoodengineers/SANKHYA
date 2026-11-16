@@ -944,14 +944,9 @@ void Simplex::ftran_entering_column(Index entering) {
     alpha_support_.push_back(row);  // a column's rows are distinct (SparseMatrix::finalize)
   });
   // The entering column: under the Forrest-Tomlin update its partial transform is kept for
-  // the update that follows (SparseLu::solve_entering); under the product form, solve(),
-  // which carries the support through when its hyper-sparse path runs.
-  bool known = false;
-  if (lu_.forrest_tomlin()) {
-    lu_.solve_entering(alpha_.data(), &column_history_);
-  } else {
-    known = lu_.solve(alpha_.data(), &column_history_, &alpha_support_);
-  }
+  // the update that follows (SparseLu::solve_entering); under the product form this is
+  // solve(). Either way the support is carried through when the hyper-sparse path runs.
+  const bool known = lu_.solve_entering(alpha_.data(), &column_history_, &alpha_support_);
   settle_support(alpha_, known, &alpha_support_);
   alpha_support_exact_ = true;
 }

@@ -291,6 +291,79 @@ TEST(SparseLuHyper, ForrestTomlinSolvesAreTheFullLoopsToTheBit) {
   EXPECT_GT(hyper_btrans, 500);
 }
 
+TEST(SparseLuHyper, ForrestTomlinEnteringColumnsAndUpdatesOverTheReachAreTheFullLoops) {
+  // The dual loop's Forrest-Tomlin iteration, kept hyper-sparse end to end (#1042): the
+  // entering column is solved with its support and its spike kept off the reach, the update
+  // takes that spike and alpha's support and runs its partial BTRAN over the reach, and the
+  // order of positions keeps holes instead of shifting. Against a copy that takes every one
+  // of those through the full loops: the same alpha, the same refusals, the same solves
+  // after every update, to the bit.
+  std::mt19937 rng(10420);
+  std::int64_t hyper_ftrans = 0;
+  int updates = 0;
+  for (int trial = 0; trial < 30; ++trial) {
+    std::uniform_int_distribution<Index> size(80, 600);
+    const Index m = size(rng);
+    const Basis basis = random_basis(&rng, m, trial % 3 == 0 ? 1 : 3);
+    SparseLu full;
+    SparseLu hyper;
+    full.use_forrest_tomlin(true);
+    hyper.use_forrest_tomlin(true);
+    hyper.use_hyper_sparse(true);
+    const std::vector<LuColumn> columns = basis.columns();
+    ASSERT_TRUE(full.factorize(columns, m, tol::kPivotTolerance, tol::kMarkowitzThreshold));
+    ASSERT_TRUE(hyper.factorize(columns, m, tol::kPivotTolerance, tol::kMarkowitzThreshold));
+    const std::string tag = "trial " + std::to_string(trial) + ", m " + std::to_string(m);
+    for (int update = 0; update < 40; ++update) {
+      const std::vector<double> entering = sparse_vector(&rng, m, 1 + update % 4);
+      std::vector<double> alpha_full = entering;
+      std::vector<double> alpha_hyper = entering;
+      std::vector<Index> support;
+      for (Index i = 0; i < m; ++i) {
+        if (entering[static_cast<std::size_t>(i)] != 0.0) support.push_back(i);
+      }
+      full.solve_entering(alpha_full.data());
+      const bool known = hyper.solve_entering(alpha_hyper.data(), nullptr, &support);
+      if (!known) {
+        support.clear();
+        for (Index i = 0; i < m; ++i) {
+          if (alpha_hyper[static_cast<std::size_t>(i)] != 0.0) support.push_back(i);
+        }
+      }
+      Index leaving = 0;
+      for (Index i = 0; i < m; ++i) {
+        ASSERT_EQ(alpha_full[static_cast<std::size_t>(i)],
+                  alpha_hyper[static_cast<std::size_t>(i)])
+            << tag << ": alpha entry " << i;
+        if (std::fabs(alpha_full[static_cast<std::size_t>(i)]) >
+            std::fabs(alpha_full[static_cast<std::size_t>(leaving)])) {
+          leaving = i;
+        }
+      }
+      const bool a = full.update(leaving, alpha_full.data());
+      const bool b = hyper.update(leaving, alpha_hyper.data(), support);
+      ASSERT_EQ(a, b) << tag << " update " << update;
+      if (!a) {
+        ASSERT_TRUE(full.factorize(columns, m, tol::kPivotTolerance, tol::kMarkowitzThreshold));
+        ASSERT_TRUE(
+            hyper.factorize(columns, m, tol::kPivotTolerance, tol::kMarkowitzThreshold));
+        continue;
+      }
+      ++updates;
+      std::vector<double> unit(static_cast<std::size_t>(m), 0.0);
+      unit[static_cast<std::size_t>(sample_rows(&rng, m, 1)[0])] = 1.0;
+      expect_same_solves(full, hyper, unit, nullptr, tag + " unit after updates");
+      expect_same_solves(full, hyper, sparse_vector(&rng, m, 3), nullptr,
+                         tag + " sparse after updates");
+    }
+    hyper_ftrans += hyper.solve_stats().ftran_hyper;
+  }
+  std::cout << "[ hyper ] Forrest-Tomlin reach solves with kept spikes: " << hyper_ftrans
+            << " FTRAN over " << updates << " updates\n";
+  EXPECT_GT(updates, 500);
+  EXPECT_GT(hyper_ftrans, 1000);
+}
+
 TEST(SparseLuHyper, UpdateOverTheSupportIsTheFullUpdateToTheBit) {
   // The dual loop hands update() alpha's support (#1006, finding 4). The eta it records
   // must be the one the pass over all m positions records, so the solves through the two
@@ -395,28 +468,34 @@ TEST(SparseLuHyper, NetlibIterationCountsAndObjectivesDoNotMove) {
   // pivots. Primal and dual, presolve off so the engines do the work.
   const char* instances[] = {"afiro",  "sc50b",   "share2b", "stocfor1",
                              "degen2", "ship04s", "sctap1"};
-  for (const char* algorithm : {"simplex", "dual-simplex"}) {
-    for (const char* name : instances) {
-      Model model;
-      const std::string path =
-          (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
-           "data/netlib" / (std::string(name) + ".mps"))
-              .string();
-      const io::ReadResult read = io::read_model(path, &model);
-      ASSERT_TRUE(read.ok) << path << ": " << read.error;
-      Solution runs[2];
-      for (int hyper = 0; hyper < 2; ++hyper) {
-        Options options;
-        options.set_bool("log_to_console", false);
-        options.set_bool("presolve", false);
-        options.set_string("algorithm", algorithm);
-        options.set_bool("lu_hyper_sparse", hyper == 1);
-        runs[hyper] = solve(model, options);
+  // Under either update scheme (#1042: the Forrest-Tomlin solves, the kept spike and the
+  // update's partial BTRAN take the reach too).
+  for (const char* basis_update : {"product-form", "forrest-tomlin"}) {
+    for (const char* algorithm : {"simplex", "dual-simplex"}) {
+      for (const char* name : instances) {
+        Model model;
+        const std::string path =
+            (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+             "data/netlib" / (std::string(name) + ".mps"))
+                .string();
+        const io::ReadResult read = io::read_model(path, &model);
+        ASSERT_TRUE(read.ok) << path << ": " << read.error;
+        Solution runs[2];
+        for (int hyper = 0; hyper < 2; ++hyper) {
+          Options options;
+          options.set_bool("log_to_console", false);
+          options.set_bool("presolve", false);
+          options.set_string("algorithm", algorithm);
+          options.set_bool("lu_hyper_sparse", hyper == 1);
+          options.set_string("basis_update", basis_update);
+          runs[hyper] = solve(model, options);
+        }
+        const std::string tag = std::string(name) + " " + algorithm + " " + basis_update;
+        EXPECT_EQ(runs[0].status, SolveStatus::kOptimal) << tag;
+        EXPECT_EQ(runs[0].status, runs[1].status) << tag;
+        EXPECT_EQ(runs[0].iterations, runs[1].iterations) << tag;
+        EXPECT_EQ(runs[0].objective, runs[1].objective) << tag;
       }
-      EXPECT_EQ(runs[0].status, SolveStatus::kOptimal) << name << " " << algorithm;
-      EXPECT_EQ(runs[0].status, runs[1].status) << name << " " << algorithm;
-      EXPECT_EQ(runs[0].iterations, runs[1].iterations) << name << " " << algorithm;
-      EXPECT_EQ(runs[0].objective, runs[1].objective) << name << " " << algorithm;
     }
   }
 }

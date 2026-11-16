@@ -45,6 +45,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -141,6 +142,10 @@ class SparseLu {
   /// factorization or update has happened in between; otherwise the update rebuilds it as
   /// before. Under the product form this is solve(), to the bit.
   void solve_entering(double* b, DensityHistory* history = nullptr) const;
+  /// solve_entering() with the right-hand side's support, as solve()'s three-argument form
+  /// takes and returns it; the spike is kept whichever path runs.
+  [[nodiscard]] bool solve_entering(double* b, DensityHistory* history,
+                                    std::vector<Index>* support) const;
 
   /// HYPER-SPARSE SOLVES (#464; Gilbert & Peierls 1988, Hall & McKinnon 2005). When on,
   /// solve() and solve_transpose() on product-form factors first find, by a search over
@@ -174,8 +179,8 @@ class SparseLu {
   /// the result may be nonzero at, without repeats, in any order; the seeds were read from
   /// it rather than from a pass over all of b. On a false return the full loops ran and
   /// `support` is unspecified. The arithmetic, and so every result bit, is the two-argument
-  /// form's. Product-form factors only: under an active Forrest-Tomlin update the full
-  /// solve runs and the answer is false.
+  /// form's, under either update scheme (#1042: over an active Forrest-Tomlin update the
+  /// reach runs through the row etas and the folded U, lu_ft_hyper.cpp).
   [[nodiscard]] bool solve(double* b, DensityHistory* history,
                            std::vector<Index>* support) const;
   [[nodiscard]] bool solve_transpose(double* b, DensityHistory* history,
@@ -430,9 +435,19 @@ class SparseLu {
   /// The full BTRAN loops on product-form factors, after the etas.
   void solve_transpose_after_etas(double* b) const;
   /// The same two, over an active Forrest-Tomlin factorization (#1042): L, the row etas and
-  /// the folded U, over the steps the right-hand side reaches through them.
-  [[nodiscard]] bool ft_solve_hyper(double* b) const;
-  [[nodiscard]] bool ft_solve_transpose_hyper(double* b) const;
+  /// the folded U, over the steps the right-hand side reaches through them; `support` as
+  /// for solve_hyper() (lu_ft_hyper.cpp).
+  [[nodiscard]] bool ft_solve_hyper(double* b, std::vector<Index>* support = nullptr) const;
+  [[nodiscard]] bool ft_solve_transpose_hyper(double* b,
+                                              std::vector<Index>* support = nullptr) const;
+  /// Mark and list in hs_first_ the steps `step_of` maps b's nonzeros to, read off
+  /// `support` when given; false once they pass `limit`.
+  [[nodiscard]] bool seed_reach(const double* b, const std::vector<Index>* support,
+                                const std::vector<Index>& step_of, std::size_t limit) const;
+  /// ft_btran_unit()'s reach from `step` through the folded U's rows, into hs_first_ in
+  /// position order; false (hs_first_ unspecified) when hyper-sparse solves are off or the
+  /// reach is too dense to pay.
+  [[nodiscard]] bool ft_btran_reach(Index step) const;
   /// Record one result's density in `bins`, and as last_density_.
   void record_density(std::array<std::int64_t, 5>& bins, Index nonzeros, Index m) const;
   mutable double last_density_ = 0.0;
@@ -522,7 +537,7 @@ class SparseLu {
   bool forrest_tomlin_ = false;  ///< what update() dispatches to; sticky across factorize()
   bool ft_active_ = false;
   Index ft_base_row_nonzeros_ = 0;  ///< off-diagonal entry count at the moment FT mode began
-  /// Running total of ft_row_'s entries, maintained by ft_set()/ft_erase() so
+  /// Running total of ft_row_'s entries, maintained by update_forrest_tomlin() so
   /// ft_extra_nonzeros() is O(1) rather than a sum over every row on every call - the
   /// simplex's refactorization policy needs to read it every iteration (issue #68).
   Index ft_row_fill_ = 0;
@@ -530,18 +545,22 @@ class SparseLu {
   /// Fixed forever once built: the step that has represented basis position p since
   /// factorize(), i.e. the inverse of pivot_col_.
   std::vector<Index> ft_step_of_position_;
+  /// Positions are an ORDER, not the range 0..m-1 (#1042): an update moves its step to a
+  /// new position past every other and leaves -1, a hole every loop over positions skips,
+  /// where the step was. The relative order of all other steps is untouched, so every solve
+  /// visits them as a shift down by one would, and the move costs O(1) instead of O(m).
+  /// ft_init() resets the order to 0..m-1, so the holes are bounded by the updates.
   std::vector<Index> ft_position_;  ///< step -> its current position
-  std::vector<Index> ft_step_at_;   ///< position -> the step currently occupying it
+  std::vector<Index> ft_step_at_;   ///< position -> the step occupying it, or -1
   std::vector<double> ft_diag_;     ///< step -> its current diagonal value
 
-  /// U's off-diagonal entries, both STEP-keyed and mirrored, kept in sync by ft_set() and
-  /// ft_erase(): ft_row_[s] is step s's own row, i.e. the OTHER steps its row references
-  /// (matching u_steps_ before any update); ft_col_[s] is the steps that reference s (their
-  /// ROW has an entry AT s), the mirror image, matching uc_steps_. Both exclude the diagonal.
+  /// U's off-diagonal entries, both STEP-keyed and mirrored, kept in sync by
+  /// update_forrest_tomlin(): ft_row_[s] is step s's own row, i.e. the OTHER steps its row
+  /// references (matching u_steps_ before any update); ft_col_[s] is the steps that reference s
+  /// (their ROW has an entry AT s), the mirror image, matching uc_steps_. Both exclude the
+  /// diagonal.
   FtFile ft_row_;
   FtFile ft_col_;
-  /// update_forrest_tomlin()'s copy of s0's old row or column, taken before erasing it.
-  std::vector<Index> ft_old_steps_;
 
   /// The row-eta file (Forrest & Tomlin 1972, eq. for R): one entry per update, applied
   /// between L and U rather than appended outside both as update()'s eta file is. Update k
@@ -585,8 +604,10 @@ class SparseLu {
   mutable std::uint64_t kept_generation_ = 0;
   mutable Index kept_updates_ = 0;
   std::uint64_t generation_ = 0;  ///< factorize() calls; tags the kept spike
-  /// Copy work_ (by step, after L and the row etas, before U) into the kept spike.
-  void keep_spike() const;
+  /// Copy work_ (by step, after L and the row etas, before U) into the kept spike: its
+  /// nonzeros among `steps` when given (a hyper-sparse solve's reach, outside which the full
+  /// loops hold zeros), else among all m; listed by increasing step either way.
+  void keep_spike(const std::vector<Index>* steps = nullptr) const;
   mutable std::vector<Index> ft_spike_touched_;
   /// Nonzero steps of the CURRENT call's alpha-by-step vector (work_), collected for free
   /// while work_ is gathered from the caller's dense `alpha` (that gather is the one place
@@ -596,8 +617,6 @@ class SparseLu {
   mutable std::vector<Index> ft_work_nz_;
 
   void ft_init();
-  void ft_set(Index owner_step, Index referenced_step, double value);
-  void ft_erase(Index owner_step, Index referenced_step);
   /// The partial BTRAN identified by Forrest & Tomlin as the way to compute the row-eta:
   /// e~ = e_step^T U_current^-1, i.e. a BTRAN through U ALONE (no L, no earlier retas),
   /// seeded at a single step. Shares the push logic with ft_forward_substitute() below.
