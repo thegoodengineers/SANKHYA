@@ -1,0 +1,66 @@
+instance,seeds,seeds_matched,seeds_proved,matched_seeds,proved_seeds,sgm_seconds,sgm_first_feasible_seconds,mean_primal_integral,time_limit,git_commit,machine
+10teams,3,3,2,0 1 2,1 2,22.3787,1.1621,1.9664,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+air03,3,3,3,0 1 2,0 1 2,2.4003,1.6032,1.9266,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+air04,3,2,2,0 1,0 1,49.1490,9.6512,10.1972,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+air05,3,1,1,2,2,53.4050,7.3897,8.0871,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+arki001,3,0,0,,,60.0000,9.3881,10.0123,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+bell3a,3,3,3,0 1 2,0 1 2,8.3660,0.0103,0.0103,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+bell5,3,3,3,0 1 2,0 1 2,2.2048,0.0008,0.0056,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+blend2,3,3,3,0 1 2,0 1 2,2.0455,0.2146,0.2825,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+cap6000,3,0,0,,,60.0000,0.1197,9.2724,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+dano3mip,3,0,0,,,60.0000,60.0000,,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+danoint,3,0,0,,,60.0000,0.6186,3.4429,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+dcmulti,3,3,3,0 1 2,0 1 2,0.9432,0.0273,0.0368,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+dsbmip,3,3,3,0 1 2,0 1 2,9.2510,8.9665,9.1746,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+egout,3,3,3,0 1 2,0 1 2,0.0264,0.0008,0.0031,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+enigma,3,3,3,0 1 2,0 1 2,0.2459,0.2311,0.2436,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+fast0507,3,0,0,,,60.0000,2.4296,12.3702,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+fiber,3,3,3,0 1 2,0 1 2,6.7956,0.1048,0.6153,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+fixnet6,3,3,3,0 1 2,0 1 2,9.2602,0.0056,2.8983,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+flugpl,3,3,3,0 1 2,0 1 2,0.0241,0.0197,0.0197,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+gen,3,3,3,0 1 2,0 1 2,0.1669,0.0108,0.0113,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+gesa2,3,3,3,0 1 2,0 1 2,1.7016,0.0087,0.1003,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+gesa2_o,3,3,3,0 1 2,0 1 2,7.6404,0.3041,0.4379,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+gesa3,3,3,3,0 1 2,0 1 2,3.9094,0.0095,0.1293,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+gesa3_o,3,3,3,0 1 2,0 1 2,3.3091,0.2072,0.2104,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+gt2,3,3,3,0 1 2,0 1 2,0.1076,0.0005,0.0141,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+harp2,3,0,0,,,60.0000,0.4216,3.8498,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+khb05250,3,3,3,0 1 2,0 1 2,0.1324,0.0038,0.0099,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+l152lav,3,3,3,0 1 2,0 1 2,3.2399,0.8563,0.8726,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+lseu,3,3,3,0 1 2,0 1 2,0.7502,0.0047,0.0118,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+markshare1,3,0,0,,,60.0000,0.0030,57.7378,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+markshare2,3,0,0,,,60.0000,0.0013,58.9606,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+mas74,3,0,0,,,60.0000,0.0037,8.1864,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+mas76,3,0,0,,,60.0000,0.0036,1.0783,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+misc03,3,3,3,0 1 2,0 1 2,1.1756,0.0464,0.0738,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+misc06,3,3,3,0 1 2,0 1 2,0.6193,0.2607,0.2654,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+misc07,3,3,3,0 1 2,0 1 2,25.2820,0.2001,0.4874,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+mitre,3,3,3,0 1 2,0 1 2,7.5708,2.5168,3.1231,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+mkc,3,0,0,,,60.0000,3.2406,11.8318,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+mod008,3,3,3,0 1 2,0 1 2,1.0305,0.0034,0.0048,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+mod010,3,3,3,0 1 2,0 1 2,1.0028,0.8495,0.8517,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+mod011,3,0,0,,,60.0000,3.1598,7.9772,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+modglob,3,3,3,0 1 2,0 1 2,0.8570,0.0036,0.0347,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+noswot,3,2,0,0 1,,60.0000,0.0014,1.0784,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+nw04,3,0,0,,,60.0000,8.0120,9.1387,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+p0033,3,3,3,0 1 2,0 1 2,0.0319,0.0057,0.0060,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+p0201,3,3,3,0 1 2,0 1 2,0.8211,0.0063,0.0609,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+p0282,3,3,3,0 1 2,0 1 2,0.2988,0.0162,0.0697,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+p0548,3,3,3,0 1 2,0 1 2,7.5340,0.0138,0.6533,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+p2756,3,0,0,,,60.0000,0.9706,31.9156,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+pk1,3,0,0,,,60.0000,0.0014,24.6471,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+pp08a,3,3,3,0 1 2,0 1 2,1.2941,0.0012,0.0595,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+pp08aCUTS,3,3,3,0 1 2,0 1 2,1.5701,0.0018,0.0934,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+qiu,3,3,3,0 1 2,0 1 2,50.7094,0.6219,11.4503,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+qnet1,3,3,3,0 1 2,0 1 2,3.8207,0.0170,0.6138,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+qnet1_o,3,3,3,0 1 2,0 1 2,2.1192,0.0441,0.3031,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+rentacar,3,3,3,0 1 2,0 1 2,10.1341,7.2297,7.7736,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+rgn,3,3,3,0 1 2,0 1 2,0.5373,0.0051,0.0081,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+rout,3,0,0,,,60.0000,0.0214,1.6784,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+set1ch,3,3,3,0 1 2,0 1 2,1.5683,0.0033,0.4722,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+seymour,3,0,0,,,60.0000,1.6819,3.3672,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+stein27,3,3,3,0 1 2,0 1 2,0.1754,0.0031,0.0031,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+stein45,3,3,3,0 1 2,0 1 2,21.5788,0.0008,0.1237,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+swath,3,0,0,,,60.0000,20.5857,43.8338,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+vpm1,3,3,3,0 1 2,0 1 2,0.0734,0.0026,0.0131,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
+vpm2,3,3,3,0 1 2,0 1 2,16.5648,0.3212,0.5653,60,243006f,github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64
