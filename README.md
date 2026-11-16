@@ -53,7 +53,7 @@ as regenerable backups.
 | Netlib | 94 | **83 of 94** (exact optimum and verified, `passed`) | - | `bench/results/netlib-full-945cb4f.csv` | `945cb4f` | 2026-10-19 |
 | Netlib certified bounds | 94 | **93 of 94** (optimal answer within 1e-6 of a rigorous bound the verifier re-derives, with `certified_gap_seconds=120`) | - | `bench/results/certified-gap-netlib-full-81b812c.csv` | `81b812c` | 2026-10-21 |
 | Netlib infeasible | 29 | **29 of 29** (certified infeasible, `passed`) | - | `bench/results/netlib-infeasible-0aa5301.csv` | `0aa5301` | 2026-11-15 |
-| Kennington | 16 | **16 of 16** (matches published optimum and verified, `passed`) | - | `bench/results/kennington-full-9463fd7.csv` | `9463fd7` | 2026-10-02 |
+| Kennington | 16 | **16 of 16** (matches published optimum and verified, `passed`) | - | `bench/results/kennington-full-b192fa8.csv` | `b192fa8` | 2026-11-15 |
 | Mittelmann | 12 | **5 of 12** (matches HiGHS's objective and verified, `passed`) | HiGHS (objective check) | `bench/results/mittelmann-72123ff.csv` | `72123ff` | 2026-09-24 |
 | MIPLIB 3 | 65 | **45 of 65** (proved the published optimum and verified, best of 3 seeds, 60 s, 1 thread) | HiGHS 50 of 65 (same job, same rule) | `bench/results/miplib3-60s-seeds3-8429ecf.csv` | `8429ecf` | 2026-11-14 |
 | MIPLIB 2017 | 30 | **14 of 30** (matched the published optimum and verified) | - | `bench/results/miplib-ad57c03.csv` | `ad57c03` | 2026-09-27 |
@@ -339,7 +339,10 @@ Kennington: **16 of 16** matched and verified at 600 s on `main` at `9463fd7`
 (`bench/results/kennington-full-9463fd7.csv`, #749): `pds-20` now ends `optimal` and verified in
 421 s, where at `65eecbc` it ended `feasible` at 418 s, its interior point's answer standing
 without crossover at a complementarity of 1.5e-6 against the verifier's 1e-6 (the crossover's
-time budget was discounted twice until #607). Netlib's infeasible set: **13 of 29**
+time budget was discounted twice until #607). On `main` at `b192fa8`, after #1257, #1259, #1261
+and #1266 (`bench/results/kennington-full-b192fa8.csv`, a GitHub-hosted runner, 600 s): 16 of 16
+matched and verified in 30.8 s of solve time over all 16, every one on the dual simplex but the
+four `osa` models; `pds-20` takes 5.6 s. Netlib's infeasible set: **13 of 29**
 infeasible with a Farkas certificate the verifier accepts, the other 16 correct `infeasible`
 verdicts without one (12 from the dual simplex and phase 1, 3 from presolve) and `cplex2` a
 `numerical_error`; no wrong verdict (`bench/results/netlib-infeasible-65eecbc.csv`). On `main`

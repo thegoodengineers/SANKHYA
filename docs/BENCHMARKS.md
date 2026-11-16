@@ -413,8 +413,8 @@ Operations Research 38(2), 1990), larger and sparser than the core Netlib set. F
 hashed by `bench/runners/fetch_kennington.py`, which parses the published optima from the
 directory's own readme; run by `bench/runners/kennington.py` under the full-set rules.
 
-Source CSV: `bench/results/kennington-full-9463fd7.csv`  
-Commit `9463fd7` · machine `laptop, Intel i7-1355U 10 cores 12 threads, 16 GB, on mains, no other jobs` · generated 2026-10-02T06:14:09+00:00
+Source CSV: `bench/results/kennington-full-b192fa8.csv`  
+Commit `b192fa8` · machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 9V74 80-Core Processor 15 GiB RAM` · generated 2026-11-15T14:05:08+00:00
 
 **16 of 16** matched the readme's published optimum to a relative 1e-6 **and** passed independent verification. The published values are Vanderbei's ALPO results printed to eight significant figures, so rounding moves them by at most 5e-8 relative, well inside the tolerance.
 
@@ -422,26 +422,26 @@ Every instance in this set passed.
 
 | instance | rows | cols | status | our objective | published optimum | rel. error | iters | time (s) | verified |
 |---|---:|---:|---|---:|---:|---:|---:|---:|:--:|
-| `cre-a` | 3516 | 4067 | optimal | 2.3595407061e+07 | 2.3595407e+07 | 2.6e-09 | 2609 | 0.162 | yes |
-| `cre-b` | 9648 | 72447 | optimal | 2.3129639887e+07 | 2.3129640e+07 | 4.9e-09 | 8560 | 19.272 | yes |
-| `cre-c` | 3068 | 3678 | optimal | 2.5275116141e+07 | 2.5275116e+07 | 5.6e-09 | 2460 | 0.191 | yes |
-| `cre-d` | 8926 | 69980 | optimal | 2.4454969765e+07 | 2.4454970e+07 | 9.6e-09 | 7356 | 14.493 | yes |
-| `ken-07` | 2426 | 3602 | optimal | -6.7952044338e+08 | -6.7952044e+08 | 5.0e-09 | 1308 | 0.082 | yes |
-| `ken-11` | 14694 | 21349 | optimal | -6.9723822625e+09 | -6.9723823e+09 | 5.4e-09 | 8265 | 0.920 | yes |
-| `ken-13` | 28632 | 42659 | optimal | -1.0257394789e+10 | -1.0257395e+10 | 2.1e-08 | 6117 | 4.850 | yes |
-| `ken-18` | 105127 | 154699 | optimal | -5.2217025287e+10 | -5.2217025e+10 | 5.5e-09 | 232861 | 423.610 | yes |
-| `osa-07` | 1118 | 23949 | optimal | 5.3572251730e+05 | 5.3572252e+05 | 5.0e-09 | 50 | 0.469 | yes |
-| `osa-14` | 2337 | 52460 | optimal | 1.1064628447e+06 | 1.1064628e+06 | 4.0e-08 | 55 | 0.980 | yes |
-| `osa-30` | 4350 | 100024 | optimal | 2.1421398732e+06 | 2.1421399e+06 | 1.3e-08 | 76 | 1.728 | yes |
-| `osa-60` | 10280 | 232966 | optimal | 4.0440725032e+06 | 4.0440725e+06 | 7.8e-10 | 200 | 5.659 | yes |
-| `pds-02` | 2953 | 7535 | optimal | 2.8857862010e+10 | 2.8857862e+10 | 3.5e-10 | 1144 | 0.090 | yes |
-| `pds-06` | 9881 | 28655 | optimal | 2.7761037600e+10 | 2.7761038e+10 | 1.4e-08 | 6486 | 0.694 | yes |
-| `pds-10` | 16558 | 48763 | optimal | 2.6727094976e+10 | 2.6727095e+10 | 9.0e-10 | 6183 | 29.348 | yes |
-| `pds-20` | 33874 | 105728 | optimal | 2.3821658640e+10 | 2.3821659e+10 | 1.5e-08 | 18190 | 420.767 | yes |
+| `cre-a` | 3516 | 4067 | optimal | 2.3595407061e+07 | 2.3595407e+07 | 2.6e-09 | 2499 | 0.078 | yes |
+| `cre-b` | 9648 | 72447 | optimal | 2.3129639887e+07 | 2.3129640e+07 | 4.9e-09 | 7877 | 1.185 | yes |
+| `cre-c` | 3068 | 3678 | optimal | 2.5275116141e+07 | 2.5275116e+07 | 5.6e-09 | 2315 | 0.079 | yes |
+| `cre-d` | 8926 | 69980 | optimal | 2.4454969765e+07 | 2.4454970e+07 | 9.6e-09 | 6606 | 0.801 | yes |
+| `ken-07` | 2426 | 3602 | optimal | -6.7952044338e+08 | -6.7952044e+08 | 5.0e-09 | 1202 | 0.026 | yes |
+| `ken-11` | 14694 | 21349 | optimal | -6.9723822625e+09 | -6.9723823e+09 | 5.4e-09 | 7259 | 0.266 | yes |
+| `ken-13` | 28632 | 42659 | optimal | -1.0257394789e+10 | -1.0257395e+10 | 2.1e-08 | 13374 | 0.828 | yes |
+| `ken-18` | 105127 | 154699 | optimal | -5.2217025287e+10 | -5.2217025e+10 | 5.5e-09 | 51643 | 10.249 | yes |
+| `osa-07` | 1118 | 23949 | optimal | 5.3572251730e+05 | 5.3572252e+05 | 5.0e-09 | 39 | 0.610 | yes |
+| `osa-14` | 2337 | 52460 | optimal | 1.1064628447e+06 | 1.1064628e+06 | 4.0e-08 | 55 | 1.899 | yes |
+| `osa-30` | 4350 | 100024 | optimal | 2.1421398732e+06 | 2.1421399e+06 | 1.3e-08 | 81 | 2.656 | yes |
+| `osa-60` | 10280 | 232966 | optimal | 4.0440725032e+06 | 4.0440725e+06 | 7.8e-10 | 200 | 8.976 | yes |
+| `pds-02` | 2953 | 7535 | optimal | 2.8857862010e+10 | 2.8857862e+10 | 3.5e-10 | 595 | 0.032 | yes |
+| `pds-06` | 9881 | 28655 | optimal | 2.7761037600e+10 | 2.7761038e+10 | 1.4e-08 | 5061 | 0.342 | yes |
+| `pds-10` | 16558 | 48763 | optimal | 2.6727094976e+10 | 2.6727095e+10 | 9.0e-10 | 10724 | 0.985 | yes |
+| `pds-20` | 33874 | 105728 | optimal | 2.3821658640e+10 | 2.3821659e+10 | 1.5e-08 | 26754 | 5.825 | yes |
 
 **Summary**
 
-- shifted geometric mean solve time over the passed instances (shift 1s): **4.997s**
+- shifted geometric mean solve time over the passed instances (shift 1s): **1.236s**
 - worst relative error against a published optimum: **4.04e-08**
 - no failures on this set
 
