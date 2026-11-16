@@ -103,7 +103,10 @@ def highs_timed(mps: Path, time_limit: float) -> tuple[float | None, str, float 
                               timeout=time_limit + 60)
     except (OSError, subprocess.TimeoutExpired):
         return None, "highs did not finish", None
-    lines = done.stdout.strip().splitlines()
+    # The last three lines: highspy 1.16 prints its banner on Highs() before output_flag can
+    # silence it, which read as the status and put the objective in the seconds (run
+    # 43721413170).
+    lines = done.stdout.strip().splitlines()[-3:]
     if done.returncode != 0 or len(lines) < 2:
         return None, "highs unavailable", None
     status = lines[0].strip()
