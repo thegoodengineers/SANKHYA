@@ -522,8 +522,25 @@ tar -xzf sankhya-1.0.0-linux-x86_64-cpu.tar.gz && cd sankhya-1.0.0-linux-x86_64-
 sha256sum -c SHA256SUMS
 build/sankhya solve demo/crude_blend.mps --write-sol blend.sol
 python3 tools/verify_solution.py demo/crude_blend.mps blend.sol
-demo/finale.sh                        # Windows: unzip, then demo\finale.cmd
+demo/finale.sh
 ```
+
+On Windows (PowerShell, Python 3 for the verifier; no compiler):
+
+```powershell
+Expand-Archive sankhya-1.0.0-windows-x64-cpu.zip -DestinationPath .
+cd sankhya-1.0.0-windows-x64-cpu
+build\sankhya.exe solve demo\crude_blend.mps --write-sol blend.sol
+python tools\verify_solution.py demo\crude_blend.mps blend.sol
+demo\finale.cmd
+```
+
+`notebooks/walkthrough.ipynb` needs no build either: run from anywhere without a `build/`, its
+first cell downloads this platform's CPU archive from the newest published release, checks it
+against the release's `SHA256SUMS` and unpacks it beside the notebook (the `v1.0.0-rc5`
+archives lack the two committed CSVs its last two cells read; later archives carry them). The
+release workflow runs that cell on its own on Linux and Windows, and runs the whole notebook
+from an unpacked archive in a container with no compiler.
 
 **From pip.** The bindings are ctypes over the C API, so one wheel per platform, with the
 library and the CLI inside it, serves CPython 3.9 to 3.13: `manylinux_2_35_x86_64` (glibc 2.35
