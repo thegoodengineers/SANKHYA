@@ -113,6 +113,11 @@ def memory_cap():
         resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
     return apply
 OVERRUN_SLACK_SECONDS = 5.0
+# --profile-dir DIR (#1278): with --profile, every solve's whole profile_out JSON (the nested
+# regions, e.g. what inside `branching` took the time) is kept as
+# DIR/<model>-<commit>-<options hash>.json, the model's stem naming its seed. None: not kept.
+PROFILE_DIR: Path | None = None
+PROFILE_TAG = ""
 
 
 def keep_overrun_log(instance: Path, time_limit: float, wall: float, killed: bool,
@@ -481,6 +486,10 @@ def solve(binary: Path, instance: Path, time_limit: float, verify: bool,
                                          else None)
         if profile:
             flat.update(profile_seconds(profile_path))
+            if PROFILE_DIR is not None and profile_path.exists():
+                stem = instance.name.removesuffix(".gz").removesuffix(".mps")
+                PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(profile_path, PROFILE_DIR / f"{stem}-{PROFILE_TAG}.json")
         return flat
 
 
@@ -614,7 +623,15 @@ def main() -> int:
                         help="keep the solver's console log of every run killed at the hang "
                              "margin or returned more than 5 s past its limit, as "
                              "DIR/<instance>.log (#1199); the solver then logs to its console")
+    parser.add_argument("--profile-dir", type=Path, default=None, metavar="DIR",
+                        help="with --profile, keep every solve's whole profile JSON (its "
+                             "nested regions) as DIR/<model>-<commit>-<options hash>.json")
     args = parser.parse_args()
+    if args.profile_dir is not None:
+        global PROFILE_DIR, PROFILE_TAG
+        PROFILE_DIR = (REPO_ROOT / args.profile_dir).resolve()
+        options_hash = hashlib.sha256(" ".join(args.solver_option).encode()).hexdigest()[:8]
+        PROFILE_TAG = f"{git_commit(args.binary)}-{options_hash}"
     if args.memory_limit_gb is not None:
         global MEMORY_LIMIT_GB
         MEMORY_LIMIT_GB = args.memory_limit_gb
