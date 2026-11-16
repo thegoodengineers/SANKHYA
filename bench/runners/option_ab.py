@@ -19,6 +19,11 @@ option between them) is measured the same way: bench.yml's ab-option suite build
 .base, and options="--runner maros_meszaros.py --base-binary .base/build/sankhya" compares
 the two builds; each row's git_commit then names its own arm's commit.
 
+With --arm NAME:KEY=VALUE[,KEY=VALUE...] (repeatable) the arms are the ones named instead of
+off and on, each the shared --solver-option plus its own options (an arm with no options is
+written NAME:), every one on --binary, their order rotating from one instance to the next: a
+cut-family ablation of the root bound, e.g. --arm all: --arm no-mir:enable_mir_cuts=false.
+
 Usage:
     python bench/runners/option_ab.py --runner kennington.py --binary build/sankhya \\
         --option ipm_supernodal=true --instances cre-a pds-02 --time-limit 600 \\
@@ -86,15 +91,27 @@ def main() -> int:
     parser.add_argument("--runner-arg", action="append", default=[], metavar="ARG",
                         help="passed to the runner as given, for both arms; write "
                              "--runner-arg=--flag for a value that starts with a dash")
+    parser.add_argument("--arm", action="append", default=[], metavar="NAME:K=V,...",
+                        help="a named arm in place of off and on; repeatable")
     parser.add_argument("--out-prefix", required=True)
     args = parser.parse_args()
-    if not args.option and args.base_binary is None:
+    named: dict[str, list[str]] = {}
+    for spec in args.arm:
+        name, _, options = spec.partition(":")
+        if not name or name in named:
+            parser.error(f"--arm {spec!r}: give each arm a new name")
+        named[name] = args.solver_option + [o for o in options.split(",") if o]
+    if named and (args.option or args.base_binary is not None):
+        parser.error("--arm replaces --option and --base-binary")
+    if not named and not args.option and args.base_binary is None:
         parser.error("nothing differs between the arms: give --option or --base-binary")
 
     if args.instances and len(args.runner) > 1:
         parser.error("--instances names one runner's instances: give a single --runner")
-    arms = {"off": args.solver_option, "on": args.solver_option + args.option}
-    binaries = {"off": args.base_binary or args.binary, "on": args.binary}
+    arms = named or {"off": args.solver_option, "on": args.solver_option + args.option}
+    binaries = {arm: args.binary for arm in arms}
+    if not named:
+        binaries["off"] = args.base_binary or args.binary
     work = Path(tempfile.mkdtemp(prefix="option-ab-"))
     rows: list[dict] = []
     fields: list[str] = []
@@ -102,7 +119,9 @@ def main() -> int:
             for name in args.instances or instances_of(runner, args.set_name)]
     for repeat in range(1, args.repeats + 1):
         for index, (runner, name) in enumerate(jobs):
-            order = ("off", "on") if (index + repeat) % 2 else ("on", "off")
+            names = list(arms)
+            shift = (index + repeat + 1) % len(names)  # two arms: off first on odd
+            order = names[shift:] + names[:shift]
             for arm in order:
                 out = work / f"{arm}-{repeat}-{name}.csv"
                 cmd = [sys.executable, f"bench/runners/{runner}", "--binary",
@@ -140,9 +159,10 @@ def main() -> int:
                                 extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
-    print(f"on arm: {args.binary} {' '.join(args.option)}; off arm: {binaries['off']}; "
-          f"{len(jobs)} instances x {args.repeats} "
-          f"repeat(s); wrote {path}")
+    arms_text = ("; ".join(f"{arm}: {' '.join(options)}" for arm, options in named.items())
+                 if named else f"on arm: {args.binary} {' '.join(args.option)}; off arm: "
+                 f"{binaries['off']}")
+    print(f"{arms_text}; {len(jobs)} instances x {args.repeats} repeat(s); wrote {path}")
     return 0
 
 
