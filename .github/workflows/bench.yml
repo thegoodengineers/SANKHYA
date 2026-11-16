@@ -155,7 +155,9 @@ jobs:
 
       # #1158: HiGHS beside SANKHYA on the same 65 MIPLIB 3 models, same job, same machine.
       - name: Install HiGHS for the MIPLIB 3 head-to-head
-        if: inputs.suite == 'miplib3' || inputs.suite == 'miplib2017-bench' || inputs.suite == 'first-incumbent'
+        if: >-
+          inputs.suite == 'miplib3' || inputs.suite == 'miplib2017-bench'
+          || inputs.suite == 'first-incumbent' || inputs.suite == 'mittelmann'
         run: pip install numpy highspy
 
       # #983: the Maros-Meszaros head-to-head runs every rival compare_suite.py knows - HiGHS,
@@ -276,7 +278,10 @@ jobs:
               python3 bench/runners/fetch_miplib3.py
               git checkout -- data/miplib3/manifest.json ;;
             ab-supernodal) python3 bench/runners/fetch_kennington.py cre-a cre-c ken-07 pds-02 ;;
-            mittelmann) python3 bench/runners/fetch_mittelmann.py --set small ;;
+            # The twelve of data/mittelmann/reference.json and the LPfeas-14, sixteen files.
+            mittelmann)
+              python3 bench/runners/fetch_mittelmann.py --set medium
+              python3 bench/runners/mittelmann_cuopt.py --fetch ;;
             lpfeas14) python3 bench/runners/mittelmann_cuopt.py --fetch ;;
             pdhg-step-weight-ab)
               python3 bench/runners/fetch_data.py --set full --offline-fallback
@@ -289,7 +294,9 @@ jobs:
                   git checkout -- 'data/netlib/*.mps' ;;
                 *kennington.py*) python3 bench/runners/fetch_kennington.py ;;
                 *maros_meszaros.py*) python3 bench/runners/fetch_maros_meszaros.py ;;
-                *mittelmann.py*) python3 bench/runners/fetch_mittelmann.py --set small ;;
+                *mittelmann.py*)
+                  python3 bench/runners/fetch_mittelmann.py --set medium
+                  python3 bench/runners/mittelmann_cuopt.py --fetch ;;
                 # #1199: an A/B over benchmark-set models; all 240 are fetched, sha256-checked.
                 *miplib2017-bench*) python3 bench/runners/fetch_miplib.py --benchmark ;;
                 *miplib3*)
@@ -447,11 +454,12 @@ jobs:
               # #470: scalar and supernodal IPM factorization, 1 and 4 threads, over two refs.
               ab-supernodal)
                 python3 bench/runners/supernodal_ab.py --base .base/build/sankhya                   --new build/sankhya --machine "$machine" ${limit[@]+"${limit[@]}"} "$@" ;;
-              # The eight smallest Mittelmann LPs; `--instances irish-electricity` narrows it
-              # and `--no-highs` skips the HiGHS cross-check (highspy is not installed here).
+              # The sixteen Mittelmann LPs, then HiGHS on each file in the same job (its
+              # objective and its own clock); `--instances irish-electricity` narrows it and
+              # `--no-highs` skips HiGHS. 12 GB of the runner's 16 per solve, as for MIPLIB.
               mittelmann)
                 python3 bench/runners/mittelmann.py --binary build/sankhya \
-                  ${limit[@]+"${limit[@]}"} "$@" ;;
+                  --machine "$machine" --memory-limit-gb 12 ${limit[@]+"${limit[@]}"} "$@" ;;
               # #1177: Mittelmann's LPfeas-14 on the CPU PDHG engine, ours alone (no card, no
               # cuOpt here), every solve's verbose log kept and its restart trace in the CSV.
               lpfeas14)
