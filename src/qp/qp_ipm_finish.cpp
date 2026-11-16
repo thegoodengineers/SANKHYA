@@ -551,7 +551,7 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
     diag("  REJECT product %.3e\n", largest_product);
     return false;
   }
-  diag("  ACCEPT\n");
+  diag("%s", "  ACCEPT\n");
 
   *v = std::move(c.v);
   *y = std::move(c.y);
