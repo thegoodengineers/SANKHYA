@@ -255,7 +255,15 @@ jobs:
               python3 bench/runners/fetch_miplib3.py
               git checkout -- data/miplib3/manifest.json
               # A profiled LP named by its path under data/kennington needs that set.
-              case " $OPTIONS " in *" data/kennington/"*) python3 bench/runners/fetch_kennington.py ;; esac ;;
+              case " $OPTIONS " in *" data/kennington/"*) python3 bench/runners/fetch_kennington.py ;; esac
+              # ... and one under data/miplib2017-bench the benchmark set's file, by name.
+              for token in $OPTIONS; do
+                case "$token" in
+                  data/miplib2017-bench/*)
+                    name="$(basename "$token")"
+                    python3 bench/runners/fetch_miplib.py --benchmark "${name%.mps.gz}" ;;
+                esac
+              done ;;
             # #1199: options is the shard, K/N; the fetch writes its names beside the models.
             # options=samadhan50: the 50 models of bench/runners/miplib2017_samadhan50.json.
             miplib2017-bench)
