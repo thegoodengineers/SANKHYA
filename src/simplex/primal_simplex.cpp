@@ -2175,6 +2175,7 @@ thread_local NodeScratch node_scratch;
 
 void release_node_solve_scratch() {
   node_scratch = NodeScratch{};
+  SparseLu::release_spare_workspace();  // #1278: a large one the node solves kept
 }
 
 namespace detail {
@@ -2285,6 +2286,10 @@ Solution solve_with_scaling(const Model& model, const Options& options, Logger& 
                                       ProfileMode::kDetailed);
   NodeScratch local;
   NodeScratch& scratch = warm != nullptr ? node_scratch : local;
+  // The same pattern keeps the LU's elimination workspace on this thread whatever the basis
+  // size (#1278, lu.hpp): every simplex below is destroyed inside this call.
+  std::optional<SparseLu::KeepLargeSpare> keep_workspace;
+  if (warm != nullptr) keep_workspace.emplace();
   Model& scaled = scratch.scaled;
   scaled_attempt = &scaled;
   const bool held = cache.id != 0 && scratch.id == cache.id &&
