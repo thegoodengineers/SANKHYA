@@ -412,7 +412,7 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
   // crossover was told it had no time. The same remaining time now bounds both. A guess
   // the limit stops leaves the interior point's answer exactly as an exhausted limit before
   // the guess does; the status guard in solve() then measures that answer like any other.
-  const double time_limit = options.get_double("time_limit");
+  double time_limit = options.get_double("time_limit");
   const bool limited = time_limit > 0.0 && std::isfinite(time_limit) && time_limit < 1e300;
   const auto no_time_left = [&] {
     interior.message += "; no time left for crossover, the interior point's answer stands";
@@ -420,6 +420,19 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
     return std::move(interior);
   };
   if (limited && time_limit - timer.elapsed_seconds() <= 0.0) return no_time_left();
+  // From an optimal point the crossover gets a share of what is left, not all of it
+  // (tol::kCrossoverShareAfterOptimal): the answer already stands. The guess and the pivots
+  // both run under the shortened limit.
+  Options capped = options;
+  if (limited && from_optimal) {
+    const double elapsed = timer.elapsed_seconds();
+    const double share = tol::kCrossoverShareAfterOptimal * (time_limit - elapsed);
+    time_limit = elapsed + share;
+    capped.set_double("time_limit", time_limit);
+    interior.message += fmt::format(
+        "; crossover from the optimal interior point given {:.1f}s, {:g} of the time left",
+        share, tol::kCrossoverShareAfterOptimal);
+  }
   const std::function<bool()> should_stop = [&] {
     return (limited && timer.elapsed_seconds() >= time_limit) ||
            (control != nullptr && control->interruption_requested());
@@ -457,7 +470,7 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
       "Crossover: {} of {} entries interior, basis guess of {} from the interior point, {} "
       "evicted for rank",
       guess.interior, model.num_cols() + model.num_rows(), guess.basic, guess.repaired);
-  return crossover_push_from_basis(model, std::move(interior), std::move(warm), options, logger,
+  return crossover_push_from_basis(model, std::move(interior), std::move(warm), capped, logger,
                                    control, timer);
 }
 
