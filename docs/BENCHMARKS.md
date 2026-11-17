@@ -4465,11 +4465,11 @@ adapters read no certificate, where SANKHYA's and HiGHS's must pass the verifier
 | suite | instances | limit | SANKHYA | HiGHS | SCIP | CBC | GLPK | CSV | commit |
 |---|---:|---:|---|---|---|---|---|---|---|
 | Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-1659c8b.csv` | `1659c8b` |
-| MIPLIB 3 MILP | 65 | 60 s | 42 / 41 / 42 / 0 | 52 / 49 / 52 / 0 | 50 / 45 / 50 / 0 | 49 / 48 / 49 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-d1d0d52.csv` | `d1d0d52` |
+| MIPLIB 3 MILP | 65 | 60 s | 45 / 44 / 45 / 0 | 53 / 50 / 53 / 0 | 51 / 46 / 51 / 0 | 49 / 48 / 49 / 0 | 34 / 33 / 33 / 0 | `bench/results/head-to-head-miplib3-60s-5ce0630.csv` | `5ce0630` |
 | Stress set LP | 126 | 60 s | 117 / 117 / 118 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-1659c8b.csv` | `1659c8b` |
 | Maros-Meszaros QP | 138 | 60 s | 131 / 129 / 131 / 2 | 102 / 94 / 28 / 8 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-1659c8b.csv` | `1659c8b` |
 
-Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 49, CBC 48, SCIP 45, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 117, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 129, SCIP 58, HiGHS 28.
+Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 50, CBC 48, SCIP 46, SANKHYA 44, GLPK 32. Stress set LP, graded correct: SANKHYA 117, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 129, SCIP 58, HiGHS 28.
 
 **HiGHS off its defaults, `qp_regularization_value = 0`** (same job, same files, not the HiGHS column above): at its defaults HiGHS solves a regularized QP (`qp_regularization_value = 1e-7` in its manual) and its point misses the stationarity of the QP as stated by 1e-7 |x_j|; with the regularization off it reads **106 / 103 / 84 / 3**, 84 matched and verified, of 138; not optimal: 1 `crashed`, 11 `solve error`, 20 `time_limit`.
 
@@ -4614,22 +4614,22 @@ Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2,
 - Maros-Meszaros QP, SCIP on `tame`: optimal; [FAIL] objective           recomputed 5.187246390146e-23, solver said -9.985476434923e-09, difference 9.985e-09
 - Maros-Meszaros QP, SCIP on `zecevic2`: optimal; [FAIL] objective           recomputed -4.125000039990e+00, solver said -4.125000049982e+00, difference 9.992e-09
 
-**MIPLIB 3 in detail** (`bench/results/head-to-head-miplib3-60s-d1d0d52.csv`, machine `github-actions ubuntu-24.04; INTEL(R) XEON(R) PLATINUM 8573C; 4 cores; 16 GiB RAM; Linux-x86_64`). Every solver stops at a relative gap of 0.0001, SANKHYA's default and HiGHS's, set explicitly for SCIP, CBC and GLPK; everything else is each solver's default. SANKHYA runs once, at its default seed, where section 2a reports the best of three seeds. The time is the shifted geometric mean of each solver's own clock (shift 10 s), a run that is not proved, matched and verified charged the 60 s limit.
+**MIPLIB 3 in detail** (`bench/results/head-to-head-miplib3-60s-5ce0630.csv`, machine `github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64`). Every solver stops at a relative gap of 0.0001, SANKHYA's default and HiGHS's, set explicitly for SCIP, CBC and GLPK; everything else is each solver's default. SANKHYA runs once, at its default seed, where section 2a reports the best of three seeds. The time is the shifted geometric mean of each solver's own clock (shift 10 s), a run that is not proved, matched and verified charged the 60 s limit.
 
 | solver | version | proved | matched | proved, matched and verified | wrong | not proved, and how | SGM time |
 |---|---|---:|---:|---:|---:|---|---:|
-| SANKHYA | d1d0d52 | 42 | 41 | 41 | 0 | 21 feasible, 2 time_limit | 15.71 s |
-| HiGHS | 1.16.0 | 52 | 49 | 49 | 0 | 13 time_limit | 10.64 s |
-| SCIP | 10.0.2 | 50 | 45 | 45 | 0 | 15 time_limit | 12.91 s |
-| CBC | 2.10.11 | 49 | 48 | 48 | 0 | 16 time_limit | 10.15 s |
-| GLPK | 5.0 | 33 | 32 | 31 | 0 | 32 time_limit | 21.98 s |
+| SANKHYA | 5ce0630 | 45 | 44 | 44 | 0 | 19 feasible, 1 time_limit | 13.19 s |
+| HiGHS | 1.16.0 | 53 | 50 | 50 | 0 | 12 time_limit | 9.88 s |
+| SCIP | 10.0.2 | 51 | 46 | 46 | 0 | 14 time_limit | 12.12 s |
+| CBC | 2.10.11 | 49 | 48 | 48 | 0 | 16 time_limit | 9.46 s |
+| GLPK | 5.0 | 34 | 33 | 32 | 0 | 31 time_limit | 21.45 s |
 
 Instance by instance, proved, matched and verified:
 
-- HiGHS and not SANKHYA (9): `10teams`, `air04`, `air05`, `mitre`, `mod011`, `noswot`, `nw04`, `p2756`, `rout`. SANKHYA and not HiGHS (1): `bell5`.
-- SCIP and not SANKHYA (8): `10teams`, `air04`, `air05`, `mitre`, `noswot`, `nw04`, `p2756`, `rout`. SANKHYA and not SCIP (4): `gesa2_o`, `gesa3`, `gesa3_o`, `misc06`.
-- CBC and not SANKHYA (8): `10teams`, `air05`, `mas76`, `mitre`, `mod011`, `nw04`, `p2756`, `pk1`. SANKHYA and not CBC (1): `set1ch`.
-- GLPK and not SANKHYA (0): none. SANKHYA and not GLPK (10): `dsbmip`, `gesa2`, `gesa2_o`, `gt2`, `modglob`, `pp08a`, `pp08aCUTS`, `set1ch`, `vpm1`, `vpm2`.
+- HiGHS and not SANKHYA (7): `10teams`, `air05`, `mod011`, `noswot`, `nw04`, `p2756`, `rout`. SANKHYA and not HiGHS (1): `bell5`.
+- SCIP and not SANKHYA (6): `10teams`, `air05`, `noswot`, `nw04`, `p2756`, `rout`. SANKHYA and not SCIP (4): `gesa2_o`, `gesa3`, `gesa3_o`, `misc06`.
+- CBC and not SANKHYA (7): `10teams`, `air05`, `mas76`, `mod011`, `nw04`, `p2756`, `pk1`. SANKHYA and not CBC (3): `air04`, `qiu`, `set1ch`.
+- GLPK and not SANKHYA (1): `nw04`. SANKHYA and not GLPK (13): `air04`, `dsbmip`, `gesa2`, `gesa2_o`, `gt2`, `mitre`, `modglob`, `pp08a`, `pp08aCUTS`, `qiu`, `set1ch`, `vpm1`, `vpm2`.
 
 ---
 
