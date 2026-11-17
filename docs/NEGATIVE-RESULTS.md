@@ -503,6 +503,27 @@ The CSVs are on the PR's branch, stamped `d80f5cb`, a branch commit: `option-ab-
 
 What would earn it a place: a separator that closes p200x1188c's root, and a loop gate that keeps bell5's rounds from costing its tree. The second is the root-loop gate's call (#1278), not this option's.
 
+### Flow path cuts by a walk along switched outflows (PR #1303, `flow_cover_path_walk`, kept off)
+
+`flow_cover_path_walk` extends the flow cover aggregation, which eliminates only unswitched columns. When none is left, the walk continues along the switched outflow carrying the most LP flow into the next node's balance row, and separates the flow cover of the summed path balance. These are the path inequalities of Van Roy and Wolsey (1985). The target was p200x1188c: HiGHS's root closes it, ours closes about 0.22 of the gap.
+
+Setup: `bench.yml` `ab-option` at `31860ca`. Both arms on one runner, 60 s, one thread, 3 seeds.
+
+| gate | run | off: proved / matched / verified | on: proved / matched / verified |
+|---|---|---|---|
+| 25 MIPLIB 2017 targets | 43912240097 | 0 / 10 / 54 | 0 / 10 / 54 |
+| MIPLIB 3, 65 models | 43912248011 | 139 / 140 / 192 | 139 / 140 / 192 |
+
+- **Counts:** nothing gained and nothing lost in either gate. This targets runner (an EPYC 7763) proved none of the 25 in either arm.
+- **Shifted geometric mean** where both arms prove MIPLIB 3 (139 runs): 2.28 s off, 2.25 s on.
+- **p200x1188c's root did not move:** 0.217-0.224 of the gap closed off, 0.215-0.218 on.
+- **beasleyC3** gained 0.005-0.007 on every seed.
+- **Root gap closed moved by up to 0.08 either way on** h80x6320d, vpm2, mod011, fixnet6, egout and modglob. Their round counts changed too.
+
+CSVs, on the PR's branch and stamped `31860ca`: `option-ab-miplib2017-targets-flow-path-31860ca.csv`, `option-ab-miplib3-flow-path-31860ca.csv`.
+
+What would earn it a place: a gain on a fixed-charge network's root. p200x1188c's weakness is not missing path aggregates. Its big-M arc capacities are the next suspect: coefficient tightening, opt-in as `presolve_coefficient_tightening`.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
