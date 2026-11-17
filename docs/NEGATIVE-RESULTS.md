@@ -324,6 +324,21 @@ Under `auto` every optional heuristic stands down at the first incumbent, howeve
 
 Files: `bench/results/option-ab-miplib3-rins-on-f60c6ea.csv`, `option-ab-miplib2017-targets-rins-on-f60c6ea.csv`, `option-ab-miplib-tier1-rins-on-f60c6ea.csv` (the `arm` column; both arms are the `f60c6ea` binary on `main`). What would earn a default: a stronger root bound on those models, so a better incumbent closes a tree, then this A/B again.
 
+### Four LP-engine settings for the root LPs of ex9, ex10 and ns1116954 (MIPLIB 2017 benchmark set)
+
+HiGHS proves ex9, ex10 and ns1116954 in 3.4, 9.9 and 3.9 s in the same 60 s jobs (`highs-miplib2017-bench-60s-c8544ed.csv`); our search never leaves the root. Diagnosis run 44010017090 (profile=detailed with nested profiles, verbose logs, 3 seeds, the branch of #1316):
+
+- **Presolve is not the gap on ex9 and ex10.** Ours takes ex9 from 40962 rows, 10404 columns to 33846 and 8560, and ex10 from 69608 and 17680 to 63016 and 15936: exactly the sizes the MIPLIB 2017 instance pages publish after trivial presolving. On ns1116954, a zero-objective (feasibility) model, ours removes nothing and trivial presolving removes 120 of 131991 rows and 720 of 12648 columns, which cannot matter at that size.
+- **The root dual simplex does not finish in 57 s.** ex9: 24995 iterations, 446684 bound flips, 888 refactorizations (one every 28 iterations), and 26.7 s of 57 in the basic-values update (the FTRAN carrying each iteration's bound flips into x_B, and the recomputation after each refactorization), 10.2 s in FTRAN, 6.9 s refactorizing; 58711 of the FTRAN results were 30% dense or more. ex10: 19953 iterations, 27.6 s in basic values. ns1116954: 27775 iterations, 30.7 s in basic values, 10.7 s refactorizing. Symmetry detection spends 1.8-2.6 s on each before stopping at its budget.
+
+Four settings were tried on one `main` binary (`c1e5290`), all arms in one job, seed 0, 60 s, one thread (run 44081344529): `dual_perturb_costs_at_start=true`, `dual_ratio_test=harris`, `basis_update=forrest-tomlin`, and `mip_node_engine=primal`. None finishes the root LP of ex9 or ex10 (57.3-57.6 s of node LP in every arm). On ns1116954 Harris finishes the root in 15.4 s and the primal simplex in 38.0 s, against 58.0 s unfinished for the default, and bound 0 is then proved; but no feasible point follows (24.0 s of root cuts and 18.6 s of heuristics under Harris), so the status is the same. On neos-960392 the arms change the node count and the incumbent (-23 default, -55 Harris, -118 perturbed), never the proof.
+
+What would move these models: a root dual simplex whose flip update and refactorization rate do not grow with the density of B^-1 on degenerate 0/1 LPs; for ns1116954, a feasible point. Files: `bench/results/option-ab-miplib2017-root-lp-arms-c1e5290.csv` (the `arm` column).
+
+### neos859080 is proved on some seeds and not others: conflict analysis is off (`conflict_analysis`)
+
+neos859080 (164 rows, 80 binary and 80 general integer columns, infeasible) is proved infeasible in 3.2 s on seeds 1 and 2 (95 and 117 nodes) and runs out of time on seed 0 (141,000+ nodes, the open list growing by about one node per node from node 60). The row and column permutation decides the branching order, and on seed 0 the order leaves open nodes that fail for the same reason. With `conflict_analysis=true` every seed is proved, seed 0 in 2.7 s and 93 nodes; `mip_heuristics=true` changes nothing (run 44081402766, `main` `c1e5290`, 3 seeds, 60 s, one thread). Of each 3.2 s proof, about 3.0 s is the propagation dive at the root. The default stays off (section 2, "Conflict analysis") until its A/B on MIPLIB 3 and tier 1 at `c1e5290` (runs 44088198542 and 44088204926). Files: `bench/results/option-ab-miplib2017-heur-conflict-arms-c1e5290.csv`.
+
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
 
 These decisions were made on numbers that are not in `bench/results/`. They are recorded as such, and each names the re-run that would move it to section 1.
