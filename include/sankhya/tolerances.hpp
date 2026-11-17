@@ -118,8 +118,9 @@ inline constexpr Count kFeasibilityJumpCompletionIterationsFloor = 10'000;
 
 /// The parity heuristic (#841, src/mip/parity.hpp): the most binary columns its dense GF(2)
 /// elimination takes (rows x 2048^2 / 64 word operations at most, well under a second); the
-/// fixings it tries, 2^4, so a null space of dimension four is enumerated whole; and the
-/// node limit of the sub-MIP that completes each fixing.
+/// fixings it tries, 2^4, so a null space of dimension four is enumerated whole (a larger one
+/// is not tried at all, branch_and_bound_parity.cpp); and the node limit of the sub-MIP that
+/// completes each fixing.
 inline constexpr int kParityMaxColumns = 2048;
 inline constexpr int kParityCandidates = 16;
 inline constexpr Count kParitySubMipNodes = 1000;

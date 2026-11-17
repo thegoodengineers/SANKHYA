@@ -6,11 +6,15 @@
 // dimension four (sixteen). A system with no 0/1 solution must say so and offer nothing.
 
 #include <cstdint>
+#include <cstdio>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "mip/parity.hpp"
+#include "sankhya/logging.hpp"
+#include "sankhya/mip.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
 
@@ -153,6 +157,44 @@ TEST(Parity, SearchFindsTheLightsOutOptimumWithItOn) {
     ASSERT_EQ(solved.status, SolveStatus::kOptimal) << value << ": " << solved.message;
     EXPECT_NEAR(solved.objective, 15.0, 1e-9) << value;
   }
+}
+
+TEST(Parity, NullSpaceLargerThanTheFixingsIsNotTried) {
+  // One parity row over six binaries, x0 + ... + x5 - 2 y = 1: dimension five, 32
+  // assignments, more than the 16 fixings cover, so the search tries none and still solves.
+  Model m;
+  m.col_cost = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0};
+  m.col_lower.assign(7, 0.0);
+  m.col_upper = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 3.0};
+  m.col_type.assign(7, VarType::kInteger);
+  m.matrix.reset(1, 7);
+  for (Index j = 0; j < 6; ++j) m.matrix.add_entry(0, j, 1.0);
+  m.matrix.add_entry(0, 6, -2.0);
+  m.matrix.finalize();
+  m.row_lower = {1.0};
+  m.row_upper = {1.0};
+  m.hessian.reset(7, 7);
+  m.hessian.finalize();
+  EXPECT_EQ(parity_fixings(m, {}, 16).null_space_dimension, 5);
+
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_string("mip_heur_parity", "on");
+  options.set_int("mip_threads", 1);
+  std::FILE* stream = std::tmpfile();
+  ASSERT_NE(stream, nullptr);
+  Logger logger(stream, LogLevel::kInfo);
+  const Solution solved = solve_branch_and_bound(m, options, logger, nullptr);
+  std::fflush(stream);
+  std::rewind(stream);
+  std::string text;
+  char buffer[4096];
+  while (std::fgets(buffer, sizeof(buffer), stream) != nullptr) text += buffer;
+  std::fclose(stream);
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+  EXPECT_NEAR(solved.objective, 1.0, 1e-9);
+  EXPECT_NE(text.find("null space of dimension 5; 0 fixing(s) tried"), std::string::npos)
+      << text;
 }
 
 }  // namespace

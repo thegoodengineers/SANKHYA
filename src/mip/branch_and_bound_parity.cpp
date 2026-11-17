@@ -28,8 +28,19 @@ void BranchAndBound::run_parity_in(std::size_t slot) {
   ++s.calls;
   const ParityFixings f =
       parity_fixings(original_, feasibility_jump_zero_start(original_), tol::kParityCandidates);
+  // ONLY A NULL SPACE THE CANDIDATES COVER WHOLE. With dimension k the rows allow 2^k
+  // assignments of their binaries; when 2^k exceeds kParityCandidates the fixings tried are
+  // an arbitrary corner of that space, chosen by column order, and each costs a sub-MIP on
+  // the whole model. On neos8 (MIPLIB 2017) 12 parity rows over 780 binaries leave k = 768:
+  // the 16 sub-MIPs took 38-42 s of a 57 s solve before the root LP, and the incumbent they
+  // gave on two seeds the root rounding finds anyway (bench run 44010017090). On the
+  // lights-out models the heuristic is for (#841) the rows pin the binaries down and k is
+  // small. The elimination itself is kept, and logged, whatever k is.
+  const bool whole = f.null_space_dimension < 31 &&
+                     (Index{1} << f.null_space_dimension) <= Index{tol::kParityCandidates};
   std::size_t tried = 0;
   for (const std::vector<std::uint8_t>& bits : f.candidates) {
+    if (!whole) break;
     if (control_ != nullptr && control_->interruption_requested()) break;
     if (schedule_.seconds_budgets && limits_.time_exhausted(timer_.elapsed_seconds())) break;
     ++tried;
@@ -53,9 +64,10 @@ void BranchAndBound::run_parity_in(std::size_t slot) {
   s.seconds += clock.elapsed_seconds();
   logger_.info(
       "Parity (#841): {} parity row(s) over {} binary column(s), null space of dimension {}{}; "
-      "{} fixing(s) tried in {:.3f}s",
+      "{} fixing(s) tried in {:.3f}s{}",
       f.parity_rows, f.columns.size(), f.null_space_dimension,
-      f.inconsistent ? ", inconsistent mod 2" : "", tried, clock.elapsed_seconds());
+      f.inconsistent ? ", inconsistent mod 2" : "", tried, clock.elapsed_seconds(),
+      whole ? "" : " (the null space is larger than the fixings can cover, so none is tried)");
 }
 
 }  // namespace sankhya::mip
