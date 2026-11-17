@@ -302,6 +302,28 @@ On the 13 MIPLIB models where a committed run ended without a point or away from
 
 The heuristics pay where the search has no point and cost proving time where it has one. What was adopted is the same schedule only while there is no incumbent (`mip_heuristics=auto`, the default since), which loses no proof on either set; `mip_heuristics=true` stays a choice, not the default. The 66b38df and c77bc4f CSVs record the options under the names they had then (`mip_heuristics=true` with the dive options; `mip_heuristics_until_incumbent=true`, since folded into `mip_heuristics=auto`).
 
+### RINS kept running under `mip_heuristics=auto` (`mip_heur_rins=on`, #1158)
+
+Under `auto` every optional heuristic stands down at the first incumbent, however poor: on mod011 the first fractional dive's -50.8M (optimum -54.56M) is still the incumbent after 13,000 nodes, and on p2756 the incumbents are 3587, 11588 and 9122 against 3124. RINS (Danna, Rothberg and Le Pape 2005) kept running while the relative gap is above a threshold was the candidate. The threshold comes from the mechanism, not a fit: a RINS sub-MIP can at best take the incumbent to the node bound, so the one gap below which it has nothing left to do is the gap at which the solve stops anyway, `mip_relative_gap`. That is what the existing switch `mip_heur_rins=on` does under `auto`, so it was measured as it stands. Option A/B on one `main` binary (`f60c6ea`), both arms in one job, 3 seeds, 60 s, one thread:
+
+| set (run) | arm | seed 0 m / p / v | seed 1 | seed 2 | proved, best of 3 |
+|---|---|---|---|---|---|
+| MIPLIB 3, 65 (43885721444) | defaults | 46 / 44 / 64 | 46 / 45 / 64 | 45 / 45 / 64 | 46 |
+| | RINS on | 47 / 44 / 64 | 47 / 45 / 64 | 46 / 44 / 64 | 46 |
+| 25 MIPLIB 2017 targets (43885730120) | defaults | 3 / 0 / 18 | 4 / 1 / 18 | 3 / 1 / 18 | 1 |
+| | RINS on | 3 / 0 / 18 | 4 / 1 / 18 | 4 / 1 / 18 | 1 |
+| MIPLIB 2017 tier 1, 30 (43915160597) | defaults | 18 / 11 / 30 | 19 / 11 / 30 | 17 / 11 / 29 | 12 |
+| | RINS on | 18 / 11 / 30 | 20 / 11 / 30 | 18 / 11 / 29 | 12 |
+
+(m / p / v: matched the published optimum / proved it / verified point; the verifier rejected nothing in any arm.)
+
+- **Fails the rule:** gesa2 seed 2 loses its proof and its match. It stops at the 1e-4 gap target in 1.75 s on an incumbent RINS found, 25780672.3, 3.2e-5 above the optimum, where the defaults prove 25779856.4. Matches are lost on irp seed 0 and neos-3083819-nubu seed 1 (targets) and markshare_4_0 seed 1 (tier 1); no verified point is lost.
+- **Matches gained:** mas76 on all three seeds and noswot seed 2 (MIPLIB 3); p200x1188c on all three seeds (targets); k16x240b seed 1, neos5 seed 2 and noswot seed 1 (tier 1).
+- **Better incumbents, no proof:** mod011 -50.8M to -53.1M (seed 0) and -52.7M to -53.4M (seed 2); p2756 3587 / 11588 / 9122 to 3514 / 3214 / 3487; rout seed 1 1104.73 to 1079.73 (optimum 1077.56); harp2, mas74, danoint and arki001 closer too. Over the runs whose incumbent changed, RINS on ends closer to the published optimum on 29 and further on 18 (MIPLIB 3), 13 and 4 (targets), 21 and 10 (tier 1); markshare1, mkc, swath seed 1 and air05 seed 1 are the clear losses.
+- **Why it cannot prove them:** RINS moves the incumbent, not the bound. What stops mod011, p2756 and rout at 60 s is the dual bound (-56.0M to -56.5M against -54.56M; 2728 to 2782 against 3124; 1049.0 to 1052.9 against 1077.56, both arms, every seed), and none of them is proved with the better point.
+
+Files: `bench/results/option-ab-miplib3-rins-on-f60c6ea.csv`, `option-ab-miplib2017-targets-rins-on-f60c6ea.csv`, `option-ab-miplib-tier1-rins-on-f60c6ea.csv` (the `arm` column; both arms are the `f60c6ea` binary on `main`). What would earn a default: a stronger root bound on those models, so a better incumbent closes a tree, then this A/B again.
+
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
 
 These decisions were made on numbers that are not in `bench/results/`. They are recorded as such, and each names the re-run that would move it to section 1.
