@@ -482,6 +482,24 @@ It changed no count: 2 proved, 10 matched and 54 verified in both arms, nothing 
 
 The CSV is not committed because it carries branch stamps. It is in the run's artifact.
 
+### irish-electricity: no strict interior, and the two presolve reductions aimed at it are not enough (PR #1302, diagnosis only)
+
+Every one of our runs on Mittelmann's irish-electricity settles at objective about 2,454,39x with a model-space primal violation near 1e-4. That covers the interior point with presolve on and off, scaling on and off, and both the proximal and normal-equations paths, plus PDHG. HiGHS reports 2,546,254.56 optimal. `bench/runners/interior_check.py` (PR #1302) answers two questions without our solver:
+
+- **HiGHS's point is primal feasible by our standard** (run 43901416734). `tools/verify_solution.py` passes its bounds (7.9e-08), rows (8.1e-08 relative), objective and strong duality. Only the reduced-cost identity misses, at 2.9e-06 relative. Our point is therefore infeasible, not a better optimum: a 1e-4 relaxation of a few rows is worth 3.6% of the objective here.
+- **The feasible set has no strict interior** (run 43919907943). The max-min-slack LP (Boyd & Vandenberghe 2004, 11.4.1), solved by HiGHS's interior point, gives t* = 0. Its 42 inequalities with a nonzero dual are pairs `C_initstart_k` / `C_aStart_k_1`. For k = 47 they read `cstart_47_1 - v_47_1 >= 0` and `cstart_47_1 - v_47_1 + hstart_47_1 <= 0`, with `hstart_47_1` in [0, 1] and in no other row. Together they force `hstart = 0` and `cstart = v` at every feasible point: implicit equalities, so there is no interior for the interior point to follow.
+
+**Tried:** `presolve_dual_fixing=true presolve_parallel_rows=true`, the two reductions that remove exactly that pattern (fix `hstart` at 0, then merge the two identical rows into an equality). Both fired: 88 dual-fixed columns and 1,859 parallel rows merged (run 43995441320, verbose log in its artifact). Nothing changed:
+
+| engine | run | off | on |
+|---|---|---|---|
+| `algorithm=ipm` | 43921068158 | iteration_limit, 2,454,396.5 | iteration_limit, 2,454,394.0 |
+| `auto` (PDHG) | 43921075853 | time_limit, 2,454,384.17 | time_limit, 2,454,384.17 |
+
+Both A/Bs were on main at `c288ba1`. Other implicit equalities remain after them.
+
+**Next step, not taken:** the same slack LP on the presolved model, which needs the presolved model written out, to name what remains. The CSVs are not committed; they are in the runs' artifacts.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
