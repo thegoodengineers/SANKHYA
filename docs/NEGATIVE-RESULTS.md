@@ -324,6 +324,35 @@ Under `auto` every optional heuristic stands down at the first incumbent, howeve
 
 Files: `bench/results/option-ab-miplib3-rins-on-f60c6ea.csv`, `option-ab-miplib2017-targets-rins-on-f60c6ea.csv`, `option-ab-miplib-tier1-rins-on-f60c6ea.csv` (the `arm` column; both arms are the `f60c6ea` binary on `main`). What would earn a default: a stronger root bound on those models, so a better incumbent closes a tree, then this A/B again.
 
+### Four LP-engine settings for the root LPs of ex9, ex10 and ns1116954 (MIPLIB 2017 benchmark set)
+
+HiGHS proves ex9, ex10 and ns1116954 in 3.4, 9.9 and 3.9 s in the same 60 s jobs (`highs-miplib2017-bench-60s-c8544ed.csv`); our search never leaves the root. Diagnosis run 44010017090 (profile=detailed with nested profiles, verbose logs, 3 seeds, the branch of #1316):
+
+- **Presolve is not the gap on ex9 and ex10.** Ours takes ex9 from 40962 rows, 10404 columns to 33846 and 8560, and ex10 from 69608 and 17680 to 63016 and 15936: exactly the sizes the MIPLIB 2017 instance pages publish after trivial presolving. On ns1116954, a zero-objective (feasibility) model, ours removes nothing and trivial presolving removes 120 of 131991 rows and 720 of 12648 columns, which cannot matter at that size.
+- **The root dual simplex does not finish in 57 s.** ex9: 24995 iterations, 446684 bound flips, 888 refactorizations (one every 28 iterations), and 26.7 s of 57 in the basic-values update (the FTRAN carrying each iteration's bound flips into x_B, and the recomputation after each refactorization), 10.2 s in FTRAN, 6.9 s refactorizing; 58711 of the FTRAN results were 30% dense or more. ex10: 19953 iterations, 27.6 s in basic values. ns1116954: 27775 iterations, 30.7 s in basic values, 10.7 s refactorizing. Symmetry detection spends 1.8-2.6 s on each before stopping at its budget.
+
+Four settings were tried on one `main` binary (`c1e5290`), all arms in one job, seed 0, 60 s, one thread (run 44081344529): `dual_perturb_costs_at_start=true`, `dual_ratio_test=harris`, `basis_update=forrest-tomlin`, and `mip_node_engine=primal`. None finishes the root LP of ex9 or ex10 (57.3-57.6 s of node LP in every arm). On ns1116954 Harris finishes the root in 15.4 s and the primal simplex in 38.0 s, against 58.0 s unfinished for the default, and bound 0 is then proved; but no feasible point follows (24.0 s of root cuts and 18.6 s of heuristics under Harris), so the status is the same. On neos-960392 the arms change the node count and the incumbent (-23 default, -55 Harris, -118 perturbed), never the proof.
+
+What would move these models: a root dual simplex whose flip update and refactorization rate do not grow with the density of B^-1 on degenerate 0/1 LPs; for ns1116954, a feasible point. Files: `bench/results/option-ab-miplib2017-root-lp-arms-c1e5290.csv` (the `arm` column).
+
+### neos859080 is proved on some seeds and not others: conflict analysis is off (`conflict_analysis`)
+
+neos859080 (164 rows, 80 binary and 80 general integer columns, infeasible) is proved infeasible in 3.2 s on seeds 1 and 2 (95 and 117 nodes) and runs out of time on seed 0 (141,000+ nodes, the open list growing by about one node per node from node 60). The row and column permutation decides the branching order, and on seed 0 the order leaves open nodes that fail for the same reason. With `conflict_analysis=true` every seed is proved, seed 0 in 2.7 s and 93 nodes; `mip_heuristics=true` changes nothing (run 44081402766, `main` `c1e5290`, 3 seeds, 60 s, one thread). Of each 3.2 s proof, about 3.0 s is the propagation dive at the root.
+
+The default stays off, now on a `main` measurement (the same `c1e5290` binary, both arms in one job, 3 seeds, 60 s, one thread; this replaces the branch measurement in section 2):
+
+| set (run) | arm | seed 0 m / p / v | seed 1 | seed 2 | proved, best of 3 |
+|---|---|---|---|---|---|
+| MIPLIB 3, 65 (44088198542) | off | 47 / 45 / 64 | 46 / 45 / 64 | 45 / 45 / 64 | 46 |
+| | `conflict_analysis=true` | 47 / 44 / 64 | 46 / 45 / 64 | 45 / 45 / 64 | 46 |
+| MIPLIB 2017 tier 1, 30 (44088204926) | off | 18 / 11 / 30 | 19 / 11 / 30 | 17 / 11 / 29 | 12 |
+| | `conflict_analysis=true` | 18 / 11 / 30 | 20 / 10 / 30 | 17 / 11 / 29 | 12 |
+
+- **Fails the rule:** enlight8 seed 1 loses its proof (optimal in 40.1 s and 412,295 nodes off; 37,936 nodes in 60 s on, the analysis taking most of each node), and air05 seed 0 loses a proof made at 59.9 s (523 against 532 nodes).
+- **Gained:** neos859080 on every seed (above), and the noswot seed 1 match (-41).
+
+Files: `bench/results/option-ab-miplib2017-heur-conflict-arms-c1e5290.csv`, `option-ab-miplib3-conflict-on-c1e5290.csv`, `option-ab-miplib-tier1-conflict-on-c1e5290.csv` (the `arm` column). What would earn a default: an analysis whose cost per node is bounded (enlight8), then this A/B again.
+
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
 
 These decisions were made on numbers that are not in `bench/results/`. They are recorded as such, and each names the re-run that would move it to section 1.
@@ -342,7 +371,7 @@ Landed in #381/#292: the search learns from every node it proves infeasible whic
 
 On the branch at `6c405f8` (#405), 30 MIPLIB instances at 60 s: the same 14 reached and 9 proved either way, no verdict moved. On the nine instances that finish, conflicts take the node count to 0.965× (2,204 against 2,285). On the 21 stopped by the limit the count is 0.938× in the same wall clock — nodes not reached, not search saved — with `enlight8` at 0.373× and 37.4 s of its 60 s budget spent inside the analysis.
 
-Re-run that would settle it: the same A/B at a `main` commit, with the analysis time per instance in the CSV.
+Re-run on `main` at `c1e5290`: section 1, "neos859080 is proved on some seeds and not others". It still fails the rule there (enlight8 and air05 each lose a proof), so the default stays off.
 
 ### An infeasibility neighbourhood for the QP interior point (#981, branch `qp-ipm-pmm`, not merged)
 
