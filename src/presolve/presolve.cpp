@@ -153,11 +153,24 @@ struct Workspace {
 /// that point from the problem, and branch and bound then proves the second-best answer
 /// optimal without any symptom. floor/ceil with a tolerance is the standard treatment
 /// (Achterberg et al.); the tolerance keeps 2.9999999997 from becoming 2.
-[[nodiscard]] double round_integer_lower(double value) {
-  return std::ceil(value - tol::kIntegrality);
+///
+/// THE SNAP IS OUTWARD, SO IT IS MEASURED IN THE UNITS OF WHAT THE BOUND STANDS FOR (#1319).
+/// A bound a row implies, snapped back by d to an integer, admits points that violate that
+/// row by |a| d. Where the row stays in the model that is only a weaker bound; where the
+/// bound replaces the row (a singleton row, a doubleton's substituted column) it is the
+/// model, and 4459767 x >= 4 rounded to x >= 0 admitted x = 0, 4 below the row. The snap is
+/// at most what the row's feasibility tolerance absorbs, row_snap(a) (Achterberg, Bixby, Gu,
+/// Rothberg & Weninger 2020, sec. 3: a rounded bound must not cut a point feasible within the
+/// tolerance, and must not admit one outside it either). A bound with no row behind it (the
+/// model's own) is snapped in its own units.
+[[nodiscard]] double row_snap(double coefficient) {
+  return std::min(tol::kIntegrality, tol::kPrimalFeasibility / std::fabs(coefficient));
 }
-[[nodiscard]] double round_integer_upper(double value) {
-  return std::floor(value + tol::kIntegrality);
+[[nodiscard]] double round_integer_lower(double value, double snap = tol::kIntegrality) {
+  return std::ceil(value - snap);
+}
+[[nodiscard]] double round_integer_upper(double value, double snap = tol::kIntegrality) {
+  return std::floor(value + snap);
 }
 
 [[nodiscard]] ActivityBounds activity_bounds(const Workspace& work, Index row) {
@@ -1114,7 +1127,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           const auto write = [&](double v, bool upper) {
             if (result.proved_infeasible) return;
             if (!std::isfinite(v) || std::fabs(v) > tol::kPresolveMaxPropagatedBound) return;
-            if (integer) v = upper ? round_integer_upper(v) : round_integer_lower(v);
+            if (integer) {
+              v = upper ? round_integer_upper(v, row_snap(a))
+                        : round_integer_lower(v, row_snap(a));
+            }
             const double old = upper ? work.col_upper[u] : work.col_lower[u];
             const double step =
                 integer ? 0.0 : tol::kPresolveBoundMinStep * std::max(1.0, std::fabs(old));
@@ -1256,8 +1272,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           if (finite(work.row_lower[r])) implied_upper = work.row_lower[r] / coefficient;
         }
         if (model.col_type[c] == VarType::kInteger) {
-          if (finite(implied_lower)) implied_lower = round_integer_lower(implied_lower);
-          if (finite(implied_upper)) implied_upper = round_integer_upper(implied_upper);
+          // The row goes; the rounded bound is all that is left of it (#1319).
+          const double snap = row_snap(coefficient);
+          if (finite(implied_lower)) implied_lower = round_integer_lower(implied_lower, snap);
+          if (finite(implied_upper)) implied_upper = round_integer_upper(implied_upper, snap);
         }
 
         Record record;
@@ -1393,8 +1411,13 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
           if (bxk_lo_finite) implied_k_upper = bxk_lo / b;
         }
         if (model.col_type[uk] == VarType::kInteger) {
-          if (finite(implied_k_lower)) implied_k_lower = round_integer_lower(implied_k_lower);
-          if (finite(implied_k_upper)) implied_k_upper = round_integer_upper(implied_k_upper);
+          // These bounds carry x_elim's box once x_elim is substituted out: x_keep moved by d
+          // moves x_elim by |b / a| d, so the snap is in x_elim's units (#1319).
+          const double snap = row_snap(b / a);
+          if (finite(implied_k_lower))
+            implied_k_lower = round_integer_lower(implied_k_lower, snap);
+          if (finite(implied_k_upper))
+            implied_k_upper = round_integer_upper(implied_k_upper, snap);
         }
 
         Record record;

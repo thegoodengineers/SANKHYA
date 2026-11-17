@@ -27,6 +27,14 @@ constexpr double kExactSumLimit = 9007199254740992.0;  // 2^53
   return std::fabs(v) < kInfinity;
 }
 
+/// How far an integer column's bound implied by a row with coefficient a may be snapped back
+/// to an integer: no further than the row's feasibility tolerance absorbs (#1319; presolve.cpp
+/// says why). A bound snapped by the integrality tolerance alone admitted x = 0 on 4459767 x
+/// >= 4.
+[[nodiscard]] double row_snap(double a) {
+  return std::min(tol::kIntegrality, tol::kPrimalFeasibility / std::fabs(a));
+}
+
 [[nodiscard]] bool exact_integer(double v) {
   return std::fabs(v) <= kExactIntegerLimit && std::floor(v) == v;
 }
@@ -203,8 +211,8 @@ class Tightener {
         const int others = act.min_infinite - (finite(own_min) ? 0 : 1);
         if (others == 0) {
           const double rest = finite(own_min) ? act.min - a * own_min : act.min;
-          changed = (a > 0.0 ? set_upper(j, implied(row_upper, rest, true))
-                             : set_lower(j, implied(row_upper, rest, false))) ||
+          changed = (a > 0.0 ? set_upper(j, implied(row_upper, rest, true), a)
+                             : set_lower(j, implied(row_upper, rest, false), a)) ||
                     changed;
         }
       }
@@ -213,8 +221,8 @@ class Tightener {
         const int others = act.max_infinite - (finite(own_max) ? 0 : 1);
         if (others == 0) {
           const double rest = finite(own_max) ? act.max - a * own_max : act.max;
-          changed = (a > 0.0 ? set_lower(j, implied(row_lower, rest, false))
-                             : set_upper(j, implied(row_lower, rest, true))) ||
+          changed = (a > 0.0 ? set_lower(j, implied(row_lower, rest, false), a)
+                             : set_upper(j, implied(row_lower, rest, true), a)) ||
                     changed;
         }
       }
@@ -222,9 +230,9 @@ class Tightener {
     return changed;
   }
 
-  bool set_upper(Index j, double v) {
+  bool set_upper(Index j, double v, double a) {
     if (!std::isfinite(v) || std::fabs(v) > tol::kPresolveMaxPropagatedBound) return false;
-    if (is_integer(j)) v = std::floor(v + tol::kIntegrality);
+    if (is_integer(j)) v = std::floor(v + row_snap(a));
     const double old = upper(j);
     const bool improves =
         !finite(old) ||
@@ -245,9 +253,9 @@ class Tightener {
     return true;
   }
 
-  bool set_lower(Index j, double v) {
+  bool set_lower(Index j, double v, double a) {
     if (!std::isfinite(v) || std::fabs(v) > tol::kPresolveMaxPropagatedBound) return false;
-    if (is_integer(j)) v = std::ceil(v - tol::kIntegrality);
+    if (is_integer(j)) v = std::ceil(v - row_snap(a));
     const double old = lower(j);
     const bool improves =
         !finite(old) ||
