@@ -922,15 +922,49 @@ Solution BranchAndBound::run() {
     // Semi-continuous columns and sets (#754): an integral point that breaks one of them is
     // not a solution, and is branched on below instead of closing the node.
     const bool fractional = most_fractional(relaxation.col_value) >= 0;
+    // AN INTEGRAL RELAXATION CLOSES ITS NODE ONLY WHEN ITS POINT IS A SOLUTION (#1312).
+    // Pruning by optimality (Land & Doig 1960; Wolsey, "Integer Programming", 1998, sec.
+    // 7.2) needs the node's LP optimum to be feasible for the MILP: then no point of the node
+    // is better. "Integral" here is to integrality_tolerance_, and offer_incumbent() tests
+    // the point with its integer columns rounded (#1187). A binary at 3.3e-7 with a flow of
+    // 7.2e-7 on its row x - 3.06 y <= 0 is integral by the first test and 7.2e-7 infeasible
+    // by the second; closing the node on it anyway threw away the subtree holding the
+    // optimum, and egout (568.101) was proved optimal at 612.29. A refused point is not a
+    // solution, so the node is branched on the column the rounding moved, which fixes it to
+    // an exact integer in one child and moves it away in the other; with no such column, the
+    // node is set aside on its bound like a node LP that failed (#733), so it blocks an
+    // optimality claim instead of disappearing.
+    const auto branch_on_refused_point = [&](const std::vector<double>& x, double bound) {
+      const Index column = off_integer_column(x);
+      if (column >= 0) return column;
+      leave();
+      certificate_refuse("an integral node LP point was refused by the incumbent test");
+      if (unsolved_nodes_ == 0) {
+        logger_.info(
+            "node {}'s relaxation is integral to the tolerance but its rounded point is not "
+            "feasible, and no integer column can be branched on; the node is set aside on its "
+            "bound",
+            nodes_explored_);
+      }
+      ++unsolved_nodes_;
+      unsolved_bound_ = std::min(unsolved_bound_, bound);
+      return Index{-1};
+    };
+    Index refused_integral_column = -1;
     if (!fractional && !sc_sos_violated(relaxation.col_value)) {
-      // Integral relaxation: this node's optimum is a MILP solution.
-      offer_incumbent(relaxation.col_value);
-      if (pool_complete_ && split_integral_node(node_index, relaxation)) {
-        certificate_refuse("pool_complete split a node other than by one disjunction");
+      bool feasible = false;
+      offer_incumbent(relaxation.col_value, &feasible);
+      if (feasible) {
+        // Integral relaxation, and its point a MILP solution: this node's optimum.
+        if (pool_complete_ && split_integral_node(node_index, relaxation)) {
+          certificate_refuse("pool_complete split a node other than by one disjunction");
+          continue;
+        }
+        leave();
         continue;
       }
-      leave();
-      continue;
+      refused_integral_column = branch_on_refused_point(relaxation.col_value, prune_bound);
+      if (refused_integral_column < 0) continue;
     }
 
     // The children start from THIS relaxation's basis, captured before the dives and the
@@ -979,7 +1013,9 @@ Solution BranchAndBound::run() {
     // The branching decision, with the node's bounds still entered: strong branching
     // solves the two children in place and restores the bounds it moved.
     strong_fixes_.clear();
-    const Index branch_column = [&] {
+    Index branch_column = [&] {
+      // A refused integral point (#1312) has no fractional column for a rule to score.
+      if (refused_integral_column >= 0) return refused_integral_column;
       // Strong branching's probe LPs are inside this, which is the point: it is the cost of
       // the branching decision.
       ProfileScope timed(logger_.profiler(), "branching", ProfileMode::kDetailed);
@@ -1004,13 +1040,19 @@ Solution BranchAndBound::run() {
       if (miqp_node_ipm_warm_start_) children_qp_warm = last_qp_warm_;
     }
     if (branch_column == kBranchIntegral && !strong_fixes_.empty()) {
-      offer_incumbent(relaxation.col_value);
-      if (pool_complete_ &&
-          split_integral_node(link_strong_fixes(node_index, prune_bound), relaxation)) {
+      bool feasible = false;
+      offer_incumbent(relaxation.col_value, &feasible);
+      if (feasible) {
+        if (pool_complete_ &&
+            split_integral_node(link_strong_fixes(node_index, prune_bound), relaxation)) {
+          continue;
+        }
+        leave();
         continue;
       }
-      leave();
-      continue;
+      // The same rule as above (#1312); the children below hang under the fixes.
+      branch_column = branch_on_refused_point(relaxation.col_value, prune_bound);
+      if (branch_column < 0) continue;
     }
     if (branch_column < 0) {
       // Cannot happen after the integrality test above, but a rule that returns nothing
@@ -1028,8 +1070,11 @@ Solution BranchAndBound::run() {
     const double floor_value = std::floor(value);
     DomainChange down_change{branch_column, true, floor_value};
     DomainChange up_change{branch_column, false, floor_value + 1.0};
-    double down_fraction = value - floor_value;
-    double up_fraction = floor_value + 1.0 - value;
+    // A branch on a refused integral point (#1312) moves the column by its rounding error,
+    // a fraction that would turn any gain into a huge pseudocost: none is recorded.
+    const bool refused_point = most_fractional(relaxation.col_value) < 0;
+    double down_fraction = refused_point ? 0.0 : value - floor_value;
+    double up_fraction = refused_point ? 0.0 : floor_value + 1.0 - value;
 
     // OBJECTIVE BRANCHING (#418): with the objective a row of the model and its step known,
     // a relaxation whose objective sits strictly between two attainable values is split on

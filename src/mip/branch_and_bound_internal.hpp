@@ -459,8 +459,17 @@ class BranchAndBound {
   /// with a lot of structure it finds the incumbent that makes every later bound useful.
   void try_rounding(const std::vector<double>& x);
 
-  /// Accept a candidate if it is integral, feasible and better than the incumbent.
-  bool offer_incumbent(const std::vector<double>& x);
+  /// Accept a candidate if it is integral, feasible and better than the incumbent. With
+  /// `feasible`, also say whether it was refused as no solution at all (false) or only as
+  /// no better than the incumbent (true): a node closed on its integral relaxation needs
+  /// the difference (#1312).
+  bool offer_incumbent(const std::vector<double>& x, bool* feasible = nullptr);
+
+  /// #1312: the integer column of `x` farthest from an integer, among those the floor
+  /// branch (x <= floor, x >= floor + 1) splits into two children that both differ from the
+  /// node's domain; -1 when there is none. For a relaxation integral to the tolerance whose
+  /// rounded point the incumbent test refused.
+  [[nodiscard]] Index off_integer_column(const std::vector<double>& x) const;
 
   // ---- Primal heuristics (#290, #414), in branch_and_bound_heuristics.cpp ---------------
   void init_heuristics();
