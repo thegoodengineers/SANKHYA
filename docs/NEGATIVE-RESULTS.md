@@ -522,6 +522,48 @@ Both A/Bs were on main at `c288ba1`. Other implicit equalities remain after them
 
 **Next step, not taken:** the same slack LP on the presolved model, which needs the presolved model written out, to name what remains. The CSVs are not committed; they are in the runs' artifacts.
 
+### c-MIR aggregation by variable-bound distance (PR #1296, draft)
+
+PR #1296 changed how the MIR row aggregation picks the column to eliminate. Before, it measured a continuous column's distance to its simple bounds only; with `mir_variable_bound_aggregation` it measures the distance to the closest simple or variable bound at the LP point (Marchand and Wolsey 2001, sec. 2). A flow sitting on its x <= u y is then left for the c-MIR bound substitution. The option also lets a network's flow balance rows start an aggregation.
+
+The target was the fixed-charge networks among the weak-root MIPLIB 2017 models. In run 43876593093 (#1297), p200x1188c's root closed 0.238 of the gap and beasleyC3's 0.637, even with `root_cut_loop_when=always` and 200 cuts a round; HiGHS's root closes 1.000 and 0.968.
+
+Setup: `bench.yml` `ab-option` at `d80f5cb`. Both arms on one runner, 60 s, one thread, 3 seeds.
+
+| gate | run | off: proved / matched / verified | on: proved / matched / verified |
+|---|---|---|---|
+| 25 MIPLIB 2017 targets | 43879990262 | 3 / 13 / 54 | 3 / 13 / 54 |
+| MIPLIB 3, 65 models | 43879997189 | 137 / - / 192 | 134 / - / 191 |
+
+- **Targets:** nothing gained. Only p200x1188c's root moved, from 0.224 to 0.318 of the gap closed.
+- **MIPLIB 3:** bell5 lost its proof on all three seeds. The cuts closed more of its root gap (0.144 to 0.867), but the root loop then kept 6 rounds and 103 cut rows instead of 1 round and 23. The tree went from about 19,000 nodes and a proof in 1.6-3.5 s to about 500,000 nodes at the 60 s limit.
+- **Tier-1:** not run.
+
+The CSVs are not committed because they carry branch stamps (`d80f5cb`). They are in the runs' artifacts (`option-ab-d80f5cb.csv` in each) and on PR #1296's branch.
+
+What would earn it a place: a separator that closes p200x1188c's root, and a loop gate that keeps bell5's rounds from costing its tree. The second is the root-loop gate's call (#1278), not this option's.
+
+### Flow path cuts by a walk along switched outflows (PR #1303, closed)
+
+`flow_cover_path_walk` extends the flow cover aggregation, which eliminates only unswitched columns. When none is left, the walk continues along the switched outflow carrying the most LP flow into the next node's balance row, and separates the flow cover of the summed path balance. These are the path inequalities of Van Roy and Wolsey (1985). The target was p200x1188c: HiGHS's root closes it, ours closes about 0.22 of the gap.
+
+Setup: `bench.yml` `ab-option` at `31860ca`. Both arms on one runner, 60 s, one thread, 3 seeds.
+
+| gate | run | off: proved / matched / verified | on: proved / matched / verified |
+|---|---|---|---|
+| 25 MIPLIB 2017 targets | 43912240097 | 0 / 10 / 54 | 0 / 10 / 54 |
+| MIPLIB 3, 65 models | 43912248011 | 139 / 140 / 192 | 139 / 140 / 192 |
+
+- **Counts:** nothing gained and nothing lost in either gate. This targets runner (an EPYC 7763) proved none of the 25 in either arm.
+- **Shifted geometric mean** where both arms prove MIPLIB 3 (139 runs): 2.28 s off, 2.25 s on.
+- **p200x1188c's root did not move:** 0.217-0.224 of the gap closed off, 0.215-0.218 on.
+- **beasleyC3** gained 0.005-0.007 on every seed.
+- **Root gap closed moved by up to 0.08 either way on** h80x6320d, vpm2, mod011, fixnet6, egout and modglob. Their round counts changed too.
+
+The CSVs are not committed because they carry branch stamps (`31860ca`). They are in the runs' artifacts (`option-ab-31860ca.csv` in each) and on PR #1303's branch.
+
+What would earn it a place: a gain on a fixed-charge network's root. p200x1188c's weakness is not missing path aggregates. It is not big-M arc capacities either: `presolve_coefficient_tightening` leaves its root LP and root bound unchanged (run 43995480555). That option also gives wrong `optimal` answers on egout and modglob (#1312).
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
