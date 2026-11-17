@@ -711,14 +711,23 @@ pure price move leaves primal feasible. The same run is `sankhya_solve_scenarios
 `Model.solve_scenarios([[("cost", j, price)], [("rhs", i, demand)]])` in Python, each
 returning per scenario the solution, whether it was verified, and its safe bound.
 
-On a GitHub-hosted runner at `f2c20f1` (bench run 43847211319,
-`bench/results/scenarios-f2c20f1.csv` and `scenario-summary-f2c20f1.csv`, 4 vCPU), all 3990
-scenario answers passed `tools/verify_solution.py` on their own written models and agreed with
-their single solves to 1e-8 relative. On the 365-day refinery year (15,695 rows), 100 demand
-forecasts took 3.76 s with the base solve against 71.88 s for 100 single solves (19.1x), and
-100 crude price sets 34.43 s against 74.08 s (2.15x); restarting from the previous scenario
-(`scenario_start=previous`) took 3.27 s and 27.36 s. The primal restart for the price sets
-lost to single solves (474.03 s), as #773 measured, so the dual restart stays the default.
+On `main` at `675a454` (bench run 43921230857, `bench/results/scenarios-675a454.csv` and
+`bench/results/scenario-summary-675a454.csv`, a 4 vCPU GitHub-hosted runner), all 3990 scenario
+answers were verified four ways:
+
+- by the in-process KKT check, or by the Farkas certificate for an infeasible answer;
+- by `tools/verify_solution.py` on the scenario's own written model;
+- by a check, with the verifier's MPS reader, that the written model is the base plus that
+  scenario's overrides;
+- by agreement with a separate single solve to 1e-8 relative.
+
+On the 365-day refinery year (15,695 rows), 100 demand forecasts took 5.34 s, base solve
+included, against 103.09 s for 100 single solves (19.3x), and 100 crude price sets took
+49.33 s against 107.40 s (2.18x). Restarting each scenario from the one before it
+(`scenario_start=previous`) took 4.62 s and 38.60 s. The primal restart a price move invites
+lost to the single solves on both sets (670.64 s for the price sets), as #773 had measured, so
+the dual restart stays the default. On the crude blend, 1000 price sets took 0.023 s against
+0.081 s.
 
 `sankhya engines` lists every engine in the build: the classes it solves, how it is reached
 (`algorithm=<name>`, `algorithm=pdhg` with `--gpu`, or the problem class alone), what its
