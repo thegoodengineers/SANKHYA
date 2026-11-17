@@ -156,7 +156,7 @@ Closed: #411, #412, #413, #415, #417, #419, #221, #358, #446, #447, #448, #456, 
 | #473 | proximal regularization behind `ipm_proximal_regularization` (#657), its A/B on `main` (#1060, #1067) | pilot.ja is lost on Netlib with the option on; irish-electricity unsolved either way |
 | #477 | the learned tree behind `algorithm_selection=learned` (#941), worse than the rules on Netlib | a person's review of the four branches |
 | #508 | Feasibility Jump on the device, off by default (#679), measured on a V100 (#734) | the A/B that would earn it a default |
-| #514 | spatial branch and bound (#637) and its bound certificate (#978); 32 of 39 pooling runs optimal and verified | 7 runs end `feasible`; no pooling CSV after #978 records a checked certificate |
+| #514 | spatial branch and bound (#637), its bound certificate (#978), reformulation-linearization rows on by default (#1283, #1291) and root OBBT behind `global_obbt` (#1290); 38 of 39 pooling runs optimal and verified, every one of the 39 certificates checked (`bench/results/pooling-1659c8b.csv`, `pooling-certificate-1659c8b.csv`) | adhya3 (P-formulation) ends `feasible` with the gap open |
 | #535 | the TSan job covers the race, the KKT check, the SpMV and the decomposition (#659) and the threaded Cholesky (#1035), green on `main` | no required check is enforced |
 | #414 | a switch and a counted budget per heuristic (#425); FJ and parity on by default after their A/Bs | the per-heuristic A/B of the #378 four and the dives; 0 of the 5 named instances at the optimum |
 | #418 | restarts and objective branching, off, with their A/Bs (#970) | no bound moved on b-ball, opt1217, rlp1 or noswot |
