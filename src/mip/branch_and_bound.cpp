@@ -235,8 +235,14 @@ void BranchAndBound::append_symmetry_rows() {
 }
 
 Solution BranchAndBound::run() {
-  init_heuristics();
-  detect_objective_integrality();
+  // The regions below (profile=detailed, a pointer test otherwise) name the search's work
+  // outside the node LPs, cuts, heuristics and branching, so a run's exclusive `engine` time
+  // splits by phase too.
+  {
+    ProfileScope timed(logger_.profiler(), "search setup", ProfileMode::kDetailed);
+    init_heuristics();
+    detect_objective_integrality();
+  }
   // Reduced-cost fixing and restarts (#418), both off unless asked for.
   reduced_cost_fixing_ = options_.get_bool("mip_reduced_cost_fixing");
   // A restart re-roots the search on the relaxation (#754 keeps it to the plain case).
@@ -385,6 +391,7 @@ Solution BranchAndBound::run() {
       // rows exist to cut all but one of each orbit away.
       logger_.info("pool_complete: formulation symmetry is off (mip_symmetry)");
     } else if (shared_ == nullptr) {
+      ProfileScope timed(logger_.profiler(), "symmetry", ProfileMode::kDetailed);
       append_symmetry_rows();
     } else if (!shared_->symmetry_pairs().empty()) {
       append_ordering_rows(&working_, shared_->symmetry_pairs());
@@ -399,9 +406,12 @@ Solution BranchAndBound::run() {
   // the row bounds feed the multipliers, and branching changes none of them.
   // A parallel worker (#222) takes the scaling the driver computed once: the matrix is the
   // same in every subtree, so it is not rebuilt for each one.
-  scaling_ = shared_ != nullptr && shared_->scaling() != nullptr
-                 ? *shared_->scaling()
-                 : build_node_scaling(working_, node_options_);
+  {
+    ProfileScope timed(logger_.profiler(), "node scaling", ProfileMode::kDetailed);
+    scaling_ = shared_ != nullptr && shared_->scaling() != nullptr
+                   ? *shared_->scaling()
+                   : build_node_scaling(working_, node_options_);
+  }
   probe_options_ = node_options_;
   probe_options_.set_int("iteration_limit", tol::kStrongBranchingIterations);
   // #502, each off by default until an A/B on main. The heap is one worker's: a parallel
@@ -421,8 +431,11 @@ Solution BranchAndBound::run() {
                original_.num_rows(), original_.num_cols(), integer_columns_.size());
   // Feasibility Jump before any LP (#506), when asked for: an incumbent now prunes from
   // the first node.
-  run_feasibility_jump(nullptr);
-  run_parity();  // #841, off by default
+  {
+    ProfileScope timed(logger_.profiler(), "feasibility jump", ProfileMode::kDetailed);
+    run_feasibility_jump(nullptr);
+    run_parity();  // #841, off by default
+  }
 
   // THE ROOT STARTS WITH NO BOUND PROVED (#289). TreeNode::bound is 0.0 by default, which
   // is a placeholder for "inherited from the parent" and the root has no parent. A search
@@ -619,11 +632,16 @@ Solution BranchAndBound::run() {
     // costs now rule out, and what the learned conflicts imply at the global bounds; and if
     // that fixed enough of the integer columns, throw the tree away and re-solve the root on
     // the tightened bounds.
-    if (fix_by_reduced_cost() + fix_by_conflicts() > 0 && restart_due()) {
-      certificate_refuse("the search restarted and discarded its tree");
-      restart_search();
-      continue;
+    bool restarted = false;
+    {
+      ProfileScope timed(logger_.profiler(), "reduced-cost fixing", ProfileMode::kDetailed);
+      if (fix_by_reduced_cost() + fix_by_conflicts() > 0 && restart_due()) {
+        certificate_refuse("the search restarted and discarded its tree");
+        restart_search();
+        restarted = true;
+      }
     }
+    if (restarted) continue;
 
     // Which node to take next is the configured policy's decision (#293), and only the
     // order it decides: the tree, the bounds and the incumbent test are the same either way.
@@ -657,7 +675,10 @@ Solution BranchAndBound::run() {
     debug_node_ = node_index;
     const bool debug_inside = debug_node_contains();  // #500: false with no debug solution
 
-    const bool propagated = propagate();
+    const bool propagated = [&] {
+      ProfileScope timed(logger_.profiler(), "propagation", ProfileMode::kDetailed);
+      return propagate();
+    }();
     if (debug_inside) debug_after_propagation(propagated);
     if (!propagated) {
       const bool by_conflict = conflict_pruned_;
@@ -701,6 +722,7 @@ Solution BranchAndBound::run() {
     // re-solved, until no pooled cut is violated. Each pass brings back at least one cut and
     // none is aged out again inside the loop, so it ends within the pool's size.
     if (cut_pooling_ && relaxation.status == SolveStatus::kOptimal) {
+      ProfileScope timed(logger_.profiler(), "cut pool", ProfileMode::kDetailed);
       while (cut_removal_ ? readd_pooled_cuts(&relaxation)
                           : reactivate_pooled_cuts(&relaxation)) {
         if (debug_inside) debug_after_node_lp(relaxation);
@@ -817,15 +839,22 @@ Solution BranchAndBound::run() {
     }
     // The root relaxation after cuts is what reduced-cost fixing (#418) reasons from: its
     // reduced costs bound what every integer solution must pay to move a column.
-    if (node_index == 0) remember_root_relaxation(relaxation);
-    if (node_index == 0) batch_remember_root(relaxation);  // #520's starting point
+    if (node_index == 0) {
+      ProfileScope timed(logger_.profiler(), "root relaxation kept", ProfileMode::kDetailed);
+      remember_root_relaxation(relaxation);
+      batch_remember_root(relaxation);  // #520's starting point
+    }
     // Cuts below the root (#221): shallow nodes only, on the global bounds, kept for the
     // whole tree. The node's bound is taken after the round, so a cut that moved it
     // counts for pruning and for the pseudocosts alike.
     if (node_index != 0 && node.depth <= tree_cut_depth_ && !quadratic_) {
+      ProfileScope timed(logger_.profiler(), "tree cuts", ProfileMode::kDetailed);
       tree_cut_round(node.depth, &relaxation);
     }
-    age_cut_rows(&relaxation);
+    {
+      ProfileScope timed(logger_.profiler(), "cut aging", ProfileMode::kDetailed);
+      age_cut_rows(&relaxation);
+    }
     // miqp_node_ipm_warm_start (#494, #893): the save point of the solve that produced the
     // relaxation as it now stands, taken before the heuristics below can solve other QPs.
     qp::QpIpmWarmStart node_qp_warm;
@@ -1100,17 +1129,20 @@ Solution BranchAndBound::run() {
         nodes_explored_);
   }
 
-  report_conflicts();
-  report_sc_sos();  // #754
-  report_safe_bounds();
-  report_miqp_ipm();
-  report_branching_fixpoint();
-  report_batch();
-  finish_certificate();  // #518: written here, whatever status the search ends in
-  // A search stopped by a limit is exactly the one worth resuming (#287).
-  // Not with a node set aside unsolved (#733): the checkpoint holds the open list only, and a
-  // resumed search would lose the bound that node still holds.
-  if (limit_hit && !open_.empty() && unsolved_nodes_ == 0) save_checkpoint();
+  {
+    ProfileScope timed(logger_.profiler(), "search report", ProfileMode::kDetailed);
+    report_conflicts();
+    report_sc_sos();  // #754
+    report_safe_bounds();
+    report_miqp_ipm();
+    report_branching_fixpoint();
+    report_batch();
+    finish_certificate();  // #518: written here, whatever status the search ends in
+    // A search stopped by a limit is exactly the one worth resuming (#287).
+    // Not with a node set aside unsolved (#733): the checkpoint holds the open list only, and
+    // a resumed search would lose the bound that node still holds.
+    if (limit_hit && !open_.empty() && unsolved_nodes_ == 0) save_checkpoint();
+  }
   if (shared_ != nullptr) leave_shared(limit_hit, solution.stopped_by, gap_target_met);
 
   // ---- Report ------------------------------------------------------------------------------
@@ -1372,8 +1404,10 @@ Solution solve_branch_and_bound(const Model& given, const Options& requested, Lo
   // A certificate (#518) proves the answer for the rows as given, so they are not rewritten.
   const bool certify = !options.get_string("write_certificate").empty();
   Model tightened = model;
-  const RowTightening effect =
-      certify ? RowTightening{} : tighten_integral_rows(&tightened, logger);
+  const RowTightening effect = [&] {
+    ProfileScope timed(logger.profiler(), "row tightening", ProfileMode::kDetailed);
+    return certify ? RowTightening{} : tighten_integral_rows(&tightened, logger);
+  }();
   // OBBT (#515): tighten column bounds by solving min/max x_j LPs before the
   // search starts. Runs on the copy so the caller's model is unchanged.
   const ObbtResult obbt_result = (!certify && options.get_bool("mip_obbt"))
