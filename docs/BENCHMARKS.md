@@ -272,8 +272,8 @@ Every instance in Netlib's summary table. Both tiers above are defined by a row 
 makes them the easier half of the library by construction; this is the number Phase 6's
 ">= 95% of Netlib" exit criterion is measured against, and the one the README quotes.
 
-Source CSV: `bench/results/netlib-full-945cb4f.csv`  
-Commit `945cb4f` · machine `github-actions ubuntu-latest 4 vCPU AMD EPYC 7763 64-Core Processor 15 GiB RAM` · generated 2026-10-19T05:54:35+00:00
+Source CSV: `bench/results/netlib-full-1659c8b.csv`  
+Commit `1659c8b` · machine `github-actions ubuntu-24.04 4 vCPU Intel(R) Xeon(R) 6975P-C 15 GiB RAM` · generated 2026-11-16T13:57:36+00:00
 
 **83 of 94 instances in this working set** matched their published optimum to a relative 1e-6 **and** passed independent verification by `tools/verify_solution.py`.
 
@@ -289,105 +289,105 @@ Coverage: this run used **94 of the 97 instances** Netlib publishes an optimal v
 
 | instance | rows | cols | status | our objective | published optimum | rel. error | iters | time (s) | verified |
 |---|---:|---:|---|---:|---:|---:|---:|---:|:--:|
-| `25fv47` | 821 | 1571 | optimal | 5.5018458883e+03 | 5.5018458883e+03 | 2.4e-12 | 2439 | 1.012 | yes |
-| `80bau3b` | 2262 | 9799 | optimal | 9.8722419241e+05 | 9.8723216072e+05 | 8.1e-06 | 3379 | 0.199 | yes |
-| `adlittle` | 56 | 97 | optimal | 2.2549496316e+05 | 2.2549496316e+05 | 1.1e-11 | 76 | 0.004 | yes |
-| `afiro` | 27 | 32 | optimal | -4.6475314286e+02 | -4.6475314286e+02 | 6.1e-12 | 13 | 0.003 | yes |
-| `agg` | 488 | 163 | optimal | -3.5991767287e+07 | -3.5991767287e+07 | 1.2e-11 | 159 | 0.008 | yes |
-| `agg2` | 516 | 302 | optimal | -2.0239252356e+07 | -2.0239252356e+07 | 1.1e-12 | 173 | 0.009 | yes |
-| `agg3` | 516 | 302 | optimal | 1.0312115935e+07 | 1.0312115935e+07 | 8.7e-12 | 168 | 0.009 | yes |
-| `bandm` | 305 | 472 | optimal | -1.5862801845e+02 | -1.5862801845e+02 | 7.6e-13 | 426 | 0.015 | yes |
-| `beaconfd` | 173 | 262 | optimal | 3.3592485807e+04 | 3.3592485807e+04 | 6.0e-12 | 116 | 0.007 | yes |
-| `blend` | 74 | 83 | optimal | -3.0812149846e+01 | -3.0812149846e+01 | 5.6e-12 | 80 | 0.004 | yes |
-| `bnl1` | 643 | 1175 | optimal | 1.9776295615e+03 | 1.9776292856e+03 | 1.4e-07 | 908 | 0.037 | yes |
-| `bnl2` | 2324 | 3489 | optimal | 1.8112365404e+03 | 1.8112365404e+03 | 2.3e-11 | 1567 | 0.263 | yes |
-| `boeing1` | 351 | 384 | optimal | -3.3521356751e+02 | -3.3521356751e+02 | 8.6e-12 | 407 | 0.012 | yes |
-| `boeing2` | 166 | 143 | optimal | -3.1501872802e+02 | -3.1501872802e+02 | 1.5e-11 | 195 | 0.005 | yes |
-| `bore3d` | 233 | 315 | optimal | 1.3730803942e+03 | 1.3730803942e+03 | 6.2e-12 | 135 | 0.006 | yes |
-| `brandy` | 220 | 249 | optimal | 1.5185098965e+03 | 1.5185098965e+03 | 7.8e-12 | 245 | 0.026 | yes |
-| `capri` | 271 | 353 | optimal | 2.6900129138e+03 | 2.6900129138e+03 | 1.2e-11 | 266 | 0.009 | yes |
-| `cycle` | 1903 | 2857 | optimal | -5.2263930249e+00 | -5.2263930249e+00 | 1.1e-12 | 299 | 0.039 | yes |
-| `czprob` | 929 | 3523 | optimal | 2.1851966989e+06 | 2.1851966989e+06 | 2.0e-11 | 822 | 0.038 | yes |
-| `d2q06c` | 2171 | 5167 | optimal | 1.2278421081e+05 | 1.2278423615e+05 | 2.1e-07 | 4905 | 15.120 | yes |
-| `d6cube` | 415 | 6184 | optimal | 3.1549166667e+02 | 3.1549166667e+02 | 1.1e-11 | 353 | 0.067 | yes |
-| `degen2` | 444 | 534 | optimal | -1.4351780000e+03 | -1.4351780000e+03 | 0.0e+00 | 434 | 0.019 | yes |
-| `degen3` | 1503 | 1818 | optimal | -9.8729400000e+02 | -9.8729400000e+02 | 4.6e-16 | 1901 | 0.194 | yes |
-| `dfl001` | 6071 | 12230 | optimal | 1.1266396047e+07 | 1.1266400000e+07 | 3.5e-07 | 23941 | 13.364 | yes |
-| `e226` | 223 | 282 | optimal | -1.1638929066e+01 | -1.8751929066e+01 | 3.8e-01 | 311 | 0.012 | yes |
-| `etamacro` | 400 | 688 | optimal | -7.5571523331e+02 | -7.5571521774e+02 | 2.1e-08 | 544 | 0.015 | yes |
-| `fffff800` | 524 | 854 | optimal | 5.5567956482e+05 | 5.5567961165e+05 | 8.4e-08 | 607 | 0.022 | yes |
-| `finnis` | 497 | 614 | optimal | 1.7279106560e+05 | 1.7279096547e+05 | 5.8e-07 | 361 | 0.029 | yes |
-| `fit1d` | 24 | 1026 | optimal | -9.1463780924e+03 | -9.1463780924e+03 | 2.3e-12 | 45 | 0.013 | yes |
-| `fit1p` | 627 | 1677 | optimal | 9.1463780924e+03 | 9.1463780924e+03 | 2.3e-12 | 802 | 0.064 | yes |
-| `fit2d` | 25 | 10500 | optimal | -6.8464293294e+04 | -6.8464293294e+04 | 2.5e-12 | 126 | 0.141 | yes |
-| `fit2p` | 3000 | 13525 | optimal | 6.8464293294e+04 | 6.8464293232e+04 | 9.0e-10 | 4975 | 2.158 | yes |
-| `forplan` | 161 | 421 | optimal | -6.6421896127e+02 | -6.6421873953e+02 | 3.3e-07 | 244 | 0.010 | yes |
-| `ganges` | 1309 | 1681 | optimal | -1.0958573613e+05 | -1.0958636356e+05 | 5.7e-06 | 1156 | 0.028 | yes |
-| `gfrd-pnc` | 616 | 1092 | optimal | 6.9022359995e+06 | 6.9022359995e+06 | 7.1e-12 | 472 | 0.015 | yes |
-| `greenbea` | 2392 | 5405 | optimal | -7.2555248130e+07 | -7.2462405908e+07 | 1.3e-03 | 5393 | 40.066 | yes |
-| `greenbeb` | 2392 | 5405 | optimal | -4.3022602612e+06 | -4.3021476065e+06 | 2.6e-05 | 5429 | 38.003 | yes |
-| `grow15` | 300 | 645 | optimal | -1.0687094129e+08 | -1.0687094129e+08 | 3.3e-11 | 983 | 0.041 | yes |
-| `grow22` | 440 | 946 | optimal | -1.6083433648e+08 | -1.6083433648e+08 | 1.6e-11 | 1675 | 0.088 | yes |
-| `grow7` | 140 | 301 | optimal | -4.7787811815e+07 | -4.7787811815e+07 | 6.0e-12 | 446 | 0.013 | yes |
-| `israel` | 174 | 142 | optimal | -8.9664482186e+05 | -8.9664482186e+05 | 3.4e-12 | 130 | 0.007 | yes |
-| `kb2` | 43 | 41 | optimal | -1.7499001299e+03 | -1.7499001299e+03 | 3.5e-12 | 49 | 0.003 | yes |
-| `lotfi` | 153 | 308 | optimal | -2.5264706062e+01 | -2.5264706062e+01 | 4.7e-12 | 185 | 0.007 | yes |
-| `maros` | 846 | 1443 | optimal | -5.8063743701e+04 | -5.8063743701e+04 | 2.2e-12 | 1254 | 0.441 | yes |
-| `maros-r7` | 3136 | 9408 | optimal | 1.4971851665e+06 | 1.4971851665e+06 | 1.4e-11 | 28 | 7.154 | yes |
-| `modszk1` | 687 | 1620 | optimal | 3.2061972906e+02 | 3.2061972906e+02 | 1.3e-11 | 649 | 0.152 | yes |
-| `nesm` | 662 | 2923 | optimal | 1.4076036488e+07 | 1.4076073035e+07 | 2.6e-06 | 2094 | 0.124 | yes |
-| `perold` | 625 | 1376 | optimal | -9.3807552782e+03 | -9.3807580773e+03 | 3.0e-07 | 1505 | 1.031 | yes |
-| `pilot` | 1441 | 3652 | optimal | -5.5748972929e+02 | -5.5740430007e+02 | 1.5e-04 | 3487 | 1.320 | yes |
-| `pilot.ja` | 940 | 1988 | optimal | -6.1131364656e+03 | -6.1131344111e+03 | 3.4e-07 | 1459 | 1.964 | yes |
-| `pilot.we` | 722 | 2789 | optimal | -2.7201075328e+06 | -2.7201027439e+06 | 1.8e-06 | 2667 | 0.185 | yes |
-| `pilot4` | 410 | 1000 | optimal | -2.5811392589e+03 | -2.5811392641e+03 | 2.0e-09 | 641 | 0.466 | yes |
-| `pilot87` | 2030 | 4883 | optimal | 3.0171034818e+02 | 3.0171072827e+02 | 1.3e-06 | 18887 | 47.798 | yes |
-| `pilotnov` | 975 | 2172 | optimal | -4.4972761882e+03 | -4.4972761882e+03 | 4.2e-12 | 1063 | 0.077 | yes |
-| `recipe` | 91 | 180 | optimal | -2.6661600000e+02 | -2.6661600000e+02 | 1.1e-15 | 42 | 0.004 | yes |
-| `sc105` | 105 | 103 | optimal | -5.2202061212e+01 | -5.2202061212e+01 | 5.6e-12 | 95 | 0.004 | yes |
-| `sc205` | 205 | 203 | optimal | -5.2202061212e+01 | -5.2202061212e+01 | 5.6e-12 | 217 | 0.006 | yes |
-| `sc50a` | 50 | 48 | optimal | -6.4575077059e+01 | -6.4575077059e+01 | 6.7e-12 | 42 | 0.003 | yes |
-| `sc50b` | 50 | 48 | optimal | -7.0000000000e+01 | -7.0000000000e+01 | 2.0e-16 | 42 | 0.003 | yes |
-| `scagr25` | 471 | 500 | optimal | -1.4753433061e+07 | -1.4753433061e+07 | 1.6e-11 | 403 | 0.011 | yes |
-| `scagr7` | 129 | 140 | optimal | -2.3313898243e+06 | -2.3313892548e+06 | 2.4e-07 | 134 | 0.005 | yes |
-| `scfxm1` | 330 | 457 | optimal | 1.8416759028e+04 | 1.8416759028e+04 | 1.9e-11 | 411 | 0.034 | yes |
-| `scfxm2` | 660 | 914 | optimal | 3.6660261565e+04 | 3.6660261565e+04 | 3.3e-14 | 857 | 0.105 | yes |
-| `scfxm3` | 990 | 1371 | optimal | 5.4901254550e+04 | 5.4901254550e+04 | 4.5e-12 | 1276 | 0.161 | yes |
-| `scorpion` | 388 | 358 | optimal | 1.8781248227e+03 | 1.8781248227e+03 | 2.0e-11 | 241 | 0.042 | yes |
-| `scrs8` | 490 | 1169 | optimal | 9.0429695380e+02 | 9.0429998619e+02 | 3.4e-06 | 536 | 0.038 | yes |
-| `scsd1` | 77 | 760 | optimal | 8.6666666743e+00 | 8.6666666743e+00 | 3.9e-12 | 95 | 0.007 | yes |
-| `scsd6` | 147 | 1350 | optimal | 5.0500000078e+01 | 5.0500000078e+01 | 3.8e-13 | 224 | 0.011 | yes |
-| `scsd8` | 397 | 2750 | optimal | 9.0499999993e+02 | 9.0499999993e+02 | 5.0e-12 | 786 | 0.036 | yes |
-| `sctap1` | 300 | 480 | optimal | 1.4122500000e+03 | 1.4122500000e+03 | 0.0e+00 | 274 | 0.008 | yes |
-| `sctap2` | 1090 | 1880 | optimal | 1.7248071429e+03 | 1.7248071429e+03 | 2.5e-11 | 727 | 0.019 | yes |
-| `sctap3` | 1480 | 2480 | optimal | 1.4240000000e+03 | 1.4240000000e+03 | 0.0e+00 | 944 | 0.026 | yes |
-| `seba` | 515 | 1028 | optimal | 1.5711600000e+04 | 1.5711600000e+04 | 0.0e+00 | 440 | 0.011 | yes |
-| `share1b` | 117 | 225 | optimal | -7.6589318579e+04 | -7.6589318579e+04 | 2.4e-12 | 129 | 0.005 | yes |
-| `share2b` | 96 | 79 | optimal | -4.1573224074e+02 | -4.1573224074e+02 | 3.4e-12 | 123 | 0.005 | yes |
-| `shell` | 536 | 1775 | optimal | 1.2088253460e+09 | 1.2088253460e+09 | 0.0e+00 | 405 | 0.015 | yes |
-| `ship04l` | 402 | 2118 | optimal | 1.7933245380e+06 | 1.7933245380e+06 | 1.7e-11 | 457 | 0.014 | yes |
-| `ship04s` | 402 | 1458 | optimal | 1.7987147004e+06 | 1.7987147004e+06 | 2.5e-11 | 309 | 0.011 | yes |
-| `ship08l` | 778 | 4283 | optimal | 1.9090552114e+06 | 1.9090552114e+06 | 5.7e-12 | 764 | 0.028 | yes |
-| `ship08s` | 778 | 2387 | optimal | 1.9200982105e+06 | 1.9200982105e+06 | 1.8e-11 | 434 | 0.015 | yes |
-| `ship12l` | 1151 | 5427 | optimal | 1.4701879193e+06 | 1.4701879193e+06 | 2.0e-11 | 1100 | 0.038 | yes |
-| `ship12s` | 1151 | 2763 | optimal | 1.4892361344e+06 | 1.4892361344e+06 | 4.1e-12 | 572 | 0.018 | yes |
-| `sierra` | 1227 | 2036 | optimal | 1.5394362184e+07 | 1.5394362184e+07 | 2.4e-11 | 583 | 0.021 | yes |
-| `stair` | 356 | 467 | optimal | -2.5126695119e+02 | -2.5126695119e+02 | 1.2e-11 | 405 | 0.357 | yes |
-| `standata` | 359 | 1075 | optimal | 1.2576995000e+03 | 1.2576995000e+03 | 1.8e-16 | 52 | 0.008 | yes |
-| `standmps` | 467 | 1075 | optimal | 1.4060175000e+03 | 1.4060175000e+03 | 1.6e-16 | 198 | 0.010 | yes |
-| `stocfor1` | 117 | 111 | optimal | -4.1131976219e+04 | -4.1131976219e+04 | 1.1e-11 | 114 | 0.005 | yes |
-| `stocfor2` | 2157 | 2031 | optimal | -3.9024408538e+04 | -3.9024408538e+04 | 3.0e-12 | 2057 | 0.105 | yes |
-| `stocfor3` | 16675 | 15695 | optimal | -3.9976783944e+04 | -3.9976661576e+04 | 3.1e-06 | 15927 | 3.933 | yes |
-| `truss` | 1000 | 8806 | optimal | 4.5881584719e+05 | 4.5881584719e+05 | 9.6e-12 | 19406 | 2.509 | yes |
-| `tuff` | 333 | 587 | optimal | 2.9214776509e-01 | 2.9214776509e-01 | 3.6e-12 | 186 | 0.010 | yes |
-| `vtp.base` | 198 | 203 | optimal | 1.2983146246e+05 | 1.2983146246e+05 | 1.0e-11 | 161 | 0.006 | yes |
-| `wood1p` | 244 | 2594 | optimal | 1.4429024116e+00 | 1.4429024116e+00 | 1.8e-11 | 223 | 0.068 | yes |
-| `woodw` | 1098 | 8405 | optimal | 1.3044763331e+00 | 1.3044763331e+00 | 1.2e-11 | 2119 | 0.239 | yes |
+| `25fv47` | 821 | 1571 | optimal | 5.5018458883e+03 | 5.5018458883e+03 | 2.4e-12 | 2016 | 0.511 | yes |
+| `80bau3b` | 2262 | 9799 | optimal | 9.8722419241e+05 | 9.8723216072e+05 | 8.1e-06 | 3495 | 0.157 | yes |
+| `adlittle` | 56 | 97 | optimal | 2.2549496316e+05 | 2.2549496316e+05 | 1.1e-11 | 77 | 0.003 | yes |
+| `afiro` | 27 | 32 | optimal | -4.6475314286e+02 | -4.6475314286e+02 | 6.1e-12 | 11 | 0.002 | yes |
+| `agg` | 488 | 163 | optimal | -3.5991767287e+07 | -3.5991767287e+07 | 1.2e-11 | 112 | 0.005 | yes |
+| `agg2` | 516 | 302 | optimal | -2.0239252356e+07 | -2.0239252356e+07 | 1.1e-12 | 173 | 0.006 | yes |
+| `agg3` | 516 | 302 | optimal | 1.0312115935e+07 | 1.0312115935e+07 | 8.7e-12 | 168 | 0.006 | yes |
+| `bandm` | 305 | 472 | optimal | -1.5862801845e+02 | -1.5862801845e+02 | 7.6e-13 | 319 | 0.009 | yes |
+| `beaconfd` | 173 | 262 | optimal | 3.3592485807e+04 | 3.3592485807e+04 | 6.0e-12 | 101 | 0.005 | yes |
+| `blend` | 74 | 83 | optimal | -3.0812149846e+01 | -3.0812149846e+01 | 5.6e-12 | 67 | 0.003 | yes |
+| `bnl1` | 643 | 1175 | optimal | 1.9776295615e+03 | 1.9776292856e+03 | 1.4e-07 | 812 | 0.024 | yes |
+| `bnl2` | 2324 | 3489 | optimal | 1.8112365404e+03 | 1.8112365404e+03 | 2.3e-11 | 1106 | 0.163 | yes |
+| `boeing1` | 351 | 384 | optimal | -3.3521356751e+02 | -3.3521356751e+02 | 8.6e-12 | 402 | 0.010 | yes |
+| `boeing2` | 166 | 143 | optimal | -3.1501872802e+02 | -3.1501872802e+02 | 1.5e-11 | 195 | 0.004 | yes |
+| `bore3d` | 233 | 315 | optimal | 1.3730803942e+03 | 1.3730803942e+03 | 6.2e-12 | 51 | 0.004 | yes |
+| `brandy` | 220 | 249 | optimal | 1.5185098965e+03 | 1.5185098965e+03 | 7.8e-12 | 154 | 0.017 | yes |
+| `capri` | 271 | 353 | optimal | 2.6900129138e+03 | 2.6900129138e+03 | 1.2e-11 | 191 | 0.005 | yes |
+| `cycle` | 1903 | 2857 | optimal | -5.2263930249e+00 | -5.2263930249e+00 | 1.1e-12 | 245 | 0.028 | yes |
+| `czprob` | 929 | 3523 | optimal | 2.1851966989e+06 | 2.1851966989e+06 | 2.0e-11 | 774 | 0.027 | yes |
+| `d2q06c` | 2171 | 5167 | optimal | 1.2278421081e+05 | 1.2278423615e+05 | 2.1e-07 | 4772 | 5.541 | yes |
+| `d6cube` | 415 | 6184 | optimal | 3.1549166667e+02 | 3.1549166667e+02 | 1.1e-11 | 353 | 0.053 | yes |
+| `degen2` | 444 | 534 | optimal | -1.4351780000e+03 | -1.4351780000e+03 | 0.0e+00 | 434 | 0.015 | yes |
+| `degen3` | 1503 | 1818 | optimal | -9.8729400000e+02 | -9.8729400000e+02 | 3.5e-16 | 1797 | 0.140 | yes |
+| `dfl001` | 6071 | 12230 | optimal | 1.1266396047e+07 | 1.1266400000e+07 | 3.5e-07 | 17112 | 5.199 | yes |
+| `e226` | 223 | 282 | optimal | -1.1638929066e+01 | -1.8751929066e+01 | 3.8e-01 | 300 | 0.009 | yes |
+| `etamacro` | 400 | 688 | optimal | -7.5571523331e+02 | -7.5571521774e+02 | 2.1e-08 | 508 | 0.012 | yes |
+| `fffff800` | 524 | 854 | optimal | 5.5567956482e+05 | 5.5567961165e+05 | 8.4e-08 | 486 | 0.015 | yes |
+| `finnis` | 497 | 614 | optimal | 1.7279106560e+05 | 1.7279096547e+05 | 5.8e-07 | 343 | 0.018 | yes |
+| `fit1d` | 24 | 1026 | optimal | -9.1463780924e+03 | -9.1463780924e+03 | 2.3e-12 | 45 | 0.009 | yes |
+| `fit1p` | 627 | 1677 | optimal | 9.1463780924e+03 | 9.1463780924e+03 | 2.3e-12 | 802 | 0.044 | yes |
+| `fit2d` | 25 | 10500 | optimal | -6.8464293294e+04 | -6.8464293294e+04 | 2.5e-12 | 126 | 0.096 | yes |
+| `fit2p` | 3000 | 13525 | optimal | 6.8464293294e+04 | 6.8464293232e+04 | 9.0e-10 | 4975 | 1.528 | yes |
+| `forplan` | 161 | 421 | optimal | -6.6421896127e+02 | -6.6421873953e+02 | 3.3e-07 | 223 | 0.008 | yes |
+| `ganges` | 1309 | 1681 | optimal | -1.0958573613e+05 | -1.0958636356e+05 | 5.7e-06 | 633 | 0.013 | yes |
+| `gfrd-pnc` | 616 | 1092 | optimal | 6.9022359995e+06 | 6.9022359995e+06 | 7.1e-12 | 431 | 0.011 | yes |
+| `greenbea` | 2392 | 5405 | optimal | -7.2555248130e+07 | -7.2462405908e+07 | 1.3e-03 | 3053 | 9.329 | yes |
+| `greenbeb` | 2392 | 5405 | optimal | -4.3022602612e+06 | -4.3021476065e+06 | 2.6e-05 | 3177 | 5.994 | yes |
+| `grow15` | 300 | 645 | optimal | -1.0687094129e+08 | -1.0687094129e+08 | 3.3e-11 | 983 | 0.032 | yes |
+| `grow22` | 440 | 946 | optimal | -1.6083433648e+08 | -1.6083433648e+08 | 1.6e-11 | 1710 | 0.072 | yes |
+| `grow7` | 140 | 301 | optimal | -4.7787811815e+07 | -4.7787811815e+07 | 6.0e-12 | 446 | 0.011 | yes |
+| `israel` | 174 | 142 | optimal | -8.9664482186e+05 | -8.9664482186e+05 | 3.4e-12 | 130 | 0.005 | yes |
+| `kb2` | 43 | 41 | optimal | -1.7499001299e+03 | -1.7499001299e+03 | 3.5e-12 | 50 | 0.002 | yes |
+| `lotfi` | 153 | 308 | optimal | -2.5264706062e+01 | -2.5264706062e+01 | 4.7e-12 | 185 | 0.005 | yes |
+| `maros` | 846 | 1443 | optimal | -5.8063743701e+04 | -5.8063743701e+04 | 2.2e-12 | 760 | 0.161 | yes |
+| `maros-r7` | 3136 | 9408 | optimal | 1.4971851665e+06 | 1.4971851665e+06 | 1.4e-11 | 28 | 4.823 | yes |
+| `modszk1` | 687 | 1620 | optimal | 3.2061972906e+02 | 3.2061972906e+02 | 1.4e-11 | 543 | 0.080 | yes |
+| `nesm` | 662 | 2923 | optimal | 1.4076036488e+07 | 1.4076073035e+07 | 2.6e-06 | 2119 | 0.098 | yes |
+| `perold` | 625 | 1376 | optimal | -9.3807552782e+03 | -9.3807580773e+03 | 3.0e-07 | 1084 | 0.459 | yes |
+| `pilot` | 1441 | 3652 | optimal | -5.5748972929e+02 | -5.5740430007e+02 | 1.5e-04 | 5694 | 1.519 | yes |
+| `pilot.ja` | 940 | 1988 | optimal | -6.1131364656e+03 | -6.1131344111e+03 | 3.4e-07 | 1578 | 0.804 | yes |
+| `pilot.we` | 722 | 2789 | optimal | -2.7201075328e+06 | -2.7201027439e+06 | 1.8e-06 | 2419 | 0.118 | yes |
+| `pilot4` | 410 | 1000 | optimal | -2.5811392589e+03 | -2.5811392641e+03 | 2.0e-09 | 644 | 0.205 | yes |
+| `pilot87` | 2030 | 4883 | optimal | 3.0171034818e+02 | 3.0171072827e+02 | 1.3e-06 | 18887 | 81.939 | yes |
+| `pilotnov` | 975 | 2172 | optimal | -4.4972761882e+03 | -4.4972761882e+03 | 4.2e-12 | 1104 | 0.059 | yes |
+| `recipe` | 91 | 180 | optimal | -2.6661600000e+02 | -2.6661600000e+02 | 1.1e-15 | 41 | 0.003 | yes |
+| `sc105` | 105 | 103 | optimal | -5.2202061212e+01 | -5.2202061212e+01 | 5.6e-12 | 70 | 0.003 | yes |
+| `sc205` | 205 | 203 | optimal | -5.2202061212e+01 | -5.2202061212e+01 | 5.6e-12 | 166 | 0.004 | yes |
+| `sc50a` | 50 | 48 | optimal | -6.4575077059e+01 | -6.4575077059e+01 | 6.7e-12 | 28 | 0.003 | yes |
+| `sc50b` | 50 | 48 | optimal | -7.0000000000e+01 | -7.0000000000e+01 | 0.0e+00 | 28 | 0.003 | yes |
+| `scagr25` | 471 | 500 | optimal | -1.4753433061e+07 | -1.4753433061e+07 | 1.6e-11 | 277 | 0.007 | yes |
+| `scagr7` | 129 | 140 | optimal | -2.3313898243e+06 | -2.3313892548e+06 | 2.4e-07 | 69 | 0.004 | yes |
+| `scfxm1` | 330 | 457 | optimal | 1.8416759028e+04 | 1.8416759028e+04 | 1.9e-11 | 376 | 0.025 | yes |
+| `scfxm2` | 660 | 914 | optimal | 3.6660261565e+04 | 3.6660261565e+04 | 3.3e-14 | 738 | 0.069 | yes |
+| `scfxm3` | 990 | 1371 | optimal | 5.4901254550e+04 | 5.4901254550e+04 | 4.5e-12 | 1111 | 0.104 | yes |
+| `scorpion` | 388 | 358 | optimal | 1.8781248227e+03 | 1.8781248227e+03 | 2.0e-11 | 59 | 0.019 | yes |
+| `scrs8` | 490 | 1169 | optimal | 9.0429695380e+02 | 9.0429998619e+02 | 3.4e-06 | 340 | 0.024 | yes |
+| `scsd1` | 77 | 760 | optimal | 8.6666666743e+00 | 8.6666666743e+00 | 3.9e-12 | 95 | 0.005 | yes |
+| `scsd6` | 147 | 1350 | optimal | 5.0500000078e+01 | 5.0500000078e+01 | 3.8e-13 | 224 | 0.009 | yes |
+| `scsd8` | 397 | 2750 | optimal | 9.0499999993e+02 | 9.0499999993e+02 | 5.0e-12 | 786 | 0.028 | yes |
+| `sctap1` | 300 | 480 | optimal | 1.4122500000e+03 | 1.4122500000e+03 | 0.0e+00 | 273 | 0.006 | yes |
+| `sctap2` | 1090 | 1880 | optimal | 1.7248071429e+03 | 1.7248071429e+03 | 2.5e-11 | 725 | 0.012 | yes |
+| `sctap3` | 1480 | 2480 | optimal | 1.4240000000e+03 | 1.4240000000e+03 | 0.0e+00 | 949 | 0.016 | yes |
+| `seba` | 515 | 1028 | optimal | 1.5711600000e+04 | 1.5711600000e+04 | 1.2e-16 | 106 | 0.007 | yes |
+| `share1b` | 117 | 225 | optimal | -7.6589318579e+04 | -7.6589318579e+04 | 2.4e-12 | 129 | 0.004 | yes |
+| `share2b` | 96 | 79 | optimal | -4.1573224074e+02 | -4.1573224074e+02 | 3.4e-12 | 123 | 0.004 | yes |
+| `shell` | 536 | 1775 | optimal | 1.2088253460e+09 | 1.2088253460e+09 | 0.0e+00 | 291 | 0.011 | yes |
+| `ship04l` | 402 | 2118 | optimal | 1.7933245380e+06 | 1.7933245380e+06 | 1.7e-11 | 457 | 0.010 | yes |
+| `ship04s` | 402 | 1458 | optimal | 1.7987147004e+06 | 1.7987147004e+06 | 2.5e-11 | 310 | 0.008 | yes |
+| `ship08l` | 778 | 4283 | optimal | 1.9090552114e+06 | 1.9090552114e+06 | 5.7e-12 | 770 | 0.020 | yes |
+| `ship08s` | 778 | 2387 | optimal | 1.9200982105e+06 | 1.9200982105e+06 | 1.8e-11 | 434 | 0.012 | yes |
+| `ship12l` | 1151 | 5427 | optimal | 1.4701879193e+06 | 1.4701879193e+06 | 2.0e-11 | 1095 | 0.026 | yes |
+| `ship12s` | 1151 | 2763 | optimal | 1.4892361344e+06 | 1.4892361344e+06 | 4.1e-12 | 575 | 0.014 | yes |
+| `sierra` | 1227 | 2036 | optimal | 1.5394362184e+07 | 1.5394362184e+07 | 2.4e-11 | 583 | 0.015 | yes |
+| `stair` | 356 | 467 | optimal | -2.5126695119e+02 | -2.5126695119e+02 | 1.2e-11 | 333 | 0.181 | yes |
+| `standata` | 359 | 1075 | optimal | 1.2576995000e+03 | 1.2576995000e+03 | 1.8e-16 | 37 | 0.006 | yes |
+| `standmps` | 467 | 1075 | optimal | 1.4060175000e+03 | 1.4060175000e+03 | 1.6e-16 | 177 | 0.008 | yes |
+| `stocfor1` | 117 | 111 | optimal | -4.1131976219e+04 | -4.1131976219e+04 | 1.1e-11 | 75 | 0.004 | yes |
+| `stocfor2` | 2157 | 2031 | optimal | -3.9024408538e+04 | -3.9024408538e+04 | 3.0e-12 | 1363 | 0.053 | yes |
+| `stocfor3` | 16675 | 15695 | optimal | -3.9976783944e+04 | -3.9976661576e+04 | 3.1e-06 | 10607 | 1.146 | yes |
+| `truss` | 1000 | 8806 | optimal | 4.5881584719e+05 | 4.5881584719e+05 | 9.6e-12 | 19406 | 2.055 | yes |
+| `tuff` | 333 | 587 | optimal | 2.9214776509e-01 | 2.9214776509e-01 | 3.6e-12 | 139 | 0.008 | yes |
+| `vtp.base` | 198 | 203 | optimal | 1.2983146246e+05 | 1.2983146246e+05 | 1.0e-11 | 70 | 0.004 | yes |
+| `wood1p` | 244 | 2594 | optimal | 1.4429024116e+00 | 1.4429024116e+00 | 1.8e-11 | 186 | 0.052 | yes |
+| `woodw` | 1098 | 8405 | optimal | 1.3044763331e+00 | 1.3044763331e+00 | 1.2e-11 | 1173 | 0.085 | yes |
 
 **Summary**
 
-- shifted geometric mean solve time (shift 1s): **0.212s**
-- slowest solved instance: 15.120s
+- shifted geometric mean solve time (shift 1s): **0.142s**
+- slowest solved instance: 5.541s
 - worst relative error against a published optimum: **5.79e-07**
 - **failed: `80bau3b`, `e226`, `ganges`, `greenbea`, `greenbeb`, `nesm`, `pilot`, `pilot.we`, `pilot87`, `scrs8`, `stocfor3`** — kept in the table on purpose
 
@@ -413,8 +413,8 @@ Operations Research 38(2), 1990), larger and sparser than the core Netlib set. F
 hashed by `bench/runners/fetch_kennington.py`, which parses the published optima from the
 directory's own readme; run by `bench/runners/kennington.py` under the full-set rules.
 
-Source CSV: `bench/results/kennington-full-b192fa8.csv`  
-Commit `b192fa8` · machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 9V74 80-Core Processor 15 GiB RAM` · generated 2026-11-15T14:05:08+00:00
+Source CSV: `bench/results/kennington-full-1659c8b.csv`  
+Commit `1659c8b` · machine `github-actions ubuntu-24.04 4 vCPU INTEL(R) XEON(R) PLATINUM 8573C 15 GiB RAM` · generated 2026-11-16T14:04:17+00:00
 
 **16 of 16** matched the readme's published optimum to a relative 1e-6 **and** passed independent verification. The published values are Vanderbei's ALPO results printed to eight significant figures, so rounding moves them by at most 5e-8 relative, well inside the tolerance.
 
@@ -422,26 +422,26 @@ Every instance in this set passed.
 
 | instance | rows | cols | status | our objective | published optimum | rel. error | iters | time (s) | verified |
 |---|---:|---:|---|---:|---:|---:|---:|---:|:--:|
-| `cre-a` | 3516 | 4067 | optimal | 2.3595407061e+07 | 2.3595407e+07 | 2.6e-09 | 2499 | 0.078 | yes |
-| `cre-b` | 9648 | 72447 | optimal | 2.3129639887e+07 | 2.3129640e+07 | 4.9e-09 | 7877 | 1.185 | yes |
-| `cre-c` | 3068 | 3678 | optimal | 2.5275116141e+07 | 2.5275116e+07 | 5.6e-09 | 2315 | 0.079 | yes |
-| `cre-d` | 8926 | 69980 | optimal | 2.4454969765e+07 | 2.4454970e+07 | 9.6e-09 | 6606 | 0.801 | yes |
-| `ken-07` | 2426 | 3602 | optimal | -6.7952044338e+08 | -6.7952044e+08 | 5.0e-09 | 1202 | 0.026 | yes |
-| `ken-11` | 14694 | 21349 | optimal | -6.9723822625e+09 | -6.9723823e+09 | 5.4e-09 | 7259 | 0.266 | yes |
-| `ken-13` | 28632 | 42659 | optimal | -1.0257394789e+10 | -1.0257395e+10 | 2.1e-08 | 13374 | 0.828 | yes |
-| `ken-18` | 105127 | 154699 | optimal | -5.2217025287e+10 | -5.2217025e+10 | 5.5e-09 | 51643 | 10.249 | yes |
-| `osa-07` | 1118 | 23949 | optimal | 5.3572251730e+05 | 5.3572252e+05 | 5.0e-09 | 39 | 0.610 | yes |
-| `osa-14` | 2337 | 52460 | optimal | 1.1064628447e+06 | 1.1064628e+06 | 4.0e-08 | 55 | 1.899 | yes |
-| `osa-30` | 4350 | 100024 | optimal | 2.1421398732e+06 | 2.1421399e+06 | 1.3e-08 | 81 | 2.656 | yes |
-| `osa-60` | 10280 | 232966 | optimal | 4.0440725032e+06 | 4.0440725e+06 | 7.8e-10 | 200 | 8.976 | yes |
-| `pds-02` | 2953 | 7535 | optimal | 2.8857862010e+10 | 2.8857862e+10 | 3.5e-10 | 595 | 0.032 | yes |
-| `pds-06` | 9881 | 28655 | optimal | 2.7761037600e+10 | 2.7761038e+10 | 1.4e-08 | 5061 | 0.342 | yes |
-| `pds-10` | 16558 | 48763 | optimal | 2.6727094976e+10 | 2.6727095e+10 | 9.0e-10 | 10724 | 0.985 | yes |
-| `pds-20` | 33874 | 105728 | optimal | 2.3821658640e+10 | 2.3821659e+10 | 1.5e-08 | 26754 | 5.825 | yes |
+| `cre-a` | 3516 | 4067 | optimal | 2.3595407061e+07 | 2.3595407e+07 | 2.6e-09 | 2499 | 0.098 | yes |
+| `cre-b` | 9648 | 72447 | optimal | 2.3129639887e+07 | 2.3129640e+07 | 4.9e-09 | 7513 | 1.487 | yes |
+| `cre-c` | 3068 | 3678 | optimal | 2.5275116141e+07 | 2.5275116e+07 | 5.6e-09 | 2313 | 0.102 | yes |
+| `cre-d` | 8926 | 69980 | optimal | 2.4454969765e+07 | 2.4454970e+07 | 9.6e-09 | 6369 | 1.075 | yes |
+| `ken-07` | 2426 | 3602 | optimal | -6.7952044338e+08 | -6.7952044e+08 | 5.0e-09 | 1202 | 0.029 | yes |
+| `ken-11` | 14694 | 21349 | optimal | -6.9723822625e+09 | -6.9723823e+09 | 5.4e-09 | 7254 | 0.271 | yes |
+| `ken-13` | 28632 | 42659 | optimal | -1.0257394789e+10 | -1.0257395e+10 | 2.1e-08 | 13345 | 0.886 | yes |
+| `ken-18` | 105127 | 154699 | optimal | -5.2217025287e+10 | -5.2217025e+10 | 5.5e-09 | 51536 | 8.437 | yes |
+| `osa-07` | 1118 | 23949 | optimal | 5.3572251730e+05 | 5.3572252e+05 | 5.0e-09 | 39 | 0.789 | yes |
+| `osa-14` | 2337 | 52460 | optimal | 1.1064628447e+06 | 1.1064628e+06 | 4.0e-08 | 55 | 2.346 | yes |
+| `osa-30` | 4350 | 100024 | optimal | 2.1421398732e+06 | 2.1421399e+06 | 1.3e-08 | 81 | 3.709 | yes |
+| `osa-60` | 10280 | 232966 | optimal | 4.0440725032e+06 | 4.0440725e+06 | 7.8e-10 | 200 | 12.041 | yes |
+| `pds-02` | 2953 | 7535 | optimal | 2.8857862010e+10 | 2.8857862e+10 | 3.5e-10 | 595 | 0.037 | yes |
+| `pds-06` | 9881 | 28655 | optimal | 2.7761037600e+10 | 2.7761038e+10 | 1.4e-08 | 5188 | 0.444 | yes |
+| `pds-10` | 16558 | 48763 | optimal | 2.6727094976e+10 | 2.6727095e+10 | 9.0e-10 | 10971 | 1.282 | yes |
+| `pds-20` | 33874 | 105728 | optimal | 2.3821658640e+10 | 2.3821659e+10 | 1.5e-08 | 26554 | 7.509 | yes |
 
 **Summary**
 
-- shifted geometric mean solve time over the passed instances (shift 1s): **1.236s**
+- shifted geometric mean solve time over the passed instances (shift 1s): **1.438s**
 - worst relative error against a published optimum: **4.04e-08**
 - no failures on this set
 
@@ -456,11 +456,11 @@ file in exact rational arithmetic. A certified relative gap at or under 1e-6 mea
 reported objective is within 1e-6 of a proven bound on the true optimum, so that closeness
 rests on a proof and not on a solver tolerance. The timings of this run are not used anywhere.
 
-Run at `81b812c` on `github-actions ubuntu-24.04 4 vCPU AMD EPYC 9V74 80-Core Processor 15 GiB RAM` (`certified-gap-netlib-full-81b812c.csv`), with `certified_gap_seconds=120`.
+Run at `1659c8b` on `github-actions ubuntu-24.04 4 vCPU Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz 15 GiB RAM` (`certified-gap-netlib-full-1659c8b.csv`), with `certified_gap_seconds=120`.
 
 | optimal answers | certified to 1e-6 relative | finite bound, looser | no finite bound | stated bound re-derived exactly by the verifier |
 |---:|---:|---:|---:|---:|
-| 94 | **93** (worst 5.1e-08) | 1 | 0 | 94 of 94 |
+| 94 | **93** (worst 1.4e-07) | 1 | 0 | 94 of 94 |
 
 Finite but looser than 1e-6: pilot87 (5.36e-06).
 
@@ -2463,46 +2463,46 @@ Condat-Vu `qp-condat-vu` before it and as the interior point's fallback on a num
 error) and judged the way the published QP benchmark judges it, on primal residual, dual residual and duality gap at 1e-6
 and at 1e-9, as well as against the published objective and by the independent verifier.
 
-Source CSV: `bench/results/maros-meszaros-c766eae.csv`  
-Commit `c766eae` · machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 7763 64-Core Processor 15 GiB RAM` · time limit 60 s per instance · solver defaults
+Source CSV: `bench/results/maros-meszaros-1659c8b.csv`  
+Commit `1659c8b` · machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 7763 64-Core Processor 15 GiB RAM` · time limit 60 s per instance · solver defaults
 
-**138 of 138 instances** run. `optimal` on **128**; within 1e-6 relative of the published objective on **127**; accepted by the independent verifier on **132**.
+**138 of 138 instances** run. `optimal` on **131**; within 1e-6 relative of the published objective on **129**; accepted by the independent verifier on **135**.
 
 | level | success, relative measures (#491) | success, absolute measures (the published report's criterion) |
 |---|---:|---:|
-| 1e-6 | 128 / 138 | 110 / 138 |
-| 1e-9 | 116 / 138 | 40 / 138 |
+| 1e-6 | 131 / 138 | 113 / 138 |
+| 1e-9 | 117 / 138 | 40 / 138 |
 
 Success at a level means the status is `optimal` and the primal residual, the dual residual and the duality gap are all within it, each recomputed from the QPS file and the written `.sol` by `bench/runners/qp_residuals.py` through the verifier's own MPS reader. The reference objectives are the readme's OPT column (BPMPD at default settings, eight significant digits), parsed by `bench/runners/fetch_maros_meszaros.py` into `data/maros-meszaros/reference.json` with every file's sha256.
 
-Shifted geometric mean of solver time, shift 10 s, an instance not successful at 1e-6 charged the full limit as the published report does: **2.97 s**.
+Shifted geometric mean of solver time, shift 10 s, an instance not successful at 1e-6 charged the full limit as the published report does: **2.52 s**.
 
 | instance | rows | cols | status | our objective | reference | rel. gap | primal rel. | dual rel. | gap rel. | iters | solver time (s) | verified | 1e-6 | 1e-9 |
 |---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|:--:|:--:|:--:|
 | `aug2d` | 10000 | 20200 | optimal | 1687411.753 | 1687411.8 | 2.8e-08 | 4.1e-16 | 4.6e-15 | 2.8e-16 | 1 | 0.05 | yes | yes | yes |
-| `aug2dc` | 10000 | 20200 | optimal | 1818368.066 | 1818368.1 | 1.9e-08 | 4.1e-16 | 4.6e-15 | 1.3e-16 | 1 | 0.06 | yes | yes | yes |
-| `aug2dcqp` | 10000 | 20200 | optimal | 6498134.739 | 6498134.8 | 9.3e-09 | 4.4e-16 | 1.5e-16 | 1.4e-14 | 16 | 0.30 | yes | yes | yes |
+| `aug2dc` | 10000 | 20200 | optimal | 1818368.066 | 1818368.1 | 1.9e-08 | 4.1e-16 | 4.6e-15 | 1.3e-16 | 1 | 0.05 | yes | yes | yes |
+| `aug2dcqp` | 10000 | 20200 | optimal | 6498134.739 | 6498134.8 | 9.3e-09 | 4.4e-16 | 1.5e-16 | 1.4e-14 | 16 | 0.31 | yes | yes | yes |
 | `aug2dqp` | 10000 | 20200 | optimal | 6237012.026 | 6237012.1 | 1.2e-08 | 2.8e-16 | 0.0e+00 | 7.0e-13 | 18 | 0.34 | yes | yes | yes |
 | `aug3d` | 1000 | 3873 | optimal | 554.0677258 | 554.06773 | 7.6e-09 | 2.8e-16 | 4.4e-16 | 0.0e+00 | 1 | 0.00 | yes | yes | yes |
 | `aug3dc` | 1000 | 3873 | optimal | 771.2624387 | 771.26244 | 1.7e-09 | 4.8e-16 | 4.0e-16 | 0.0e+00 | 1 | 0.01 | yes | yes | yes |
 | `aug3dcqp` | 1000 | 3873 | optimal | 993.3621467 | 993.36215 | 3.4e-09 | 5.4e-16 | 0.0e+00 | 1.7e-10 | 11 | 0.04 | yes | yes | yes |
 | `aug3dqp` | 1000 | 3873 | optimal | 675.2376715 | 675.23767 | 2.2e-09 | 5.2e-16 | 0.0e+00 | 6.4e-10 | 13 | 0.04 | yes | yes | yes |
-| `boyd1` | 18 | 93261 | optimal | -61735219.64 | -61735220 | 5.8e-09 | 1.8e-14 | 1.3e-15 | 1.4e-12 | 35 | 29.39 | yes | yes | yes |
-| `boyd2` | 186531 | 93263 | optimal | 21.256767 | 21.256767 | 2.2e-10 | 1.3e-14 | 3.9e-15 | 8.1e-10 | 69 | 35.50 | yes | yes | yes |
+| `boyd1` | 18 | 93261 | optimal | -61735219.64 | -61735220 | 5.8e-09 | 1.8e-14 | 1.3e-15 | 1.4e-12 | 36 | 31.64 | yes | yes | yes |
+| `boyd2` | 186531 | 93263 | optimal | 21.256767 | 21.256767 | 2.2e-10 | 1.3e-14 | 3.9e-15 | 8.1e-10 | 69 | 36.24 | yes | yes | yes |
 | `cont-050` | 2401 | 2597 | optimal | -4.563850904 | -4.5638509 | 9.5e-10 | 6.4e-16 | 0.0e+00 | 9.5e-12 | 11 | 0.09 | yes | yes | yes |
-| `cont-100` | 9801 | 10197 | optimal | -4.644397869 | -4.6443979 | 6.7e-09 | 7.0e-16 | 0.0e+00 | 2.4e-11 | 12 | 0.80 | yes | yes | yes |
-| `cont-101` | 10098 | 10197 | optimal | 0.1955273247 | 0.19552733 | 5.3e-09 | 9.4e-16 | 0.0e+00 | 8.2e-11 | 11 | 0.77 | yes | yes | yes |
-| `cont-200` | 39601 | 40397 | optimal | -4.68487592 | -4.6848759 | 4.3e-09 | 7.1e-16 | 0.0e+00 | 1.8e-11 | 13 | 6.94 | yes | yes | yes |
-| `cont-201` | 40198 | 40397 | optimal | 0.192483373 | 0.19248337 | 3.0e-09 | 9.5e-16 | 0.0e+00 | 5.8e-12 | 12 | 6.59 | yes | yes | yes |
-| `cont-300` | 90298 | 90597 | optimal | 0.1915122861 | 0.19151232 | 3.4e-08 | 9.5e-16 | 0.0e+00 | 3.1e-10 | 13 | 39.96 | yes | yes | yes |
-| `cvxqp1l` | 5000 | 10000 | optimal | 108704799.9 | 1.087048e+08 | 7.8e-10 | 1.2e-15 | 0.0e+00 | 8.8e-15 | 15 | 40.44 | yes | yes | yes |
+| `cont-100` | 9801 | 10197 | optimal | -4.644397869 | -4.6443979 | 6.7e-09 | 7.0e-16 | 0.0e+00 | 2.4e-11 | 12 | 0.82 | yes | yes | yes |
+| `cont-101` | 10098 | 10197 | optimal | 0.1955273247 | 0.19552733 | 5.3e-09 | 9.4e-16 | 0.0e+00 | 8.2e-11 | 11 | 0.76 | yes | yes | yes |
+| `cont-200` | 39601 | 40397 | optimal | -4.68487592 | -4.6848759 | 4.3e-09 | 7.1e-16 | 0.0e+00 | 1.8e-11 | 13 | 6.88 | yes | yes | yes |
+| `cont-201` | 40198 | 40397 | optimal | 0.192483373 | 0.19248337 | 3.0e-09 | 9.5e-16 | 0.0e+00 | 5.8e-12 | 12 | 6.49 | yes | yes | yes |
+| `cont-300` | 90298 | 90597 | optimal | 0.1915122861 | 0.19151232 | 3.4e-08 | 9.5e-16 | 0.0e+00 | 3.1e-10 | 13 | 39.64 | yes | yes | yes |
+| `cvxqp1l` | 5000 | 10000 | optimal | 108704799.9 | 1.087048e+08 | 7.8e-10 | 1.2e-15 | 0.0e+00 | 8.8e-15 | 15 | 38.27 | yes | yes | yes |
 | `cvxqp1m` | 500 | 1000 | optimal | 1087511.567 | 1087511.6 | 3.0e-08 | 4.4e-15 | 0.0e+00 | 1.9e-14 | 14 | 0.17 | yes | yes | yes |
 | `cvxqp1s` | 50 | 100 | optimal | 11590.71812 | 11590.718 | 1.0e-08 | 5.9e-16 | 0.0e+00 | 1.9e-12 | 10 | 0.00 | yes | yes | yes |
-| `cvxqp2l` | 2500 | 10000 | optimal | 81842458.26 | 81842458 | 3.2e-09 | 5.0e-15 | 0.0e+00 | 7.3e-16 | 18 | 30.62 | yes | yes | yes |
+| `cvxqp2l` | 2500 | 10000 | optimal | 81842458.26 | 81842458 | 3.2e-09 | 5.0e-15 | 0.0e+00 | 7.3e-16 | 18 | 29.77 | yes | yes | yes |
 | `cvxqp2m` | 250 | 1000 | optimal | 820155.431 | 820155.43 | 1.2e-09 | 1.0e-13 | 0.0e+00 | 7.7e-14 | 13 | 0.07 | yes | yes | yes |
 | `cvxqp2s` | 25 | 100 | optimal | 8120.940477 | 8120.9405 | 2.8e-09 | 1.5e-16 | 0.0e+00 | 6.4e-12 | 12 | 0.00 | yes | yes | yes |
-| `cvxqp3l` | 7500 | 10000 | optimal | 115711104.5 | 1.157111e+08 | 3.9e-08 | 3.0e-16 | 0.0e+00 | 1.1e-14 | 13 | 50.58 | yes | yes | yes |
-| `cvxqp3m` | 750 | 1000 | optimal | 1362828.742 | 1362828.7 | 3.1e-08 | 3.0e-16 | 0.0e+00 | 2.4e-13 | 14 | 0.25 | yes | yes | yes |
+| `cvxqp3l` | 7500 | 10000 | optimal | 115711104.5 | 1.157111e+08 | 3.9e-08 | 3.0e-16 | 0.0e+00 | 1.1e-14 | 13 | 48.79 | yes | yes | yes |
+| `cvxqp3m` | 750 | 1000 | optimal | 1362828.742 | 1362828.7 | 3.1e-08 | 3.0e-16 | 0.0e+00 | 2.4e-13 | 14 | 0.26 | yes | yes | yes |
 | `cvxqp3s` | 75 | 100 | optimal | 11943.4322 | 11943.432 | 1.7e-08 | 1.5e-16 | 0.0e+00 | 1.6e-12 | 10 | 0.00 | yes | yes | yes |
 | `dpklo1` | 77 | 133 | optimal | 0.3700962171 | 0.37009622 | 2.9e-09 | 1.9e-16 | 2.2e-15 | 3.2e-15 | 1 | 0.00 | yes | yes | yes |
 | `dtoc3` | 9998 | 14999 | optimal | 235.262481 | 235.26248 | 4.4e-09 | 2.3e-16 | 7.4e-13 | 4.9e-12 | 1 | 0.03 | yes | yes | yes |
@@ -2514,7 +2514,7 @@ Shifted geometric mean of solver time, shift 10 s, an instance not successful at
 | `dualc2` | 229 | 7 | optimal | 3551.307693 | 3551.3077 | 2.1e-09 | 3.8e-18 | 0.0e+00 | 1.7e-13 | 11 | 0.00 | yes | yes | yes |
 | `dualc5` | 278 | 8 | optimal | 427.2323268 | 427.23233 | 7.4e-09 | 1.1e-16 | 0.0e+00 | 1.4e-10 | 9 | 0.00 | yes | yes | yes |
 | `dualc8` | 503 | 8 | optimal | 18309.35883 | 18309.359 | 9.1e-09 | 3.0e-16 | 0.0e+00 | 3.3e-11 | 10 | 0.00 | yes | yes | yes |
-| `exdata` | 3001 | 3000 | optimal | -141.8434322 | -141.84343 | 1.5e-08 | 6.4e-15 | 0.0e+00 | 1.6e-10 | 14 | 8.28 | yes | yes | yes |
+| `exdata` | 3001 | 3000 | optimal | -141.8434322 | -141.84343 | 1.5e-08 | 6.4e-15 | 0.0e+00 | 1.6e-10 | 14 | 8.15 | yes | yes | yes |
 | `genhs28` | 8 | 10 | optimal | 0.9271736938 | 0.92717369 | 3.8e-09 | 0.0e+00 | 3.0e-16 | 0.0e+00 | 1 | 0.00 | yes | yes | yes |
 | `gouldqp2` | 349 | 699 | optimal | 0.0001842745318 | 0.00018427534 | 8.1e-10 | 1.0e-16 | 0.0e+00 | 1.2e-10 | 13 | 0.01 | yes | yes | yes |
 | `gouldqp3` | 349 | 699 | optimal | 2.062784038 | 2.062784 | 1.8e-08 | 1.4e-15 | 0.0e+00 | 8.6e-07 | 7 | 0.00 | yes | yes | **no** |
@@ -2528,25 +2528,25 @@ Shifted geometric mean of solver time, shift 10 s, an instance not successful at
 | `hs53` | 3 | 5 | optimal | 4.093023256 | 4.0930233 | 1.1e-08 | 1.1e-16 | 0.0e+00 | 2.5e-11 | 5 | 0.00 | yes | yes | yes |
 | `hs76` | 3 | 4 | optimal | -4.681818182 | -4.6818182 | 3.9e-09 | 0.0e+00 | 0.0e+00 | 3.3e-11 | 7 | 0.00 | yes | yes | yes |
 | `hues-mod` | 2 | 10000 | optimal | 34824463.87 | 34824690 | 6.5e-06 | 6.2e-16 | 5.8e-16 | 3.2e-14 | 15 | 0.14 | yes | yes | yes |
-| `huestis` | 2 | 10000 | feasible | 3.482446387e+11 | 3.482469e+11 | 6.5e-06 | 7.2e-17 | 6.7e-16 | 3.9e-15 | 14 | 0.23 | yes | **no** | **no** |
+| `huestis` | 2 | 10000 | feasible | 3.482446387e+11 | 3.482469e+11 | 6.5e-06 | 7.2e-17 | 6.7e-16 | 3.9e-15 | 14 | 0.24 | yes | **no** | **no** |
 | `ksip` | 1001 | 20 | optimal | 0.5757979412 | 0.57579794 | 1.2e-09 | 0.0e+00 | 1.9e-13 | 4.4e-11 | 16 | 0.05 | yes | yes | yes |
 | `laser` | 1000 | 1002 | optimal | 2409601.346 | 2409601.4 | 2.3e-08 | 1.6e-16 | 2.2e-16 | 1.9e-14 | 17 | 0.02 | yes | yes | yes |
-| `liswet1` | 10000 | 10002 | optimal | 36.12239976 | 36.122402 | 6.2e-08 | 5.7e-15 | 9.9e-11 | 6.4e-08 | 63 | 4.15 | yes | yes | **no** |
-| `liswet10` | 10000 | 10002 | optimal | 49.48578394 | 49.485785 | 2.1e-08 | 6.7e-16 | 8.4e-11 | 1.5e-08 | 166 | 13.53 | yes | yes | **no** |
-| `liswet11` | 10000 | 10002 | optimal | 49.52395936 | 49.523957 | 4.8e-08 | 1.8e-16 | 2.2e-11 | 4.5e-08 | 65 | 4.92 | yes | yes | **no** |
-| `liswet12` | 10000 | 10002 | iteration_limit | 1654.174082 | 1736.9274 | 4.8e-02 | 1.5e-08 | 3.4e-10 | 4.7e-02 | 210 | 17.48 | - | **no** | **no** |
-| `liswet2` | 10000 | 10002 | optimal | 24.99807596 | 24.998076 | 1.8e-09 | 2.9e-13 | 4.0e-12 | 5.9e-09 | 24 | 1.35 | yes | yes | **no** |
+| `liswet1` | 10000 | 10002 | optimal | 36.12240099 | 36.122402 | 2.8e-08 | 1.0e-15 | 1.0e-10 | 3.0e-08 | 69 | 4.42 | yes | yes | **no** |
+| `liswet10` | 10000 | 10002 | optimal | 49.4857853 | 49.485785 | 6.0e-09 | 1.8e-16 | 8.5e-11 | 1.2e-08 | 73 | 5.53 | yes | yes | **no** |
+| `liswet11` | 10000 | 10002 | optimal | 49.52395741 | 49.523957 | 8.3e-09 | 0.0e+00 | 2.2e-11 | 5.5e-09 | 62 | 4.54 | yes | yes | **no** |
+| `liswet12` | 10000 | 10002 | optimal | 1736.927426 | 1736.9274 | 1.5e-08 | 1.8e-16 | 6.0e-10 | 1.6e-10 | 96 | 7.37 | yes | yes | yes |
+| `liswet2` | 10000 | 10002 | optimal | 24.99807596 | 24.998076 | 1.8e-09 | 2.9e-13 | 4.0e-12 | 5.9e-09 | 24 | 1.27 | yes | yes | **no** |
 | `liswet3` | 10000 | 10002 | optimal | 25.00122064 | 25.00122 | 2.5e-08 | 0.0e+00 | 2.6e-13 | 2.8e-08 | 14 | 0.25 | yes | yes | **no** |
-| `liswet4` | 10000 | 10002 | optimal | 25.00011267 | 25.000112 | 2.7e-08 | 0.0e+00 | 1.6e-12 | 2.7e-08 | 16 | 0.48 | yes | yes | **no** |
-| `liswet5` | 10000 | 10002 | optimal | 25.03426084 | 25.034253 | 3.1e-07 | 5.6e-11 | 1.3e-10 | 2.2e-07 | 12 | 0.23 | yes | yes | **no** |
-| `liswet6` | 10000 | 10002 | optimal | 24.99574864 | 24.995748 | 2.6e-08 | 2.3e-11 | 5.2e-12 | 6.3e-08 | 15 | 0.44 | yes | yes | **no** |
-| `liswet7` | 10000 | 10002 | optimal | 498.8408903 | 498.84089 | 6.4e-10 | 2.2e-16 | 7.9e-10 | 9.4e-10 | 62 | 4.66 | yes | yes | yes |
-| `liswet8` | 10000 | 10002 | iteration_limit | 653.9165061 | 7144.7006 | 9.1e-01 | 1.3e-08 | 1.1e-09 | 8.2e-02 | 210 | 17.39 | - | **no** | **no** |
-| `liswet9` | 10000 | 10002 | iteration_limit | 1914.18689 | 1963.2513 | 2.5e-02 | 1.1e-08 | 1.0e-09 | 2.5e-02 | 210 | 17.35 | - | **no** | **no** |
+| `liswet4` | 10000 | 10002 | optimal | 25.00011267 | 25.000112 | 2.7e-08 | 0.0e+00 | 1.6e-12 | 2.7e-08 | 16 | 0.49 | yes | yes | **no** |
+| `liswet5` | 10000 | 10002 | optimal | 25.03426084 | 25.034253 | 3.1e-07 | 5.6e-11 | 1.3e-10 | 2.2e-07 | 12 | 0.22 | yes | yes | **no** |
+| `liswet6` | 10000 | 10002 | optimal | 24.99574864 | 24.995748 | 2.6e-08 | 2.3e-11 | 5.2e-12 | 6.3e-08 | 15 | 0.46 | yes | yes | **no** |
+| `liswet7` | 10000 | 10002 | optimal | 498.8408925 | 498.84089 | 4.9e-09 | 1.1e-16 | 7.6e-10 | 3.4e-09 | 69 | 5.19 | yes | yes | **no** |
+| `liswet8` | 10000 | 10002 | optimal | 714.4700598 | 7144.7006 | 9.0e-01 | 1.9e-16 | 3.6e-10 | 1.0e-09 | 96 | 7.31 | yes | yes | **no** |
+| `liswet9` | 10000 | 10002 | optimal | 1963.251261 | 1963.2513 | 2.0e-08 | 1.1e-16 | 3.4e-10 | 3.5e-11 | 90 | 6.76 | yes | yes | yes |
 | `lotschd` | 7 | 12 | optimal | 2398.415891 | 2398.4159 | 3.6e-09 | 4.5e-13 | 2.6e-13 | 1.4e-12 | 8 | 0.00 | yes | yes | yes |
 | `mosarqp1` | 700 | 2500 | optimal | -952.875443 | -952.87544 | 3.2e-09 | 0.0e+00 | 0.0e+00 | 9.1e-12 | 10 | 0.02 | yes | yes | yes |
 | `mosarqp2` | 600 | 900 | optimal | -1597.482118 | -1597.4821 | 1.1e-08 | 0.0e+00 | 0.0e+00 | 5.6e-12 | 10 | 0.01 | yes | yes | yes |
-| `powell20` | 10000 | 10000 | optimal | 5.208958281e+10 | 5.2089583e+10 | 3.6e-09 | 4.0e-15 | 1.2e-13 | 9.6e-12 | 47 | 0.48 | yes | yes | yes |
+| `powell20` | 10000 | 10000 | optimal | 5.208958281e+10 | 5.2089583e+10 | 3.6e-09 | 4.0e-15 | 1.2e-13 | 9.6e-12 | 51 | 0.49 | yes | yes | yes |
 | `primal1` | 85 | 325 | optimal | -0.03501296558 | -0.035012965 | 5.8e-10 | 0.0e+00 | 4.6e-17 | 7.7e-10 | 13 | 0.01 | yes | yes | yes |
 | `primal2` | 96 | 649 | optimal | -0.0337336761 | -0.033733676 | 1.0e-10 | 0.0e+00 | 2.6e-17 | 2.0e-11 | 12 | 0.02 | yes | yes | yes |
 | `primal3` | 111 | 745 | optimal | -0.1357558365 | -0.13575584 | 3.5e-09 | 0.0e+00 | 3.4e-17 | 6.0e-10 | 13 | 0.05 | yes | yes | yes |
@@ -2555,28 +2555,28 @@ Shifted geometric mean of solver time, shift 10 s, an instance not successful at
 | `primalc2` | 7 | 231 | optimal | -3551.307693 | -3551.3077 | 2.1e-09 | 1.5e-16 | 4.8e-18 | 2.4e-14 | 14 | 0.00 | yes | yes | yes |
 | `primalc5` | 8 | 287 | optimal | -427.2323268 | -427.23233 | 7.6e-09 | 0.0e+00 | 2.8e-18 | 1.1e-11 | 20 | 0.01 | yes | yes | yes |
 | `primalc8` | 8 | 520 | optimal | -18309.42979 | -18309.43 | 1.2e-08 | 4.6e-15 | 1.1e-17 | 7.2e-15 | 19 | 0.01 | yes | yes | yes |
-| `q25fv47` | 820 | 1571 | optimal | 13744447.89 | 13744448 | 7.6e-09 | 1.2e-16 | 5.8e-14 | 1.9e-12 | 34 | 0.98 | yes | yes | yes |
+| `q25fv47` | 820 | 1571 | optimal | 13744447.89 | 13744448 | 7.6e-09 | 1.2e-16 | 5.8e-14 | 1.9e-12 | 34 | 0.96 | yes | yes | yes |
 | `qadlittl` | 56 | 97 | optimal | 480318.8585 | 480318.86 | 3.0e-09 | 9.6e-17 | 3.4e-13 | 2.5e-13 | 15 | 0.00 | yes | yes | yes |
 | `qafiro` | 27 | 32 | optimal | -1.590781794 | -1.5907818 | 3.9e-09 | 7.9e-17 | 1.8e-19 | 2.3e-10 | 11 | 0.00 | yes | yes | yes |
 | `qbandm` | 305 | 472 | optimal | 16352.34204 | 16352.342 | 2.2e-09 | 6.7e-14 | 1.1e-11 | 1.3e-11 | 21 | 0.01 | yes | yes | yes |
 | `qbeaconf` | 173 | 262 | optimal | 164712.0601 | 164712.06 | 9.1e-10 | 7.9e-16 | 5.3e-17 | 4.5e-13 | 17 | 0.01 | yes | yes | yes |
 | `qbore3d` | 233 | 315 | optimal | 3100.200802 | 3100.2008 | 5.7e-10 | 5.3e-15 | 7.1e-17 | 1.8e-11 | 20 | 0.01 | yes | yes | yes |
 | `qbrandy` | 220 | 249 | optimal | 28375.11486 | 28375.115 | 5.1e-09 | 1.4e-14 | 2.6e-18 | 1.5e-12 | 19 | 0.01 | yes | yes | yes |
-| `qcapri` | 271 | 353 | optimal | 66793293.27 | 66793293 | 4.0e-09 | 3.3e-17 | 1.7e-17 | 2.2e-16 | 38 | 0.39 | yes | yes | yes |
+| `qcapri` | 271 | 353 | optimal | 66793293.27 | 66793293 | 4.0e-09 | 3.3e-17 | 1.7e-17 | 2.2e-16 | 40 | 0.37 | yes | yes | yes |
 | `qe226` | 223 | 282 | optimal | 212.6534329 | 212.65343 | 1.4e-08 | 4.6e-18 | 1.1e-13 | 3.3e-10 | 23 | 0.02 | yes | yes | yes |
 | `qetamacr` | 400 | 688 | optimal | 86760.36963 | 86760.37 | 4.3e-09 | 3.2e-15 | 0.0e+00 | 7.5e-11 | 34 | 0.07 | yes | yes | yes |
-| `qfffff80` | 524 | 854 | optimal | 873147.4605 | 873147.47 | 1.1e-08 | 6.2e-17 | 4.0e-12 | 1.6e-15 | 176 | 3.90 | yes | yes | yes |
-| `qforplan` | 161 | 421 | feasible | 7456631461 | 7.4566315e+09 | 5.3e-09 | 1.3e-16 | 0.0e+00 | 4.2e-14 | 30 | 0.55 | yes | **no** | **no** |
-| `qgfrdxpn` | 616 | 1092 | feasible | 1.007905849e+11 | 1.0079059e+11 | 5.1e-08 | 3.1e-15 | 1.5e-23 | 7.6e-15 | 36 | 1.39 | yes | **no** | **no** |
-| `qgrow15` | 300 | 645 | optimal | -101693640.5 | -1.0169364e+08 | 4.6e-09 | 2.7e-16 | 2.2e-17 | 1.5e-16 | 28 | 2.52 | yes | yes | yes |
+| `qfffff80` | 524 | 854 | optimal | 873147.4605 | 873147.47 | 1.1e-08 | 6.2e-17 | 4.0e-12 | 1.6e-15 | 176 | 3.65 | yes | yes | yes |
+| `qforplan` | 161 | 421 | feasible | 7456631461 | 7.4566315e+09 | 5.3e-09 | 1.3e-16 | 0.0e+00 | 4.2e-14 | 30 | 0.52 | yes | **no** | **no** |
+| `qgfrdxpn` | 616 | 1092 | feasible | 1.007905849e+11 | 1.0079059e+11 | 5.1e-08 | 3.1e-15 | 1.5e-23 | 7.6e-15 | 39 | 1.30 | yes | **no** | **no** |
+| `qgrow15` | 300 | 645 | optimal | -101693640.5 | -1.0169364e+08 | 4.6e-09 | 2.7e-16 | 2.2e-17 | 1.5e-16 | 28 | 2.28 | yes | yes | yes |
 | `qgrow22` | 440 | 946 | optimal | -149628953.5 | -1.4962895e+08 | 2.3e-08 | 3.1e-16 | 1.5e-17 | 6.0e-16 | 33 | 0.06 | yes | yes | yes |
-| `qgrow7` | 140 | 301 | optimal | -42798713.87 | -42798714 | 3.0e-09 | 2.6e-16 | 1.2e-16 | 1.7e-14 | 27 | 0.02 | yes | yes | yes |
+| `qgrow7` | 140 | 301 | optimal | -42798713.87 | -42798714 | 3.0e-09 | 2.6e-16 | 1.2e-16 | 1.7e-14 | 27 | 0.01 | yes | yes | yes |
 | `qisrael` | 174 | 142 | optimal | 25347837.79 | 25347838 | 8.3e-09 | 0.0e+00 | 1.6e-17 | 1.6e-14 | 29 | 0.01 | yes | yes | yes |
 | `qpcblend` | 74 | 83 | optimal | -0.007842542988 | -0.0078425409 | 2.1e-09 | 1.4e-17 | 0.0e+00 | 1.0e-10 | 16 | 0.00 | yes | yes | yes |
-| `qpcboei1` | 351 | 384 | optimal | 11503914.01 | 11503914 | 8.5e-10 | 1.3e-17 | 1.7e-19 | 1.6e-16 | 30 | 1.09 | yes | yes | yes |
-| `qpcboei2` | 166 | 143 | optimal | 8171962.244 | 8171962.3 | 6.8e-09 | 3.9e-16 | 8.0e-20 | 6.8e-16 | 30 | 0.07 | yes | yes | yes |
+| `qpcboei1` | 351 | 384 | optimal | 11503914.01 | 11503914 | 8.5e-10 | 1.3e-17 | 1.7e-19 | 1.6e-16 | 31 | 1.01 | yes | yes | yes |
+| `qpcboei2` | 166 | 143 | optimal | 8171962.244 | 8171962.3 | 6.8e-09 | 3.9e-16 | 8.0e-20 | 6.8e-16 | 33 | 0.06 | yes | yes | yes |
 | `qpcstair` | 356 | 467 | optimal | 6204387.476 | 6204387.5 | 3.9e-09 | 1.1e-16 | 3.7e-17 | 2.0e-13 | 25 | 0.05 | yes | yes | yes |
-| `qpilotno` | 975 | 2172 | iteration_limit | 4755887.979 | 4728586.9 | 5.8e-03 | 1.4e-06 | 4.3e-07 | 1.0e+00 | 210 | 2.91 | - | **no** | **no** |
+| `qpilotno` | 975 | 2172 | iteration_limit | 4755887.979 | 4728586.9 | 5.8e-03 | 1.4e-06 | 4.3e-07 | 1.0e+00 | 210 | 2.89 | - | **no** | **no** |
 | `qptest` | 2 | 2 | optimal | 4.371875 | 4.371875 | 3.1e-12 | 0.0e+00 | 0.0e+00 | 9.1e-12 | 8 | 0.00 | yes | yes | yes |
 | `qrecipe` | 91 | 180 | optimal | -266.6159999 | -266.616 | 2.5e-10 | 9.7e-16 | 1.9e-15 | 4.9e-10 | 18 | 0.01 | yes | yes | yes |
 | `qsc205` | 205 | 203 | optimal | -0.00581395345 | -0.0058139518 | 1.6e-09 | 1.4e-16 | 1.5e-15 | 4.0e-11 | 14 | 0.00 | yes | yes | yes |
@@ -2584,7 +2584,7 @@ Shifted geometric mean of solver time, shift 10 s, an instance not successful at
 | `qscagr7` | 129 | 140 | optimal | 26865948.59 | 26865949 | 1.5e-08 | 2.0e-16 | 9.1e-16 | 1.6e-14 | 21 | 0.00 | yes | yes | yes |
 | `qscfxm1` | 330 | 457 | optimal | 16882691.64 | 16882692 | 2.1e-08 | 1.2e-17 | 1.5e-16 | 1.3e-14 | 29 | 0.04 | yes | yes | yes |
 | `qscfxm2` | 660 | 914 | optimal | 27776161.58 | 27776162 | 1.5e-08 | 2.8e-18 | 7.5e-17 | 1.6e-15 | 37 | 0.11 | yes | yes | yes |
-| `qscfxm3` | 990 | 1371 | optimal | 30816354.47 | 30816355 | 1.7e-08 | 7.3e-18 | 1.4e-17 | 3.6e-16 | 41 | 13.42 | yes | yes | yes |
+| `qscfxm3` | 990 | 1371 | optimal | 30816354.47 | 30816355 | 1.7e-08 | 7.3e-18 | 1.4e-17 | 3.6e-16 | 43 | 12.30 | yes | yes | yes |
 | `qscorpio` | 388 | 358 | optimal | 1880.509553 | 1880.5096 | 2.5e-08 | 1.4e-14 | 6.3e-17 | 6.8e-11 | 17 | 0.01 | yes | yes | yes |
 | `qscrs8` | 490 | 1169 | optimal | 904.5600139 | 904.56001 | 4.3e-09 | 6.7e-16 | 4.5e-16 | 1.2e-10 | 31 | 0.03 | yes | yes | yes |
 | `qscsd1` | 77 | 760 | optimal | 8.666666675 | 8.6666667 | 2.9e-09 | 2.8e-16 | 0.0e+00 | 1.1e-10 | 13 | 0.01 | yes | yes | yes |
@@ -2593,21 +2593,21 @@ Shifted geometric mean of solver time, shift 10 s, an instance not successful at
 | `qsctap1` | 300 | 480 | optimal | 1415.861111 | 1415.8611 | 7.9e-09 | 4.7e-17 | 0.0e+00 | 1.3e-11 | 23 | 0.01 | yes | yes | yes |
 | `qsctap2` | 1090 | 1880 | optimal | 1735.026498 | 1735.0265 | 9.7e-10 | 1.3e-17 | 0.0e+00 | 6.0e-10 | 21 | 0.04 | yes | yes | yes |
 | `qsctap3` | 1480 | 2480 | optimal | 1438.754681 | 1438.7547 | 1.3e-08 | 8.9e-18 | 0.0e+00 | 5.4e-12 | 23 | 0.06 | yes | yes | yes |
-| `qseba` | 515 | 1028 | optimal | 81481800.36 | 81481801 | 7.9e-09 | 1.4e-16 | 2.9e-15 | 3.7e-16 | 37 | 2.44 | yes | yes | yes |
-| `qshare1b` | 117 | 225 | optimal | 720078.3182 | 720078.32 | 2.6e-09 | 2.0e-16 | 1.9e-16 | 6.1e-15 | 31 | 0.01 | yes | yes | yes |
+| `qseba` | 515 | 1028 | optimal | 81481800.36 | 81481801 | 7.9e-09 | 1.4e-16 | 2.9e-15 | 3.7e-16 | 39 | 2.26 | yes | yes | yes |
+| `qshare1b` | 117 | 225 | optimal | 720078.3182 | 720078.32 | 2.6e-09 | 2.0e-16 | 1.9e-16 | 6.1e-15 | 31 | 0.02 | yes | yes | yes |
 | `qshare2b` | 96 | 79 | optimal | 11703.69172 | 11703.692 | 2.4e-08 | 2.1e-15 | 3.7e-13 | 5.7e-12 | 19 | 0.00 | yes | yes | yes |
-| `qshell` | 536 | 1775 | feasible | 1.572636843e+12 | 1.5726368e+12 | 2.7e-08 | 4.1e-16 | 8.7e-17 | 4.7e-16 | 35 | 2.79 | yes | **no** | **no** |
+| `qshell` | 536 | 1775 | feasible | 1.572636843e+12 | 1.5726368e+12 | 2.7e-08 | 4.1e-16 | 8.7e-17 | 4.7e-16 | 37 | 2.57 | yes | **no** | **no** |
 | `qship04l` | 402 | 2118 | optimal | 2420015.534 | 2420015.5 | 1.4e-08 | 1.8e-14 | 2.4e-17 | 4.2e-14 | 18 | 0.02 | yes | yes | yes |
 | `qship04s` | 402 | 1458 | optimal | 2424993.673 | 2424993.7 | 1.1e-08 | 9.0e-14 | 1.0e-16 | 1.4e-11 | 17 | 0.01 | yes | yes | yes |
-| `qship08l` | 778 | 4283 | optimal | 2376040.617 | 2376040.6 | 7.0e-09 | 5.3e-15 | 1.2e-18 | 9.4e-15 | 23 | 0.69 | yes | yes | yes |
+| `qship08l` | 778 | 4283 | optimal | 2376040.617 | 2376040.6 | 7.0e-09 | 5.3e-15 | 1.2e-18 | 9.4e-15 | 23 | 0.68 | yes | yes | yes |
 | `qship08s` | 778 | 2387 | optimal | 2385728.851 | 2385728.9 | 2.0e-08 | 3.4e-16 | 4.7e-18 | 6.8e-15 | 22 | 0.17 | yes | yes | yes |
-| `qship12l` | 1151 | 5427 | optimal | 3018876.577 | 3018876.6 | 7.6e-09 | 8.0e-16 | 2.6e-18 | 1.5e-16 | 26 | 7.43 | yes | yes | yes |
-| `qship12s` | 1151 | 2763 | optimal | 3056962.249 | 3056962.3 | 1.7e-08 | 1.3e-16 | 1.2e-18 | 1.5e-16 | 26 | 1.14 | yes | yes | yes |
+| `qship12l` | 1151 | 5427 | optimal | 3018876.577 | 3018876.6 | 7.6e-09 | 8.0e-16 | 2.6e-18 | 1.5e-16 | 28 | 6.93 | yes | yes | yes |
+| `qship12s` | 1151 | 2763 | optimal | 3056962.249 | 3056962.3 | 1.7e-08 | 1.3e-16 | 1.2e-18 | 1.5e-16 | 28 | 1.08 | yes | yes | yes |
 | `qsierra` | 1227 | 2036 | optimal | 23750458.18 | 23750458 | 7.5e-09 | 2.1e-16 | 7.6e-20 | 7.3e-13 | 24 | 0.09 | yes | yes | yes |
 | `qstair` | 356 | 467 | optimal | 7985452.756 | 7985452.8 | 5.5e-09 | 6.9e-18 | 2.4e-16 | 1.0e-13 | 28 | 0.03 | yes | yes | yes |
 | `qstandat` | 359 | 1075 | optimal | 6411.83839 | 6411.8384 | 1.6e-09 | 5.6e-16 | 2.8e-16 | 1.1e-10 | 24 | 0.02 | yes | yes | yes |
 | `s268` | 5 | 5 | optimal | 2.704291546e-08 | 5.7310705e-07 | 5.5e-07 | 0.0e+00 | 4.0e-16 | 5.8e-08 | 11 | 0.00 | yes | yes | **no** |
-| `stadat1` | 3999 | 2001 | iteration_limit | -28707058.45 | -28526864 | 6.3e-03 | 1.9e-04 | 5.7e-05 | 2.0e-04 | 1000000 | 50.57 | - | **no** | **no** |
+| `stadat1` | 3999 | 2001 | iteration_limit | -28707058.45 | -28526864 | 6.3e-03 | 1.9e-04 | 5.7e-05 | 2.0e-04 | 1000000 | 50.58 | - | **no** | **no** |
 | `stadat2` | 3999 | 2001 | optimal | -32.62666486 | -32.626665 | 4.2e-09 | 0.0e+00 | 4.9e-14 | 3.9e-10 | 17 | 0.07 | yes | yes | yes |
 | `stadat3` | 7999 | 4001 | optimal | -35.77945295 | -35.779453 | 1.5e-09 | 0.0e+00 | 4.7e-14 | 1.8e-10 | 19 | 0.15 | yes | yes | yes |
 | `stcqp1` | 2052 | 4097 | optimal | 155143.5547 | 155143.56 | 3.4e-08 | 1.5e-16 | 0.0e+00 | 3.9e-14 | 10 | 0.06 | yes | yes | yes |
@@ -2615,14 +2615,14 @@ Shifted geometric mean of solver time, shift 10 s, an instance not successful at
 | `tame` | 1 | 2 | optimal | 0 | 0 | 0.0e+00 | 3.1e-12 | 0.0e+00 | 1.6e-10 | 5 | 0.00 | yes | yes | yes |
 | `ubh1` | 12000 | 18009 | optimal | 1.116000816 | 1.1160008 | 1.4e-08 | 1.9e-16 | 2.1e-16 | 3.9e-10 | 11 | 0.44 | yes | yes | yes |
 | `values` | 1 | 202 | model_error | 0 | -1.3966211 | 1.0e+00 | - | - | - | 0 | 0.00 | - | **no** | **no** |
-| `yao` | 2000 | 2002 | optimal | 197.7042559 | 197.70426 | 2.1e-08 | 5.6e-17 | 1.2e-13 | 1.1e-11 | 69 | 0.52 | yes | yes | yes |
+| `yao` | 2000 | 2002 | optimal | 197.704256 | 197.70426 | 2.0e-08 | 5.6e-17 | 1.1e-13 | 9.0e-11 | 68 | 0.38 | yes | yes | yes |
 | `zecevic2` | 2 | 2 | optimal | -4.125 | -4.125 | 1.1e-11 | 8.0e-12 | 0.0e+00 | 8.4e-10 | 6 | 0.00 | yes | yes | yes |
 
 Every failure, named:
 
-- **Did not reach `optimal`** (10): `huestis`, `liswet12`, `liswet8`, `liswet9`, `qforplan`, `qgfrdxpn`, `qpilotno`, `qshell`, `stadat1`, `values`.
-- **`optimal` but more than 1e-6 relative from the reference objective** (1): `hues-mod`.
-- **`optimal` but not successful at 1e-9 relative** (12): `gouldqp3`, `hs268`, `hs35mod`, `liswet1`, `liswet10`, `liswet11`, `liswet2`, `liswet3`, `liswet4`, `liswet5`, `liswet6`, `s268`.
+- **Did not reach `optimal`** (7): `huestis`, `qforplan`, `qgfrdxpn`, `qpilotno`, `qshell`, `stadat1`, `values`.
+- **`optimal` but more than 1e-6 relative from the reference objective** (2): `hues-mod`, `liswet8`.
+- **`optimal` but not successful at 1e-9 relative** (14): `gouldqp3`, `hs268`, `hs35mod`, `liswet1`, `liswet10`, `liswet11`, `liswet2`, `liswet3`, `liswet4`, `liswet5`, `liswet6`, `liswet7`, `liswet8`, `s268`.
 
 **Reference errata.** For these instances the published objective is not the optimum: it was recomputed exactly, or independent solvers agree on another value (`data/maros-meszaros/reference_errata.json`). The table above still judges them against the published value, so they count as not matched.
 
@@ -2630,7 +2630,7 @@ Every failure, named:
 |---|---:|---:|---:|---:|---|
 | `hues-mod` | 3.4824690e+07 | 34824463.87334522571976875 | 6.4933e-06 | 34824463.873345532 | `bench/runners/exact_diagonal_qp.py data/maros-meszaros/hues-mod.qps` |
 | `huestis` | 3.4824690e+11 | 348244638733.4522571976875 | 6.4933e-06 | 348244638733.45282 | `bench/runners/exact_diagonal_qp.py data/maros-meszaros/huestis.qps` |
-| `liswet8` | 7.1447006e+03 | 714.47006 | 9.0000e-01 | 653.9165061262438 | HiGHS 714.4700590543218, Clp 714.4700590347206 and PIQP 714.4700559636733, each optimal and the latter two accepted by tools/verify_solution.py, in bench/results/head-to-head-maros-meszaros-d0eb672.csv (#1084); SANKHYA 714.470059768, optimal and verified, with qp_ipm_adaptive_dual_drop (#1178) |
+| `liswet8` | 7.1447006e+03 | 714.47006 | 9.0000e-01 | 714.4700597551564 | HiGHS 714.4700590543218, Clp 714.4700590347206 and PIQP 714.4700559636733, each optimal and the latter two accepted by tools/verify_solution.py, in bench/results/head-to-head-maros-meszaros-d0eb672.csv (#1084); SANKHYA 714.470059768, optimal and verified, with qp_ipm_adaptive_dual_drop (#1178) |
 
 ---
 
@@ -2643,75 +2643,74 @@ Bilinear quality terms make every one a non-convex QCQP. A run passes only on `o
 the published optimum with a solution the independent verifier accepts; a model the solver
 refuses is listed as refused, not dropped (`bench/runners/pooling.py`).
 
-Source CSV: `bench/results/pooling-729112d.csv`  
-Commit `729112d` · machine `Linux-x86_64` · time limit 60 s per run · `nonconvex=global` (set by the runner, #516), otherwise solver defaults
+Source CSV: `bench/results/pooling-1659c8b.csv`  
+Commit `1659c8b` · machine `Linux-x86_64` · time limit 60 s per run · `nonconvex=global` (set by the runner, #516), otherwise solver defaults
 
-**32 of 39 runs** (13 instances) reached the published global optimum within 1e-4 relative, claimed `optimal`, and were accepted by `tools/verify_solution.py` against the original non-convex model.
+**38 of 39 runs** (13 instances) reached the published global optimum within 1e-4 relative, claimed `optimal`, and were accepted by `tools/verify_solution.py` against the original non-convex model.
 
 | instance | form | status | our objective | global optimum | proven bound | root bound | nodes | time (s) | verified |
 |---|---|---|---:|---:|---:|---:|---:|---:|:--:|
-| `adhya1` | P | optimal | -549.7948331 | -549.8030502 | -549.8487943 | -989.18928 | 3601 | 3.80 | yes |
-| `adhya1` | PQ | optimal | -549.765337 | -549.8030502 | -549.8199626 | -840.27056 | 181 | 0.18 | yes |
-| `adhya1` | Q | optimal | -549.7938835 | -549.8030502 | -549.847225 | -1335 | 5699 | 4.09 | yes |
-| `adhya2` | P | optimal | -549.7707537 | -549.8030502 | -549.8256722 | -847.00386 | 13359 | 22.97 | yes |
-| `adhya2` | PQ | optimal | -549.7936477 | -549.8030502 | -549.8479255 | -574.78261 | 149 | 0.16 | yes |
-| `adhya2` | Q | optimal | -549.7841738 | -549.8030502 | -549.8387989 | -1335 | 5347 | 3.96 | yes |
-| `adhya3` | P | feasible | -557.329488 | -561.0446875 | -578.7302661 | -876.20685 | 19323 | 60.01 | yes |
-| `adhya3` | PQ | optimal | -561.0446804 | -561.0446875 | -561.0446909 | -574.78261 | 130 | 0.26 | yes |
-| `adhya3` | Q | feasible | -559.2204679 | -561.0446875 | -627.0629097 | -1335 | 30714 | 60.01 | yes |
-| `adhya4` | P | optimal | -877.6417921 | -877.6457399 | -877.6767281 | -992.66728 | 890 | 1.42 | yes |
-| `adhya4` | PQ | optimal | -877.6457443 | -877.6457399 | -877.6462669 | -961.93218 | 40 | 0.07 | yes |
-| `adhya4` | Q | feasible | -871.3110415 | -877.6457399 | -1018.789903 | -1345 | 31852 | 60.02 | yes |
+| `adhya1` | P | optimal | -549.7948331 | -549.8030502 | -549.8487943 | -989.18928 | 3601 | 2.07 | yes |
+| `adhya1` | PQ | optimal | -549.7863779 | -549.8030502 | -549.8400811 | -840.27056 | 159 | 0.08 | yes |
+| `adhya1` | Q | optimal | -549.7865523 | -549.8030502 | -549.8400811 | -840.27056 | 163 | 0.07 | yes |
+| `adhya2` | P | optimal | -549.7707537 | -549.8030502 | -549.8256722 | -847.00386 | 13359 | 13.16 | yes |
+| `adhya2` | PQ | optimal | -549.7790974 | -549.8030502 | -549.8292582 | -574.78261 | 157 | 0.09 | yes |
+| `adhya2` | Q | optimal | -549.8029624 | -549.8030502 | -549.8031413 | -574.78261 | 270 | 0.12 | yes |
+| `adhya3` | P | feasible | -560.7955363 | -561.0446875 | -574.2235064 | -876.20685 | 32224 | 60.01 | yes |
+| `adhya3` | PQ | optimal | -561.0008763 | -561.0446875 | -561.0492389 | -574.78261 | 80 | 0.10 | yes |
+| `adhya3` | Q | optimal | -561.0446701 | -561.0446875 | -561.0447103 | -574.78261 | 130 | 0.14 | yes |
+| `adhya4` | P | optimal | -877.6417921 | -877.6457399 | -877.6767281 | -992.66728 | 890 | 0.82 | yes |
+| `adhya4` | PQ | optimal | -877.6457443 | -877.6457399 | -877.6462669 | -961.93218 | 40 | 0.04 | yes |
+| `adhya4` | Q | optimal | -877.6457443 | -877.6457399 | -877.6462669 | -961.93218 | 40 | 0.04 | yes |
 | `bental4` | P | optimal | -450 | -450 | -450 | -550 | 3 | 0.00 | yes |
 | `bental4` | PQ | optimal | -450 | -450 | -450 | -550 | 3 | 0.00 | yes |
-| `bental4` | Q | optimal | -450.0000003 | -450 | -450.0132749 | -2933.3333 | 197 | 0.05 | yes |
-| `bental5` | P | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.01 | yes |
+| `bental4` | Q | optimal | -450 | -450 | -450 | -550 | 3 | 0.00 | yes |
+| `bental5` | P | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.00 | yes |
 | `bental5` | PQ | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.00 | yes |
-| `bental5` | Q | feasible | -3500 | -3500 | -7015.668933 | -9700 | 29730 | 60.03 | yes |
+| `bental5` | Q | optimal | -3500 | -3500 | -3500 | -3500 | 1 | 0.01 | yes |
 | `foulds2` | P | optimal | -1100 | -1100 | -1100 | -1100 | 1 | 0.00 | yes |
 | `foulds2` | PQ | optimal | -1100 | -1100 | -1100 | -1100 | 1 | 0.00 | yes |
-| `foulds2` | Q | optimal | -1100.000001 | -1100 | -1100.107363 | -6900 | 15523 | 7.50 | yes |
-| `foulds3` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.03 | yes |
-| `foulds3` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.07 | yes |
-| `foulds3` | Q | feasible | -8 | -8 | -260 | -260 | 6596 | 60.02 | yes |
-| `foulds4` | P | optimal | -8 | -8 | -8 | -8 | 2 | 0.04 | yes |
-| `foulds4` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.09 | yes |
-| `foulds4` | Q | feasible | -8 | -8 | -260 | -260 | 6691 | 60.01 | yes |
-| `foulds5` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.02 | yes |
-| `foulds5` | PQ | optimal | -8 | -8 | -8 | -8 | 2 | 0.11 | yes |
-| `foulds5` | Q | feasible | -8 | -8 | -260 | -260 | 4403 | 60.02 | yes |
+| `foulds2` | Q | optimal | -1100 | -1100 | -1100 | -1100 | 2 | 0.00 | yes |
+| `foulds3` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.02 | yes |
+| `foulds3` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.03 | yes |
+| `foulds3` | Q | optimal | -8 | -8 | -8 | -8 | 1 | 0.07 | yes |
+| `foulds4` | P | optimal | -8 | -8 | -8 | -8 | 2 | 0.02 | yes |
+| `foulds4` | PQ | optimal | -8 | -8 | -8 | -8 | 1 | 0.04 | yes |
+| `foulds4` | Q | optimal | -8 | -8 | -8 | -8 | 2 | 0.08 | yes |
+| `foulds5` | P | optimal | -8 | -8 | -8 | -8 | 1 | 0.01 | yes |
+| `foulds5` | PQ | optimal | -8 | -8 | -8 | -8 | 5 | 0.15 | yes |
+| `foulds5` | Q | optimal | -8 | -8 | -8 | -8 | 3 | 0.14 | yes |
 | `haverly1` | P | optimal | -400 | -400 | -400 | -500 | 3 | 0.00 | yes |
 | `haverly1` | PQ | optimal | -400 | -400 | -400 | -500 | 3 | 0.00 | yes |
-| `haverly1` | Q | optimal | -400.0000011 | -400 | -400.0000011 | -2450 | 41 | 0.01 | yes |
-| `haverly2` | P | optimal | -600 | -600 | -600 | -1000 | 7 | 0.01 | yes |
+| `haverly1` | Q | optimal | -400 | -400 | -400 | -500 | 3 | 0.00 | yes |
+| `haverly2` | P | optimal | -600 | -600 | -600 | -1000 | 7 | 0.00 | yes |
 | `haverly2` | PQ | optimal | -600 | -600 | -600 | -1000 | 3 | 0.00 | yes |
-| `haverly2` | Q | optimal | -600 | -600 | -600.0000002 | -4700 | 33 | 0.01 | yes |
+| `haverly2` | Q | optimal | -600 | -600 | -600 | -1000 | 3 | 0.00 | yes |
 | `haverly3` | P | optimal | -750 | -750 | -750 | -800 | 7 | 0.00 | yes |
 | `haverly3` | PQ | optimal | -750 | -750 | -750 | -800 | 3 | 0.00 | yes |
-| `haverly3` | Q | optimal | -750.0000011 | -750 | -750.0000011 | -2450 | 29 | 0.01 | yes |
+| `haverly3` | Q | optimal | -750 | -750 | -750 | -800 | 3 | 0.01 | yes |
 
 #### Root relaxation: PQ against P
 
 | instance | P root bound | Q root bound | PQ root bound | global optimum | P root gap closed by PQ |
 |---|---:|---:|---:|---:|---:|
-| `adhya1` | -989.18928 | -1335 | -840.27056 | -549.8030502 | 33.9 % |
-| `adhya2` | -847.00386 | -1335 | -574.78261 | -549.8030502 | 91.6 % |
-| `adhya3` | -876.20685 | -1335 | -574.78261 | -561.0446875 | 95.6 % |
-| `adhya4` | -992.66728 | -1345 | -961.93218 | -877.6457399 | 26.7 % |
-| `bental4` | -550 | -2933.3333 | -550 | -450 | 0.0 % |
-| `bental5` | -3500 | -9700 | -3500 | -3500 | - |
-| `foulds2` | -1100 | -6900 | -1100 | -1100 | - |
-| `foulds3` | -8 | -260 | -8 | -8 | - |
-| `foulds4` | -8 | -260 | -8 | -8 | - |
-| `foulds5` | -8 | -260 | -8 | -8 | - |
-| `haverly1` | -500 | -2450 | -500 | -400 | 0.0 % |
-| `haverly2` | -1000 | -4700 | -1000 | -600 | 0.0 % |
-| `haverly3` | -800 | -2450 | -800 | -750 | 0.0 % |
+| `adhya1` | -989.18928 | -840.27056 | -840.27056 | -549.8030502 | 33.9 % |
+| `adhya2` | -847.00386 | -574.78261 | -574.78261 | -549.8030502 | 91.6 % |
+| `adhya3` | -876.20685 | -574.78261 | -574.78261 | -561.0446875 | 95.6 % |
+| `adhya4` | -992.66728 | -961.93218 | -961.93218 | -877.6457399 | 26.7 % |
+| `bental4` | -550 | -550 | -550 | -450 | 0.0 % |
+| `bental5` | -3500 | -3500 | -3500 | -3500 | - |
+| `foulds2` | -1100 | -1100 | -1100 | -1100 | - |
+| `foulds3` | -8 | -8 | -8 | -8 | - |
+| `foulds4` | -8 | -8 | -8 | -8 | - |
+| `foulds5` | -8 | -8 | -8 | -8 | - |
+| `haverly1` | -500 | -500 | -500 | -400 | 0.0 % |
+| `haverly2` | -1000 | -1000 | -1000 | -600 | 0.0 % |
+| `haverly3` | -800 | -800 | -800 | -750 | -0.0 % |
 
 Every run that did not pass, named:
 
-- **gap not closed** (4): `bental5_q`, `foulds3_q`, `foulds4_q`, `foulds5_q`.
-- **gap not closed, incumbent worse than the optimum** (3): `adhya3_p`, `adhya3_q`, `adhya4_q`.
+- **gap not closed, incumbent worse than the optimum** (1): `adhya3_p`.
 
 #### The global bound certificate, checked (#514)
 
@@ -2721,52 +2720,52 @@ rebuilds every relaxation from the original model in exact arithmetic and accept
 only when the bound it proves closes the gap. A certified search uses no bound tightening, so
 it is a different search from the run above.
 
-Source CSV: `bench/results/pooling-certificate-729112d.csv`  
-Commit `729112d` · machine `Linux-x86_64` · time limit 60 s per run · `nonconvex=global` and `write_certificate` (set by the runner)
+Source CSV: `bench/results/pooling-certificate-1659c8b.csv`  
+Commit `1659c8b` · machine `Linux-x86_64` · time limit 60 s per run · `nonconvex=global` and `write_certificate` (set by the runner)
 
-**32 of 39 runs certified**: `optimal` at the published global optimum, accepted by `tools/verify_solution.py`, and the certificate accepted by `tools/verify_global_certificate.py` in exact arithmetic. Status: feasible 7, optimal 32. Checker verdict: verified 39.
+**38 of 39 runs certified**: `optimal` at the published global optimum, accepted by `tools/verify_solution.py`, and the certificate accepted by `tools/verify_global_certificate.py` in exact arithmetic. Status: feasible 1, optimal 38. Checker verdict: verified 39.
 
 | instance | form | status | our objective | proven bound | nodes | time (s) | certificate |
 |---|---|---|---:|---:|---:|---:|---|
-| `adhya1` | P | optimal | -549.7685155 | -549.8233376 | 5037 | 5.20 | verified |
-| `adhya1` | PQ | optimal | -549.7912685 | -549.8295776 | 260 | 0.21 | verified |
-| `adhya1` | Q | optimal | -549.7868114 | -549.8417839 | 14733 | 10.08 | verified |
-| `adhya2` | P | optimal | -549.7983014 | -549.8531637 | 16063 | 26.51 | verified |
-| `adhya2` | PQ | optimal | -549.8021965 | -549.8031651 | 390 | 0.33 | verified |
-| `adhya2` | Q | optimal | -549.8018498 | -549.8568155 | 13381 | 9.76 | verified |
-| `adhya3` | P | feasible | -558.765194 | -580.0450057 | 18975 | 60.36 | verified |
-| `adhya3` | PQ | optimal | -561.0348454 | -561.0448366 | 160 | 0.26 | verified |
-| `adhya3` | Q | feasible | -556.7204874 | -672.2611562 | 42947 | 60.65 | verified |
-| `adhya4` | P | optimal | -877.6442226 | -877.6857026 | 1310 | 1.94 | verified |
-| `adhya4` | PQ | optimal | -877.6429502 | -877.65716 | 30 | 0.07 | verified |
-| `adhya4` | Q | feasible | -870.0801347 | -1025.798983 | 33050 | 60.59 | verified |
+| `adhya1` | P | optimal | -549.7685155 | -549.8233376 | 5037 | 2.70 | verified |
+| `adhya1` | PQ | optimal | -549.7998144 | -549.8054088 | 350 | 0.16 | verified |
+| `adhya1` | Q | optimal | -549.7526842 | -549.8073823 | 323 | 0.13 | verified |
+| `adhya2` | P | optimal | -549.7983014 | -549.8531637 | 16063 | 14.86 | verified |
+| `adhya2` | PQ | optimal | -549.8030215 | -549.8032364 | 500 | 0.23 | verified |
+| `adhya2` | Q | optimal | -549.8026782 | -549.8030708 | 530 | 0.24 | verified |
+| `adhya3` | P | feasible | -560.6142829 | -574.4335109 | 32412 | 60.50 | verified |
+| `adhya3` | PQ | optimal | -561.0442048 | -561.0451696 | 140 | 0.13 | verified |
+| `adhya3` | Q | optimal | -561.0187163 | -561.0457062 | 140 | 0.13 | verified |
+| `adhya4` | P | optimal | -877.6442226 | -877.6857026 | 1310 | 1.11 | verified |
+| `adhya4` | PQ | optimal | -877.6429502 | -877.65716 | 30 | 0.05 | verified |
+| `adhya4` | Q | optimal | -877.6429502 | -877.65716 | 30 | 0.04 | verified |
 | `bental4` | P | optimal | -450 | -450 | 3 | 0.00 | verified |
 | `bental4` | PQ | optimal | -450 | -450 | 3 | 0.00 | verified |
-| `bental4` | Q | optimal | -450 | -450.0255012 | 281 | 0.07 | verified |
-| `bental5` | P | optimal | -3500 | -3500 | 1 | 0.01 | verified |
+| `bental4` | Q | optimal | -450 | -450 | 3 | 0.00 | verified |
+| `bental5` | P | optimal | -3500 | -3500 | 1 | 0.00 | verified |
 | `bental5` | PQ | optimal | -3500 | -3500 | 1 | 0.00 | verified |
-| `bental5` | Q | feasible | -3500 | -7081.634645 | 30766 | 60.62 | verified |
+| `bental5` | Q | optimal | -3500 | -3500 | 1 | 0.01 | verified |
 | `foulds2` | P | optimal | -1100 | -1100 | 1 | 0.00 | verified |
-| `foulds2` | PQ | optimal | -1100 | -1100 | 1 | 0.01 | verified |
-| `foulds2` | Q | optimal | -1100 | -1100.109233 | 35359 | 18.02 | verified |
-| `foulds3` | P | optimal | -8 | -8 | 1 | 0.03 | verified |
-| `foulds3` | PQ | optimal | -8 | -8 | 1 | 0.07 | verified |
-| `foulds3` | Q | feasible | -8 | -260 | 6963 | 60.38 | verified |
-| `foulds4` | P | optimal | -8 | -8 | 2 | 0.04 | verified |
-| `foulds4` | PQ | optimal | -8 | -8 | 1 | 0.09 | verified |
-| `foulds4` | Q | feasible | -8 | -260 | 6785 | 60.38 | verified |
-| `foulds5` | P | optimal | -8 | -8 | 1 | 0.02 | verified |
-| `foulds5` | PQ | optimal | -8 | -8 | 2 | 0.11 | verified |
-| `foulds5` | Q | feasible | -8 | -260 | 4600 | 60.16 | verified |
+| `foulds2` | PQ | optimal | -1100 | -1100 | 1 | 0.00 | verified |
+| `foulds2` | Q | optimal | -1100 | -1100 | 1 | 0.00 | verified |
+| `foulds3` | P | optimal | -8 | -8 | 1 | 0.02 | verified |
+| `foulds3` | PQ | optimal | -8 | -8 | 1 | 0.03 | verified |
+| `foulds3` | Q | optimal | -8 | -8 | 1 | 0.07 | verified |
+| `foulds4` | P | optimal | -8 | -8 | 2 | 0.02 | verified |
+| `foulds4` | PQ | optimal | -8 | -8 | 1 | 0.04 | verified |
+| `foulds4` | Q | optimal | -8 | -8 | 2 | 0.08 | verified |
+| `foulds5` | P | optimal | -8 | -8 | 1 | 0.01 | verified |
+| `foulds5` | PQ | optimal | -8 | -8 | 5 | 0.15 | verified |
+| `foulds5` | Q | optimal | -8 | -8 | 5 | 0.19 | verified |
 | `haverly1` | P | optimal | -400 | -400 | 3 | 0.00 | verified |
 | `haverly1` | PQ | optimal | -400 | -400 | 3 | 0.00 | verified |
-| `haverly1` | Q | optimal | -400 | -400 | 67 | 0.02 | verified |
-| `haverly2` | P | optimal | -600 | -600 | 7 | 0.01 | verified |
+| `haverly1` | Q | optimal | -400 | -400 | 3 | 0.00 | verified |
+| `haverly2` | P | optimal | -600 | -600 | 7 | 0.00 | verified |
 | `haverly2` | PQ | optimal | -600 | -600 | 3 | 0.00 | verified |
-| `haverly2` | Q | optimal | -600 | -600 | 61 | 0.02 | verified |
-| `haverly3` | P | optimal | -750 | -750 | 7 | 0.01 | verified |
+| `haverly2` | Q | optimal | -600 | -600 | 3 | 0.00 | verified |
+| `haverly3` | P | optimal | -750 | -750 | 7 | 0.00 | verified |
 | `haverly3` | PQ | optimal | -750 | -750 | 3 | 0.00 | verified |
-| `haverly3` | Q | optimal | -750 | -750 | 63 | 0.02 | verified |
+| `haverly3` | Q | optimal | -750 | -750 | 3 | 0.00 | verified |
 
 ---
 
@@ -3609,8 +3608,8 @@ Chinneck's collection of infeasible LPs (`netlib.org/lp/infeas`, fetched and has
 alone proves nothing; a pass needs the Farkas certificate the solver wrote to survive
 `tools/verify_solution.py` (`bench/runners/netlib_infeasible.py`).
 
-Source CSV: `bench/results/netlib-infeasible-0aa5301.csv`  
-Commit `0aa5301` · machine `github-actions ubuntu-24.04 4 vCPU AMD EPYC 9V74 80-Core Processor 15 GiB RAM` · time limit 60 s per instance
+Source CSV: `bench/results/netlib-infeasible-1659c8b.csv`  
+Commit `1659c8b` · machine `github-actions ubuntu-24.04 4 vCPU Intel(R) Xeon(R) 6975P-C 15 GiB RAM` · time limit 60 s per instance
 
 **29 of 29** reported `infeasible` **and** wrote a Farkas certificate that `tools/verify_solution.py` accepted. A status of `infeasible` without a certificate is not counted: the verifier has nothing to check, so the verdict is unproven.
 
@@ -3621,33 +3620,33 @@ Every instance in the collection passed.
 | instance | rows | cols | status | engine | certificate | multipliers | time (s) | verified | IIS | the solver's message |
 |---|---:|---:|---|---|---|---:|---:|:--:|---|---|
 | `bgdbg1` | 348 | 407 | infeasible | presolve | farkas | 2 | 0.004 | yes | 3 proved | row 163 allows activity of at most 24 but the column bounds force at least 54; proved by presolve; proof: the rows aggre |
-| `bgetam` | 400 | 688 | infeasible | simplex-dual | farkas | 39 | 0.057 | yes | 78 proved | dual simplex: basic variable 635 is outside its bounds by 4.647e+03, far above the 1.0e-07 feasibility tolerance, and no |
-| `bgindy` | 2671 | 10116 | infeasible | simplex-dual | farkas | 3 | 1.043 | yes | 154 proved | dual simplex: basic variable 12627 is outside its bounds by 7.134e+03, far above the 1.0e-07 feasibility tolerance, and  |
-| `bgprtr` | 20 | 34 | infeasible | simplex-dual+primal | farkas | 6 | 0.004 | yes | 12 proved | phase 1 terminated with max bound violation 2.343e+01, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
-| `box1` | 231 | 261 | infeasible | simplex-dual | farkas | 9 | 0.006 | yes | 10 proved | dual simplex: basic variable 101 is outside its bounds by 5.000e-01, far above the 1.0e-07 feasibility tolerance, and no |
-| `ceria3d` | 3576 | 824 | infeasible | presolve | farkas | 222 | 1.639 | yes | 222 proved | row 292 needs activity of at least 0.75 but the column bounds cap it at 0.5; proved by presolve; certificate from the el |
-| `chemcom` | 288 | 720 | infeasible | simplex-dual | farkas | 21 | 0.039 | yes | 98 proved | dual simplex: basic variable 704 is outside its bounds by 1.436e+03, far above the 1.0e-07 feasibility tolerance, and no |
-| `cplex1` | 3005 | 3221 | infeasible | simplex-dual+primal | farkas | 5 | 0.212 | yes | 6 proved | phase 1 terminated with max bound violation 6.834e+06, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
-| `cplex2` | 224 | 221 | infeasible | simplex-dual+primal | farkas | 134 | 0.051 | yes | - | proved infeasible in exact rational arithmetic: the model as read into doubles is exactly infeasible: its elastic LP's e |
-| `ex72a` | 197 | 215 | infeasible | simplex-dual | farkas | 60 | 0.019 | yes | 61 proved | dual simplex: basic variable 50 is outside its bounds by 5.000e-01, far above the 1.0e-07 feasibility tolerance, and no  |
-| `ex73a` | 193 | 211 | infeasible | simplex-dual | farkas | 25 | 0.008 | yes | 26 proved | dual simplex: basic variable 48 is outside its bounds by 5.000e-01, far above the 1.0e-07 feasibility tolerance, and no  |
-| `forest6` | 66 | 95 | infeasible | simplex-dual | farkas | 66 | 0.026 | yes | 94 proved | dual simplex: basic variable 0 is outside its bounds by 3.221e+05, far above the 1.0e-07 feasibility tolerance, and no n |
+| `bgetam` | 400 | 688 | infeasible | simplex-dual | farkas | 39 | 0.051 | yes | 78 proved | dual simplex: basic variable 635 is outside its bounds by 4.647e+03, far above the 1.0e-07 feasibility tolerance, and no |
+| `bgindy` | 2671 | 10116 | infeasible | simplex-dual | farkas | 3 | 0.832 | yes | 154 proved | dual simplex: basic variable 12627 is outside its bounds by 7.134e+03, far above the 1.0e-07 feasibility tolerance, and  |
+| `bgprtr` | 20 | 34 | infeasible | simplex-dual+primal | farkas | 6 | 0.003 | yes | 12 proved | phase 1 terminated with max bound violation 2.343e+01, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
+| `box1` | 231 | 261 | infeasible | simplex-dual | farkas | 9 | 0.005 | yes | 10 proved | dual simplex: basic variable 101 is outside its bounds by 5.000e-01, far above the 1.0e-07 feasibility tolerance, and no |
+| `ceria3d` | 3576 | 824 | infeasible | presolve | farkas | 222 | 1.662 | yes | 222 proved | row 292 needs activity of at least 0.75 but the column bounds cap it at 0.5; proved by presolve; certificate from the el |
+| `chemcom` | 288 | 720 | infeasible | simplex-dual | farkas | 21 | 0.032 | yes | 98 proved | dual simplex: basic variable 704 is outside its bounds by 1.436e+03, far above the 1.0e-07 feasibility tolerance, and no |
+| `cplex1` | 3005 | 3221 | infeasible | simplex-dual+primal | farkas | 5 | 0.211 | yes | 6 proved | phase 1 terminated with max bound violation 6.834e+06, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
+| `cplex2` | 224 | 221 | infeasible | simplex-dual+primal | farkas | 134 | 0.048 | yes | - | proved infeasible in exact rational arithmetic: the model as read into doubles is exactly infeasible: its elastic LP's e |
+| `ex72a` | 197 | 215 | infeasible | simplex-dual | farkas | 60 | 0.018 | yes | 61 proved | dual simplex: basic variable 50 is outside its bounds by 5.000e-01, far above the 1.0e-07 feasibility tolerance, and no  |
+| `ex73a` | 193 | 211 | infeasible | simplex-dual | farkas | 25 | 0.007 | yes | 26 proved | dual simplex: basic variable 48 is outside its bounds by 5.000e-01, far above the 1.0e-07 feasibility tolerance, and no  |
+| `forest6` | 66 | 95 | infeasible | simplex-dual | farkas | 66 | 0.027 | yes | 94 proved | dual simplex: basic variable 0 is outside its bounds by 3.221e+05, far above the 1.0e-07 feasibility tolerance, and no n |
 | `galenet` | 8 | 8 | infeasible | presolve | farkas | 3 | 0.003 | yes | 6 proved | row 4 needs activity of at least 30 but the column bounds cap it at 20; proved by presolve; certificate from the elastic |
-| `gosh` | 3792 | 10733 | infeasible | simplex-dual+primal | farkas | 9 | 2.923 | yes | 9 proved | phase 1 terminated with max bound violation 3.998e+00, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
-| `gran` | 2658 | 2520 | infeasible | presolve | farkas | 336 | 37.511 | yes | 834 proved | row 1612 allows activity of at most 97.7 but the column bounds force at least 97.7; proved by presolve; certificate from |
-| `greenbea` | 2393 | 5405 | infeasible | presolve | farkas | 1 | 0.274 | yes | 94 proved | row 1491 allows activity of at most 0 but the column bounds force at least 320; proved by presolve; proof: the rows aggr |
+| `gosh` | 3792 | 10733 | infeasible | simplex-dual+primal | farkas | 9 | 3.024 | yes | 9 proved | phase 1 terminated with max bound violation 1.263e+01, far above the 1.0e-07 feasibility tolerance; proof: the rows aggr |
+| `gran` | 2658 | 2520 | infeasible | presolve | farkas | 97 | 2.534 | yes | 212 proved | row 1612 allows activity of at most 97.7 but the column bounds force at least 97.7; proved by presolve; certificate from |
+| `greenbea` | 2393 | 5405 | infeasible | presolve | farkas | 1 | 0.235 | yes | 94 proved | row 1491 allows activity of at most 0 but the column bounds force at least 320; proved by presolve; proof: the rows aggr |
 | `itest2` | 9 | 4 | infeasible | presolve | farkas | 3 | 0.003 | yes | 3 proved | row 4 allows activity of at most 2 but the column bounds force at least 13; proved by presolve; proof: the rows aggregat |
-| `itest6` | 11 | 8 | infeasible | presolve | farkas | 3 | 0.003 | yes | 3 proved | row 3 needs activity of at least 50000 but the column bounds cap it at -30000; proved by presolve; proof: the rows aggre |
-| `klein1` | 54 | 54 | infeasible | simplex-dual | farkas | 51 | 0.057 | yes | 55 **not proved** | dual simplex: basic variable 89 is outside its bounds by 7.734e+04, far above the 1.0e-07 feasibility tolerance, and no  |
-| `klein2` | 477 | 54 | infeasible | simplex-dual | farkas | 54 | 0.221 | yes | 55 proved | dual simplex: basic variable 282 is outside its bounds by 5.350e+04, far above the 1.0e-07 feasibility tolerance, and no |
-| `klein3` | 994 | 88 | infeasible | simplex-dual | farkas | 87 | 1.682 | yes | 89 proved | dual simplex: basic variable 414 is outside its bounds by 6.342e+04, far above the 1.0e-07 feasibility tolerance, and no |
-| `mondou2` | 312 | 604 | infeasible | simplex-dual | farkas | 34 | 0.029 | yes | 61 proved | dual simplex: basic variable 375 is outside its bounds by 9.130e+03, far above the 1.0e-07 feasibility tolerance, and no |
-| `pang` | 361 | 460 | infeasible | simplex-dual+primal | farkas | 13 | 0.051 | yes | 35 proved | phase 1 terminated with max bound violation 8.174e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
-| `pilot4i` | 410 | 1000 | infeasible | presolve | farkas | 1 | 0.025 | yes | 43 proved | row 390 needs activity of at least 15.17 but the column bounds cap it at 0; proved by presolve; proof: the rows aggregat |
-| `qual` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 125 | 1.565 | yes | 225 proved | phase 1 terminated with max bound violation 1.363e+06, far above the 1.0e-07 feasibility tolerance; certificate from the |
-| `reactor` | 318 | 637 | infeasible | presolve | farkas | 1 | 0.009 | yes | 15 proved | row 116 needs activity of at least 0 but the column bounds cap it at -1; proved by presolve; proof: the rows aggregate t |
-| `refinery` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 82 | 0.243 | yes | 165 proved | phase 1 terminated with max bound violation 2.129e+07, far above the 1.0e-07 feasibility tolerance; certificate from the |
-| `vol1` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 130 | 1.869 | yes | 231 **not proved** | phase 1 terminated with max bound violation 2.094e+07, far above the 1.0e-07 feasibility tolerance; certificate from the |
+| `itest6` | 11 | 8 | infeasible | presolve | farkas | 3 | 0.002 | yes | 3 proved | row 3 needs activity of at least 50000 but the column bounds cap it at -30000; proved by presolve; proof: the rows aggre |
+| `klein1` | 54 | 54 | infeasible | simplex-dual | farkas | 51 | 0.054 | yes | 55 **not proved** | dual simplex: basic variable 89 is outside its bounds by 7.734e+04, far above the 1.0e-07 feasibility tolerance, and no  |
+| `klein2` | 477 | 54 | infeasible | simplex-dual | farkas | 54 | 0.195 | yes | 55 proved | dual simplex: basic variable 282 is outside its bounds by 5.350e+04, far above the 1.0e-07 feasibility tolerance, and no |
+| `klein3` | 994 | 88 | infeasible | simplex-dual | farkas | 87 | 1.437 | yes | 89 proved | dual simplex: basic variable 414 is outside its bounds by 6.342e+04, far above the 1.0e-07 feasibility tolerance, and no |
+| `mondou2` | 312 | 604 | infeasible | simplex-dual | farkas | 34 | 0.026 | yes | 61 proved | dual simplex: basic variable 375 is outside its bounds by 9.130e+03, far above the 1.0e-07 feasibility tolerance, and no |
+| `pang` | 361 | 460 | infeasible | simplex-dual+primal | farkas | 13 | 0.049 | yes | 35 proved | phase 1 terminated with max bound violation 8.174e+04, far above the 1.0e-07 feasibility tolerance; route: the scaled at |
+| `pilot4i` | 410 | 1000 | infeasible | presolve | farkas | 1 | 0.021 | yes | 43 proved | row 390 needs activity of at least 15.17 but the column bounds cap it at 0; proved by presolve; proof: the rows aggregat |
+| `qual` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 125 | 1.544 | yes | 225 proved | phase 1 terminated with max bound violation 1.363e+06, far above the 1.0e-07 feasibility tolerance; certificate from the |
+| `reactor` | 318 | 637 | infeasible | presolve | farkas | 1 | 0.008 | yes | 15 proved | row 116 needs activity of at least 0 but the column bounds cap it at -1; proved by presolve; proof: the rows aggregate t |
+| `refinery` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 82 | 0.230 | yes | 165 proved | phase 1 terminated with max bound violation 2.129e+07, far above the 1.0e-07 feasibility tolerance; certificate from the |
+| `vol1` | 323 | 464 | infeasible | simplex-dual+primal | farkas | 130 | 1.870 | yes | 231 **not proved** | phase 1 terminated with max bound violation 2.094e+07, far above the 1.0e-07 feasibility tolerance; certificate from the |
 | `woodinfe` | 35 | 89 | infeasible | presolve | farkas | 1 | 0.003 | yes | 2 proved | row 17 needs activity of at least 0 but the column bounds cap it at -5; proved by presolve; proof: the rows aggregate to |
 
 No per-engine option run is committed yet (`--solver-option algorithm=simplex`, `dual-simplex`, `pdhg`).
@@ -3864,28 +3863,28 @@ SANKHYA included.
 
 ### 4a.1 Netlib LP
 
-Source CSV: `bench/results/head-to-head-netlib-8eaf18c.csv`  
-Commit `8eaf18c` · machine `github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`  
+Source CSV: `bench/results/head-to-head-netlib-1659c8b.csv`  
+Commit `1659c8b` · machine `github-actions ubuntu-24.04; Intel(R) Xeon(R) 6975P-C; 4 cores; 15 GiB RAM; Linux-x86_64`  
 94 instances · time limit 120 s · 1 thread per solver · every solver a separate process
 
 **The 92 LPs netlib.org ships as EMPS files:**
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | 8eaf18c | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.206 s |
-| HiGHS | 1.16.0 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.096 s |
-| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.273 s |
-| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.292 s |
-| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.406 s |
+| SANKHYA | 1659c8b | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.229 s |
+| HiGHS | 1.16.0 | 92 | 92 | 83 | 92 | 92 | primal+dual | 0.128 s |
+| SCIP | 10.0.2 | 92 | 92 | 83 | 92 | 92 | primal-only | 0.312 s |
+| CBC/Clp | 1.17.9 | 92 | 92 | 83 | 92 | 88 | primal+dual | 1.314 s |
+| GLPK | 5.0 | 92 | 92 | 83 | 92 | 91 | primal+dual | 0.437 s |
 
 **Instance by instance, SANKHYA against each rival:**
 
 | against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
 |---|---:|---:|---:|---:|---:|---:|
-| HiGHS | 92 | 3 | 82 | 7 | 1.00x | 0.76x |
-| SCIP | 92 | 19 | 70 | 3 | 1.00x | 0.29x |
-| CBC/Clp | 92 | 5 | 82 | 5 | 1.00x | 0.50x |
-| GLPK | 92 | 14 | 75 | 3 | 1.00x | 0.65x |
+| HiGHS | 92 | 5 | 81 | 6 | 1.00x | 0.82x |
+| SCIP | 92 | 19 | 70 | 3 | 1.00x | 0.30x |
+| CBC/Clp | 92 | 6 | 80 | 6 | 1.00x | 0.60x |
+| GLPK | 92 | 12 | 76 | 4 | 1.00x | 0.64x |
 
 *A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
 
@@ -3893,11 +3892,11 @@ Commit `8eaf18c` · machine `github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core 
 
 | solver | version | runs | solved | matched | matched exact | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---:|---|---:|
-| SANKHYA | 8eaf18c | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.161 s |
-| HiGHS | 1.16.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 0.745 s |
-| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 1.513 s |
-| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 0.679 s |
-| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.125 s |
+| SANKHYA | 1659c8b | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.530 s |
+| HiGHS | 1.16.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.204 s |
+| SCIP | 10.0.2 | 2 | 2 | 1 | 2 | 2 | primal-only | 1.671 s |
+| CBC/Clp | 1.17.9 | 2 | 2 | 1 | 2 | 2 | primal+dual | 0.952 s |
+| GLPK | 5.0 | 2 | 2 | 1 | 2 | 2 | primal+dual | 1.557 s |
 
 `matched` grades against the readme's optimum and `matched exact` against Koch's exact rational optimum (`data/netlib/koch_exact.json`, #747); the timing counts the exact grade. Where the two differ the readme is the one that is wrong: on 80bau3b, ganges, greenbea, greenbeb, nesm, pilot, pilot.we, scrs8 and stocfor3 every solver here agrees with Koch.
 
@@ -3955,33 +3954,35 @@ Every run that did not count, by solver:
 
 ### 4a.3 Maros-Meszaros QP
 
-Source CSV: `bench/results/head-to-head-maros-meszaros-d0eb672.csv`  
-Commit `d0eb672` · machine `github-actions ubuntu-latest; AMD EPYC 9V45 96-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`  
+Source CSV: `bench/results/head-to-head-maros-meszaros-1659c8b.csv`  
+Commit `1659c8b` · machine `github-actions ubuntu-24.04; AMD EPYC 9V45 96-Core Processor; 4 cores; 16 GiB RAM; Linux-x86_64`  
 138 instances · time limit 60 s · 1 thread per solver · every solver a separate process
 
 | solver | version | runs | solved | matched | verified | checked on | SGM time, shift 10 s |
 |---|---|---:|---:|---:|---:|---|---:|
-| SANKHYA | d0eb672 | 138 | 119 | 117 | 119 | primal+dual | 4.066 s |
-| HiGHS | 1.15.1 | 138 | 102 | 96 | 31 | primal+dual | 35.808 s |
-| SCIP | 10.0.2 | 138 | 78 | 76 | 53 | primal-only | 26.584 s |
-| CBC/Clp | 1.17.9 | 138 | 129 | 115 | 64 | primal+dual | 20.001 s |
+| SANKHYA | 1659c8b | 138 | 131 | 129 | 131 | primal+dual | 2.387 s |
+| HiGHS | 1.16.0 | 138 | 102 | 94 | 28 | primal+dual | 37.928 s |
+| HiGHS, QP regularization 0 | 1.16.0 | 138 | 106 | 103 | 84 | primal+dual | 12.899 s |
+| SCIP | 10.0.2 | 138 | 87 | 85 | 60 | primal-only | 23.655 s |
+| CBC/Clp | 1.17.9 | 138 | 129 | 115 | 64 | primal+dual | 20.019 s |
 | GLPK | - | 138 | unsupported | - | - | - | - |
-| OSQP | 1.1.3 | 138 | 65 | 61 | 48 | primal-only | 26.650 s |
-| Clarabel | 0.11.1 | 138 | 132 | 105 | 107 | primal-only | 10.062 s |
-| PIQP | 0.6.4 | 138 | 137 | 130 | 135 | primal-only | 1.905 s |
-| SCS | 3.3.1 | 138 | 125 | 105 | 72 | primal-only | 16.235 s |
+| OSQP | 1.1.3 | 138 | 65 | 61 | 48 | primal-only | 26.644 s |
+| Clarabel | 0.11.1 | 138 | 132 | 105 | 107 | primal-only | 10.074 s |
+| PIQP | 0.7.0 | 138 | 136 | 130 | 134 | primal-only | 1.932 s |
+| SCS | 3.3.2 | 138 | 124 | 101 | 65 | primal-only | 18.506 s |
 
 **Instance by instance, SANKHYA against each rival:**
 
 | against | instances compared | SANKHYA faster | tie | rival faster | median of SANKHYA's time over the rival's, floored | the same, clocks as recorded |
 |---|---:|---:|---:|---:|---:|---:|
-| HiGHS | 120 | 91 | 26 | 3 | 1.00x | 0.34x |
-| SCIP | 120 | 93 | 22 | 5 | 0.93x | 0.04x |
-| CBC/Clp | 126 | 76 | 36 | 14 | 1.00x | 0.26x |
-| OSQP | 118 | 76 | 40 | 2 | 1.00x | 1.48x |
-| Clarabel | 123 | 41 | 66 | 16 | 1.00x | 1.38x |
-| PIQP | 133 | 5 | 89 | 39 | 1.00x | 2.73x |
-| SCS | 118 | 54 | 59 | 5 | 1.00x | 0.67x |
+| HiGHS | 130 | 107 | 21 | 2 | 1.00x | 0.21x |
+| HiGHS, QP regularization 0 | 130 | 70 | 52 | 8 | 1.00x | 0.33x |
+| SCIP | 130 | 100 | 25 | 5 | 1.00x | 0.09x |
+| CBC/Clp | 130 | 80 | 34 | 16 | 1.00x | 0.39x |
+| OSQP | 130 | 88 | 40 | 2 | 1.00x | 1.58x |
+| Clarabel | 132 | 49 | 67 | 16 | 1.00x | 1.41x |
+| PIQP | 134 | 6 | 86 | 42 | 1.00x | 3.16x |
+| SCS | 129 | 71 | 53 | 5 | 1.00x | 0.66x |
 
 *A tie is two times within 10% of each other, or both under 0.1 s (the coarsest clock here cannot tell those apart). A run that did not count loses to one that did, and an instance on which neither counted is left out. Both medians are over the instances both solvers counted on, and above 1x SANKHYA is the slower one: the first floors each time at 0.1 s as the profile below does, the second takes each solver's clock as recorded, which on instances of a few milliseconds is a ratio of start-up costs and, for a solver that prints 0.0, is left out.*
 
@@ -3991,47 +3992,51 @@ Commit `d0eb672` · machine `github-actions ubuntu-latest; AMD EPYC 9V45 96-Core
 
 Every run that did not count, by solver:
 
-- **SANKHYA**, 21: `cvxqp1l` (time_limit), `cvxqp3l` (time_limit), `hues-mod` (optimal at relative gap 6.5e-06), `huestis` (feasible), `liswet1` (iteration_limit), `liswet10` (iteration_limit), `liswet11` (iteration_limit), `liswet12` (iteration_limit), `liswet2` (optimal at relative gap 1.2e-06), `liswet7` (time_limit), `liswet8` (iteration_limit), `liswet9` (iteration_limit), `qfffff80` (feasible), `qforplan` (feasible), `qgfrdxpn` (feasible), `qpilotno` (iteration_limit), `qshell` (feasible), `qsierra` (iteration_limit), `stadat1` (iteration_limit), `values` (model_error), `yao` (iteration_limit)
-- **HiGHS**, 107: `aug2d` (solve error), `aug2dc` (solve error), `aug2dcqp` (time_limit), `aug2dqp` (time_limit), `aug3d` (optimal, rejected by the verifier), `aug3dc` (optimal, rejected by the verifier), `aug3dcqp` (time_limit), `aug3dqp` (optimal, rejected by the verifier), `boyd1` (time_limit), `boyd2` (time_limit), `cont-050` (optimal, rejected by the verifier), `cont-100` (optimal, rejected by the verifier), `cont-101` (time_limit), `cont-200` (time_limit), `cont-201` (time_limit), `cont-300` (time_limit), `cvxqp1l` (optimal, rejected by the verifier), `cvxqp2l` (time_limit), `cvxqp2m` (optimal, rejected by the verifier), `cvxqp2s` (optimal, rejected by the verifier), `dpklo1` (optimal, rejected by the verifier), `dtoc3` (solve error), `exdata` (optimal, rejected by the verifier), `gouldqp2` (optimal, rejected by the verifier), `gouldqp3` (optimal, rejected by the verifier), `hs118` (optimal, rejected by the verifier), `hs268` (optimal, rejected by the verifier), `hs35` (optimal, rejected by the verifier), `hs35mod` (optimal, rejected by the verifier), `hs51` (optimal, rejected by the verifier), `hs76` (optimal, rejected by the verifier), `hues-mod` (time_limit), `huestis` (time_limit), `ksip` (not set), `laser` (not set), `liswet1` (optimal, rejected by the verifier), `liswet10` (optimal, rejected by the verifier), `liswet11` (optimal, rejected by the verifier), `liswet12` (optimal, rejected by the verifier), `liswet2` (optimal, rejected by the verifier), `liswet3` (optimal, rejected by the verifier), `liswet4` (optimal, rejected by the verifier), `liswet5` (optimal, rejected by the verifier), `liswet6` (optimal, rejected by the verifier), `liswet7` (optimal, rejected by the verifier), `liswet8` (optimal, rejected by the verifier), `liswet9` (optimal, rejected by the verifier), `lotschd` (optimal, rejected by the verifier), `mosarqp1` (solve error), `mosarqp2` (time_limit), `powell20` (optimal, rejected by the verifier), `primalc1` (optimal, rejected by the verifier), `primalc2` (optimal, rejected by the verifier), `primalc5` (optimal, rejected by the verifier), `primalc8` (optimal, rejected by the verifier), `q25fv47` (time_limit), `qadlittl` (optimal, rejected by the verifier), `qafiro` (optimal, rejected by the verifier), `qbandm` (optimal, rejected by the verifier), `qbeaconf` (optimal, rejected by the verifier), `qbore3d` (optimal, rejected by the verifier), `qbrandy` (optimal, rejected by the verifier), `qcapri` (solve error), `qe226` (not set), `qetamacr` (optimal, rejected by the verifier), `qfffff80` (optimal, rejected by the verifier), `qforplan` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `qgrow15` (solve error), `qgrow22` (time_limit), `qgrow7` (time_limit), `qisrael` (optimal, rejected by the verifier), `qpcboei1` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qpcstair` (not set), `qpilotno` (not set), `qrecipe` (optimal, rejected by the verifier), `qscagr25` (optimal, rejected by the verifier), `qscagr7` (optimal, rejected by the verifier), `qscfxm1` (optimal, rejected by the verifier), `qscfxm2` (optimal, rejected by the verifier), `qscfxm3` (optimal, rejected by the verifier), `qscorpio` (optimal, rejected by the verifier), `qscrs8` (optimal, rejected by the verifier), `qscsd8` (time_limit), `qsctap1` (optimal, rejected by the verifier), `qsctap2` (not set), `qsctap3` (not set), `qseba` (optimal, rejected by the verifier), `qshare1b` (solve error), `qshare2b` (optimal, rejected by the verifier), `qshell` (optimal, rejected by the verifier), `qship04l` (optimal, rejected by the verifier), `qship04s` (optimal, rejected by the verifier), `qship08l` (optimal, rejected by the verifier), `qship08s` (optimal, rejected by the verifier), `qship12l` (optimal, rejected by the verifier), `qship12s` (optimal, rejected by the verifier), `qsierra` (solve error), `qstair` (time_limit), `qstandat` (optimal, rejected by the verifier), `s268` (optimal, rejected by the verifier), `stadat1` (optimal, rejected by the verifier), `stadat2` (optimal, rejected by the verifier), `stadat3` (solve error), `stcqp1` (time_limit), `ubh1` (time_limit)
-- **SCIP**, 87: `aug2d` (hung), `aug2dc` (hung), `aug2dcqp` (hung), `aug2dqp` (hung), `aug3d` (time_limit), `aug3dc` (time_limit), `boyd1` (time_limit), `boyd2` (time_limit), `cont-050` (optimal, rejected by the verifier), `cont-100` (hung), `cont-101` (crashed), `cont-200` (time_limit), `cont-201` (hung), `cont-300` (time_limit), `cvxqp1l` (time_limit), `cvxqp1m` (time_limit), `cvxqp2l` (time_limit), `cvxqp2m` (time_limit), `cvxqp3l` (time_limit), `cvxqp3m` (time_limit), `dpklo1` (optimal, rejected by the verifier), `dtoc3` (hung), `dual1` (optimal, rejected by the verifier), `dual2` (time_limit), `dual3` (time_limit), `dual4` (optimal, rejected by the verifier), `dualc1` (optimal at relative gap 6.8e-06), `exdata` (crashed), `genhs28` (optimal, rejected by the verifier), `gouldqp2` (time_limit), `gouldqp3` (time_limit), `hs268` (time_limit), `hs35` (optimal, rejected by the verifier), `hs35mod` (optimal, rejected by the verifier), `hs51` (optimal, rejected by the verifier), `hs52` (time_limit), `hs53` (optimal, rejected by the verifier), `hs76` (optimal, rejected by the verifier), `hues-mod` (time_limit), `huestis` (time_limit), `ksip` (optimal, rejected by the verifier), `laser` (crashed), `liswet1` (time_limit), `liswet10` (hung), `liswet11` (time_limit), `liswet12` (time_limit), `liswet2` (time_limit), `liswet3` (time_limit), `liswet4` (time_limit), `liswet5` (time_limit), `liswet6` (hung), `liswet7` (time_limit), `liswet8` (time_limit), `liswet9` (hung), `powell20` (time_limit), `primal1` (optimal, rejected by the verifier), `primal2` (optimal, rejected by the verifier), `primal3` (time_limit), `primal4` (time_limit), `q25fv47` (time_limit), `qafiro` (optimal, rejected by the verifier), `qe226` (optimal, rejected by the verifier), `qetamacr` (time_limit), `qforplan` (time_limit), `qgfrdxpn` (crashed), `qisrael` (optimal, rejected by the verifier), `qpcblend` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qptest` (optimal, rejected by the verifier), `qsc205` (optimal, rejected by the verifier), `qsctap1` (optimal, rejected by the verifier), `qsctap2` (optimal, rejected by the verifier), `qsctap3` (optimal, rejected by the verifier), `qseba` (crashed), `qshell` (crashed), `qship12l` (time_limit), `s268` (time_limit), `stadat1` (crashed), `stadat2` (crashed), `stadat3` (crashed), `stcqp1` (time_limit), `stcqp2` (time_limit), `tame` (optimal, rejected by the verifier), `ubh1` (time_limit), `values` (time_limit), `yao` (optimal at relative gap 7.7e-03), `zecevic2` (optimal, rejected by the verifier)
-- **CBC/Clp**, 76: `aug2dcqp` (optimal, rejected by the verifier), `aug2dqp` (optimal, rejected by the verifier), `boyd1` (optimal, rejected by the verifier), `boyd2` (hung), `cont-050` (optimal, rejected by the verifier), `cont-100` (optimal, rejected by the verifier), `cont-101` (optimal, rejected by the verifier), `cont-200` (unparsed), `cont-201` (unparsed), `cont-300` (unparsed), `cvxqp1l` (unparsed), `cvxqp3l` (unparsed), `dpklo1` (optimal, rejected by the verifier), `dual1` (optimal, rejected by the verifier), `dual2` (optimal, rejected by the verifier), `dual3` (optimal, rejected by the verifier), `dual4` (optimal, rejected by the verifier), `gouldqp2` (optimal, rejected by the verifier), `hs268` (optimal, rejected by the verifier), `hs35` (optimal, rejected by the verifier), `hs35mod` (optimal, rejected by the verifier), `hs53` (optimal, rejected by the verifier), `hs76` (optimal, rejected by the verifier), `hues-mod` (optimal at relative gap 6.5e-06), `huestis` (optimal, rejected by the verifier), `ksip` (optimal, rejected by the verifier), `liswet8` (optimal at relative gap 9.0e-01), `mosarqp2` (optimal, rejected by the verifier), `primal1` (optimal, rejected by the verifier), `primal2` (optimal, rejected by the verifier), `primal3` (optimal, rejected by the verifier), `primalc2` (optimal, rejected by the verifier), `q25fv47` (optimal, rejected by the verifier), `qadlittl` (optimal, rejected by the verifier), `qafiro` (optimal, rejected by the verifier), `qbeaconf` (optimal, rejected by the verifier), `qbore3d` (optimal, rejected by the verifier), `qbrandy` (optimal, rejected by the verifier), `qcapri` (unparsed), `qe226` (optimal, rejected by the verifier), `qfffff80` (unparsed), `qforplan` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `qgrow15` (optimal, rejected by the verifier), `qgrow22` (optimal, rejected by the verifier), `qgrow7` (optimal, rejected by the verifier), `qisrael` (optimal, rejected by the verifier), `qpcblend` (optimal, rejected by the verifier), `qpcboei1` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qpcstair` (optimal, rejected by the verifier), `qpilotno` (unparsed), `qptest` (optimal, rejected by the verifier), `qsc205` (optimal, rejected by the verifier), `qscagr25` (optimal, rejected by the verifier), `qscagr7` (optimal, rejected by the verifier), `qscfxm1` (optimal, rejected by the verifier), `qscfxm2` (optimal, rejected by the verifier), `qscfxm3` (optimal, rejected by the verifier), `qscsd8` (optimal, rejected by the verifier), `qsctap1` (optimal, rejected by the verifier), `qsctap3` (optimal, rejected by the verifier), `qseba` (optimal, rejected by the verifier), `qshare1b` (optimal, rejected by the verifier), `qshell` (optimal, rejected by the verifier), `qship08l` (optimal, rejected by the verifier), `qship08s` (optimal, rejected by the verifier), `qsierra` (optimal, rejected by the verifier), `qstair` (optimal, rejected by the verifier), `qstandat` (optimal, rejected by the verifier), `s268` (optimal, rejected by the verifier), `stadat1` (optimal, rejected by the verifier), `stadat3` (optimal, rejected by the verifier), `tame` (optimal, rejected by the verifier), `ubh1` (optimal, rejected by the verifier), `zecevic2` (optimal, rejected by the verifier)
+- **SANKHYA**, 9: `hues-mod` (optimal at relative gap 6.5e-06), `huestis` (feasible), `liswet8` (optimal at relative gap 9.0e-01), `qforplan` (feasible), `qgfrdxpn` (feasible), `qpilotno` (iteration_limit), `qshell` (feasible), `stadat1` (iteration_limit), `values` (model_error)
+- **HiGHS**, 110: `aug2d` (solve error), `aug2dc` (solve error), `aug2dcqp` (time_limit), `aug2dqp` (time_limit), `aug3d` (optimal, rejected by the verifier), `aug3dc` (optimal, rejected by the verifier), `aug3dcqp` (optimal, rejected by the verifier), `aug3dqp` (optimal, rejected by the verifier), `boyd1` (time_limit), `boyd2` (time_limit), `cont-050` (optimal, rejected by the verifier), `cont-100` (optimal, rejected by the verifier), `cont-101` (optimal, rejected by the verifier), `cont-200` (time_limit), `cont-201` (time_limit), `cont-300` (time_limit), `cvxqp1l` (optimal, rejected by the verifier), `cvxqp2l` (optimal, rejected by the verifier), `cvxqp2m` (optimal, rejected by the verifier), `cvxqp2s` (optimal, rejected by the verifier), `cvxqp3l` (solve error), `cvxqp3m` (optimal, rejected by the verifier), `dpklo1` (optimal, rejected by the verifier), `dtoc3` (solve error), `exdata` (optimal, rejected by the verifier), `gouldqp2` (optimal, rejected by the verifier), `gouldqp3` (optimal, rejected by the verifier), `hs118` (optimal, rejected by the verifier), `hs268` (optimal, rejected by the verifier), `hs35` (optimal, rejected by the verifier), `hs35mod` (optimal, rejected by the verifier), `hs51` (optimal, rejected by the verifier), `hs76` (optimal, rejected by the verifier), `hues-mod` (time_limit), `huestis` (time_limit), `ksip` (time_limit), `laser` (time_limit), `liswet1` (optimal, rejected by the verifier), `liswet10` (optimal, rejected by the verifier), `liswet11` (time_limit), `liswet12` (optimal, rejected by the verifier), `liswet2` (optimal, rejected by the verifier), `liswet3` (optimal, rejected by the verifier), `liswet4` (optimal, rejected by the verifier), `liswet5` (optimal, rejected by the verifier), `liswet6` (optimal, rejected by the verifier), `liswet7` (optimal, rejected by the verifier), `liswet8` (optimal, rejected by the verifier), `liswet9` (optimal, rejected by the verifier), `lotschd` (optimal, rejected by the verifier), `mosarqp1` (solve error), `mosarqp2` (time_limit), `powell20` (optimal, rejected by the verifier), `primalc1` (optimal, rejected by the verifier), `primalc2` (optimal, rejected by the verifier), `primalc5` (optimal, rejected by the verifier), `primalc8` (optimal, rejected by the verifier), `q25fv47` (time_limit), `qadlittl` (optimal, rejected by the verifier), `qafiro` (optimal, rejected by the verifier), `qbandm` (optimal, rejected by the verifier), `qbeaconf` (optimal, rejected by the verifier), `qbore3d` (optimal, rejected by the verifier), `qbrandy` (optimal, rejected by the verifier), `qcapri` (solve error), `qe226` (optimal, rejected by the verifier), `qetamacr` (optimal, rejected by the verifier), `qfffff80` (optimal, rejected by the verifier), `qforplan` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `qgrow15` (time_limit), `qgrow22` (solve error), `qgrow7` (solve error), `qisrael` (optimal, rejected by the verifier), `qpcboei1` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qpcstair` (time_limit), `qpilotno` (time_limit), `qrecipe` (optimal, rejected by the verifier), `qsc205` (time_limit), `qscagr25` (optimal, rejected by the verifier), `qscagr7` (optimal, rejected by the verifier), `qscfxm1` (optimal, rejected by the verifier), `qscfxm2` (optimal, rejected by the verifier), `qscfxm3` (optimal, rejected by the verifier), `qscorpio` (optimal, rejected by the verifier), `qscrs8` (optimal, rejected by the verifier), `qscsd1` (solve error), `qscsd8` (solve error), `qsctap1` (optimal, rejected by the verifier), `qsctap2` (solve error), `qsctap3` (solve error), `qseba` (optimal, rejected by the verifier), `qshare1b` (optimal, rejected by the verifier), `qshare2b` (optimal, rejected by the verifier), `qshell` (optimal, rejected by the verifier), `qship04l` (optimal, rejected by the verifier), `qship04s` (optimal, rejected by the verifier), `qship08l` (optimal, rejected by the verifier), `qship08s` (optimal, rejected by the verifier), `qship12l` (time_limit), `qship12s` (optimal, rejected by the verifier), `qsierra` (solve error), `qstair` (time_limit), `qstandat` (optimal, rejected by the verifier), `s268` (optimal, rejected by the verifier), `stadat1` (crashed), `stadat2` (optimal, rejected by the verifier), `stadat3` (time_limit), `ubh1` (time_limit)
+- **HiGHS, QP regularization 0**, 54: `aug2d` (solve error), `aug2dc` (solve error), `aug2dcqp` (solve error), `aug2dqp` (time_limit), `aug3d` (solve error), `boyd1` (time_limit), `boyd2` (time_limit), `cont-200` (time_limit), `cont-201` (time_limit), `cont-300` (time_limit), `cvxqp1l` (optimal, rejected by the verifier), `cvxqp3l` (time_limit), `dpklo1` (optimal, rejected by the verifier), `dtoc3` (solve error), `hues-mod` (time_limit), `huestis` (time_limit), `ksip` (time_limit), `laser` (solve error), `liswet1` (optimal, rejected by the verifier), `liswet10` (optimal, rejected by the verifier), `liswet11` (optimal, rejected by the verifier), `liswet12` (optimal, rejected by the verifier), `liswet3` (optimal, rejected by the verifier), `liswet4` (optimal, rejected by the verifier), `liswet5` (optimal, rejected by the verifier), `liswet6` (optimal, rejected by the verifier), `liswet7` (optimal, rejected by the verifier), `liswet8` (optimal, rejected by the verifier), `liswet9` (optimal, rejected by the verifier), `mosarqp1` (solve error), `mosarqp2` (time_limit), `q25fv47` (time_limit), `qcapri` (optimal, rejected by the verifier), `qe226` (time_limit), `qforplan` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `qgrow15` (optimal, rejected by the verifier), `qgrow22` (solve error), `qgrow7` (time_limit), `qpcboei1` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qpcstair` (time_limit), `qpilotno` (time_limit), `qscagr25` (optimal, rejected by the verifier), `qscfxm1` (optimal, rejected by the verifier), `qscsd8` (solve error), `qsctap2` (solve error), `qsctap3` (solve error), `qshell` (optimal, rejected by the verifier), `qsierra` (solve error), `qstair` (time_limit), `stadat1` (crashed), `stadat3` (time_limit), `ubh1` (time_limit)
+- **SCIP**, 80: `aug2d` (hung), `aug2dc` (hung), `aug2dcqp` (hung), `aug2dqp` (hung), `boyd1` (time_limit), `boyd2` (time_limit), `cont-050` (optimal, rejected by the verifier), `cont-100` (hung), `cont-101` (crashed), `cont-200` (time_limit), `cont-201` (hung), `cont-300` (time_limit), `cvxqp1l` (time_limit), `cvxqp1m` (time_limit), `cvxqp2l` (time_limit), `cvxqp2m` (time_limit), `cvxqp3l` (hung), `dpklo1` (optimal, rejected by the verifier), `dtoc3` (hung), `dual1` (optimal, rejected by the verifier), `dual2` (time_limit), `dual3` (time_limit), `dual4` (optimal, rejected by the verifier), `dualc1` (optimal at relative gap 6.8e-06), `exdata` (crashed), `genhs28` (optimal, rejected by the verifier), `gouldqp2` (time_limit), `gouldqp3` (time_limit), `hs268` (time_limit), `hs35` (optimal, rejected by the verifier), `hs35mod` (optimal, rejected by the verifier), `hs51` (optimal, rejected by the verifier), `hs52` (time_limit), `hs53` (optimal, rejected by the verifier), `hs76` (optimal, rejected by the verifier), `hues-mod` (hung), `huestis` (hung), `ksip` (optimal, rejected by the verifier), `laser` (crashed), `liswet1` (hung), `liswet10` (hung), `liswet11` (time_limit), `liswet12` (time_limit), `liswet2` (hung), `liswet3` (hung), `liswet4` (hung), `liswet5` (hung), `liswet6` (hung), `liswet7` (time_limit), `liswet8` (hung), `liswet9` (hung), `powell20` (hung), `primal1` (optimal, rejected by the verifier), `primal2` (optimal, rejected by the verifier), `primal3` (optimal, rejected by the verifier), `primal4` (optimal, rejected by the verifier), `qafiro` (optimal, rejected by the verifier), `qe226` (optimal, rejected by the verifier), `qforplan` (time_limit), `qgfrdxpn` (crashed), `qisrael` (optimal, rejected by the verifier), `qpcblend` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qptest` (optimal, rejected by the verifier), `qsc205` (optimal, rejected by the verifier), `qsctap1` (optimal, rejected by the verifier), `qsctap2` (optimal, rejected by the verifier), `qsctap3` (optimal, rejected by the verifier), `qshell` (crashed), `s268` (time_limit), `stadat1` (crashed), `stadat2` (crashed), `stadat3` (crashed), `stcqp1` (time_limit), `stcqp2` (time_limit), `tame` (optimal, rejected by the verifier), `ubh1` (time_limit), `values` (time_limit), `yao` (optimal at relative gap 7.7e-03), `zecevic2` (optimal, rejected by the verifier)
+- **CBC/Clp**, 76: `aug2dcqp` (optimal, rejected by the verifier), `aug2dqp` (optimal, rejected by the verifier), `boyd1` (optimal, rejected by the verifier), `boyd2` (hung), `cont-050` (optimal, rejected by the verifier), `cont-100` (optimal, rejected by the verifier), `cont-101` (optimal, rejected by the verifier), `cont-200` (unparsed), `cont-201` (unparsed), `cont-300` (hung), `cvxqp1l` (unparsed), `cvxqp3l` (unparsed), `dpklo1` (optimal, rejected by the verifier), `dual1` (optimal, rejected by the verifier), `dual2` (optimal, rejected by the verifier), `dual3` (optimal, rejected by the verifier), `dual4` (optimal, rejected by the verifier), `gouldqp2` (optimal, rejected by the verifier), `hs268` (optimal, rejected by the verifier), `hs35` (optimal, rejected by the verifier), `hs35mod` (optimal, rejected by the verifier), `hs53` (optimal, rejected by the verifier), `hs76` (optimal, rejected by the verifier), `hues-mod` (optimal at relative gap 6.5e-06), `huestis` (optimal, rejected by the verifier), `ksip` (optimal, rejected by the verifier), `liswet8` (optimal at relative gap 9.0e-01), `mosarqp2` (optimal, rejected by the verifier), `primal1` (optimal, rejected by the verifier), `primal2` (optimal, rejected by the verifier), `primal3` (optimal, rejected by the verifier), `primalc2` (optimal, rejected by the verifier), `q25fv47` (optimal, rejected by the verifier), `qadlittl` (optimal, rejected by the verifier), `qafiro` (optimal, rejected by the verifier), `qbeaconf` (optimal, rejected by the verifier), `qbore3d` (optimal, rejected by the verifier), `qbrandy` (optimal, rejected by the verifier), `qcapri` (unparsed), `qe226` (optimal, rejected by the verifier), `qfffff80` (unparsed), `qforplan` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `qgrow15` (optimal, rejected by the verifier), `qgrow22` (optimal, rejected by the verifier), `qgrow7` (optimal, rejected by the verifier), `qisrael` (optimal, rejected by the verifier), `qpcblend` (optimal, rejected by the verifier), `qpcboei1` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qpcstair` (optimal, rejected by the verifier), `qpilotno` (unparsed), `qptest` (optimal, rejected by the verifier), `qsc205` (optimal, rejected by the verifier), `qscagr25` (optimal, rejected by the verifier), `qscagr7` (optimal, rejected by the verifier), `qscfxm1` (optimal, rejected by the verifier), `qscfxm2` (optimal, rejected by the verifier), `qscfxm3` (optimal, rejected by the verifier), `qscsd8` (optimal, rejected by the verifier), `qsctap1` (optimal, rejected by the verifier), `qsctap3` (optimal, rejected by the verifier), `qseba` (optimal, rejected by the verifier), `qshare1b` (optimal, rejected by the verifier), `qshell` (optimal, rejected by the verifier), `qship08l` (optimal, rejected by the verifier), `qship08s` (optimal, rejected by the verifier), `qsierra` (optimal, rejected by the verifier), `qstair` (optimal, rejected by the verifier), `qstandat` (optimal, rejected by the verifier), `s268` (optimal, rejected by the verifier), `stadat1` (optimal, rejected by the verifier), `stadat3` (optimal, rejected by the verifier), `tame` (optimal, rejected by the verifier), `ubh1` (optimal, rejected by the verifier), `zecevic2` (optimal, rejected by the verifier)
 - **OSQP**, 92: `boyd1` (iteration_limit), `boyd2` (iteration_limit), `cont-100` (iteration_limit), `cont-101` (iteration_limit), `cont-200` (iteration_limit), `cont-201` (iteration_limit), `cont-300` (time_limit), `cvxqp1l` (iteration_limit), `cvxqp1m` (optimal, rejected by the verifier), `cvxqp1s` (optimal, rejected by the verifier), `cvxqp2l` (optimal, rejected by the verifier), `cvxqp2m` (optimal, rejected by the verifier), `cvxqp3l` (iteration_limit), `cvxqp3m` (optimal, rejected by the verifier), `cvxqp3s` (optimal, rejected by the verifier), `exdata` (optimal, rejected by the verifier), `gouldqp2` (optimal, rejected by the verifier), `hs268` (optimal at relative gap 2.1e-04), `hues-mod` (infeasible), `huestis` (infeasible), `ksip` (iteration_limit), `liswet1` (iteration_limit), `liswet10` (feasible), `liswet11` (feasible), `liswet12` (feasible), `liswet2` (feasible), `liswet3` (feasible), `liswet4` (feasible), `liswet5` (feasible), `liswet6` (feasible), `liswet7` (feasible), `liswet8` (feasible), `liswet9` (feasible), `powell20` (iteration_limit), `primalc1` (unbounded), `primalc2` (unbounded), `primalc5` (unbounded), `primalc8` (iteration_limit), `q25fv47` (iteration_limit), `qadlittl` (optimal, rejected by the verifier), `qafiro` (optimal, rejected by the verifier), `qbandm` (iteration_limit), `qbeaconf` (optimal, rejected by the verifier), `qbore3d` (iteration_limit), `qbrandy` (iteration_limit), `qcapri` (iteration_limit), `qe226` (iteration_limit), `qetamacr` (iteration_limit), `qfffff80` (iteration_limit), `qforplan` (iteration_limit), `qgfrdxpn` (iteration_limit), `qgrow15` (iteration_limit), `qgrow22` (iteration_limit), `qgrow7` (iteration_limit), `qisrael` (iteration_limit), `qpcblend` (optimal, rejected by the verifier), `qpcboei1` (iteration_limit), `qpcboei2` (iteration_limit), `qpcstair` (feasible), `qpilotno` (iteration_limit), `qscagr25` (iteration_limit), `qscagr7` (iteration_limit), `qscfxm1` (iteration_limit), `qscfxm2` (iteration_limit), `qscfxm3` (iteration_limit), `qscorpio` (iteration_limit), `qscrs8` (iteration_limit), `qscsd1` (optimal, rejected by the verifier), `qscsd6` (iteration_limit), `qscsd8` (optimal, rejected by the verifier), `qsctap1` (iteration_limit), `qsctap2` (iteration_limit), `qsctap3` (iteration_limit), `qseba` (iteration_limit), `qshare1b` (iteration_limit), `qshare2b` (iteration_limit), `qshell` (feasible), `qship04l` (iteration_limit), `qship04s` (optimal, rejected by the verifier), `qship08l` (iteration_limit), `qship08s` (feasible), `qship12l` (optimal, rejected by the verifier), `qship12s` (optimal, rejected by the verifier), `qsierra` (iteration_limit), `qstair` (iteration_limit), `qstandat` (iteration_limit), `s268` (optimal at relative gap 2.1e-04), `stadat1` (iteration_limit), `stadat2` (iteration_limit), `stadat3` (iteration_limit), `ubh1` (iteration_limit), `yao` (iteration_limit)
 - **Clarabel**, 48: `boyd1` (AlmostSolved), `boyd2` (iteration_limit), `gouldqp3` (optimal at relative gap 3.8e-04), `hs268` (optimal at relative gap 1.3e-03), `hs35mod` (optimal at relative gap 1.3e-06), `hues-mod` (optimal at relative gap 6.4e-06), `huestis` (optimal at relative gap 6.5e-06), `liswet1` (optimal, rejected by the verifier), `liswet10` (optimal at relative gap 4.9e-01), `liswet11` (optimal, rejected by the verifier), `liswet12` (AlmostSolved), `liswet2` (optimal at relative gap 2.5e-05), `liswet5` (optimal at relative gap 1.0e-04), `liswet7` (optimal, rejected by the verifier), `liswet8` (optimal, rejected by the verifier), `liswet9` (AlmostSolved), `powell20` (infeasible), `q25fv47` (optimal, rejected by the verifier), `qbandm` (optimal, rejected by the verifier), `qbeaconf` (optimal at relative gap 1.9e-06), `qbore3d` (optimal at relative gap 1.3e-05), `qbrandy` (optimal, rejected by the verifier), `qcapri` (optimal, rejected by the verifier), `qfffff80` (optimal, rejected by the verifier), `qforplan` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `qpcboei1` (optimal, rejected by the verifier), `qpcstair` (optimal, rejected by the verifier), `qpilotno` (optimal, rejected by the verifier), `qscfxm1` (optimal, rejected by the verifier), `qscfxm2` (optimal, rejected by the verifier), `qscfxm3` (optimal, rejected by the verifier), `qscorpio` (optimal, rejected by the verifier), `qscrs8` (optimal at relative gap 7.9e-05), `qscsd8` (optimal, rejected by the verifier), `qsctap1` (optimal, rejected by the verifier), `qsctap2` (optimal, rejected by the verifier), `qsctap3` (optimal, rejected by the verifier), `qseba` (optimal, rejected by the verifier), `qshare1b` (optimal at relative gap 1.6e-05), `qshare2b` (optimal, rejected by the verifier), `qship04l` (optimal at relative gap 1.6e-06), `qship08l` (optimal at relative gap 1.4e-06), `qship12l` (optimal at relative gap 3.1e-06), `qstair` (optimal, rejected by the verifier), `s268` (optimal at relative gap 1.3e-03), `ubh1` (optimal at relative gap 5.6e-04), `yao` (AlmostSolved)
-- **PIQP**, 10: `boyd2` (optimal at relative gap 1.2e-05), `hs268` (optimal at relative gap 2.1e-06), `hues-mod` (optimal at relative gap 6.5e-06), `huestis` (optimal at relative gap 6.5e-06), `liswet7` (iteration_limit), `liswet8` (optimal at relative gap 9.0e-01), `qafiro` (optimal at relative gap 1.3e-05), `qcapri` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `s268` (optimal at relative gap 2.1e-06)
-- **SCS**, 67: `boyd1` (optimal at relative gap 1.8e-06), `boyd2` (solved (inaccurate - reached time_limit_secs)), `cont-100` (optimal, rejected by the verifier), `cont-101` (optimal, rejected by the verifier), `cont-200` (solved (inaccurate - reached time_limit_secs)), `cont-300` (optimal, rejected by the verifier), `cvxqp1l` (optimal, rejected by the verifier), `cvxqp2m` (optimal, rejected by the verifier), `gouldqp2` (optimal, rejected by the verifier), `hues-mod` (optimal, rejected by the verifier), `huestis` (optimal, rejected by the verifier), `ksip` (optimal, rejected by the verifier), `laser` (infeasible (inaccurate - reached max_iters)), `liswet1` (optimal, rejected by the verifier), `liswet10` (optimal, rejected by the verifier), `liswet11` (optimal, rejected by the verifier), `liswet12` (solved (inaccurate - reached max_iters)), `liswet2` (optimal, rejected by the verifier), `liswet3` (optimal, rejected by the verifier), `liswet4` (optimal, rejected by the verifier), `liswet5` (optimal, rejected by the verifier), `liswet6` (optimal, rejected by the verifier), `liswet7` (optimal, rejected by the verifier), `liswet8` (optimal, rejected by the verifier), `liswet9` (solved (inaccurate - reached max_iters)), `lotschd` (optimal, rejected by the verifier), `powell20` (infeasible), `primalc2` (optimal, rejected by the verifier), `primalc8` (optimal, rejected by the verifier), `q25fv47` (optimal, rejected by the verifier), `qbandm` (optimal, rejected by the verifier), `qbeaconf` (optimal, rejected by the verifier), `qbore3d` (optimal, rejected by the verifier), `qcapri` (optimal, rejected by the verifier), `qe226` (optimal, rejected by the verifier), `qetamacr` (solved (inaccurate - reached max_iters)), `qfffff80` (optimal, rejected by the verifier), `qforplan` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `qgrow15` (unbounded (inaccurate - reached max_iters)), `qgrow22` (unbounded (inaccurate - reached max_iters)), `qgrow7` (unbounded (inaccurate - reached max_iters)), `qisrael` (optimal, rejected by the verifier), `qpcboei1` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qpilotno` (optimal, rejected by the verifier), `qscagr7` (optimal, rejected by the verifier), `qscfxm1` (optimal, rejected by the verifier), `qscfxm2` (solved (inaccurate - reached max_iters)), `qscfxm3` (optimal, rejected by the verifier), `qsctap1` (optimal, rejected by the verifier), `qseba` (optimal, rejected by the verifier), `qshare1b` (optimal, rejected by the verifier), `qshare2b` (optimal, rejected by the verifier), `qshell` (optimal, rejected by the verifier), `qship04l` (optimal, rejected by the verifier), `qship04s` (optimal, rejected by the verifier), `qship08s` (optimal, rejected by the verifier), `qsierra` (optimal, rejected by the verifier), `qstair` (optimal, rejected by the verifier), `qstandat` (optimal, rejected by the verifier), `stadat1` (unbounded), `stadat2` (optimal, rejected by the verifier), `stcqp2` (optimal, rejected by the verifier), `values` (optimal, rejected by the verifier), `yao` (solved (inaccurate - reached max_iters)), `zecevic2` (optimal, rejected by the verifier)
+- **PIQP**, 10: `boyd2` (optimal at relative gap 1.2e-05), `hs268` (optimal at relative gap 2.1e-06), `hues-mod` (optimal at relative gap 6.5e-06), `huestis` (infeasible), `liswet7` (iteration_limit), `liswet8` (optimal at relative gap 9.0e-01), `qafiro` (optimal at relative gap 1.3e-05), `qcapri` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `s268` (optimal at relative gap 2.1e-06)
+- **SCS**, 73: `boyd2` (solved (inaccurate - reached time_limit_secs)), `cont-100` (optimal, rejected by the verifier), `cont-201` (optimal, rejected by the verifier), `cvxqp1l` (solved (inaccurate - reached time_limit_secs)), `cvxqp2m` (optimal, rejected by the verifier), `cvxqp3l` (optimal, rejected by the verifier), `cvxqp3s` (optimal, rejected by the verifier), `gouldqp2` (optimal, rejected by the verifier), `gouldqp3` (optimal, rejected by the verifier), `hues-mod` (optimal, rejected by the verifier), `huestis` (optimal, rejected by the verifier), `ksip` (optimal, rejected by the verifier), `laser` (infeasible (inaccurate - reached max_iters)), `liswet1` (optimal, rejected by the verifier), `liswet10` (optimal, rejected by the verifier), `liswet11` (optimal, rejected by the verifier), `liswet12` (solved (inaccurate - reached max_iters)), `liswet2` (optimal, rejected by the verifier), `liswet3` (optimal, rejected by the verifier), `liswet4` (optimal, rejected by the verifier), `liswet5` (optimal, rejected by the verifier), `liswet6` (optimal, rejected by the verifier), `liswet7` (optimal, rejected by the verifier), `liswet8` (optimal, rejected by the verifier), `liswet9` (solved (inaccurate - reached max_iters)), `lotschd` (optimal, rejected by the verifier), `mosarqp2` (optimal, rejected by the verifier), `powell20` (infeasible), `primalc1` (optimal, rejected by the verifier), `primalc8` (optimal, rejected by the verifier), `q25fv47` (optimal, rejected by the verifier), `qbandm` (optimal, rejected by the verifier), `qbeaconf` (optimal, rejected by the verifier), `qbore3d` (optimal, rejected by the verifier), `qbrandy` (optimal, rejected by the verifier), `qcapri` (solved (inaccurate - reached max_iters)), `qe226` (optimal, rejected by the verifier), `qetamacr` (solved (inaccurate - reached max_iters)), `qfffff80` (optimal, rejected by the verifier), `qforplan` (optimal, rejected by the verifier), `qgfrdxpn` (optimal, rejected by the verifier), `qgrow15` (unbounded), `qgrow22` (unbounded), `qgrow7` (unbounded (inaccurate - reached max_iters)), `qisrael` (optimal, rejected by the verifier), `qpcboei1` (optimal, rejected by the verifier), `qpcboei2` (optimal, rejected by the verifier), `qpcstair` (optimal, rejected by the verifier), `qpilotno` (optimal, rejected by the verifier), `qscagr25` (optimal, rejected by the verifier), `qscagr7` (optimal, rejected by the verifier), `qscfxm1` (optimal, rejected by the verifier), `qscfxm2` (solved (inaccurate - reached max_iters)), `qscfxm3` (optimal, rejected by the verifier), `qscsd6` (optimal, rejected by the verifier), `qsctap2` (optimal, rejected by the verifier), `qseba` (optimal, rejected by the verifier), `qshare1b` (optimal, rejected by the verifier), `qshell` (optimal, rejected by the verifier), `qship04l` (optimal, rejected by the verifier), `qship04s` (optimal, rejected by the verifier), `qship08l` (optimal, rejected by the verifier), `qship08s` (optimal, rejected by the verifier), `qship12l` (optimal, rejected by the verifier), `qsierra` (optimal, rejected by the verifier), `qstair` (optimal, rejected by the verifier), `qstandat` (optimal, rejected by the verifier), `stadat1` (unbounded), `stcqp2` (optimal, rejected by the verifier), `ubh1` (optimal, rejected by the verifier), `values` (optimal, rejected by the verifier), `yao` (solved (inaccurate - reached max_iters)), `zecevic2` (optimal, rejected by the verifier)
 
 What the verifier rejected:
 
 - HiGHS on `aug3d`: [FAIL] dual feasibility (columns)  worst 2.006e-07 (2.006e-07 relative) on C---3696; [FAIL] strong duality              primal 5.540677257925e+02  dual 5.540682388161e+02  gap 5.130e-04 (relative 9.259e-07), 2.789e-04 of
 - HiGHS on `aug3dc`: [FAIL] dual feasibility (columns)  worst 1.828e-07 (1.828e-07 relative) on C---3697; [FAIL] strong duality              primal 7.712624386890e+02  dual 7.712628998920e+02  gap 4.612e-04 (relative 5.980e-07), 2.248e-04 of
-- HiGHS on `aug3dqp`: [FAIL] dual feasibility (columns)  worst 7.805e-07 (7.550e-07 relative) on C---2179; [FAIL] complementary slackness     worst |multiplier| * slack = 3.160e-06 relative to its magnitudes on C---1691
-- HiGHS on `cont-050`: [FAIL] strong duality              primal -4.563850868314e+00  dual -4.564606144916e+00  gap 7.553e-04 (relative 1.655e-04), 5.197e-04 of it from per-item violations accepted above
-- HiGHS on `cont-100`: [FAIL] strong duality              primal -4.644397375958e+00  dual -4.646823585593e+00  gap 2.426e-03 (relative 5.224e-04), 1.950e-03 of it from per-item violations accepted above
-- HiGHS on `cvxqp1l`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.689e-05 relative to its magnitudes on C---6304
+- HiGHS on `aug3dcqp`: [FAIL] dual feasibility (columns)  worst 1.991e-07 (1.991e-07 relative) on C---2885; [FAIL] complementary slackness     worst |multiplier| * slack = 1.096e-06 relative to its magnitudes on C---2067; [FAIL] strong duality
+- HiGHS on `aug3dqp`: [FAIL] dual feasibility (columns)  worst 2.222e-07 (2.222e-07 relative) on C---3652; [FAIL] complementary slackness     worst |multiplier| * slack = 1.186e-06 relative to its magnitudes on C---2067
+- HiGHS on `cont-050`: [FAIL] strong duality              primal -4.563850868314e+00  dual -4.564606145095e+00  gap 7.553e-04 (relative 1.655e-04), 5.197e-04 of it from per-item violations accepted above
+- HiGHS on `cont-100`: [FAIL] strong duality              primal -4.644397375959e+00  dual -4.646823585569e+00  gap 2.426e-03 (relative 5.224e-04), 1.950e-03 of it from per-item violations accepted above
+- HiGHS on `cont-101`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.500e-06 relative to its magnitudes on C---8389; [FAIL] strong duality              primal 1.955290889685e-01  dual 1.800909169287e-01  gap 1.544e-02 (rela
+- HiGHS on `cvxqp1l`: [FAIL] complementary slackness     worst |multiplier| * slack = 4.408e-06 relative to its magnitudes on C----899
+- HiGHS on `cvxqp2l`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.500e-06 relative to its magnitudes on C---1023
 - HiGHS on `cvxqp2m`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.263e-06 relative to its magnitudes on C----111
 - HiGHS on `cvxqp2s`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.168e-06 relative to its magnitudes on C------9
+- HiGHS on `cvxqp3m`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.316e-06 relative to its magnitudes on C-----42
 - HiGHS on `dpklo1`: [FAIL] row activity                worst violation 3.653e+01 (3.653e+01 relative to the row's terms) on 53
-- HiGHS on `exdata`: [FAIL] dual feasibility (columns)  worst 1.000e-06 (1.000e-06 relative) on bs47; [FAIL] complementary slackness     worst |multiplier| * slack = 1.000e-05 relative to its magnitudes on bs249
-- HiGHS on `gouldqp2`: [FAIL] strong duality              primal 1.882025172792e-04  dual 1.596021559707e-04  gap 2.860e-05 (relative 2.860e-05), 8.530e-06 of it from per-item violations accepted above
-- HiGHS on `gouldqp3`: [FAIL] strong duality              primal 2.062783971756e+00  dual 2.062776572639e+00  gap 7.399e-06 (relative 3.587e-06), 6.220e-06 of it from per-item violations accepted above
+- HiGHS on `exdata`: [FAIL] dual feasibility (columns)  worst 1.000e-06 (1.000e-06 relative) on bs161; [FAIL] complementary slackness     worst |multiplier| * slack = 1.000e-05 relative to its magnitudes on bs161
+- HiGHS on `gouldqp2`: [FAIL] strong duality              primal 1.882025166267e-04  dual 1.595588328168e-04  gap 2.864e-05 (relative 2.864e-05), 8.526e-06 of it from per-item violations accepted above
+- HiGHS on `gouldqp3`: [FAIL] strong duality              primal 2.062783971764e+00  dual 2.062776572639e+00  gap 7.399e-06 (relative 3.587e-06), 6.220e-06 of it from per-item violations accepted above
 - HiGHS on `hs118`: [FAIL] complementary slackness     worst |multiplier| * slack = 3.591e-04 relative to its magnitudes on C------8; [FAIL] strong duality              primal 6.648204500000e+02  dual 6.648187602000e+02  gap 1.690e-03 (rela
-- HiGHS on `hs268`: [FAIL] dual feasibility (columns)  worst 4.000e-07 (4.000e-07 relative) on C------5; [FAIL] strong duality              primal -1.818989403546e-12  dual 3.099999958067e-06  gap 3.100e-06 (relative 3.100e-06), 1.999e-07 o
+- HiGHS on `hs268`: [FAIL] dual feasibility (columns)  worst 4.000e-07 (4.000e-07 relative) on C------5; [FAIL] strong duality              primal 0.000000000000e+00  dual 3.100096364506e-06  gap 3.100e-06 (relative 3.100e-06), 0.000e+00 of
 - HiGHS on `hs35`: [FAIL] dual feasibility (columns)  worst 1.333e-07 (1.333e-07 relative) on C------1
 - HiGHS on `hs35mod`: [FAIL] dual feasibility (columns)  worst 1.500e-07 (1.500e-07 relative) on C------1
 - HiGHS on `hs51`: [FAIL] dual feasibility (columns)  worst 1.000e-07 (1.000e-07 relative) on C------2; [FAIL] strong duality              primal 8.881784197001e-16  dual 4.999999925204e-07  gap 5.000e-07 (relative 5.000e-07), 4.000e-07 of
 - HiGHS on `hs76`: [FAIL] dual feasibility (columns)  worst 2.091e-07 (2.091e-07 relative) on C------2
 - HiGHS on `liswet1`: [FAIL] dual feasibility (columns)  worst 7.482e-06 (7.482e-06 relative) on C--10002; [FAIL] complementary slackness     worst |multiplier| * slack = 7.482e-06 relative to its magnitudes on C--10002; [FAIL] strong duality
-- HiGHS on `liswet10`: [FAIL] dual feasibility (columns)  worst 4.814e-05 (4.814e-05 relative) on C---9530; [FAIL] complementary slackness     worst |multiplier| * slack = 4.814e-05 relative to its magnitudes on C---9530; [FAIL] strong duality
-- HiGHS on `liswet11`: [FAIL] dual feasibility (columns)  worst 8.005e-04 (8.005e-04 relative) on C--10001; [FAIL] complementary slackness     worst |multiplier| * slack = 8.005e-04 relative to its magnitudes on C--10001; [FAIL] strong duality
-- HiGHS on `liswet12`: [FAIL] dual feasibility (columns)  worst 3.274e-05 (3.274e-05 relative) on C---8482; [FAIL] complementary slackness     worst |multiplier| * slack = 3.274e-05 relative to its magnitudes on C---8482
-- HiGHS on `liswet2`: [FAIL] dual feasibility (columns)  worst 1.452e-07 (1.452e-07 relative) on C--10001; [FAIL] strong duality              primal 2.499807610290e+01  dual 2.499840954945e+01  gap 3.334e-04 (relative 1.334e-05), 3.332e-04 of
-- HiGHS on `liswet3`: [FAIL] dual feasibility (columns)  worst 6.224e-04 (6.224e-04 relative) on C---9530; [FAIL] complementary slackness     worst |multiplier| * slack = 6.224e-04 relative to its magnitudes on C---9530; [FAIL] strong duality
-- HiGHS on `liswet4`: [FAIL] dual feasibility (columns)  worst 8.156e-04 (8.156e-04 relative) on C---9662; [FAIL] complementary slackness     worst |multiplier| * slack = 8.156e-04 relative to its magnitudes on C---9662; [FAIL] strong duality
-- HiGHS on `liswet5`: [FAIL] dual feasibility (columns)  worst 5.453e-03 (5.453e-03 relative) on C---9555; [FAIL] complementary slackness     worst |multiplier| * slack = 5.453e-03 relative to its magnitudes on C---9555; [FAIL] strong duality
-- HiGHS on `liswet6`: [FAIL] dual feasibility (columns)  worst 4.394e-03 (4.394e-03 relative) on C---9153; [FAIL] complementary slackness     worst |multiplier| * slack = 4.394e-03 relative to its magnitudes on C---9153; [FAIL] strong duality
+- HiGHS on `liswet10`: [FAIL] dual feasibility (columns)  worst 4.389e-04 (4.389e-04 relative) on C---8399; [FAIL] complementary slackness     worst |multiplier| * slack = 4.389e-04 relative to its magnitudes on C---8399; [FAIL] strong duality
+- HiGHS on `liswet12`: [FAIL] dual feasibility (columns)  worst 7.400e-05 (7.400e-05 relative) on C---8482; [FAIL] complementary slackness     worst |multiplier| * slack = 7.400e-05 relative to its magnitudes on C---8482
+- HiGHS on `liswet2`: [FAIL] dual feasibility (columns)  worst 1.456e-07 (1.456e-07 relative) on C--10001; [FAIL] strong duality              primal 2.499807610290e+01  dual 2.499840954945e+01  gap 3.334e-04 (relative 1.334e-05), 3.332e-04 of
+- HiGHS on `liswet3`: [FAIL] dual feasibility (columns)  worst 6.080e-03 (6.080e-03 relative) on C---9530; [FAIL] complementary slackness     worst |multiplier| * slack = 6.080e-03 relative to its magnitudes on C---9530; [FAIL] strong duality
+- HiGHS on `liswet4`: [FAIL] dual feasibility (columns)  worst 9.154e-03 (9.154e-03 relative) on C---9662; [FAIL] complementary slackness     worst |multiplier| * slack = 9.154e-03 relative to its magnitudes on C---9662; [FAIL] strong duality
+- HiGHS on `liswet5`: [FAIL] dual feasibility (columns)  worst 4.613e-03 (4.613e-03 relative) on C---9555; [FAIL] complementary slackness     worst |multiplier| * slack = 4.613e-03 relative to its magnitudes on C---9555; [FAIL] strong duality
+- HiGHS on `liswet6`: [FAIL] dual feasibility (columns)  worst 2.800e-03 (2.800e-03 relative) on C---9153; [FAIL] complementary slackness     worst |multiplier| * slack = 2.800e-03 relative to its magnitudes on C---9153; [FAIL] strong duality
 - HiGHS on `liswet7`: [FAIL] dual feasibility (columns)  worst 7.272e-07 (7.272e-07 relative) on C--10002
-- HiGHS on `liswet8`: [FAIL] dual feasibility (columns)  worst 3.877e-05 (3.877e-05 relative) on C---9549; [FAIL] complementary slackness     worst |multiplier| * slack = 3.877e-05 relative to its magnitudes on C---9549; [FAIL] strong duality
-- HiGHS on `liswet9`: [FAIL] dual feasibility (columns)  worst 1.141e-05 (1.141e-05 relative) on C---9794; [FAIL] complementary slackness     worst |multiplier| * slack = 1.141e-05 relative to its magnitudes on C---9794
+- HiGHS on `liswet8`: [FAIL] dual feasibility (columns)  worst 5.955e-04 (5.955e-04 relative) on C---9549; [FAIL] complementary slackness     worst |multiplier| * slack = 5.955e-04 relative to its magnitudes on C---9549
+- HiGHS on `liswet9`: [FAIL] dual feasibility (columns)  worst 5.203e-05 (5.203e-05 relative) on C---3182; [FAIL] complementary slackness     worst |multiplier| * slack = 5.203e-05 relative to its magnitudes on C---3182
 - HiGHS on `lotschd`: [FAIL] complementary slackness     worst |multiplier| * slack = 7.516e-05 relative to its magnitudes on C------5
 - HiGHS on `powell20`: [FAIL] dual feasibility (columns)  worst 2.501e-04 (1.000e-07 relative) on C---5002; [FAIL] complementary slackness     worst |multiplier| * slack = 7.499e-04 relative to its magnitudes on C--10000
 - HiGHS on `primalc1`: [FAIL] dual feasibility (columns)  worst 1.032e-03 (1.032e-03 relative) on C------1; [FAIL] complementary slackness     worst |multiplier| * slack = 1.066e+01 relative to its magnitudes on C------1; [FAIL] strong duality
@@ -4044,10 +4049,11 @@ What the verifier rejected:
 - HiGHS on `qbeaconf`: [FAIL] dual feasibility (columns)  worst 2.792e-04 (2.792e-04 relative) on 10144; [FAIL] complementary slackness     worst |multiplier| * slack = 7.795e-01 relative to its magnitudes on 10144
 - HiGHS on `qbore3d`: [FAIL] dual feasibility (columns)  worst 8.437e-04 (8.437e-04 relative) on IUT.KWXI; [FAIL] complementary slackness     worst |multiplier| * slack = 7.118e+00 relative to its magnitudes on IUT.KWXI
 - HiGHS on `qbrandy`: [FAIL] dual feasibility (columns)  worst 3.532e-04 (3.531e-04 relative) on 100002; [FAIL] complementary slackness     worst |multiplier| * slack = 1.248e+00 relative to its magnitudes on 100002
-- HiGHS on `qetamacr`: [FAIL] dual feasibility (columns)  worst 1.393e-06 (1.393e-06 relative) on KAPSTK65; [FAIL] complementary slackness     worst |multiplier| * slack = 2.144e-04 relative to its magnitudes on PCPETG05
+- HiGHS on `qe226`: [FAIL] dual feasibility (columns)  worst 1.100e-05 (1.100e-05 relative) on .VN1ER; [FAIL] complementary slackness     worst |multiplier| * slack = 1.210e-03 relative to its magnitudes on .VN1ER
+- HiGHS on `qetamacr`: [FAIL] dual feasibility (columns)  worst 1.393e-06 (1.393e-06 relative) on KAPSTK65; [FAIL] complementary slackness     worst |multiplier| * slack = 2.144e-04 relative to its magnitudes on PCPETG00
 - HiGHS on `qfffff80`: [FAIL] dual feasibility (columns)  worst 2.469e-02 (2.469e-02 relative) on YP.DWLGS; [FAIL] complementary slackness     worst |multiplier| * slack = 6.098e+03 relative to its magnitudes on YP.DWLGS
-- HiGHS on `qforplan`: [FAIL] dual feasibility (columns)  worst 1.604e-03 (1.604e-03 relative) on DEDO3 82; [FAIL] complementary slackness     worst |multiplier| * slack = 2.573e+01 relative to its magnitudes on DEDO3 82; [FAIL] strong duality
-- HiGHS on `qgfrdxpn`: [FAIL] dual feasibility (columns)  worst 4.381e-04 (3.678e-04 relative) on KB1LA1; [FAIL] complementary slackness     worst |multiplier| * slack = 3.510e+02 relative to its magnitudes on XJ2DZ2
+- HiGHS on `qforplan`: [FAIL] activity agreement          max |ours - solver's| = 1.544e-06; [FAIL] dual feasibility (columns)  worst 1.604e-03 (1.604e-03 relative) on DEDO3 82; [FAIL] complementary slackness     worst |multiplier| * slack = 2
+- HiGHS on `qgfrdxpn`: [FAIL] complementary slackness     worst |multiplier| * slack = 3.510e+02 relative to its magnitudes on XJ2DZ2
 - HiGHS on `qisrael`: [FAIL] dual feasibility (columns)  worst 6.064e-04 (6.064e-04 relative) on A373; [FAIL] complementary slackness     worst |multiplier| * slack = 3.677e+00 relative to its magnitudes on A373
 - HiGHS on `qpcboei1`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.254e-02 relative to its magnitudes on C-----69
 - HiGHS on `qpcboei2`: [FAIL] complementary slackness     worst |multiplier| * slack = 7.700e-02 relative to its magnitudes on C------9
@@ -4061,31 +4067,54 @@ What the verifier rejected:
 - HiGHS on `qscrs8`: [FAIL] dual feasibility (columns)  worst 2.103e-05 (2.103e-05 relative) on NELEDM75; [FAIL] complementary slackness     worst |multiplier| * slack = 4.424e-03 relative to its magnitudes on NELEDM75
 - HiGHS on `qsctap1`: [FAIL] dual feasibility (columns)  worst 1.000e-06 (1.818e-07 relative) on Z4ZZ7ZZ5; [FAIL] complementary slackness     worst |multiplier| * slack = 1.000e-05 relative to its magnitudes on Z4ZZ7ZZ4
 - HiGHS on `qseba`: [FAIL] dual feasibility (columns)  worst 7.896e-04 (7.896e-04 relative) on C0172000; [FAIL] complementary slackness     worst |multiplier| * slack = 6.235e+00 relative to its magnitudes on C0172000
+- HiGHS on `qshare1b`: [FAIL] dual feasibility (columns)  worst 2.606e-02 (2.606e-02 relative) on CCC023; [FAIL] complementary slackness     worst |multiplier| * slack = 6.791e+03 relative to its magnitudes on CCC023
 - HiGHS on `qshare2b`: [FAIL] dual feasibility (columns)  worst 6.000e-06 (6.000e-06 relative) on 010520; [FAIL] complementary slackness     worst |multiplier| * slack = 3.600e-04 relative to its magnitudes on 010520
 - HiGHS on `qshell`: [FAIL] complementary slackness     worst |multiplier| * slack = 6.132e+03 relative to its magnitudes on C10010
 - HiGHS on `qship04l`: [FAIL] complementary slackness     worst |multiplier| * slack = 6.357e-04 relative to its magnitudes on PREG0101
 - HiGHS on `qship04s`: [FAIL] complementary slackness     worst |multiplier| * slack = 6.438e-04 relative to its magnitudes on PREG0101
 - HiGHS on `qship08l`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.585e-04 relative to its magnitudes on PREG0203
 - HiGHS on `qship08s`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.589e-04 relative to its magnitudes on PREG0203
-- HiGHS on `qship12l`: [FAIL] complementary slackness     worst |multiplier| * slack = 8.495e-04 relative to its magnitudes on PREG0407
 - HiGHS on `qship12s`: [FAIL] complementary slackness     worst |multiplier| * slack = 8.517e-04 relative to its magnitudes on PREG0407
 - HiGHS on `qstandat`: [FAIL] dual feasibility (columns)  worst 9.830e-05 (9.829e-05 relative) on FTR.....; [FAIL] complementary slackness     worst |multiplier| * slack = 9.663e-02 relative to its magnitudes on FTR.....
-- HiGHS on `s268`: [FAIL] dual feasibility (columns)  worst 4.000e-07 (4.000e-07 relative) on C------5; [FAIL] strong duality              primal -1.818989403546e-12  dual 3.099999958067e-06  gap 3.100e-06 (relative 3.100e-06), 1.999e-07 o
-- HiGHS on `stadat1`: [FAIL] dual feasibility (columns)  worst 1.930e+06 (1.901e+00 relative) on C----340; [FAIL] complementary slackness     worst |multiplier| * slack = 1.930e+06 relative to its magnitudes on C----340
-- HiGHS on `stadat2`: [FAIL] dual feasibility (columns)  worst 1.026e-06 (1.026e-06 relative) on C------1; [FAIL] complementary slackness     worst |multiplier| * slack = 1.414e-06 relative to its magnitudes on C---2001; [FAIL] strong duality
-- SCIP on `cont-050`: [FAIL] objective           recomputed -4.563850884524e+00, solver said -4.563850981085e+00, difference 9.656e-08
-- SCIP on `dpklo1`: [FAIL] objective           recomputed 3.700962516886e-01, solver said 3.700961596973e-01, difference 9.199e-08
-- SCIP on `dual1`: [FAIL] objective           recomputed 3.501300191822e-02, solver said 3.501290376899e-02, difference 9.815e-08
-- SCIP on `dual4`: [FAIL] objective           recomputed 7.460908862231e-01, solver said 7.460907878984e-01, difference 9.832e-08
-- SCIP on `genhs28`: [FAIL] objective           recomputed 9.271737444168e-01, solver said 9.271736500756e-01, difference 9.434e-08
-- SCIP on `hs35`: [FAIL] objective           recomputed 1.111111478922e-01, solver said 1.111110651898e-01, difference 8.270e-08
-- SCIP on `hs35mod`: [FAIL] objective           recomputed 2.500000312530e-01, solver said 2.499999782114e-01, difference 5.304e-08
+- HiGHS on `s268`: [FAIL] dual feasibility (columns)  worst 4.000e-07 (4.000e-07 relative) on C------5; [FAIL] strong duality              primal 0.000000000000e+00  dual 3.100096364506e-06  gap 3.100e-06 (relative 3.100e-06), 0.000e+00 of
+- HiGHS on `stadat2`: [FAIL] dual feasibility (columns)  worst 1.414e-06 (1.414e-06 relative) on C---2001; [FAIL] complementary slackness     worst |multiplier| * slack = 1.414e-06 relative to its magnitudes on C---2001; [FAIL] strong duality
+- HiGHS, QP regularization 0 on `cvxqp1l`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.024e-04 relative to its magnitudes on C---2039
+- HiGHS, QP regularization 0 on `dpklo1`: [FAIL] row activity                worst violation 3.653e+01 (3.653e+01 relative to the row's terms) on 53
+- HiGHS, QP regularization 0 on `liswet1`: [FAIL] dual feasibility (columns)  worst 5.779e-05 (5.779e-05 relative) on C--10001; [FAIL] complementary slackness     worst |multiplier| * slack = 5.779e-05 relative to its magnitudes on C--10001; [FAIL] strong duality
+- HiGHS, QP regularization 0 on `liswet10`: [FAIL] dual feasibility (columns)  worst 1.247e-02 (1.247e-02 relative) on C---9712; [FAIL] complementary slackness     worst |multiplier| * slack = 1.247e-02 relative to its magnitudes on C---9712; [FAIL] strong duality
+- HiGHS, QP regularization 0 on `liswet11`: [FAIL] dual feasibility (columns)  worst 2.187e-03 (2.187e-03 relative) on C---5854; [FAIL] complementary slackness     worst |multiplier| * slack = 2.187e-03 relative to its magnitudes on C---5854
+- HiGHS, QP regularization 0 on `liswet12`: [FAIL] dual feasibility (columns)  worst 2.358e-05 (2.358e-05 relative) on C--10001; [FAIL] complementary slackness     worst |multiplier| * slack = 2.358e-05 relative to its magnitudes on C--10001
+- HiGHS, QP regularization 0 on `liswet3`: [FAIL] dual feasibility (columns)  worst 1.707e-02 (1.707e-02 relative) on C---9511; [FAIL] complementary slackness     worst |multiplier| * slack = 1.707e-02 relative to its magnitudes on C---9511; [FAIL] strong duality
+- HiGHS, QP regularization 0 on `liswet4`: [FAIL] dual feasibility (columns)  worst 2.541e-02 (2.541e-02 relative) on C---9662; [FAIL] complementary slackness     worst |multiplier| * slack = 2.541e-02 relative to its magnitudes on C---9662; [FAIL] strong duality
+- HiGHS, QP regularization 0 on `liswet5`: [FAIL] dual feasibility (columns)  worst 2.002e-02 (2.002e-02 relative) on C---9555; [FAIL] complementary slackness     worst |multiplier| * slack = 2.002e-02 relative to its magnitudes on C---9555; [FAIL] strong duality
+- HiGHS, QP regularization 0 on `liswet6`: [FAIL] dual feasibility (columns)  worst 1.225e-02 (1.225e-02 relative) on C---9153; [FAIL] complementary slackness     worst |multiplier| * slack = 1.225e-02 relative to its magnitudes on C---9153; [FAIL] strong duality
+- HiGHS, QP regularization 0 on `liswet7`: [FAIL] dual feasibility (columns)  worst 2.440e-04 (2.440e-04 relative) on C--10002; [FAIL] complementary slackness     worst |multiplier| * slack = 2.560e-04 relative to its magnitudes on C--10001; [FAIL] strong duality
+- HiGHS, QP regularization 0 on `liswet8`: [FAIL] dual feasibility (columns)  worst 3.624e-03 (3.624e-03 relative) on C---9662; [FAIL] complementary slackness     worst |multiplier| * slack = 3.624e-03 relative to its magnitudes on C---9662
+- HiGHS, QP regularization 0 on `liswet9`: [FAIL] dual feasibility (columns)  worst 2.717e-04 (2.717e-04 relative) on C---9788; [FAIL] complementary slackness     worst |multiplier| * slack = 2.717e-04 relative to its magnitudes on C---9788
+- HiGHS, QP regularization 0 on `qcapri`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.152e-06 relative to its magnitudes on VALRES
+- HiGHS, QP regularization 0 on `qforplan`: [FAIL] complementary slackness     worst |multiplier| * slack = 5.382e-02 relative to its magnitudes on DEDO5 22
+- HiGHS, QP regularization 0 on `qgfrdxpn`: [FAIL] complementary slackness     worst |multiplier| * slack = 6.897e-06 relative to its magnitudes on XJ2DZ2
+- HiGHS, QP regularization 0 on `qgrow15`: [FAIL] row activity                worst violation 6.687e+02 (1.997e-02 relative to the row's terms) on PRI0102; [FAIL] activity agreement          max |ours - solver's| = 7.874e+02
+- HiGHS, QP regularization 0 on `qpcboei1`: [FAIL] complementary slackness     worst |multiplier| * slack = 3.986e-06 relative to its magnitudes on C----234
+- HiGHS, QP regularization 0 on `qpcboei2`: [FAIL] complementary slackness     worst |multiplier| * slack = 3.309e-06 relative to its magnitudes on C----102
+- HiGHS, QP regularization 0 on `qscagr25`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.435e-04 relative to its magnitudes on COL00178
+- HiGHS, QP regularization 0 on `qscfxm1`: [FAIL] complementary slackness     worst |multiplier| * slack = 4.237e-06 relative to its magnitudes on 1D2YK
+- HiGHS, QP regularization 0 on `qshell`: [FAIL] complementary slackness     worst |multiplier| * slack = 2.009e-04 relative to its magnitudes on C10010
+- SCIP on `cont-050`: [FAIL] objective           recomputed -4.563850907011e+00, solver said -4.563850922358e+00, difference 1.535e-08
+- SCIP on `dpklo1`: [FAIL] objective           recomputed 3.700962171143e-01, solver said 3.700962071807e-01, difference 9.934e-09
+- SCIP on `dual1`: [FAIL] objective           recomputed 3.501296435026e-02, solver said 3.501295306576e-02, difference 1.128e-08
+- SCIP on `dual4`: [FAIL] objective           recomputed 7.460908117710e-01, solver said 7.460907969306e-01, difference 1.484e-08
+- SCIP on `genhs28`: [FAIL] objective           recomputed 9.271736937664e-01, solver said 9.271736837764e-01, difference 9.990e-09
+- SCIP on `hs35`: [FAIL] objective           recomputed 1.111111045050e-01, solver said 1.111110945017e-01, difference 1.000e-08
+- SCIP on `hs35mod`: [FAIL] objective           recomputed 2.500000020587e-01, solver said 2.499999900145e-01, difference 1.204e-08
 - SCIP on `hs51`: [FAIL] objective           recomputed 0.000000000000e+00, solver said -9.075448303975e-08, difference 9.075e-08
-- SCIP on `hs53`: [FAIL] objective           recomputed 4.093023275720e+00, solver said 4.093023219721e+00, difference 5.600e-08
+- SCIP on `hs53`: [FAIL] objective           recomputed 4.093023255814e+00, solver said 4.093023245915e+00, difference 9.899e-09
 - SCIP on `hs76`: [FAIL] objective           recomputed -4.681818221798e+00, solver said -4.681818231789e+00, difference 9.990e-09
 - SCIP on `ksip`: [FAIL] objective           recomputed 5.757979899730e-01, solver said 5.757978923372e-01, difference 9.764e-08
-- SCIP on `primal1`: [FAIL] objective           recomputed -3.501293585563e-02, solver said -3.501301643532e-02, difference 8.058e-08
-- SCIP on `primal2`: [FAIL] objective           recomputed -3.373363901253e-02, solver said -3.373373819399e-02, difference 9.918e-08
+- SCIP on `primal1`: [FAIL] objective           recomputed -3.501295974008e-02, solver said -3.501298447112e-02, difference 2.473e-08
+- SCIP on `primal2`: [FAIL] objective           recomputed -3.373366797028e-02, solver said -3.373369384926e-02, difference 2.588e-08
+- SCIP on `primal3`: [FAIL] objective           recomputed -1.357558326444e-01, solver said -1.357558555116e-01, difference 2.287e-08
+- SCIP on `primal4`: [FAIL] objective           recomputed -7.460908386962e-01, solver said -7.460908596746e-01, difference 2.098e-08
 - SCIP on `qafiro`: [FAIL] objective           recomputed -1.590782842719e+00, solver said -1.590782851654e+00, difference 8.936e-09
 - SCIP on `qe226`: [FAIL] row activity        worst violation 1.105e-07 (1.105e-07 relative to the row's terms) on ...054
 - SCIP on `qisrael`: [FAIL] row activity        worst violation 9.990e-07 (9.990e-07 relative to the row's terms) on B173
@@ -4097,7 +4126,7 @@ What the verifier rejected:
 - SCIP on `qsctap2`: [FAIL] row activity        worst violation 7.097e-07 (7.097e-07 relative to the row's terms) on ACZ39ZZ2
 - SCIP on `qsctap3`: [FAIL] row activity        worst violation 7.088e-07 (7.088e-07 relative to the row's terms) on ACZ32ZZ2
 - SCIP on `tame`: [FAIL] objective           recomputed 5.187246390146e-23, solver said -9.985476434923e-09, difference 9.985e-09
-- SCIP on `zecevic2`: [FAIL] objective           recomputed -4.124999992549e+00, solver said -4.125000059605e+00, difference 6.706e-08
+- SCIP on `zecevic2`: [FAIL] objective           recomputed -4.125000039990e+00, solver said -4.125000049982e+00, difference 9.992e-09
 - CBC/Clp on `aug2dcqp`: [FAIL] complementary slackness     worst |multiplier| * slack = 1.583e-06 relative to its magnitudes on C--19611
 - CBC/Clp on `aug2dqp`: [FAIL] dual feasibility (columns)  worst 9.312e-07 (9.312e-07 relative) on C--19804; [FAIL] complementary slackness     worst |multiplier| * slack = 5.991e-05 relative to its magnitudes on C--19804
 - CBC/Clp on `boyd1`: [FAIL] activity agreement          max |ours - solver's| = 3.052e-05; [FAIL] complementary slackness     worst |multiplier| * slack = 1.299e-05 relative to its magnitudes on C--25323
@@ -4207,58 +4236,64 @@ What the verifier rejected:
 - Clarabel on `qstair`: [FAIL] column bounds       worst violation 3.702e-06 (3.702e-06 relative) on RQL51; [FAIL] row activity        worst violation 2.626e-06 (2.626e-06 relative to the row's terms) on C08
 - PIQP on `qcapri`: [FAIL] row activity        worst violation 1.114e-07 (1.114e-07 relative to the row's terms) on EEB78
 - PIQP on `qgfrdxpn`: [FAIL] row activity        worst violation 3.767e-07 (3.767e-07 relative to the row's terms) on ZL1
-- SCS on `cont-100`: [FAIL] column bounds       worst violation 5.459e-06 (1.560e-06 relative) on C---4901
-- SCS on `cont-101`: [FAIL] column bounds       worst violation 4.135e-07 (4.135e-07 relative) on C---2701
-- SCS on `cont-300`: [FAIL] column bounds       worst violation 1.508e-07 (1.508e-07 relative) on C--90299
-- SCS on `cvxqp1l`: [FAIL] row activity        worst violation 7.369e-07 (2.455e-07 relative to the row's terms) on R---1000
-- SCS on `cvxqp2m`: [FAIL] column bounds       worst violation 1.265e-07 (1.265e-07 relative) on C----246
-- SCS on `gouldqp2`: [FAIL] column bounds       worst violation 4.241e-05 (1.071e-05 relative) on C----110
-- SCS on `hues-mod`: [FAIL] row activity        worst violation 2.399e-07 (2.399e-07 relative to the row's terms) on R------2
-- SCS on `huestis`: [FAIL] row activity        worst violation 1.563e-07 (1.563e-07 relative to the row's terms) on R------1
-- SCS on `ksip`: [FAIL] row activity        worst violation 1.835e-06 (1.835e-06 relative to the row's terms) on R----948
-- SCS on `liswet1`: [FAIL] row activity        worst violation 1.928e-06 (1.928e-06 relative to the row's terms) on R----229
-- SCS on `liswet10`: [FAIL] row activity        worst violation 2.047e-06 (1.024e-06 relative to the row's terms) on R---9944
-- SCS on `liswet11`: [FAIL] row activity        worst violation 1.588e-06 (7.946e-07 relative to the row's terms) on R---9931
-- SCS on `liswet2`: [FAIL] row activity        worst violation 1.785e-06 (1.785e-06 relative to the row's terms) on R----123
-- SCS on `liswet3`: [FAIL] row activity        worst violation 1.646e-06 (1.646e-06 relative to the row's terms) on R-----66
-- SCS on `liswet4`: [FAIL] row activity        worst violation 1.619e-06 (1.619e-06 relative to the row's terms) on R-----67
-- SCS on `liswet5`: [FAIL] row activity        worst violation 3.570e-06 (1.776e-06 relative to the row's terms) on R-----49
-- SCS on `liswet6`: [FAIL] row activity        worst violation 2.046e-06 (2.046e-06 relative to the row's terms) on R---9944
-- SCS on `liswet7`: [FAIL] row activity        worst violation 1.017e-06 (1.017e-06 relative to the row's terms) on R---9912
-- SCS on `liswet8`: [FAIL] row activity        worst violation 1.901e-06 (1.901e-06 relative to the row's terms) on R-----60
+- SCS on `cont-100`: [FAIL] column bounds       worst violation 3.911e-06 (1.117e-06 relative) on C---4901
+- SCS on `cont-201`: [FAIL] column bounds       worst violation 1.753e-07 (1.753e-07 relative) on C--40199
+- SCS on `cvxqp2m`: [FAIL] column bounds       worst violation 1.440e-07 (1.440e-07 relative) on C----246
+- SCS on `cvxqp3l`: [FAIL] column bounds       worst violation 4.693e-06 (4.693e-06 relative) on C---2931; [FAIL] row activity        worst violation 7.639e-07 (2.549e-07 relative to the row's terms) on R---6000
+- SCS on `cvxqp3s`: [FAIL] column bounds       worst violation 1.241e-07 (1.241e-07 relative) on C-----43
+- SCS on `gouldqp2`: [FAIL] column bounds       worst violation 9.810e-06 (3.649e-07 relative) on C----327
+- SCS on `gouldqp3`: [FAIL] column bounds       worst violation 1.153e-06 (1.825e-07 relative) on C----169
+- SCS on `hues-mod`: [FAIL] column bounds       worst violation 2.180e-07 (2.180e-07 relative) on C--10000; [FAIL] row activity        worst violation 1.207e-05 (1.207e-05 relative to the row's terms) on R------1
+- SCS on `huestis`: [FAIL] row activity        worst violation 1.212e-04 (1.212e-04 relative to the row's terms) on R------1
+- SCS on `ksip`: [FAIL] row activity        worst violation 1.797e-06 (1.797e-06 relative to the row's terms) on R----948
+- SCS on `liswet1`: [FAIL] row activity        worst violation 1.936e-06 (1.936e-06 relative to the row's terms) on R----205
+- SCS on `liswet10`: [FAIL] row activity        worst violation 1.951e-06 (9.755e-07 relative to the row's terms) on R---9944
+- SCS on `liswet11`: [FAIL] row activity        worst violation 2.033e-06 (1.017e-06 relative to the row's terms) on R---9937
+- SCS on `liswet2`: [FAIL] row activity        worst violation 1.464e-06 (1.464e-06 relative to the row's terms) on R-----66
+- SCS on `liswet3`: [FAIL] row activity        worst violation 1.877e-06 (1.877e-06 relative to the row's terms) on R-----60
+- SCS on `liswet4`: [FAIL] row activity        worst violation 1.735e-06 (1.735e-06 relative to the row's terms) on R-----66
+- SCS on `liswet5`: [FAIL] row activity        worst violation 1.789e-06 (8.869e-07 relative to the row's terms) on R-----79
+- SCS on `liswet6`: [FAIL] row activity        worst violation 1.911e-06 (1.911e-06 relative to the row's terms) on R---9938
+- SCS on `liswet7`: [FAIL] row activity        worst violation 1.637e-06 (1.637e-06 relative to the row's terms) on R---9937
+- SCS on `liswet8`: [FAIL] row activity        worst violation 1.297e-06 (1.297e-06 relative to the row's terms) on R---9931
 - SCS on `lotschd`: [FAIL] column bounds       worst violation 4.686e-07 (4.686e-07 relative) on C-----10
-- SCS on `primalc2`: [FAIL] row activity        worst violation 1.466e-03 (3.101e-07 relative to the row's terms) on R------7
-- SCS on `primalc8`: [FAIL] column bounds       worst violation 1.913e-05 (1.913e-05 relative) on C----219
-- SCS on `q25fv47`: [FAIL] column bounds       worst violation 7.242e-04 (7.242e-04 relative) on CA137; [FAIL] row activity        worst violation 6.183e-05 (6.183e-05 relative to the row's terms) on RJ106
-- SCS on `qbandm`: [FAIL] column bounds       worst violation 1.007e-04 (1.007e-04 relative) on LGO30
+- SCS on `mosarqp2`: [FAIL] row activity        worst violation 1.038e-07 (1.038e-07 relative to the row's terms) on R----420
+- SCS on `primalc1`: [FAIL] column bounds       worst violation 1.986e-06 (1.986e-06 relative) on C-----57
+- SCS on `primalc8`: [FAIL] column bounds       worst violation 6.557e-07 (6.557e-07 relative) on C----132
+- SCS on `q25fv47`: [FAIL] column bounds       worst violation 1.422e-03 (1.422e-03 relative) on CH014; [FAIL] row activity        worst violation 3.968e-04 (3.968e-04 relative to the row's terms) on RA090
+- SCS on `qbandm`: [FAIL] column bounds       worst violation 2.282e-04 (2.282e-04 relative) on UNDHCS; [FAIL] row activity        worst violation 1.237e-07 (1.237e-07 relative to the row's terms) on OMB10D
 - SCS on `qbeaconf`: [FAIL] column bounds       worst violation 6.656e-06 (6.656e-06 relative) on 94961
-- SCS on `qbore3d`: [FAIL] column bounds       worst violation 2.048e-04 (2.048e-04 relative) on UPL.BYXI; [FAIL] row activity        worst violation 1.384e-06 (1.384e-06 relative to the row's terms) on XSU.FLXI
-- SCS on `qcapri`: [FAIL] column bounds       worst violation 5.757e-04 (5.753e-04 relative) on CHAI79; [FAIL] row activity        worst violation 2.750e-02 (2.635e-03 relative to the row's terms) on CRS79
-- SCS on `qe226`: [FAIL] column bounds       worst violation 4.863e-06 (4.863e-06 relative) on .T5JP5; [FAIL] row activity        worst violation 2.114e-06 (2.114e-06 relative to the row's terms) on ...048
-- SCS on `qfffff80`: [FAIL] column bounds       worst violation 5.792e-03 (5.792e-03 relative) on ESPID3N; [FAIL] row activity        worst violation 1.371e-02 (1.371e-02 relative to the row's terms) on CBP3RN
-- SCS on `qforplan`: [FAIL] column bounds       worst violation 7.460e-04 (7.460e-04 relative) on M037P2 C; [FAIL] row activity        worst violation 5.174e-05 (5.174e-05 relative to the row's terms) on GS--- 2R
-- SCS on `qgfrdxpn`: [FAIL] column bounds       worst violation 8.778e-07 (8.778e-07 relative) on KI2EU2; [FAIL] row activity        worst violation 1.318e-06 (1.318e-06 relative to the row's terms) on HD1
-- SCS on `qisrael`: [FAIL] column bounds       worst violation 1.868e-04 (1.868e-04 relative) on A390; [FAIL] row activity        worst violation 2.463e-02 (2.235e-02 relative to the row's terms) on B165
-- SCS on `qpcboei1`: [FAIL] column bounds       worst violation 4.405e-05 (4.405e-05 relative) on C----123; [FAIL] row activity        worst violation 2.950e-05 (2.950e-05 relative to the row's terms) on R-----68
-- SCS on `qpcboei2`: [FAIL] column bounds       worst violation 1.528e-04 (7.641e-05 relative) on C----123; [FAIL] row activity        worst violation 5.419e-02 (2.720e-04 relative to the row's terms) on R----144
-- SCS on `qpilotno`: [FAIL] column bounds       worst violation 4.145e-02 (4.145e-02 relative) on UELE01; [FAIL] row activity        worst violation 1.754e-03 (1.754e-03 relative to the row's terms) on GVXT06
-- SCS on `qscagr7`: [FAIL] column bounds       worst violation 3.109e-07 (3.109e-07 relative) on COL00109; [FAIL] row activity        worst violation 7.029e-04 (9.345e-07 relative to the row's terms) on ROW00122
-- SCS on `qscfxm1`: [FAIL] column bounds       worst violation 1.057e-02 (1.057e-02 relative) on 1DRIN; [FAIL] row activity        worst violation 7.216e-01 (4.896e-03 relative to the row's terms) on 1MS061
-- SCS on `qscfxm3`: [FAIL] column bounds       worst violation 2.673e-04 (2.673e-04 relative) on 1MALK; [FAIL] row activity        worst violation 7.986e-03 (1.664e-05 relative to the row's terms) on 3DT028
-- SCS on `qsctap1`: [FAIL] column bounds       worst violation 1.975e-07 (1.975e-07 relative) on Z1Z12ZZ9
-- SCS on `qseba`: [FAIL] column bounds       worst violation 3.143e-04 (3.143e-04 relative) on M0172000; [FAIL] row activity        worst violation 5.073e-05 (4.482e-06 relative to the row's terms) on VILLKOR2
-- SCS on `qshare1b`: [FAIL] column bounds       worst violation 1.377e-01 (1.377e-01 relative) on CCC186
-- SCS on `qshare2b`: [FAIL] column bounds       worst violation 2.586e-07 (2.586e-07 relative) on 010132
-- SCS on `qshell`: [FAIL] column bounds       worst violation 4.286e-02 (4.286e-02 relative) on C12590
-- SCS on `qship04l`: [FAIL] column bounds       worst violation 1.827e-07 (1.827e-07 relative) on SH040274; [FAIL] row activity        worst violation 2.851e-05 (5.939e-07 relative to the row's terms) on OVRMAX
+- SCS on `qbore3d`: [FAIL] column bounds       worst violation 4.866e-04 (4.866e-04 relative) on M6H.FPXI; [FAIL] row activity        worst violation 1.630e-04 (1.630e-04 relative to the row's terms) on XSU.FLXI
+- SCS on `qbrandy`: [FAIL] column bounds       worst violation 1.126e-04 (1.126e-04 relative) on 100812; [FAIL] row activity        worst violation 6.090e-05 (6.090e-05 relative to the row's terms) on 10131A
+- SCS on `qe226`: [FAIL] column bounds       worst violation 1.076e-06 (1.076e-06 relative) on .CB1H1; [FAIL] row activity        worst violation 7.003e-07 (7.003e-07 relative to the row's terms) on ...158
+- SCS on `qfffff80`: [FAIL] column bounds       worst violation 1.122e-03 (1.122e-03 relative) on H7PLV3N; [FAIL] row activity        worst violation 1.244e-03 (1.471e-05 relative to the row's terms) on COST.DEM
+- SCS on `qforplan`: [FAIL] column bounds       worst violation 2.676e+00 (1.000e+00 relative) on M037T1 M; [FAIL] row activity        worst violation 2.458e-04 (2.458e-04 relative to the row's terms) on GS--- 2R
+- SCS on `qgfrdxpn`: [FAIL] column bounds       worst violation 4.546e-04 (4.546e-04 relative) on GC1GB1; [FAIL] row activity        worst violation 1.166e-06 (1.166e-06 relative to the row's terms) on HD1
+- SCS on `qisrael`: [FAIL] column bounds       worst violation 1.563e-04 (1.563e-04 relative) on A390; [FAIL] row activity        worst violation 5.448e-02 (4.439e-02 relative to the row's terms) on B165
+- SCS on `qpcboei1`: [FAIL] column bounds       worst violation 3.455e-02 (3.455e-02 relative) on C----147; [FAIL] row activity        worst violation 2.574e-03 (2.574e-03 relative to the row's terms) on R-----68
+- SCS on `qpcboei2`: [FAIL] column bounds       worst violation 1.241e-01 (1.377e-03 relative) on C-----91; [FAIL] row activity        worst violation 9.817e-01 (4.942e-03 relative to the row's terms) on R----144
+- SCS on `qpcstair`: [FAIL] column bounds       worst violation 1.243e-07 (1.243e-07 relative) on C----119
+- SCS on `qpilotno`: [FAIL] column bounds       worst violation 4.182e-02 (4.182e-02 relative) on UELE01; [FAIL] row activity        worst violation 8.801e+01 (1.758e-03 relative to the row's terms) on BEIM01
+- SCS on `qscagr25`: [FAIL] column bounds       worst violation 1.226e-06 (1.226e-06 relative) on COL00014; [FAIL] row activity        worst violation 2.142e-02 (2.677e-05 relative to the row's terms) on ROW00464
+- SCS on `qscagr7`: [FAIL] column bounds       worst violation 5.253e-07 (5.253e-07 relative) on COL00021; [FAIL] row activity        worst violation 1.100e-03 (1.462e-06 relative to the row's terms) on ROW00122
+- SCS on `qscfxm1`: [FAIL] column bounds       worst violation 1.031e-02 (1.031e-02 relative) on 1DRIN; [FAIL] row activity        worst violation 6.896e-01 (4.679e-03 relative to the row's terms) on 1MS061
+- SCS on `qscfxm3`: [FAIL] column bounds       worst violation 2.596e-05 (2.596e-05 relative) on 1MIN4; [FAIL] row activity        worst violation 6.502e-07 (6.502e-07 relative to the row's terms) on 2DT070
+- SCS on `qscsd6`: [FAIL] column bounds       worst violation 1.827e-07 (1.827e-07 relative) on 40003015
+- SCS on `qsctap2`: [FAIL] column bounds       worst violation 2.650e-06 (2.650e-06 relative) on Z2Z23ZZ8; [FAIL] row activity        worst violation 1.885e-07 (1.885e-07 relative to the row's terms) on NCZZ9Z10
+- SCS on `qseba`: [FAIL] column bounds       worst violation 4.495e-03 (4.495e-03 relative) on M3280000; [FAIL] row activity        worst violation 4.916e-05 (1.966e-05 relative to the row's terms) on VILLKOR4
+- SCS on `qshare1b`: [FAIL] column bounds       worst violation 6.511e-04 (6.511e-04 relative) on CCC093; [FAIL] row activity        worst violation 3.960e-04 (3.729e-07 relative to the row's terms) on 000066
+- SCS on `qshell`: [FAIL] column bounds       worst violation 2.843e-04 (2.843e-04 relative) on C21650; [FAIL] row activity        worst violation 9.702e-07 (9.702e-07 relative to the row's terms) on 3478
+- SCS on `qship04l`: [FAIL] row activity        worst violation 3.468e-06 (3.468e-06 relative to the row's terms) on TRAN0402
 - SCS on `qship04s`: [FAIL] column bounds       worst violation 1.731e-06 (1.731e-06 relative) on SH030640
-- SCS on `qship08s`: [FAIL] row activity        worst violation 3.489e-06 (1.180e-07 relative to the row's terms) on OVRMAX
+- SCS on `qship08l`: [FAIL] row activity        worst violation 4.021e-06 (4.021e-06 relative to the row's terms) on TRAN0102
+- SCS on `qship08s`: [FAIL] column bounds       worst violation 2.293e-06 (2.293e-06 relative) on SH010156
+- SCS on `qship12l`: [FAIL] column bounds       worst violation 1.048e-06 (1.048e-06 relative) on SH010238; [FAIL] row activity        worst violation 1.897e-07 (1.897e-07 relative to the row's terms) on TRAN0106
 - SCS on `qsierra`: [FAIL] column bounds       worst violation 5.579e-02 (5.579e-02 relative) on BRBV3B; [FAIL] row activity        worst violation 3.263e-05 (3.263e-05 relative to the row's terms) on RBBBL3
-- SCS on `qstair`: [FAIL] column bounds       worst violation 4.849e-07 (4.849e-07 relative) on ZM3
-- SCS on `qstandat`: [FAIL] column bounds       worst violation 1.538e-05 (1.538e-05 relative) on A..2X2S2
-- SCS on `stadat2`: [FAIL] row activity        worst violation 2.295e-05 (2.423e-06 relative to the row's terms) on R---2627
-- SCS on `stcqp2`: [FAIL] column bounds       worst violation 1.191e-06 (5.953e-07 relative) on C---1171
-- SCS on `values`: [FAIL] column bounds       worst violation 1.148e-07 (1.148e-07 relative) on a52
+- SCS on `qstair`: [FAIL] column bounds       worst violation 4.915e-06 (4.915e-06 relative) on V135; [FAIL] row activity        worst violation 1.389e-07 (1.389e-07 relative to the row's terms) on C02
+- SCS on `qstandat`: [FAIL] column bounds       worst violation 3.864e-04 (3.864e-04 relative) on IP15..T1; [FAIL] row activity        worst violation 1.091e-04 (5.457e-05 relative to the row's terms) on LN.5..T3
+- SCS on `stcqp2`: [FAIL] column bounds       worst violation 7.410e-06 (3.705e-06 relative) on C---1171
+- SCS on `ubh1`: [FAIL] column bounds       worst violation 2.575e-07 (2.575e-07 relative) on C--10005; [FAIL] row activity        worst violation 2.368e-07 (2.368e-07 relative to the row's terms) on R--10000
+- SCS on `values`: [FAIL] column bounds       worst violation 1.135e-07 (1.135e-07 relative) on a52
 - SCS on `zecevic2`: [FAIL] row activity        worst violation 2.421e-07 (1.384e-07 relative to the row's terms) on R------1
 
 ---
@@ -4429,12 +4464,12 @@ adapters read no certificate, where SANKHYA's and HiGHS's must pass the verifier
 
 | suite | instances | limit | SANKHYA | HiGHS | SCIP | CBC | GLPK | CSV | commit |
 |---|---:|---:|---|---|---|---|---|---|---|
-| Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-8eaf18c.csv` | `8eaf18c` |
+| Netlib LP | 94 | 120 s | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 94 / 0 | 94 / 94 / 90 / 0 | 94 / 94 / 93 / 0 | `bench/results/head-to-head-netlib-1659c8b.csv` | `1659c8b` |
 | MIPLIB 3 MILP | 65 | 60 s | 42 / 41 / 42 / 0 | 52 / 49 / 52 / 0 | 50 / 45 / 50 / 0 | 49 / 48 / 49 / 0 | 33 / 32 / 32 / 0 | `bench/results/head-to-head-miplib3-60s-d1d0d52.csv` | `d1d0d52` |
-| Stress set LP | 126 | 60 s | 115 / 115 / 117 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-7119598.csv` | `7119598` |
-| Maros-Meszaros QP | 138 | 60 s | 128 / 127 / 128 / 1 | 101 / 94 / 28 / 7 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-4981e56.csv` | `4981e56` |
+| Stress set LP | 126 | 60 s | 117 / 117 / 118 / 0 | 116 / 28 / 42 / 86 | 97 / 27 / 23 / 69 | 126 / 59 / 55 / 24 | 126 / 45 / 40 / 60 | `bench/results/stress-1659c8b.csv` | `1659c8b` |
+| Maros-Meszaros QP | 138 | 60 s | 131 / 129 / 131 / 2 | 102 / 94 / 28 / 8 | 87 / 85 / 60 / 2 | no QP | no QP | `bench/results/head-to-head-maros-meszaros-partial-1659c8b.csv` | `1659c8b` |
 
-Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 49, CBC 48, SCIP 45, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 115, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 127, SCIP 58, HiGHS 28.
+Netlib LP, matched and verified: SANKHYA 94, HiGHS 94, SCIP 94, GLPK 93, CBC 90. MIPLIB 3 MILP, matched and verified: HiGHS 49, CBC 48, SCIP 45, SANKHYA 41, GLPK 31. Stress set LP, graded correct: SANKHYA 117, CBC 59, GLPK 45, HiGHS 28, SCIP 27. Maros-Meszaros QP, matched and verified: SANKHYA 129, SCIP 58, HiGHS 28.
 
 **HiGHS off its defaults, `qp_regularization_value = 0`** (same job, same files, not the HiGHS column above): at its defaults HiGHS solves a regularized QP (`qp_regularization_value = 1e-7` in its manual) and its point misses the stationarity of the QP as stated by 1e-7 |x_j|; with the regularization off it reads **106 / 103 / 84 / 3**, 84 matched and verified, of 138; not optimal: 1 `crashed`, 11 `solve error`, 20 `time_limit`.
 
@@ -4448,6 +4483,8 @@ Versions, as each solver reported them in those runs: HiGHS 1.16.0, SCIP 10.0.2,
 - Maros-Meszaros QP, SCIP on `dualc1`: optimal; relative gap 6.75066400474483e-06
 - Maros-Meszaros QP, HiGHS on `gouldqp2`: optimal; [FAIL] strong duality              primal 1.882025166267e-04  dual 1.595588328168e-04  gap 2.864e-05 (relative 2.864e-05), 8.526e-06 of it from per-item violations accepted above
 - Maros-Meszaros QP, SANKHYA on `hues-mod`: optimal; relative gap 6.493285498031229e-06
+- Maros-Meszaros QP, SANKHYA on `liswet8`: optimal; relative gap 0.9000000000342703
+- Maros-Meszaros QP, HiGHS on `liswet8`: optimal; [FAIL] dual feasibility (columns)  worst 5.955e-04 (5.955e-04 relative) on C---9549; [FAIL] complementary slackness     worst /multiplier/ * slack = 5.955e-04 relative to its magnitudes on C---9549
 - Maros-Meszaros QP, HiGHS, QP regularization 0 on `liswet8`: optimal; [FAIL] dual feasibility (columns)  worst 3.624e-03 (3.624e-03 relative) on C---9662; [FAIL] complementary slackness     worst /multiplier/ * slack = 3.624e-03 relative to its magnitudes on C---9662
 - Maros-Meszaros QP, HiGHS on `primalc8`: optimal; [FAIL] dual feasibility (columns)  worst 3.311e-03 (3.311e-03 relative) on C------1; [FAIL] complementary slackness     worst /multiplier/ * slack = 1.096e+02 relative to its magnitudes on C------1
 - Maros-Meszaros QP, HiGHS on `qbore3d`: optimal; [FAIL] dual feasibility (columns)  worst 8.437e-04 (8.437e-04 relative) on IUT.KWXI; [FAIL] complementary slackness     worst /multiplier/ * slack = 7.118e+00 relative to its magnitudes on IUT.KWXI
@@ -4670,32 +4707,30 @@ row of the file as written and most of its certificates failing to prove the fil
 (each failing check is named below); Klee-Minty from n = 30, whose last right-hand sides
 reach 5^29 > 1e20, comes back unbounded.
 
-Measured on SANKHYA commit `7119598` against HiGHS 1.16.0 (highspy, separate process) and cbc-clp 1.17.9, glpk 5.0, scip 10.0.2 (bench/runners/rivals.py; an `infeasible` or `unbounded` from one of these is graded on the status alone), machine `github-actions ubuntu-24.04 4 vCPU Intel(R) Xeon(R) 6973P-C 15 GiB RAM`, 126 instances. Source: `stress-7119598.csv`.
+Measured on SANKHYA commit `1659c8b` against HiGHS 1.16.0 (highspy, separate process) and cbc-clp 1.17.9, glpk 5.0, scip 10.0.2 (bench/runners/rivals.py; an `infeasible` or `unbounded` from one of these is graded on the status alone), machine `github-actions ubuntu-24.04 4 vCPU Intel(R) Xeon(R) 6975P-C 15 GiB RAM`, 126 instances. Source: `stress-1659c8b.csv`.
 
 | family | instances | sankhya correct / wrong / failed | cbc-clp correct / wrong / failed | glpk correct / wrong / failed | highs correct / wrong / failed | scip correct / wrong / failed |
 |---|---|---|---|---|---|---|
 | `degenerate` | 5 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 | 5 / 0 / 0 |
 | `klee_minty` | 7 | 7 / 0 / 0 | 4 / 3 / 0 | 6 / 1 / 0 | 4 / 3 / 0 | 4 / 3 / 0 |
 | `near_singular` | 8 | 8 / 0 / 0 | 7 / 1 / 0 | 8 / 0 / 0 | 8 / 0 / 0 | 6 / 0 / 2 |
-| `scaled_netlib` | 94 | 83 / 0 / 11 | 35 / 59 / 0 | 14 / 80 / 0 | 0 / 84 / 10 | 0 / 67 / 27 |
+| `scaled_netlib` | 94 | 85 / 0 / 9 | 35 / 59 / 0 | 14 / 80 / 0 | 0 / 84 / 10 | 0 / 67 / 27 |
 | `thin_infeasible` | 8 | 8 / 0 / 0 | 4 / 4 / 0 | 8 / 0 / 0 | 8 / 0 / 0 | 8 / 0 / 0 |
 | `unbounded` | 4 | 4 / 0 / 0 | 4 / 0 / 0 | 4 / 0 / 0 | 3 / 1 / 0 | 4 / 0 / 0 |
-| **all** | 126 | 115 / 0 / 11 | 59 / 67 / 0 | 45 / 81 / 0 | 28 / 88 / 10 | 27 / 70 / 29 |
+| **all** | 126 | 117 / 0 / 9 | 59 / 67 / 0 | 45 / 81 / 0 | 28 / 88 / 10 | 27 / 70 / 29 |
 
 **Reported `optimal` and wrong**, the headline count (#750): sankhya **0**, cbc-clp **64**, glpk **71**, highs **30**, scip **17**.
 
-**sankhya, failed** (11):
+**sankhya, failed** (9):
 
-- `scaled_bnl2`: no verdict: time_limit (time limit 59.9987s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_d2q06c`: no verdict: time_limit (time limit 59.9977s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_degen3`: no verdict: time_limit (stopped at the time limit of 59.9986s after 60.00s, 445054 iterations, 0 nodes; route: the scaled attempt returned time_)
-- `scaled_dfl001`: no verdict: time_limit (stopped at the time limit of 59.9965s after 60.00s, 83608 iterations, 0 nodes; route: the scaled attempt returned time_l)
-- `scaled_greenbeb`: no verdict: time_limit (time limit 59.9974s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_perold`: no verdict: time_limit (time limit 59.9994s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
-- `scaled_pilot`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 1.945e+09 from a least of 4.884e+01, which cannot happen on faithf)
-- `scaled_pilot.ja`: no verdict: time_limit (time limit 59.9985s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_bnl2`: no verdict: time_limit (time limit 59.9986s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_d2q06c`: no verdict: time_limit (time limit 59.9976s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_dfl001`: no verdict: time_limit (time limit 59.9961s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_perold`: no verdict: time_limit (time limit 59.9993s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot`: no verdict: time_limit (time limit 59.9962s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
+- `scaled_pilot.ja`: no verdict: time_limit (time limit 59.9984s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 - `scaled_pilot.we`: no verdict: numerical_error (phase 1 diverged: the largest bound violation grew to 2.959e+07 from a least of 1.841e-03, which cannot happen on faithf)
-- `scaled_pilot87`: no verdict: time_limit (stopped at the time limit of 59.9931s after 59.99s, 38696 iterations, 0 nodes; route: the scaled attempt returned time_l)
+- `scaled_pilot87`: no verdict: time_limit (time limit 59.9927s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 - `scaled_stair`: no verdict: time_limit (time limit 59.9997s reached inside the basis factorization, which was abandoned; route: the scaled attempt returned time)
 
 **cbc-clp, wrong** (67):
