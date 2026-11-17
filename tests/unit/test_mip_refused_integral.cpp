@@ -121,7 +121,8 @@ TEST(RefusedIntegralNode, HugeBigMMilpsAgreeWithTheExactOracleWithAndWithoutTigh
   config.max_cols = 5;
   config.bounded_column_probability = 0.7;
   int compared = 0;
-  for (int trial = 0; trial < 200; ++trial) {
+  // About 40% of the draws have an exact optimum; the rest are infeasible or unbounded.
+  for (int trial = 0; trial < 400; ++trial) {
     oracle::GeneratedLp lp = oracle::random_lp(rng, config);
     lp.integral.assign(static_cast<std::size_t>(lp.num_cols), 0);
     for (Index j = 0; j < lp.num_cols; ++j) {
