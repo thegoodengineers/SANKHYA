@@ -93,6 +93,10 @@ HANG_MARGIN_SECONDS = 60.0
 # that returned more than OVERRUN_SLACK_SECONDS past its limit, is kept, so the phase that
 # ignored the deadline can be read off a CI run. None: logs are not captured, as before.
 OVERRUN_LOG_DIR: Path | None = None
+# --all-logs: with --overrun-logs DIR, every solve's log is kept, as
+# DIR/<model>-<options hash>.log, the model's stem naming its seed; a diagnosis run reads the
+# phases of a solve that finished in time too.
+ALL_LOGS_TAG: str | None = None
 # --memory-limit-gb G (#1199): the address space each solve may take, set on the solver's
 # process alone (RLIMIT_AS, POSIX only). Without it one model can take the whole job down:
 # radiationm40-10-02 twice ended a bench.yml shard with "the runner has received a shutdown
@@ -124,14 +128,17 @@ def keep_overrun_log(instance: Path, time_limit: float, wall: float, killed: boo
                      output) -> None:
     """Write `output` (the solver's stdout, text or bytes, possibly partial when it was
     killed) to OVERRUN_LOG_DIR/<instance>.log under a one-line header, when the run was
-    killed or returned more than the slack past its limit."""
-    if OVERRUN_LOG_DIR is None or not (killed or wall > time_limit + OVERRUN_SLACK_SECONDS):
+    killed or returned more than the slack past its limit (with --all-logs, every run)."""
+    late = killed or wall > time_limit + OVERRUN_SLACK_SECONDS
+    if OVERRUN_LOG_DIR is None or not (late or ALL_LOGS_TAG is not None):
         return
     text = output.decode(errors="replace") if isinstance(output, bytes) else (output or "")
     stem = instance.name.removesuffix(".gz").removesuffix(".mps")
+    if ALL_LOGS_TAG is not None:
+        stem += f"-{ALL_LOGS_TAG}"
     OVERRUN_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    header = (f"# {stem}: time limit {time_limit:g} s, wall {wall:.1f} s, "
-              f"{'killed at the hang margin' if killed else 'returned late'}\n")
+    how = "killed at the hang margin" if killed else "returned late" if late else "in time"
+    header = f"# {stem}: time limit {time_limit:g} s, wall {wall:.1f} s, {how}\n"
     (OVERRUN_LOG_DIR / f"{stem}.log").write_text(header + text, encoding="utf-8",
                                                   newline="\n")
 RESULTS_DIR = REPO_ROOT / "bench" / "results"
@@ -623,6 +630,9 @@ def main() -> int:
                         help="keep the solver's console log of every run killed at the hang "
                              "margin or returned more than 5 s past its limit, as "
                              "DIR/<instance>.log (#1199); the solver then logs to its console")
+    parser.add_argument("--all-logs", action="store_true",
+                        help="with --overrun-logs DIR, keep every solve's log, as "
+                             "DIR/<model>-<options hash>.log")
     parser.add_argument("--profile-dir", type=Path, default=None, metavar="DIR",
                         help="with --profile, keep every solve's whole profile JSON (its "
                              "nested regions) as DIR/<model>-<commit>-<options hash>.json")
@@ -638,6 +648,11 @@ def main() -> int:
     if args.overrun_logs is not None:
         global OVERRUN_LOG_DIR
         OVERRUN_LOG_DIR = (REPO_ROOT / args.overrun_logs).resolve()
+    if args.all_logs:
+        if args.overrun_logs is None:
+            parser.error("--all-logs needs --overrun-logs DIR")
+        global ALL_LOGS_TAG
+        ALL_LOGS_TAG = hashlib.sha256(" ".join(args.solver_option).encode()).hexdigest()[:8]
     if args.seeds < 1:
         parser.error("--seeds must be at least 1")
     if args.set_name != "miplib2017" and args.tier != 1:
