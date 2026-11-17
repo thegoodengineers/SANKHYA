@@ -103,6 +103,9 @@ namespace {
 // trivially destructible thread_local, so a SparseLu destroyed after the slot (at thread
 // or program exit) sees the flag and frees its workspace instead of touching the slot.
 thread_local bool spare_slot_gone = false;
+// KeepLargeSpare (#1278, lu.hpp): while set on this thread, the slot takes a workspace of any
+// size, not only one of at most tol::kLuSpareWorkspaceRows rows.
+thread_local bool keep_large_spare = false;
 template <typename W>
 struct SpareSlot {
   std::unique_ptr<W> kept;
@@ -120,9 +123,22 @@ std::unique_ptr<SparseLu::Workspace> SparseLu::WorkspaceCache::take_spare() noex
   return std::move(spare_slot<Workspace>().kept);
 }
 
+SparseLu::KeepLargeSpare::KeepLargeSpare() noexcept : previous_(keep_large_spare) {
+  keep_large_spare = true;
+}
+SparseLu::KeepLargeSpare::~KeepLargeSpare() {
+  keep_large_spare = previous_;
+}
+
+void SparseLu::release_spare_workspace() noexcept {
+  if (!spare_slot_gone) spare_slot<Workspace>().kept.reset();
+}
+
 SparseLu::WorkspaceCache::WorkspaceCache() noexcept = default;
 SparseLu::WorkspaceCache::~WorkspaceCache() {
-  if (!ptr || spare_slot_gone || ptr->m > tol::kLuSpareWorkspaceRows) return;
+  if (!ptr || spare_slot_gone || (ptr->m > tol::kLuSpareWorkspaceRows && !keep_large_spare)) {
+    return;
+  }
   auto& slot = spare_slot<Workspace>();
   if (!slot.kept) slot.kept = std::move(ptr);
 }

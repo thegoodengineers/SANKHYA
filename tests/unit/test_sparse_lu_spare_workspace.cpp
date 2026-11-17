@@ -144,5 +144,75 @@ TEST(SparseLuSpareWorkspace, AWorkspaceAboveTheRowBoundIsNotKept) {
   EXPECT_TRUE(same_bits(second_large.ftran, first_large.ftran));
 }
 
+Outcome solve_with(SparseLu& lu, const Matrix& a) {
+  Outcome out;
+  out.ok = lu.factorize(a.columns(), a.m, tol::kPivotTolerance, tol::kMarkowitzThreshold);
+  if (!out.ok) return out;
+  out.pivot_rows = lu.pivot_rows();
+  out.pivot_columns = lu.pivot_columns();
+  out.ftran.resize(static_cast<std::size_t>(a.m));
+  for (Index i = 0; i < a.m; ++i) {
+    out.ftran[static_cast<std::size_t>(i)] = 1.0 + 0.25 * static_cast<double>(i % 7);
+  }
+  out.btran = out.ftran;
+  lu.solve(out.ftran.data());
+  lu.solve_transpose(out.btran.data());
+  return out;
+}
+
+void expect_same(const Outcome& got, const Outcome& want, const char* what, Index m) {
+  ASSERT_TRUE(want.ok) << what << " m " << m;
+  ASSERT_EQ(got.ok, want.ok) << what << " m " << m;
+  EXPECT_EQ(got.pivot_rows, want.pivot_rows) << what << " m " << m;
+  EXPECT_EQ(got.pivot_columns, want.pivot_columns) << what << " m " << m;
+  EXPECT_TRUE(same_bits(got.ftran, want.ftran)) << what << " m " << m;
+  EXPECT_TRUE(same_bits(got.btran, want.btran)) << what << " m " << m;
+}
+
+TEST(SparseLuSpareWorkspace, OneObjectFactorizingASequenceMatchesAFreshObjectEachTime) {
+  // #1278: the workspace kept between factorize() calls on ONE object, through matrices that
+  // grow, shrink and change density, against a fresh object on a fresh thread per matrix.
+  const Index sizes[] = {30, 200, 5, 200, 64, 1, 150, 30};
+  const double densities[] = {0.3, 0.02, 1.0, 0.1, 0.5, 1.0, 0.05, 0.9};
+  SparseLu reused;
+  std::uint32_t seed = 1278;
+  for (int round = 0; round < 2; ++round) {
+    for (std::size_t k = 0; k < std::size(sizes); ++k) {
+      const Matrix a = random_matrix(sizes[k], densities[k], seed++);
+      Outcome fresh;
+      std::thread([&] {
+        SparseLu lu;
+        fresh = solve_with(lu, a);
+      }).join();
+      expect_same(solve_with(reused, a), fresh, "one object", sizes[k]);
+    }
+  }
+}
+
+TEST(SparseLuSpareWorkspace, AboveTheRowBoundAKeepLargeSpareScopeKeepsTheWorkspaceUnchanged) {
+  // #1278: under the scope a workspace above the bound goes to the spare slot and the next
+  // SparseLu starts from it. Large bases of different sizes and densities, each against a
+  // fresh thread's factorization, bit for bit; then the slot is released.
+  const Index bound = tol::kLuSpareWorkspaceRows;
+  const Index sizes[] = {bound + 40, bound + 7, bound + 300, bound + 7};
+  const double nonzeros_per_column[] = {3.0, 2.0, 4.0, 5.0};
+  std::uint32_t seed = 12780;
+  {
+    const SparseLu::KeepLargeSpare keep;
+    for (std::size_t k = 0; k < std::size(sizes); ++k) {
+      const Matrix a = random_matrix(
+          sizes[k], nonzeros_per_column[k] / static_cast<double>(sizes[k]), seed++);
+      Outcome fresh;
+      std::thread([&] { fresh = factorize_and_solve(a); }).join();
+      expect_same(factorize_and_solve(a), fresh, "kept above the bound", sizes[k]);
+    }
+  }
+  SparseLu::release_spare_workspace();
+  const Matrix little = random_matrix(20, 0.4, 9);
+  Outcome fresh_small;
+  std::thread([&] { fresh_small = factorize_and_solve(little); }).join();
+  expect_same(factorize_and_solve(little), fresh_small, "after the release", 20);
+}
+
 }  // namespace
 }  // namespace sankhya

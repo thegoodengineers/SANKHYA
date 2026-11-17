@@ -82,6 +82,27 @@ struct LuSolveStats {
 
 class SparseLu {
  public:
+  /// While one lives on a thread, a SparseLu destroyed there hands its workspace to the
+  /// thread's spare slot WHATEVER ITS SIZE, not only up to tol::kLuSpareWorkspaceRows (#1278).
+  /// The bound is for a large LP solved once; a branch-and-bound search factorizes bases of
+  /// the same large size thousands of times, one fresh SparseLu per strong-branching probe,
+  /// and on decomp2 (10,765 rows) freeing and rebuilding the workspace was a fifth of all
+  /// instructions of a 60-node search (callgrind, bench run 44004613494). The warm-started
+  /// node solves hold one (solve_with_scaling, the tree's pattern); the search frees the
+  /// slot when it ends (release_spare_workspace()). Scopes nest; the outermost decides.
+  class KeepLargeSpare {
+   public:
+    KeepLargeSpare() noexcept;
+    ~KeepLargeSpare();
+    KeepLargeSpare(const KeepLargeSpare&) = delete;
+    KeepLargeSpare& operator=(const KeepLargeSpare&) = delete;
+
+   private:
+    bool previous_;
+  };
+  /// Free this thread's spare workspace now (#1278): the search that kept a large one ended.
+  static void release_spare_workspace() noexcept;
+
   /// Factorize the m x m matrix whose columns are `columns[0..m-1]`. Returns false when the
   /// basis is singular to working precision, i.e. when some step finds no candidate pivot
   /// above `pivot_tolerance` in absolute value.
