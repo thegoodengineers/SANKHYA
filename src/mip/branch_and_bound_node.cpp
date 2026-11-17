@@ -629,7 +629,8 @@ Index BranchAndBound::choose_branching_column(const std::vector<double>& x, doub
   return best;
 }
 
-bool BranchAndBound::offer_incumbent(const std::vector<double>& candidate) {
+bool BranchAndBound::offer_incumbent(const std::vector<double>& candidate, bool* feasible) {
+  if (feasible != nullptr) *feasible = false;  // until every test below has passed
   // Integrality, against the ORIGINAL bounds - a candidate must be feasible for the model
   // the user handed us, not merely for the node it was found in.
   for (const Index j : integer_columns_) {
@@ -682,6 +683,7 @@ bool BranchAndBound::offer_incumbent(const std::vector<double>& candidate) {
     }
   }
 
+  if (feasible != nullptr) *feasible = true;
   const double objective = internal_objective(x);
   // Feasible, so it is a plan whether or not it improves: the pool keeps it (#225). In a
   // parallel search there is one pool for all the workers (#222).
@@ -701,6 +703,24 @@ bool BranchAndBound::offer_incumbent(const std::vector<double>& candidate) {
     incumbent_trace_.push_back({timer_.elapsed_seconds(), reported(objective)});
   }
   return true;
+}
+
+Index BranchAndBound::off_integer_column(const std::vector<double>& x) const {
+  Index best = -1;
+  double best_distance = 0.0;
+  for (const Index j : integer_columns_) {
+    const auto u = static_cast<std::size_t>(j);
+    const double v = x[u];
+    const double distance = std::fabs(v - std::round(v));
+    if (distance <= best_distance) continue;  // exact integers (distance 0) never qualify
+    // Both children must move a bound, or the one that does not is this node again and
+    // the search would loop on it.
+    const double down = std::floor(v);
+    if (!(working_.col_upper[u] > down) || !(working_.col_lower[u] < down + 1.0)) continue;
+    best = j;
+    best_distance = distance;
+  }
+  return best;
 }
 
 bool BranchAndBound::split_integral_node(Index node_index, const Solution& relaxation) {
