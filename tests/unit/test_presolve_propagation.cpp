@@ -173,6 +173,26 @@ TEST(PresolvePropagation, IntegerBoundsAreRoundedInwardOnlyOnIntegerColumns) {
   EXPECT_NEAR(s.col_value[0], 2.25, 1e-7);
 }
 
+TEST(PresolvePropagation, AnIntegerBoundFromARowIsSnappedInTheRowsUnits) {
+  // #1319: x0 fixed at 4 leaves 4459767 x1 >= 4 a singleton row, x1 >= 8.97e-7. Snapped by
+  // the integrality tolerance in x1's units that became x1 >= 0, the row was removed, and
+  // x1 = 0 came back 4 below it. min 3 x1 - x0: the only integer point is x1 = 1, worth -1.
+  // The same row kept by bound propagation, and by coefficient tightening, must say x1 >= 1.
+  const Model model =
+      build({{-1, 4459767}}, {0}, {kInfinity}, {-1, 3}, {4, 0}, {4, 1}, {false, true});
+  for (const bool propagation : {false, true}) {
+    for (const bool tightening : {false, true}) {
+      Options options = with_propagation(propagation);
+      options.set_bool("presolve_coefficient_tightening", tightening);
+      const Solution s = solve(model, options);
+      ASSERT_EQ(s.status, SolveStatus::kOptimal)
+          << "propagation " << propagation << " tightening " << tightening << ": " << s.message;
+      EXPECT_NEAR(s.objective, -1.0, 1e-9);
+      EXPECT_EQ(s.col_value[1], 1.0);
+    }
+  }
+}
+
 /// The exact oracle's verdict against ours: same status, the optimum to 1e-6 relative.
 bool agree(const oracle::OracleResult& exact, const Solution& got, std::string* why) {
   switch (exact.status) {
