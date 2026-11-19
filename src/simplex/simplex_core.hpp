@@ -584,14 +584,16 @@ class Simplex {
   /// loop and reported at verbose level by finish(): the scale tables showed the iteration
   /// rate falling 38x for a 5x larger model, and the only honest way to say why is to
   /// measure each phase. Index order: pricing, pivot row (BTRAN + row), ratio test, FTRAN,
-  /// basis update, refactorization, basic values (FTRAN), reduced costs (BTRAN + pass).
-  std::array<double, 8> dual_phase_seconds_{};
+  /// basis update, refactorization, basic values (the flips' FTRAN and the recomputation
+  /// after a refactorization), reduced costs (BTRAN + pass), and the dual steepest-edge
+  /// weights (their FTRAN of rho, #411), which basic values used to absorb.
+  std::array<double, 9> dual_phase_seconds_{};
   /// Right-hand side for the one FTRAN that carries a set of bound flips into the basic
   /// values (#210); kept as a member so a flip iteration allocates nothing.
   std::vector<double> flip_rhs_;
-  static constexpr const char* kDualPhaseNames[8] = {
-      "pricing", "pivot row",   "ratio test",   "ftran",
-      "update",  "refactorize", "basic values", "reduced costs"};
+  static constexpr const char* kDualPhaseNames[9] = {
+      "pricing",     "pivot row",    "ratio test",    "ftran",       "update",
+      "refactorize", "basic values", "reduced costs", "dual weights"};
   double worst_basis_pivot_ = 0.0;  ///< smallest pivot over every factorization
   Count iterations_seen_ = 0;       ///< for the per-refactorization log line only
   Count rejected_updates_ = 0;
