@@ -98,6 +98,18 @@ bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
             "Root cut loop: not entered, round 1 took no flow cover and the model has no "
             "variable upper bound (root_cut_loop_when=auto)");
       }
+    } else if (wanted && when == "charged") {
+      // As auto, but every model without a round-1 flow cover enters on probation, not
+      // only one with a variable upper bound (#1278: enlight_hard and mik-250-20-75-4,
+      // whose rounds gain several times round 1, were kept out), and each of its rounds is
+      // CHARGED for the nonzeros it adds to every node LP (root_cut_loop()): the rounds
+      // that proved enlight_hard cost enlight8 its proof, 14 -> 580 cut rows and 412k ->
+      // 80k nodes.
+      const bool cover = std::any_of(round1.begin(), round1.end(), [](const Cut& cut) {
+        return cut.family == CutFamily::kFlowCover;
+      });
+      root_loop_probation_ = !cover;
+      root_loop_charged_ = !cover;
     } else if (wanted && when == "switched-flows") {
       // The rounds pay on fixed-charge and lot-sizing models, whose switched flows x <= u y
       // are what the aggregated flow covers and the c-MIR path cuts work on (#1158's A/B:
@@ -245,6 +257,40 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
       why = "a failed re-solve";
       break;
     }
+    // THE ROW CHARGE (root_cut_loop_when=charged, #1278). Every node LP after the root
+    // carries the round's rows, and a dual simplex iteration's work - pricing, the row of
+    // the tableau, the two triangular solves - grows with the nonzeros of the matrix; a
+    // round that adds z nonzeros to an LP of Z makes every node after it about z / Z
+    // dearer. On enlight8 the rounds' dense cuts took the node LP from 79 to 173 rows on
+    // average, and the tree from 412k nodes in 41 s to 80k in 60 s. The round pays only if
+    // it shrinks what the tree has left to close at least as much: the share of the
+    // remaining gap it closes (the stall rule's reference: incumbent minus bound, or
+    // max(1, |bound|) with no incumbent) must reach z / Z. A round that does not is rolled
+    // back and the loop ends on the last round that paid. No constant is chosen: the two
+    // shares are compared.
+    if (root_loop_charged_) {
+      const double before = bounds.back();
+      const double gain = internal_objective(next.col_value) - before;
+      const double left = have_incumbent_ ? std::max(incumbent_internal_ - before, 0.0)
+                                          : std::max(1.0, std::fabs(before));
+      const auto old_nonzeros = std::max<Index>(pre_round_model.num_nonzeros(), 1);
+      const double row_share =
+          static_cast<double>(working_.num_nonzeros() - pre_round_model.num_nonzeros()) /
+          static_cast<double>(old_nonzeros);
+      if (left > 0.0 && gain < row_share * left) {
+        logger_.info(
+            "Root cut round {}: closed {:.3g} of the gap left for {:.3g} more nonzeros; rolled "
+            "back to round {} (root_cut_loop_when=charged)",
+            round, gain / left, row_share, round - 1);
+        working_ = std::move(pre_round_model);
+        scaling_ = std::move(pre_round_scaling);
+        drop_cuts_from(pool_before);
+        resize_warm_starts(working_.num_rows());
+        current_warm_ = basis_of(*relaxation);
+        why = "a round whose rows cost more than it closed";
+        break;
+      }
+    }
     *relaxation = std::move(next);
     root_cuts_applied_ += static_cast<Count>(accepted.size());
     root_bound_after_cuts_internal_ = internal_objective(relaxation->col_value);
@@ -261,10 +307,18 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
   // search runs as it does when the gate keeps the loop out: round 1's rows, no pool. The
   // rows of rounds 2.. are the last ones appended (nothing is removed before this point), so
   // dropping them from the pool and restoring the saved model is the whole of it.
+  // A round 1 that moved the bound by no more than the stall rule's share of its reference
+  // gives the comparison nothing to stand on: any later gain beats zero, and on misc07 seed
+  // 2 (MIPLIB 3) and neos859080 seed 1 (MIPLIB 2017), whose round 1 moved nothing, 3 to 20
+  // rounds were kept and the tree lost its proof (#1278's A/B at 587f58d). Such a root goes
+  // back to round 1 too.
   if (round_one.has_value()) {
     const double first_gain = std::max(bounds[1] - bounds[0], 0.0);
     const double later_gain = bounds.back() - bounds[1];
-    if (later_gain <= tol::kRootCutProbationGain * first_gain) {
+    const double reference = have_incumbent_ ? std::max(incumbent_internal_ - bounds[1], 0.0)
+                                             : std::max(1.0, std::fabs(bounds[1]));
+    if (later_gain <= tol::kRootCutProbationGain * first_gain ||
+        (root_loop_charged_ && first_gain <= tol::kRootCutStallFraction * reference)) {
       logger_.info(
           "Root cut loop: probation failed after {} round(s), bound {:.10g} to {:.10g} against "
           "{:.10g} after round 1; back to round 1 (root_cut_loop_when=auto), stopped on {}",
