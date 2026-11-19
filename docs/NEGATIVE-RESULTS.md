@@ -353,6 +353,24 @@ The default stays off, now on a `main` measurement (the same `c1e5290` binary, b
 
 Files: `bench/results/option-ab-miplib2017-heur-conflict-arms-c1e5290.csv`, `option-ab-miplib3-conflict-on-c1e5290.csv`, `option-ab-miplib-tier1-conflict-on-c1e5290.csv` (the `arm` column). What would earn a default: an analysis whose cost per node is bounded (enlight8), then this A/B again.
 
+### The LU rebuilt every 128 updates again inside branch and bound (#1275 measured on MIP, default not changed)
+
+#1275 raised `lu_update_limit` from 128 to 512 on an LP A/B (Netlib, Kennington). On the MIPLIB 2017 benchmark set, 9 proved at `c8544ed` became 7 at `3dba456`. A same-job bisect (both arms on one runner, 3 seeds, 60 s, one thread) finds #1275 to be the only commit in that range that changes the search path of nu25-pr12 and neos-957323. nu25-pr12's root bound after cuts moves from 53259.33 to 53269.67, and its seed 0 goes from proved in 46.3 s to not proved in 60 s. neos-957323's seed 0 goes from 32.3 s and 30 nodes to 60.5 s and 166 (run 44469021991). Every other step leaves the paths unchanged (runs 44463479230, 44463490379, 44469031925, 44469044197, 44469054720, 44469069852).
+
+The default stays 512, on a `main` measurement at `854a328`: one binary, `lu_update_limit=128` against the default in the same job, 60 s, one thread.
+
+| set (runs) | arm | proved | matched | feasible and verified |
+|---|---|---:|---:|---:|
+| benchmark set, 240, seed 0 (44473575740, 44473582769, 44473590520, 44473597442, 44473604002, 44473610259) | 512 | 7 | 15 | 132 |
+| | 128 | 7 | 14 | 130 |
+| SAMADHAN's 50, 3 seeds, 150 solves (44473616807, 44473623921) | 512 | 11 | 21 | 132 |
+| | 128 | 13 | 22 | 132 |
+
+- **Flips both ways:** on the 240, 128 gains nu25-pr12 (35.0 s) and loses neos-827175 (7.0 s at 512, not proved at 128). On the 50, 128 gains nu25-pr12 seed 0 (44.1 s) and qap10 seed 1 (45.2 s; at 512 that solve stopped at the 60 s limit) and loses none.
+- **Time** where both arms prove: geometric mean ratio 128/512 of 0.878 on the 240 (6 models) and 0.945 on the 50 (11 solves).
+
+The search path is sensitive to the factorization interval, and neither interval wins. Files: `bench/results/option-ab-miplib2017-bench-lu-update-limit-128-854a328.csv`, `option-ab-miplib2017-samadhan50-lu-update-limit-128-854a328.csv`, `option-ab-miplib2017-9b0ec5d-vs-ddf9913.csv`, `option-ab-miplib2017-c8544ed-vs-3dba456.csv` (the `arm` column). What would earn a change: a node-LP interval that wins on a whole set, not on a model.
+
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
 
 These decisions were made on numbers that are not in `bench/results/`. They are recorded as such, and each names the re-run that would move it to section 1.
