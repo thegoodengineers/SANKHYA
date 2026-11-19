@@ -172,6 +172,59 @@ TEST(Heuristics, TheFeasibilityPumpFindsAPointOnACoveringModel) {
   EXPECT_GE(solves, 1);
 }
 
+TEST(Heuristics, ThePumpWithGeneralIntegersInItsDistanceFindsAPoint) {
+  // x, y integer in [0, 10]: 2x + 3y >= 7.5, x + y <= 4, from the LP point (3.75, 0). The
+  // rounding (4, 0) is feasible, but x = 4 lies strictly inside its bounds, so only the
+  // distance of mip_pump_general_integers (Bertacco, Fischetti and Lodi 2007) pulls the
+  // projection to it.
+  const Model m = integer_model({{2, 3}, {1, 1}}, {7.5, -kInf}, {kInf, 4.0}, {1, 1}, 0.0, 10.0);
+  Options lp;
+  lp.set_bool("log_to_console", false);
+  Count solves = 0;
+  const std::vector<double> x =
+      feasibility_pump(m, all_columns(m), {3.75, 0.0}, lp, 20, 1e-6, &solves, true);
+  ASSERT_FALSE(x.empty()) << "after " << solves << " projections";
+  EXPECT_TRUE(feasible(m, x));
+  EXPECT_EQ(x.size(), 2U) << "the auxiliary columns stay inside the pump";
+
+  // Random covering / packing mixes over integers in [0, 3]: whatever it returns is feasible.
+  std::mt19937 rng(2007);
+  std::uniform_int_distribution<int> coefficient(0, 3);
+  std::uniform_real_distribution<double> lp_value(0.0, 3.0);
+  int pumped = 0;
+  for (int trial = 0; trial < 100; ++trial) {
+    const std::size_t n = 6;
+    std::vector<std::vector<double>> rows(3, std::vector<double>(n));
+    std::vector<double> lower(3, -kInf);
+    std::vector<double> upper(3, kInf);
+    for (std::size_t i = 0; i < 3; ++i) {
+      double sum = 0.0;
+      for (std::size_t j = 0; j < n; ++j) {
+        rows[i][j] = coefficient(rng);
+        sum += rows[i][j];
+      }
+      if (i % 2 == 0) {
+        lower[i] = std::floor(sum);  // covering
+      } else {
+        upper[i] = std::ceil(1.5 * sum);  // packing
+      }
+    }
+    std::vector<double> cost(n);
+    for (double& c : cost) c = 1.0 + coefficient(rng);
+    const Model g = integer_model(rows, lower, upper, cost, 0.0, 3.0);
+    std::vector<double> start(n);
+    for (double& v : start) v = lp_value(rng);
+    Count projections = 0;
+    const std::vector<double> point =
+        feasibility_pump(g, all_columns(g), start, lp, 10, 1e-6, &projections, true);
+    if (!point.empty()) {
+      ++pumped;
+      EXPECT_TRUE(feasible(g, point)) << "trial " << trial;
+    }
+  }
+  EXPECT_GT(pumped, 0);
+}
+
 TEST(Heuristics, EveryPointAHeuristicCallsFeasibleIsFeasible) {
   // Random covering / packing mixes. Whatever repair() returns true for, and whatever the
   // pump returns, is re-checked here by a function that shares no code with them.

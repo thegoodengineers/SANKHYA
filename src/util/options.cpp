@@ -881,6 +881,16 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  kNoLimit,
                  {}});
+    s.push_back({"mip_pump_general_integers",
+                 OptionType::Bool,
+                 false,
+                 "The root feasibility pump's distance covers every general integer column "
+                 "through an auxiliary column and two rows (Bertacco, Fischetti and Lodi, "
+                 "Discrete Optimization 4, 2007), not only the columns rounded to a bound. "
+                 "OFF until its A/B on main.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"mip_pump_rounds",
                  OptionType::Int,
                  std::int64_t{20},
