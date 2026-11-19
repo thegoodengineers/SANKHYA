@@ -1076,13 +1076,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  {}});
     s.push_back({"mip_node_factor_cache",
                  OptionType::Int,
-                 std::int64_t{0},
+                 std::int64_t{8},
                  "MILP: keep the LU factors of up to this many node LP starting bases and "
                  "reuse them when a later node LP starts from the same basis (#501) - the "
                  "strong-branching probes of a node and its children all do. The factors "
                  "reused are the ones the solve would have computed, so the tree and the "
-                 "answer are unchanged. 0 is off, which is the default until the MIPLIB A/B "
-                 "on main.",
+                 "answer are unchanged. 0 is off. 8 by default since #1278: once the LU's "
+                 "workspace was kept between probes of any basis size (#1311), a 60-node "
+                 "search took 14.3% fewer instructions on decomp2 and 5.3% on drayage-25-23, "
+                 "node for node the same (callgrind, bench runs 44105464502 and 44105484046); "
+                 "at 60 s, 3 seeds, MIPLIB 3, tier 1 and the 25 MIPLIB 2017 models of #1278 "
+                 "prove and match exactly what they did, a little faster (MIPLIB 3 shifted "
+                 "geometric mean 2.76 -> 2.66 s, bench run 44348135700).",
                  0.0,
                  kNoLimit,
                  {}});

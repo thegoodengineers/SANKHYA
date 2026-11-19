@@ -214,6 +214,7 @@ TEST(NodeFactorCache, TheSearchIsTheSameTreeWithTheCacheOn) {
   Options plain = quiet();
   plain.set_bool("deterministic", true);
   plain.set_int("node_limit", 400);
+  plain.set_int("mip_node_factor_cache", 0);  // off, explicitly: 8 is the default since #1278
   const Solution off = solve(model, plain);
   ASSERT_GT(off.nodes, 10) << "the test needs a real tree";
 
