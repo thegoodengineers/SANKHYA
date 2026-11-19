@@ -267,9 +267,11 @@ TEST(Heuristics, TheSearchWithEveryHeuristicForcedOnAgreesWithBruteForce) {
       any = true;
     }
 
-    // Three arms: the master switch on, off, and every switch forced on by name with the
-    // dives at every node, the backtrack and RENS (#414), so every path is exercised.
-    for (int arm = 0; arm < 3; ++arm) {
+    // Four arms: the master switch on, off, every switch forced on by name with the dives
+    // at every node, the backtrack and RENS (#414), so every path is exercised, and that
+    // again with a dive time budget so small (mip_dive_time_share) that the dives' LPs are
+    // stopped by it: a dive cut short must cost nothing but its point.
+    for (int arm = 0; arm < 4; ++arm) {
       const bool heuristics = arm != 1;
       Options options;
       options.set_bool("log_to_console", false);
@@ -277,11 +279,15 @@ TEST(Heuristics, TheSearchWithEveryHeuristicForcedOnAgreesWithBruteForce) {
       options.set_bool("mip_heuristics", arm == 0);
       options.set_int("mip_rins_frequency", 1);
       options.set_int("mip_pump_rounds", 30);
-      if (arm == 2) {
+      if (arm >= 2) {
         for (const char* name : kEverySwitch) options.set_string(name, "on");
         options.set_int("mip_dive_frequency", 1);
         options.set_bool("mip_dive_backtrack", true);
         options.set_int("mip_rens_nodes", 3);
+      }
+      if (arm == 3) {
+        options.set_double("time_limit", 60.0);
+        options.set_double("mip_dive_time_share", 1e-9);
       }
       const Solution solved = solve(m, options);
       ++compared;
@@ -298,7 +304,7 @@ TEST(Heuristics, TheSearchWithEveryHeuristicForcedOnAgreesWithBruteForce) {
       EXPECT_TRUE(feasible(m, solved.col_value)) << "trial " << trial;
     }
   }
-  EXPECT_EQ(compared, 360);
+  EXPECT_EQ(compared, 480);
   EXPECT_LT(infeasible, compared);
 }
 
@@ -414,6 +420,10 @@ TEST(Heuristics, EverySwitchResolvesAgainstTheMasterSwitch) {
   EXPECT_TRUE(s.dive_backtrack);
   EXPECT_EQ(s.dive_lp_resolves, tol::kDivingNoIncumbentLpResolves);
   EXPECT_EQ(s.dive_frequency, tol::kDivingNoIncumbentFrequency);
+  EXPECT_DOUBLE_EQ(s.dive_time_share, tol::kDivingTimeShare);
+  until.set_double("mip_dive_time_share", 0.25);
+  EXPECT_DOUBLE_EQ(HeuristicSchedule::from(until).dive_time_share, 0.25);
+  until.set_double("mip_dive_time_share", tol::kDivingTimeShare);
   // Once it stands down a dive is the default one: the options' own cap, no backtrack.
   EXPECT_EQ(s.base_dive_lp_resolves, tol::kDivingMaxLpResolves);
   EXPECT_FALSE(s.base_dive_backtrack);

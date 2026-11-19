@@ -684,6 +684,7 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   s.rens_nodes = options.get_int("mip_rens_nodes");
   s.dive_frequency = options.get_int("mip_dive_frequency");
   s.dive_lp_resolves = static_cast<int>(options.get_int("mip_dive_lp_resolves"));
+  s.dive_time_share = options.get_double("mip_dive_time_share");
   s.pump_rounds = static_cast<int>(options.get_int("mip_pump_rounds"));
   s.pdhg_pump = options.get_bool("gpu_pump");
   s.fix_and_propagate = options.get_bool("gpu_fix_and_prop");

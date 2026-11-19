@@ -346,6 +346,23 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
       stood_down ? schedule_.base_dive_lp_resolves : schedule_.dive_lp_resolves;
   const bool may_backtrack =
       stood_down ? schedule_.base_dive_backtrack : schedule_.dive_backtrack;
+  // A TIME BUDGET PER DIVE (mip_dive_time_share): a share of the time left when the dive
+  // starts, the rule the sub-MIP heuristics already follow (kSubMipBudgetShare). The re-solve
+  // and depth caps count LPs, not their cost: on neos-950242 (MIPLIB 2017) one coefficient
+  // dive spent 51 s of a 60 s solve on 15 re-solves, and on hypothyroid-k1 the fractional
+  // dive 33 s on 31, with nothing found and nothing after them given any time (bench.yml run
+  // 44348500088). Each LP is limited to what is left of the budget; an LP stopped by it
+  // ends the dive as a dead end does. 0 (or no time limit, or deterministic=true): no budget.
+  const double dive_seconds =
+      schedule_.dive_time_share > 0.0 && schedule_.seconds_budgets && limits_.has_time_limit()
+          ? schedule_.dive_time_share * limits_.remaining_seconds(timer_.elapsed_seconds())
+          : -1.0;
+  // Sets the next LP's cap to what is left of the budget; false once nothing is left.
+  const auto budget_left = [&]() {
+    if (dive_seconds < 0.0) return true;
+    node_seconds_cap_ = dive_seconds - clock.elapsed_seconds();
+    return node_seconds_cap_ > 0.0;
+  };
   while (depth < tol::kDivingMaxDepth && lp_resolves < resolve_cap) {
     const DiveChoice choice = choose_dive_column(original_, locks_, integer_columns_, x, rule,
                                                  guide, integrality_tolerance_);
@@ -361,6 +378,7 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
       break;
     }
 
+    if (!budget_left()) break;
     const auto u = static_cast<std::size_t>(choice.column);
     const std::size_t before_fix = saved_.size();
     tighten_lower(u, choice.value);
@@ -368,7 +386,8 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
     ++depth;
     Solution probe = solve_node();
     ++lp_resolves;
-    if (probe.status != SolveStatus::kOptimal && may_backtrack && !backtracked) {
+    if (probe.status != SolveStatus::kOptimal && may_backtrack && !backtracked &&
+        budget_left()) {
       // ONE backtrack (Achterberg 2007, sec. 9.2): undo the fix and try the other side of
       // the column once; a second dead end ends the dive.
       backtracked = true;
@@ -390,6 +409,7 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
     current_warm_ = basis_of(probe);
     if (miqp_node_ipm_warm_start_) current_qp_warm_ = last_qp_warm_;  // #494, likewise
   }
+  node_seconds_cap_ = -1.0;
   s.work += lp_resolves;
   unwind_to(mark);
   s.seconds += clock.elapsed_seconds();
