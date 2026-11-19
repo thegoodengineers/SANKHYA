@@ -80,6 +80,13 @@ inline constexpr int kDivingMaxLpResolves = 50;
 /// 2007, sec. 9.2; Berthold 2006, ch. 3: dives repeated through the tree).
 inline constexpr int kDivingNoIncumbentLpResolves = 1000;
 inline constexpr int kDivingNoIncumbentFrequency = 50;
+/// The default of mip_dive_time_share: the share of the time left one dive may spend, its
+/// LPs limited to what is left of it; 0 is no budget in seconds, only the counted caps above.
+/// 0.1, kSubMipBudgetShare's value, is measured (#1324, 60 s, one thread, 3 seeds, against
+/// 0): hypothyroid-k1 gets a point on all three seeds, two at the optimum, where 0 has none,
+/// and nothing proved, matched or verified is lost on the 25 MIPLIB 2017 targets, MIPLIB 3
+/// or tier 1 (bench.yml runs 44453252594, 44471158949, 44471171480).
+inline constexpr double kDivingTimeShare = 0.1;
 
 /// Sub-MIP heuristics (RINS #290, RENS #414): the least fraction of the integer columns the
 /// sub-model must fix for the neighbourhood to be one. Below it the sub-MIP is nearly the

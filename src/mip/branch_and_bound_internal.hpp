@@ -570,6 +570,12 @@ class BranchAndBound {
     // honoured the clock they were handed. Written in place, as the LP comment says.
     if (limits_.has_time_limit()) {
       options.set_double("time_limit", limits_.remaining_seconds(timer_.elapsed_seconds()));
+      // A dive's LP gets no more than its dive has left (mip_dive_time_share); the cap is
+      // only ever set under a time limit, so the line above restores the next node's.
+      if (node_seconds_cap_ >= 0.0) {
+        options.set_double("time_limit",
+                           std::min(options.get_double("time_limit"), node_seconds_cap_));
+      }
     }
     if (quadratic_) {
       if (miqp_node_ipm_) return solve_qp_node_ipm(options);  // #494
@@ -1092,6 +1098,9 @@ class BranchAndBound {
   std::vector<HeuristicStats> heuristic_stats_;
   /// The incumbent (internal objective) Local-MIP last started from (#507); NaN before any.
   double local_mip_from_ = std::numeric_limits<double>::quiet_NaN();
+  /// While a dive runs under mip_dive_time_share: the seconds its next LP may take (what is
+  /// left of the dive's budget); negative otherwise. solve_node_with() applies it.
+  double node_seconds_cap_ = -1.0;
   Locks locks_;
   HeuristicSchedule schedule_;
   // Reduced-cost fixing and restarts (#418).

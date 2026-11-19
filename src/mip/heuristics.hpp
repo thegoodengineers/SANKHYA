@@ -167,6 +167,8 @@ struct HeuristicSchedule {
   Count rens_nodes = 0;
   Count dive_frequency = 0;  ///< 0: the dives run at the root only
   int dive_lp_resolves = 0;
+  /// The share of the time left that one dive may spend (mip_dive_time_share); 0: no budget.
+  double dive_time_share = 0.0;
   int pump_rounds = 0;
   Count fj_work = 0;
   Count fj_completion_iterations = 0;  ///< per model row; 0 is no limit (#1030)
