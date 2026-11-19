@@ -197,5 +197,49 @@ TEST(Parity, NullSpaceLargerThanTheFixingsIsNotTried) {
       << text;
 }
 
+TEST(Parity, FixingsOfUnderHalfTheBinariesAreNotTried) {
+  // x0 + x1 + x2 - 2 y = 1 is a parity row of dimension two, four fixings, but they fix 3 of
+  // the 11 binaries (x0..x9, y): each sub-MIP would be nearly the whole model, so none is
+  // tried (hypothyroid-k1: 3 of 2602), and the search still solves it.
+  Model m;
+  m.col_cost.assign(11, 1.0);
+  m.col_cost[10] = 0.0;
+  m.col_lower.assign(11, 0.0);
+  m.col_upper.assign(11, 1.0);
+  m.col_type.assign(11, VarType::kInteger);
+  m.matrix.reset(2, 11);
+  for (Index j = 0; j < 3; ++j) m.matrix.add_entry(0, j, 1.0);
+  m.matrix.add_entry(0, 10, -2.0);
+  for (Index j = 3; j < 10; ++j) m.matrix.add_entry(1, j, 1.0);
+  m.matrix.finalize();
+  m.row_lower = {1.0, 3.0};
+  m.row_upper = {1.0, kInfinity};
+  m.hessian.reset(11, 11);
+  m.hessian.finalize();
+  const ParityFixings f = parity_fixings(m, {}, 16);
+  ASSERT_EQ(f.null_space_dimension, 2);
+  ASSERT_EQ(f.columns.size(), 3U);
+
+  Options options;
+  options.set_bool("log_to_console", false);
+  options.set_bool("presolve", false);
+  options.set_string("mip_heur_parity", "on");
+  options.set_int("mip_threads", 1);
+  std::FILE* stream = std::tmpfile();
+  ASSERT_NE(stream, nullptr);
+  Logger logger(stream, LogLevel::kInfo);
+  const Solution solved = solve_branch_and_bound(m, options, logger, nullptr);
+  std::fflush(stream);
+  std::rewind(stream);
+  std::string text;
+  char buffer[4096];
+  while (std::fgets(buffer, sizeof(buffer), stream) != nullptr) text += buffer;
+  std::fclose(stream);
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+  EXPECT_NEAR(solved.objective, 4.0, 1e-9);
+  EXPECT_NE(text.find("0 fixing(s) tried"), std::string::npos) << text;
+  EXPECT_NE(text.find("they fix 3 of 11 binaries"), std::string::npos) << text;
+}
+
 }  // namespace
 }  // namespace sankhya::mip
