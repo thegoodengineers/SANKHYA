@@ -353,6 +353,7 @@ void BranchAndBound::dive(std::size_t slot, DiveRule rule, const std::vector<dou
   // dive 33 s on 31, with nothing found and nothing after them given any time (bench.yml run
   // 44348500088). Each LP is limited to what is left of the budget; an LP stopped by it
   // ends the dive as a dead end does. 0 (or no time limit, or deterministic=true): no budget.
+  // At the default, 0.1, hypothyroid-k1 gets a point on every seed (#1324).
   const double dive_seconds =
       schedule_.dive_time_share > 0.0 && schedule_.seconds_budgets && limits_.has_time_limit()
           ? schedule_.dive_time_share * limits_.remaining_seconds(timer_.elapsed_seconds())

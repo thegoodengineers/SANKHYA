@@ -1014,7 +1014,7 @@ const std::vector<OptionSpec>& Options::registry() {
                  "The share of the time left that one dive may spend, its LPs limited to "
                  "what is left of it; the dive ends when it is spent. 0: no budget, only "
                  "mip_dive_lp_resolves and the depth cap. Only under a time limit and "
-                 "deterministic=false.",
+                 "deterministic=false. The default, 0.1, is measured (#1324).",
                  0.0,
                  1.0,
                  {}});
