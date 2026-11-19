@@ -616,6 +616,33 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     remove_artificial_bounds();
     return factorization_failed(iterations, timer);
   };
+  // DIAG: flip boxed nonbasic columns whose reduced cost is wrong-signed beyond tolerance.
+  const bool diag_correct = options_.get_bool("diag_dual_flip_correction");
+  const bool diag_shift = options_.get_bool("diag_dual_shift_entering");
+  Count diag_corrections = 0;
+  const auto correct_dual = [&]() {
+    if (!diag_correct) return;
+    Count flipped = 0;
+    for (const Index k : nonbasic_list_) {
+      const auto u = static_cast<std::size_t>(k);
+      if (!is_finite_bound(lower_[u]) || !is_finite_bound(upper_[u])) continue;
+      const double d = reduced_cost_[u];
+      if (status_[u] == BasisStatus::kAtLower && d < -dual_tolerance_) {
+        status_[u] = BasisStatus::kAtUpper;
+        nonbasic_value_[u] = upper_[u];
+        ++flipped;
+      } else if (status_[u] == BasisStatus::kAtUpper && d > dual_tolerance_) {
+        status_[u] = BasisStatus::kAtLower;
+        nonbasic_value_[u] = lower_[u];
+        ++flipped;
+      }
+    }
+    if (flipped > 0) {
+      diag_corrections += flipped;
+      compute_basic_values();
+      rebuild_infeasible_list();
+    }
+  };
   // Refactorize and recompute everything the loop reads. Used wherever a claim reached
   // through the eta file must be re-examined on fresh factors before it is acted on.
   const auto refresh = [&]() {
@@ -625,6 +652,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     compute_basic_values();
     rebuild_infeasible_list();
     compute_reduced_costs(false);
+    correct_dual();
     return true;
   };
 
@@ -994,6 +1022,11 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     // it would move the duals backwards. Its cost is shifted so the reduced cost is exactly
     // zero instead, and the step is degenerate (Koberstein 2005, ch. 6). The shift is
     // undone with every other cost change before any answer leaves this loop.
+    if (!dual_harris_ && diag_shift) {
+      const double d = reduced_cost_[e];
+      const double a = (to_upper ? 1.0 : -1.0) * pivot_by_row;
+      if (a > 0.0 ? d < -dual_tolerance_ : d > dual_tolerance_) shift_cost(entering, -d);
+    }
     if (dual_harris_) {
       const double d = reduced_cost_[e];
       const double a = (to_upper ? 1.0 : -1.0) * pivot_by_row;
@@ -1153,13 +1186,14 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
         logger_.verbose(
             "diag refactor it {} ({}): etas {} eta-nnz {} factor-nnz {} | x drift {:.2e} "
             "max|x_B| {:.2e} | d drift {:.2e} wrong-signed {} max {:.2e} mass {:.2e} | "
-            "since last: neg steps {} min|pivot| {:.2e} obj {:.6e}",
+            "since last: neg steps {} min|pivot| {:.2e} obj {:.6e} corrections {}",
             iterations, why, diag_etas, diag_eta_nnz, lu_.factor_nonzeros(), dx, xmax, dd,
             wrong, wrong_max, wrong_mass, diag_neg_steps, diag_min_pivot,
-            minimization_objective());
+            minimization_objective(), diag_corrections);
         diag_neg_steps = 0;
         diag_min_pivot = kInfinity;
       }
+      correct_dual();
     }
 
     if (std::optional<Solution> stopped = count_iteration()) return stopped;

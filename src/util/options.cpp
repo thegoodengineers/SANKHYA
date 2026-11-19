@@ -395,6 +395,10 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"diag_dual_flip_correction", OptionType::Bool, false,
+                 "DIAG, not for merge.", 0.0, 0.0, {}});
+    s.push_back({"diag_dual_shift_entering", OptionType::Bool, false,
+                 "DIAG, not for merge.", 0.0, 0.0, {}});
     s.push_back({"mps_format",
                  OptionType::String,
                  std::string("auto"),
