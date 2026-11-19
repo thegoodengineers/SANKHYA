@@ -1084,8 +1084,10 @@ const std::vector<OptionSpec>& Options::registry() {
                  "answer are unchanged. 0 is off. 8 by default since #1278: once the LU's "
                  "workspace was kept between probes of any basis size (#1311), a 60-node "
                  "search took 14.3% fewer instructions on decomp2 and 5.3% on drayage-25-23, "
-                 "node for node the same (callgrind, bench runs 44105464502 and 44105484046), "
-                 "and MIPLIB 3 at 60 s, 3 seeds, proved 135 against 134 with nothing lost.",
+                 "node for node the same (callgrind, bench runs 44105464502 and 44105484046); "
+                 "at 60 s, 3 seeds, MIPLIB 3, tier 1 and the 25 MIPLIB 2017 models of #1278 "
+                 "prove and match exactly what they did, a little faster (MIPLIB 3 shifted "
+                 "geometric mean 2.76 -> 2.66 s, bench run 44348135700).",
                  0.0,
                  kNoLimit,
                  {}});
