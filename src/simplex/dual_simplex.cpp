@@ -998,10 +998,24 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     // it would move the duals backwards. Its cost is shifted so the reduced cost is exactly
     // zero instead, and the step is degenerate (Koberstein 2005, ch. 6). The shift is
     // undone with every other cost change before any answer leaves this loop.
-    if (dual_harris_) {
+    //
+    // AND THE TEXTBOOK TEST'S, PAST THE DUAL TOLERANCE. Its breakpoint for a wrong-signed
+    // reduced cost is zero (collect_dual_breakpoints()), so such a column can enter too, and
+    // the step d_q / alpha_rq then runs backwards: the dual objective falls, and every column
+    // the step moves the wrong way crosses zero in turn. On the root LPs of ex9 and ex10
+    // (MIPLIB 2017) a handful of such reduced costs became 2,000-3,600 within one
+    // refactorization interval, and ex10's objective then wandered between -288 and +119
+    // for 22,000 iterations, where a dual objective may only rise; with this shift the
+    // same 60 s runs climbed to 81.0 and 100.0 (the published optima are 81 and 100), though
+    // they did not finish (runs 44453927156, 44457192916). Past the tolerance only: a
+    // reduced cost inside it is dual feasible by definition, its backward step is
+    // tolerance-sized, and leaving those alone keeps every basis that never strays further
+    // on the pivots it took before.
+    {
       const double d = reduced_cost_[e];
       const double a = (to_upper ? 1.0 : -1.0) * pivot_by_row;
-      if (a > 0.0 ? d < 0.0 : d > 0.0) shift_cost(entering, -d);
+      const double wrong_side = dual_harris_ ? 0.0 : dual_tolerance_;
+      if (a > 0.0 ? d < -wrong_side : d > wrong_side) shift_cost(entering, -d);
     }
 
     // Dual step length: the duals move by this much along rho below, and the stall counter
