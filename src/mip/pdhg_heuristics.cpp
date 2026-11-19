@@ -15,6 +15,7 @@
 
 #include "domain_propagation.hpp"
 #include "feasibility_jump.hpp"
+#include "pump_projection.hpp"
 #include "sankhya/logging.hpp"
 #include "sankhya/pdhg.hpp"
 #include "sankhya/timer.hpp"
@@ -263,14 +264,9 @@ bool point_is_feasible(const Model& model, const std::vector<Index>& integer_col
 
 // ---- The feasibility pump -----------------------------------------------------------------
 //
-// THE PROJECTION LP is built once and only its data changes between rounds, so the matrix is
-// the same every round. Its columns are the model's, all continuous, plus one auxiliary
-// column d_k >= 0 per GENERAL integer column (Bertacco, Fischetti & Lodi 2007) with the two
-// rows d_k - x_j >= -r_j and d_k + x_j >= r_j, so that d_k >= |x_j - r_j| and cost 1 on d_k
-// measures the distance. A column whose integer domain is exactly its two integral bounds
-// needs no auxiliary: its distance is x_j - l_j at r_j = l_j and u_j - x_j at r_j = u_j, a
-// cost of +1 or -1 on x_j (FGL 2005). A column with one integer in its domain has distance 0.
-// Round by round only those costs and the auxiliary rows' lower sides move.
+// THE PROJECTION LP is built once and only its data changes between rounds
+// (pump_projection.hpp): one auxiliary column per GENERAL integer column (Bertacco, Fischetti
+// & Lodi 2007), a cost of +1 or -1 on a two-valued one (FGL 2005).
 PdhgHeuristicResult pdhg_feasibility_pump(const Model& model,
                                           const std::vector<Index>& integer_columns,
                                           const std::vector<double>& start,
@@ -278,7 +274,6 @@ PdhgHeuristicResult pdhg_feasibility_pump(const Model& model,
   PdhgHeuristicResult result;
   const Budget budget(settings.seconds);
   const Index n = model.num_cols();
-  const Index m = model.num_rows();
   const double tol_int = settings.integrality_tolerance;
   if (integer_columns.empty()) {
     result.stopped = "no integer columns";
@@ -291,74 +286,10 @@ PdhgHeuristicResult pdhg_feasibility_pump(const Model& model,
   for (const Index j : integer_columns) is_integer[static_cast<std::size_t>(j)] = 1;
   const bool mixed = static_cast<Index>(integer_columns.size()) < n;
 
-  // Classify each integer column: -2 fixed, -1 two-valued with integral bounds, k >= 0 the
-  // index of its auxiliary column.
-  std::vector<Index> kind(static_cast<std::size_t>(n), -2);
-  std::vector<Index> generals;  // the column of each auxiliary, by auxiliary index
-  for (const Index j : integer_columns) {
-    const auto u = static_cast<std::size_t>(j);
-    const double lo = integer_ceil_of(model.col_lower[u], tol_int);
-    const double hi = integer_floor_of(model.col_upper[u], tol_int);
-    if (std::isfinite(lo) && std::isfinite(hi) && hi <= lo) continue;  // one value, or none
-    if (std::isfinite(lo) && std::isfinite(hi) && hi - lo == 1.0 && model.col_lower[u] == lo &&
-        model.col_upper[u] == hi) {
-      kind[u] = -1;
-      continue;
-    }
-    kind[u] = static_cast<Index>(generals.size());
-    generals.push_back(j);
-  }
-  const auto g = static_cast<Index>(generals.size());
-
-  Model lp;
-  lp.name = model.name;
-  lp.sense = ObjSense::kMinimize;
-  lp.col_cost.assign(static_cast<std::size_t>(n + g), 0.0);
-  lp.col_lower = model.col_lower;
-  lp.col_upper = model.col_upper;
-  for (Index k = 0; k < g; ++k) {
-    lp.col_cost[static_cast<std::size_t>(n + k)] = 1.0;
-    lp.col_lower.push_back(0.0);
-    lp.col_upper.push_back(kInfinity);
-  }
-  lp.col_type.assign(static_cast<std::size_t>(n + g), VarType::kContinuous);
-  lp.row_lower = model.row_lower;
-  lp.row_upper = model.row_upper;
-  lp.row_lower.resize(static_cast<std::size_t>(m + 2 * g), 0.0);
-  lp.row_upper.resize(static_cast<std::size_t>(m + 2 * g), kInfinity);
-  {
-    std::vector<Index> starts;
-    std::vector<Index> rows;
-    std::vector<double> values;
-    starts.reserve(static_cast<std::size_t>(n + g) + 1);
-    starts.push_back(0);
-    for (Index j = 0; j < n; ++j) {
-      const ColumnView column = model.matrix.column(j);
-      for (Index k = 0; k < column.size; ++k) {
-        rows.push_back(column.rows[k]);
-        values.push_back(column.values[k]);
-      }
-      const Index aux = kind[static_cast<std::size_t>(j)];
-      if (aux >= 0) {
-        rows.push_back(m + 2 * aux);
-        values.push_back(-1.0);
-        rows.push_back(m + 2 * aux + 1);
-        values.push_back(1.0);
-      }
-      starts.push_back(static_cast<Index>(rows.size()));
-    }
-    for (Index k = 0; k < g; ++k) {
-      rows.push_back(m + 2 * k);
-      values.push_back(1.0);
-      rows.push_back(m + 2 * k + 1);
-      values.push_back(1.0);
-      starts.push_back(static_cast<Index>(rows.size()));
-    }
-    lp.matrix.assign_columns(m + 2 * g, n + g, std::move(starts), std::move(rows),
-                             std::move(values));
-  }
-  lp.hessian.reset(n + g, n + g);
-  lp.hessian.finalize();
+  // The projection LP (pump_projection.hpp): the model's columns, one auxiliary per general
+  // integer column.
+  PumpProjection projection = pump_projection(model, integer_columns, tol_int);
+  const std::vector<Index>& kind = projection.kind;
 
   std::vector<double> x = start;
   if (static_cast<Index>(x.size()) != n)
@@ -466,17 +397,8 @@ PdhgHeuristicResult pdhg_feasibility_pump(const Model& model,
     while (recent.size() > static_cast<std::size_t>(tol::kPumpCycleWindow)) recent.pop_front();
 
     // 4. Project the rounding back onto the LP polytope in the L1 distance, by PDHG.
-    for (const Index j : integer_columns) {
-      const auto u = static_cast<std::size_t>(j);
-      const Index aux = kind[u];
-      if (aux == -1) {
-        lp.col_cost[u] = rounding[u] <= model.col_lower[u] ? 1.0 : -1.0;
-      } else if (aux >= 0) {
-        lp.row_lower[static_cast<std::size_t>(m + 2 * aux)] = -rounding[u];
-        lp.row_lower[static_cast<std::size_t>(m + 2 * aux + 1)] = rounding[u];
-      }
-    }
-    const Solution projected = solve_pdhg_for(lp, settings, device, budget);
+    set_pump_target(&projection, model, integer_columns, rounding);
+    const Solution projected = solve_pdhg_for(projection.lp, settings, device, budget);
     ++result.pdhg_solves;
     if (!has_point(projected, n)) {
       result.stopped = std::string("a projection returned no point: ") +

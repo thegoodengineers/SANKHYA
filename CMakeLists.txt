@@ -350,6 +350,7 @@ set(SANKHYA_CORE_SOURCES
   src/mip/feasibility_jump.cpp
   src/mip/parity.cpp
   src/mip/pdhg_heuristics.cpp
+  src/mip/pump_projection.cpp
   src/mip/branch_and_bound_parallel.cpp
   src/nlp/convex_nlp.cpp
   src/nlp/convexity.cpp

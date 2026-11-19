@@ -8,6 +8,7 @@
 #include <limits>
 #include <random>
 
+#include "mip/pump_projection.hpp"
 #include "sankhya/logging.hpp"
 #include "sankhya/sparse.hpp"
 #include "sankhya/timer.hpp"
@@ -189,9 +190,17 @@ std::vector<double> feasibility_pump(const Model& model,
                                      const std::vector<Index>& integer_columns,
                                      const std::vector<double>& start,
                                      const Options& lp_options, int max_rounds,
-                                     double integrality_tolerance, Count* lp_solves) {
+                                     double integrality_tolerance, Count* lp_solves,
+                                     bool general_integers) {
   *lp_solves = 0;
   if (integer_columns.empty()) return {};
+  // mip_pump_general_integers: the projection with an auxiliary column per general integer
+  // (Bertacco, Fischetti and Lodi 2007; pump_projection.hpp), so a general integer rounded
+  // strictly inside its bounds is in the distance too.
+  PumpProjection projection;
+  if (general_integers) {
+    projection = pump_projection(model, integer_columns, integrality_tolerance);
+  }
   // The projection LP: the model's rows and bounds, every column continuous, and an
   // objective replaced round by round with the L1 distance to the current rounding.
   Model lp = model;
@@ -251,6 +260,14 @@ std::vector<double> feasibility_pump(const Model& model,
     // The L1 distance to the rounding is linear in x for a column rounded to one of its
     // bounds: x - l at the lower, u - x at the upper. A general integer rounded strictly
     // between its bounds would need an auxiliary column and is left out of the distance.
+    if (general_integers) {
+      set_pump_target(&projection, model, integer_columns, rounding);
+      const Solution projected = solve(projection.lp, projection_options);
+      ++*lp_solves;
+      if (projected.status != SolveStatus::kOptimal) return {};
+      x.assign(projected.col_value.begin(), projected.col_value.begin() + model.num_cols());
+      continue;
+    }
     std::fill(lp.col_cost.begin(), lp.col_cost.end(), 0.0);
     for (const Index j : integer_columns) {
       const auto u = static_cast<std::size_t>(j);
@@ -686,6 +703,7 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   s.dive_lp_resolves = static_cast<int>(options.get_int("mip_dive_lp_resolves"));
   s.dive_time_share = options.get_double("mip_dive_time_share");
   s.pump_rounds = static_cast<int>(options.get_int("mip_pump_rounds"));
+  s.pump_general_integers = options.get_bool("mip_pump_general_integers");
   s.pdhg_pump = options.get_bool("gpu_pump");
   s.fix_and_propagate = options.get_bool("gpu_fix_and_prop");
   s.pdhg_device = options.get_string("gpu_heur_backend") != "cpu";

@@ -38,8 +38,9 @@
 //                    back onto the LP polytope in the L1 distance, until they meet. The
 //                    distance is linear only for a column rounded to one of its bounds; a
 //                    general integer rounded strictly inside its bounds needs an auxiliary
-//                    column (Bertacco, Fischetti and Lodi 2007) and is left out of the
-//                    distance here, which the PR says.
+//                    column (Bertacco, Fischetti and Lodi 2007), which the projection has
+//                    under mip_pump_general_integers (pump_projection.hpp) and otherwise
+//                    leaves out of the distance.
 
 #pragma once
 
@@ -123,13 +124,12 @@ bool rens_submodel(const Model& model, const std::vector<Index>& integer_columns
 /// columns are integral and which the pump's own LP says is feasible, or an empty vector.
 /// `lp_solves` reports the LP projections spent. `lp_options` is what each projection is
 /// solved with; the caller sets its limits. Its time_limit is the pump's in
-/// total: each projection gets what is left of it.
-[[nodiscard]] std::vector<double> feasibility_pump(const Model& model,
-                                                   const std::vector<Index>& integer_columns,
-                                                   const std::vector<double>& start,
-                                                   const Options& lp_options, int max_rounds,
-                                                   double integrality_tolerance,
-                                                   Count* lp_solves);
+/// total: each projection gets what is left of it. `general_integers` puts every general
+/// integer column in the distance through an auxiliary column (mip_pump_general_integers).
+[[nodiscard]] std::vector<double> feasibility_pump(
+    const Model& model, const std::vector<Index>& integer_columns,
+    const std::vector<double>& start, const Options& lp_options, int max_rounds,
+    double integrality_tolerance, Count* lp_solves, bool general_integers = false);
 
 /// Which heuristics a search runs, and with what budgets, resolved from the options once
 /// (#414). Each heuristic has its own mip_heur_* switch: `auto` follows mip_heuristics, `on`
@@ -170,6 +170,7 @@ struct HeuristicSchedule {
   /// The share of the time left that one dive may spend (mip_dive_time_share); 0: no budget.
   double dive_time_share = 0.0;
   int pump_rounds = 0;
+  bool pump_general_integers = false;  ///< mip_pump_general_integers
   Count fj_work = 0;
   Count fj_completion_iterations = 0;  ///< per model row; 0 is no limit (#1030)
   bool seconds_budgets = true;         ///< false under deterministic=true (#288's rule)

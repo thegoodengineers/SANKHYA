@@ -429,9 +429,9 @@ void BranchAndBound::run_root_pump(const Solution& relaxation) {
                   std::max(0.0, 0.2 * limits_.remaining_seconds(timer_.elapsed_seconds())));
   }
   Count solves = 0;
-  const std::vector<double> x =
-      feasibility_pump(original_, integer_columns_, relaxation.col_value, lp,
-                       schedule_.pump_rounds, integrality_tolerance_, &solves);
+  const std::vector<double> x = feasibility_pump(
+      original_, integer_columns_, relaxation.col_value, lp, schedule_.pump_rounds,
+      integrality_tolerance_, &solves, schedule_.pump_general_integers);
   s.work += solves;
   if (!x.empty()) (void)offer_from(kPump, x);
   s.seconds += clock.elapsed_seconds();
