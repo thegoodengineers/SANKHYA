@@ -620,6 +620,8 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
   if (options_.get_bool("dual_perturb_costs_at_start")) perturb_costs_at_start();
 
   int degenerate_run = 0;
+  Count diag_neg_steps = 0;          // DIAG
+  double diag_min_pivot = kInfinity;  // DIAG
   int refuted_claims = 0;  // kRefutedFeasibilityLimit
   double refuted_objective = kInfinity;
   const auto hand_over = [&](const std::string& why) -> std::optional<Solution> {
@@ -1021,6 +1023,9 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     // Dual step length: the duals move by this much along rho below, and the stall counter
     // reads it here.
     const double dual_step = reduced_cost_[e] / pivot_by_row;
+    // DIAG: a step that moves the dual objective backwards, and the pivot size.
+    if ((to_upper ? 1.0 : -1.0) * dual_step < -tol::kRatioTestFeasibility) ++diag_neg_steps;
+    diag_min_pivot = std::min(diag_min_pivot, std::fabs(pivot));
     if (std::fabs(dual_step) <= tol::kRatioTestFeasibility) {
       ++degenerate_run;
       // PERTURB BEFORE HANDING OVER. The primal loop is the last resort, and on dfl001 it
@@ -1125,6 +1130,14 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
         eta_work_since_refactor_ >
         refactor_work_ratio_ * std::max(1.0, static_cast<double>(lu_.factor_nonzeros()));
     if (!updated || past_break_even || lu_.should_refactorize()) {
+      // DIAG (#1320 follow-up, not for merge): drift at each refactorization.
+      const char* why = !updated ? "update-rejected"
+                        : past_break_even ? "break-even"
+                                          : "eta-limit";
+      const Index diag_etas = lu_.eta_count();
+      const Index diag_eta_nnz = lu_.eta_nonzeros();
+      const std::vector<double> diag_x = x_basic_;
+      const std::vector<double> diag_d = reduced_cost_;
       if (!refactorize()) return singular();
       ++refactorizations_;
       rebuild_nonbasic_list();  // a repair inside refactorize() may have swapped columns
@@ -1135,6 +1148,42 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       charge(6);
       compute_reduced_costs(false);
       charge(7);
+      {
+        double dx = 0.0, xmax = 0.0, dd = 0.0, wrong_max = 0.0, wrong_mass = 0.0;
+        Count wrong = 0;
+        for (Index i = 0; i < m_; ++i) {
+          const auto s = static_cast<std::size_t>(i);
+          dx = std::max(dx, std::fabs(diag_x[s] - x_basic_[s]));
+          xmax = std::max(xmax, std::fabs(x_basic_[s]));
+        }
+        for (Index k = 0; k < total_; ++k) {
+          const auto u = static_cast<std::size_t>(k);
+          if (basis_position_[u] >= 0 || status_[u] == BasisStatus::kFixed) continue;
+          dd = std::max(dd, std::fabs(diag_d[u] - reduced_cost_[u]));
+          const double d = reduced_cost_[u];
+          double v = 0.0;
+          if (status_[u] == BasisStatus::kAtLower) v = -d;
+          else if (status_[u] == BasisStatus::kAtUpper) v = d;
+          else if (status_[u] == BasisStatus::kNonbasicFree) v = std::fabs(d);
+          if (v > dual_tolerance_) {
+            ++wrong;
+            wrong_max = std::max(wrong_max, v);
+            const double range = is_finite_bound(upper_[u]) && is_finite_bound(lower_[u])
+                                     ? upper_[u] - lower_[u]
+                                     : 1.0;
+            wrong_mass += v * range;
+          }
+        }
+        logger_.verbose(
+            "diag refactor it {} ({}): etas {} eta-nnz {} factor-nnz {} | x drift {:.2e} "
+            "max|x_B| {:.2e} | d drift {:.2e} wrong-signed {} max {:.2e} mass {:.2e} | "
+            "since last: neg steps {} min|pivot| {:.2e} obj {:.6e}",
+            iterations, why, diag_etas, diag_eta_nnz, lu_.factor_nonzeros(), dx, xmax, dd,
+            wrong, wrong_max, wrong_mass, diag_neg_steps, diag_min_pivot,
+            minimization_objective());
+        diag_neg_steps = 0;
+        diag_min_pivot = kInfinity;
+      }
     }
 
     if (std::optional<Solution> stopped = count_iteration()) return stopped;
