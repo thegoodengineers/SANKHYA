@@ -1032,6 +1032,10 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     // Before the basis changes: the weight update reads alpha_ (already computed) and the
     // leaving slot's weight.
     update_dual_weights(leaving_slot, pivot);
+    // Its own clock (with the pivot checks above, which are a few comparisons): the weight
+    // update's FTRAN of rho is as dense as the entering column's, and charged to "basic
+    // values" it made that phase read as the flip update's cost (#1320).
+    charge(8);
 
     // The leaving variable lands exactly on the bound it violated; the entering variable's
     // value follows from the row: x_r - delta * alpha_rq = bound, so delta = (x_r - bound) /
