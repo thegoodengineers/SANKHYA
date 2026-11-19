@@ -245,6 +245,31 @@ void Simplex::remove_artificial_bounds() {
   if (moved) compute_basic_values();
 }
 
+double Simplex::wrong_signed_gap() const {
+  // The duality gap an optimality claim on this basis leaves: primal minus dual is the sum
+  // over the nonbasic columns of d_j times the distance from x_j to the bound d_j prices,
+  // and a column whose reduced cost has the sign its status admits contributes nothing.
+  double gap = 0.0;
+  for (Index k = 0; k < total_; ++k) {
+    const auto u = static_cast<std::size_t>(k);
+    if (basis_position_[u] >= 0 || status_[u] == BasisStatus::kFixed) continue;
+    const double d = reduced_cost_[u];
+    // A reduced cost inside the dual tolerance is one the verifier excuses in full
+    // (its share of the gap is "accounted"); only a larger one prices its range.
+    if (std::fabs(d) <= dual_tolerance_) continue;
+    double distance = 0.0;
+    if (status_[u] == BasisStatus::kAtLower && d < 0.0) {
+      distance = is_finite_bound(upper_[u]) ? upper_[u] - lower_[u] : std::fabs(lower_[u]);
+    } else if (status_[u] == BasisStatus::kAtUpper && d > 0.0) {
+      distance = is_finite_bound(lower_[u]) ? upper_[u] - lower_[u] : std::fabs(upper_[u]);
+    } else if (status_[u] == BasisStatus::kNonbasicFree && d != 0.0) {
+      distance = 1.0;
+    }
+    gap += std::fabs(d) * distance;
+  }
+  return gap;
+}
+
 // -----------------------------------------------------------------------------------------
 // Dual pricing
 // -----------------------------------------------------------------------------------------
@@ -708,26 +733,7 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       // when it exceeds it the basis goes to the primal loop, which prices exactly those
       // columns as improving and finishes in a handful of pivots.
       {
-        double gap = 0.0;
-        for (Index k = 0; k < total_; ++k) {
-          const auto u = static_cast<std::size_t>(k);
-          if (basis_position_[u] >= 0 || status_[u] == BasisStatus::kFixed) continue;
-          const double d = reduced_cost_[u];
-          // A reduced cost inside the dual tolerance is one the verifier excuses in full
-          // (its share of the gap is "accounted"); only a larger one prices its range.
-          if (std::fabs(d) <= dual_tolerance_) continue;
-          double distance = 0.0;
-          if (status_[u] == BasisStatus::kAtLower && d < 0.0) {
-            distance =
-                is_finite_bound(upper_[u]) ? upper_[u] - lower_[u] : std::fabs(lower_[u]);
-          } else if (status_[u] == BasisStatus::kAtUpper && d > 0.0) {
-            distance =
-                is_finite_bound(lower_[u]) ? upper_[u] - lower_[u] : std::fabs(upper_[u]);
-          } else if (status_[u] == BasisStatus::kNonbasicFree && d != 0.0) {
-            distance = 1.0;
-          }
-          gap += std::fabs(d) * distance;
-        }
+        const double gap = wrong_signed_gap();
         const double objective = minimization_objective();
         if (gap > tol::kDualityGap * std::max(1.0, std::fabs(objective))) {
           return hand_over(fmt::format(

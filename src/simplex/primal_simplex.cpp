@@ -1597,6 +1597,10 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
   }
   int degenerate_run = 0;
   bool bland = false;
+  // Consecutive optimality claims through the eta file that fresh factors refuted with the
+  // objective not moving between them; see kRefutedOptimalityLimit below.
+  int refuted_claims = 0;
+  double refuted_objective = kInfinity;
   bool was_phase_one = true;
   numerically_dependent_.assign(static_cast<std::size_t>(total_), 0);
   // A PHASE 1 THAT EXPLODES IS A BROKEN BASIS, NOT A LONG SOLVE (#214). Each phase-1 pivot
@@ -1606,6 +1610,9 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
   // the time limit, which a reader takes for "needs more time". Six orders of magnitude
   // above the least violation seen is the failure it is, reported as one.
   static constexpr double kPhaseOneDivergence = 1e6;
+  // 20, the dual loop's kRefutedFeasibilityLimit and for the same reason: an honest run of
+  // refuted claims ends within one or two, a cycle does not end.
+  static constexpr int kRefutedOptimalityLimit = 20;
   double least_infeasibility = std::numeric_limits<double>::infinity();
 
   for (;;) {
@@ -1731,6 +1738,17 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       // it is about to report. It cannot loop: a refactorization empties the eta file, and
       // only a pivot refills it.
       //
+      // IT CAN, ONE PIVOT AT A TIME. On fresh factors a column prices as improving by more
+      // than the tolerance; it is pivoted in; through that one eta nothing does; the factors
+      // are refreshed and the same claim is refuted again. arki001 (MIPLIB 3), handed over
+      // from the dual with exact costs restored, did that 212,465 times at a fixed objective
+      // in 60 s (run 44478899596). So, as the dual loop does for its feasibility claims
+      // (kRefutedFeasibilityLimit in dual_simplex.cpp): a run of claims refuted at an
+      // unchanged objective ends on fresh factors, where the claim is settled by what it is
+      // worth - the duality gap the wrong-signed reduced costs leave, the identity the
+      // verifier checks (#244). Within kDualityGap it is optimal; beyond, a numerical error
+      // says so rather than a time limit spent spinning.
+      //
       // ONCE THE CLEANUP BELOW HAS STARTED, ITS NEXT PIVOT IS LOOKED FOR FIRST. A cleanup
       // pivot is an ordinary pivot, and nothing about it needs fresh factors; only the claim
       // that none is left does. Refactorizing before each one cost a factorization per
@@ -1741,9 +1759,32 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       if (m_ > 0 && lu_.eta_count() > 0) {
         if (polish_pivots_ > 0) entering = polish_candidate(&direction);
         if (entering < 0) {
+          const double objective = minimization_objective();
+          const bool moved = std::fabs(objective - refuted_objective) >
+                             tol::kDualityGap * std::max(1.0, std::fabs(objective));
+          refuted_claims = moved ? 1 : refuted_claims + 1;
+          refuted_objective = objective;
           if (!refactorize()) return factorization_failed(iterations, timer);
           ++refactorizations_;
           compute_basic_values();
+          if (refuted_claims > kRefutedOptimalityLimit) {
+            compute_reduced_costs(false);
+            reduced_costs_stale_ = false;
+            const double gap = wrong_signed_gap();
+            const double fresh = minimization_objective();
+            const std::string why = fmt::format(
+                "{} optimality claims through the eta file refuted on fresh factors at an "
+                "unchanged objective; the wrong-signed reduced costs price {:.3e} against a "
+                "{:.1e} relative duality tolerance",
+                refuted_claims, gap, tol::kDualityGap);
+            if (max_infeasibility() <= primal_tolerance_ &&
+                gap <= tol::kDualityGap * std::max(1.0, std::fabs(fresh))) {
+              logger_.verbose("iteration {}: {}; optimal", iterations, why);
+              return finish(SolveStatus::kOptimal, {}, iterations, timer.elapsed_seconds());
+            }
+            return finish(SolveStatus::kNumericalError, why, iterations,
+                          timer.elapsed_seconds());
+          }
           logger_.verbose(
               "iteration {}: no improving column through the eta file; re-pricing "
               "on fresh factors before declaring optimality",
