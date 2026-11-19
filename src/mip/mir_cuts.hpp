@@ -59,6 +59,13 @@ struct MirOptions {
   /// closest simple or VARIABLE bound, divisor trials delta / 2, / 4, / 8 after the best
   /// delta, complementation of the integer columns, the most efficacious cut kept.
   bool cmir = false;
+  /// With cmir (option `mir_variable_bound_aggregation`): the aggregation walks Marchand and
+  /// Wolsey's way, by the distance to the closest simple OR variable bound
+  /// (row_aggregation.hpp), and a row may start one when a continuous column in it has a
+  /// variable bound whose switch is fractional, not only when it holds a fractional integer
+  /// itself: a network's flow balance rows, which carry no integer column, then become base
+  /// inequalities.
+  bool variable_bound_aggregation = false;
   /// Certificate mode (#518): each plain MIR cut carries the split it rests on
   /// (cut_derivation.hpp). c-MIR cuts carry none.
   bool derive = false;

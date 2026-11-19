@@ -145,6 +145,7 @@ add_executable(sankhya_tests
   unit/test_debug_solution.cpp
   unit/test_cut_pool.cpp
   unit/test_cmir_cuts.cpp
+  unit/test_cmir_aggregation.cpp
   unit/test_root_cut_loop.cpp
   unit/test_root_node_engine.cpp
   unit/test_qp_time_limit.cpp
