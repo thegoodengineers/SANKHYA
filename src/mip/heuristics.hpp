@@ -101,6 +101,14 @@ struct DiveChoice {
                                             const std::vector<double>& x, DiveRule rule,
                                             const std::vector<double>& incumbent,
                                             double integrality_tolerance);
+/// Every column choose_dive_column() would consider, best first (it takes the first): the
+/// order the propagating dive (mip_dive_propagate) fixes a batch in. Ties keep the order of
+/// `integer_columns`. Empty when x is integral on them, or for guided diving with no
+/// incumbent.
+[[nodiscard]] std::vector<DiveChoice> rank_dive_columns(
+    const Model& model, const Locks& locks, const std::vector<Index>& integer_columns,
+    const std::vector<double>& x, DiveRule rule, const std::vector<double>& incumbent,
+    double integrality_tolerance);
 
 /// The RINS sub-model: `model` with every integer column fixed where `relaxation` and
 /// `incumbent` agree to `tolerance`. False, leaving `out` alone, when fewer than
@@ -155,6 +163,9 @@ struct HeuristicSchedule {
   int fix_and_propagate_backtracks = 0;
   bool dive[kDiveRules] = {false, false, false, false};  ///< by DiveRule
   bool dive_backtrack = false;
+  /// mip_dive_propagate: the dives propagate after every fix, fix a batch per LP, backtrack
+  /// on a counted budget and share an LP-iteration budget (branch_and_bound_dive.cpp).
+  bool dive_propagate = false;
   /// mip_heuristics=auto: the optional heuristics run only while the search
   /// has no incumbent; once it has one the schedule is the default one again.
   bool until_incumbent = false;

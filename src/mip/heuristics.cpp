@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <utility>
 
 #include "sankhya/logging.hpp"
 #include "sankhya/sparse.hpp"
@@ -279,6 +280,60 @@ const char* to_string(DiveRule rule) {
   return "diving";
 }
 
+namespace {
+/// What `rule` makes of integer column j at x: false when j is integral there; otherwise
+/// its score (smaller is better) and the integer it would be fixed to.
+bool score_dive_column(const Model& model, const Locks& locks, Index j,
+                       const std::vector<double>& x, DiveRule rule,
+                       const std::vector<double>& incumbent, double integrality_tolerance,
+                       double* score_out, double* value_out) {
+  const auto u = static_cast<std::size_t>(j);
+  const double v = x[u];
+  const double nearest = std::round(v);
+  const double fraction = std::fabs(v - nearest);
+  if (fraction <= integrality_tolerance) return false;
+  const double down = std::floor(v);
+  const double up = std::ceil(v);
+  bool round_up = nearest > v;
+  double score = fraction;
+  switch (rule) {
+    case DiveRule::kFractional:
+      // The least fractional column, to its nearest integer: the rule the root dive has
+      // always used (#25) - lock in what the relaxation already nearly agrees on.
+      break;
+    case DiveRule::kCoefficient: {
+      // Achterberg 2007, sec. 9.2.2: the direction fewer rows object to, and among the
+      // columns the one with the fewest objections, ties broken by fractionality.
+      const int up_locks = locks.up[u];
+      const int down_locks = locks.down[u];
+      round_up = up_locks < down_locks || (up_locks == down_locks && round_up);
+      score = static_cast<double>(round_up ? up_locks : down_locks) + fraction;
+      break;
+    }
+    case DiveRule::kVectorLength: {
+      // Achterberg 2007, sec. 9.2.4: round against the objective (up when the cost is
+      // non-negative in minimise space), and prefer the column whose objective increase
+      // is spread over the most rows - on a covering model one such fix satisfies many.
+      const double cost = model.sense_multiplier() * model.col_cost[u];
+      round_up = cost >= 0.0;
+      const double increase = round_up ? (up - v) * cost : (v - down) * (-cost);
+      score = increase / static_cast<double>(model.matrix.column(j).size + 1);
+      break;
+    }
+    case DiveRule::kGuided: {
+      // Achterberg 2007, sec. 9.2.3: towards the incumbent, the closest column first.
+      const double target = incumbent[u];
+      round_up = target >= up;
+      score = std::fabs(v - target);
+      break;
+    }
+  }
+  *score_out = score;
+  *value_out = clamp_to(round_up ? up : down, model.col_lower[u], model.col_upper[u]);
+  return true;
+}
+}  // namespace
+
 DiveChoice choose_dive_column(const Model& model, const Locks& locks,
                               const std::vector<Index>& integer_columns,
                               const std::vector<double>& x, DiveRule rule,
@@ -287,57 +342,45 @@ DiveChoice choose_dive_column(const Model& model, const Locks& locks,
   DiveChoice best;
   if (rule == DiveRule::kGuided && incumbent.size() != x.size()) return best;
   double best_score = std::numeric_limits<double>::infinity();
-  const double sense = model.sense_multiplier();
   for (const Index j : integer_columns) {
-    const auto u = static_cast<std::size_t>(j);
-    const double v = x[u];
-    const double nearest = std::round(v);
-    const double fraction = std::fabs(v - nearest);
-    if (fraction <= integrality_tolerance) continue;
-    const double down = std::floor(v);
-    const double up = std::ceil(v);
-    bool round_up = nearest > v;
-    double score = fraction;
-    switch (rule) {
-      case DiveRule::kFractional:
-        // The least fractional column, to its nearest integer: the rule the root dive has
-        // always used (#25) - lock in what the relaxation already nearly agrees on.
-        break;
-      case DiveRule::kCoefficient: {
-        // Achterberg 2007, sec. 9.2.2: the direction fewer rows object to, and among the
-        // columns the one with the fewest objections, ties broken by fractionality.
-        const int up_locks = locks.up[u];
-        const int down_locks = locks.down[u];
-        round_up = up_locks < down_locks || (up_locks == down_locks && round_up);
-        score = static_cast<double>(round_up ? up_locks : down_locks) + fraction;
-        break;
-      }
-      case DiveRule::kVectorLength: {
-        // Achterberg 2007, sec. 9.2.4: round against the objective (up when the cost is
-        // non-negative in minimise space), and prefer the column whose objective increase
-        // is spread over the most rows - on a covering model one such fix satisfies many.
-        const double cost = sense * model.col_cost[u];
-        round_up = cost >= 0.0;
-        const double increase = round_up ? (up - v) * cost : (v - down) * (-cost);
-        score = increase / static_cast<double>(model.matrix.column(j).size + 1);
-        break;
-      }
-      case DiveRule::kGuided: {
-        // Achterberg 2007, sec. 9.2.3: towards the incumbent, the closest column first.
-        const double target = incumbent[u];
-        round_up = target >= up;
-        score = std::fabs(v - target);
-        break;
-      }
+    double score = 0.0;
+    double value = 0.0;
+    if (!score_dive_column(model, locks, j, x, rule, incumbent, integrality_tolerance, &score,
+                           &value)) {
+      continue;
     }
     // Strictly better only, so the lowest index wins a tie and a rerun makes the same dive.
     if (score < best_score) {
       best_score = score;
       best.column = j;
-      best.value = clamp_to(round_up ? up : down, model.col_lower[u], model.col_upper[u]);
+      best.value = value;
     }
   }
   return best;
+}
+
+std::vector<DiveChoice> rank_dive_columns(const Model& model, const Locks& locks,
+                                          const std::vector<Index>& integer_columns,
+                                          const std::vector<double>& x, DiveRule rule,
+                                          const std::vector<double>& incumbent,
+                                          double integrality_tolerance) {
+  std::vector<std::pair<double, DiveChoice>> scored;
+  if (rule == DiveRule::kGuided && incumbent.size() != x.size()) return {};
+  for (const Index j : integer_columns) {
+    double score = 0.0;
+    double value = 0.0;
+    if (score_dive_column(model, locks, j, x, rule, incumbent, integrality_tolerance, &score,
+                          &value)) {
+      scored.push_back({score, DiveChoice{j, value}});
+    }
+  }
+  // Stable, so a tie keeps the integer columns' order, as choose_dive_column() breaks it.
+  std::stable_sort(scored.begin(), scored.end(),
+                   [](const auto& a, const auto& b) { return a.first < b.first; });
+  std::vector<DiveChoice> ranked;
+  ranked.reserve(scored.size());
+  for (const auto& entry : scored) ranked.push_back(entry.second);
+  return ranked;
 }
 
 bool rens_submodel(const Model& model, const std::vector<Index>& integer_columns,
@@ -679,6 +722,7 @@ HeuristicSchedule HeuristicSchedule::from(const Options& options) {
   s.dive[static_cast<std::size_t>(DiveRule::kGuided)] =
       resolve_switch(options, "mip_heur_dive_guided", master);
   s.dive_backtrack = options.get_bool("mip_dive_backtrack");
+  s.dive_propagate = options.get_bool("mip_dive_propagate");
   s.rins_frequency = options.get_int("mip_rins_frequency");
   s.rins_nodes = options.get_int("mip_rins_nodes");
   s.rens_nodes = options.get_int("mip_rens_nodes");
