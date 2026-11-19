@@ -466,6 +466,9 @@ class Simplex {
   void report_solve_densities() const;
 
   [[nodiscard]] double minimization_objective() const;
+  /// The objective the wrong-signed nonbasic reduced costs past the dual tolerance price:
+  /// what an optimality claim on this basis leaves in the duality gap (#244).
+  [[nodiscard]] double wrong_signed_gap() const;
   Solution finish(SolveStatus status, const std::string& message, Count iterations,
                   double seconds);
 
