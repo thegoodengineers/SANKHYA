@@ -756,7 +756,9 @@ const std::vector<OptionSpec>& Options::registry() {
          "the root goes back to its state after round 1 and the pool stays off (gesa2 and "
          "mod011 enter and keep their rounds; bell5 enters and is rolled back). "
          "probation: as auto, but every model on which round 1 took no flow cover enters "
-         "on probation, with or without a variable upper bound.",
+         "on probation, with or without a variable upper bound. Opt-in: measured against "
+         "auto it gains two proofs on SAMADHAN's 50 and loses five elsewhere (#1332, "
+         "docs/NEGATIVE-RESULTS.md).",
          0.0,
          0.0,
          {"always", "switched-flows", "flow-covers", "auto", "probation"}});

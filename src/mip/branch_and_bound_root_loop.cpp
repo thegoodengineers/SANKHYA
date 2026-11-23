@@ -91,11 +91,11 @@ bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
       const bool cover = std::any_of(round1.begin(), round1.end(), [](const Cut& cut) {
         return cut.family == CutFamily::kFlowCover;
       });
-      // probation: every model without a flow cover enters on probation, not only one with
-      // a variable upper bound. On the MIPLIB 2017 near-misses (neos17, neos-911970,
-      // mik-250-20-75-4, nu25-pr12, enlight_hard) round 1 takes 30 of up to 377 candidates
-      // in under 0.07 s and the loop is never entered, while HiGHS's root bound is far
-      // above ours (bench.yml run 45114877618).
+      // probation (#1332, opt-in): every model without a flow cover enters on probation, not
+      // only one with a variable upper bound. On SAMADHAN's 50 it proves enlight_hard seed 0
+      // and swath1 seed 1 where auto proves neither, but it loses the proofs of neos859080
+      // seed 1, misc06 and misc07 seed 2 and enlight8 seeds 1 and 2, so auto stays the
+      // default (docs/NEGATIVE-RESULTS.md).
       wanted = cover || when == "probation" || find_variable_bounds(working_).rows > 0;
       root_loop_probation_ = wanted && !cover;
       if (!wanted) {
@@ -272,9 +272,9 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
     if (later_gain <= tol::kRootCutProbationGain * first_gain) {
       logger_.info(
           "Root cut loop: probation failed after {} round(s), bound {:.10g} to {:.10g} against "
-          "{:.10g} after round 1; back to round 1 (root_cut_loop_when=auto), stopped on {}",
+          "{:.10g} after round 1; back to round 1 (root_cut_loop_when={}), stopped on {}",
           root_cut_rounds_, reported(bounds.front()), reported(bounds.back()),
-          reported(bounds[1]), why);
+          reported(bounds[1]), options_.get_string("root_cut_loop_when"), why);
       drop_cuts_from(round_one->pool);
       working_ = std::move(round_one->model);
       scaling_ = std::move(round_one->scaling);

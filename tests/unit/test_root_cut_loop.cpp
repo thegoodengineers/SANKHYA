@@ -154,6 +154,59 @@ TEST(RootCutLoop, OffIsTheSingleRoundAndOnNeverEndsBelowIt) {
       instances, looped, higher);
 }
 
+TEST(RootCutLoop, ProbationGateLetsAModelWithoutAVariableBoundInAndAutoKeepsItOut) {
+  // root_cut_loop_when=probation (#1332): pure binary knapsack and cover models have no
+  // variable upper bound, and with the flow cover family off round 1 takes no flow cover.
+  // Under `auto` the loop is therefore never entered; under `probation` it is, on probation:
+  // the rounds are either kept (more than one round reported) or rolled back to round 1
+  // (one round, and the log says probation failed). Either way the optimum is `auto`'s.
+  std::mt19937_64 rng(20260927);
+  Options auto_gate = root_cuts(true);
+  auto_gate.set_bool("enable_flow_cover_cuts", false);
+  auto_gate.set_string("root_cut_loop_when", "auto");
+  Options probation_gate = auto_gate;
+  probation_gate.set_string("root_cut_loop_when", "probation");
+  int entered = 0;
+  int kept = 0;
+  int rolled_back = 0;
+  int instances = 0;
+  for (int trial = 0; trial < 80; ++trial) {
+    const oracle::GeneratedLp lp = binary_instance(rng, 12);
+    const Model model = integer_model(lp);
+    Solution under_auto;
+    const std::string auto_log = solve_logged(model, auto_gate, &under_auto);
+    Solution under_probation;
+    const std::string probation_log = solve_logged(model, probation_gate, &under_probation);
+    if (under_auto.status != SolveStatus::kOptimal) continue;
+    ++instances;
+    EXPECT_EQ(auto_log.find("Root cut round"), std::string::npos)
+        << "auto entered the loop on a model with no variable upper bound: " << auto_log;
+    EXPECT_LE(under_auto.root_cut_rounds, 1);
+    ASSERT_EQ(under_probation.status, SolveStatus::kOptimal) << probation_log;
+    EXPECT_NEAR(under_probation.objective, under_auto.objective,
+                1e-6 * std::max(1.0, std::fabs(under_auto.objective)));
+    EXPECT_EQ(probation_log.find("not entered"), std::string::npos) << probation_log;
+    if (probation_log.find("Root cut round 1:") == std::string::npos) continue;  // no cut taken
+    ++entered;
+    // Every loop says how it stopped, kept or rolled back.
+    EXPECT_NE(probation_log.find("Root cut loop: "), std::string::npos) << probation_log;
+    EXPECT_NE(probation_log.find("stopped on "), std::string::npos) << probation_log;
+    if (probation_log.find("probation failed") != std::string::npos) {
+      ++rolled_back;
+      EXPECT_EQ(under_probation.root_cut_rounds, 1) << probation_log;
+    } else {
+      ++kept;
+      EXPECT_GT(under_probation.root_cut_rounds, 1) << probation_log;
+    }
+  }
+  EXPECT_GE(instances, 40);
+  EXPECT_GT(entered, 0) << "no instance entered the loop under probation";
+  std::printf(
+      "[  INFO    ] probation gate: %d instances, %d entered the loop, %d kept their rounds, "
+      "%d rolled back to round 1\n",
+      instances, entered, kept, rolled_back);
+}
+
 /// The loop's closing line, "Root cut loop: R round(s), N row(s) of a budget of B, ...":
 /// N and B, or {-1, -1} when the log has none.
 std::pair<long, long> rows_and_budget(const std::string& log) {
