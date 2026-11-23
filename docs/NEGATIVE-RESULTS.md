@@ -627,6 +627,45 @@ What these runs led to instead: a time budget per dive (#1324), which gives hypo
 
 **Tried: that pump distance** (`mip_pump_general_integers`, #1329, closed, branch kept). Every general integer gets an auxiliary column and two rows in the projection LP. On the 25 MIPLIB 2017 targets (run 44495592865, binary `e64302e`, 3 seeds, 60 s, one thread) no row changed status or objective in either arm: 5 proved, 16 matched, 57 verified. On neos-3381206-awhea the pump now really projects, taking 2.7-3.0 s for its 20 rounds where it took 0.06 s, and still proposes nothing. Run 44524975889 (binary `283b4cc`) gave it 200 rounds and gave the PDHG pump (#509, which already had this distance) 500. Both stopped on their time share after 55-95 rounds, and neither found a point on any seed. So the missing distance is not what stops us on this model. CSVs are in the runs' artifacts (`option-ab-e64302e.csv`, `option-ab-283b4cc.csv`, branch stamps).
 
+### Probation for every model in the root cut loop (`root_cut_loop_when=probation`, PR #1332, opt-in)
+
+`root_cut_loop_when=auto` lets a model into the root cut loop only when round 1 took a flow cover or the model has a variable upper bound. `probation` lets every model in, on the probation `auto` already applies: the rounds after round 1 stay only if together they gain at least what round 1 gained, and the rows slack at the last root LP go to the cut pool.
+
+The target was SAMADHAN's 50, where we prove 6 on seed 0 against their claim of 8. On the near-misses HiGHS proves in 3 to 21 s (enlight_hard, nu25-pr12, neos17, mik-250-20-75-4, binkar10_1, neos-911970), diagnosis run 45114877618 (`main` at `cb5ef02`, `profile=detailed`, 3 seeds) shows trees of 14k to 330k nodes under a root bound far below HiGHS's: neos17 0.0039 against 0.136, neos-911970 23.26 against 52.2, enlight_hard 16.5 against 23.6. Each takes 30 of up to 377 cut candidates in one round of under 0.07 s, and the loop is not entered.
+
+Setup: `bench.yml` `ab-option` on one binary, `8fd937f`. `off` is the defaults, `on` adds `root_cut_loop_when=probation`. Both arms in one job per gate, 60 s, one thread, 3 seeds. Counts are matched / proved / verified.
+
+| gate | run | off, per seed | on, per seed | off, all | on, all |
+|---|---|---|---|---|---|
+| SAMADHAN's 50 | 45137785259, 45137799681 | 9/6/45, 7/4/45, 5/4/43 | 9/7/45, 8/5/45, 6/4/43 | 21/14/133 | 23/16/133 |
+| 25 MIPLIB 2017 targets | 45137861197 | 5/1/19, 6/2/19, 5/2/19 | 6/2/19, 5/1/19, 7/3/19 | 16/5/57 | 18/6/57 |
+| MIPLIB 3, 65 models | 45137875637 | 46/45/64, 47/46/65, 46/45/64 | 46/45/64, 47/46/65, 45/43/64 | 139/136/193 | 138/134/193 |
+| tier 1, 30 models | 45137888938 | 18/11/30, 19/11/30, 17/11/29 | 17/12/30, 19/10/30, 17/10/29 | 54/33/89 | 53/32/89 |
+
+It fails the rule: five proofs are lost.
+
+- **neos859080 seed 1** (targets). `off` proves it infeasible in 3.2 s at 95 nodes. With 3 rounds kept (18 rows) the search hits the limit at 168,797 nodes. Seed 0 hits the limit in both arms.
+- **misc07 seed 2** (MIPLIB 3). `off` proves it in 22.8 s. Round 1 gained nothing, so any later gain passes probation: 20 rounds and 557 rows move the root from 1415 to 1516 against an optimum of 2810, and the run ends at the limit with bound 2805.
+- **misc06 seed 2** (MIPLIB 3). Six rounds, then `optimal within the relative gap target` at 4.0e-5 with 12851.076 against 12850.861: a gap-target stop the match rule scores as a miss, not a wrong answer. The earlier gates recorded in #1278's body lost the same run the same way.
+- **enlight8 seeds 1 and 2** (tier 1). `off` proves them in 49.5 and 56.6 s at 412k and 478k nodes. With 20 rounds and about 580 rows the root goes from 1.5 to 10.1 and 13.9 against an optimum of 27, and the tree then runs 52k and 43k nodes in 60 s. The earlier gates in #1278's body lost seed 1.
+- **Match lost:** neos5 seed 0 (15 to 15.5), in both runs that hold it.
+
+What it gained:
+
+- **enlight_hard seed 0 proved** in 17.7 to 25.0 s in the three runs that hold it: 20 rounds, root 15.5 to 30.4 against 37, 3,089 nodes against 370k unproved. Seeds 1 and 2 end at gaps of 5.4% and 2.7% against 32% and 24%.
+- **swath1 seed 1 proved** in 38.4 s, and **irp seed 2** in 38.1 s.
+- **mik-250-20-75-4 matched** on seeds 0 and 2, gap 7.4% to 1.3-1.8%.
+- **Gaps:** binkar10_1 3.8-4.6% to 0.3-1.2%, pg 33% to 10%, pg5_34 11-13% to 6-7%.
+- **Worse:** neos17's gap goes from 4.5-4.9% to 5.5-8.8%, at 23k-42k nodes against 76k-85k, and swath3's from 3.7% and 4.3% to 4.3% and 12% on seeds 0 and 1.
+
+On SAMADHAN's 50 that is 7 proved on seed 0 against 6, and 7 against 6 best of 3 seeds in this job. It does not reach 8.
+
+No reading of the root separates the wins from the losses. The share of the root gap the rounds close is 0.64-0.70 on enlight_hard and 0.35-0.50 on enlight8, but 0.09 on swath1 seed 1 (proof gained) and 0.07 on misc07 seed 2 (proof lost). #1278 charged each round for the nonzeros it adds and lost gesa2 and ej instead.
+
+The CSVs are not committed because they carry branch stamps. Each is `option-ab-8fd937f.csv` in its run's artifact.
+
+What would earn the default: a tree that does not pay for the rounds' rows. On enlight8 the search runs 38k-52k nodes in 60 s with the rounds kept, against 412k-509k without, and that is the whole loss.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
