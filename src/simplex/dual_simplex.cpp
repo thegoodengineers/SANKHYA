@@ -621,6 +621,9 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
 
   int degenerate_run = 0;
   Count diag_neg_steps = 0;          // DIAG
+  double diag_min_row_rel = 1.0, diag_min_col_rel = 1.0, diag_max_col = 0.0;  // DIAG
+  Count diag_col_small3 = 0, diag_col_small5 = 0, diag_row_small3 = 0;        // DIAG
+  Count diag_degenerate = 0;                                                  // DIAG
   double diag_min_pivot = kInfinity;  // DIAG
   int refuted_claims = 0;  // kRefutedFeasibilityLimit
   double refuted_objective = kInfinity;
@@ -1026,6 +1029,32 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
     // DIAG: a step that moves the dual objective backwards, and the pivot size.
     if ((to_upper ? 1.0 : -1.0) * dual_step < -tol::kRatioTestFeasibility) ++diag_neg_steps;
     diag_min_pivot = std::min(diag_min_pivot, std::fabs(pivot));
+    {
+      double row_max = 0.0;
+      const auto row_entry = [&](Index k) {
+        const auto u = static_cast<std::size_t>(k);
+        if (basis_position_[u] >= 0 || status_[u] == BasisStatus::kFixed) return;
+        row_max = std::max(row_max, std::fabs(pivot_row_[u]));
+      };
+      if (pivot_row_held_sparse_) {
+        for (const Index k : pivot_row_touched_) row_entry(k);
+      } else {
+        for (const Index k : nonbasic_list_) row_entry(k);
+      }
+      double col_max = 0.0;
+      for (const Index i : alpha_support_) {
+        col_max = std::max(col_max, std::fabs(alpha_[static_cast<std::size_t>(i)]));
+      }
+      const double row_rel = row_max > 0.0 ? std::fabs(pivot_by_row) / row_max : 1.0;
+      const double col_rel = col_max > 0.0 ? std::fabs(pivot) / col_max : 1.0;
+      diag_min_row_rel = std::min(diag_min_row_rel, row_rel);
+      diag_min_col_rel = std::min(diag_min_col_rel, col_rel);
+      diag_max_col = std::max(diag_max_col, col_max);
+      if (col_rel < 1e-3) ++diag_col_small3;
+      if (col_rel < 1e-5) ++diag_col_small5;
+      if (row_rel < 1e-3) ++diag_row_small3;
+    }
+    if (std::fabs(dual_step) <= tol::kRatioTestFeasibility) ++diag_degenerate;  // DIAG
     if (std::fabs(dual_step) <= tol::kRatioTestFeasibility) {
       ++degenerate_run;
       // PERTURB BEFORE HANDING OVER. The primal loop is the last resort, and on dfl001 it
@@ -1151,10 +1180,17 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
       {
         double dx = 0.0, xmax = 0.0, dd = 0.0, wrong_max = 0.0, wrong_mass = 0.0;
         Count wrong = 0;
+        Count diag_infeasible = 0;
+        double diag_infeasibility_sum = 0.0;
         for (Index i = 0; i < m_; ++i) {
           const auto s = static_cast<std::size_t>(i);
           dx = std::max(dx, std::fabs(diag_x[s] - x_basic_[s]));
           xmax = std::max(xmax, std::fabs(x_basic_[s]));
+          const double v = slot_infeasibility(i);
+          if (v > 0.0) {
+            ++diag_infeasible;
+            diag_infeasibility_sum += v;
+          }
         }
         for (Index k = 0; k < total_; ++k) {
           const auto u = static_cast<std::size_t>(k);
@@ -1177,12 +1213,21 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
         logger_.verbose(
             "diag refactor it {} ({}): etas {} eta-nnz {} factor-nnz {} | x drift {:.2e} "
             "max|x_B| {:.2e} | d drift {:.2e} wrong-signed {} max {:.2e} mass {:.2e} | "
-            "since last: neg steps {} min|pivot| {:.2e} obj {:.6e}",
+            "since last: neg steps {} min|pivot| {:.2e} obj {:.6e} | pivot/rowmax min {:.2e} "
+            "pivot/colmax min {:.2e} colmax max {:.2e} col<1e-3 {} col<1e-5 {} row<1e-3 {} | "
+            "degenerate {} infeasible rows {} sum {:.2e} shifts {} flips {}",
             iterations, why, diag_etas, diag_eta_nnz, lu_.factor_nonzeros(), dx, xmax, dd,
             wrong, wrong_max, wrong_mass, diag_neg_steps, diag_min_pivot,
-            minimization_objective());
+            minimization_objective(), diag_min_row_rel, diag_min_col_rel, diag_max_col,
+            diag_col_small3, diag_col_small5, diag_row_small3, diag_degenerate, diag_infeasible,
+            diag_infeasibility_sum, cost_shifts_, bound_flips_);
         diag_neg_steps = 0;
         diag_min_pivot = kInfinity;
+        diag_min_row_rel = 1.0;
+        diag_min_col_rel = 1.0;
+        diag_max_col = 0.0;
+        diag_col_small3 = diag_col_small5 = diag_row_small3 = 0;
+        diag_degenerate = 0;
       }
     }
 
