@@ -1480,6 +1480,29 @@ Solution solve_branch_and_bound(const Model& given, const Options& requested, Lo
     return result;
   };
 
+  // A ROW THE ROUNDING LEFT EMPTY IS THE ANSWER (#1335). Every column of it is integer with
+  // an integral coefficient and its bounds hold no integer, so no integer point satisfies
+  // it (Chvatal 1973). The search would only refuse the crossed bounds as a malformed
+  // model. Reported as the search reports a tree closed with nothing: no point, the worst
+  // objective and bound of the sense, infinite gaps.
+  if (effect.empty_row >= 0) {
+    Solution none;
+    none.allocate_for(given);
+    none.algorithm = "branch-and-bound";
+    none.status = SolveStatus::kInfeasible;
+    none.message = fmt::format(
+        "row {} has an integer activity at every integer point (integer columns, integral "
+        "coefficients) and no integer lies in its bounds [{:g}, {:g}]",
+        effect.empty_row, effect.empty_lower, effect.empty_upper);
+    const double nothing_found = given.sense == ObjSense::kMaximize ? -kInfinity : kInfinity;
+    none.objective = nothing_found;
+    none.dual_bound = nothing_found;
+    none.absolute_gap = kInfinity;
+    none.relative_gap = kInfinity;
+    logger.info("Infeasible: {}", none.message);
+    return checked(std::move(none));
+  }
+
   // PARALLEL TREE SEARCH (#222), when asked for and when the model is one it takes: a MILP,
   // not a pool_complete search (whose pruning reads the pool's cutoff at every node), and
   // not in deterministic mode (the tree a parallel search explores depends on timing).
