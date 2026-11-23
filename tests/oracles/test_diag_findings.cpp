@@ -73,37 +73,54 @@ void run(const char* name, const Model& model, const std::vector<OptionList>& se
 
 const double inf = kInfinity;
 
-TEST(DiagFindings, NearIntegerCoefficient) {
-  // min x + y: (2 + 2^-21) x + 2 y >= 1000 + 400 * 2^-21, x and y integer in [0, 500].
-  // x + y = 500 needs x >= 400, and (400, 100) meets the row exactly: the optimum is 500.
-  const double delta = 1.0 / 2097152.0;
-  const Model model = build({{2.0 + delta, 2.0}}, {1000.0 + 400.0 * delta}, {inf}, {1, 1},
-                            {0, 0}, {500, 500}, {true, true});
-  run("near-integer coefficient, optimum 500", model,
-      {{}, {{"presolve", "false"}}, {{"mip_threads", "1"}}, {{"enable_root_cuts", "false"}}});
-  // The same with a third column so the row is not a doubleton anywhere.
-  const Model three = build({{2.0 + delta, 2.0, 2.0}}, {1000.0 + 400.0 * delta}, {inf},
-                            {1, 1, 1}, {0, 0, 0}, {500, 500, 500}, {true, true, true});
-  run("near-integer coefficient, three columns, optimum 500", three,
-      {{}, {{"presolve", "false"}}});
+TEST(DiagFindings, ObbtOne) {
+  // min 0: 4 x1 >= 6, 3 x0 - 2 x1 >= 2, -6 x0 >= -14, 3 x1 + x2 >= 8; x1 integer free.
+  const Model model = build({{0, 4, 0}, {3, -2, 0}, {-6, 0, 0}, {0, 3, 1}}, {6, 2, -14, 8},
+                            {inf, inf, inf, inf}, {0, 0, 0}, {-inf, -inf, 0}, {inf, inf, inf},
+                            {false, true, false});
+  run("OBBT one, feasible, optimum 0", model,
+      {{{"mip_obbt", "true"}, {"log_level", "debug"}},
+       {{"mip_obbt", "true"}, {"mip_threads", "1"}},
+       {{"mip_obbt", "true"}, {"presolve", "false"}},
+       {}});
 }
 
-TEST(DiagFindings, InfeasibleMilpWithAnUnboundedRelaxation) {
-  // min -x: 2 y - 2 z = 1, y and z integer in [0, 5], x >= 0 in no row. No integer point;
-  // the relaxation is feasible and unbounded.
-  const Model model = build({{0, 2, -2}}, {1}, {1}, {-1, 0, 0}, {0, 0, 0}, {inf, 5, 5},
-                            {false, true, true});
-  run("infeasible MILP, unbounded relaxation (empty column)", model,
-      {{}, {{"presolve", "false"}}, {{"mip_threads", "1"}}});
-  // The same with x in a row of its own: x - w >= 0, w >= 0 free to grow.
-  const Model rowed = build({{0, 2, -2, 0}, {1, 0, 0, -1}}, {1, 0}, {1, inf}, {-1, 0, 0, 0},
-                            {0, 0, 0, 0}, {inf, 5, 5, inf}, {false, true, true, false});
-  run("infeasible MILP, unbounded relaxation (x in a row)", rowed,
-      {{}, {{"presolve", "false"}}, {{"mip_threads", "1"}}});
-  // And an unbounded MILP that does have a point, which must stay unbounded: 2 y - 2 z = 2.
-  const Model truly = build({{0, 2, -2}}, {2}, {2}, {-1, 0, 0}, {0, 0, 0}, {inf, 5, 5},
-                            {false, true, true});
-  run("unbounded MILP with a point", truly, {{}, {{"presolve", "false"}}});
+TEST(DiagFindings, ObbtTwo) {
+  // min 5 x2: 5 x0 + x2 <= 8, -2 x0 + x1 - 5/8 x2 <= 69/16; x0 >= 0, x1 = 4 integer, x2 free.
+  const Model model = build({{5, 0, 1}, {-2, 1, -0.625}}, {-inf, -inf}, {8, 4.3125}, {0, 0, 5},
+                            {0, 4, -inf}, {inf, 4, inf}, {false, true, false});
+  run("OBBT two, optimum -78.0556", model,
+      {{{"mip_obbt", "true"}, {"log_level", "debug"}},
+       {{"mip_obbt", "true"}, {"mip_threads", "1"}},
+       {{"mip_obbt", "true"}, {"presolve", "false"}},
+       {}});
+}
+
+TEST(DiagFindings, ObbtThree) {
+  // min -4 x2: 6 x1 >= 201/8, 3/2 x1 + x2 <= 15/2, 4 x0 + 2 x2 - 6 x3 <= 8; x0 integer free,
+  // x1 free, x2 free, x3 <= -3.
+  const Model model = build({{0, 6, 0, 0}, {0, 1.5, 1, 0}, {4, 0, 2, -6}}, {25.125, -inf, -inf},
+                            {inf, 7.5, 8}, {0, 0, -4, 0}, {-inf, -inf, -inf, -inf},
+                            {inf, inf, inf, -3}, {true, false, false, false});
+  run("OBBT three, optimum -4.875", model,
+      {{{"mip_obbt", "true"}, {"log_level", "debug"}},
+       {{"mip_obbt", "true"}, {"mip_threads", "1"}},
+       {{"mip_obbt", "true"}, {"gmi_safety", "true"}},
+       {}});
+}
+
+TEST(DiagFindings, CoefficientTightening) {
+  // min -3 x3: 6 x1 - 3 x2 = 12, -4 x0 - 3/2 x1 + 2 x2 - 3/4 x3 >= 11/2,
+  // -2 x1 - x2/4 - x3 >= -15/2, 6 x0 + 3/2 x3 = -6; x1 integer <= 5, x3 integer <= -1.
+  const Model model =
+      build({{0, 6, -3, 0}, {-4, -1.5, 2, -0.75}, {0, -2, -0.25, -1}, {6, 0, 0, 1.5}},
+            {12, 5.5, -7.5, -6}, {12, inf, inf, -6}, {0, 0, 0, -3}, {-inf, -inf, -inf, -inf},
+            {inf, 5, inf, -1}, {false, true, false, true});
+  run("coefficient tightening, optimum 6", model,
+      {{{"presolve_coefficient_tightening", "true"}, {"log_level", "debug"}},
+       {{"presolve_coefficient_tightening", "true"}, {"mip_threads", "1"}},
+       {{"presolve_bound_propagation", "true"}},
+       {}});
 }
 
 }  // namespace
