@@ -910,6 +910,21 @@ TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithNodePricing) {
   }
 }
 
+// mip_root_dual_ratio_test under the exact oracle: the root LP and its cut rounds run
+// Harris with cost shifting, the node LPs after it the textbook rule, so the switch meets a
+// root basis that a shifted cost and the primal hand-over may have produced. A ratio test
+// only changes the path to a node's optimum, never the optimum.
+TEST(BranchAndBound, FuzzAgainstTheExactMilpOracleWithAHarrisRoot) {
+  Options options = mip_options();
+  options.set_string("mip_root_dual_ratio_test", "harris");
+  expect_clean_sweep(run_milp_fuzz(options, "harris root"));
+  options.set_bool("enable_root_cuts", true);
+  options.set_int("tree_cut_depth", 4);
+  options.set_bool("presolve", false);
+  expect_clean_sweep(run_milp_fuzz(options, "harris root, tree cuts, wide", true, 600), 200,
+                     100);
+}
+
 // The cut pool (#497) under the exact rational oracle: aged cut rows DELETED from the node
 // LP and appended again when violated. An age limit of 1 removes a row at nearly every node
 // where it is slack, so stored bases are remapped onto changed rows all the time; a row put

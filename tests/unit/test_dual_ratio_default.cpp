@@ -128,5 +128,20 @@ TEST(DualRatioDefault, AnExplicitRuleAppliesToBoth) {
               mip.solution.objective, 1e-9);
 }
 
+// mip_root_dual_ratio_test: the root's rule is the root's alone. Under harris the root LP
+// runs Harris and the node LPs after it the branch-and-bound rule, textbook, so both
+// counters move; the optimum is the default's.
+TEST(DualRatioDefault, ARootRuleCoversTheRootOnly) {
+  Options options = bare();
+  options.set_string("mip_root_dual_ratio_test", "harris");
+  const Profiled mip = solve_profiled(branching_model(true), options);
+  ASSERT_EQ(mip.solution.status, SolveStatus::kOptimal) << mip.solution.message;
+  ASSERT_GT(mip.solution.nodes, 1) << "the test needs the search to branch";
+  EXPECT_GT(counter(mip, kHarris), 0) << mip.counters.dump(2);
+  EXPECT_GT(counter(mip, kTextbook), 0) << mip.counters.dump(2);
+  EXPECT_NEAR(solve_profiled(branching_model(true), bare()).solution.objective,
+              mip.solution.objective, 1e-9);
+}
+
 }  // namespace
 }  // namespace sankhya
