@@ -229,6 +229,13 @@ class BranchAndBound {
     // mip_node_pricing (#792): applied after the root, in run(), so the root LP keeps
     // `pricing`.
     node_pricing_ = options.get_string("mip_node_pricing");
+    // mip_root_dual_ratio_test: the root and its cut rounds take the root rule, and run()
+    // gives the node LPs back the branch-and-bound rule after the root, as for pricing.
+    if (const std::string root_rule = options.get_string("mip_root_dual_ratio_test");
+        root_rule != "inherit") {
+      node_ratio_test_ = options.get_string("dual_ratio_test");
+      node_options_.set_string("dual_ratio_test", root_rule);
+    }
 
     // MIQP: the node relaxation is a QP rather than an LP (#58 names MIQP as the class this
     // dispatcher refused). The Hessian is a property of the model, not of a node - branching
@@ -1017,6 +1024,9 @@ class BranchAndBound {
   /// mip_node_pricing (#792): "inherit", or the rule node LPs after the root switch to.
   std::string node_pricing_ = "inherit";
   bool node_pricing_applied_ = false;
+  /// mip_root_dual_ratio_test: empty, or the dual ratio test node LPs and probes take while
+  /// the root runs under its own.
+  std::string node_ratio_test_;
   /// miqp_node_ipm_warm_start (#494, #893): start a child's IPM from its parent's iterate.
   bool miqp_node_ipm_warm_start_ = false;
   Options node_ipm_options_;            ///< node_options_ with the IPM's iteration cap
