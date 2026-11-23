@@ -82,7 +82,7 @@ bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
             "Root cut loop: not entered, round 1 took no flow cover "
             "(root_cut_loop_when=flow-covers)");
       }
-    } else if (wanted && when == "auto") {
+    } else if (wanted && (when == "auto" || when == "probation")) {
       // A flow cover in round 1 enters as under flow-covers. Without one, a model with a
       // variable upper bound enters ON PROBATION (tolerances.hpp, kRootCutProbationGain):
       // gesa2 and mod011 have the structure and take no cover in round 1, and so does
@@ -91,7 +91,12 @@ bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
       const bool cover = std::any_of(round1.begin(), round1.end(), [](const Cut& cut) {
         return cut.family == CutFamily::kFlowCover;
       });
-      wanted = cover || find_variable_bounds(working_).rows > 0;
+      // probation: every model without a flow cover enters on probation, not only one with
+      // a variable upper bound. On the MIPLIB 2017 near-misses (neos17, neos-911970,
+      // mik-250-20-75-4, nu25-pr12, enlight_hard) round 1 takes 30 of up to 377 candidates
+      // in under 0.07 s and the loop is never entered, while HiGHS's root bound is far
+      // above ours (bench.yml run 45114877618).
+      wanted = cover || when == "probation" || find_variable_bounds(working_).rows > 0;
       root_loop_probation_ = wanted && !cover;
       if (!wanted) {
         logger_.info(
