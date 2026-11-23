@@ -95,6 +95,13 @@ def main() -> int:
                         help="a named arm in place of off and on; repeatable")
     parser.add_argument("--out-prefix", required=True)
     args = parser.parse_args()
+    # DIAG (not for merge): the rival's own log on the named models, LP relaxation then MIP.
+    subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "highspy"], check=False)
+    for diag_name in args.instances or []:
+        for diag_kind in ("relax", "mip"):
+            print(f"===== DIAG-HIGHS {diag_name} {diag_kind} =====", flush=True)
+            subprocess.run([sys.executable, "bench/runners/diag_highs_log.py", diag_name,
+                            diag_kind], check=False)
     named: dict[str, list[str]] = {}
     for spec in args.arm:
         name, _, options = spec.partition(":")
