@@ -625,6 +625,8 @@ HiGHS proves neos-950242, neos-3381206-awhea, hypothyroid-k1, neos-960392 and ns
 
 What these runs led to instead: a time budget per dive (#1324), which gives hypothyroid-k1 a point on every seed, and parity fixings only when they fix half the binaries (#1323). What would move the rest: for ns1116954 and neos-960392, the root and node dual simplex on degenerate 0/1 LPs. For neos-3381206-awhea, a pump distance that covers general integers (Bertacco, Fischetti and Lodi 2007).
 
+**Tried: that pump distance** (`mip_pump_general_integers`, #1329, closed, branch kept). Every general integer gets an auxiliary column and two rows in the projection LP. On the 25 MIPLIB 2017 targets (run 44495592865, binary `e64302e`, 3 seeds, 60 s, one thread) no row changed status or objective in either arm: 5 proved, 16 matched, 57 verified. On neos-3381206-awhea the pump now really projects, taking 2.7-3.0 s for its 20 rounds where it took 0.06 s, and still proposes nothing. Run 44524975889 (binary `283b4cc`) gave it 200 rounds and gave the PDHG pump (#509, which already had this distance) 500. Both stopped on their time share after 55-95 rounds, and neither found a point on any seed. So the missing distance is not what stops us on this model. CSVs are in the runs' artifacts (`option-ab-e64302e.csv`, `option-ab-283b4cc.csv`, branch stamps).
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
