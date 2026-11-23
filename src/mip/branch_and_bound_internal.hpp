@@ -1153,6 +1153,9 @@ class BranchAndBound {
   Count nodes_explored_ = 0;
   /// The root loop was entered under `auto` without a flow cover, so on probation (#1158).
   bool root_loop_probation_ = false;
+  /// root_cut_loop_when=charged (#1278): each round after round 1 must close a share of the
+  /// remaining gap at least the share of nonzeros it adds to the LP, or it is rolled back.
+  bool root_loop_charged_ = false;
   /// Root relaxation objective (internal, minimise space) before and after the root cut
   /// round; NaN until the root LP solved. Reported through Solution::root_bound (#221).
   double root_bound_internal_ = std::numeric_limits<double>::quiet_NaN();
