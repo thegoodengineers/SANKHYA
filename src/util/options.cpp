@@ -295,6 +295,19 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {"devex", "dantzig", "dual-steepest-edge"}});
+    s.push_back({"mip_root_dual_ratio_test",
+                 OptionType::String,
+                 std::string("inherit"),
+                 "Dual ratio test for the branch-and-bound root: the root LP from the slack "
+                 "basis, its cut rounds and the root heuristics' LPs. inherit (default) uses "
+                 "the rule `dual_ratio_test` gives every LP inside branch and bound; harris "
+                 "or textbook override it there only, and the node LPs after the root and "
+                 "every strong-branching probe keep that rule. The root is the one cold "
+                 "solve of the search, where a small pivot taken on a tie is how the basis "
+                 "decays (Harris 1973; Koberstein 2005, ch. 6).",
+                 0.0,
+                 0.0,
+                 {"inherit", "harris", "textbook"}});
     s.push_back({"mip_node_pricing",
                  OptionType::String,
                  std::string("devex"),

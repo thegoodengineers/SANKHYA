@@ -371,6 +371,35 @@ The default stays 512, on a `main` measurement at `854a328`: one binary, `lu_upd
 
 The search path is sensitive to the factorization interval, and neither interval wins. Files: `bench/results/option-ab-miplib2017-bench-lu-update-limit-128-854a328.csv`, `option-ab-miplib2017-samadhan50-lu-update-limit-128-854a328.csv`, `option-ab-miplib2017-9b0ec5d-vs-ddf9913.csv`, `option-ab-miplib2017-c8544ed-vs-3dba456.csv` (the `arm` column). What would earn a change: a node-LP interval that wins on a whole set, not on a model.
 
+### Harris's ratio test for the LPs inside branch and bound (`dual_ratio_test=harris`, with and without `dual_perturb_costs_at_start`)
+
+Branch and bound runs its LPs under the textbook bound-flipping test (#712 scoped the Harris default to LP solves until a multi-seed MIPLIB run). On the root LPs of ex9, ex10 and ns1116954 the textbook test takes pivots that are tiny beside their column: diagnostic run 45114865139 (`main` `cb5ef02` plus logging at every refactorization, 60 s, seed 0, one thread) counts 713, 555 and 87 pivots under 1e-5 of the entering column's largest entry, with |x_B| reaching 1e6 on ex9 and 8e8 on ex10, where 1,359 reduced costs are wrong-signed again at the end and the objective is -538 against an optimum of 100. Under Harris (Harris 1973; Koberstein 2005, ch. 6: the largest pivot among the breakpoints within a tolerance-sized relaxation) the same roots take 1, 27 and 0 such pivots and |x_B| stays at 1e1-1e5. ns1116954's root then finishes. ex9 reaches its optimal objective, 81.000, by iteration 17,000 and sits there until the limit at 24,764 with 12,000-13,600 of its 33,846 rows still primal infeasible; ex10 is at 76 of 100 when the limit stops it at 16,051 iterations (at 100.00 with the start perturbation as well), about 23,000 of its 63,016 rows infeasible; both carry 0.9-1.6M eta nonzeros against 100-200k in the factors.
+
+As a default for every LP inside branch and bound it fails the rule (both arms one `main` binary, `d394a85`, each pair in one job, 3 seeds, 60 s, one thread):
+
+| set (run) | arm | seed 0 m / p / v | seed 1 | seed 2 | proved, best of 3 |
+|---|---|---|---|---|---|
+| MIPLIB 3, 65 (45118192105) | default | 46 / 45 / 64 | 46 / 45 / 65 | 45 / 45 / 64 | 46 |
+| | `dual_ratio_test=harris` | 46 / 45 / 64 | 45 / 43 / 64 | 46 / 45 / 64 | 46 |
+| MIPLIB 2017 tier 1, 30 (45118196471) | default | 18 / 11 / 30 | 19 / 11 / 30 | 17 / 11 / 29 | 12 |
+| | harris | 18 / 11 / 30 | 17 / 10 / 30 | 17 / 9 / 29 | 11 |
+| 25 MIPLIB 2017 targets (45118200762) | default | 5 / 1 / 19 | 6 / 2 / 19 | 5 / 2 / 19 | 2 |
+| | harris | 4 / 2 / 19 | 4 / 2 / 19 | 5 / 2 / 20 | 2 |
+| MIPLIB 3 (45118205125) | default | 45 / 43 / 64 | 44 / 43 / 63 | 45 / 45 / 64 | 46 |
+| | harris + start perturbation | 44 / 42 / 65 | 45 / 43 / 62 | 43 / 42 / 62 | 43 |
+| tier 1 (45118209302) | default | 18 / 11 / 30 | 19 / 11 / 30 | 17 / 11 / 29 | 12 |
+| | harris + start perturbation | 19 / 11 / 30 | 18 / 11 / 30 | 18 / 10 / 30 | 12 |
+| 25 targets (45118215226) | default | 5 / 1 / 19 | 6 / 2 / 19 | 5 / 2 / 19 | 2 |
+| | harris + start perturbation | 7 / 3 / 19 | 5 / 2 / 19 | 4 / 2 / 19 | 3 |
+
+(m / p / v: matched the published optimum / proved it / verified point; the verifier rejected nothing in any arm. The two MIPLIB 3 default arms differ because the jobs landed on different CPUs and several proofs finish within seconds of the limit.)
+
+- **Harris fails the rule:** neos-3611689-kaihu loses its proof on all three seeds (optimal in 37, 52 and 24 s and 49,000-118,000 nodes by default; 127,000-141,000 nodes and bounds 115-117 against 119 at the limit under Harris: the node LPs change the tree), and air04 seed 1, qiu seed 0, 10teams seed 1 and enlight8 seed 2 lose theirs; dano3mip seed 1 loses its point.
+- **Gained:** neos859080 seed 0, 10teams seed 0 and enlight8 seed 0 proved; ns1116954's root finished on all three seeds (bound 0) and ex9's on seed 2 (bound 81), neither with a feasible point.
+- **Harris with the start perturbation fails it too:** air04 seed 0, air05 seed 2, gesa2_o seed 2, qiu seed 2, enlight8 seed 2 and neos-3611689-kaihu seed 0 lose proofs, arki001 seeds 1-2 and swath seed 2 lose their points; neos859080 seed 0, neos-960392 seed 0 (proved -238 in 16.7 s) and enlight8 seed 0 are gained.
+
+Files: `bench/results/option-ab-miplib3-bb-harris-d394a85.csv`, `option-ab-miplib-tier1-bb-harris-d394a85.csv`, `option-ab-miplib2017-targets-bb-harris-d394a85.csv`, and the same three with `bb-harrisperturb` (the `arm` column: `off` is the default). Harris for the root alone is in section 2. What would move ex9 and ex10: the endgame after the objective is optimal, not the pivot rule.
+
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
 
 These decisions were made on numbers that are not in `bench/results/`. They are recorded as such, and each names the re-run that would move it to section 1.
@@ -626,6 +655,24 @@ HiGHS proves neos-950242, neos-3381206-awhea, hypothyroid-k1, neos-960392 and ns
 What these runs led to instead: a time budget per dive (#1324), which gives hypothyroid-k1 a point on every seed, and parity fixings only when they fix half the binaries (#1323). What would move the rest: for ns1116954 and neos-960392, the root and node dual simplex on degenerate 0/1 LPs. For neos-3381206-awhea, a pump distance that covers general integers (Bertacco, Fischetti and Lodi 2007).
 
 **Tried: that pump distance** (`mip_pump_general_integers`, #1329, closed, branch kept). Every general integer gets an auxiliary column and two rows in the projection LP. On the 25 MIPLIB 2017 targets (run 44495592865, binary `e64302e`, 3 seeds, 60 s, one thread) no row changed status or objective in either arm: 5 proved, 16 matched, 57 verified. On neos-3381206-awhea the pump now really projects, taking 2.7-3.0 s for its 20 rounds where it took 0.06 s, and still proposes nothing. Run 44524975889 (binary `283b4cc`) gave it 200 rounds and gave the PDHG pump (#509, which already had this distance) 500. Both stopped on their time share after 55-95 rounds, and neither found a point on any seed. So the missing distance is not what stops us on this model. CSVs are in the runs' artifacts (`option-ab-e64302e.csv`, `option-ab-283b4cc.csv`, branch stamps).
+
+### Harris's ratio test for the branch-and-bound root only (`mip_root_dual_ratio_test=harris`, #1333, opt-in)
+
+The section-1 entry on Harris inside branch and bound loses its proofs through the node LPs, so the root LP, its cut rounds and the root heuristics' LPs were given a rule of their own (`mip_root_dual_ratio_test`), the node LPs and probes keeping the textbook test. Measured on the PR's binary `849f172` (`d394a85` plus the option; `off` is the default, both arms in one job, 3 seeds, 60 s, one thread):
+
+| set (run) | arm | seed 0 m / p / v | seed 1 | seed 2 | proved, best of 3 |
+|---|---|---|---|---|---|
+| MIPLIB 3, 65 (45138176043) | default | 46 / 45 / 64 | 46 / 45 / 65 | 45 / 45 / 64 | 46 |
+| | root Harris | 44 / 44 / 64 | 45 / 44 / 64 | 45 / 44 / 63 | 46 |
+| MIPLIB 2017 tier 1, 30 (45138181409) | default | 18 / 11 / 30 | 19 / 11 / 30 | 17 / 11 / 29 | 12 |
+| | root Harris | 16 / 10 / 30 | 16 / 11 / 30 | 16 / 10 / 29 | 12 |
+| 25 MIPLIB 2017 targets (45138186354) | default | 5 / 1 / 19 | 6 / 2 / 19 | 5 / 2 / 19 | 2 |
+| | root Harris | 4 / 1 / 20 | 4 / 2 / 19 | 4 / 2 / 20 | 2 |
+
+- **Fails the rule:** air05 seeds 0 and 2, air04 seed 1, qiu seed 0, 10teams seed 1 and neos-3611689-kaihu seeds 0 and 2 lose their proofs; dano3mip seed 1 and swath seed 2 lose their points. A different optimal vertex at the root is a different set of root cuts and a different tree: the root bounds agree to the last digits and the node counts do not.
+- **Gained:** 10teams seed 0 and air05 seed 1 proved; ns1116954's root finished on all three seeds (bound 0) and ex9's on seed 2 (bound 81); neos-3381206-awhea a verified point on seeds 0 and 2.
+
+The option stays, default `inherit`. Re-run that would settle it: the same A/B on `main` once #1333 is merged; it is not expected to pass, since the losses are tree changes on models the default proves within seconds of the limit.
 
 ## 3. Built opt-in, awaiting the measurement
 

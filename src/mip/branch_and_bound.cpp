@@ -414,6 +414,7 @@ Solution BranchAndBound::run() {
   }
   probe_options_ = node_options_;
   probe_options_.set_int("iteration_limit", tol::kStrongBranchingIterations);
+  if (!node_ratio_test_.empty()) probe_options_.set_string("dual_ratio_test", node_ratio_test_);
   // #502, each off by default until an A/B on main. The heap is one worker's: a parallel
   // worker donates open nodes by erasing them from the middle of open_.
   // #754: a fixing round that makes the node integral closes it as an incumbent, which a
@@ -698,6 +699,10 @@ Solution BranchAndBound::run() {
       node_options_.set_string("pricing", node_pricing_);
       probe_options_.set_string("pricing", node_pricing_);
       node_pricing_applied_ = true;
+    }
+    if (node_index != 0 && !node_ratio_test_.empty()) {
+      node_options_.set_string("dual_ratio_test", node_ratio_test_);
+      node_ratio_test_.clear();
     }
 
     // The node LP's size, before the pool or a cut round changes it (#497's measure).
