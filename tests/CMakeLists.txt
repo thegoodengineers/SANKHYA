@@ -212,6 +212,7 @@ add_executable(sankhya_tests
   oracles/test_fuzz_dual_reduce.cpp
   oracles/rich_model.cpp
   oracles/rich_generator.cpp
+  oracles/solution_checks.cpp
   oracles/test_fuzz_general_form.cpp
   oracles/test_safe_bound.cpp
   oracles/test_batch_pdhg.cpp
