@@ -28,13 +28,25 @@ namespace {
 
 /// Is `value` an integer, to within the integrality tolerance?
 ///
-/// The tolerance is deliberately the same one the solver uses to decide whether a variable is
-/// integral. A coefficient this routine wrongly accepts as an integer makes the row's
-/// activity non-integral in truth, and the rounding below then removes feasible points - the
-/// exact failure cuts.hpp exists to prevent. Anything the solver would not call an integer,
-/// this must not either.
+/// The tolerance is the one the solver uses to decide whether a variable is integral, and
+/// that is what this is for: a bound, or a knapsack weight the cover separator rounds. It is
+/// NOT the test for a coefficient whose row is about to have its bounds rounded; see
+/// is_an_integer().
 [[nodiscard]] bool is_integral(double value) noexcept {
   return std::fabs(value - std::round(value)) <= tol::kIntegrality;
+}
+
+/// Is `value` an integer, exactly?
+///
+/// What tighten_integral_rows asks of a coefficient (#1341). The rounding there rests on the
+/// row's activity being an integer at every integer point, and a coefficient that is only
+/// near an integer breaks that by its distance times the column's value: with 2 + 2^-21 on
+/// a column that reaches 400 the activity is 1.9e-4 off, the row's bound 1000.00019 was
+/// rounded up to 1001, and the point meeting the row with equality, the optimum, was cut
+/// off. No tolerance on the coefficient is safe without a bound on the column, so there is
+/// none; presolve's implied-integer detection asks the same (review of #629).
+[[nodiscard]] bool is_an_integer(double value) noexcept {
+  return value == std::round(value);
 }
 
 // =========================================================================================
@@ -517,7 +529,7 @@ RowTightening tighten_integral_rows(Model* model, Logger& logger) {
     for (Index k = 0; k < column.size; ++k) {
       const auto row = static_cast<std::size_t>(column.rows[k]);
       has_entry[row] = 1;
-      if (!integer_column || !is_integral(column.values[k])) eligible[row] = 0;
+      if (!integer_column || !is_an_integer(column.values[k])) eligible[row] = 0;
     }
   }
 
