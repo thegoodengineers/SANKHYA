@@ -190,6 +190,7 @@ add_executable(sankhya_tests
   unit/test_conic.cpp
   unit/test_miqcp.cpp
   unit/test_fractional_integer_bounds.cpp
+  unit/test_empty_integral_row.cpp
   unit/test_deterministic.cpp
   unit/test_run_order_determinism.cpp
   unit/test_resource_limits.cpp

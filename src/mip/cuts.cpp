@@ -527,6 +527,8 @@ RowTightening tighten_integral_rows(Model* model, Logger& logger) {
 
     double& lower = model->row_lower[u];
     double& upper = model->row_upper[u];
+    const double given_lower = lower;
+    const double given_upper = upper;
     bool moved = false;
     bool lower_moved = false;
     bool upper_moved = false;
@@ -581,11 +583,22 @@ RowTightening tighten_integral_rows(Model* model, Logger& logger) {
     // infeasibility that was not already there, because every integer-feasible point
     // satisfies the rounded bounds. Saying so is still worth a line, because "the model
     // became infeasible after cuts" is the first thing anyone will suspect.
+    //
+    // AND IT IS A VERDICT, NOT A MODEL TO SEARCH (#1335). A row crossed this way proves the
+    // model has no integer point: the one-row case of Chvatal's rounding. Left in the model
+    // and nothing more, it reached the search, whose Model::validate() refused the crossed
+    // bounds, and an infeasible MILP came back model_error. The first such row is reported,
+    // with the bounds it was given, for the caller to answer infeasible on.
     if (is_finite_bound(lower) && is_finite_bound(upper) && lower > upper) {
       logger.verbose(
           "row {} has no integral activity in [{:g}, {:g}]; it was already infeasible for "
           "integer points and the rounding has made that explicit",
-          i, model->row_lower[u], model->row_upper[u]);
+          i, given_lower, given_upper);
+      if (result.empty_row < 0) {
+        result.empty_row = i;
+        result.empty_lower = given_lower;
+        result.empty_upper = given_upper;
+      }
     }
   }
 
