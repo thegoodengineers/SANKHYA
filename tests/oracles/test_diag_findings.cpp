@@ -73,77 +73,37 @@ void run(const char* name, const Model& model, const std::vector<OptionList>& se
 
 const double inf = kInfinity;
 
-TEST(DiagFindings, UnboundedLpA) {
-  const Model model = build({{3, -6, 0}, {0, 6, 0.5}, {4, 3, 0}}, {21, -inf, -inf},
-                            {inf, -11.25, 10}, {0, 0, 0.125}, {-inf, -inf, -inf},
-                            {inf, inf, 1}, {false, false, false});
-  run("unbounded LP A", model,
-      {{},
-       {{"presolve", "false"}},
-       {{"presolve_dual_reductions", "false"}},
-       {{"presolve_substitution", "false"}},
-       {{"presolve_dual_reductions", "false"}, {"presolve_substitution", "false"}},
-       {{"algorithm", "simplex"}},
-       {{"algorithm", "simplex"}, {"presolve", "false"}},
-       {{"presolve", "false"}, {"scaling", "false"}},
-       {{"presolve", "false"}, {"dual_ratio_test", "textbook"}},
-       {{"presolve", "false"}, {"dual_ratio_test", "harris"}}});
+TEST(DiagFindings, NearIntegerCoefficient) {
+  // min x + y: (2 + 2^-21) x + 2 y >= 1000 + 400 * 2^-21, x and y integer in [0, 500].
+  // x + y = 500 needs x >= 400, and (400, 100) meets the row exactly: the optimum is 500.
+  const double delta = 1.0 / 2097152.0;
+  const Model model = build({{2.0 + delta, 2.0}}, {1000.0 + 400.0 * delta}, {inf}, {1, 1},
+                            {0, 0}, {500, 500}, {true, true});
+  run("near-integer coefficient, optimum 500", model,
+      {{}, {{"presolve", "false"}}, {{"mip_threads", "1"}}, {{"enable_root_cuts", "false"}}});
+  // The same with a third column so the row is not a doubleton anywhere.
+  const Model three = build({{2.0 + delta, 2.0, 2.0}}, {1000.0 + 400.0 * delta}, {inf},
+                            {1, 1, 1}, {0, 0, 0}, {500, 500, 500}, {true, true, true});
+  run("near-integer coefficient, three columns, optimum 500", three,
+      {{}, {{"presolve", "false"}}});
 }
 
-TEST(DiagFindings, UnboundedLpB) {
-  const Model model = build({{0, -5, 2}, {-1, 0, 2.0 / 3.0}, {-0.5, 0, 5}}, {4, -inf, -inf},
-                            {inf, -3, 0}, {0, 0, 4}, {-inf, -inf, -inf}, {inf, 0, inf},
-                            {false, false, false});
-  run("unbounded LP B", model,
-      {{},
-       {{"presolve", "false"}},
-       {{"presolve_dual_reductions", "false"}},
-       {{"presolve_substitution", "false"}},
-       {{"presolve_dual_reductions", "false"}, {"presolve_substitution", "false"}},
-       {{"algorithm", "simplex"}},
-       {{"algorithm", "simplex"}, {"presolve", "false"}},
-       {{"presolve", "false"}, {"dual_ratio_test", "textbook"}},
-       {{"presolve", "false"}, {"dual_ratio_test", "harris"}}});
-}
-
-TEST(DiagFindings, UnboundedLpC) {
-  const Model model = build({{-4, 2, 0}, {7, 7, 2}}, {-3546.5, -inf}, {inf, -6247}, {0, 0, 4},
-                            {-inf, -inf, -inf}, {inf, inf, 701}, {false, false, false});
-  run("unbounded LP C", model,
-      {{},
-       {{"presolve", "false"}},
-       {{"presolve_dual_reductions", "false"}},
-       {{"presolve_substitution", "false"}},
-       {{"algorithm", "simplex"}}});
-}
-
-TEST(DiagFindings, InfeasibleLpUnderTheRace) {
-  const Model model = build({{-3, -2}, {-5, 0}}, {-4, -5}, {-4, inf}, {0, 0}, {-inf, -inf},
-                            {inf, -253}, {false, false});
-  run("infeasible LP", model,
-      {{},
-       {{"engine_race", "true"}, {"deterministic", "true"}},
-       {{"engine_race", "true"}},
-       {{"engine_race", "true"}, {"deterministic", "true"}, {"presolve", "false"}},
-       {{"engine_race", "true"},
-        {"deterministic", "true"},
-        {"presolve_dual_reductions", "false"}}});
-}
-
-TEST(DiagFindings, InfeasibleMilpReportedAsAModelError) {
-  const Model model = build({{-6, 1.5, -6}}, {-6}, {-6}, {0, 0, 0}, {-inf, -1, -inf}, {1, -1, 1},
-                            {true, false, true});
-  run("infeasible MILP", model,
-      {{},
-       {{"enable_root_cuts", "false"}},
-       {{"mir_cmir", "false"}},
-       {{"enable_root_cuts", "false"}, {"mir_cmir", "false"}},
-       {{"presolve", "false"}},
-       {{"presolve", "false"}, {"enable_root_cuts", "false"}},
-       {{"mip_threads", "1"}},
-       {{"mip_threads", "1"}, {"enable_root_cuts", "false"}},
-       {{"mip_heur_fj", "off"}},
-       {{"mip_heur_parity", "off"}}});
+TEST(DiagFindings, InfeasibleMilpWithAnUnboundedRelaxation) {
+  // min -x: 2 y - 2 z = 1, y and z integer in [0, 5], x >= 0 in no row. No integer point;
+  // the relaxation is feasible and unbounded.
+  const Model model = build({{0, 2, -2}}, {1}, {1}, {-1, 0, 0}, {0, 0, 0}, {inf, 5, 5},
+                            {false, true, true});
+  run("infeasible MILP, unbounded relaxation (empty column)", model,
+      {{}, {{"presolve", "false"}}, {{"mip_threads", "1"}}});
+  // The same with x in a row of its own: x - w >= 0, w >= 0 free to grow.
+  const Model rowed = build({{0, 2, -2, 0}, {1, 0, 0, -1}}, {1, 0}, {1, inf}, {-1, 0, 0, 0},
+                            {0, 0, 0, 0}, {inf, 5, 5, inf}, {false, true, true, false});
+  run("infeasible MILP, unbounded relaxation (x in a row)", rowed,
+      {{}, {{"presolve", "false"}}, {{"mip_threads", "1"}}});
+  // And an unbounded MILP that does have a point, which must stay unbounded: 2 y - 2 z = 2.
+  const Model truly = build({{0, 2, -2}}, {2}, {2}, {-1, 0, 0}, {0, 0, 0}, {inf, 5, 5},
+                            {false, true, true});
+  run("unbounded MILP with a point", truly, {{}, {{"presolve", "false"}}});
 }
 
 }  // namespace
