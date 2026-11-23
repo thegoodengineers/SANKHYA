@@ -82,7 +82,7 @@ bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
             "Root cut loop: not entered, round 1 took no flow cover "
             "(root_cut_loop_when=flow-covers)");
       }
-    } else if (wanted && when == "auto") {
+    } else if (wanted && (when == "auto" || when == "probation")) {
       // A flow cover in round 1 enters as under flow-covers. Without one, a model with a
       // variable upper bound enters ON PROBATION (tolerances.hpp, kRootCutProbationGain):
       // gesa2 and mod011 have the structure and take no cover in round 1, and so does
@@ -91,7 +91,12 @@ bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
       const bool cover = std::any_of(round1.begin(), round1.end(), [](const Cut& cut) {
         return cut.family == CutFamily::kFlowCover;
       });
-      wanted = cover || find_variable_bounds(working_).rows > 0;
+      // probation (#1332, opt-in): every model without a flow cover enters on probation, not
+      // only one with a variable upper bound. On SAMADHAN's 50 it proves enlight_hard seed 0
+      // and swath1 seed 1 where auto proves neither, but it loses the proofs of neos859080
+      // seed 1, misc06 and misc07 seed 2 and enlight8 seeds 1 and 2, so auto stays the
+      // default (docs/NEGATIVE-RESULTS.md).
+      wanted = cover || when == "probation" || find_variable_bounds(working_).rows > 0;
       root_loop_probation_ = wanted && !cover;
       if (!wanted) {
         logger_.info(
@@ -267,9 +272,9 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
     if (later_gain <= tol::kRootCutProbationGain * first_gain) {
       logger_.info(
           "Root cut loop: probation failed after {} round(s), bound {:.10g} to {:.10g} against "
-          "{:.10g} after round 1; back to round 1 (root_cut_loop_when=auto), stopped on {}",
+          "{:.10g} after round 1; back to round 1 (root_cut_loop_when={}), stopped on {}",
           root_cut_rounds_, reported(bounds.front()), reported(bounds.back()),
-          reported(bounds[1]), why);
+          reported(bounds[1]), options_.get_string("root_cut_loop_when"), why);
       drop_cuts_from(round_one->pool);
       working_ = std::move(round_one->model);
       scaling_ = std::move(round_one->scaling);
