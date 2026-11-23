@@ -211,6 +211,7 @@ add_executable(sankhya_tests
   oracles/rich_model.cpp
   oracles/rich_generator.cpp
   oracles/test_fuzz_general_form.cpp
+  oracles/test_diag_findings.cpp
   oracles/test_safe_bound.cpp
   oracles/test_batch_pdhg.cpp
   oracles/test_batch_bounds.cpp
