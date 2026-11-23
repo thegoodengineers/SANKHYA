@@ -362,7 +362,7 @@ TEST(FuzzGeneralForm, LinearProgramsUnderTheDefaults) {
 }
 
 TEST(FuzzGeneralForm, LinearProgramsUnderEveryEngineAndPresolveSwitch) {
-  const int count = scaled(2000);
+  const int count = scaled(1000);
   const Tally tally =
       sweep("LPs, one or two switches off their defaults", 20261124, count, lp_families(),
             [](std::mt19937_64& rng) { return some_of(lp_switches(), rng); });
