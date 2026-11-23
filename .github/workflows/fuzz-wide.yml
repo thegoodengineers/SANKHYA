@@ -22,7 +22,7 @@ on:
         required: true
       scale:
         description: multiplier on every trial count
-        default: "20"
+        default: "50"
         required: true
       seed:
         description: first seed (job k adds 1000 k); empty takes 100000 x the run number
@@ -58,7 +58,7 @@ jobs:
 
       - name: Fuzz
         env:
-          SANKHYA_FUZZ_SCALE: ${{ inputs.scale || '20' }}
+          SANKHYA_FUZZ_SCALE: ${{ inputs.scale || '50' }}
           FIRST_SEED: ${{ inputs.seed || format('{0}00000', github.run_number) }}
         run: |
           set -u
