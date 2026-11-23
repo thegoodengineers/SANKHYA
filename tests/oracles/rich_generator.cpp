@@ -146,7 +146,21 @@ RichModel random_rich(std::mt19937_64& rng, const RichConfig& config) {
 
   const bool planted = happens(rng, config.planted);
   const auto slack = [&] { return happens(rng, 0.5) ? rat(0) : rat(between(rng, 1, 3)); };
+  // A nonzero multiple for a dependent row or column: -3 .. 3, or half of that.
+  const auto multiple = [&] {
+    std::int64_t value = between(rng, -3, 3);
+    if (value == 0) value = 2;
+    return rat(value, happens(rng, 0.3) ? 2 : 1);
+  };
   for (std::size_t i = 0; i < rows; ++i) {
+    if (i > 0 && happens(rng, config.dependent_rows)) {
+      // A multiple of an earlier row. With the bounds drawn below it is redundant, or the
+      // same row from the other side, or (not planted) in contradiction with it.
+      const auto source = static_cast<std::size_t>(between(rng, 0, static_cast<Index>(i) - 1));
+      const Rational factor = multiple();
+      for (std::size_t j = 0; j < cols; ++j) m.a[i][j] = factor * m.a[source][j];
+      continue;
+    }
     bool any = false;
     for (std::size_t j = 0; j < cols; ++j) {
       if (!happens(rng, config.density)) continue;
@@ -157,6 +171,20 @@ RichModel random_rich(std::mt19937_64& rng, const RichConfig& config) {
       m.a[i][static_cast<std::size_t>(between(rng, 0, m.num_cols - 1))] =
           coefficient(rng, config);
     }
+  }
+  for (std::size_t j = 0; j < cols; ++j) {
+    if (!happens(rng, 0.15)) m.cost[j] = coefficient(rng, config);
+  }
+  for (std::size_t j = 1; j < cols; ++j) {
+    if (!happens(rng, config.dependent_columns)) continue;
+    // A multiple of an earlier column, at the same price per unit or one unit dearer: the
+    // two are interchangeable, or one dominates the other.
+    const auto source = static_cast<std::size_t>(between(rng, 0, static_cast<Index>(j) - 1));
+    const Rational factor = multiple();
+    for (std::size_t i = 0; i < rows; ++i) m.a[i][j] = factor * m.a[i][source];
+    m.cost[j] = factor * m.cost[source] + rat(between(rng, 0, 1));
+  }
+  for (std::size_t i = 0; i < rows; ++i) {
     Rational anchor = rat(between(rng, -config.magnitude, config.magnitude));
     if (planted) {
       anchor = Rational();
@@ -174,9 +202,6 @@ RichModel random_rich(std::mt19937_64& rng, const RichConfig& config) {
     } else {
       m.row_lower[i] = anchor - slack();
     }
-  }
-  for (std::size_t j = 0; j < cols; ++j) {
-    if (!happens(rng, 0.15)) m.cost[j] = coefficient(rng, config);
   }
   for (int k = 0; k < config.big_m_links; ++k) add_big_m_link(&m, rng, config);
   return m;

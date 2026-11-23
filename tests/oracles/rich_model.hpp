@@ -127,6 +127,9 @@ struct RichConfig {
   /// Share of models whose rows are built around a point inside the bounds, so that they
   /// are feasible; the rest draw their right-hand sides blindly and are mostly infeasible.
   double planted = 0.8;
+  /// Share of rows (columns) that are a multiple of an earlier row (column).
+  double dependent_rows = 0.0;
+  double dependent_columns = 0.0;
   /// Fixed-charge links x - M y <= l appended, y a new binary (see add_big_m_link).
   int big_m_links = 0;
   std::int64_t big_m_min = 1000;
