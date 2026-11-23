@@ -31,6 +31,7 @@
 #include <cstdlib>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <random>
 #include <string>
 #include <utility>
@@ -184,6 +185,9 @@ struct Verdict {
   Outcome outcome = Outcome::kAgreed;
   OracleStatus exact = OracleStatus::kOptimal;
   bool duals_checked = false;
+  /// What disagreed, in a few words: mismatches of one kind are counted together and a
+  /// reduction must keep the kind it started with.
+  std::string kind;
   std::string why;
 };
 
@@ -200,18 +204,19 @@ Verdict judge(const RichModel& rich, const OptionList& extra, bool certifies = t
     v.outcome = Outcome::kAbstained;
     return v;
   }
-  const auto mismatch = [&v](const std::string& why) {
+  const auto mismatch = [&v](const std::string& kind, const std::string& why) {
     v.outcome = Outcome::kMismatched;
+    v.kind = kind;
     v.why = why;
     return v;
   };
   if (exact.status == OracleStatus::kOptimal) {
     const std::string broken = exact_violation(rich, exact.x, exact.objective);
-    if (!broken.empty()) return mismatch("HARNESS: the exact point does not fit: " + broken);
+    if (!broken.empty()) return mismatch("HARNESS", "the exact point does not fit: " + broken);
   }
   const Model model = to_model(rich);
   if (const std::string invalid = model.validate(); !invalid.empty()) {
-    return mismatch("HARNESS: " + invalid);
+    return mismatch("HARNESS", invalid);
   }
   Options options;
   options.set_bool("log_to_console", false);
@@ -220,7 +225,7 @@ Verdict judge(const RichModel& rich, const OptionList& extra, bool certifies = t
   options.set_double("time_limit", 60.0);
   std::string error;
   for (const auto& [key, value] : extra) {
-    if (!options.set_from_string(key, value, &error)) return mismatch("HARNESS: " + error);
+    if (!options.set_from_string(key, value, &error)) return mismatch("HARNESS", error);
   }
   const Solution s = solve(model, options);
   const std::string solver = std::string("solver: ") + to_string(s.status) + ", objective " +
@@ -234,7 +239,8 @@ Verdict judge(const RichModel& rich, const OptionList& extra, bool certifies = t
     const bool claims_point =
         s.status == SolveStatus::kOptimal || s.status == SolveStatus::kFeasible;
     if (certifies ? s.status != wanted : claims_point) {
-      return mismatch(std::string("exactly ") + to_string(exact.status) + "; " + solver);
+      return mismatch(std::string(to_string(exact.status)) + " reported " + to_string(s.status),
+                      std::string("exactly ") + to_string(exact.status) + "; " + solver);
     }
     return v;
   }
@@ -243,26 +249,30 @@ Verdict judge(const RichModel& rich, const OptionList& extra, bool certifies = t
   const double scale = std::max(1.0, std::fabs(expected));
   const std::string exactly =
       "the exact optimum is " + std::to_string(expected) + "; " + solver;
-  if (s.status != SolveStatus::kOptimal) return mismatch(exactly);
+  if (s.status != SolveStatus::kOptimal) {
+    return mismatch(std::string("optimal reported ") + to_string(s.status), exactly);
+  }
   // A MILP that stops on its gap target is optimal within that target (#188) and says so.
   double allowed = 1e-6 * scale;
   if (rich.has_integers() && s.message.find("gap target") != std::string::npos) {
     allowed += std::max(options.get_double("mip_absolute_gap"),
                         options.get_double("mip_relative_gap") * scale);
   }
-  if (!(std::fabs(s.objective - expected) <= allowed)) return mismatch(exactly);
+  if (!(std::fabs(s.objective - expected) <= allowed)) {
+    return mismatch("a wrong objective reported optimal", exactly);
+  }
   const double sense = rich.maximize ? -1.0 : 1.0;
   if (!(sense * (s.dual_bound - expected) <= 1e-6 * scale)) {
-    return mismatch("the dual bound passes the optimum: " + exactly);
+    return mismatch("dual bound", "the dual bound passes the optimum: " + exactly);
   }
   if (const std::string bad = point_violation(model, s); !bad.empty()) {
-    return mismatch(bad + "; " + exactly);
+    return mismatch("returned point", bad + "; " + exactly);
   }
   if (!rich.has_integers() && s.row_dual.size() == static_cast<std::size_t>(model.num_rows()) &&
       s.col_dual.size() == static_cast<std::size_t>(model.num_cols())) {
     v.duals_checked = true;
     if (const std::string bad = dual_violation(model, s, expected); !bad.empty()) {
-      return mismatch(bad + "; " + exactly);
+      return mismatch("returned duals", bad + "; " + exactly);
     }
   }
   return v;
@@ -297,7 +307,7 @@ Tally sweep(const std::string& title, std::uint64_t seed, int count,
             const std::function<Choice(std::mt19937_64&)>& choose) {
   std::mt19937_64 rng = seeded(seed);
   Tally tally;
-  int printed = 0;
+  std::map<std::string, int> kinds;
   for (int trial = 0; trial < count; ++trial) {
     const Family& family = families[static_cast<std::size_t>(trial) % families.size()];
     const RichModel rich = random_rich(rng, family.config);
@@ -315,17 +325,16 @@ Tally sweep(const std::string& title, std::uint64_t seed, int count,
       continue;
     }
     ++tally.mismatched;
-    if (printed++ >= 3) continue;
-    // Reduced under the same options, to a model that still fails for a reason of the
-    // solver's (a harness failure is printed as drawn).
-    const bool harness = v.why.rfind("HARNESS", 0) == 0;
+    // The first two of each kind are printed, reduced under the same options to a model
+    // that still fails in the same way (a harness failure is printed as drawn).
+    if (++kinds[v.kind] > 2) continue;
     const RichModel small =
-        harness ? rich : shrink(rich, [&choice](const RichModel& candidate) {
+        v.kind == "HARNESS" ? rich : shrink(rich, [&](const RichModel& candidate) {
           const Verdict again = judge(candidate, choice.options, choice.certifies);
-          return again.outcome == Outcome::kMismatched && again.why.rfind("HARNESS", 0) != 0;
+          return again.outcome == Outcome::kMismatched && again.kind == v.kind;
         });
-    std::cout << "\n--- MISMATCH: " << title << ", family " << family.name << ", trial "
-              << trial << ", options: " << text(choice.options) << " ---\n"
+    std::cout << "\n--- MISMATCH (" << v.kind << "): " << title << ", family " << family.name
+              << ", trial " << trial << ", options: " << text(choice.options) << " ---\n"
               << v.why << "\nreduced to:\n"
               << small.to_text() << "where "
               << judge(small, choice.options, choice.certifies).why << "\nas drawn:\n"
@@ -339,6 +348,7 @@ Tally sweep(const std::string& title, std::uint64_t seed, int count,
             << "  oracle abstained    " << tally.abstained << "\n"
             << "  duals certified     " << tally.duals_checked << "\n"
             << "  MISMATCHED          " << tally.mismatched << "\n";
+  for (const auto& [kind, times] : kinds) std::cout << "    " << kind << ": " << times << "\n";
   return tally;
 }
 
