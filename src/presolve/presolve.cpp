@@ -1734,8 +1734,16 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
   const bool probe_always = options.get_bool("presolve_probing");
   const double fixed_share = options.get_double("presolve_probing_fixed_share");
   if ((probe_always || fixed_share > 0.0) && reduced.has_integrality()) {
-    probing =
-        probe_binaries(reduced, reduced.col_lower, reduced.col_upper, tol::kProbingWorkLimit);
+    const auto diag_work = static_cast<std::int64_t>(
+        options.get_double("diag_probing_work_scale") *
+        static_cast<double>(tol::kProbingWorkLimit));  // DIAG
+    const Timer diag_clock;                            // DIAG
+    probing = probe_binaries(reduced, reduced.col_lower, reduced.col_upper, diag_work);
+    logger.verbose(
+        "  presolve: DIAG probing round 1: {} probed, {} fixed, {} tightened, limit reached {}, "
+        "{:.2f}s",
+        probing.probed, probing.fixings, probing.tightenings, probing.work_limit_reached,
+        diag_clock.elapsed_seconds());
     const Index integers = reduced.num_integer_columns();
     if (!probe_always && !probing.infeasible &&
         static_cast<double>(probing.fixings) <
@@ -1757,8 +1765,13 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       Count found = probing.fixings;
       for (Count round = 1; round < rounds && found > 0 && !probing.work_limit_reached;
            ++round) {
-        ProbingResult again = probe_binaries(reduced, probing.col_lower, probing.col_upper,
-                                             tol::kProbingWorkLimit);
+        ProbingResult again =
+            probe_binaries(reduced, probing.col_lower, probing.col_upper, diag_work);
+        logger.verbose(
+            "  presolve: DIAG probing round {}: {} probed, {} fixed, {} tightened, limit "
+            "reached {}, {:.2f}s since round 1",
+            round + 1, again.probed, again.fixings, again.tightenings, again.work_limit_reached,
+            diag_clock.elapsed_seconds());
         probing.probed += again.probed;
         if (again.infeasible) {
           probing.infeasible = true;

@@ -478,6 +478,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"diag_probing_work_scale", OptionType::Double, 1.0,
+                 "DIAG, not for merge.", 0.0, 1e9, {}});
     s.push_back({"presolve_probing_fixed_share",
                  OptionType::Double,
                  tol::kProbingFixedShare,
