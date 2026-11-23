@@ -285,6 +285,17 @@ void dual_box(const Work& w, std::vector<double>* y_lo, std::vector<double>* y_h
 bool reduce_columns(Work* w, double dual_tolerance, DualReduceResult* out) {
   std::vector<double> y_lo, y_hi;
   dual_box(*w, &y_lo, &y_hi);
+  // AN EMPTY BOX IS NOT A BOX (#1337). y_lo > y_hi on a row says no y is dual feasible: the
+  // LP has no optimum, it is unbounded or infeasible, and which of the two is the engine's
+  // to find on the model as it stands (nothing here has shown a feasible point). The ranges
+  // below are read off the intervals, and off an inverted one they are not ranges: with
+  // y <= 0 from the row and y >= 1/4 from a singleton with no lower bound, a column of the
+  // row came out "negative over the box" and was fixed at its upper bound, the one bound
+  // that kept an unbounded LP bounded, and the engine then called that optimal. The bounds
+  // only ever tighten, so an interval inverted anywhere in the propagation still is here.
+  for (std::size_t i = 0; i < y_lo.size(); ++i) {
+    if (y_lo[i] > y_hi[i]) return false;
+  }
   bool changed = false;
   const auto n = static_cast<Index>(w->cols.size());
   for (Index j = 0; j < n; ++j) {

@@ -41,6 +41,10 @@
 // the bounds the reduced model's duals are held to survive the removals, and the free
 // columns are never removed at all. Postsolve puts the column at its bound, nonbasic; the
 // reduced costs of the stage's input are then c - A^T y.
+// The box can come out empty, y_lo > y_hi on some row: then no y is dual feasible, the LP
+// is unbounded or infeasible, and no column is fixed (#1337). With a box that is not empty
+// the fixing is safe on such an LP too: the fixed column's own dual constraint holds over
+// the whole box, so removing it leaves the set of dual feasible y as it was, empty.
 //
 // LP only, and nothing is done unless a reduction fires.
 #pragma once
