@@ -247,12 +247,13 @@ TEST(FuzzDualReduce, KktInstancesKeepTheirOptimum) {
   EXPECT_GT(fired, 100) << "the generator stopped producing forcing rows and dominated columns";
 }
 
-TEST(FuzzDualReduce, AnEmptyDualBoxFixesNoColumn) {
-  // #1337, three models the general-form fuzz (#1334) reduced, all exactly unbounded. In
-  // each a row's dual is boxed from both sides by its row type, a column singleton and the
-  // free columns, and the two sides cross. The stage fixed a column off the crossed
-  // interval, the LP became bounded, and the answer came back `feasible` (a wrong `optimal`
-  // the status guard caught) where it is `unbounded` with the stage off.
+TEST(FuzzDualReduce, NoColumnIsFixedOnAnLpWithNoDualFeasiblePoint) {
+  // #1337, six models the general-form fuzz (#1334) reduced, all exactly unbounded, so
+  // none has a dual feasible point. In the first three a row's dual is boxed from both
+  // sides by its row type, a column singleton and the free columns, and the two sides
+  // cross. The stage fixed a column off the crossed interval, the LP became bounded, and
+  // the answer came back `feasible` (a wrong `optimal` the status guard caught) where it is
+  // `unbounded` with the stage off.
   struct Lp {
     std::vector<std::vector<double>> rows;
     std::vector<double> row_lower, row_upper, cost, col_lower, col_upper;
@@ -280,6 +281,29 @@ TEST(FuzzDualReduce, AnEmptyDualBoxFixesNoColumn) {
        {0, 0, 4},
        {-inf, -inf, -inf},
        {inf, inf, 701}},
+      // The next three have a box that is NOT empty, and a singleton whose own bound the
+      // free columns carried back onto its row tighter than it went in.
+      // min -6 x2: 3/8 x0 - 2 x1 + x2/4 <= 175/8, -6 x0 + 4 x1 <= -8; x2 >= -2.
+      {{{0.375, -2, 0.25}, {-6, 4, 0}},
+       {-inf, -inf},
+       {21.875, -8},
+       {0, 0, -6},
+       {-inf, -inf, -2},
+       {inf, inf, inf}},
+      // min 4 x1 - 4 x2: -2 x1 + 4 x2 <= -18, -3 x0 + 5 x1 - 3/8 x2 = 845/16; x0 <= -1.
+      {{{0, -2, 4}, {-3, 5, -0.375}},
+       {-inf, 52.8125},
+       {-18, 52.8125},
+       {0, 4, -4},
+       {-inf, -inf, -inf},
+       {-1, inf, inf}},
+      // min -3 x1: -2 x0 - 5 x1 + x2/2 >= -21, -5/2 x0 + x2 <= -8; x1 >= 2.
+      {{{-2, -5, 0.5}, {-2.5, 0, 1}},
+       {-21, -inf},
+       {inf, -8},
+       {0, -3, 0},
+       {-inf, 2, -inf},
+       {inf, inf, inf}},
   };
   Options probe;
   probe.set_bool("log_to_console", false);
@@ -304,7 +328,7 @@ TEST(FuzzDualReduce, AnEmptyDualBoxFixesNoColumn) {
     model.matrix.finalize();
     ASSERT_EQ(model.validate(), "");
     EXPECT_EQ(presolve::dual_reduce(model, probe, logger).dominated_columns, 0)
-        << "model " << k << ": a column was fixed off an empty dual box";
+        << "model " << k << ": a column was fixed on an LP with no dual feasible point";
     for (const bool stage : {false, true}) {
       const Solution s = solve_with(model, stage);
       EXPECT_EQ(s.status, SolveStatus::kUnbounded)

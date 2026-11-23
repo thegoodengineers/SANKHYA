@@ -36,15 +36,23 @@
 // containing every dual feasible y. A column j with l_j finite whose reduced cost is positive
 // over the whole box, c_j - max sum a_ij y_i > 0, has d_j > 0 at every optimum, so x_j = l_j
 // there by complementary slackness; symmetrically x_j = u_j when the reduced cost is negative
-// over the box. Only singletons and free columns feed the box: the source that bounds a row
-// tightest is never itself dominated (its own reduced cost is exactly zero at that bound), so
-// the bounds the reduced model's duals are held to survive the removals, and the free
-// columns are never removed at all. Postsolve puts the column at its bound, nonbasic; the
-// reduced costs of the stage's input are then c - A^T y.
-// The box can come out empty, y_lo > y_hi on some row: then no y is dual feasible, the LP
-// is unbounded or infeasible, and no column is fixed (#1337). With a box that is not empty
-// the fixing is safe on such an LP too: the fixed column's own dual constraint holds over
-// the whole box, so removing it leaves the set of dual feasible y as it was, empty.
+// over the box. Only singletons and free columns feed the box, and the free columns are
+// never removed. Postsolve puts the column at its bound, nonbasic; the reduced costs of the
+// stage's input are then c - A^T y.
+//
+// WHAT MAKES THE FIXING SAFE (#1337). Fixing x_j removes its dual constraint, so the claim
+// "the reduced cost keeps its sign over the box" has to hold over a box that does not rest
+// on that constraint. Then the constraint was implied by the others, the set of dual
+// feasible y is the same with the column fixed, and an LP that had no optimum (unbounded or
+// infeasible) still has none. Two things can break it, and both did:
+//   * The box can come out empty, y_lo > y_hi on some row. Then no y is dual feasible and
+//     nothing read off the intervals is a range. No column is fixed.
+//   * A singleton with a bound missing is itself a source of the box, and the free columns
+//     carry its bound round and back onto its own row. It is tested against its row's bound
+//     from the row type and the other singletons alone, so it is fixed only when another
+//     source bounds the row strictly tighter than it does. That also means a fixing never
+//     removes the tightest source of a row, so the bounds the reduced model's duals are held
+//     to survive the removals.
 //
 // LP only, and nothing is done unless a reduction fires.
 #pragma once
