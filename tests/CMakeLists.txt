@@ -153,6 +153,7 @@ add_executable(sankhya_tests
   unit/test_cut_filter_policy.cpp
   unit/test_presolve_parallel_rows.cpp
   unit/test_presolve_scaled.cpp
+  unit/test_presolve_narrow_box.cpp
   unit/test_prescale.cpp
   unit/test_scaled_resolve.cpp
   unit/test_presolve_probing.cpp
