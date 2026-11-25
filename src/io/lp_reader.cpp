@@ -81,15 +81,27 @@ bool LpParser::lex(const std::string& path, std::string* error) {
            std::isdigit(static_cast<unsigned char>(line[i + 1])) != 0)) {
         const char* begin = line.c_str() + i;
         char* end = nullptr;
-        const double value = std::strtod(begin, &end);
-        if (end == begin) {
+        double value = std::strtod(begin, &end);
+        auto length = static_cast<std::size_t>(end - begin);
+        // "0x1" is the coefficient 0 written against the variable x1, not a number: the format
+        // has no hexadecimal ("a variable name cannot begin with a number or a period", and
+        // "1x1 + 2x2" is its own example of a coefficient written against its variable; CPLEX
+        // LP file format, syntax rules). strtod has read 0x1 as 1 and 0xA as 10 since C99
+        // (7.20.1.3), which deleted the term and moved the value to the right-hand side, or
+        // into the objective's offset. From a digit or a point the 0x prefix is the only
+        // non-decimal form strtod takes, so stopping after the zero is the whole guard.
+        if (c == '0' && i + 1 < line.size() && (line[i + 1] == 'x' || line[i + 1] == 'X')) {
+          value = 0.0;
+          length = 1;
+        }
+        if (length == 0) {
           *error = fmt::format("{}:{}: cannot parse a number", path, line_number);
           return false;
         }
         tok.kind = TokKind::kNumber;
         tok.value = value;
-        tok.text.assign(begin, static_cast<std::size_t>(end - begin));
-        i += static_cast<std::size_t>(end - begin);
+        tok.text.assign(begin, length);
+        i += length;
       } else if (ident_start(c)) {
         const std::size_t start = i;
         while (i < line.size() && ident_body(line[i])) ++i;
