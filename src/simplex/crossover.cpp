@@ -15,7 +15,6 @@
 #include <fmt/format.h>
 
 #include "../util/profiler.hpp"
-#include "core/kkt_check.hpp"
 #include "la/lu.hpp"
 #include "primal_simplex.hpp"
 #include "sankhya/tolerances.hpp"
@@ -475,6 +474,12 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
                                    control, timer);
 }
 
+bool vertex_gives_way(const Model& model, const Solution& interior, const Solution& vertex,
+                      KktVerdict* at_vertex) {
+  *at_vertex = check_lp_optimality(model, vertex);
+  return !at_vertex->passed && check_lp_optimality(model, interior).passed;
+}
+
 Solution crossover_push_from_basis(const Model& model, Solution interior, WarmStart warm,
                                    const Options& options, Logger& logger,
                                    SolveControl* control, const Timer& timer) {
@@ -544,25 +549,23 @@ Solution crossover_push_from_basis(const Model& model, Solution interior, WarmSt
   // from (Megiddo, "On finding primal- and dual-optimal bases", ORSA J. Computing 3(1), 1991;
   // Bixby & Saltzman, "Recovering an optimal LP basis from an interior point solution", Oper.
   // Res. Lett. 15(4), 1994). The simplex calls its vertex optimal at its own tolerances, and on
-  // Mittelmann's s100 that vertex then failed strong duality at the verifier's 1e-9 where the
-  // interior point's answer it replaced did not (mittelmann-2e53805.csv). Both are judged by
+  // Mittelmann's s100 that vertex then failed strong duality at the verifier's 1e-9 and the
+  // solve ended feasible (mittelmann-2e53805.csv), where the interior point's own answer is
+  // optimal and verified (crossover=false, bench.yml run 45523557462). Both are judged by
   // the in-process copy of the verifier's checks (core/kkt_check.hpp); when the vertex fails
   // and the interior point's answer passes, the latter stands, without a basis, exactly as when
   // the crossover runs out of time.
-  if (from_optimal) {
-    const KktVerdict at_vertex = check_lp_optimality(model, vertex);
-    if (!at_vertex.passed && check_lp_optimality(model, interior).passed) {
-      interior.message += fmt::format(
-          "; crossover reached a vertex after {} pivots ({:.2f}s) that fails the {} check "
-          "({}) where the interior point's answer passes, so the interior point's answer "
-          "stands",
-          pivot_count, pivot_clock.elapsed_seconds(), at_vertex.check, at_vertex.detail);
-      logger.warning(
-          "Crossover: the vertex fails the {} check where the interior point's answer passes; "
-          "keeping the interior point's answer",
-          at_vertex.check);
-      return interior;
-    }
+  KktVerdict at_vertex;
+  if (from_optimal && vertex_gives_way(model, interior, vertex, &at_vertex)) {
+    interior.message += fmt::format(
+        "; crossover reached a vertex after {} pivots ({:.2f}s) that fails the {} check ({}) "
+        "where the interior point's answer passes, so the interior point's answer stands",
+        pivot_count, pivot_clock.elapsed_seconds(), at_vertex.check, at_vertex.detail);
+    logger.warning(
+        "Crossover: the vertex fails the {} check where the interior point's answer passes; "
+        "keeping the interior point's answer",
+        at_vertex.check);
+    return interior;
   }
   vertex.iterations += interior.iterations;
   vertex.algorithm = interior.algorithm + "+crossover";
