@@ -475,9 +475,9 @@ Solution crossover_to_vertex(const Model& model, Solution interior, const Option
 }
 
 bool vertex_gives_way(const Model& model, const Solution& interior, const Solution& vertex,
-                      KktVerdict* at_vertex) {
-  *at_vertex = check_lp_optimality(model, vertex);
-  return !at_vertex->passed && check_lp_optimality(model, interior).passed;
+                      const KktTolerances& tolerances, KktVerdict* at_vertex) {
+  *at_vertex = check_lp_optimality(model, vertex, tolerances);
+  return !at_vertex->passed && check_lp_optimality(model, interior, tolerances).passed;
 }
 
 Solution crossover_push_from_basis(const Model& model, Solution interior, WarmStart warm,
@@ -555,8 +555,12 @@ Solution crossover_push_from_basis(const Model& model, Solution interior, WarmSt
   // the in-process copy of the verifier's checks (core/kkt_check.hpp); when the vertex fails
   // and the interior point's answer passes, the latter stands, without a basis, exactly as when
   // the crossover runs out of time.
+  // At the tolerances the status guard in solve() judges the answer by.
+  KktTolerances tolerances;
+  tolerances.primal = options.get_double("primal_feasibility_tolerance");
+  tolerances.dual = options.get_double("dual_feasibility_tolerance");
   KktVerdict at_vertex;
-  if (from_optimal && vertex_gives_way(model, interior, vertex, &at_vertex)) {
+  if (from_optimal && vertex_gives_way(model, interior, vertex, tolerances, &at_vertex)) {
     interior.message += fmt::format(
         "; crossover reached a vertex after {} pivots ({:.2f}s) that fails the {} check ({}) "
         "where the interior point's answer passes, so the interior point's answer stands",
