@@ -105,6 +105,22 @@ TEST(EmptyIntegralRow, TheRoundingNamesTheRowAndItsBoundsAsGiven) {
   EXPECT_EQ(mip::tighten_integral_rows(&dust, logger).empty_row, -1);
 }
 
+TEST(EmptyIntegralRow, ARowThatArrivesCrossedIsNotCalledEmpty) {
+  // #1350: x - y in [1, 1 - 9e-16], the equality x - y = 1 as a parallel-row merge wrote
+  // it. The integer 1 is where both bounds are, to rounding; the rounding moves neither of
+  // them, so the crossing is not its finding and proves nothing. The row stays as given,
+  // for validate() to refuse.
+  Logger logger(nullptr);
+  const double below_one = 0.9999999999999991;
+  Model crossed = one_row({1.0, -1.0}, 0.0, 2.0, {0.0, 0.0}, {5.0, 5.0}, {true, true});
+  crossed.row_lower[0] = 1.0;
+  crossed.row_upper[0] = below_one;
+  EXPECT_EQ(mip::tighten_integral_rows(&crossed, logger).empty_row, -1);
+  EXPECT_EQ(crossed.row_lower[0], 1.0);
+  EXPECT_EQ(crossed.row_upper[0], below_one);
+  EXPECT_NE(crossed.validate(), "");
+}
+
 TEST(EmptyIntegralRow, ARowWithAnIntegerInItsBoundsStillSolves) {
   // The control: 0.2 <= x - y <= 1.8 is x - y = 1, and min x + y is then 1 at (1, 0).
   Model model = one_row({1.0, -1.0}, 0.2, 1.8, {0.0, 0.0}, {5.0, 5.0}, {true, true});
