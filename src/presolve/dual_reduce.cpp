@@ -185,9 +185,20 @@ bool reduce_rows(Work* w, double feasibility, DualReduceResult* out) {
   return changed;
 }
 
+/// What the row types and the column singletons say of each row's dual, before the free
+/// columns propagate it, and the same with the tightest singleton left out: the box a
+/// singleton is tested against is the one that does not rest on that singleton
+/// (reduce_columns).
+struct SingletonBounds {
+  std::vector<double> lo, hi;            ///< row type and every singleton
+  std::vector<double> lo_else, hi_else;  ///< without the singleton that set lo (hi)
+  std::vector<Index> lo_from, hi_from;   ///< that singleton, or -1
+};
+
 /// The box [y_lo, y_hi] every dual feasible y lies in (dual_reduce.hpp), from the row
 /// types, the column singletons and the free columns.
-void dual_box(const Work& w, std::vector<double>* y_lo, std::vector<double>* y_hi) {
+void dual_box(const Work& w, std::vector<double>* y_lo, std::vector<double>* y_hi,
+              SingletonBounds* singletons) {
   const auto m = static_cast<Index>(w.rows.size());
   const auto n = static_cast<Index>(w.cols.size());
   y_lo->assign(static_cast<std::size_t>(m), -kInfinity);
@@ -203,12 +214,29 @@ void dual_box(const Work& w, std::vector<double>* y_lo, std::vector<double>* y_h
   // A live column j with u_j = +inf says sum a_ij y_i <= c_j, with l_j = -inf >= c_j. The
   // singletons bound their one row outright; the free columns are run as the equality
   // sum a_ij y_i = c_j, each term bounded from the others', for a few rounds.
-  const auto tighten = [&](Index i, double bound, bool upper) {
+  singletons->lo_else = *y_lo;
+  singletons->hi_else = *y_hi;
+  singletons->lo_from.assign(static_cast<std::size_t>(m), -1);
+  singletons->hi_from.assign(static_cast<std::size_t>(m), -1);
+  // The tightest bound on each side, the column it came from, and what the side was
+  // without that column: the previous tightest, row type included.
+  const auto tighten = [&](Index i, double bound, bool upper, Index from) {
     const auto ui = static_cast<std::size_t>(i);
-    if (upper)
-      (*y_hi)[ui] = std::min((*y_hi)[ui], bound);
-    else
-      (*y_lo)[ui] = std::max((*y_lo)[ui], bound);
+    if (upper) {
+      if (bound < (*y_hi)[ui]) {
+        singletons->hi_else[ui] = (*y_hi)[ui];
+        (*y_hi)[ui] = bound;
+        singletons->hi_from[ui] = from;
+      } else {
+        singletons->hi_else[ui] = std::min(singletons->hi_else[ui], bound);
+      }
+    } else if (bound > (*y_lo)[ui]) {
+      singletons->lo_else[ui] = (*y_lo)[ui];
+      (*y_lo)[ui] = bound;
+      singletons->lo_from[ui] = from;
+    } else {
+      singletons->lo_else[ui] = std::max(singletons->lo_else[ui], bound);
+    }
   };
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
@@ -220,10 +248,12 @@ void dual_box(const Work& w, std::vector<double>* y_lo, std::vector<double>* y_h
       if (w.row_dead[static_cast<std::size_t>(i)] != 0) continue;
       const double bound = w.cost[u] / a;
       // a y <= c: y <= c/a when a > 0, y >= c/a when a < 0; a y >= c the other way round.
-      if (no_upper) tighten(i, bound, a > 0.0);
-      if (no_lower) tighten(i, bound, a < 0.0);
+      if (no_upper) tighten(i, bound, a > 0.0, j);
+      if (no_lower) tighten(i, bound, a < 0.0, j);
     }
   }
+  singletons->lo = *y_lo;
+  singletons->hi = *y_hi;
   for (int round = 0; round < kDualPropagationRounds; ++round) {
     bool moved = false;
     for (Index j = 0; j < n; ++j) {
@@ -284,20 +314,53 @@ void dual_box(const Work& w, std::vector<double>* y_lo, std::vector<double>* y_h
 /// Dominated columns over the live columns; true when one was fixed.
 bool reduce_columns(Work* w, double dual_tolerance, DualReduceResult* out) {
   std::vector<double> y_lo, y_hi;
-  dual_box(*w, &y_lo, &y_hi);
+  SingletonBounds singletons;
+  dual_box(*w, &y_lo, &y_hi, &singletons);
+  // AN EMPTY BOX IS NOT A BOX (#1337). y_lo > y_hi on a row says no y is dual feasible: the
+  // LP has no optimum, it is unbounded or infeasible, and which of the two is the engine's
+  // to find on the model as it stands (nothing here has shown a feasible point). The ranges
+  // below are read off the intervals, and off an inverted one they are not ranges: with
+  // y <= 0 from the row and y >= 1/4 from a singleton with no lower bound, a column of the
+  // row came out "negative over the box" and was fixed at its upper bound, the one bound
+  // that kept an unbounded LP bounded, and the engine then called that optimal. The bounds
+  // only ever tighten, so an interval inverted anywhere in the propagation still is here.
+  for (std::size_t i = 0; i < y_lo.size(); ++i) {
+    if (y_lo[i] > y_hi[i]) return false;
+  }
   bool changed = false;
   const auto n = static_cast<Index>(w->cols.size());
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
     if (w->col_dead[u] != 0 || w->col_count[u] == 0) continue;
     // d_j = c_j - sum a_ij y_i over the box: [d_lo, d_hi].
+    //
+    // A SINGLETON WITH A BOUND MISSING IS TESTED WITHOUT ITS OWN WORD (#1337). Fixing x_j
+    // removes its dual constraint, so the box the fixing rests on must hold without that
+    // constraint. For every other column it does: the box is built from the singletons and
+    // the free columns, which stay. Such a singleton is one of the box's sources, and the
+    // free columns carry its bound round and back onto its own row tighter than it went in:
+    // with y0 <= -24 from x2 >= -2 (cost -6, coefficient 1/4), and free columns saying
+    // y0 = 16 y1 and y0 = 2 y1, the rounds gave y0 <= -192, x2 came out "positive over the
+    // box" and was fixed at -2. Without x2's constraint y = 0 is dual feasible: the LP with
+    // x2 fixed is bounded, the LP as given is not, and the engine called the first optimal.
+    // So such a column is read against its row's bound from the row type and the OTHER
+    // singletons only, with no propagation. It is then fixed only when another source bounds
+    // its row strictly tighter than it does, so no fixing ever loosens the box.
+    const bool source =
+        w->col_count[u] == 1 && (!finite(w->col_lower[u]) || !finite(w->col_upper[u]));
     double d_lo = w->cost[u], d_hi = w->cost[u];
     bool lo_finite = true, hi_finite = true;
     for (const auto& [i, a] : w->cols[u]) {
       const auto ui = static_cast<std::size_t>(i);
       if (w->row_dead[ui] != 0) continue;
-      const double term_max = a > 0.0 ? y_hi[ui] : y_lo[ui];  // of a y_i
-      const double term_min = a > 0.0 ? y_lo[ui] : y_hi[ui];
+      double lo = y_lo[ui];
+      double hi = y_hi[ui];
+      if (source) {
+        lo = singletons.lo_from[ui] == j ? singletons.lo_else[ui] : singletons.lo[ui];
+        hi = singletons.hi_from[ui] == j ? singletons.hi_else[ui] : singletons.hi[ui];
+      }
+      const double term_max = a > 0.0 ? hi : lo;  // of a y_i
+      const double term_min = a > 0.0 ? lo : hi;
       if (finite(term_max))
         d_lo -= a * term_max;
       else
