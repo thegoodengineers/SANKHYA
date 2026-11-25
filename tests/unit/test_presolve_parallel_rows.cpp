@@ -154,6 +154,51 @@ TEST(PresolveParallelRows, CrossedBoundsAreLeftForTheEngine) {
   EXPECT_EQ(solved.status, SolveStatus::kInfeasible) << solved.message;
 }
 
+TEST(PresolveParallelRows, BoundsThatMeetToRoundingMergeIntoAnEqualityNotACrossedRow) {
+  // #1350. x0/10 - x1/2 + x2 <= 97/20 and -3 times it <= -291/20 are one equality. The
+  // scale is -0.3 / 0.1 = -2.9999999999999996 and -14.55 divided by it is one ulp above
+  // 4.85, so the merged row was written with its lower bound above its upper. x1 is an
+  // integer column so that the row stays in the reduced model (a free continuous x1 would
+  // be substituted away with it).
+  Model first = build({{0.1, -0.5, 1.0}, {-0.3, 1.5, -3.0}}, {-kInf, -kInf}, {4.85, -14.55},
+                      {0, 0, 0}, {-kInf, -kInf, -kInf}, {8, kInf, 6});
+  first.col_type[1] = VarType::kInteger;
+  const presolve::Result reduced = reduce(first, true);
+  EXPECT_EQ(reduced.report.parallel_rows, 1);
+  EXPECT_EQ(reduced.model.num_rows(), 1);
+  EXPECT_EQ(reduced.model.validate(), "");
+  for (Index i = 0; i < reduced.model.num_rows(); ++i) {
+    const auto u = static_cast<std::size_t>(i);
+    EXPECT_LE(reduced.model.row_lower[u], reduced.model.row_upper[u]) << "row " << i;
+  }
+
+  // The two models the general-form fuzz (#1334) reduced, as MILPs: the first came back
+  // model_error from the search's validate(), the second infeasible from the integral-row
+  // rounding, which read the crossed row [1, 1 - 9e-16] as holding no integer. Both have
+  // points; the objective is zero.
+  // x0 - 3 x2 + x3 >= -17, -x1 + x2/2 >= 0, 2/3 x0 + 5/8 x1 + x2 + 2/3 x3 <= 205/24, with
+  // x1 = 3, x2 <= 6, x0 and x3 integer: x2 = 6 and x0 + x3 = 1.
+  Model second = build({{1, 0, -3, 1}, {0, -1, 0.5, 0}, {2.0 / 3.0, 0.625, 1, 2.0 / 3.0}},
+                       {-17, 0, -kInf}, {kInf, kInf, 205.0 / 24.0}, {0, 0, 0, 0},
+                       {-kInf, 3, -kInf, -kInf}, {kInf, 3, 6, kInf});
+  second.col_type[0] = VarType::kInteger;
+  second.col_type[3] = VarType::kInteger;
+  for (const Model* milp : {&first, &second}) {
+    const Solution solved = solve(*milp, with_parallel_rows(true));
+    ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+    EXPECT_NEAR(solved.objective, 0.0, 1e-9);
+  }
+}
+
+TEST(PresolveParallelRows, BoundsThatCrossBeyondTheToleranceInEitherRowsUnitsAreLeft) {
+  // x0 + x1 >= 4 against 1000 (x0 + x1) <= 3999.99996: the bounds cross by 4e-8 in the
+  // first row's units, inside 1e-7, and by 4e-5 in the second's, outside it. Merging them
+  // into an equality at 4 would leave the second row violated by 4e-5, so they are left.
+  const Model model =
+      build({{1, 1}, {1000, 1000}}, {4.0, -kInf}, {kInf, 3999.99996}, {1, 1}, {0, 0}, {10, 10});
+  EXPECT_EQ(reduce(model, true).report.parallel_rows, 0);
+}
+
 /// `lp` with `extra` rows appended, each a scaled copy of an existing row with a bound of
 /// its own: a tighter lower bound for a positive scale, an upper bound for a negative one.
 oracle::GeneratedLp with_duplicates(const oracle::GeneratedLp& lp, std::mt19937_64& rng,
