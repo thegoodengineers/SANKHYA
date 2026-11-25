@@ -52,6 +52,9 @@ Model shaped_lp(Index rows, Index cols, Count nonzeros) {
 Options auto_options() {
   Options o;
   o.set_bool("log_to_console", false);
+  // The rule table and its fallbacks are under test. engine_race=auto would race the solves
+  // of the large shapes below on a machine with three cores (core/engine_race.hpp).
+  o.set_bool("engine_race", false);
   return o;
 }
 

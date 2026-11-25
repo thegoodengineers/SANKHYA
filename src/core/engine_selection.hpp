@@ -116,6 +116,17 @@ inline constexpr double kSimplexWorkCeiling = 3e8;
 inline constexpr double kNetworkNonzerosPerColumn = 4.0;
 inline constexpr Index kNetworkRowCeiling = 200000;
 
+/// The shape THE NETWORK RULE above keeps on the dual simplex, from the model's counts and
+/// the pattern bound on its normal equations (EngineFeatures::normal_equations_nnz_bound).
+/// The rule table and the engine race's size gate (core/engine_race.hpp) both ask this.
+[[nodiscard]] constexpr bool network_shaped(Index rows, Index columns, Count nonzeros,
+                                            double normal_equations_nnz_bound) {
+  return normal_equations_nnz_bound < kNormalEquationsCeiling && columns >= rows &&
+         rows < kNetworkRowCeiling &&
+         static_cast<double>(nonzeros) <
+             kNetworkNonzerosPerColumn * static_cast<double>(columns);
+}
+
 /// Decide the LP engine for `model` under `options`. An explicit `algorithm` other than
 /// "auto" is honoured as given (rule "requested"); a starting basis forces a simplex
 /// (rule "warm-start"), because only a simplex can use one.
