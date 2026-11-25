@@ -25,12 +25,14 @@ namespace sankhya::qp::ipm_detail {
 /// relative primal and dual residuals, has every multiplier of the right sign and every
 /// product under the in-process gate. `should_stop` is the solve's own clock: a round is not
 /// started once it says so, and the finish declines. Returns whether the point was replaced;
-/// on false the arguments are untouched.
+/// on false the arguments are untouched. `postpone_dense` orders the reduced system's dense
+/// nodes last, as qp_ipm_postpone_dense does for the interior point's own factorization.
 [[nodiscard]] bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
                                      const std::vector<bool>& has_upper, double tolerance,
                                      double primal_tolerance, double regularization_floor,
                                      const std::function<bool()>& should_stop,
                                      std::vector<double>* v, std::vector<double>* y,
-                                     std::vector<double>* zl, std::vector<double>* zu);
+                                     std::vector<double>* zl, std::vector<double>* zu,
+                                     bool postpone_dense = false);
 
 }  // namespace sankhya::qp::ipm_detail
