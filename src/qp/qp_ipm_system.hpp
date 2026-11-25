@@ -83,9 +83,10 @@ void refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
 
 /// The same correction by right-preconditioned GMRES instead of the stationary iteration: it
 /// minimizes ||rhs - K_0 x|| over x + K^{-1} Krylov(K_0 K^{-1}, r), at most
-/// tol::kQpIpmKrylovDimension vectors, and x is replaced only when the residual falls. It
-/// stops early once the residual is at rounding level, eps max(1, ||rhs||, ||rhs - K_0 x||).
+/// tol::kQpIpmKrylovDimension vectors, and x is replaced only when the residual falls. With
+/// `stop_at_rounding_floor` it stops early once the residual is at rounding level, eps max(1,
+/// ||rhs||, ||rhs - K_0 x||); for a K_0 whose row block has full row rank only.
 void refine_krylov(const SparseLdl& ldl, const SparseMatrix& k0, const std::vector<double>& rhs,
-                   std::vector<double>* x);
+                   std::vector<double>* x, bool stop_at_rounding_floor = false);
 
 }  // namespace sankhya::qp::ipm_detail

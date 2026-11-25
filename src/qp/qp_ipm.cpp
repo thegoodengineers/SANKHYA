@@ -454,9 +454,11 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     refine_unregularized(ldl, k0, rhs, &step);
     // #981: with qp_ipm_adaptive_dual_regularization the Krylov refinement joins once the
     // floor has been cut - only on a model whose step already failed to close the residual,
-    // so a large well-posed model (boyd2) never pays for it.
+    // so a large well-posed model (boyd2) never pays for it. It stops at the rounding floor
+    // when every row carries a slack (rows_full_rank, #1178): M'dy = 0 then has no solution
+    // but zero, so the residual it minimizes pins the multiplier step down (LISWET, yao).
     if (krylov_refinement || (adaptive_dual && dual_floor < regularization_floor)) {
-      refine_krylov(ldl, k0, rhs, &step);
+      refine_krylov(ldl, k0, rhs, &step, rows_full_rank);
     }
     for (std::size_t j = 0; j < nc; ++j) {
       dv[j] = step[j];

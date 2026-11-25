@@ -271,7 +271,7 @@ void refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
 // reaches |b - M v|, and the Newton step then leaves almost all of the primal residual
 // in place; GMRES is not held to a contraction factor below one.
 void refine_krylov(const SparseLdl& ldl, const SparseMatrix& k0, const std::vector<double>& rhs,
-                   std::vector<double>* x) {
+                   std::vector<double>* x, bool stop_at_rounding_floor) {
   const std::size_t n = rhs.size();
   const auto m = static_cast<std::size_t>(tol::kQpIpmKrylovDimension);
   std::vector<double> kx(n);
@@ -289,16 +289,21 @@ void refine_krylov(const SparseLdl& ldl, const SparseMatrix& k0, const std::vect
   if (!(beta > 0.0) || !std::isfinite(beta)) return;
   // The rotated right-hand side |g_{j+1}| is the residual norm of the j-th iterate at no cost
   // (Saad, Iterative Methods for Sparse Linear Systems, 2nd ed., 2003, sec. 6.5.3; under right
-  // preconditioning the true residual's, sec. 9.3.2), so the loop ends as soon as it reaches
-  // what a residual computed in double precision can resolve, the same eps max(1, |rhs|)
-  // floor refine_unregularized stops at (Arioli, Demmel & Duff, SIAM J. Matrix Anal. Appl. 10,
-  // 1989). Before, the only exit was eps * beta, which a step the stationary refinement
-  // already brought close to that floor never reaches, so every Newton solve paid all
-  // kQpIpmKrylovDimension inner steps.
-  double rhs_norm = 0.0;
-  for (const double value : rhs) rhs_norm += value * value;
-  const double floor =
-      std::numeric_limits<double>::epsilon() * std::max({1.0, beta, std::sqrt(rhs_norm)});
+  // preconditioning the true residual's, sec. 9.3.2). With `stop_at_rounding_floor` the loop
+  // ends as soon as it reaches what a residual computed in double precision can resolve, the
+  // same eps max(1, |rhs|) floor refine_unregularized stops at (Arioli, Demmel & Duff, SIAM J.
+  // Matrix Anal. Appl. 10, 1989). Without it the only exit is eps * beta, which a step the
+  // stationary refinement already brought close to that floor never reaches, so every Newton
+  // solve pays all kQpIpmKrylovDimension inner steps. The caller asks for the floor only when
+  // the row block M has full row rank (#1178): on a rank-deficient one no residual pins the
+  // multiplier step dy down, and stopping at the floor lost Maros-Meszaros qfffff80
+  // (bench.yml run 45539655689).
+  double floor = std::numeric_limits<double>::epsilon() * beta;
+  if (stop_at_rounding_floor) {
+    double rhs_norm = 0.0;
+    for (const double value : rhs) rhs_norm += value * value;
+    floor = std::numeric_limits<double>::epsilon() * std::max({1.0, beta, std::sqrt(rhs_norm)});
+  }
   std::vector<std::vector<double>> basis(m + 1, std::vector<double>(n));
   std::vector<std::vector<double>> hess(m + 1, std::vector<double>(m, 0.0));
   std::vector<double> cs(m), sn(m), g(m + 1, 0.0), w(n);
