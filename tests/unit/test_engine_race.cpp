@@ -377,12 +377,45 @@ TEST(EngineRace, TheLosersAreCancelledOnceTheWinnerIsAccepted) {
   EXPECT_TRUE(check_lp_optimality(model, s).passed);
 }
 
-TEST(EngineRace, IsOffByDefault) {
+TEST(EngineRace, IsOffByDefaultOnASmallModel) {
   const Model model = netlib("afiro");
   const Solution s = solve(model, quiet("auto"));
   ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
   EXPECT_NE(s.engine_rule, "race");
   EXPECT_EQ(s.message.find("engine race"), std::string::npos) << s.message;
+}
+
+/// A model of `rows` rows and `nonzeros` entries, one per column: the size gate reads only
+/// rows x nonzeros.
+Model sized(Index rows, Count nonzeros) {
+  Model m;
+  const auto cols = static_cast<Index>(nonzeros);
+  m.resize_columns(cols);
+  m.resize_rows(rows);
+  m.matrix.reset(rows, cols);
+  for (Index j = 0; j < cols; ++j) m.matrix.add_entry(j % rows, j, 1.0);
+  m.matrix.finalize();
+  return m;
+}
+
+TEST(EngineRace, AutoRacesOnlyTheCallersOwnSolveOfALargeLpOffTheNetworkRule) {
+  const Options automatic = quiet("auto");
+  const Model large = sized(20000, 15000);  // rows x nonzeros = 3e8, kSimplexWorkCeiling
+  const Model small = sized(20000, 14999);
+  EXPECT_TRUE(engine_race_applies(large, automatic, false, "size:ipm", true));
+  EXPECT_FALSE(engine_race_applies(small, automatic, false, "size:ipm", true));
+  EXPECT_FALSE(engine_race_applies(large, automatic, false, "network:dual-simplex", true));
+  EXPECT_FALSE(engine_race_applies(large, automatic, false, "size:ipm", false));  // nested
+  EXPECT_FALSE(engine_race_applies(large, automatic, true, "size:ipm", true));    // a basis
+  Options pinned = automatic;
+  pinned.set_string("algorithm", "ipm");
+  EXPECT_FALSE(engine_race_applies(large, pinned, false, "requested", true));
+  Options off = automatic;
+  off.set_bool("engine_race", false);
+  EXPECT_FALSE(engine_race_applies(large, off, false, "size:ipm", true));
+  Options on = automatic;
+  on.set_bool("engine_race", true);
+  EXPECT_TRUE(engine_race_applies(small, on, false, "network:dual-simplex", false));
 }
 
 }  // namespace
