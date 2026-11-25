@@ -156,6 +156,7 @@ add_executable(sankhya_tests
   unit/test_prescale.cpp
   unit/test_scaled_resolve.cpp
   unit/test_presolve_probing.cpp
+  unit/test_presolve_probing_activities.cpp
   unit/test_presolve_implied_integer.cpp
   unit/test_presolve_propagation.cpp
   unit/test_presolve_fill_in_pricing.cpp
