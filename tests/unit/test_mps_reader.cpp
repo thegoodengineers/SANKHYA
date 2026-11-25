@@ -21,6 +21,7 @@
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/qcqp.hpp"
 
 #include "support/temp_file.hpp"
 
@@ -1193,6 +1194,115 @@ TEST(MpsReader, AQuadraticConstraintSectionIsRefusedByName) {
   // ... and alone: the auto reader must not retry the other dialect and append its
   // tokenizer error to a verdict that was about the file, not the layout.
   EXPECT_EQ(error.find("also failed"), std::string::npos) << error;
+}
+
+// =========================================================================================
+// QSECTION names the row it belongs to, and a record may carry two entries
+// =========================================================================================
+//
+// QSECTION is MOSEK's section, and its header carries a label (MOSEK Optimizer API manual,
+// "The MPS file format", section QSECTION): "the label [cname1] must be a constraint name
+// previously specified in the ROWS section. The label [cname1] denotes the constraint to which
+// the quadratic terms belong" - the manual's own example writes the objective's as
+// `QSECTION obj`. A record is `[vname1] [vname2] [value1] [vname3] [value2]`, the last two
+// optional: "A record specifies one or two elements in the lower triangular part of the Q
+// matrix ... An optional second element is specified in the same way by the fields [vname1],
+// [vname3], and [value2]".
+
+TEST(MpsReader, AQsectionThatNamesAConstraintIsNotTheObjectivesHessian) {
+  // min -x - y subject to 0.5 (2 x^2 + 2 y^2) <= 1, x, y >= 0: optimum -sqrt(2) at
+  // x = y = 1/sqrt(2). Read as the objective's Hessian it is min -x - y + x^2 + y^2 with c1
+  // an empty row, optimum -0.5 at x = y = 0.5: a different model, solved and reported as this
+  // one. This reader takes a quadratic row as QCMATRIX; the section is refused by name.
+  const std::string text =
+      "NAME          QCSEC\n"
+      "ROWS\n"
+      " N  obj\n"
+      " L  c1\n"
+      "COLUMNS\n"
+      "    x         obj       -1.0\n"
+      "    y         obj       -1.0\n"
+      "RHS\n"
+      "    rhs       c1        1.0\n"
+      "QSECTION      c1\n"
+      "    x         x         2.0\n"
+      "    y         y         2.0\n"
+      "ENDATA\n";
+  const std::string error = parse_expecting_failure(text);
+  EXPECT_NE(error.find("QSECTION"), std::string::npos) << error;
+  EXPECT_NE(error.find("c1"), std::string::npos) << error;
+  EXPECT_EQ(error.find("also failed"), std::string::npos) << error;
+
+  // The reader that does take quadratic rows must not put it in the objective either.
+  const TempFile file(text);
+  QcqpModel qcqp;
+  const io::ReadResult result = io::read_qcqp_mps(file.path(), &qcqp);
+  EXPECT_FALSE(result.ok && qcqp.linear.has_quadratic_objective())
+      << "QSECTION c1 was read as the objective's Hessian";
+}
+
+TEST(MpsReader, AQsectionThatNamesTheObjectiveIsTheObjectivesHessian) {
+  const Model model = parse_or_fail(
+      "NAME          QOSEC\n"
+      "ROWS\n"
+      " N  obj\n"
+      " G  c1\n"
+      "COLUMNS\n"
+      "    x         obj       -1.0   c1        1.0\n"
+      "    y         obj       -1.0   c1        1.0\n"
+      "RHS\n"
+      "    rhs       c1        1.0\n"
+      "QSECTION      obj\n"
+      "    x         x         2.0\n"
+      "    y         y         2.0\n"
+      "ENDATA\n");
+  EXPECT_EQ(model.hessian.num_nonzeros(), 2);
+  EXPECT_DOUBLE_EQ(model.hessian.at(0, 0), 2.0);
+  EXPECT_DOUBLE_EQ(model.hessian.at(1, 1), 2.0);
+}
+
+TEST(MpsReader, AQuadraticRecordWithTwoEntriesKeepsBoth) {
+  // Q = [[2, -1], [-1, 2]] written on two records, the first carrying (x, x) and (x, y). At
+  // x = y = 1, 0.5 x'Qx = 0.5 (2 - 1 - 1 + 2) = 1; with the second entry of the record
+  // dropped it is 0.5 (2 + 2) = 2.
+  const Model model = parse_or_fail(
+      "NAME          QTWO\n"
+      "ROWS\n"
+      " N  obj\n"
+      " G  c1\n"
+      "COLUMNS\n"
+      "    x         obj       0.0    c1        1.0\n"
+      "    y         obj       0.0    c1        1.0\n"
+      "RHS\n"
+      "    rhs       c1        1.0\n"
+      "QSECTION      obj\n"
+      "    x         x         2.0            y         -1.0\n"
+      "    y         y         2.0\n"
+      "ENDATA\n");
+  EXPECT_EQ(model.hessian.num_nonzeros(), 3);
+  EXPECT_DOUBLE_EQ(model.hessian.at(0, 0), 2.0);
+  EXPECT_DOUBLE_EQ(model.hessian.at(1, 0), -1.0);
+  EXPECT_DOUBLE_EQ(model.hessian.at(1, 1), 2.0);
+  const std::vector<double> x{1.0, 1.0};
+  EXPECT_DOUBLE_EQ(model.evaluate_objective(x.data()), 1.0);
+}
+
+TEST(MpsReader, AQuadraticRecordWithAStrayFieldIsRejected) {
+  // Four fields, or more than five, is neither one entry nor two.
+  for (const char* record : {"    x         x         2.0            y\n",
+                             "    x         x         2.0            y         -1.0   y\n"}) {
+    const std::string error =
+        parse_expecting_failure(std::string("NAME          QBAD\n"
+                                            "ROWS\n"
+                                            " N  obj\n"
+                                            " G  c1\n"
+                                            "COLUMNS\n"
+                                            "    x         obj       0.0    c1        1.0\n"
+                                            "    y         obj       0.0    c1        1.0\n"
+                                            "QUADOBJ\n") +
+                                record + "ENDATA\n");
+    EXPECT_NE(error.find("field"), std::string::npos) << error;
+  }
 }
 
 }  // namespace

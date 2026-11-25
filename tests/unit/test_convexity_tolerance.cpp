@@ -15,11 +15,13 @@
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "sankhya/model.hpp"
+#include "sankhya/options.hpp"
 
 #include "qp/convexity.hpp"
 
@@ -268,6 +270,54 @@ TEST(ConvexityTolerance, ABilinearSaddleIsRefusedWithItsExactEigenvalue) {
   // two-column direction the refusal reports instead is the eigenvector, curvature exactly -1.
   const Model model = hessian_only({{0.0, 1.0}, {1.0, 0.0}});
   expect_refused(model, -1.0, -1.0 + 1e-12, "x0 * x1");
+}
+
+// =========================================================================================
+// Refused: curvature on one column, beside a large diagonal entry on another
+// =========================================================================================
+
+TEST(ConvexityTolerance, NegativeCurvatureDoesNotHideBehindALargeDiagonalElsewhere) {
+  // Q = diag(1e12, -0.5) has the eigenvalue -0.5. One shift for the whole matrix, measured
+  // against its largest diagonal entry, is 1e-12 * 1e12 = 1 here, and -0.5 + 1 is a positive
+  // pivot: the unrelated 1e12 on the first column is what hides the second column's
+  // curvature. Q = [-0.5] alone is refused.
+  expect_refused(hessian_only({{1e12, 0.0}, {0.0, -0.5}}), -0.5, -0.5 * (1.0 - 1e-9),
+                 "diag(1e12, -0.5)");
+  // Milder numbers, the same failure: a shift of 1e-3 over a curvature of -5e-4.
+  expect_refused(hessian_only({{1e9, 0.0}, {0.0, -5e-4}}), -5e-4, -5e-4 * (1.0 - 1e-9),
+                 "diag(1e9, -5e-4)");
+  // Not only a negative diagonal entry: [[1e-3, 1], [1, 1e-3]] has the eigenvalue 1e-3 - 1 and
+  // both of its diagonal entries are positive.
+  expect_refused(hessian_only({{1e12, 0.0, 0.0}, {0.0, 1e-3, 1.0}, {0.0, 1.0, 1e-3}}),
+                 1e-3 - 1.0, -0.99, "a saddle beside 1e12");
+}
+
+TEST(ConvexityTolerance, ASemidefiniteMatrixWithABadlyScaledDiagonalIsStillConvex) {
+  // The other direction: a diagonal spanning twelve orders of magnitude is not by itself a
+  // reason to refuse. v v^T with v = (1e6, 1) is semidefinite of rank one, and its second
+  // pivot is zero before the shift, whichever column is eliminated first.
+  expect_convex(hessian_only({{1e12, 1e6}, {1e6, 1.0}}), "v v^T, v = (1e6, 1)");
+  expect_convex(hessian_only({{1.0, 1e6}, {1e6, 1e12}}), "v v^T, v = (1, 1e6)");
+  expect_convex(hessian_only({{1e12, 0.0}, {0.0, 1e-13}}), "diag(1e12, 1e-13)");
+  expect_convex(hessian_only({{1e12, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 1.0}}),
+                "diag(1e12, 0, 1)");
+}
+
+TEST(ConvexityTolerance, ASaddleBesideALargeDiagonalIsNotSolvedAsConvex) {
+  // minimise 0.5 (1e12 x1^2 - 0.5 x2^2), -1 <= x1 <= 1, -100 <= x2 <= 100, no rows. The
+  // objective is separable: 5e11 x1^2 is least at x1 = 0, and -0.25 x2^2 is least at
+  // x2 = +-100, where it is -2500. The origin is a saddle point with objective 0; an engine
+  // that takes the model for convex stops there and calls it optimal.
+  Model model = hessian_only({{1e12, 0.0}, {0.0, -0.5}});
+  model.col_lower = {-1.0, -100.0};
+  model.col_upper = {1.0, 100.0};
+  Options options;
+  options.set_bool("log_to_console", false);
+  const Solution solution = solve(model, options);
+  EXPECT_EQ(solution.status, SolveStatus::kModelError)
+      << "status " << to_string(solution.status) << ", objective " << solution.objective << ": "
+      << solution.message;
+  EXPECT_NE(solution.message.find("not convex"), std::string::npos) << solution.message;
 }
 
 }  // namespace
