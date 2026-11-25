@@ -275,7 +275,7 @@ double Simplex::wrong_signed_gap() const {
 // -----------------------------------------------------------------------------------------
 
 void Simplex::reset_dual_weights() {
-  leaving_heap_stale_ = true;
+  retire_leaving_queue();
   dual_weight_.assign(static_cast<std::size_t>(m_), 1.0);
   ++dual_weight_resets_;
   // Steepest edge starts from the truth where that is affordable (#411): the slack basis
@@ -286,7 +286,7 @@ void Simplex::reset_dual_weights() {
 }
 
 void Simplex::compute_exact_dual_weights() {
-  leaving_heap_stale_ = true;
+  retire_leaving_queue();
   dual_weight_ = exact_dual_weights_for_testing();
 }
 
@@ -316,7 +316,7 @@ double Simplex::slot_infeasibility(Index slot) const {
 }
 
 void Simplex::rebuild_infeasible_list() {
-  leaving_heap_stale_ = true;
+  retire_leaving_queue();
   infeasible_slots_.clear();
   slot_listed_.assign(static_cast<std::size_t>(m_), 0);
   slot_infeasibility_.assign(static_cast<std::size_t>(m_), 0.0);
@@ -345,12 +345,10 @@ void Simplex::queue_leaving_row(Index slot) {
   const auto s = static_cast<std::size_t>(slot);
   const double infeasibility = slot_infeasibility_[s];
   if (infeasibility == 0.0) return;  // an entry it had is dropped when it reaches the top
-  // Too many moves for this iteration, or as many dead entries as rows: the next choice
-  // scans and refills.
+  // Too many moves for this iteration, or as many dead entries as rows: back to the scan.
   const std::size_t ceiling = infeasible_slots_.size() + static_cast<std::size_t>(m_);
   if (++leaving_pushes_ > leaving_budget_ || leaving_heap_.size() > ceiling) {
-    leaving_heap_stale_ = true;
-    leaving_heap_.clear();
+    retire_leaving_queue();
     return;
   }
   const double score = infeasibility * infeasibility / dual_weight_[s];
@@ -360,7 +358,12 @@ void Simplex::queue_leaving_row(Index slot) {
 }
 
 Index Simplex::choose_leaving_row() {
-  if (leaving_heap_stale_) return scan_leaving_rows(true);
+  if (leaving_heap_stale_) {
+    const bool refill = leaving_scans_to_skip_ == 0;
+    if (!refill) --leaving_scans_to_skip_;
+    return scan_leaving_rows(refill);
+  }
+  ++leaving_served_;
   leaving_pushes_ = 0;
   const bool any_rejected = dual_rows_rejected_now_ > 0;
   Index best = -1;
@@ -441,6 +444,7 @@ Index Simplex::scan_leaving_rows(bool refill) {
     const double listed = static_cast<double>(kept);
     leaving_budget_ = static_cast<std::size_t>(listed / std::log2(listed + 2.0));
     leaving_pushes_ = 0;
+    leaving_served_ = 0;
     std::make_heap(leaving_heap_.begin(), leaving_heap_.end(), leaving_below);
     leaving_heap_stale_ = false;
   }
@@ -627,7 +631,7 @@ void Simplex::update_dual_weights(Index leaving_slot, double pivot) {
       // every row, counted as a reset, rather than pricing on it.
       dual_weight_.assign(static_cast<std::size_t>(m_), 1.0);
       ++dual_weight_resets_;
-      leaving_heap_stale_ = true;
+      retire_leaving_queue();
     }
     return;
   }

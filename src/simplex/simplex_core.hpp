@@ -738,7 +738,11 @@ class Simplex {
   /// deletion). Anything that changes many weights or rows at once - a rebuild of the list,
   /// a weight reset, a refactorization, which re-admits the rejected rows - marks the queue
   /// stale, and the next choice scans and refills it. An iteration that moves too many
-  /// slots for a heap to pay (alpha dense, as on pilot87) marks it stale as well.
+  /// slots for a heap to pay (alpha dense, as on pilot87) marks it stale as well. A refill
+  /// costs a few scans, so when the queue it built made fewer than kLeavingPayback choices
+  /// before going stale, the number of plain scans before the next refill doubles, up to
+  /// kLeavingBackoffLimit: a model whose alpha is always dense refills once in that many
+  /// iterations and otherwise runs the scan it ran before.
   struct LeavingEntry {
     double score;
     Index slot;
@@ -749,8 +753,22 @@ class Simplex {
   }
   std::vector<LeavingEntry> leaving_heap_;
   bool leaving_heap_stale_ = true;
-  std::size_t leaving_pushes_ = 0;    ///< since the last choice
-  std::size_t leaving_budget_ = 0;    ///< pushes an iteration may make before it scans instead
+  std::size_t leaving_pushes_ = 0;         ///< since the last choice
+  std::size_t leaving_budget_ = 0;         ///< pushes an iteration may make before it scans
+  std::size_t leaving_served_ = 0;         ///< choices the queue has made since its refill
+  std::size_t leaving_backoff_ = 0;        ///< plain scans between refills
+  std::size_t leaving_scans_to_skip_ = 0;  ///< plain scans left before the next refill
+  static constexpr std::size_t kLeavingPayback = 4;
+  static constexpr std::size_t kLeavingBackoffLimit = 255;
+  /// Mark the queue stale, and set how many plain scans pass before it is refilled.
+  void retire_leaving_queue() {
+    if (leaving_heap_stale_) return;
+    leaving_heap_stale_ = true;
+    leaving_backoff_ = leaving_served_ < kLeavingPayback
+                           ? std::min(2 * leaving_backoff_ + 1, kLeavingBackoffLimit)
+                           : 0;
+    leaving_scans_to_skip_ = leaving_backoff_;
+  }
   std::vector<Index> alpha_support_;  ///< nonzero slots of alpha_, ascending (see below)
   /// HYPER-SPARSE VECTORS (Hall and McKinnon 2005, sec. 3). Each work vector of the dual
   /// iteration keeps the list of the positions it may be nonzero at, so that clearing it,

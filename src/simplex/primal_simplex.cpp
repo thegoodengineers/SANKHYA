@@ -355,7 +355,7 @@ bool Simplex::refactorize() {
   std::fill(numerically_dependent_.begin(), numerically_dependent_.end(), 0);
   // A leaving row the dual passed over on the previous factors is judged afresh on these.
   std::fill(dual_row_rejected_.begin(), dual_row_rejected_.end(), 0);
-  leaving_heap_stale_ = true;  // and the queue that left them out (dual_simplex.cpp)
+  retire_leaving_queue();  // which left them out (dual_simplex.cpp)
   dual_rows_rejected_now_ = 0;
   // Phase 2 materialised a dense m x m array here and threw it away again on every pivot:
   // O(m^2) of memory traffic and O(m^3) of arithmetic to factorize a matrix that is better
