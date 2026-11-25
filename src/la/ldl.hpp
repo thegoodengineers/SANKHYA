@@ -43,7 +43,7 @@ namespace sankhya {
 /// about its own matrix and the AMD ordering is an implementation detail.
 struct SemidefiniteReport {
   enum class Verdict {
-    kPositiveSemidefinite,  ///< every pivot of A + shift I positive: x^T A x > -shift x^T x
+    kPositiveSemidefinite,  ///< every pivot of A + S positive: x^T A x > -sum s_k x_k^2
     kIndefinite,            ///< a direction with x^T A x < 0 was exhibited
     kUndecided,             ///< the probe was abandoned (deadline, or a factor that cannot fit)
   };
@@ -51,12 +51,13 @@ struct SemidefiniteReport {
   Verdict verdict = Verdict::kUndecided;
   /// The original column that decided an kIndefinite verdict, or -1.
   Index column = -1;
-  /// The pivot of A + shift * I at that column: zero or negative.
+  /// The pivot of A + S at that column: zero or negative.
   double pivot = 0.0;
-  /// The diagonal shift the test factorized with (#835).
+  /// The diagonal shift the test factorized with (#835): for kIndefinite the entry of S at
+  /// `column`, for kPositiveSemidefinite the largest entry of S.
   double shift = 0.0;
   /// For kIndefinite, a direction z in the ORIGINAL column order with
-  /// z^T (A + shift I) z = pivot <= 0 in exact arithmetic, so z^T A z < 0. Empty otherwise.
+  /// z^T (A + S) z = pivot <= 0 in exact arithmetic, so z^T A z < 0. Empty otherwise.
   std::vector<double> witness;
 };
 
@@ -152,17 +153,20 @@ class SparseLdl {
   /// that matters - a direction of negative curvature - into a clean factorization, and the
   /// caller would solve a non-convex model and report a local point as optimal.
   ///
-  /// The rule (#835): factorize A + shift * I with shift = `shift_factor` * max(1, largest
-  /// |diagonal|), and require every pivot to be strictly positive. Completing proves A's
-  /// smallest eigenvalue is above -shift, up to the factorization's backward error, which for
-  /// a semidefinite A - singular, rank deficient, or positive definite with condition 1e11 -
-  /// lies far below the shift, so such an A always completes. The first pivot that is not
+  /// The rule (#835): factorize A + S for the diagonal S with s_k = `shift_factor` * max(1,
+  /// |a_kk|), each column's shift measured against its OWN diagonal entry, and require every
+  /// pivot to be strictly positive. Completing proves x^T A x > -sum s_k x_k^2 for every x, up
+  /// to the factorization's backward error, which for a semidefinite A - singular, rank
+  /// deficient, or positive definite with condition 1e11 - scales with the column as the
+  /// shift does (ldl.cpp), so such an A completes. One shift for the whole matrix, measured
+  /// against its largest diagonal entry, is the same rule only when the diagonal is all of
+  /// one size: on diag(1e12, -0.5) it was 1 and hid the -0.5. The first pivot that is not
   /// positive is the certificate: its column, its value, and the direction z = P^T L^{-T} e_k
-  /// along which z^T (A + shift I) z = pivot, so z^T A z < 0. The old rule (a pivot within a
+  /// along which z^T (A + S) z = pivot, so z^T A z < 0. The old rule (a pivot within a
   /// slack of zero taken as exactly zero, the entries beside it then required to be within
   /// the same slack) refused all three of QPLIB_10056, QPLIB_10069 and QPLIB_8515, which are
   /// convex; ldl.cpp records why. [[0, 1], [1, 0]] is still refused: its second pivot is
-  /// shift - 1 / shift.
+  /// s - 1 / s for s = `shift_factor`.
   ///
   /// Calls analyze() itself. Leaves no usable factors behind: this is a decision procedure,
   /// not a factorization, and the factors it computes are of the shifted matrix.

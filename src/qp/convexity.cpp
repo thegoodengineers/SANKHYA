@@ -27,11 +27,13 @@ namespace {
 /// this bound exists so the reference stays a reference.
 constexpr Index kDenseReferenceLimit = 2000;
 
-/// The tolerance of the decision, relative to max(1, largest |Q_ii|): Q is accepted when
-/// Q + shift * I factorizes with every pivot positive, shift = kCurvatureTolerance * that
-/// scale, so an accepted Q has no eigenvalue below -shift (#835). It is measured against the
-/// largest diagonal entry rather than an absolute number because an indefinite direction in a
-/// badly scaled Q would otherwise hide under a fixed tolerance.
+/// The tolerance of the decision, relative to max(1, |Q_kk|) column by column: Q is accepted
+/// when Q + S factorizes with every pivot positive, S diagonal with s_k = kCurvatureTolerance
+/// * max(1, |Q_kk|), so an accepted Q has x^T Q x > -sum s_k x_k^2 for every x (#835). Each
+/// column's shift is measured against its own diagonal entry, not the largest one in the
+/// matrix: a single shift of 1e-12 * 1e12 = 1 let diag(1e12, -0.5) through as convex, and
+/// src/la/ldl.cpp gives the reason the column is the right scale. A shift never exceeds the
+/// single one it replaces, so nothing that rule refused is accepted by this one.
 ///
 /// 1e-12 is the threshold QPLIB itself counts a negative eigenvalue by (its NOBJQUADNEGEV
 /// statistic, doc.html), and #835 needs both of its sides. Below it: QPLIB_10056's smallest
@@ -233,7 +235,7 @@ struct Witness {
   return best;
 }
 
-/// The verdict and detail for a pivot of Q + shift * I that was not positive.
+/// The verdict and detail for a pivot of Q + S that was not positive; `shift` is S there.
 [[nodiscard]] ConvexityResult indefinite(const Model& model, const SparseMatrix& lower,
                                          const std::vector<double>& z, Index column,
                                          double pivot, double shift, const char* method) {
@@ -241,20 +243,20 @@ struct Witness {
   const Witness witness = sharpen(model, lower, z, column);
   if (!witness.verified) {
     result.detail = fmt::format(
-        "{} of Q + {:.3g} I reached a pivot of {:.6g} at {} in minimization sense, but no "
-        "direction it exhibits has x^T Q x below its own rounding error, so convexity is "
-        "neither proved nor refuted at this tolerance",
-        method, shift, pivot, column_label(model, column));
+        "{} of Q + S reached a pivot of {:.6g} at {}, where the shift S is {:.3g}, in "
+        "minimization sense, but no direction it exhibits has x^T Q x below its own rounding "
+        "error, so convexity is neither proved nor refuted at this tolerance",
+        method, pivot, column_label(model, column), shift);
     return result;  // kUnverified
   }
   result.verdict = Convexity::kIndefinite;
   result.witness = witness.x;
   result.witness_curvature = witness.curvature;
   result.detail = fmt::format(
-      "{} of Q + {:.3g} I reached a pivot of {:.6g} at {} in minimization sense; it exhibits a "
-      "direction x with x^T Q x / x^T x = {:.6g}{}, in which the objective curves downward, so "
-      "the model is non-convex",
-      method, shift, pivot, column_label(model, column), witness.curvature, witness.along);
+      "{} of Q + S reached a pivot of {:.6g} at {}, where the shift S is {:.3g}, in "
+      "minimization sense; it exhibits a direction x with x^T Q x / x^T x = {:.6g}{}, in which "
+      "the objective curves downward, so the model is non-convex",
+      method, pivot, column_label(model, column), shift, witness.curvature, witness.along);
   return result;
 }
 
@@ -283,7 +285,6 @@ ConvexityResult check_convexity_dense(const Model& model) {
   // an off-diagonal entry appears twice.
   const auto un = static_cast<std::size_t>(n);
   std::vector<double> q(un * un, 0.0);
-  double largest_diagonal = 0.0;
   for (Index j = 0; j < n; ++j) {
     const ColumnView column = lower.column(j);
     for (Index k = 0; k < column.size; ++k) {
@@ -291,24 +292,26 @@ ConvexityResult check_convexity_dense(const Model& model) {
       const double value = column.values[k];
       q[static_cast<std::size_t>(i) * un + static_cast<std::size_t>(j)] = value;
       q[static_cast<std::size_t>(j) * un + static_cast<std::size_t>(i)] = value;
-      if (i == j) largest_diagonal = std::max(largest_diagonal, std::fabs(value));
     }
   }
-  const double shift = kCurvatureTolerance * std::max(1.0, largest_diagonal);
 
-  // LDL^T of Q + shift * I without row interchanges, every pivot required positive: the rule
+  // LDL^T of Q + S without row interchanges, S diagonal with each column's shift measured
+  // against its own diagonal entry, every pivot required positive: the rule
   // check_semidefinite() applies sparsely, and why it is the right one is written there.
   std::vector<double> l(un * un, 0.0);
   std::vector<double> d(un, 0.0);
+  double largest_shift = 0.0;
   for (Index j = 0; j < n; ++j) {
     const auto uj = static_cast<std::size_t>(j);
+    const double shift = kCurvatureTolerance * std::max(1.0, std::fabs(q[uj * un + uj]));
+    largest_shift = std::max(largest_shift, shift);
     double pivot = q[uj * un + uj] + shift;
     for (Index k = 0; k < j; ++k) {
       const auto uk = static_cast<std::size_t>(k);
       pivot -= l[uj * un + uk] * l[uj * un + uk] * d[uk];
     }
     if (!(pivot > 0.0)) {
-      // z = L^{-T} e_j over the first j + 1 columns: z^T (Q + shift I) z = pivot.
+      // z = L^{-T} e_j over the first j + 1 columns: z^T (Q + S) z = pivot.
       std::vector<double> z(un, 0.0);
       z[uj] = 1.0;
       for (Index k = j - 1; k >= 0; --k) {
@@ -335,8 +338,9 @@ ConvexityResult check_convexity_dense(const Model& model) {
   }
 
   result.verdict = Convexity::kConvex;
-  result.detail =
-      fmt::format("LDL^T of Q + {:.3g} I completed with every pivot positive", shift);
+  result.detail = fmt::format(
+      "LDL^T of Q + S completed with every pivot positive, the shift S at most {:.3g}",
+      largest_shift);
   return result;
 }
 
@@ -357,8 +361,9 @@ ConvexityResult check_convexity(const Model& model, const std::function<bool()>&
     case SemidefiniteReport::Verdict::kPositiveSemidefinite:
       result.verdict = Convexity::kConvex;
       result.detail = fmt::format(
-          "sparse LDL^T of Q + {:.3g} I over {} nonzeros completed with every pivot positive",
-          report.shift, lower.num_nonzeros());
+          "sparse LDL^T of Q + S over {} nonzeros completed with every pivot positive, the "
+          "shift S at most {:.3g}",
+          lower.num_nonzeros(), report.shift);
       return result;
     case SemidefiniteReport::Verdict::kIndefinite:
       return indefinite(model, lower, report.witness, report.column, report.pivot, report.shift,
@@ -370,9 +375,9 @@ ConvexityResult check_convexity(const Model& model, const std::function<bool()>&
   // gave up on the deadline, and the deadline says it has passed. Undecided either way.
   if (ldl.stopped_early() && should_stop && should_stop()) {
     result.stopped = true;
-    result.detail = fmt::format(
-        "the sparse LDL^T of Q + shift I over {} nonzeros was stopped before it finished",
-        lower.num_nonzeros());
+    result.detail =
+        fmt::format("the sparse LDL^T of Q + S over {} nonzeros was stopped before it finished",
+                    lower.num_nonzeros());
     return result;  // kUnverified
   }
 
