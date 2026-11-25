@@ -1776,39 +1776,52 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // #981: off by default, so with it off every call below behaves exactly as before.
     const bool qp_stall_handoff = options.get_bool("qp_ipm_stall_handoff");
     *engine_ran = want_qp_ipm ? "qp-ipm" : "convex-qp";
+    const auto run_qp_engines = [&](const Model& target) {
+      if (!want_qp_ipm) {
+        Solution first =
+            qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger, control);
+        // #981, the reverse direction: the first-order engine's own ceiling or a time
+        // limit, finished by the interior point on the time left.
+        if (qp_stall_handoff) {
+          handoff_qp_first_order_limit_to_ipm(&first, target, options, logger, control, timer,
+                                              limits, with_the_time_that_is_left, engine_ran);
+        }
+        return first;
+      }
+      qp::QpIpmWarmResult ipm_result;
+      Solution ipm = qp::solve_convex_qp_ipm(target, with_the_time_that_is_left(options),
+                                             logger, control, /*warm_start=*/nullptr,
+                                             qp_stall_handoff ? &ipm_result : nullptr);
+      if (ipm.status == SolveStatus::kNumericalError) {
+        logger.warning("QP interior point: {}; falling back to Condat-Vu", ipm.message);
+        *engine_ran = "qp-ipm+convex-qp";
+        return qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger,
+                                   control);
+      }
+      // #981: a genuine stall, not an explicit iteration_limit, handed to the
+      // first-order engine for whatever time is left.
+      if (qp_stall_handoff && ipm.status == SolveStatus::kIterationLimit &&
+          ipm_result.stalled) {
+        handoff_qp_ipm_stall_to_first_order(&ipm, ipm_result, target, options, logger, control,
+                                            timer, limits, with_the_time_that_is_left,
+                                            engine_ran);
+      }
+      return ipm;
+    };
+    // qp_prescale: the engines above run on the presolved model equilibrated by Ruiz on its
+    // KKT matrix, factors rounded to powers of two (src/core/prescale.hpp), and the answer is
+    // mapped back exactly before postsolve, the status guard and the KKT gate see it, so
+    // every verdict below is still judged in the model's own units.
+    const bool qp_prescale = options.get_bool("qp_prescale");
     solution = with_presolve(
         [&](const Model& target) {
-          if (!want_qp_ipm) {
-            Solution first = qp::solve_convex_qp(target, with_the_time_that_is_left(options),
-                                                 logger, control);
-            // #981, the reverse direction: the first-order engine's own ceiling or a time
-            // limit, finished by the interior point on the time left.
-            if (qp_stall_handoff) {
-              handoff_qp_first_order_limit_to_ipm(&first, target, options, logger, control,
-                                                  timer, limits, with_the_time_that_is_left,
-                                                  engine_ran);
-            }
-            return first;
-          }
-          qp::QpIpmWarmResult ipm_result;
-          Solution ipm = qp::solve_convex_qp_ipm(target, with_the_time_that_is_left(options),
-                                                 logger, control, /*warm_start=*/nullptr,
-                                                 qp_stall_handoff ? &ipm_result : nullptr);
-          if (ipm.status == SolveStatus::kNumericalError) {
-            logger.warning("QP interior point: {}; falling back to Condat-Vu", ipm.message);
-            *engine_ran = "qp-ipm+convex-qp";
-            return qp::solve_convex_qp(target, with_the_time_that_is_left(options), logger,
-                                       control);
-          }
-          // #981: a genuine stall, not an explicit iteration_limit, handed to the
-          // first-order engine for whatever time is left.
-          if (qp_stall_handoff && ipm.status == SolveStatus::kIterationLimit &&
-              ipm_result.stalled) {
-            handoff_qp_ipm_stall_to_first_order(&ipm, ipm_result, target, options, logger,
-                                                control, timer, limits,
-                                                with_the_time_that_is_left, engine_ran);
-          }
-          return ipm;
+          if (!qp_prescale) return run_qp_engines(target);
+          const PrescaledModel prescaled =
+              prescale_qp_by_powers_of_two(target, kPrescalePasses);
+          Solution scaled = run_qp_engines(prescaled.model);
+          unscale_solution(prescaled, &scaled);
+          scaled.recompute_quality(target);
+          return scaled;
         },
         &presolve_proved_it);
     if (presolve_proved_it) {

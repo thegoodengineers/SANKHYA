@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SANKHYA - equilibration of the model by powers of two, and its exact inverse (#792).
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -8,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include "core/kkt_check.hpp"
 #include "core/prescale.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
@@ -153,6 +155,64 @@ TEST(Prescale, TheObjectiveConstantSurvivesEveryLpRoute) {
       EXPECT_NEAR(s.objective, linear + 7.113, 1e-9) << algorithm << " presolve " << presolve;
       EXPECT_NEAR(s.objective, -2.8 + 7.113, 1e-6) << algorithm << " presolve " << presolve;
     }
+  }
+}
+
+/// min x1^2 + x2^2 - 2 x1 - 4 x2  s.t.  x1 + x2 <= 2,  x >= 0 (optimum (0.5, 1.5), objective
+/// -4.5, row dual -1), written in u = x1 / 2^-20 and with its row multiplied by 2^10: Q spans
+/// 2^-39 .. 2 and A 2^-10 .. 2^10.
+Model badly_scaled_qp() {
+  const double s = 0x1p-20;
+  const double r = 0x1p10;
+  Model model;
+  model.col_cost = {-2.0 * s, -4.0};
+  model.col_lower = {0.0, 0.0};
+  model.col_upper = {kInf, kInf};
+  model.col_type.assign(2, VarType::kContinuous);
+  model.row_lower = {-kInf};
+  model.row_upper = {2.0 * r};
+  model.matrix.reset(1, 2);
+  model.matrix.add_entry(0, 0, s * r);
+  model.matrix.add_entry(0, 1, r);
+  model.matrix.finalize(0.0);
+  model.hessian.reset(2, 2);
+  model.hessian.add_entry(0, 0, 2.0 * s * s);
+  model.hessian.add_entry(1, 1, 2.0);
+  model.hessian.finalize(0.0);
+  return model;
+}
+
+TEST(Prescale, TheQpKktMatrixIsEquilibratedByPowersOfTwo) {
+  const PrescaledModel p = prescale_qp_by_powers_of_two(badly_scaled_qp(), 20);
+  for (const double r : p.row) EXPECT_TRUE(is_power_of_two(r)) << r;
+  for (const double c : p.column) EXPECT_TRUE(is_power_of_two(c)) << c;
+  double largest = 0.0;
+  double smallest = kInf;
+  for (const SparseMatrix* m : {&p.model.matrix, &p.model.hessian}) {
+    for (const double v : m->values()) {
+      largest = std::max(largest, std::fabs(v));
+      smallest = std::min(smallest, std::fabs(v));
+    }
+  }
+  EXPECT_LE(largest / smallest, 64.0);
+  EXPECT_EQ(p.model.hessian.num_nonzeros(), 2);
+}
+
+TEST(Prescale, AQpSolvedEquilibratedAnswersInItsOwnUnits) {
+  const Model model = badly_scaled_qp();
+  for (const bool prescale : {false, true}) {
+    Options options;
+    options.set_bool("log_to_console", false);
+    options.set_bool("qp_prescale", prescale);
+    const Solution s = solve(model, options);
+    ASSERT_EQ(s.status, SolveStatus::kOptimal)
+        << "qp_prescale " << prescale << ": " << s.message;
+    EXPECT_NEAR(s.objective, -4.5, 1e-7) << prescale;
+    EXPECT_NEAR(s.col_value[0] * 0x1p-20, 0.5, 1e-7) << prescale;
+    EXPECT_NEAR(s.col_value[1], 1.5, 1e-7) << prescale;
+    EXPECT_NEAR(s.row_dual[0] * 0x1p10, -1.0, 1e-7) << prescale;
+    const KktVerdict verdict = check_qp_optimality(model, s);
+    EXPECT_TRUE(verdict.passed) << prescale << " " << verdict.check << ": " << verdict.detail;
   }
 }
 
