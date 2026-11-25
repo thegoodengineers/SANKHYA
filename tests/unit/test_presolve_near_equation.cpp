@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// SANKHYA - presolve substitutes a two-entry row only when the row is an equation.
+// SANKHYA - presolve substitutes a two-entry row only when the row is an equation (#1363).
 //
 // A ranged row whose range is inside the feasibility tolerance is still a range: on a row
 // scaled by 2^-27 a range of 3.7e-8 is five units of its columns. The doubleton reduction
@@ -57,10 +57,11 @@ Model build(ObjSense sense, const std::vector<std::vector<double>>& rows,
   return model;
 }
 
-Options quiet(bool presolve = true) {
+Options quiet(bool presolve = true, bool implied_integer = false) {
   Options options;
   options.set_bool("log_to_console", false);
   options.set_bool("presolve", presolve);
+  options.set_bool("presolve_implied_integer", implied_integer);
   return options;
 }
 
@@ -127,6 +128,20 @@ TEST(PresolveNearEquation, AnEquationStillFoldsWhateverItsScale) {
     EXPECT_EQ(doubleton_equations(model), 1) << "scale " << s;
     expect_optimum(model, 1.0, "an equation scaled by " + std::to_string(s), true);
   }
+}
+
+TEST(PresolveNearEquation, ARangedRowInsideTheToleranceMakesNoImpliedInteger) {
+  // max 2^30 (x - y1 - y2):  0 <= x - y1 - y2 <= 2^-24,  x in [0, 10],  y integer in [0, 3].
+  // The optimum is 2^30 * 2^-24 = 64. presolve_implied_integer read the row as the equation
+  // x - y1 - y2 = 0 and made x an integer, which leaves only 0.
+  const Model model =
+      build(ObjSense::kMaximize, {{1, -1, -1}}, {0}, {0x1p-24}, {0x1p30, -0x1p30, -0x1p30},
+            {0, 0, 0}, {10, 3, 3}, {false, true, true});
+  Logger logger(nullptr);
+  EXPECT_EQ(presolve::presolve(model, quiet(true, true), logger).report.implied_integers, 0);
+  const Solution s = solve(model, quiet(true, true));
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_NEAR(s.objective, 64.0, 1e-6);
 }
 
 }  // namespace
