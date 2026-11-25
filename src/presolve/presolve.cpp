@@ -1741,9 +1741,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
     probing = probe_binaries(reduced, reduced.col_lower, reduced.col_upper, diag_work);
     logger.verbose(
         "  presolve: DIAG probing round 1: {} probed, {} fixed, {} tightened, limit reached {}, "
-        "{:.2f}s",
+        "{:.2f}s, work charged {} actual {}, rows passed over {}",
         probing.probed, probing.fixings, probing.tightenings, probing.work_limit_reached,
-        diag_clock.elapsed_seconds());
+        diag_clock.elapsed_seconds(), probing.diag_work_charged, probing.diag_work_actual,
+        probing.rows_passed_over);
     const Index integers = reduced.num_integer_columns();
     if (!probe_always && !probing.infeasible &&
         static_cast<double>(probing.fixings) <

@@ -98,6 +98,8 @@ class Prober {
     }
     merge_cliques(&result);
     result.rows_passed_over = rows_passed_over_;
+    result.diag_work_charged = work_;
+    result.diag_work_actual = actual_work_;
     result.col_lower = std::move(lo_);
     result.col_upper = std::move(up_);
     return result;
@@ -323,6 +325,7 @@ class Prober {
     const ColumnView row = by_row_.row(i);
     work_ += row.size;
     probe_work_ += row.size;
+    actual_work_ += row.size;  // DIAG
     double min = 0.0;
     double max = 0.0;
     int min_inf = 0;
@@ -453,6 +456,7 @@ class Prober {
   /// Column j's lower or upper bound moved from `old` to `now`: every row of its column.
   void note_moved(Index j, double old, double now, bool upper) {
     const ColumnView column = model_.matrix.column(j);
+    actual_work_ += column.size;  // DIAG
     for (Index k = 0; k < column.size; ++k) {
       const auto r = static_cast<std::size_t>(column.rows[k]);
       activity_trail_.push_back({column.rows[k], activity_[r]});
@@ -580,6 +584,7 @@ class Prober {
   std::vector<double> drift_;
   std::vector<char> rescan_always_;
   Count rows_passed_over_ = 0;
+  std::int64_t actual_work_ = 0;  // DIAG
 };
 
 }  // namespace

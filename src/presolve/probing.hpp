@@ -49,7 +49,9 @@ struct ProbingResult {
   Count implications = 0;   ///< (x_j = v) implies a bound on another column, per probe
   bool infeasible = false;  ///< both values of some binary are infeasible
   bool work_limit_reached = false;  ///< candidates were left unprobed
-  Count rows_passed_over = 0;       ///< queued rows the activities showed could imply nothing
+  Count rows_passed_over = 0;
+  std::int64_t diag_work_charged = 0;  ///< DIAG
+  std::int64_t diag_work_actual = 0;   ///< DIAG: rescanned entries plus activity updates       ///< queued rows the activities showed could imply nothing
 
   /// Pairwise conflicts between literals, each pair once with first < second. Capped (a
   /// missing edge only means fewer cliques, never an invalid one).
