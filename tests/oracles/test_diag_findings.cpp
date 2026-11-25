@@ -90,7 +90,7 @@ TEST(DiagFindings, ImpliedFreeDuals) {
                         {-14.25, 6, 9}, {0, 3, 0}, {3, 0, -inf}, {inf, inf, inf},
                         {false, false, false});
   run("implied free B, optimum 0", b,
-      {{{"presolve_implied_free", "true"}},
+      {{{"presolve_implied_free", "true"}, {"log_level", "debug"}},
        {{"presolve_implied_free", "true"}, {"engine_race", "true"}, {"deterministic", "true"}},
        {}});
   // min -2 x3: x2 + x3 = -17/2, 2 x0 >= 4, 5/2 x0 - 5 x1 + x2/2 = 19/2.
@@ -98,7 +98,7 @@ TEST(DiagFindings, ImpliedFreeDuals) {
                         {-8.5, inf, 9.5}, {0, 0, 0, -2}, {-inf, -1, -inf, -inf},
                         {2, -1, -1, -3}, {false, false, false, false});
   run("implied free C, optimum 15", c,
-      {{{"presolve_implied_free", "true"}},
+      {{{"presolve_implied_free", "true"}, {"log_level", "debug"}},
        {{"presolve_implied_free", "true"}, {"engine_race", "true"}, {"deterministic", "true"}},
        {}});
 }

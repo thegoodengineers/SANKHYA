@@ -714,6 +714,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         if (!implied_free) return false;
         const auto uc = static_cast<std::size_t>(column);
         if (work.col_count[uc] != 1) return false;
+        if (work.doubleton_touched[uc]) return false;  // DIAG TRIAL
         Index row = -1;
         double a = 0.0;
         const ColumnView view = model.matrix.column(column);
