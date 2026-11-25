@@ -746,11 +746,12 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"root_cut_time_from_loop",
                  OptionType::Bool,
                  false,
-                 "Where root_cut_loop's time share (5 percent of time_limit) is counted from. "
-                 "Off: from the start of the search, so the work before round 2 (symmetry, "
-                 "Feasibility Jump, the root LP and round 1) spends it, and a model whose "
-                 "first round ends past it gets no second round. On: from the loop's own "
-                 "start at round 2, so the share bounds the rounds alone.",
+                 "The clock of root_cut_loop's time share (5 percent). Off: the search's, so "
+                 "the loop stops once the search has used 5 percent of time_limit, and the "
+                 "work before the first cut round (symmetry, Feasibility Jump, the root LP) "
+                 "spends it too; a model on which that takes the share gets one round. On: "
+                 "the loop's own, 5 percent of the time left when the first round began, "
+                 "counted from there, so it bounds what the rounds themselves cost.",
                  0.0,
                  0.0,
                  {}});

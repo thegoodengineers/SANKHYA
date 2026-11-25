@@ -132,7 +132,7 @@ bool BranchAndBound::root_cut_loop_wanted(const std::vector<Cut>& round1) {
 
 void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
                                    const std::vector<Cut>& first_taken,
-                                   std::int64_t first_iterations) {
+                                   std::int64_t first_iterations, double started) {
   // bounds[k] is the root bound after round k; bounds[0] before any cut.
   std::vector<double> bounds{root_bound_internal_, root_bound_after_cuts_internal_};
   root_cut_rounds_ = 1;
@@ -140,14 +140,19 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
                reported(bounds.back()), first_taken.size(), by_family(first_taken),
                first_iterations);
   const bool timed = time_limit_ > 0.0 && time_limit_ < 1e300;
-  // The time share's clock (root_cut_time_from_loop). Off, it is the search's own, so the
-  // presolve-to-root work before round 1 (symmetry, Feasibility Jump, the root LP, round 1)
-  // spends the share and a slow root never reaches round 2 (mod011: its first point comes at
-  // 2.9 to 3.3 s of a 3 s share). On, it starts here, at round 2, and the share bounds the
-  // rounds themselves, as the stall and round limits do (Achterberg 2007, ch. 8: the root
-  // separation loop is limited by its own rounds and stall, not by the time spent before it).
-  const double clock_start =
-      options_.get_bool("root_cut_time_from_loop") ? timer_.elapsed_seconds() : 0.0;
+  // THE TIME SHARE'S CLOCK (root_cut_time_from_loop). Off, it is the search's: the loop
+  // stops once the search has used kRootCutTimeShare of time_limit, and the work before
+  // round 1 spends that too. On beasleyC3 the symmetry search and Feasibility Jump take
+  // 3.6 to 4.6 s before the root LP, on mc11 2.2 to 3.0 s and on mod011 3.0 to 3.3 s,
+  // against a share of 3 s at a 60 s limit, so the loop ran one round on eight of those
+  // nine runs (bench.yml runs 45523852605 and 45523859891). On, it is the loop's own: the
+  // share is of the time that was left when round 1 began, counted from there, so it bounds
+  // what the rounds cost, the first included, as the stall and round limits do (Achterberg
+  // 2007, ch. 8: the root loop is limited by its own rounds). Round 1 counts on purpose: on
+  // dano3mip its re-solve alone takes 25 s, and rounds started after that cost the search
+  // its last seconds and the point it found in them (run 45524294564, seed 1).
+  const double clock_start = options_.get_bool("root_cut_time_from_loop") ? started : 0.0;
+  const double time_budget = tol::kRootCutTimeShare * (time_limit_ - clock_start);
   // With the pool removing the slack rows at the end (below), the budget is the pooled one.
   const auto row_budget = static_cast<Count>(
       root_cut_row_budget(model_rows, cut_removal_ ? cut_max_per_round_ : 0));
@@ -197,8 +202,7 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
         break;
       }
     }
-    if (timed &&
-        timer_.elapsed_seconds() - clock_start > tol::kRootCutTimeShare * time_limit_) {
+    if (timed && timer_.elapsed_seconds() - clock_start > time_budget) {
       why = "the time share";
       break;
     }

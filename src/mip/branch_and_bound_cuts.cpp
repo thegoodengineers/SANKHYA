@@ -392,6 +392,7 @@ std::size_t BranchAndBound::admit_dense_root_cuts(std::vector<FilteredCut>* filt
 }
 
 void BranchAndBound::root_cut_round(Solution* relaxation) {
+  const double started = timer_.elapsed_seconds();  // root_cut_time_from_loop's clock
   const Index original_root_rows = working_.num_rows();
   Model pre_cut_model = working_;
   auto pre_cut_scaling = scaling_;
@@ -466,7 +467,8 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
     // More rounds from the new basis, until the bound stalls (#495); off by default, and
     // the round above is the whole of what runs then.
     if (root_cut_loop_wanted(accepted)) {
-      root_cut_loop(relaxation, original_root_rows, accepted, relaxation->iterations);
+      root_cut_loop(relaxation, original_root_rows, accepted, relaxation->iterations,
+                    started);
     }
     return;
   }

@@ -870,12 +870,14 @@ class BranchAndBound {
   /// Rounds 2 onward of the root loop (#495, branch_and_bound_root_loop.cpp): separate at
   /// the current LP point, append, re-solve warm, until the bound stalls, the round cap, the
   /// time share or a round that takes nothing. `first_taken` and `first_iterations` are
-  /// round 1's, for its log line.
+  /// round 1's, for its log line; `started` is the search clock when round 1 began, which
+  /// the time share is counted from under root_cut_time_from_loop.
   /// root_cut_loop, read with root_cut_loop_when (#1158): always, or only on a model with a
   /// variable upper bound x <= u y, decided once at the root from working_'s rows.
   bool root_cut_loop_wanted(const std::vector<Cut>& round1);
   void root_cut_loop(Solution* relaxation, Index model_rows,
-                     const std::vector<Cut>& first_taken, std::int64_t first_iterations);
+                     const std::vector<Cut>& first_taken, std::int64_t first_iterations,
+                     double started);
   /// A round at a node of depth <= tree_cut_depth_: MIR cuts on the global bounds,
   /// appended for the whole tree, the node re-solved from its own basis.
   void tree_cut_round(Index depth, Solution* relaxation);
