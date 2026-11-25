@@ -601,7 +601,15 @@ RowTightening tighten_integral_rows(Model* model, Logger& logger) {
     // and nothing more, it reached the search, whose Model::validate() refused the crossed
     // bounds, and an infeasible MILP came back model_error. The first such row is reported,
     // with the bounds it was given, for the caller to answer infeasible on.
-    if (is_finite_bound(lower) && is_finite_bound(upper) && lower > upper) {
+    //
+    // ONLY A ROW THE ROUNDING CROSSED (#1350). The proof is "no integer lies between the
+    // bounds", and it starts from bounds that are in order. A row that ARRIVES with its
+    // lower bound above its upper is a malformed row, not an empty one: a parallel-row merge
+    // wrote [1, 1 - 9e-16] for the equality x0 + x3 = 1, neither bound moved here, and the
+    // crossing was read as a proof and a feasible MILP answered infeasible. Such a row is
+    // left for validate() to refuse, as it was before #1335.
+    if (is_finite_bound(lower) && is_finite_bound(upper) && lower > upper &&
+        given_lower <= given_upper) {
       logger.verbose(
           "row {} has no integral activity in [{:g}, {:g}]; it was already infeasible for "
           "integer points and the rounding has made that explicit",
