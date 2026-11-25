@@ -1356,8 +1356,9 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // runs its own presolve and postsolve per engine, so what comes back is already in the
     // model's terms.
     const bool race =
-        requested == "auto" && engine_race_applies(model, options, warm_requested, chosen.rule,
-                                                   g_solves_in_flight.load() == 1);
+        requested == "auto" &&
+        engine_race_applies(model, options, warm_requested, g_solves_in_flight.load() == 1,
+                            std::thread::hardware_concurrency());
     bool race_accepted = false;
     if (race) {
       solution = run_engine_race(model, options, control, logger, timer, chosen.engine->name(),

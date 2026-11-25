@@ -136,7 +136,13 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
   Count refactorizations = 0;
   bool deadline_hit = false;
   for (const Index k : superbasic) {
-    if (deadline_ && (pivots & 63) == 0 && deadline_()) {
+    // THE PUSH READS THE CALLER'S INTERRUPT, as the loops do at every iteration. It read only
+    // the deadline, so a crossover told to stop ran on to its own share of the time limit: in
+    // the engine race on Mittelmann's datt256_lp PDHG won at 72 s and the interior point's
+    // crossover, cancelled then, came back at 326 s (bench.yml run 45523563473). The primal
+    // loop below reports the interrupt.
+    if ((pivots & 63) == 0 && ((deadline_ && deadline_()) ||
+                               (control_ != nullptr && control_->interruption_requested()))) {
       deadline_hit = true;
       break;
     }
@@ -307,7 +313,7 @@ Solution Simplex::run_push(const WarmStart& warm, const std::vector<double>& int
       "Crossover push: {} superbasic variable(s), {} arrived at a bound without a pivot, {} "
       "basis changes, {} refactorizations, max infeasibility {:.3e}{}",
       superbasic.size(), arrived, pivots, refactorizations, max_infeasibility(),
-      deadline_hit ? " (time limit reached inside the push)" : "");
+      deadline_hit ? " (time limit or interrupt reached inside the push)" : "");
   if (max_infeasibility() > loose) {
     return finish(SolveStatus::kNotSolved,
                   fmt::format("crossover push declined: the pushed point is {:.3e} infeasible, "
