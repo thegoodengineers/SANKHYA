@@ -160,6 +160,7 @@ add_executable(sankhya_tests
   unit/test_presolve_implied_integer.cpp
   unit/test_presolve_propagation.cpp
   unit/test_presolve_fill_in_pricing.cpp
+  unit/test_presolve_near_equation.cpp
   unit/test_dual_steepest_edge.cpp
   unit/test_node_factor_cache.cpp
   unit/test_simplex_quality_once.cpp
