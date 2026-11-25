@@ -40,6 +40,12 @@ struct PrescaledModel {
 /// the nearest power of two. For an LP (no Hessian, no integer columns); the caller checks.
 [[nodiscard]] PrescaledModel prescale_by_powers_of_two(const Model& model, int passes);
 
+/// The convex QP's version (qp_prescale): `passes` rounds of Ruiz equilibration in the
+/// infinity norm on the symmetric KKT matrix [Q A'; A 0], the factors then rounded to powers
+/// of two; Q' = S Q S on top of the LP's change of variables, and no cost scaling. For a
+/// model without integer columns; the caller checks.
+[[nodiscard]] PrescaledModel prescale_qp_by_powers_of_two(const Model& model, int passes);
+
 /// Map an answer of `prescaled.model` back to the model it was built from: the point, the
 /// activities, both dual vectors, a Farkas vector and a ray. The basis is unchanged (a
 /// diagonal change of variables keeps a basis a basis) and so is the objective (c'x' = c x).
