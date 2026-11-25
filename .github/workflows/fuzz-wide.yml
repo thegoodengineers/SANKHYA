@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: Apache-2.0
+# SANKHYA - the general-form oracle fuzz, wide.
+#
+# tests/oracles/test_fuzz_general_form.cpp runs on every pull request at a size that costs a
+# few seconds. This runs the same tests with every trial count multiplied by `scale`, in
+# eight jobs that each take seeds no other job and no earlier run used, in a Release build.
+# A mismatch fails the job and prints the model reduced, with the options it failed under;
+# the seed is in the log, so SANKHYA_FUZZ_SEED and SANKHYA_FUZZ_SCALE reproduce it.
+#
+# Dispatch it on any ref. A push to a branch named diag/fuzz-wide* runs it too, which is how
+# a change is swept before it is merged (a workflow can only be dispatched once it is on
+# main).
+
+name: fuzz-wide
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: commit, branch or tag to build
+        default: main
+        required: true
+      scale:
+        description: multiplier on every trial count
+        default: "50"
+        required: true
+      seed:
+        description: first seed (job k adds 1000 k); empty takes 100000 x the run number
+        default: ""
+        required: false
+  push:
+    branches: ['diag/fuzz-wide**']
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: seeds ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Install toolchain
+        run: scripts/ci_apt.sh ninja-build zlib1g-dev
+
+      - name: Build
+        run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DSANKHYA_BUILD_TESTS=ON
+          cmake --build build -j --target sankhya_tests
+
+      - name: Fuzz
+        env:
+          SANKHYA_FUZZ_SCALE: ${{ inputs.scale || '50' }}
+          FIRST_SEED: ${{ inputs.seed || format('{0}00000', github.run_number) }}
+        run: |
+          set -u
+          export SANKHYA_FUZZ_SEED=$((FIRST_SEED + 1000 * ${{ matrix.shard }}))
+          echo "commit $(git rev-parse HEAD) scale $SANKHYA_FUZZ_SCALE seed $SANKHYA_FUZZ_SEED"
+          ./build/tests/sankhya_tests --gtest_filter='RefusedIntegralNode.IsTriedInTheModelsOwnUnits*' 2>&1 \
+            | tee "$RUNNER_TEMP/fuzz.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Upload the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-wide-${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/fuzz.log
