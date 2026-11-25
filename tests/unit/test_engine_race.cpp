@@ -385,37 +385,45 @@ TEST(EngineRace, IsOffByDefaultOnASmallModel) {
   EXPECT_EQ(s.message.find("engine race"), std::string::npos) << s.message;
 }
 
-/// A model of `rows` rows and `nonzeros` entries, one per column: the size gate reads only
-/// rows x nonzeros.
-Model sized(Index rows, Count nonzeros) {
+/// A model of `rows` rows and `cols` columns with `per_column` entries in each column: the
+/// gate reads rows x nonzeros and the network shape.
+Model sized(Index rows, Index cols, Index per_column) {
   Model m;
-  const auto cols = static_cast<Index>(nonzeros);
   m.resize_columns(cols);
   m.resize_rows(rows);
   m.matrix.reset(rows, cols);
-  for (Index j = 0; j < cols; ++j) m.matrix.add_entry(j % rows, j, 1.0);
+  for (Index j = 0; j < cols; ++j) {
+    for (Index k = 0; k < per_column; ++k) m.matrix.add_entry((j + k) % rows, j, 1.0);
+  }
   m.matrix.finalize();
   return m;
 }
 
-TEST(EngineRace, AutoRacesOnlyTheCallersOwnSolveOfALargeLpOffTheNetworkRule) {
+TEST(EngineRace, AutoRacesOnlyTheCallersOwnSolveOfALargeLpThatIsNotNetworkShaped) {
   const Options automatic = quiet("auto");
-  const Model large = sized(20000, 15000);  // rows x nonzeros = 3e8, kSimplexWorkCeiling
-  const Model small = sized(20000, 14999);
-  EXPECT_TRUE(engine_race_applies(large, automatic, false, "size:ipm", true));
-  EXPECT_FALSE(engine_race_applies(small, automatic, false, "size:ipm", true));
-  EXPECT_FALSE(engine_race_applies(large, automatic, false, "network:dual-simplex", true));
-  EXPECT_FALSE(engine_race_applies(large, automatic, false, "size:ipm", false));  // nested
-  EXPECT_FALSE(engine_race_applies(large, automatic, true, "size:ipm", true));    // a basis
+  // 5 entries a column, so not network shaped; rows x nonzeros = 3e8, kSimplexWorkCeiling.
+  const Model large = sized(10000, 6000, 5);
+  const Model small = sized(10000, 5999, 5);
+  // ken-11's shape: 14,694 rows and 7.2e8 of work, but under 4 entries a column.
+  const Model network = sized(14694, 21349, 2);
+  EXPECT_TRUE(engine_race_applies(large, automatic, false, true, 4));
+  EXPECT_FALSE(engine_race_applies(small, automatic, false, true, 4));
+  EXPECT_FALSE(engine_race_applies(network, automatic, false, true, 4));
+  EXPECT_FALSE(engine_race_applies(large, automatic, false, false, 4));  // a nested solve
+  EXPECT_FALSE(engine_race_applies(large, automatic, true, true, 4));    // a starting basis
+  EXPECT_FALSE(engine_race_applies(large, automatic, false, true, 2));   // too few cores
+  Options in_order = automatic;
+  in_order.set_bool("deterministic", true);
+  EXPECT_FALSE(engine_race_applies(large, in_order, false, true, 4));
   Options pinned = automatic;
   pinned.set_string("algorithm", "ipm");
-  EXPECT_FALSE(engine_race_applies(large, pinned, false, "requested", true));
+  EXPECT_FALSE(engine_race_applies(large, pinned, false, true, 4));
   Options off = automatic;
   off.set_bool("engine_race", false);
-  EXPECT_FALSE(engine_race_applies(large, off, false, "size:ipm", true));
+  EXPECT_FALSE(engine_race_applies(large, off, false, true, 4));
   Options on = automatic;
   on.set_bool("engine_race", true);
-  EXPECT_TRUE(engine_race_applies(small, on, false, "network:dual-simplex", false));
+  EXPECT_TRUE(engine_race_applies(network, on, false, false, 1));
 }
 
 }  // namespace

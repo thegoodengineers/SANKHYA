@@ -15,6 +15,7 @@
 
 #include <fmt/format.h>
 
+#include "core/engine_features.hpp"
 #include "core/engine_selection.hpp"
 #include "core/kkt_check.hpp"
 #include "core/presolve_pipeline.hpp"
@@ -33,13 +34,17 @@ EngineRaceTestHooks& engine_race_hooks_for_testing() {
 }
 
 bool engine_race_applies(const Model& model, const Options& options, bool warm_start,
-                         const std::string& rule, bool outermost) {
+                         bool outermost, unsigned cores) {
   if (options.get_string("algorithm") != "auto" || warm_start) return false;
   const std::string& race = options.get_string("engine_race");
   if (race != "auto") return race == "true";
+  if (!outermost || cores < kRaceCores || options.get_bool("deterministic")) return false;
   const double work =
       static_cast<double>(model.num_rows()) * static_cast<double>(model.num_nonzeros());
-  return outermost && work >= kSimplexWorkCeiling && rule != "network:dual-simplex";
+  if (work < kSimplexWorkCeiling) return false;
+  // One pass over the nonzeros, only for a model already past the size gate.
+  return !network_shaped(model.num_rows(), model.num_cols(), model.num_nonzeros(),
+                         compute_engine_features(model).normal_equations_nnz_bound);
 }
 
 namespace {

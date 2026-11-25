@@ -2169,9 +2169,10 @@ const std::vector<OptionSpec>& Options::registry() {
                  "that fixed order. The answer's message carries every engine's outcome. "
                  "true races every LP solve under auto, false none. auto (the default) races "
                  "the caller's own solve of an LP whose rows x nonzeros reach 3e8 and that "
-                 "the network rule does not keep on the dual simplex: on Mittelmann's sixteen "
-                 "at 600 s that is 11 verified against 7 under the rule table, while on "
-                 "Netlib's millisecond solves the race is 1.59x slower and only maros-r7 is "
+                 "is not network shaped (under 4 nonzeros per column, the dual simplex's by "
+                 "the rule table), on a machine with at least three cores and outside "
+                 "deterministic mode; every other solve keeps the rule table. On Netlib's "
+                 "millisecond solves the race is 1.59x slower, and only maros-r7 there is "
                  "that large.",
                  0.0,
                  0.0,
