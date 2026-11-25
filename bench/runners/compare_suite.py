@@ -267,6 +267,10 @@ def solve(solver: str, suite: dict, model_path: Path, time_limit: float, sol: Pa
     options = ["threads=1"] + SANKHYA_ARMS.get(solver, [])
     if suite["kind"] == "mip":
         options.append("mip_threads=1")  # the tree's own setting, one per core by default
+    if suite["kind"] == "lp":
+        # The engine race is three engines on three threads, and engine_race=auto runs it on
+        # a large LP; one thread each is this comparison's stated configuration.
+        options.append("engine_race=false")
     if suite["kind"] == "qp":
         blob = maros_meszaros.run_one(binary, model_path, time_limit, False, options,
                                       keep_sol=sol)
