@@ -667,7 +667,10 @@ std::optional<Solution> Simplex::dual_loop(Timer& timer, Count* iterations_io) {
 
   for (;;) {
     iterations_seen_ = iterations;
-    if (iterations % 20 == 0) {
+    // Both arguments are passes over the model, about 12% of ken-18's instructions with the
+    // log off (callgrind, bench.yml profile-nodes run 45523568421), so they are computed
+    // only when the line or progress record is written. Neither changes any state.
+    if (iterations % 20 == 0 && logger_.writes_iterations()) {
       logger_.iteration(iterations, minimization_objective(), max_infeasibility(), -1.0,
                         timer.elapsed_seconds());
     }

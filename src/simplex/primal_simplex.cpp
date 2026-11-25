@@ -1663,7 +1663,8 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       reduced_costs_stale_ = phase_one;
     }
 
-    if (iterations % 20 == 0) {
+    // minimization_objective() is a pass over the columns; only for a line that is written.
+    if (iterations % 20 == 0 && logger_.writes_iterations()) {
       logger_.iteration(iterations, minimization_objective(), infeasibility, -1.0,
                         timer.elapsed_seconds());
     }
