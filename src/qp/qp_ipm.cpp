@@ -80,6 +80,7 @@
 
 #include <fmt/format.h>
 
+#include "../core/kkt_check.hpp"
 #include "../core/stop_controller.hpp"
 #include "la/ldl.hpp"
 #include "sankhya/certificate.hpp"
@@ -417,6 +418,51 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   int step_rejections = 0;
   std::vector<double> prev_v, prev_y, prev_zl, prev_zu;  // the iterate a rejected step restores
 
+  // ---- the caller's model's view of the iterate ------------------------------------------
+  // The point, the row duals in the model's own sense and the reduced costs c + Q x - A'
+  // row_dual, the quantity the Condat-Vu engine reports and the KKT check derives.
+  const double sense = model.sense_multiplier();
+  const auto map_back = [&](Solution* out) {
+    for (Index j = 0; j < s.n; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      const Index kcol = s.column_of[u];
+      out->col_value[u] = kcol < 0 ? s.fixed_value[u] : v[static_cast<std::size_t>(kcol)];
+    }
+    for (Index i = 0; i < model.num_rows(); ++i) {
+      const auto u = static_cast<std::size_t>(i);
+      const Index r = s.row_of[u];
+      out->row_dual[u] = r < 0 ? 0.0 : sense * y[static_cast<std::size_t>(r)];
+    }
+    std::vector<double> qx(static_cast<std::size_t>(s.n), 0.0);
+    hessian_times(model.hessian, out->col_value, &qx);
+    for (Index j = 0; j < s.n; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      double d = model.col_cost[u] + qx[u];
+      const ColumnView column = model.matrix.column(j);
+      for (Index p = 0; p < column.size; ++p) {
+        d -= column.values[p] * out->row_dual[static_cast<std::size_t>(column.rows[p])];
+      }
+      out->col_dual[u] = d;
+    }
+  };
+  // The in-process KKT gate's verdict on the current iterate as an optimum: the check solve()
+  // applies to this engine's answer (#590), complementarity judged relative to the size of the
+  // numbers each slack is a difference of (#806, tol::kComplementarityRounding). The extra
+  // iterations past the relative stop and the active-set finish (#980) exist to close
+  // products this gate would refuse; on an iterate it already accepts they only cost time
+  // (qscfxm3: optimal in 0.076 s at 950712b without the finish, 12.3 s with it at 1659c8b).
+  const double dual_tolerance = options.get_double("dual_feasibility_tolerance");
+  const auto gate_accepts = [&]() {
+    Solution probe = solution;
+    map_back(&probe);
+    probe.status = SolveStatus::kOptimal;
+    probe.recompute_quality(model);
+    KktTolerances gate;
+    gate.primal = primal_tolerance;
+    gate.dual = dual_tolerance;
+    return check_qp_optimality(model, probe, gate).passed;
+  };
+
   SolveStatus status = SolveStatus::kIterationLimit;
   std::string message;
   Count iterations = 0;
@@ -662,7 +708,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     }
     if (relative_met &&
         (largest_product <= tol::kQpIpmComplementarityShare * tol::kComplementarity ||
-         iterations_past_relative >= kIterationsForProducts)) {
+         iterations_past_relative >= kIterationsForProducts || gate_accepts())) {
       status = SolveStatus::kOptimal;
       break;
     }
@@ -969,7 +1015,8 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     residuals();
     const double largest_product_at_exit =
         largest_complementarity_product(s, has_lower, has_upper, v, y, zl, zu, rp);
-    if (largest_product_at_exit > tol::kQpIpmComplementarityShare * tol::kComplementarity) {
+    if (largest_product_at_exit > tol::kQpIpmComplementarityShare * tol::kComplementarity &&
+        !gate_accepts()) {
       const bool finished =
           active_set_finish(s, has_lower, has_upper, tolerance, primal_tolerance,
                             regularization_floor, should_stop, &v, &y, &zl, &zu);
@@ -992,30 +1039,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   }
 
   // ---- back to the caller's model -------------------------------------------------------
-  const double sense = model.sense_multiplier();
-  for (Index j = 0; j < s.n; ++j) {
-    const auto u = static_cast<std::size_t>(j);
-    const Index kcol = s.column_of[u];
-    solution.col_value[u] = kcol < 0 ? s.fixed_value[u] : v[static_cast<std::size_t>(kcol)];
-  }
-  for (Index i = 0; i < model.num_rows(); ++i) {
-    const auto u = static_cast<std::size_t>(i);
-    const Index r = s.row_of[u];
-    solution.row_dual[u] = r < 0 ? 0.0 : sense * y[static_cast<std::size_t>(r)];
-  }
-  // Reduced costs in the model's own sense, c + Q x - A' row_dual, the quantity the Condat-Vu
-  // engine reports and the KKT check derives.
-  std::vector<double> qx(static_cast<std::size_t>(s.n), 0.0);
-  hessian_times(model.hessian, solution.col_value, &qx);
-  for (Index j = 0; j < s.n; ++j) {
-    const auto u = static_cast<std::size_t>(j);
-    double d = model.col_cost[u] + qx[u];
-    const ColumnView column = model.matrix.column(j);
-    for (Index p = 0; p < column.size; ++p) {
-      d -= column.values[p] * solution.row_dual[static_cast<std::size_t>(column.rows[p])];
-    }
-    solution.col_dual[u] = d;
-  }
+  map_back(&solution);
   solution.status = status;
   solution.message = message;
   solution.iterations = iterations;
