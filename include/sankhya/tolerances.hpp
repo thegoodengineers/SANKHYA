@@ -1079,8 +1079,8 @@ inline constexpr double kRootCutProbationGain = 1.0;
 /// And the loop stops once the solve has used this share of time_limit, so a root whose
 /// every round is slow leaves the tree most of the time it was given. 0.2 until the
 /// tailing-off rule above; 0.05 since (3 s of a 60 s limit). The share is counted on the
-/// search's clock, the work before round 2 included, unless root_cut_time_from_loop, which
-/// counts it from the loop's own start.
+/// search's clock, the work before round 2 included, unless root_cut_time_from_loop (opt-in),
+/// which counts it from the loop's second round.
 inline constexpr double kRootCutTimeShare = 0.05;
 /// And the loop adds at most max(kRootCutRowFloor, kRootCutRowShare * m) cut rows in all,
 /// round 1 included, m the rows of the LP the root separates on before its first cut.

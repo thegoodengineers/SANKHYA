@@ -140,12 +140,15 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
                reported(bounds.back()), first_taken.size(), by_family(first_taken),
                first_iterations);
   const bool timed = time_limit_ > 0.0 && time_limit_ < 1e300;
-  // The time share's clock (root_cut_time_from_loop). Off, it is the search's own, so the
-  // presolve-to-root work before round 1 (symmetry, Feasibility Jump, the root LP, round 1)
-  // spends the share and a slow root never reaches round 2 (mod011: its first point comes at
-  // 2.9 to 3.3 s of a 3 s share). On, it starts here, at round 2, and the share bounds the
-  // rounds themselves, as the stall and round limits do (Achterberg 2007, ch. 8: the root
-  // separation loop is limited by its own rounds and stall, not by the time spent before it).
+  // THE TIME SHARE'S CLOCK (root_cut_time_from_loop, opt-in). Off, it is the search's: the
+  // loop stops once the search has used kRootCutTimeShare of time_limit, and the work before
+  // round 2 spends that too. On beasleyC3 the symmetry search and Feasibility Jump take 3.6
+  // to 4.6 s before the root LP, on mc11 2.2 to 3.0 s and on mod011 3.0 to 3.3 s, against a
+  // share of 3 s at a 60 s limit, so the loop ran one round on eight of those nine runs
+  // (bench.yml runs 45523852605 and 45523859891). On, the clock starts here, at round 2,
+  // and the share bounds the rounds themselves, as the stall and round limits do
+  // (Achterberg 2007, ch. 8: the root loop is limited by its own rounds). Off by default:
+  // its gates gained no proof and lost dano3mip's only point (docs/NEGATIVE-RESULTS.md).
   const double clock_start =
       options_.get_bool("root_cut_time_from_loop") ? timer_.elapsed_seconds() : 0.0;
   // With the pool removing the slack rows at the end (below), the budget is the pooled one.
@@ -198,7 +201,7 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
       }
     }
     if (timed &&
-        timer_.elapsed_seconds() - clock_start > tol::kRootCutTimeShare * time_limit_) {
+        root_cut_time_share_spent(timer_.elapsed_seconds(), clock_start, time_limit_)) {
       why = "the time share";
       break;
     }

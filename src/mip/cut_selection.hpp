@@ -67,6 +67,12 @@ struct CutSelection {
 /// the rounds, not the rows, then bound the loop.
 [[nodiscard]] Index root_cut_row_budget(Index model_rows, Index pooled_per_round = 0);
 
+/// The root separation loop's time share (#495): true once more than kRootCutTimeShare of
+/// `time_limit` has passed between `clock_start` and `now`, all three in seconds.
+/// `clock_start` is 0, the start of the search, or under root_cut_time_from_loop the search
+/// clock when the loop began its second round.
+[[nodiscard]] bool root_cut_time_share_spent(double now, double clock_start, double time_limit);
+
 /// A selection cut short to `room` rows: the first `room` of `selected` (best first, as
 /// select_cuts returns them) stay; the rest go to the FRONT of `waiting`, since they scored
 /// above everything selection deferred, and `waiting` is held to kCutWaitingLimit.

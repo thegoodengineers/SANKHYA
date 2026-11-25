@@ -746,11 +746,14 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"root_cut_time_from_loop",
                  OptionType::Bool,
                  false,
-                 "Where root_cut_loop's time share (5 percent of time_limit) is counted from. "
-                 "Off: from the start of the search, so the work before round 2 (symmetry, "
-                 "Feasibility Jump, the root LP and round 1) spends it, and a model whose "
-                 "first round ends past it gets no second round. On: from the loop's own "
-                 "start at round 2, so the share bounds the rounds alone.",
+                 "The clock of root_cut_loop's time share (5 percent of time_limit). Off: the "
+                 "search's, so the work before the second cut round (symmetry, Feasibility "
+                 "Jump, the root LP and round 1) spends it too, and a model on which that "
+                 "takes the share gets one round. On: the loop's own, started at its second "
+                 "round, so the share bounds the rounds alone. Opt-in: in its gates at 60 s it "
+                 "gained no proof on MIPLIB 3, tier 1 or the 25 MIPLIB 2017 targets, halved "
+                 "the gaps of beasleyC3 and mod011, and lost dano3mip's only point on one "
+                 "seed (docs/NEGATIVE-RESULTS.md).",
                  0.0,
                  0.0,
                  {}});
@@ -777,8 +780,10 @@ const std::vector<OptionSpec>& Options::registry() {
          "gap-target stops). auto: flow-covers, and also a model with a variable upper "
          "bound on which round 1 took no flow cover, on probation: the rounds after round 1 "
          "are kept only if together they gain at least what round 1 gained, and otherwise "
-         "the root goes back to its state after round 1 and the pool stays off (gesa2 and "
-         "mod011 enter and keep their rounds; bell5 enters and is rolled back). "
+         "the root goes back to its state after round 1 and the pool stays off (gesa2 "
+         "enters and keeps its rounds; bell5 enters and is rolled back; mod011's rounds "
+         "are cut short by the time share at a 60 s limit and rolled back, see "
+         "root_cut_time_from_loop). "
          "probation: as auto, but every model on which round 1 took no flow cover enters "
          "on probation, with or without a variable upper bound. Opt-in: measured against "
          "auto it gains two proofs on SAMADHAN's 50 and loses five elsewhere (#1332, "

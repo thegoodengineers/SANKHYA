@@ -275,6 +275,51 @@ TEST(RootCutLoop, TheBudgetIsTheFloorOrTheShareOfTheRows) {
   EXPECT_EQ(mip::root_cut_row_budget(136, 0), std::max<Index>(tol::kRootCutRowFloor, 136));
 }
 
+TEST(RootCutLoop, TheTimeShareIsCountedFromTheClockItIsGiven) {
+  const double limit = 60.0;
+  const double share = tol::kRootCutTimeShare * limit;  // 3 s
+  // The search's clock (clock_start 0): work before the loop spends the share. beasleyC3's
+  // symmetry search and Feasibility Jump take 3.6 s, so its second round never starts.
+  EXPECT_FALSE(mip::root_cut_time_share_spent(0.5 * share, 0.0, limit));
+  EXPECT_TRUE(mip::root_cut_time_share_spent(1.2 * share, 0.0, limit));
+  // The loop's own clock (root_cut_time_from_loop): the same moment is inside the share
+  // when the loop began at it, and outside once the rounds themselves have used the share.
+  EXPECT_FALSE(mip::root_cut_time_share_spent(1.2 * share, 1.2 * share, limit));
+  EXPECT_FALSE(mip::root_cut_time_share_spent(2.1 * share, 1.2 * share, limit));
+  EXPECT_TRUE(mip::root_cut_time_share_spent(2.3 * share, 1.2 * share, limit));
+  // Exactly the share is not past it, on either clock.
+  EXPECT_FALSE(mip::root_cut_time_share_spent(share, 0.0, limit));
+}
+
+TEST(RootCutLoop, TheLoopsOwnClockChangesNothingWhereNoClockBinds) {
+  // With an hour's limit the share is 180 s, which neither clock reaches on these models,
+  // so root_cut_time_from_loop must leave the rounds, the root bound and the answer alone.
+  std::mt19937_64 rng(20261125);
+  int looped = 0;
+  for (int trial = 0; trial < 30; ++trial) {
+    const oracle::GeneratedLp lp = binary_instance(rng, 12);
+    const Model model = integer_model(lp);
+    Options search_clock = root_cuts(true);
+    search_clock.set_double("time_limit", 3600.0);
+    Options loop_clock = search_clock;
+    loop_clock.set_bool("root_cut_time_from_loop", true);
+    Solution off;
+    const std::string off_log = solve_logged(model, search_clock, &off);
+    Solution on;
+    const std::string on_log = solve_logged(model, loop_clock, &on);
+    ASSERT_EQ(on.status, off.status);
+    if (off.status != SolveStatus::kOptimal) continue;
+    EXPECT_EQ(on.root_cut_rounds, off.root_cut_rounds);
+    EXPECT_EQ(on.objective, off.objective);
+    if (!std::isnan(off.root_bound_after_cuts)) {
+      EXPECT_EQ(on.root_bound_after_cuts, off.root_bound_after_cuts);
+    }
+    EXPECT_EQ(on_log.find("stopped on the time share"), std::string::npos) << on_log;
+    if (off.root_cut_rounds > 1) ++looped;
+  }
+  EXPECT_GT(looped, 0) << "no instance ran a second round";
+}
+
 TEST(RootCutLoop, ARoundCutShortKeepsItsBestAndTheRestWaitFirst) {
   // Five selected cuts, best first, told apart by their rhs; two already waiting.
   auto cut = [](double rhs) {
