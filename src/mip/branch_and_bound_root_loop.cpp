@@ -140,6 +140,14 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
                reported(bounds.back()), first_taken.size(), by_family(first_taken),
                first_iterations);
   const bool timed = time_limit_ > 0.0 && time_limit_ < 1e300;
+  // The time share's clock (root_cut_time_from_loop). Off, it is the search's own, so the
+  // presolve-to-root work before round 1 (symmetry, Feasibility Jump, the root LP, round 1)
+  // spends the share and a slow root never reaches round 2 (mod011: its first point comes at
+  // 2.9 to 3.3 s of a 3 s share). On, it starts here, at round 2, and the share bounds the
+  // rounds themselves, as the stall and round limits do (Achterberg 2007, ch. 8: the root
+  // separation loop is limited by its own rounds and stall, not by the time spent before it).
+  const double clock_start =
+      options_.get_bool("root_cut_time_from_loop") ? timer_.elapsed_seconds() : 0.0;
   // With the pool removing the slack rows at the end (below), the budget is the pooled one.
   const auto row_budget = static_cast<Count>(
       root_cut_row_budget(model_rows, cut_removal_ ? cut_max_per_round_ : 0));
@@ -189,7 +197,8 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
         break;
       }
     }
-    if (timed && timer_.elapsed_seconds() > tol::kRootCutTimeShare * time_limit_) {
+    if (timed &&
+        timer_.elapsed_seconds() - clock_start > tol::kRootCutTimeShare * time_limit_) {
       why = "the time share";
       break;
     }
