@@ -55,10 +55,17 @@
 
 namespace sankhya::mip {
 
-/// How many row bounds `tighten_integral_rows` moved.
+/// How many row bounds `tighten_integral_rows` moved, and whether a row came out empty.
 struct RowTightening {
   Count rows_tightened = 0;
   Count bounds_moved = 0;  ///< a range row can have both sides moved
+  /// The first row whose bounds hold no integer, or -1 (#1335). Every column of such a row
+  /// is integer with an integral coefficient, so its activity is an integer at every
+  /// integer point and no integer point satisfies it: the model is infeasible.
+  /// `empty_lower` and `empty_upper` are that row's bounds as it was given.
+  Index empty_row = -1;
+  double empty_lower = 0.0;
+  double empty_upper = 0.0;
 };
 
 // =========================================================================================
