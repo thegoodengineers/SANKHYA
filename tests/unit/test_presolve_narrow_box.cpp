@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// SANKHYA - presolve fixes a column only when its box is a point.
+// SANKHYA - presolve fixes a column only when its box is a point (#1362).
 //
 // A box narrower than the feasibility tolerance is still a box: what it is worth is its
 // width times the coefficients and the cost the column carries, and with a coefficient of
