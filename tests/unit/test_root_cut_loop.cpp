@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <random>
 #include <string>
 #include <utility>
@@ -152,6 +153,49 @@ TEST(RootCutLoop, OffIsTheSingleRoundAndOnNeverEndsBelowIt) {
       "[  INFO    ] root cut loop: %d instances, %d ran a second round, %d closed more of the "
       "root gap than one round\n",
       instances, looped, higher);
+}
+
+/// The cold node LPs a search's log reports ("Node LPs: 45 warm-started dual (931
+/// iterations), 2 cold (..."), -1 when the line is not there.
+int cold_node_lps(const std::string& log) {
+  const std::size_t line = log.find("Node LPs: ");
+  if (line == std::string::npos) return -1;
+  const std::size_t count = log.find("), ", line);
+  if (count == std::string::npos) return -1;
+  return std::atoi(log.c_str() + count + 3);
+}
+
+TEST(RootCutRound, TheFirstRoundsReSolveStartsFromTheRootBasisUnderItsSwitch) {
+  // mip_root_cut_warm_start: off, the re-solve after the first cut round is a second cold
+  // solve of the root LP; on, it starts from the root's optimal basis. The answer is the
+  // same either way, and on some instance the switch saves a cold solve.
+  std::mt19937_64 rng(20261126);
+  int instances = 0;
+  int fewer_cold = 0;
+  for (int trial = 0; trial < 60; ++trial) {
+    const oracle::GeneratedLp lp = binary_instance(rng, 12);
+    const Model model = integer_model(lp);
+    const Options cold_start = root_cuts(false);
+    Options warm_start = cold_start;
+    warm_start.set_bool("mip_root_cut_warm_start", true);
+    Solution off;
+    const std::string off_log = solve_logged(model, cold_start, &off);
+    Solution on;
+    const std::string on_log = solve_logged(model, warm_start, &on);
+    ASSERT_EQ(on.status, off.status);
+    if (off.status != SolveStatus::kOptimal) continue;
+    ++instances;
+    EXPECT_NEAR(on.objective, off.objective, 1e-6 * std::max(1.0, std::fabs(off.objective)));
+    const int off_cold = cold_node_lps(off_log);
+    const int on_cold = cold_node_lps(on_log);
+    if (off_cold < 0 || on_cold < 0) continue;  // a search that ended before its summary
+    EXPECT_GE(on_cold, 1) << "the root LP itself has no basis to start from\n" << on_log;
+    if (on_cold < off_cold) ++fewer_cold;
+  }
+  EXPECT_GE(instances, 30);
+  EXPECT_GT(fewer_cold, 0) << "the switch never saved a cold solve";
+  std::printf("[  INFO    ] root cut warm start: %d instances, %d with fewer cold node LPs\n",
+              instances, fewer_cold);
 }
 
 TEST(RootCutLoop, ProbationGateLetsAModelWithoutAVariableBoundInAndAutoKeepsItOut) {

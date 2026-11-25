@@ -757,6 +757,18 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"mip_root_cut_warm_start",
+                 OptionType::Bool,
+                 false,
+                 "The re-solve after the first root cut round starts from the root LP's own "
+                 "optimal basis, the cut rows' logicals basic, as the later rounds and the "
+                 "tree rounds do. Off, it starts from the slack basis: the root holds no "
+                 "stored basis, so the root LP is in effect solved twice (dano3mip: 25 s of a "
+                 "60 s limit). OFF until its MIPLIB A/B says what the different root vertex "
+                 "changes.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back(
         {"root_cut_loop_when",
          OptionType::String,
