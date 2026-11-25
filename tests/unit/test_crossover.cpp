@@ -290,6 +290,38 @@ TEST(Crossover, OffLeavesTheInteriorPointsAnswerAlone) {
   for (const BasisStatus status : s.col_status) EXPECT_EQ(status, BasisStatus::kUnknown);
 }
 
+TEST(Crossover, AVertexThatFailsTheCheckGivesWayToAnInteriorPointThatPasses) {
+  // The s100 case (mittelmann-2e53805.csv), in miniature: the interior point's optimal answer
+  // passes the verifier's checks, the vertex does not, and the vertex gives way. A vertex that
+  // passes is kept, and so is one that fails when the interior point's answer fails too, as
+  // the status guard in solve() then judges whatever is returned.
+  Model model;
+  const std::string path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+       "data/netlib/afiro.mps")
+          .string();
+  ASSERT_TRUE(io::read_model(path, &model).ok) << path;
+  const Solution interior = solve(model, ipm_options(false));
+  Options dual = ipm_options(false);
+  dual.set_string("algorithm", "dual-simplex");
+  const Solution vertex = solve(model, dual);
+  ASSERT_EQ(interior.status, SolveStatus::kOptimal) << interior.message;
+  ASSERT_EQ(vertex.status, SolveStatus::kOptimal) << vertex.message;
+  KktVerdict verdict;
+  EXPECT_FALSE(vertex_gives_way(model, interior, vertex, &verdict)) << verdict.detail;
+  EXPECT_TRUE(verdict.passed);
+
+  Solution wrong = vertex;  // a reported objective the point does not have
+  wrong.objective += 1.0;
+  EXPECT_TRUE(vertex_gives_way(model, interior, wrong, &verdict));
+  EXPECT_FALSE(verdict.passed);
+  EXPECT_FALSE(verdict.check.empty());
+
+  Solution also_wrong = interior;
+  also_wrong.objective += 1.0;
+  EXPECT_FALSE(vertex_gives_way(model, also_wrong, wrong, &verdict));
+}
+
 TEST(Crossover, NetlibInstancesReachAVertexAtThePublishedObjective) {
   // The committed small set, through ipm + crossover: the objective the published table
   // gives, with a basis, from a start that is already optimal to 1e-8. The pivot count is
