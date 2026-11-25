@@ -742,6 +742,8 @@ Solution BranchAndBound::run() {
       continue;
     }
     if (relaxation.status == SolveStatus::kUnbounded) {
+      // Not yet a verdict on the MILP (#1343): solve_branch_and_bound() goes on to find out
+      // whether the model has an integer point, which is what decides between the two.
       leave();
       solution.status = SolveStatus::kUnbounded;
       solution.message =
@@ -1410,8 +1412,8 @@ Options with_node_lp_defaults(const Options& requested) {
 
 }  // namespace
 
-Solution solve_branch_and_bound(const Model& given, const Options& requested, Logger& logger,
-                                SolveControl* control) {
+Solution search_as_given(const Model& given, const Options& requested, Logger& logger,
+                         SolveControl* control) {
   const Options options = with_node_lp_defaults(requested);
   // SEMI-CONTINUOUS COLUMNS AND SPECIAL ORDERED SETS (#754) are taken off the model here,
   // and everything below - the row tightening, OBBT, propagation, the tree - runs on the
