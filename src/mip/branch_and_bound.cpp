@@ -742,6 +742,8 @@ Solution BranchAndBound::run() {
       continue;
     }
     if (relaxation.status == SolveStatus::kUnbounded) {
+      // Not yet a verdict on the MILP (#1343): solve_branch_and_bound() goes on to find out
+      // whether the model has an integer point, which is what decides between the two.
       leave();
       solution.status = SolveStatus::kUnbounded;
       solution.message =
@@ -939,9 +941,22 @@ Solution BranchAndBound::run() {
     // an exact integer in one child and moves it away in the other; with no such column, the
     // node is set aside on its bound like a node LP that failed (#733), so it blocks an
     // optimality claim instead of disappearing.
+    //
+    // BEFORE IT IS SET ASIDE, THE POINT IS TRIED IN THE MODEL'S OWN UNITS (#1348). The node
+    // LP's tolerance is the scaled model's and the incumbent test's is the model's, so a
+    // point can be refused for a row the LP had no reason to repair. With its integer
+    // columns kept and the rest re-solved unscaled (offer_in_model_units) the node usually
+    // has a point the test accepts; if that point meets the node's bound, the node is
+    // closed on it as any node is closed by an incumbent that meets its bound.
     const auto branch_on_refused_point = [&](const std::vector<double>& x, double bound) {
       const Index column = off_integer_column(x);
       if (column >= 0) return column;
+      // Not under a certificate (#518), whose leaves are proved by their own LP duals.
+      if (!certificate_mode() && offer_in_model_units(x) && can_prune(bound)) {
+        leave();
+        ++nodes_pruned_;
+        return Index{-1};
+      }
       leave();
       certificate_refuse("an integral node LP point was refused by the incumbent test");
       if (unsolved_nodes_ == 0) {
@@ -1410,8 +1425,8 @@ Options with_node_lp_defaults(const Options& requested) {
 
 }  // namespace
 
-Solution solve_branch_and_bound(const Model& given, const Options& requested, Logger& logger,
-                                SolveControl* control) {
+Solution search_as_given(const Model& given, const Options& requested, Logger& logger,
+                         SolveControl* control) {
   const Options options = with_node_lp_defaults(requested);
   // SEMI-CONTINUOUS COLUMNS AND SPECIAL ORDERED SETS (#754) are taken off the model here,
   // and everything below - the row tightening, OBBT, propagation, the tree - runs on the

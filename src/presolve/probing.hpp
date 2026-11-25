@@ -49,6 +49,7 @@ struct ProbingResult {
   Count implications = 0;   ///< (x_j = v) implies a bound on another column, per probe
   bool infeasible = false;  ///< both values of some binary are infeasible
   bool work_limit_reached = false;  ///< candidates were left unprobed
+  Count rows_passed_over = 0;       ///< queued rows the activities showed could imply nothing
 
   /// Pairwise conflicts between literals, each pair once with first < second. Capped (a
   /// missing edge only means fewer cliques, never an invalid one).
@@ -67,9 +68,14 @@ struct ProbingResult {
 /// Probe the binaries of `model` (integer columns with bounds [0, 1]) under the bounds
 /// `col_lower` / `col_upper`, most constrained (most nonzeros) first, until every one is
 /// probed or `work_limit` matrix entries have been visited. `model->matrix` must be frozen.
+///
+/// `row_activities` keeps every row's minimum and maximum activity up to date and passes
+/// over a queued row whose activities show it cannot imply a bound (probing.cpp says why
+/// that is exact). It changes the time, never a deduction or the work charged: false is
+/// the full rescan of every queued row, kept so a test can hold the two to the same result.
 [[nodiscard]] ProbingResult probe_binaries(const Model& model,
                                            const std::vector<double>& col_lower,
                                            const std::vector<double>& col_upper,
-                                           std::int64_t work_limit);
+                                           std::int64_t work_limit, bool row_activities = true);
 
 }  // namespace sankhya::presolve

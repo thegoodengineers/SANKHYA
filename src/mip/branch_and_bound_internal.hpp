@@ -182,6 +182,13 @@ inline double fractionality(double value) {
   return std::fabs(value - std::round(value));
 }
 Options sub_mip_options(const Options& base, Count node_limit, double time_limit);
+
+/// The search of `model` as it is given. solve_branch_and_bound() (the public entry,
+/// branch_and_bound_unbounded.cpp) runs it once, and once more without the objective when
+/// the relaxation is unbounded (#1343). kUnbounded from this function says only that the
+/// relaxation is.
+[[nodiscard]] Solution search_as_given(const Model& model, const Options& options,
+                                       Logger& logger, SolveControl* control);
 double sub_mip_seconds(const ResourceLimits& limits, double elapsed, bool seconds_budgets);
 
 class BranchAndBound {
@@ -477,6 +484,11 @@ class BranchAndBound {
   /// node's domain; -1 when there is none. For a relaxation integral to the tolerance whose
   /// rounded point the incumbent test refused.
   [[nodiscard]] Index off_integer_column(const std::vector<double>& x) const;
+
+  /// #1348, in branch_and_bound_refused.cpp: `x` with its integer columns kept and the rest
+  /// re-solved by an LP on the UNSCALED model, offered to offer_incumbent(). True when that
+  /// point is a solution (whether or not it improved the incumbent).
+  bool offer_in_model_units(const std::vector<double>& x);
 
   // ---- Primal heuristics (#290, #414), in branch_and_bound_heuristics.cpp ---------------
   void init_heuristics();
