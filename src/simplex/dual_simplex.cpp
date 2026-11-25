@@ -275,6 +275,7 @@ double Simplex::wrong_signed_gap() const {
 // -----------------------------------------------------------------------------------------
 
 void Simplex::reset_dual_weights() {
+  leaving_heap_stale_ = true;
   dual_weight_.assign(static_cast<std::size_t>(m_), 1.0);
   ++dual_weight_resets_;
   // Steepest edge starts from the truth where that is affordable (#411): the slack basis
@@ -285,6 +286,7 @@ void Simplex::reset_dual_weights() {
 }
 
 void Simplex::compute_exact_dual_weights() {
+  leaving_heap_stale_ = true;
   dual_weight_ = exact_dual_weights_for_testing();
 }
 
@@ -314,6 +316,7 @@ double Simplex::slot_infeasibility(Index slot) const {
 }
 
 void Simplex::rebuild_infeasible_list() {
+  leaving_heap_stale_ = true;
   infeasible_slots_.clear();
   slot_listed_.assign(static_cast<std::size_t>(m_), 0);
   slot_infeasibility_.assign(static_cast<std::size_t>(m_), 0.0);
@@ -331,12 +334,73 @@ void Simplex::note_slot(Index slot) {
   const auto s = static_cast<std::size_t>(slot);
   const double infeasibility = slot_infeasibility(slot);
   slot_infeasibility_[s] = infeasibility;
+  queue_leaving_row(slot);
   if (slot_listed_[s] != 0 || infeasibility == 0.0) return;
   slot_listed_[s] = 1;
   infeasible_slots_.push_back(slot);
 }
 
+void Simplex::queue_leaving_row(Index slot) {
+  if (leaving_heap_stale_) return;
+  const auto s = static_cast<std::size_t>(slot);
+  const double infeasibility = slot_infeasibility_[s];
+  if (infeasibility == 0.0) return;  // an entry it had is dropped when it reaches the top
+  // Too many moves for this iteration, or as many dead entries as rows: the next choice
+  // scans and refills.
+  const std::size_t ceiling = infeasible_slots_.size() + static_cast<std::size_t>(m_);
+  if (++leaving_pushes_ > leaving_budget_ || leaving_heap_.size() > ceiling) {
+    leaving_heap_stale_ = true;
+    leaving_heap_.clear();
+    return;
+  }
+  const double score = infeasibility * infeasibility / dual_weight_[s];
+  if (!(score > 0.0)) return;  // never chosen by the scan either (0, or not a number)
+  leaving_heap_.push_back({score, slot});
+  std::push_heap(leaving_heap_.begin(), leaving_heap_.end(), leaving_below);
+}
+
 Index Simplex::choose_leaving_row() {
+  if (leaving_heap_stale_) return scan_leaving_rows(true);
+  leaving_pushes_ = 0;
+  const bool any_rejected = dual_rows_rejected_now_ > 0;
+  Index best = -1;
+  while (!leaving_heap_.empty()) {
+    const LeavingEntry top = leaving_heap_.front();
+    const auto s = static_cast<std::size_t>(top.slot);
+    const double infeasibility = slot_infeasibility_[s];
+    // Current when the slot's score is still the entry's, to the bit; a rejected row stays
+    // out until the refactorization that re-admits it, which marks the queue stale.
+    if (infeasibility != 0.0 && !(any_rejected && dual_row_rejected_[s] != 0) &&
+        infeasibility * infeasibility / dual_weight_[s] == top.score) {
+      best = top.slot;
+      break;
+    }
+    std::pop_heap(leaving_heap_.begin(), leaving_heap_.end(), leaving_below);
+    leaving_heap_.pop_back();
+  }
+#ifndef NDEBUG
+  // The debug builds (the ASan/UBSan CI jobs) hold every choice to the scan's: a change to a
+  // score that did not reach note_slot() shows up here, not as a different pivot.
+  {
+    Index scanned = -1;
+    double scanned_score = 0.0;
+    for (const Index slot : infeasible_slots_) {
+      const auto t = static_cast<std::size_t>(slot);
+      const double v = slot_infeasibility_[t];
+      if (v == 0.0 || (any_rejected && dual_row_rejected_[t] != 0)) continue;
+      const double score = v * v / dual_weight_[t];
+      if (score > scanned_score || (score == scanned_score && scanned >= 0 && slot < scanned)) {
+        scanned_score = score;
+        scanned = slot;
+      }
+    }
+    assert(best == scanned && "the leaving-row queue disagrees with the scan");
+  }
+#endif
+  return best;
+}
+
+Index Simplex::scan_leaving_rows(bool refill) {
   // The basic variable furthest outside its bounds, in the dual devex metric: infeasibility
   // squared over the row's reference weight. The weight approximates the norm of row r of
   // B^-1, which is what turns a primal infeasibility into a dual step length - the dual
@@ -349,6 +413,7 @@ Index Simplex::choose_leaving_row() {
   double best_score = 0.0;
   const bool any_rejected = dual_rows_rejected_now_ > 0;
   std::size_t kept = 0;
+  if (refill) leaving_heap_.clear();
   for (std::size_t at = 0; at < infeasible_slots_.size(); ++at) {
     const Index slot = infeasible_slots_[at];
     const auto s = static_cast<std::size_t>(slot);
@@ -363,12 +428,22 @@ Index Simplex::choose_leaving_row() {
     infeasible_slots_[kept++] = slot;
     if (any_rejected && dual_row_rejected_[s] != 0) continue;
     const double score = infeasibility * infeasibility / dual_weight_[s];
+    if (refill && score > 0.0) leaving_heap_.push_back({score, slot});
     if (score > best_score || (score == best_score && best >= 0 && slot < best)) {
       best_score = score;
       best = slot;
     }
   }
   infeasible_slots_.resize(kept);
+  if (refill) {
+    // The queue pays when an iteration moves fewer slots than a scan reads, by a log factor:
+    // moved x log2(listed) under listed. Each refill sets that budget from the list's size.
+    const double listed = static_cast<double>(kept);
+    leaving_budget_ = static_cast<std::size_t>(listed / std::log2(listed + 2.0));
+    leaving_pushes_ = 0;
+    std::make_heap(leaving_heap_.begin(), leaving_heap_.end(), leaving_below);
+    leaving_heap_stale_ = false;
+  }
   return best;
 }
 
@@ -552,6 +627,7 @@ void Simplex::update_dual_weights(Index leaving_slot, double pivot) {
       // every row, counted as a reset, rather than pricing on it.
       dual_weight_.assign(static_cast<std::size_t>(m_), 1.0);
       ++dual_weight_resets_;
+      leaving_heap_stale_ = true;
     }
     return;
   }

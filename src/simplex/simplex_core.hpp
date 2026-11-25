@@ -288,8 +288,13 @@ class Simplex {
   [[nodiscard]] bool any_artificial_bound_active() const;
   [[nodiscard]] bool any_artificial_bound() const;
   /// Dual pricing: the basic slot with the largest weighted primal infeasibility, or -1.
-  /// Reads infeasible_slots_ and drops the slots on it that are feasible again.
+  /// From the leaving-row queue when it is current, else by scan_leaving_rows().
   [[nodiscard]] Index choose_leaving_row();
+  /// The same choice by a pass over infeasible_slots_, dropping the slots on it that are
+  /// feasible again; with `refill`, the queue is rebuilt from what the pass saw.
+  [[nodiscard]] Index scan_leaving_rows(bool refill);
+  /// File slot's current score on the queue, unless the queue is stale.
+  void queue_leaving_row(Index slot);
   /// How far slot's basic variable is outside its bounds, beyond primal_tolerance_; 0 inside.
   [[nodiscard]] double slot_infeasibility(Index slot) const;
   /// infeasible_slots_ from every slot's current value (after a dense change to x_basic_).
@@ -723,6 +728,29 @@ class Simplex {
   std::vector<Index> infeasible_slots_;
   std::vector<char> slot_listed_;
   std::vector<double> slot_infeasibility_;
+  /// THE LEAVING-ROW QUEUE (Hall and McKinnon 2005, sec. 4: the candidates are maintained
+  /// from the entries that change, not rebuilt). A max-heap of (score, slot), score the
+  /// infeasibility squared over the dual weight, ties to the lower slot: exactly the order
+  /// scan_leaving_rows() applies, so the pivot is the same. A slot is re-queued by
+  /// note_slot(), which every change to its infeasibility reaches, and that is also where
+  /// the weight update's slots (alpha's support and the leaving slot) arrive; an entry whose
+  /// score is no longer the slot's current one is dropped when it reaches the top (lazy
+  /// deletion). Anything that changes many weights or rows at once - a rebuild of the list,
+  /// a weight reset, a refactorization, which re-admits the rejected rows - marks the queue
+  /// stale, and the next choice scans and refills it. An iteration that moves too many
+  /// slots for a heap to pay (alpha dense, as on pilot87) marks it stale as well.
+  struct LeavingEntry {
+    double score;
+    Index slot;
+  };
+  /// The heap order: the larger score first, and of two equal scores the lower slot.
+  static bool leaving_below(const LeavingEntry& a, const LeavingEntry& b) {
+    return a.score < b.score || (a.score == b.score && a.slot > b.slot);
+  }
+  std::vector<LeavingEntry> leaving_heap_;
+  bool leaving_heap_stale_ = true;
+  std::size_t leaving_pushes_ = 0;    ///< since the last choice
+  std::size_t leaving_budget_ = 0;    ///< pushes an iteration may make before it scans instead
   std::vector<Index> alpha_support_;  ///< nonzero slots of alpha_, ascending (see below)
   /// HYPER-SPARSE VECTORS (Hall and McKinnon 2005, sec. 3). Each work vector of the dual
   /// iteration keeps the list of the positions it may be nonzero at, so that clearing it,
