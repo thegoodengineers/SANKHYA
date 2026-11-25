@@ -2561,9 +2561,9 @@ const std::vector<OptionSpec>& Options::registry() {
          "max(16, 10 sqrt(n)), a dense row of A) last, in the interior point's "
          "factorization and in the active-set finish's, as the LP interior point's "
          "proximal path does (#473; Amestoy, Davis & Duff, ACM TOMS 30(3), 2004). On by "
-         "default since the A/B on Maros-Meszaros (bench.yml run 45524023299, all 138 "
-         "at 60 s, interior point only): no status, passed or verified flag changed, "
-         "boyd1 35.4 s to 18.8 s and boyd2 40.3 s to 11.4 s.",
+         "default since the A/B on Maros-Meszaros against main at 23e40b50 (bench.yml run "
+         "45539507204, all 138 at 60 s, both arms in one job): no status, passed or "
+         "verified flag changed, boyd1 31.7 s to 3.4 s and boyd2 36.4 s to 10.5 s.",
          0.0,
          0.0,
          {}});

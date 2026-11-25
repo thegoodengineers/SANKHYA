@@ -803,6 +803,20 @@ The optima are 103333.874 and 101282.647.
 
 Not measured: how many integer columns end fixed after probing because both probes agree, which is the count a wider gate would read. What would earn a gate: a count that is at or above the share on these two models and below it on the MIPLIB 3 models that lost proofs under probing (10teams, air05, bell5), and a primal heuristic that reaches the optimum once the bound is there, because without one the gate moves a bound and no verdict.
 
+### The supernodal numeric phase for the QP interior point (`qp_ipm_supernodal`, opt-in)
+
+The QP interior point factored its augmented system with the scalar up-looking LDL^T and no dense-node postponement, while `src/la` has both a supernodal numeric phase (#470) and the AMD dense rule (#473) that the LP interior point's proximal path uses. Both were wired to the QP loop behind options and measured together.
+
+Setup: `bench.yml` `ab-option` on one binary, `ed6e3400`, Maros-Meszaros 138 at 60 s, three arms in one job (run 45524023299): `base` (defaults), `postpone` (`qp_ipm_postpone_dense=true`), `both` (that and `qp_ipm_supernodal=true`). Counts are passed / verified.
+
+| arm | passed | verified | SGM time, shift 10 s, failures at 60 s |
+|---|---|---|---|
+| base | 129 | 135 | 2.972 s |
+| postpone | 129 | 135 | 2.849 s |
+| both | 120 | 126 | 4.104 s |
+
+The supernodal phase did what it was for on the factor-bound models: cvxqp2l 33.8 s to 16.0 s, cvxqp1l 44.5 to 26.5, cvxqp3l 58.9 to 37.5, cont-200 7.6 to 4.3, cont-201 7.2 to 4.2, boyd2 40.3 to 12.5. But the interior point ended in a numerical error and fell back to Condat-Vu on qcapri, qpcboei1, qpcboei2, qscfxm3, qseba, qship12l, qship12s, powell20 and boyd1, each of which passes in the other two arms, and cont-300 came back optimal but no longer matched the reference. Postponement alone changed no status, passed or verified flag (stadat1 failed both ways). It is the default since this PR, in the interior point's factorization and in the active-set finish's, gated against `main` at `23e40b50` with both arms in one job (run 45539507204): 129 / 135 both ways, no row's status changed, boyd1 31.7 s to 3.4 s and boyd2 36.4 s to 10.5 s, SGM 2.830 s to 2.649 s. Why the supernodal factor fails these nine was not traced: the scalar and supernodal paths share the pivot rule, so the next step is to compare the two factors on qpcboei1's first KKT matrix. `qp_ipm_supernodal` stays, off. The CSV was not committed (branch stamp).
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
