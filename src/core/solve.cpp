@@ -1554,7 +1554,12 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
           "Retry without presolve (#783): not optimal either; the first answer stands");
       share_of_what_is_left = 1.0;
     }
-    if (!race && !warm_answer) certify_by_elastic();
+    // UNDER THE RACE TOO (#1339). The retries above are skipped for a race because every
+    // racer already ran its own presolve and postsolve; the elastic certificate reads the
+    // model as given and has no such reason. Without it an LP that presolve proves
+    // infeasible through a reduction that builds no Farkas candidate was rejected by the
+    // race's gate in every lane, and the line below then called it a numerical error.
+    if (!warm_answer) certify_by_elastic();
     refuse_an_unproved_infeasibility(model, &solution, logger);
     // THE PRESCALED RETRY (#792). An LP that came back without a verdict - a numerical
     // error, or an optimality claim the guard withdrew - is solved once more through the

@@ -16,11 +16,13 @@
 #include <new>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <gtest/gtest.h>
 
 #include "core/engine_race.hpp"
 #include "core/kkt_check.hpp"
+#include "sankhya/certificate.hpp"
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
@@ -299,6 +301,46 @@ TEST(EngineRace, WithNoAnswerAcceptedTheRuleEnginesAnswerIsNotReportedOptimal) {
   EXPECT_NE(s.message.find("no answer passed its check"), std::string::npos) << s.message;
   EXPECT_NE(s.engine_reason.find("no answer passed its check"), std::string::npos)
       << s.engine_reason;
+}
+
+TEST(EngineRace, AnInfeasibilityPresolveProvesIsCertifiedAsOnTheOrdinaryPath) {
+  // #1339, two LPs the general-form fuzz (#1334) reduced. Presolve proves both infeasible
+  // through a reduction that builds no Farkas candidate, so every lane's verdict is
+  // rejected by the gate. The ordinary path then takes its certificate from the elastic LP
+  // (#559); the race skipped that and reported numerical_error.
+  //   -3 x0 - 2 x1 = -4, -5 x0 >= -5, x0 free, x1 <= -253
+  //    3 x0 + x1 <= -4,   x0 = 0,     x0 free, x1 >= 1
+  struct Lp {
+    double a00, a01, a10, row0_lower, row0_upper, row1_lower, row1_upper, x1_lower, x1_upper;
+  };
+  const Lp cases[] = {{-3.0, -2.0, -5.0, -4.0, -4.0, -5.0, kInfinity, -kInfinity, -253.0},
+                      {3.0, 1.0, 1.0, -kInfinity, -4.0, 0.0, 0.0, 1.0, kInfinity}};
+  for (const Lp& lp : cases) {
+    Model model;
+    model.resize_columns(2);
+    model.resize_rows(2);
+    model.col_lower = {-kInfinity, lp.x1_lower};
+    model.col_upper = {kInfinity, lp.x1_upper};
+    model.row_lower = {lp.row0_lower, lp.row1_lower};
+    model.row_upper = {lp.row0_upper, lp.row1_upper};
+    model.matrix.reset(2, 2);
+    model.matrix.add_entry(0, 0, lp.a00);
+    model.matrix.add_entry(0, 1, lp.a01);
+    model.matrix.add_entry(1, 0, lp.a10);
+    model.matrix.finalize();
+    ASSERT_EQ(model.validate(), "");
+    for (const bool deterministic : {false, true}) {
+      Options options = racing();
+      options.set_bool("deterministic", deterministic);
+      const Solution s = solve(model, options);
+      ASSERT_EQ(s.status, SolveStatus::kInfeasible) << s.message;
+      std::vector<double> flipped = s.farkas_dual;
+      for (double& y : flipped) y = -y;
+      EXPECT_TRUE(farkas_proves_infeasible(model, s.farkas_dual) ||
+                  farkas_proves_infeasible(model, flipped))
+          << s.message;
+    }
+  }
 }
 
 TEST(EngineRace, AnEngineThatRunsOutOfMemoryLosesAndTheRaceGoesOn) {
