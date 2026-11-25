@@ -2,8 +2,9 @@
 // SANKHYA - probing's row activities change the time, never a deduction (probing.cpp).
 //
 // The prober keeps every row's minimum and maximum activity and passes over a queued row
-// whose activities show the full rescan could do nothing, charging the work the rescan
-// would have been. That is only worth having if it is exact, so both propagations run here
+// whose activities show the full rescan could do nothing; both paths charge the same work
+// (a rescan only where the activities could not rule one out). That is only worth having
+// if it is exact, so both propagations run here
 // on the same random models - binaries, general integers, continuous columns with finite,
 // infinite and fractional bounds, packing, partitioning, covering and knapsack rows - under
 // generous and tight work limits, and every output must be identical to the bit: the
@@ -137,7 +138,7 @@ TEST(PresolveProbingActivities, TheKeptActivitiesGiveTheFullRescansDeductions) {
           presolve::probe_binaries(model, model.col_lower, model.col_upper, work, false);
       expect_identical(kept, full, trial);
       if (::testing::Test::HasFailure()) return;
-      EXPECT_EQ(full.rows_passed_over, 0);
+      EXPECT_EQ(kept.rows_passed_over, full.rows_passed_over);
       passed_over += kept.rows_passed_over;
       fixings += kept.fixings;
       tightenings += kept.tightenings;

@@ -906,11 +906,20 @@ inline constexpr double kProbingBoundMinStep = 1e-3;
 /// A propagated bound larger in magnitude than this is not written: finite in name only.
 inline constexpr double kProbingMaxBound = 1e9;
 
-/// Matrix entries probing may visit in total, and in one probe. Probing is the most
-/// expensive MIP presolve reduction (Achterberg et al. 2020 cap it by work too); past the
-/// total the remaining binaries are left unprobed, past the per-probe cap a probe stops
-/// propagating, which only means it deduces less.
-inline constexpr std::int64_t kProbingWorkLimit = 20000000;
+/// Matrix entries probing may visit in total, and in one probe: a bound change is charged
+/// its column's length, a row rescan its row's (probing.cpp). Probing is the most expensive
+/// MIP presolve reduction (Achterberg et al. 2020 cap it by work too); past the total the
+/// remaining binaries are left unprobed, past the per-probe cap a probe stops propagating,
+/// which only means it deduces less.
+///
+/// 2e9, SIZED ON ex9 (MIPLIB 2017), whose probing fixes 2,714 of its 8,560 binaries and
+/// tightens 5,518 more when it is allowed to finish, after which the root LP is solved and
+/// optimal at once (1 node). Its first round needs 1.21e9 in these units (diagnostic run
+/// 45524574189); 2e9 leaves room for the seeds' other probing orders. The old limit, 2e7 in
+/// units that charged every queued row a full rescan, reached 64 of ex9's binaries and fixed
+/// none. The per-probe cap is unchanged in number and looser in effect: ex9's first round
+/// costs 0.51 of what it was charged before (1.21e9 against 2.37e9).
+inline constexpr std::int64_t kProbingWorkLimit = 2000000000;
 inline constexpr std::int64_t kProbingProbeWorkLimit = 1000000;
 /// presolve_probing_fixed_share's default: with presolve_probing off, probing's integer
 /// bounds are written when it fixes at least this share of the integer columns. On MIPLIB 3

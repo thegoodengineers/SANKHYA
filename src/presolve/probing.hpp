@@ -71,8 +71,9 @@ struct ProbingResult {
 ///
 /// `row_activities` keeps every row's minimum and maximum activity up to date and passes
 /// over a queued row whose activities show it cannot imply a bound (probing.cpp says why
-/// that is exact). It changes the time, never a deduction or the work charged: false is
-/// the full rescan of every queued row, kept so a test can hold the two to the same result.
+/// that is exact). It changes the time, never a deduction or the work charged: false
+/// rescans every queued row and charges only the rows the activities could not rule out, kept
+/// so a test can hold the two to the same result.
 [[nodiscard]] ProbingResult probe_binaries(const Model& model,
                                            const std::vector<double>& col_lower,
                                            const std::vector<double>& col_upper,

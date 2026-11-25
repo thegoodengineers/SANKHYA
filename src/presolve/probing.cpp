@@ -7,8 +7,7 @@
 // and maximum activity over the current bounds - the finite part of each sum and how many
 // contributions are infinite - updated by every bound change through the column's entries
 // and restored exactly when a probe is undone. A queued row is rescanned only when those
-// activities say the rescan can do something. On ex9 (MIPLIB 2017) each probe rescanned
-// about 770,000 matrix entries: one fixed binary cascades through much of the model.
+// activities say the rescan can do something (on ex9 a probe rescanned ~770,000 entries).
 //
 // WHY THE PASS-OVER IS EXACT. propagate_row() changes a bound of column k in row i only if
 // the bound it computes beats the current one by more than set_upper()/set_lower() ignore:
@@ -25,8 +24,10 @@
 // possible activity magnitude, covers the difference between the kept sum and the rescan's
 // fresh one by many orders of magnitude. A row with an infinite contribution on the side
 // tested, or an integer member with a fractional bound (where the rounding argument fails),
-// is always rescanned. The pass-over is charged the work the rescan would have been, so the
-// work limits stop probing at the same probe as before.
+// is always rescanned.
+//
+// THE WORK IS WHAT IS DONE: a bound change costs its column's length (the rows it queues
+// and updates), a rescan its row's, a pass-over nothing (kProbingWorkLimit says the rest).
 
 #include "presolve/probing.hpp"
 
@@ -74,7 +75,7 @@ class Prober {
         seen_lo_(static_cast<std::size_t>(n_), 0.0),
         seen_up_(static_cast<std::size_t>(n_), 0.0),
         row_activities_(row_activities) {
-    if (row_activities_) start_activities();
+    start_activities();
   }
 
   ProbingResult run() {
@@ -238,6 +239,8 @@ class Prober {
     const auto u = static_cast<std::size_t>(j);
     trail_.push_back({j, lo_[u], up_[u]});
     const ColumnView column = model_.matrix.column(j);
+    work_ += column.size;  // the queueing here and the activity update in note_moved()
+    probe_work_ += column.size;
     for (Index k = 0; k < column.size; ++k) {
       const auto r = static_cast<std::size_t>(column.rows[k]);
       if (queued_[r] == 0) {
@@ -267,7 +270,7 @@ class Prober {
     }
     record(j);
     up_[u] = v;
-    if (row_activities_) note_moved(j, old, v, true);
+    note_moved(j, old, v, true);
     return true;
   }
 
@@ -289,7 +292,7 @@ class Prober {
     }
     record(j);
     lo_[u] = v;
-    if (row_activities_) note_moved(j, old, v, false);
+    note_moved(j, old, v, false);
     return true;
   }
 
@@ -302,14 +305,17 @@ class Prober {
       if (probe_work_ >= tol::kProbingProbeWorkLimit || work_ >= work_limit_) break;
       const Index i = queue_[head++];
       queued_[static_cast<std::size_t>(i)] = 0;
-      if (row_activities_ && !may_imply(i)) {
-        // Charged as the rescan it replaces, so the work limits are unchanged.
-        const Index size = by_row_.row(i).size;
-        work_ += size;
-        probe_work_ += size;
+      if (!may_imply(i)) {
         ++rows_passed_over_;
+        // The full rescan (row_activities false, for the test) changes nothing here, by the
+        // argument above, and is not charged: both paths spend the same work.
+        if (row_activities_) continue;
+        ok = propagate_row(i);
         continue;
       }
+      const Index size = by_row_.row(i).size;
+      work_ += size;
+      probe_work_ += size;
       ok = propagate_row(i);
     }
     clear_queue();
@@ -321,8 +327,6 @@ class Prober {
     const double row_lower = model_.row_lower[r];
     const double row_upper = model_.row_upper[r];
     const ColumnView row = by_row_.row(i);
-    work_ += row.size;
-    probe_work_ += row.size;
     double min = 0.0;
     double max = 0.0;
     int min_inf = 0;
