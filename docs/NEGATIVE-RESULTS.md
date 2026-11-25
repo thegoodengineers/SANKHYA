@@ -328,12 +328,12 @@ Files: `bench/results/option-ab-miplib3-rins-on-f60c6ea.csv`, `option-ab-miplib2
 
 HiGHS proves ex9, ex10 and ns1116954 in 3.4, 9.9 and 3.9 s in the same 60 s jobs (`highs-miplib2017-bench-60s-c8544ed.csv`); our search never leaves the root. Diagnosis run 44010017090 (profile=detailed with nested profiles, verbose logs, 3 seeds, the branch of #1316):
 
-- **Presolve is not the gap on ex9 and ex10.** Ours takes ex9 from 40962 rows, 10404 columns to 33846 and 8560, and ex10 from 69608 and 17680 to 63016 and 15936: exactly the sizes the MIPLIB 2017 instance pages publish after trivial presolving. On ns1116954, a zero-objective (feasibility) model, ours removes nothing and trivial presolving removes 120 of 131991 rows and 720 of 12648 columns, which cannot matter at that size.
+- **Withdrawn: presolve IS the gap on ex9 and ex10** (see "ex9 and ex10 are presolve problems" below). The comparison here was against the sizes after *trivial* presolving, and it holds only for that. Ours takes ex9 from 40962 rows, 10404 columns to 33846 and 8560, and ex10 from 69608 and 17680 to 63016 and 15936: exactly the sizes the MIPLIB 2017 instance pages publish after trivial presolving. On ns1116954, a zero-objective (feasibility) model, ours removes nothing and trivial presolving removes 120 of 131991 rows and 720 of 12648 columns, which cannot matter at that size.
 - **The root dual simplex does not finish in 57 s.** ex9: 24995 iterations, 446684 bound flips, 888 refactorizations (one every 28 iterations), and 26.7 s of 57 in the basic-values update (the FTRAN carrying each iteration's bound flips into x_B, and the recomputation after each refactorization), 10.2 s in FTRAN, 6.9 s refactorizing; 58711 of the FTRAN results were 30% dense or more. ex10: 19953 iterations, 27.6 s in basic values. ns1116954: 27775 iterations, 30.7 s in basic values, 10.7 s refactorizing. Symmetry detection spends 1.8-2.6 s on each before stopping at its budget.
 
 Four settings were tried on one `main` binary (`c1e5290`), all arms in one job, seed 0, 60 s, one thread (run 44081344529): `dual_perturb_costs_at_start=true`, `dual_ratio_test=harris`, `basis_update=forrest-tomlin`, and `mip_node_engine=primal`. None finishes the root LP of ex9 or ex10 (57.3-57.6 s of node LP in every arm). On ns1116954 Harris finishes the root in 15.4 s and the primal simplex in 38.0 s, against 58.0 s unfinished for the default, and bound 0 is then proved; but no feasible point follows (24.0 s of root cuts and 18.6 s of heuristics under Harris), so the status is the same. On neos-960392 the arms change the node count and the incumbent (-23 default, -55 Harris, -118 perturbed), never the proof.
 
-What would move these models: a root dual simplex whose flip update and refactorization rate do not grow with the density of B^-1 on degenerate 0/1 LPs; for ns1116954, a feasible point. Files: `bench/results/option-ab-miplib2017-root-lp-arms-c1e5290.csv` (the `arm` column).
+What would move these models: for ex9 and ex10, probing that finishes (the entry "ex9 and ex10 are presolve problems" below); for ns1116954, a feasible point. Files: `bench/results/option-ab-miplib2017-root-lp-arms-c1e5290.csv` (the `arm` column).
 
 ### neos859080 is proved on some seeds and not others: conflict analysis is off (`conflict_analysis`)
 
@@ -398,7 +398,24 @@ As a default for every LP inside branch and bound it fails the rule (both arms o
 - **Gained:** neos859080 seed 0, 10teams seed 0 and enlight8 seed 0 proved; ns1116954's root finished on all three seeds (bound 0) and ex9's on seed 2 (bound 81), neither with a feasible point.
 - **Harris with the start perturbation fails it too:** air04 seed 0, air05 seed 2, gesa2_o seed 2, qiu seed 2, enlight8 seed 2 and neos-3611689-kaihu seed 0 lose proofs, arki001 seeds 1-2 and swath seed 2 lose their points; neos859080 seed 0, neos-960392 seed 0 (proved -238 in 16.7 s) and enlight8 seed 0 are gained.
 
-Files: `bench/results/option-ab-miplib3-bb-harris-d394a85.csv`, `option-ab-miplib-tier1-bb-harris-d394a85.csv`, `option-ab-miplib2017-targets-bb-harris-d394a85.csv`, and the same three with `bb-harrisperturb` (the `arm` column: `off` is the default). Harris for the root alone is in section 2. What would move ex9 and ex10: the endgame after the objective is optimal, not the pivot rule.
+Files: `bench/results/option-ab-miplib3-bb-harris-d394a85.csv`, `option-ab-miplib-tier1-bb-harris-d394a85.csv`, `option-ab-miplib2017-targets-bb-harris-d394a85.csv`, and the same three with `bb-harrisperturb` (the `arm` column: `off` is the default). Harris for the root alone is in section 2. What would move ex9 and ex10 is not the LP at all: see the next entry.
+
+### ex9 and ex10 are presolve problems: probing collapses ex9 at 300 times its work limit, and does not finish ex10 (diagnosis, no CSV)
+
+**HiGHS never solves these root LPs.** Its own log (HiGHS 1.16.0) on the same files (run 45171229273, diagnostic branch `diag/highs-log`, one thread, 60 s): as a MIP, its presolve takes ex9 from 40,962 rows and 10,404 columns to 29,427 rows and 17 columns at 3 s and then to empty, optimal 81 with 0 nodes and 0 LP iterations in 3.4 s; ex10 to 2 rows and 4 columns at 20 s, optimal 100 in 20.0 s; ns1116954 to 125,990 rows and 11,928 columns, a point from its feasibility jump at 4.0 s and bound 0 from a 1-node search. Asked for the LP relaxation instead (`solve_relaxation`), HiGHS's dual simplex takes 12,714 iterations and 20.7 s on ex9 and does not finish ex10 in 60 s (18,816 iterations at 100.0000024), with the same signature as ours: the objective at its optimum while 12,000-29,000 rows stay primal infeasible. ns1116954's relaxation takes 3,951 iterations and 6.6 s. So the root LP endgame of the entries above is real, and HiGHS does not solve it quickly either; its presolve removes the need.
+
+**Ours, with probing forced on and its work limit scaled** (diagnostic branch `diag/probing-work`, run 45178082458, `presolve_probing=true`, 120 s, one thread; the work limit is matrix entries visited by propagation, default 2e7):
+
+| model | work limit | binaries probed | fixed | tightened | probing time | result |
+|---|---|---|---|---|---|---|
+| ex9 | 1x | 64 | 0 | 0 | 1.2 s | root LP unfinished at 120 s |
+| ex9 | 30x | 1,971 | 32 | 0 | 8.0 s | root LP unfinished |
+| ex9 | 300x | 7,749 of 8,560 (limit not reached), then 328 in round 2 | 2,714 | 5,518 | 29.1 s + 2.0 s | **optimal 81, 1 node, 2.2 s after presolve** |
+| ex10 | 1x | 30 | 0 | 0 | 1.0 s | root LP unfinished |
+| ex10 | 30x | 861 | 0 | 0 | 7.7 s | root LP unfinished |
+| ex10 | 300x | 9,400 of 15,936 (limit reached) | 386 | 0 | 68.4 s | root LP unfinished |
+
+Probing is what collapses ex9, but each probe costs about 770,000 matrix entries (6e9 over 7,749 probes), close to the per-probe cap of 1e6: fixing one binary of these equality rows forces the rest of the row to zero and the cascade reaches much of the model, and `propagate_row()` rescans the whole row each time any of its bounds moves. At the default limit it probes 64 binaries of ex9 and 30 of ex10 and fixes nothing. What would move them: propagation by incremental row activities (each bound change updates the activities of the rows in its column, and a row is scanned only when its activities can imply a bound; Achterberg, *Constraint integer programming*, PhD thesis, TU Berlin 2007, the chapter on domain propagation), so that probing ex9 to completion fits a sane work limit, then the MIPLIB gates with that limit.
 
 ## 2. Demoted by a measurement made on a branch, not re-run on `main`
 
