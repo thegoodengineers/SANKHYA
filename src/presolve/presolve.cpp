@@ -3043,6 +3043,35 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     if (largest_change == 0.0) break;
   }
 
+  // A PARALLEL ROW'S PRICE IS HANDED BACK ONCE THE PRICES ARE FINAL (#1354). The replay
+  // above moves the kept row's dual to the removed row when the bound that binds was the
+  // removed row's, and it reads the kept row's dual as it stood then. When the kept row
+  // was itself removed afterwards (a free column singleton or a doubleton took it), its
+  // dual is only set by the passes just finished, the replay saw zero and moved nothing,
+  // and the whole price stayed on the kept row: 3 x0 - 4 x1 >= -3 kept, 6 x0 - 8 x1 <= -2
+  // merged into it, x1 free and then substituted away with the row, and the price of the
+  // upper bound, -1/2, came back on the >= row. The sign of the final dual says which
+  // bound it prices (in minimise space, positive the lower, negative the upper), so the
+  // same transfer is made here on that. a_removed = scale * a_kept, so A^T y is unchanged.
+  // Newest record first: with several rows merged into one, the last merge owns the bound
+  // if any of them does, and once the price has moved the kept row holds none to move.
+  for (std::size_t idx = result.records.size(); idx-- > 0;) {
+    const Record& record = result.records[idx];
+    if (record.kind != Record::Kind::kParallelRow || record.scale == 0.0) continue;
+    const auto removed = static_cast<std::size_t>(record.index);
+    const auto kept = static_cast<std::size_t>(record.partner_row);
+    const double signed_dual = sense * solution.row_dual[kept];
+    const bool lower_binds = signed_dual > 0.0;
+    const bool moves = (lower_binds && record.lower_from_removed) ||
+                       (signed_dual < 0.0 && record.upper_from_removed);
+    if (!moves) continue;
+    solution.row_dual[removed] = solution.row_dual[kept] / record.scale;
+    solution.row_dual[kept] = 0.0;
+    solution.row_status[removed] =
+        (lower_binds == (record.scale > 0.0)) ? BasisStatus::kAtLower : BasisStatus::kAtUpper;
+    solution.row_status[kept] = BasisStatus::kBasic;
+  }
+
   // THE REDUCED COSTS ARE RECOMPUTED FROM THE FINAL ROW DUALS, ALL OF THEM (#157), AND
   // BEFORE THE QUALITY IS MEASURED. An earlier version ran this after recompute_quality():
   // the dispatcher's status guard then judged reduced costs this pass had already replaced,
