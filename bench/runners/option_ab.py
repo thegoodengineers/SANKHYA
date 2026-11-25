@@ -5,8 +5,8 @@
 Two bench.yml runs of the same suite land on whatever CPU the pool hands out (an EPYC 9V45
 for one leg and a 7763 for the other, on the RINS A/B), and the time comparison is spoiled.
 This runs both arms in the same process on the same machine: for every instance, the runner
-(netlib.py, kennington.py, maros_meszaros.py, mittelmann.py, miplib.py, pooling.py or
-refinery_lp.py) is
+(netlib.py, kennington.py, maros_meszaros.py, mittelmann.py, miplib.py, pooling.py, qplib.py
+or refinery_lp.py) is
 called once for the `off` arm (the shared --solver-option only) and once for the `on` arm
 (plus --option), the order flipping from one instance to the next so a drift in the machine
 lands on both arms.
@@ -48,6 +48,9 @@ MANIFESTS = {
     "mittelmann.py": "data/mittelmann/reference.json",
     "miplib.py": "data/miplib/reference.json",
     "pooling.py": "data/pooling/reference.json",
+    # QPLIB's convex continuous QPs; --runner-arg=--engines --runner-arg=auto keeps one row per
+    # instance and arm (the runner's default solves each with two engines).
+    "qplib.py": "data/qplib/reference.json",
     "refinery_lp.py": "data/refinery/manifest.json",
     # Mittelmann's LPfeas-14 (#759, #1177); --runner-arg=--engine --runner-arg=cpu
     # --runner-arg=--skip-cuopt runs our CPU PDHG alone.
@@ -64,6 +67,8 @@ def instances_of(runner: str, set_name: str | None = None) -> list[str]:
     if runner == "refinery_lp.py":  # the refinery manifest lists its MILPs too
         instances = {name: entry for name, entry in instances.items()
                      if entry.get("kind") == "lp"}
+    if runner == "qplib.py":  # qplib.py refuses an instance skipped for size
+        instances = {name: entry for name, entry in instances.items() if "skipped" not in entry}
     return sorted(instances)
 
 
