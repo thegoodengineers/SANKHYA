@@ -186,34 +186,54 @@ TEST(Prescale, TheQpKktMatrixIsEquilibratedByPowersOfTwo) {
   const PrescaledModel p = prescale_qp_by_powers_of_two(badly_scaled_qp(), 20);
   for (const double r : p.row) EXPECT_TRUE(is_power_of_two(r)) << r;
   for (const double c : p.column) EXPECT_TRUE(is_power_of_two(c)) << c;
-  double largest = 0.0;
-  double smallest = kInf;
-  for (const SparseMatrix* m : {&p.model.matrix, &p.model.hessian}) {
-    for (const double v : m->values()) {
-      largest = std::max(largest, std::fabs(v));
-      smallest = std::min(smallest, std::fabs(v));
+  // Ruiz drives the largest entry of every row and column of [Q A'; A 0] to one; rounding
+  // each factor to the nearest power of two moves it by at most a factor of 2. The original
+  // spans 2^-39 (Q) to 2^10 (A).
+  std::vector<double> row_max(p.row.size(), 0.0);
+  std::vector<double> column_max(p.column.size(), 0.0);
+  for (Index j = 0; j < p.model.num_cols(); ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    const ColumnView a = p.model.matrix.column(j);
+    for (Index k = 0; k < a.size; ++k) {
+      const auto i = static_cast<std::size_t>(a.rows[k]);
+      row_max[i] = std::max(row_max[i], std::fabs(a.values[k]));
+      column_max[u] = std::max(column_max[u], std::fabs(a.values[k]));
+    }
+    const ColumnView q = p.model.hessian.column(j);
+    for (Index k = 0; k < q.size; ++k) {
+      const auto i = static_cast<std::size_t>(q.rows[k]);
+      column_max[u] = std::max(column_max[u], std::fabs(q.values[k]));
+      column_max[i] = std::max(column_max[i], std::fabs(q.values[k]));
     }
   }
-  EXPECT_LE(largest / smallest, 64.0);
+  for (const double m : row_max) {
+    EXPECT_GE(m, 0.25);
+    EXPECT_LE(m, 4.0);
+  }
+  for (const double m : column_max) {
+    EXPECT_GE(m, 0.25);
+    EXPECT_LE(m, 4.0);
+  }
   EXPECT_EQ(p.model.hessian.num_nonzeros(), 2);
 }
 
 TEST(Prescale, AQpSolvedEquilibratedAnswersInItsOwnUnits) {
+  // What qp_prescale's retry does: solve the equilibrated model, map the answer back, and
+  // judge it on the model as written.
   const Model model = badly_scaled_qp();
-  for (const bool prescale : {false, true}) {
-    Options options;
-    options.set_bool("log_to_console", false);
-    options.set_bool("qp_prescale", prescale);
-    const Solution s = solve(model, options);
-    ASSERT_EQ(s.status, SolveStatus::kOptimal)
-        << "qp_prescale " << prescale << ": " << s.message;
-    EXPECT_NEAR(s.objective, -4.5, 1e-7) << prescale;
-    EXPECT_NEAR(s.col_value[0] * 0x1p-20, 0.5, 1e-7) << prescale;
-    EXPECT_NEAR(s.col_value[1], 1.5, 1e-7) << prescale;
-    EXPECT_NEAR(s.row_dual[0] * 0x1p10, -1.0, 1e-7) << prescale;
-    const KktVerdict verdict = check_qp_optimality(model, s);
-    EXPECT_TRUE(verdict.passed) << prescale << " " << verdict.check << ": " << verdict.detail;
-  }
+  const PrescaledModel p = prescale_qp_by_powers_of_two(model, 20);
+  Options options;
+  options.set_bool("log_to_console", false);
+  Solution s = solve(p.model, options);
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  unscale_solution(p, &s);
+  s.recompute_quality(model);
+  EXPECT_NEAR(s.objective, -4.5, 1e-7);
+  EXPECT_NEAR(s.col_value[0] * 0x1p-20, 0.5, 1e-7);
+  EXPECT_NEAR(s.col_value[1], 1.5, 1e-7);
+  EXPECT_NEAR(s.row_dual[0] * 0x1p10, -1.0, 1e-7);
+  const KktVerdict verdict = check_qp_optimality(model, s);
+  EXPECT_TRUE(verdict.passed) << verdict.check << ": " << verdict.detail;
 }
 
 }  // namespace

@@ -2582,12 +2582,13 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back({"qp_prescale",
                  OptionType::Bool,
                  false,
-                 "Convex QP: before the engine runs, equilibrate the presolved model by Ruiz "
-                 "on its KKT matrix [Q A'; A 0] (Ruiz, RAL-TR-2001-034, 2001), each row and "
-                 "column factor rounded to a power of two so that the change of variables is "
-                 "exact, and map the answer back before the status guard and the KKT gate "
-                 "judge it in the model's own units. No cost scaling. Off until its A/B on "
-                 "Maros-Meszaros.",
+                 "qp_algorithm=ipm: when the interior point stalls (qp_ipm_stall_handoff's "
+                 "test) or ends in a numerical error, solve the presolved model again, on the "
+                 "time left, equilibrated by Ruiz on its KKT matrix [Q A'; A 0] (Ruiz, "
+                 "RAL-TR-2001-034, 2001), each row and column factor rounded to a power of two "
+                 "so that the change of variables is exact; an optimal answer is mapped back "
+                 "and adopted before the status guard and the KKT gate judge it in the model's "
+                 "own units, otherwise the stall hand-off runs as before. No cost scaling.",
                  0.0,
                  0.0,
                  {}});
