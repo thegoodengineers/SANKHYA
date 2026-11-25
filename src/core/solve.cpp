@@ -1351,10 +1351,13 @@ Solution solve_unguarded(const Model& model, const Options& options, SolveContro
     // configuration validation): today this is exactly !want_pdhg && !want_ipm since only
     // the two simplex engines declare supports_warm_start, but it now reads that from the
     // engine itself and stays correct as engines are added or removed without an edit here.
-    // THE ENGINE RACE (#476), when asked for under auto: every LP engine at once, and the first
-    // answer that passes an in-process check against this model wins. It runs its own
-    // presolve and postsolve per engine, so what comes back is already in the model's terms.
-    const bool race = requested == "auto" && engine_race_applies(options, warm_requested);
+    // THE ENGINE RACE (#476), under auto on a large LP or when asked for: every LP engine at
+    // once, and the first answer that passes an in-process check against this model wins. It
+    // runs its own presolve and postsolve per engine, so what comes back is already in the
+    // model's terms.
+    const bool race =
+        requested == "auto" && engine_race_applies(model, options, warm_requested, chosen.rule,
+                                                   g_solves_in_flight.load() == 1);
     bool race_accepted = false;
     if (race) {
       solution = run_engine_race(model, options, control, logger, timer, chosen.engine->name(),
