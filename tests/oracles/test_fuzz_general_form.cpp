@@ -26,14 +26,18 @@
 // that way, on seeds no earlier run used.
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <random>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -41,6 +45,7 @@
 
 #include "sankhya/model.hpp"
 #include "sankhya/options.hpp"
+#include "sankhya/timer.hpp"
 
 #include "oracles/rich_model.hpp"
 #include "oracles/solution_checks.hpp"
@@ -128,12 +133,21 @@ Verdict judge(const RichModel& rich, const OptionList& extra, bool certifies = t
   for (const auto& [key, value] : extra) {
     if (!options.set_from_string(key, value, &error)) return mismatch("HARNESS", error);
   }
+  const Timer clock;
   const Solution s = solve(model, options);
+  const double seconds = clock.elapsed_seconds();
   v.retried =
       s.message.find("retried directly against the original model") != std::string::npos;
   const std::string solver = std::string("solver: ") + to_string(s.status) + ", objective " +
                              std::to_string(s.objective) + ", bound " +
                              std::to_string(s.dual_bound) + " (" + s.message + ")";
+  // No model here has more than a dozen rows. One that takes ten seconds is a search or an
+  // engine that has lost its way, whatever it answers in the end, and it is reported as
+  // that: it would otherwise only show as a job that never finishes.
+  if (seconds > 10.0) {
+    return mismatch("a solve of more than ten seconds",
+                    std::to_string(seconds) + " s; " + solver);
+  }
 
   if (exact.status != OracleStatus::kOptimal) {
     const SolveStatus wanted = exact.status == OracleStatus::kInfeasible
@@ -196,6 +210,48 @@ struct Choice {
   bool certifies = true;
 };
 
+/// Prints the instance in hand once it has been running for half a minute. A solve that
+/// never returns prints nothing of its own, and without this the only trace of it is a job
+/// that times out hours later without saying which model it was on.
+class Watchdog {
+ public:
+  Watchdog() : thread_([this] { run(); }) {}
+  ~Watchdog() {
+    {
+      const std::lock_guard<std::mutex> lock(mutex_);
+      done_ = true;
+    }
+    wake_.notify_all();
+    thread_.join();
+  }
+  void watch(std::string instance) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    instance_ = std::move(instance);
+    since_ = std::chrono::steady_clock::now();
+    printed_ = false;
+  }
+
+ private:
+  void run() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    while (!done_) {
+      wake_.wait_for(lock, std::chrono::seconds(5));
+      if (done_ || printed_ || instance_.empty()) continue;
+      if (std::chrono::steady_clock::now() - since_ < std::chrono::seconds(30)) continue;
+      std::cout << "\n--- STILL RUNNING AFTER 30 s ---\n" << instance_ << std::flush;
+      printed_ = true;
+    }
+  }
+
+  std::mutex mutex_;
+  std::condition_variable wake_;
+  std::string instance_;
+  std::chrono::steady_clock::time_point since_;
+  bool printed_ = false;
+  bool done_ = false;
+  std::thread thread_;  // last: it reads the members above
+};
+
 struct Tally {
   int optimal = 0;
   int infeasible = 0;
@@ -212,10 +268,13 @@ Tally sweep(const std::string& title, std::uint64_t seed, int count,
   std::mt19937_64 rng = seeded(seed);
   Tally tally;
   std::map<std::string, int> kinds;
+  Watchdog watchdog;
   for (int trial = 0; trial < count; ++trial) {
     const Family& family = families[static_cast<std::size_t>(trial) % families.size()];
     const RichModel rich = random_rich(rng, family.config);
     const Choice choice = choose(rng);
+    watchdog.watch(title + ", family " + family.name + ", trial " + std::to_string(trial) +
+                   ", options: " + text(choice.options) + "\n" + rich.to_text());
     const Verdict v = judge(rich, choice.options, choice.certifies);
     tally.duals_checked += v.duals_checked ? 1 : 0;
     tally.retried += v.retried ? 1 : 0;
@@ -233,17 +292,23 @@ Tally sweep(const std::string& title, std::uint64_t seed, int count,
     // The first two of each kind are printed, reduced under the same options to a model
     // that still fails in the same way (a harness failure is printed as drawn).
     if (++kinds[v.kind] > 2) continue;
-    const RichModel small =
-        v.kind == "HARNESS" ? rich : shrink(rich, [&](const RichModel& candidate) {
-          const Verdict again = judge(candidate, choice.options, choice.certifies);
-          return again.outcome == Outcome::kMismatched && again.kind == v.kind;
-        });
+    // Printed as drawn before anything else is tried on it, and flushed: if the reduction
+    // below is slow, or never returns, the log already holds the model.
     std::cout << "\n--- MISMATCH (" << v.kind << "): " << title << ", family " << family.name
               << ", trial " << trial << ", options: " << text(choice.options) << " ---\n"
-              << v.why << "\nreduced to:\n"
+              << v.why << "\nas drawn:\n"
+              << rich.to_text() << std::flush;
+    if (v.kind == "HARNESS") continue;
+    // A minute of reduction at most: past it every candidate is declined unevaluated.
+    const Timer reducing;
+    const RichModel small = shrink(rich, [&](const RichModel& candidate) {
+      if (reducing.elapsed_seconds() > 60.0) return false;
+      const Verdict again = judge(candidate, choice.options, choice.certifies);
+      return again.outcome == Outcome::kMismatched && again.kind == v.kind;
+    });
+    std::cout << "reduced to:\n"
               << small.to_text() << "where "
-              << judge(small, choice.options, choice.certifies).why << "\nas drawn:\n"
-              << rich.to_text();
+              << judge(small, choice.options, choice.certifies).why << std::endl;
   }
   std::cout << "\n=== " << title << " (seed " << seed << " + SANKHYA_FUZZ_SEED, " << count
             << " models) ===\n"
