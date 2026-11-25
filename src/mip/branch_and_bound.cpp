@@ -941,9 +941,22 @@ Solution BranchAndBound::run() {
     // an exact integer in one child and moves it away in the other; with no such column, the
     // node is set aside on its bound like a node LP that failed (#733), so it blocks an
     // optimality claim instead of disappearing.
+    //
+    // BEFORE IT IS SET ASIDE, THE POINT IS TRIED IN THE MODEL'S OWN UNITS (#1348). The node
+    // LP's tolerance is the scaled model's and the incumbent test's is the model's, so a
+    // point can be refused for a row the LP had no reason to repair. With its integer
+    // columns kept and the rest re-solved unscaled (offer_in_model_units) the node usually
+    // has a point the test accepts; if that point meets the node's bound, the node is
+    // closed on it as any node is closed by an incumbent that meets its bound.
     const auto branch_on_refused_point = [&](const std::vector<double>& x, double bound) {
       const Index column = off_integer_column(x);
       if (column >= 0) return column;
+      // Not under a certificate (#518), whose leaves are proved by their own LP duals.
+      if (!certificate_mode() && offer_in_model_units(x) && can_prune(bound)) {
+        leave();
+        ++nodes_pruned_;
+        return Index{-1};
+      }
       leave();
       certificate_refuse("an integral node LP point was refused by the incumbent test");
       if (unsolved_nodes_ == 0) {
