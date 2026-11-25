@@ -447,10 +447,14 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   };
   // The in-process KKT gate's verdict on the current iterate as an optimum: the check solve()
   // applies to this engine's answer (#590), complementarity judged relative to the size of the
-  // numbers each slack is a difference of (#806, tol::kComplementarityRounding). The extra
-  // iterations past the relative stop and the active-set finish (#980) exist to close
-  // products this gate would refuse; on an iterate it already accepts they only cost time
-  // (qscfxm3: optimal in 0.076 s at 950712b without the finish, 12.3 s with it at 1659c8b).
+  // numbers each slack is a difference of (#806, tol::kComplementarityRounding). The
+  // active-set finish (#980) exists to close products this gate would refuse; on an iterate it
+  // already accepts the finish only costs time (bench.yml run 45523598264, qp_ipm_finish off
+  // against on: qscfxm3 12.3 s to 0.16 s, qfffff80 3.7 s to 1.4 s, same labels). The extra
+  // iterations past the relative stop keep their absolute target: this model is the
+  // presolved one, and stopping them on this gate lost qisrael to a product of 6.7e-5 after
+  // postsolve (run 45525191570), whereas the finish is only skipped at the point where the
+  // iterations already stopped.
   const double dual_tolerance = options.get_double("dual_feasibility_tolerance");
   const auto gate_accepts = [&]() {
     Solution probe = solution;
@@ -708,7 +712,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     }
     if (relative_met &&
         (largest_product <= tol::kQpIpmComplementarityShare * tol::kComplementarity ||
-         iterations_past_relative >= kIterationsForProducts || gate_accepts())) {
+         iterations_past_relative >= kIterationsForProducts)) {
       status = SolveStatus::kOptimal;
       break;
     }
