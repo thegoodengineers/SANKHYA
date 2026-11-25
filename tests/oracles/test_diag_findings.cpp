@@ -73,53 +73,46 @@ void run(const char* name, const Model& model, const std::vector<OptionList>& se
 
 const double inf = kInfinity;
 
-TEST(DiagFindings, MarginalBoundAsLp) {
-  // The model OBBT left of "OBBT one": min 0, 3 x0 - 2 x1 >= 2, 3 x1 + x2 >= 8,
-  // x0 in [2 - 2e-7, 7/3], x1 = 2, x2 >= 2 - 2e-7. Feasible (x0 = 2, x2 = 2).
-  const Model lp = build({{3, -2, 0}, {0, 3, 1}}, {2, 8}, {inf, inf}, {0, 0, 0},
-                         {2.0 - 2e-7, 2, 2.0 - 2e-7}, {7.0 / 3.0, 2, inf},
-                         {false, false, false});
-  run("marginal bound, LP, feasible", lp,
-      {{{"presolve", "false"}, {"log_level", "debug"}},
-       {{"presolve", "false"}, {"algorithm", "simplex"}},
-       {{"presolve", "false"}, {"algorithm", "dual-simplex"}},
-       {{"presolve", "false"}, {"scaling", "false"}},
+TEST(DiagFindings, ParallelRowsDuals) {
+  // min -4 x0 + 2 x1: 3 x0 - 4 x1 >= -3, 6 x0 - 8 x1 <= -2; x0 <= 3, x1 free. Optimum -7.
+  const Model model = build({{3, -4}, {6, -8}}, {-3, -inf}, {inf, -2}, {-4, 2}, {-inf, -inf},
+                            {3, inf}, {false, false});
+  run("parallel rows, optimum -7", model,
+      {{{"presolve_parallel_rows", "true"}},
+       {{"presolve_parallel_rows", "true"}, {"prescale_retry", "false"}},
+       {{"presolve_parallel_rows", "true"}, {"engine_race", "true"}, {"deterministic", "true"}},
        {}});
 }
 
-TEST(DiagFindings, MarginalBoundAsMilp) {
-  // The same with x1 an integer column: fixed at 2, then free in [2, 3] with min x1.
-  const Model fixed = build({{3, -2, 0}, {0, 3, 1}}, {2, 8}, {inf, inf}, {0, 0, 0},
-                            {2.0 - 2e-7, 2, 2.0 - 2e-7}, {7.0 / 3.0, 2, inf},
-                            {false, true, false});
-  run("marginal bound, MILP, x1 fixed, optimum 0", fixed,
-      {{{"presolve", "false"}, {"mip_threads", "1"}, {"log_level", "debug"}},
-       {{"presolve", "false"}},
-       {{"mip_threads", "1"}},
+TEST(DiagFindings, ImpliedFreeDuals) {
+  // min 3 x1: -3/4 x0 - 3/8 x1 - 4 x2 = -57/4, 2 x0 <= 6, -x0 + 4 x2 = 9; x0 >= 3, x1 >= 0.
+  const Model b = build({{-0.75, -0.375, -4}, {2, 0, 0}, {-1, 0, 4}}, {-14.25, -inf, 9},
+                        {-14.25, 6, 9}, {0, 3, 0}, {3, 0, -inf}, {inf, inf, inf},
+                        {false, false, false});
+  run("implied free B, optimum 0", b,
+      {{{"presolve_implied_free", "true"}},
+       {{"presolve_implied_free", "true"}, {"engine_race", "true"}, {"deterministic", "true"}},
        {}});
-  const Model ranged = build({{3, -2, 0}, {0, 3, 1}}, {2, 8}, {inf, inf}, {0, 1, 0},
-                             {2.0 - 2e-7, 2, 2.0 - 2e-7}, {7.0 / 3.0, 3, inf},
-                             {false, true, false});
-  run("marginal bound, MILP, x1 in [2, 3], optimum 2", ranged,
-      {{{"presolve", "false"}, {"mip_threads", "1"}}, {{"presolve", "false"}}, {}});
+  // min -2 x3: x2 + x3 = -17/2, 2 x0 >= 4, 5/2 x0 - 5 x1 + x2/2 = 19/2.
+  const Model c = build({{0, 0, 1, 1}, {2, 0, 0, 0}, {2.5, -5, 0.5, 0}}, {-8.5, 4, 9.5},
+                        {-8.5, inf, 9.5}, {0, 0, 0, -2}, {-inf, -1, -inf, -inf},
+                        {2, -1, -1, -3}, {false, false, false, false});
+  run("implied free C, optimum 15", c,
+      {{{"presolve_implied_free", "true"}},
+       {{"presolve_implied_free", "true"}, {"engine_race", "true"}, {"deterministic", "true"}},
+       {}});
 }
 
-TEST(DiagFindings, ObbtOneAgain) {
-  const Model model = build({{0, 4, 0}, {3, -2, 0}, {-6, 0, 0}, {0, 3, 1}}, {6, 2, -14, 8},
-                            {inf, inf, inf, inf}, {0, 0, 0}, {-inf, -inf, 0}, {inf, inf, inf},
-                            {false, true, false});
-  run("OBBT one, feasible, optimum 0", model,
-      {{{"mip_obbt", "true"}, {"mip_threads", "1"}, {"log_level", "debug"}}});
-}
-
-TEST(DiagFindings, CoefficientTighteningAgain) {
+TEST(DiagFindings, DominatedColumnsOnAnUnboundedLp) {
+  // min 5 x4: -8 x0 + 2 x3 - 9/2 x4 = 12967/4, -3 x1 + x4 <= -4705/2,
+  // -6 x2 - 3/2 x3 + 9 x4 = -10635; x0 <= -498, x1 <= 877, x2 <= 2271, x3 and x4 free.
   const Model model =
-      build({{0, 6, -3, 0}, {-4, -1.5, 2, -0.75}, {0, -2, -0.25, -1}, {6, 0, 0, 1.5}},
-            {12, 5.5, -7.5, -6}, {12, inf, inf, -6}, {0, 0, 0, -3}, {-inf, -inf, -inf, -inf},
-            {inf, 5, inf, -1}, {false, true, false, true});
-  run("coefficient tightening, optimum 6", model,
-      {{{"presolve_coefficient_tightening", "true"}, {"mip_threads", "1"},
-        {"log_level", "debug"}}});
+      build({{-8, 0, 0, 2, -4.5}, {0, -3, 0, 0, 1}, {0, 0, -6, -1.5, 9}},
+            {3241.75, -inf, -10635}, {3241.75, -2352.5, -10635}, {0, 0, 0, 0, 5},
+            {-inf, -inf, -inf, -inf, -inf}, {-498, 877, 2271, inf, inf},
+            {false, false, false, false, false});
+  run("dominated columns, unbounded", model,
+      {{{"presolve_dominated_columns", "true"}}, {{"presolve_dominated_columns", "true"}, {"log_level", "debug"}}, {}});
 }
 
 }  // namespace

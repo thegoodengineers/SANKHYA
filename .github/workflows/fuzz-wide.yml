@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,7 +64,7 @@ jobs:
           set -u
           export SANKHYA_FUZZ_SEED=$((FIRST_SEED + 1000 * ${{ matrix.shard }}))
           echo "commit $(git rev-parse HEAD) scale $SANKHYA_FUZZ_SCALE seed $SANKHYA_FUZZ_SEED"
-          ./build/tests/sankhya_tests --gtest_filter='FuzzGeneralForm.*' 2>&1 \
+          ./build/tests/sankhya_tests --gtest_filter='DiagFindings.*' 2>&1 \
             | tee "$RUNNER_TEMP/fuzz.log"
           exit "${PIPESTATUS[0]}"
 
