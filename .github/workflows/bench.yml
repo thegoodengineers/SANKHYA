@@ -314,6 +314,12 @@ jobs:
                   python3 bench/runners/fetch_miplib3.py
                   git checkout -- data/miplib3/manifest.json ;;
                 *miplib.py*) python3 bench/runners/fetch_miplib.py ;;
+              esac
+              # QPLIB's convex QPs, also beside another runner in the same job.
+              case "$OPTIONS" in
+                *qplib.py*)
+                  python3 bench/runners/fetch_qplib.py
+                  git checkout -- data/qplib/reference.json ;;
               esac ;;
           esac
           # The stress set is generated from the Netlib files just fetched and from its own
