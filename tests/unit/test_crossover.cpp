@@ -308,18 +308,18 @@ TEST(Crossover, AVertexThatFailsTheCheckGivesWayToAnInteriorPointThatPasses) {
   ASSERT_EQ(interior.status, SolveStatus::kOptimal) << interior.message;
   ASSERT_EQ(vertex.status, SolveStatus::kOptimal) << vertex.message;
   KktVerdict verdict;
-  EXPECT_FALSE(vertex_gives_way(model, interior, vertex, &verdict)) << verdict.detail;
+  EXPECT_FALSE(vertex_gives_way(model, interior, vertex, {}, &verdict)) << verdict.detail;
   EXPECT_TRUE(verdict.passed);
 
   Solution wrong = vertex;  // a reported objective the point does not have
   wrong.objective += 1.0;
-  EXPECT_TRUE(vertex_gives_way(model, interior, wrong, &verdict));
+  EXPECT_TRUE(vertex_gives_way(model, interior, wrong, {}, &verdict));
   EXPECT_FALSE(verdict.passed);
   EXPECT_FALSE(verdict.check.empty());
 
   Solution also_wrong = interior;
   also_wrong.objective += 1.0;
-  EXPECT_FALSE(vertex_gives_way(model, also_wrong, wrong, &verdict));
+  EXPECT_FALSE(vertex_gives_way(model, also_wrong, wrong, {}, &verdict));
 }
 
 TEST(Crossover, NetlibInstancesReachAVertexAtThePublishedObjective) {
