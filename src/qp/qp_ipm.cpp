@@ -451,11 +451,13 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     }
     for (std::size_t i = 0; i < nr; ++i) rhs[nc + i] = rp[i];
     solve_refined(ldl, k, rhs, &step);
-    refine_unregularized(ldl, k0, rhs, &step);
+    const bool at_floor = refine_unregularized(ldl, k0, rhs, &step);
     // #981: with qp_ipm_adaptive_dual_regularization the Krylov refinement joins once the
     // floor has been cut - only on a model whose step already failed to close the residual,
-    // so a large well-posed model (boyd2) never pays for it.
-    if (krylov_refinement || (adaptive_dual && dual_floor < regularization_floor)) {
+    // so a large well-posed model (boyd2) never pays for it - and not on a step the stationary
+    // refinement already took to its rounding floor, where GMRES has nothing left to gain.
+    if (!at_floor &&
+        (krylov_refinement || (adaptive_dual && dual_floor < regularization_floor))) {
       refine_krylov(ldl, k0, rhs, &step);
     }
     for (std::size_t j = 0; j < nc; ++j) {

@@ -77,13 +77,16 @@ void solve_refined(const SparseLdl& ldl, const SparseMatrix& k, const std::vecto
 /// Then corrections against the UNREGULARIZED matrix `k0` (the same Theta^{-1}, rho = delta =
 /// 0) with the same factors: x <- x + K^{-1} (rhs - K_0 x), each kept only when it lowers the
 /// residual rhs - K_0 x, at most tol::kQpIpmRefinementSteps of them. On a singular or
-/// inconsistent K_0 the first correction that does not help ends it and x stands.
-void refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
+/// inconsistent K_0 the first correction that does not help ends it and x stands. True when
+/// the residual reached its rounding floor, eps max(1, |rhs|), row by row against max(1,
+/// |K0_ii|): nothing is left for refine_krylov to gain.
+bool refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
                           const std::vector<double>& rhs, std::vector<double>* x);
 
 /// The same correction by right-preconditioned GMRES instead of the stationary iteration: it
 /// minimizes ||rhs - K_0 x|| over x + K^{-1} Krylov(K_0 K^{-1}, r), at most
-/// tol::kQpIpmKrylovDimension vectors, and x is replaced only when the residual falls.
+/// tol::kQpIpmKrylovDimension vectors, and x is replaced only when the residual falls. It
+/// stops early once the residual is at rounding level, eps max(1, ||rhs||, ||rhs - K_0 x||).
 void refine_krylov(const SparseLdl& ldl, const SparseMatrix& k0, const std::vector<double>& rhs,
                    std::vector<double>* x);
 

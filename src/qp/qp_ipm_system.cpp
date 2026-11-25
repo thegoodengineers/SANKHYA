@@ -220,7 +220,7 @@ void solve_refined(const SparseLdl& ldl, const SparseMatrix& k, const std::vecto
 // and qpilotno stay finite (measured, bench/results). The refinement does not cure the
 // degenerate LISWET family (its correction gains under 10% a step once the active rows lose
 // rank, so the loop stops where it started); that stays an open class.
-void refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
+bool refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
                           const std::vector<double>& rhs, std::vector<double>* x) {
   const std::size_t n = rhs.size();
   // Each row's residual is judged against its own diagonal, max(1, |K0_ii|): a column whose
@@ -260,6 +260,7 @@ void refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
     best = next;
     if (stalled) break;
   }
+  return best <= floor;
 }
 
 // Reference: Saad & Schultz, "GMRES: a generalized minimal residual algorithm for solving
@@ -287,6 +288,17 @@ void refine_krylov(const SparseLdl& ldl, const SparseMatrix& k0, const std::vect
   std::vector<double> r(n);
   const double beta = residual(*x, &r);
   if (!(beta > 0.0) || !std::isfinite(beta)) return;
+  // The rotated right-hand side |g_{j+1}| is the residual norm of the j-th iterate at no cost
+  // (Saad, Iterative Methods for Sparse Linear Systems, 2nd ed., 2003, sec. 6.5.3; under right
+  // preconditioning the true residual's, sec. 9.3.2), so the loop ends as soon as it reaches
+  // what a residual computed in double precision can resolve, the same eps max(1, |rhs|)
+  // floor refine_unregularized stops at (Arioli, Demmel & Duff, SIAM J. Matrix Anal. Appl. 10,
+  // 1989). Before, the only exit was eps * beta, which a step already refined to near that
+  // floor never reaches, so every Newton solve paid all kQpIpmKrylovDimension inner steps.
+  double rhs_norm = 0.0;
+  for (const double value : rhs) rhs_norm += value * value;
+  const double floor =
+      std::numeric_limits<double>::epsilon() * std::max({1.0, beta, std::sqrt(rhs_norm)});
   std::vector<std::vector<double>> basis(m + 1, std::vector<double>(n));
   std::vector<std::vector<double>> hess(m + 1, std::vector<double>(m, 0.0));
   std::vector<double> cs(m), sn(m), g(m + 1, 0.0), w(n);
@@ -322,7 +334,7 @@ void refine_krylov(const SparseLdl& ldl, const SparseMatrix& k0, const std::vect
     g[j + 1] = -sn[j] * g[j];
     g[j] = cs[j] * g[j];
     built = j + 1;
-    if (std::fabs(g[j + 1]) <= std::numeric_limits<double>::epsilon() * beta || !(norm > 0.0)) {
+    if (std::fabs(g[j + 1]) <= floor || !(norm > 0.0)) {
       break;
     }
     for (std::size_t q = 0; q < n; ++q) basis[j + 1][q] = w[q] / norm;
