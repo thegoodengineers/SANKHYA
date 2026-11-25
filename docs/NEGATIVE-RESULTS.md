@@ -713,6 +713,21 @@ The CSVs are not committed because they carry branch stamps. Each is `option-ab-
 
 What would earn the default: a tree that does not pay for the rounds' rows. On enlight8 the search runs 38k-52k nodes in 60 s with the rounds kept, against 412k-509k without, and that is the whole loss.
 
+### Ending the QP interior point's GMRES refinement at the rounding floor on every model (branch `perf/qp-krylov-exit`, not merged in that form)
+
+Once `qp_ipm_adaptive_dual_regularization` has cut the dual floor, every Newton solve is refined by GMRES(30), and the Arnoldi loop's only exit is `|g_{j+1}| <= eps * beta`, with beta the residual it started from. A step the stationary refinement already brought near rounding level never reaches that, so each solve pays all 30 inner LDL solves: liswet12 takes 4.64 s for 96 iterations on `main`. The change ended the loop once the rotated residual reached `eps * max(1, ||rhs||, beta)`, the floor the stationary refinement itself stops at (Saad 2003, sec. 6.5.3; Arioli, Demmel & Duff 1989).
+
+Measured with `bench.yml` `ab-option` and `--base-binary`, base `main` at `23e40b50`, both arms in one job, Maros-Meszaros 138 at 60 s. Counts are passed / verified.
+
+| version | run | new | base | new | gained | lost |
+|---|---|---|---|---|---|---|
+| floor exit, and GMRES skipped when the stationary refinement reported its own floor | 45524732932 | `d63a33ee` | 129 / 135 | 128 / 135 | | qfffff80 (optimal to feasible, one product at 4.0e-5 on column 610, 2.2 s to 14.6 s) |
+| floor exit alone | 45539655689 | `a0705e1f` | 129 / 135 | 128 / 135 | | qfffff80 (optimal to feasible, one product at 5.4e-6 on column 845, 2.2 s to 14.5 s) |
+
+The time it was built for is there in both: liswet12 4.64 s to 1.41 s, liswet9 4.27 to 1.59, liswet10 3.50 to 1.28, liswet11 2.88 to 0.94, liswet1 2.81 to 1.15, liswet7 3.28 to 1.16, yao 0.244 to 0.138, ubh1 0.286 to 0.126, and qscfxm3 7.34 s to 0.071 s (run 45539655689; SGM time, shift 10 s, 0.985 on the 128 passed in both). The skip in the first version changed nothing measurable (the two runs' times agree), and the unit test written for it failed in CI (run 45524726222): on a 2x2 system refined to 1e-10 the stationary refinement still did not report its floor. On QPLIB's 17 convex QPs at 300 s the second version (`1e3cb29d`, `a0705e1f` plus the runner change) changed no passed instance (12 both ways, run 45539744499) and took QPLIB_8500 from the time limit to a verified optimum.
+
+qfffff80 is the model #1180 calls a knife edge: its row block is rank deficient, `|dy|` grows as 1/delta, and no residual pins the multiplier step down, so a GMRES iterate at the floor and one 20 steps later can be different steps. That is the likely cause; it was not traced. A third form asks for the floor exit only when every row carries a slack column (the condition #1178 already uses for the delta drop; LISWET and yao are that shape) and leaves every other model on the `eps * beta` exit it had. It is on the branch at `d8d783a2` and has **not** been measured: its Maros-Meszaros and QPLIB gates were dispatched and cancelled before they ran. Nothing here is merged. The CSVs were not committed (branch stamps).
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
