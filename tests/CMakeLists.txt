@@ -156,6 +156,7 @@ add_executable(sankhya_tests
   unit/test_prescale.cpp
   unit/test_scaled_resolve.cpp
   unit/test_presolve_probing.cpp
+  unit/test_presolve_probing_activities.cpp
   unit/test_presolve_implied_integer.cpp
   unit/test_presolve_propagation.cpp
   unit/test_presolve_fill_in_pricing.cpp
@@ -192,6 +193,7 @@ add_executable(sankhya_tests
   unit/test_fractional_integer_bounds.cpp
   unit/test_integral_row_coefficients.cpp
   unit/test_empty_integral_row.cpp
+  unit/test_milp_unbounded_relaxation.cpp
   unit/test_deterministic.cpp
   unit/test_run_order_determinism.cpp
   unit/test_resource_limits.cpp

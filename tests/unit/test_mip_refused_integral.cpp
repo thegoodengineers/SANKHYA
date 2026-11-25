@@ -89,6 +89,59 @@ TEST(RefusedIntegralNode, EgoutWithCoefficientTighteningProvesThePublishedOptimu
   EXPECT_NEAR(solved.objective, 568.101, 1e-3) << solved.message;  // the manifest's
 }
 
+/// min cost x1:  3 x0 - 2 x1 >= 2,  3 x1 + x2 >= 8,  x0 in [2 - 2e-7, 7/3],
+/// x1 integer in [2, x1_upper],  x2 >= 2 - 2e-7. The point (2, 2, 2) meets both rows with
+/// equality; x0 on its lower bound leaves the first row 6e-7 short.
+Model a_bound_just_inside_a_row(double cost, double x1_upper) {
+  Model model;
+  model.resize_columns(3);
+  model.resize_rows(2);
+  model.col_cost = {0.0, cost, 0.0};
+  model.col_lower = {2.0 - 2e-7, 2.0, 2.0 - 2e-7};
+  model.col_upper = {7.0 / 3.0, x1_upper, kInfinity};
+  model.col_type[1] = VarType::kInteger;
+  model.row_lower = {2.0, 8.0};
+  model.matrix.reset(2, 3);
+  model.matrix.add_entry(0, 0, 3.0);
+  model.matrix.add_entry(0, 1, -2.0);
+  model.matrix.add_entry(1, 1, 3.0);
+  model.matrix.add_entry(1, 2, 1.0);
+  model.matrix.finalize();
+  return model;
+}
+
+TEST(RefusedIntegralNode, IsTriedInTheModelsOwnUnitsBeforeItIsSetAside) {
+  // #1348. The node LP is solved scaled, and 6e-7 on the first row is 8e-8 there: the LP is
+  // optimal with x0 on its bound, the incumbent test refuses that point at 1e-7 in the
+  // model's units, x1 is exactly 2 so there is nothing to branch on, and the node was set
+  // aside: numerical_error on a model whose optimum is one pivot away. Three objectives
+  // (x1 up, x1 fixed, x1 down), with presolve on and off, at the defaults and with the
+  // heuristics off.
+  struct Case {
+    double cost, x1_upper, optimum;
+  };
+  for (const Case& c : {Case{1.0, 3.0, 2.0}, Case{0.0, 2.0, 0.0}, Case{-1.0, 3.0, -2.0}}) {
+    const Model model = a_bound_just_inside_a_row(c.cost, c.x1_upper);
+    ASSERT_EQ(model.validate(), "");
+    for (const bool presolve : {true, false}) {
+      for (const bool defaults : {true, false}) {
+        Options options = defaults ? Options() : tree_only();
+        options.set_bool("log_to_console", false);
+        options.set_bool("presolve", presolve);
+        const Solution solved = solve(model, options);
+        ASSERT_EQ(solved.status, SolveStatus::kOptimal)
+            << "cost " << c.cost << ", presolve " << presolve << ", defaults " << defaults
+            << ": " << solved.message;
+        EXPECT_NEAR(solved.objective, c.optimum, 1e-6);
+        ASSERT_EQ(solved.col_value.size(), 3U);
+        // The point reported satisfies the rows in the model's units.
+        EXPECT_GE(3.0 * solved.col_value[0] - 2.0 * solved.col_value[1], 2.0 - 1e-7);
+        EXPECT_GE(3.0 * solved.col_value[1] + solved.col_value[2], 8.0 - 1e-7);
+      }
+    }
+  }
+}
+
 /// Add x_c <= M y_b with M far above x_c's bound, x_c paid for and y_b costed: the LP then
 /// wants y_b = x_c / M, below the integrality tolerance.
 void add_a_huge_big_m_link(oracle::GeneratedLp* lp, std::mt19937_64& rng) {
