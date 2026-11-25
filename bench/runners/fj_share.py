@@ -6,7 +6,10 @@ Runs the solver with default options on the demo crude blend MILP (demo/blend_mi
 the MILPs of the refinery suite (data/refinery, kind "mip" in its manifest), or with --set
 miplib on the fetched MIPLIB tier 1 (seed 0, the published files), reads the
 heuristic table the search prints at its exit, and records per instance the solve time, the
-seconds Feasibility Jump took over its calls, and their ratio. The CSV contract of
+seconds Feasibility Jump took over its calls, and their ratio. The tree is searched on
+--threads workers (mip_threads, default 1): a parallel search's workers log nothing, so with
+the default of one worker per core no table is printed. A solve that printed no Feasibility
+Jump line has its fj_* columns left empty, not zero. The CSV contract of
 ENGINEERING_RULES.md (sha256, objective against the reference, status, time, commit,
 machine) is kept so the rows can be compared across commits.
 
@@ -60,7 +63,8 @@ def run_one(binary: Path, path: Path, time_limit: float, threads: int,
     with tempfile.TemporaryDirectory() as tmp:
         stats_path = Path(tmp) / "stats.json"
         cmd = [str(binary), "solve", str(path), "--stats", str(stats_path), "--time-limit",
-               str(time_limit), "--option", "log_to_console=true", "--option", f"threads={threads}"]
+               str(time_limit), "--option", "log_to_console=true", "--option", f"threads={threads}",
+               "--option", f"mip_threads={threads}"]
         for option in options:
             cmd += ["--option", option]
         proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -74,11 +78,11 @@ def run_one(binary: Path, path: Path, time_limit: float, threads: int,
         "objective": result.get("objective"),
         "nodes": result.get("nodes"),
         "solve_seconds": float(seconds.group(1)) if seconds else None,
-        "fj_calls": int(fj.group(1)) if fj else 0,
-        "fj_proposed": int(fj.group(2)) if fj else 0,
-        "fj_improved": int(fj.group(3)) if fj else 0,
-        "fj_work": int(fj.group(4)) if fj else 0,
-        "fj_seconds": float(fj.group(5)) if fj else 0.0,
+        "fj_calls": int(fj.group(1)) if fj else "",
+        "fj_proposed": int(fj.group(2)) if fj else "",
+        "fj_improved": int(fj.group(3)) if fj else "",
+        "fj_work": int(fj.group(4)) if fj else "",
+        "fj_seconds": float(fj.group(5)) if fj else "",
     }
 
 
@@ -131,7 +135,7 @@ def main() -> int:
                     abs_gap = abs(objective - reference)
                     rel_gap = abs_gap / max(1.0, abs(reference))
                 share = (r["fj_seconds"] / r["solve_seconds"]
-                         if r["solve_seconds"] else "")
+                         if r["solve_seconds"] and r["fj_seconds"] != "" else "")
                 row = {"instance": name, "sha256": sha, "objective": objective,
                        "reference_objective": reference if reference is not None else "",
                        "absolute_gap": abs_gap, "relative_gap": rel_gap, "repeat": repeat,
@@ -142,7 +146,8 @@ def main() -> int:
                 share_text = "" if share == "" else f"{share:.3f}"
                 print(f"{name:<28} {' '.join(options):<36} {r['status']:<10} "
                       f"{r['solve_seconds']!s:>9}s obj {objective}  "
-                      f"fj {r['fj_seconds']:.3f}s  share {share_text}", flush=True)
+                      f"fj {r['fj_seconds'] if r['fj_seconds'] != '' else 'not reported '}s  "
+                      f"share {share_text}", flush=True)
     return 0
 
 
