@@ -832,6 +832,14 @@ Where it worked it worked well: qfffff80 176 iterations to 38 (3.79 s to 0.20 s)
 
 What shipped instead: the same equilibration as a retry, only after the unscaled interior point stalls or ends in a numerical error, adopted only when optimal (run 45539497594, one binary at `9efca8d2`: 129 / 135 to 131 / 137, qpilotno and stadat1 gained, no other row's status or flags changed). What would make it the first attempt: the three relative stop measures evaluated on unscaled residuals inside the loop, which is the second step this entry leaves undone. The CSVs were not committed (branch stamps).
 
+### Ending the QP interior point's extra iterations on the KKT gate's own verdict (first form of the finish trigger, not merged in that form)
+
+Once the three relative measures are met, the QP interior point takes up to five more iterations to bring every complementarity product under an absolute 1e-7, and then runs the active-set finish (#980) if one is still above it. The in-process KKT gate that labels the answer judges each product relative to the size of the numbers its slack is a difference of (#806), so both steps also run on points the gate would accept. The diagnostic, `qp_ipm_finish=false` against the default on `main` at `23e40b50` (run 45523598264, Maros-Meszaros 138 at 60 s): 124 passed without the finish against 129 with it (boyd1, qgrow15, qseba, qship12l and qship12s need it), and on instances optimal both ways the finish is most of the time: qscfxm3 12.3 s against 0.16 s, qfffff80 3.7 s against 1.4 s, qpcboei1 1.0 s against 0.055 s, qcapri 0.37 s against 0.053 s.
+
+The first form put the current iterate to the gate itself (`check_qp_optimality` on the model the interior point was handed) and, when it accepted, both ended the extra iterations and skipped the finish. `--base-binary`, base `23e40b50`, new `a3390ae9`, both arms in one job (run 45525191570): 129 passed to 128. qisrael stopped one iteration earlier (28 against 29), the gate accepted that iterate on the presolved model, and after postsolve one product was 6.7e-5 relative on column 44, so the label was withdrawn to feasible. The model the interior point sees is the presolved one; the gate that counts is on the original.
+
+What shipped: the extra iterations keep their absolute target, and only the finish is skipped on a point the gate accepts, at the iterate where those iterations already ended. Base `23e40b50`, new `699cfd3a` (run 45539517363): 129 passed / 135 verified both ways, no row's status changed, qscfxm3 7.40 s to 0.114 s, qfffff80 2.25 s to 0.88 s, qpcboei1 0.607 s to 0.037 s, qcapri 0.214 s to 0.035 s, qpcboei2 0.037 s to 0.008 s. The CSVs were not committed (branch stamps).
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
