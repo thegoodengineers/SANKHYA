@@ -82,6 +82,10 @@ struct Verdict {
   Outcome outcome = Outcome::kAgreed;
   OracleStatus exact = OracleStatus::kOptimal;
   bool duals_checked = false;
+  /// The answer is not the presolved solve's: that one made no claim that survived
+  /// postsolve, and solve() ran the model again without presolve (#783). The answer can be
+  /// right and the postsolve behind it wrong, so these are counted where they can be seen.
+  bool retried = false;
   /// What disagreed, in a few words: mismatches of one kind are counted together and a
   /// reduction must keep the kind it started with.
   std::string kind;
@@ -125,6 +129,8 @@ Verdict judge(const RichModel& rich, const OptionList& extra, bool certifies = t
     if (!options.set_from_string(key, value, &error)) return mismatch("HARNESS", error);
   }
   const Solution s = solve(model, options);
+  v.retried =
+      s.message.find("retried directly against the original model") != std::string::npos;
   const std::string solver = std::string("solver: ") + to_string(s.status) + ", objective " +
                              std::to_string(s.objective) + ", bound " +
                              std::to_string(s.dual_bound) + " (" + s.message + ")";
@@ -197,6 +203,7 @@ struct Tally {
   int abstained = 0;
   int mismatched = 0;
   int duals_checked = 0;
+  int retried = 0;
 };
 
 Tally sweep(const std::string& title, std::uint64_t seed, int count,
@@ -211,6 +218,7 @@ Tally sweep(const std::string& title, std::uint64_t seed, int count,
     const Choice choice = choose(rng);
     const Verdict v = judge(rich, choice.options, choice.certifies);
     tally.duals_checked += v.duals_checked ? 1 : 0;
+    tally.retried += v.retried ? 1 : 0;
     if (v.outcome == Outcome::kAbstained) {
       ++tally.abstained;
       continue;
@@ -244,6 +252,7 @@ Tally sweep(const std::string& title, std::uint64_t seed, int count,
             << "  agreed unbounded    " << tally.unbounded << "\n"
             << "  oracle abstained    " << tally.abstained << "\n"
             << "  duals certified     " << tally.duals_checked << "\n"
+            << "  retried, no presolve " << tally.retried << "\n"
             << "  MISMATCHED          " << tally.mismatched << "\n";
   for (const auto& [kind, times] : kinds) std::cout << "    " << kind << ": " << times << "\n";
   return tally;
