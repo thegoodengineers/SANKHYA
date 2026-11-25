@@ -2553,6 +2553,25 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"qp_ipm_postpone_dense",
+                 OptionType::Bool,
+                 false,
+                 "qp_algorithm=ipm: order the augmented system's dense nodes (degree above "
+                 "max(16, 10 sqrt(n)), a dense row of A) last, as the LP interior point's "
+                 "proximal path does (#473; Amestoy, Davis & Duff, ACM TOMS 30(3), 2004). "
+                 "Off until its A/B on Maros-Meszaros.",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"qp_ipm_supernodal",
+                 OptionType::Bool,
+                 false,
+                 "qp_algorithm=ipm: factor the quasi-definite augmented system by supernodes "
+                 "(#470, the ipm_supernodal kernels under the same signed pivot rule) instead "
+                 "of the scalar up-looking path. Off until its A/B on Maros-Meszaros.",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"qp_ipm_centrality_correctors",
                  OptionType::Int,
                  std::int64_t{0},
