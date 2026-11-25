@@ -380,6 +380,14 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
 
   KktMatrix kkt(s);
   SparseLdl ldl;
+  // The LDL modes src/la already has, as the LP interior point's proximal path uses them
+  // (src/ipm/ipm.cpp): a dense row of A is a dense node of this augmented system, ordered last
+  // (Amestoy, Davis & Duff, "Algorithm 837: AMD", ACM TOMS 30(3), 2004); the numeric phase by
+  // supernodes under the same signed pivot rule (Ng & Peyton, SIAM J. Sci. Comput. 14, 1993).
+  // A quasi-definite matrix factors under any symmetric permutation (Vanderbei, SIAM J.
+  // Optim. 5(1), 1995), so neither changes what is factored, only the order and the rounding.
+  ldl.set_postpone_dense(options.get_bool("qp_ipm_postpone_dense"));
+  ldl.set_supernodal(options.get_bool("qp_ipm_supernodal"));
   const Index dim = s.cols + s.rows;
   std::vector<signed char> signs(static_cast<std::size_t>(dim), 1);
   for (std::size_t j = 0; j < nc; ++j) signs[j] = -1;
