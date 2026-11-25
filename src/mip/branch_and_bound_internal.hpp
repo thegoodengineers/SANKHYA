@@ -478,6 +478,11 @@ class BranchAndBound {
   /// rounded point the incumbent test refused.
   [[nodiscard]] Index off_integer_column(const std::vector<double>& x) const;
 
+  /// #1348, in branch_and_bound_refused.cpp: `x` with its integer columns kept and the rest
+  /// re-solved by an LP on the UNSCALED model, offered to offer_incumbent(). True when that
+  /// point is a solution (whether or not it improved the incumbent).
+  bool offer_in_model_units(const std::vector<double>& x);
+
   // ---- Primal heuristics (#290, #414), in branch_and_bound_heuristics.cpp ---------------
   void init_heuristics();
   /// Offer a heuristic's candidate and count it against that heuristic.
