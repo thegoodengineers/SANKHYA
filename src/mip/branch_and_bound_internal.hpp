@@ -182,6 +182,13 @@ inline double fractionality(double value) {
   return std::fabs(value - std::round(value));
 }
 Options sub_mip_options(const Options& base, Count node_limit, double time_limit);
+
+/// The search of `model` as it is given. solve_branch_and_bound() (the public entry,
+/// branch_and_bound_unbounded.cpp) runs it once, and once more without the objective when
+/// the relaxation is unbounded (#1343). kUnbounded from this function says only that the
+/// relaxation is.
+[[nodiscard]] Solution search_as_given(const Model& model, const Options& options,
+                                       Logger& logger, SolveControl* control);
 double sub_mip_seconds(const ResourceLimits& limits, double elapsed, bool seconds_budgets);
 
 class BranchAndBound {
