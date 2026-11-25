@@ -439,7 +439,7 @@ TEST(QpIpmRefinement, CorrectionsAgainstTheUnregularizedMatrixRemoveTheProximalP
   std::vector<double> x;
   qp::ipm_detail::solve_refined(ldl, k, rhs, &x);
   EXPECT_GT(std::fabs(x[1] - 14.0), 1e-3);  // the regularized system's own answer
-  EXPECT_TRUE(qp::ipm_detail::refine_unregularized(ldl, k0, rhs, &x));  // at its floor
+  qp::ipm_detail::refine_unregularized(ldl, k0, rhs, &x);
   EXPECT_NEAR(x[0], 7.0, 1e-10);
   EXPECT_NEAR(x[1], 14.0, 1e-10);
 }

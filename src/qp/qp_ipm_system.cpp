@@ -220,7 +220,7 @@ void solve_refined(const SparseLdl& ldl, const SparseMatrix& k, const std::vecto
 // and qpilotno stay finite (measured, bench/results). The refinement does not cure the
 // degenerate LISWET family (its correction gains under 10% a step once the active rows lose
 // rank, so the loop stops where it started); that stays an open class.
-bool refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
+void refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
                           const std::vector<double>& rhs, std::vector<double>* x) {
   const std::size_t n = rhs.size();
   // Each row's residual is judged against its own diagonal, max(1, |K0_ii|): a column whose
@@ -260,7 +260,6 @@ bool refine_unregularized(const SparseLdl& ldl, const SparseMatrix& k0,
     best = next;
     if (stalled) break;
   }
-  return best <= floor;
 }
 
 // Reference: Saad & Schultz, "GMRES: a generalized minimal residual algorithm for solving
@@ -293,8 +292,9 @@ void refine_krylov(const SparseLdl& ldl, const SparseMatrix& k0, const std::vect
   // preconditioning the true residual's, sec. 9.3.2), so the loop ends as soon as it reaches
   // what a residual computed in double precision can resolve, the same eps max(1, |rhs|)
   // floor refine_unregularized stops at (Arioli, Demmel & Duff, SIAM J. Matrix Anal. Appl. 10,
-  // 1989). Before, the only exit was eps * beta, which a step already refined to near that
-  // floor never reaches, so every Newton solve paid all kQpIpmKrylovDimension inner steps.
+  // 1989). Before, the only exit was eps * beta, which a step the stationary refinement
+  // already brought close to that floor never reaches, so every Newton solve paid all
+  // kQpIpmKrylovDimension inner steps.
   double rhs_norm = 0.0;
   for (const double value : rhs) rhs_norm += value * value;
   const double floor =
