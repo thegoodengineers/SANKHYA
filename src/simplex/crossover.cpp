@@ -15,6 +15,7 @@
 #include <fmt/format.h>
 
 #include "../util/profiler.hpp"
+#include "core/kkt_check.hpp"
 #include "la/lu.hpp"
 #include "primal_simplex.hpp"
 #include "sankhya/tolerances.hpp"
@@ -538,6 +539,31 @@ Solution crossover_push_from_basis(const Model& model, Solution interior, WarmSt
     return interior;
   }
   const Count pivot_count = vertex.iterations;
+  // THE VERTEX REPLACES AN OPTIMAL ANSWER ONLY WHEN IT IS ONE TOO. From an optimal interior
+  // point the crossover is an optional finish that must not degrade the solution it starts
+  // from (Megiddo, "On finding primal- and dual-optimal bases", ORSA J. Computing 3(1), 1991;
+  // Bixby & Saltzman, "Recovering an optimal LP basis from an interior point solution", Oper.
+  // Res. Lett. 15(4), 1994). The simplex calls its vertex optimal at its own tolerances, and on
+  // Mittelmann's s100 that vertex then failed strong duality at the verifier's 1e-9 where the
+  // interior point's answer it replaced did not (mittelmann-2e53805.csv). Both are judged by
+  // the in-process copy of the verifier's checks (core/kkt_check.hpp); when the vertex fails
+  // and the interior point's answer passes, the latter stands, without a basis, exactly as when
+  // the crossover runs out of time.
+  if (from_optimal) {
+    const KktVerdict at_vertex = check_lp_optimality(model, vertex);
+    if (!at_vertex.passed && check_lp_optimality(model, interior).passed) {
+      interior.message += fmt::format(
+          "; crossover reached a vertex after {} pivots ({:.2f}s) that fails the {} check "
+          "({}) where the interior point's answer passes, so the interior point's answer "
+          "stands",
+          pivot_count, pivot_clock.elapsed_seconds(), at_vertex.check, at_vertex.detail);
+      logger.warning(
+          "Crossover: the vertex fails the {} check where the interior point's answer passes; "
+          "keeping the interior point's answer",
+          at_vertex.check);
+      return interior;
+    }
+  }
   vertex.iterations += interior.iterations;
   vertex.algorithm = interior.algorithm + "+crossover";
   const std::string note = fmt::format(
