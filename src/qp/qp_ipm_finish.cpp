@@ -137,7 +137,7 @@ std::vector<double> scaled(const std::vector<double>& d, std::vector<double> x) 
 bool solve_reduced(const Standard& s, const std::vector<Pin>& pin,
                    const std::vector<double>& v0, const std::vector<double>& y0,
                    double regularization_floor, const std::function<bool()>& should_stop,
-                   Candidate* out) {
+                   bool postpone_dense, Candidate* out) {
   const auto nc = static_cast<std::size_t>(s.cols);
   const auto nr = static_cast<std::size_t>(s.rows);
   std::vector<Index> new_col(nc, -1);
@@ -275,6 +275,9 @@ bool solve_reduced(const Standard& s, const std::vector<Pin>& pin,
     std::vector<signed char> signs(udim, 1);
     for (Index j = 0; j < nf; ++j) signs[static_cast<std::size_t>(j)] = -1;
     SparseLdl ldl;
+    // A dense row of A is a dense node here too (Amestoy, Davis & Duff, ACM TOMS 30(3), 2004);
+    // the system is ordered afresh every round, so on boyd1 the rescans add up.
+    ldl.set_postpone_dense(postpone_dense);
     if (!ldl.analyze(k, should_stop) ||
         !ldl.factorize_quasidefinite(k, signs, tol::kQpIpmPivotShare * regularization_floor,
                                      should_stop)) {
@@ -324,8 +327,8 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
                        const std::vector<bool>& has_upper, double tolerance,
                        double primal_tolerance, double regularization_floor,
                        const std::function<bool()>& should_stop, std::vector<double>* v,
-                       std::vector<double>* y, std::vector<double>* zl,
-                       std::vector<double>* zu) {
+                       std::vector<double>* y, std::vector<double>* zl, std::vector<double>* zu,
+                       bool postpone_dense) {
   const auto nc = static_cast<std::size_t>(s.cols);
   const auto nr = static_cast<std::size_t>(s.rows);
 
@@ -357,7 +360,8 @@ bool active_set_finish(const Standard& s, const std::vector<bool>& has_lower,
     // check between rounds alone still 14 s past it inside one factorization. A finish that
     // runs out of time declines, and the interior point's point stands.
     if (should_stop && should_stop()) return false;
-    if (!solve_reduced(s, pin, *v, *y, regularization_floor, should_stop, &c)) return false;
+    if (!solve_reduced(s, pin, *v, *y, regularization_floor, should_stop, postpone_dense, &c))
+      return false;
     // One change per round, the worst offender first: a free column outside its bounds goes
     // onto the bound it violates; else a pinned bound with a wrong-signed multiplier is
     // released; else a free column whose reduced cost the active rows cannot zero goes onto

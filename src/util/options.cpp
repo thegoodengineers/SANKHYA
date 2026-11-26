@@ -2553,6 +2553,32 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"qp_ipm_postpone_dense",
+         OptionType::Bool,
+         true,
+         "qp_algorithm=ipm: order the augmented system's dense nodes (degree above "
+         "max(16, 10 sqrt(n)), a dense row of A) last, in the interior point's "
+         "factorization and in the active-set finish's, as the LP interior point's "
+         "proximal path does (#473; Amestoy, Davis & Duff, ACM TOMS 30(3), 2004). On by "
+         "default since the A/B on Maros-Meszaros against main at 23e40b50 (bench.yml run "
+         "45539507204, all 138 at 60 s, both arms in one job): no status, passed or "
+         "verified flag changed, boyd1 31.7 s to 3.4 s and boyd2 36.4 s to 10.5 s.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back({"qp_ipm_supernodal",
+                 OptionType::Bool,
+                 false,
+                 "qp_algorithm=ipm: factor the quasi-definite augmented system by supernodes "
+                 "(#470, the ipm_supernodal kernels under the same signed pivot rule) instead "
+                 "of the scalar up-looking path. Off: in the A/B on Maros-Meszaros (bench.yml "
+                 "run 45524023299, with qp_ipm_postpone_dense) it halved the factor-bound "
+                 "times (cvxqp2l 33.8 s to 16.0 s) but the interior point ended in a numerical "
+                 "error on nine instances that pass without it (docs/NEGATIVE-RESULTS.md).",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"qp_ipm_centrality_correctors",
                  OptionType::Int,
                  std::int64_t{0},

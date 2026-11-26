@@ -114,6 +114,25 @@ TEST(QpIpm, HandlesEqualityRangedFreeAndFixedTogether) {
   expect_backed(model, s);
 }
 
+TEST(QpIpm, TheSupernodalAndPostponedOrderingModesReachTheSameOptimum) {
+  // qp_ipm_supernodal and qp_ipm_postpone_dense change the order and the rounding of the
+  // factorization, not the matrix: the answers agree with the scalar path's to the stop.
+  for (const Model& model : {inequality_qp(), equality_ranged_free_fixed_qp()}) {
+    Options modes = quiet();
+    modes.set_bool("qp_ipm_supernodal", true);
+    modes.set_bool("qp_ipm_postpone_dense", true);
+    Logger logger(nullptr);
+    const Solution scalar = qp::solve_convex_qp_ipm(model, quiet(), logger);
+    const Solution blocked = qp::solve_convex_qp_ipm(model, modes, logger);
+    ASSERT_EQ(blocked.status, SolveStatus::kOptimal) << blocked.message;
+    EXPECT_NEAR(blocked.objective, scalar.objective, 1e-8);
+    for (std::size_t j = 0; j < scalar.col_value.size(); ++j) {
+      EXPECT_NEAR(blocked.col_value[j], scalar.col_value[j], 1e-7);
+    }
+    expect_backed(model, blocked);
+  }
+}
+
 TEST(QpIpm, AMaximizationIsReportedInTheModelsOwnSense) {
   // max -(the objective above): the same point, the objective and the duals negated.
   Model model = equality_ranged_free_fixed_qp();
