@@ -1588,9 +1588,26 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
             if (finite(hi)) scaled_lower = hi / scale;
             if (finite(lo)) scaled_upper = lo / scale;
           }
-          const double new_lower = std::max(work.row_lower[kr], scaled_lower);
-          const double new_upper = std::min(work.row_upper[kr], scaled_upper);
-          if (new_lower > new_upper + feasibility) break;  // crossed: the engine's to refuse
+          double new_lower = std::max(work.row_lower[kr], scaled_lower);
+          double new_upper = std::min(work.row_upper[kr], scaled_upper);
+          // CROSSED BOUNDS ARE NEVER WRITTEN (#1350). Two rows that make an equality between
+          // them meet exactly only when the scale divides exactly: with a scale of
+          // -0.3 / 0.1 the bound -14.55 comes over as one ulp above 4.85, and the merged row
+          // had its lower bound above its upper. The search refused that as a malformed
+          // model, and the integral-row rounding read it as a row with no integer in it.
+          // Division by one scale is monotone, so a crossing is always between the kept
+          // row's own bound and one that came over. Within the tolerance, in the kept row's
+          // units and in the removed row's (the crossing times |scale|), the two bounds are
+          // one equality, written at the kept row's own bound: the kept row then holds
+          // exactly and the removed one to its tolerance. Beyond it the rows contradict
+          // each other and are the engine's to refuse, as before.
+          if (new_lower > new_upper) {
+            const double crossing = (new_lower - new_upper) * std::max(1.0, std::fabs(scale));
+            if (crossing > feasibility) break;
+            const double own = scaled_lower > work.row_lower[kr] ? new_upper : new_lower;
+            new_lower = own;
+            new_upper = own;
+          }
           Record record;
           record.kind = Record::Kind::kParallelRow;
           record.index = row;
