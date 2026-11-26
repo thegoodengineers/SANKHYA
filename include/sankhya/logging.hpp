@@ -102,6 +102,12 @@ class Logger {
   void iteration(Count iteration_number, double objective, double primal_infeasibility,
                  double dual_infeasibility, double seconds);
 
+  /// Whether iteration() would write anything: a console line or a progress record. An
+  /// engine whose arguments cost a pass over the model asks this first.
+  [[nodiscard]] bool writes_iterations() const noexcept {
+    return enabled(LogLevel::kInfo) || progress_stream_ != nullptr;
+  }
+
   /// Reprint the header every `n` rows so a long log stays readable. 0 disables.
   void set_iteration_header_interval(int n) noexcept { header_interval_ = n; }
 
