@@ -51,6 +51,7 @@ Index LpParser::intern_column(const std::string& name) {
   col_cost_.push_back(0.0);
   col_lower_.push_back(0.0);  // the LP-format default, as in MPS
   col_upper_.push_back(kInfinity);
+  col_upper_given_.push_back(0);
   col_type_.push_back(VarType::kContinuous);
   return index;
 }
@@ -411,6 +412,11 @@ bool LpParser::parse_constraints(const SectionSpan& span, std::string* error) {
 }
 
 bool LpParser::parse_bounds(const SectionSpan& span, std::string* error) {
+  // Recorded so a later Binary section keeps it (#1367).
+  const auto set_upper = [&](std::size_t u, double value) {
+    col_upper_[u] = value;
+    col_upper_given_[u] = 1;
+  };
   // A bound value may be written as "inf", "infinity", "-inf", "+infinity".
   const auto read_bound = [&](std::size_t* i, double* out) -> bool {
     double sign = 1.0;
@@ -442,7 +448,7 @@ bool LpParser::parse_bounds(const SectionSpan& span, std::string* error) {
         tokens_[i + 1].kind == TokKind::kIdent && to_upper(tokens_[i + 1].text) == "FREE") {
       const Index col = intern_column(tokens_[i].text);
       col_lower_[static_cast<std::size_t>(col)] = -kInfinity;
-      col_upper_[static_cast<std::size_t>(col)] = kInfinity;
+      set_upper(static_cast<std::size_t>(col), kInfinity);
       i += 2;
       continue;
     }
@@ -466,10 +472,10 @@ bool LpParser::parse_bounds(const SectionSpan& span, std::string* error) {
       if (op == "<=") {
         col_lower_[u] = lower;
       } else if (op == ">=") {
-        col_upper_[u] = lower;
+        set_upper(u, lower);
       } else {
         col_lower_[u] = lower;
-        col_upper_[u] = lower;
+        set_upper(u, lower);
       }
 
       if (i < span.end && is_relop(tokens_[i])) {
@@ -481,12 +487,12 @@ bool LpParser::parse_bounds(const SectionSpan& span, std::string* error) {
           return false;
         }
         if (op2 == "<=") {
-          col_upper_[u] = upper;
+          set_upper(u, upper);
         } else if (op2 == ">=") {
           col_lower_[u] = upper;
         } else {
           col_lower_[u] = upper;
-          col_upper_[u] = upper;
+          set_upper(u, upper);
         }
       }
       continue;
@@ -512,12 +518,12 @@ bool LpParser::parse_bounds(const SectionSpan& span, std::string* error) {
       return false;
     }
     if (op == "<=") {
-      col_upper_[u] = value;
+      set_upper(u, value);
     } else if (op == ">=") {
       col_lower_[u] = value;
     } else {
       col_lower_[u] = value;
-      col_upper_[u] = value;
+      set_upper(u, value);
     }
   }
   return true;
@@ -532,10 +538,13 @@ bool LpParser::parse_integrality(const SectionSpan& span, bool binary, std::stri
     const Index col = intern_column(tokens_[i].text);
     const auto u = static_cast<std::size_t>(col);
     col_type_[u] = VarType::kInteger;
-    if (binary) {
-      col_lower_[u] = 0.0;
-      col_upper_[u] = 1.0;
-    }
+    // "Binary variables are automatically given bounds of 0 (zero) and 1 (one), unless
+    // alternative bounds are specified in the BOUNDS section" (IBM CPLEX, "MIP features in LP
+    // file format"). The Bounds section comes first, so writing [0, 1] here discarded what it
+    // said (#1367): `x = 0` under Bounds and `x` under Binaries is how a fixed binary is
+    // written, and it came back free in [0, 1]. Each side keeps what Bounds gave it. The lower
+    // default, 0, is already the LP format's; the upper is 1 unless Bounds set it.
+    if (binary && col_upper_given_[u] == 0) col_upper_[u] = 1.0;
   }
   return true;
 }
