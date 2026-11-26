@@ -452,8 +452,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         for (Index i = 0; i < m; ++i) {
           const auto r = static_cast<std::size_t>(i);
           if (work.row_dead[r]) continue;
-          // Must be an equality row.
-          if (std::fabs(work.row_upper[r] - work.row_lower[r]) > feasibility) continue;
+          // Must be an equality row, its bounds equal (#1363): on 0 <= x - y1 - y2 <= 2^-24,
+          // inside the feasibility tolerance, x is 6e-8 off an integer wherever its cost
+          // wants the range, and promoting it cut that range out of the model.
+          if (work.row_lower[r] != work.row_upper[r]) continue;
           if (!finite(work.row_lower[r])) continue;
           const double rhs = work.row_lower[r];
           // RHS must be an integer EXACTLY. Within a tolerance the claim fails: with
@@ -1322,7 +1324,15 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       // eliminated role would need its own integrality re-derived on the survivor from the
       // coefficient ratio, which is a different reduction (Achterberg et al. cover it
       // separately) and out of scope here.
-      if (work.row_count[r] == 2 && work.row_upper[r] - work.row_lower[r] <= feasibility &&
+      //
+      // AN EQUATION MEANS THE ROW'S BOUNDS ARE EQUAL (#1363), as Model::is_equality_row() and
+      // the substitution stage have it. A range inside the feasibility tolerance is
+      // still a range: on a row scaled by 2^-27, 3.7e-8 is five units of its columns, and
+      // substituting at the lower bound cuts every point above it out of the model. 2 <= x +
+      // z <= 7 at that scale was read as x + z = 2, and z = 2 came back `optimal` 6 below
+      // the optimum; a feasible LP came back infeasible the same way. A ranged row with two
+      // entries simply stays in the reduced model.
+      if (work.row_count[r] == 2 && work.row_lower[r] == work.row_upper[r] &&
           finite(work.row_lower[r])) {
         Index first = -1, second = -1;
         double first_coeff = 0.0, second_coeff = 0.0;
@@ -1381,7 +1391,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         // column jointly.
         if (work.singleton_row_touched[ue] || work.singleton_row_touched[uk]) continue;
 
-        const double rhs = work.row_lower[r];  // == work.row_upper[r], within `feasibility`
+        const double rhs = work.row_lower[r];  // == work.row_upper[r]
 
         // The range of a*x_elim given x_elim in [lo_elim, hi_elim] - same contribution
         // pattern activity_bounds() uses above, specialised to one term.
