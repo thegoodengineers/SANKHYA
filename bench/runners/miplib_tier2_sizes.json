@@ -1,0 +1,425 @@
+{
+  "rule": "Counted by tools/verify_solution_mps.py from data/miplib-tier2/<name>.mps.gz as fetch_miplib.py --tier 2 downloads it; the sha256 is of that file.",
+  "instances": {
+    "markshare_4_0": {
+      "sha256": "1a1feb04f5637db9f69be53bd6224fcd9fe5b8d750870d9b2002b535d25f4353",
+      "rows": 4,
+      "cols": 34,
+      "nonzeros": 123,
+      "integer_cols": 30
+    },
+    "markshare2": {
+      "sha256": "8b1ea0bee5d89f3247cfbf6fd5fbd1234ea48e1d7081a8b7fbd827602b4b8914",
+      "rows": 7,
+      "cols": 74,
+      "nonzeros": 434,
+      "integer_cols": 60
+    },
+    "enlight_hard": {
+      "sha256": "942168c2126a2a91ae3ec1ededea59bc1af0cad55f94223edf4c03d20e831f66",
+      "rows": 100,
+      "cols": 200,
+      "nonzeros": 560,
+      "integer_cols": 200
+    },
+    "pk1": {
+      "sha256": "6c64530538b254a8ae648f8f8f188847366ae52da560fdec0ad290c642973ba0",
+      "rows": 45,
+      "cols": 86,
+      "nonzeros": 915,
+      "integer_cols": 55
+    },
+    "neos5": {
+      "sha256": "2888e9aeb10a4cf16d3b9ad221302fd3de815ce1454b31e660ebd060589c1072",
+      "rows": 63,
+      "cols": 63,
+      "nonzeros": 2016,
+      "integer_cols": 53
+    },
+    "gen-ip054": {
+      "sha256": "b5089ebc97c43bd583fcadf30955b8800861044d632d747c0b7ac73f19b9e6f3",
+      "rows": 27,
+      "cols": 30,
+      "nonzeros": 532,
+      "integer_cols": 30
+    },
+    "timtab1": {
+      "sha256": "5867d1a9c1067a849211c1a61bdb8839fb0025255dde09989d0ed333e0674d7a",
+      "rows": 171,
+      "cols": 397,
+      "nonzeros": 829,
+      "integer_cols": 171
+    },
+    "neos-3046615-murg": {
+      "sha256": "07d98d3032b201c023a7628a75974093c945987119a19803bcc69f0476956e19",
+      "rows": 498,
+      "cols": 274,
+      "nonzeros": 1266,
+      "integer_cols": 256
+    },
+    "sp150x300d": {
+      "sha256": "47051527397e27d1a62d0462ded35042d5eb5f4c4a3b5e3257c82279b97f1e42",
+      "rows": 450,
+      "cols": 600,
+      "nonzeros": 1200,
+      "integer_cols": 300
+    },
+    "mas76": {
+      "sha256": "91f624659e181538020e0c627910f02ffa6b355d6df708ef324e697a69485a74",
+      "rows": 12,
+      "cols": 151,
+      "nonzeros": 1640,
+      "integer_cols": 150
+    },
+    "mas74": {
+      "sha256": "019a9ca2dac800342a887cd07e326526b463dca9646ba16ad955a16fa4b6ecc1",
+      "rows": 13,
+      "cols": 151,
+      "nonzeros": 1706,
+      "integer_cols": 150
+    },
+    "gen-ip002": {
+      "sha256": "cb37e723fa2187947981215bf9c8ba40d452984d7b9be3467e9f9d18f0343f78",
+      "rows": 24,
+      "cols": 41,
+      "nonzeros": 922,
+      "integer_cols": 41
+    },
+    "neos-3754480-nidda": {
+      "sha256": "63f322dd9be49acf31f7579d8f04e3bb578bdd7ca7d3525683384190c9a8bf7f",
+      "rows": 402,
+      "cols": 253,
+      "nonzeros": 1488,
+      "integer_cols": 50
+    },
+    "neos-2657525-crna": {
+      "sha256": "447ffaafa253582984b35bb6f16b44ec5d8692ef4f5b84ffb389c2d84b938983",
+      "rows": 342,
+      "cols": 524,
+      "nonzeros": 1690,
+      "integer_cols": 524
+    },
+    "assign1-5-8": {
+      "sha256": "305c26c9eee8da7242f2f42504cb0988c9503f65972859ad5f26d9615086cde3",
+      "rows": 161,
+      "cols": 156,
+      "nonzeros": 3720,
+      "integer_cols": 130
+    },
+    "glass4": {
+      "sha256": "0d6e6ceaf921e5d5489b9926fdfed2ce0aa25fd9acfa9deb6794669b56b59591",
+      "rows": 396,
+      "cols": 322,
+      "nonzeros": 1815,
+      "integer_cols": 302
+    },
+    "supportcase26": {
+      "sha256": "e5769bd12cc2b5e711165d986ec324d68d336d6314e2b9db4156d5003b9f4ae4",
+      "rows": 870,
+      "cols": 436,
+      "nonzeros": 2492,
+      "integer_cols": 396
+    },
+    "neos-911970": {
+      "sha256": "cf9ad35ade0015d140f33ce83a593d76672c09fd8cc30c0539213be7e4a65ebb",
+      "rows": 107,
+      "cols": 888,
+      "nonzeros": 3408,
+      "integer_cols": 840
+    },
+    "mad": {
+      "sha256": "0109c5aefd23dbe6d46dd84ab4ad451eab329904249b7acaa38e9a0c94a6bc7a",
+      "rows": 51,
+      "cols": 220,
+      "nonzeros": 2808,
+      "integer_cols": 200
+    },
+    "graphdraw-domain": {
+      "sha256": "b34048178c8856db760e87b62d22a11dda8690103a2c51540e578ab16644e80c",
+      "rows": 865,
+      "cols": 254,
+      "nonzeros": 2600,
+      "integer_cols": 200
+    },
+    "exp-1-500-5-5": {
+      "sha256": "6e00da7741d808d331ff37bfcaf498bcc4c57ac24f32622f01047b6bbc7d870f",
+      "rows": 550,
+      "cols": 990,
+      "nonzeros": 1980,
+      "integer_cols": 250
+    },
+    "tr12-30": {
+      "sha256": "94f8cf2fd2fc920ed6ea2452b0755aeec110eb8404716554485c25e7a1e06a3d",
+      "rows": 750,
+      "cols": 1080,
+      "nonzeros": 2508,
+      "integer_cols": 360
+    },
+    "neos-3381206-awhea": {
+      "sha256": "58d33361a14a26ae1c497a9c8726fb33a699205a9dfad4f6c90e18ba7994db56",
+      "rows": 479,
+      "cols": 2375,
+      "nonzeros": 4275,
+      "integer_cols": 2375
+    },
+    "ic97_potential": {
+      "sha256": "db709f9ca628323d2ebcad02cb681e135a7638dfb1e6bdef4853b5366b6faa92",
+      "rows": 1046,
+      "cols": 728,
+      "nonzeros": 3138,
+      "integer_cols": 523
+    },
+    "neos-3627168-kasai": {
+      "sha256": "adf4a013825ad2932531128132c387eab68470ca087e23ea5cca4d2930954d7e",
+      "rows": 1655,
+      "cols": 1462,
+      "nonzeros": 5158,
+      "integer_cols": 535
+    },
+    "binkar10_1": {
+      "sha256": "94282c38edd6c83bb6c2d788d823fd82f218218e8e07c98d1d1ab42c1e91039e",
+      "rows": 1026,
+      "cols": 2298,
+      "nonzeros": 4496,
+      "integer_cols": 170
+    },
+    "csched008": {
+      "sha256": "5b121b09142ea4cb9da7a7a355a738fc58195343e7cc53227aaeddd52cb8d9e7",
+      "rows": 351,
+      "cols": 1536,
+      "nonzeros": 5687,
+      "integer_cols": 1284
+    },
+    "csched007": {
+      "sha256": "7d9ffe638f906498f432519c66db4570704070afdb88435a4bb75e5641f09973",
+      "rows": 351,
+      "cols": 1758,
+      "nonzeros": 6379,
+      "integer_cols": 1457
+    },
+    "beasleyC3": {
+      "sha256": "37350bc46bdb84a6373e9044eb3d0d65202427fe2bcba64ed282f894699d75dd",
+      "rows": 1750,
+      "cols": 2500,
+      "nonzeros": 5000,
+      "integer_cols": 1250
+    },
+    "p200x1188c": {
+      "sha256": "edf0cc0c502379119a65005b5c9a59ad242211598b1741e7fd9f9376b11bc30f",
+      "rows": 1388,
+      "cols": 2376,
+      "nonzeros": 4752,
+      "integer_cols": 1188
+    },
+    "neos-4338804-snowy": {
+      "sha256": "a8111bbb59ae6b28be2253e0532c9e628749e7c7cc7d1a1603992ec079f7eb04",
+      "rows": 1701,
+      "cols": 1344,
+      "nonzeros": 6342,
+      "integer_cols": 1302
+    },
+    "50v-10": {
+      "sha256": "9e64ce8962b8152e48b617cf7ec9e1abd8efeee8dcb317d4c06d817e5644192c",
+      "rows": 233,
+      "cols": 2013,
+      "nonzeros": 2745,
+      "integer_cols": 1647
+    },
+    "pg": {
+      "sha256": "b4344d7361aca3d0ff039e5de05d2ad38cfe7c9b9b8300fab4573b35821457b2",
+      "rows": 125,
+      "cols": 2700,
+      "nonzeros": 5200,
+      "integer_cols": 100
+    },
+    "mc11": {
+      "sha256": "55f4d9c9d2022cffeb3e07cd7398753f5aab720f16fa49ab17223375bab83874",
+      "rows": 1920,
+      "cols": 3040,
+      "nonzeros": 6080,
+      "integer_cols": 1520
+    },
+    "gmu-35-40": {
+      "sha256": "0c91e71117164becea8109a414127a2223be82215498f243767a7f5f51b1f11d",
+      "rows": 424,
+      "cols": 1205,
+      "nonzeros": 4843,
+      "integer_cols": 1200
+    },
+    "neos-4954672-berkel": {
+      "sha256": "634fa369d5100ae7a9c3d5e872f8c58af74d2873f6642291be899362322c1e6c",
+      "rows": 1848,
+      "cols": 1533,
+      "nonzeros": 8007,
+      "integer_cols": 630
+    },
+    "mik-250-20-75-4": {
+      "sha256": "1fa6126895fa59d1c613787ad19bb10e6080a39207224b018a43b95440dca4ef",
+      "rows": 195,
+      "cols": 270,
+      "nonzeros": 9270,
+      "integer_cols": 250
+    },
+    "mcsched": {
+      "sha256": "49deeb8c67d5ab6eec17c5e60019b93150773688271dc53510c31945dabed192",
+      "rows": 2107,
+      "cols": 1747,
+      "nonzeros": 8088,
+      "integer_cols": 1745
+    },
+    "pg5_34": {
+      "sha256": "d169bbd600ddc0be5625d95d52092f63e86d8bdfc78f86662c05429d26519567",
+      "rows": 225,
+      "cols": 2600,
+      "nonzeros": 7700,
+      "integer_cols": 100
+    },
+    "n5-3": {
+      "sha256": "48efedf21c4057851a4ef7efc79fbbcbd292b68ee5f6b6a16e904d11ab11bacc",
+      "rows": 1062,
+      "cols": 2550,
+      "nonzeros": 9900,
+      "integer_cols": 150
+    },
+    "lotsize": {
+      "sha256": "14702c1793474b78a30b91512a12917790ba860f7abe765b01b296fb86835902",
+      "rows": 1920,
+      "cols": 2985,
+      "nonzeros": 6565,
+      "integer_cols": 1195
+    },
+    "ran14x18-disj-8": {
+      "sha256": "2a063d948b69e080e8712c449000bf8f26b05ff4f619552a35b06ca5b6eb38c8",
+      "rows": 447,
+      "cols": 504,
+      "nonzeros": 10277,
+      "integer_cols": 252
+    },
+    "rococoC10-001000": {
+      "sha256": "672eff60e166bf14a0ac4781bcf4fcce443c24851e510f69555c1447fb6729c2",
+      "rows": 1293,
+      "cols": 3117,
+      "nonzeros": 11751,
+      "integer_cols": 3117
+    },
+    "gmu-35-50": {
+      "sha256": "5652e6ad8889e874bc88356d3f717677793457dc6afe76c934b3603bc3adb8d1",
+      "rows": 435,
+      "cols": 1919,
+      "nonzeros": 8643,
+      "integer_cols": 1914
+    },
+    "b1c1s1": {
+      "sha256": "3ad5eb7edd4a86889fbdaedc086444a93ebe07e54a743b5e19d2a5908340ad46",
+      "rows": 3904,
+      "cols": 3872,
+      "nonzeros": 11408,
+      "integer_cols": 288
+    },
+    "uct-subprob": {
+      "sha256": "509d9d593796d1234e4f831bbab22c7f289e45a145b24c58e310c9d3faa23216",
+      "rows": 1973,
+      "cols": 2256,
+      "nonzeros": 10147,
+      "integer_cols": 379
+    },
+    "neos17": {
+      "sha256": "1d50d129c3cbee9e409399314e5a77626811a46c301a2cf2fa2a2e64f65a8ba9",
+      "rows": 486,
+      "cols": 535,
+      "nonzeros": 24785,
+      "integer_cols": 300
+    },
+    "bppc4-08": {
+      "sha256": "f7441940af00d8a1a68b889f95dcabbe0185b68f53598cb70595fab23eca1cec",
+      "rows": 111,
+      "cols": 1456,
+      "nonzeros": 23964,
+      "integer_cols": 1454
+    },
+    "qap10": {
+      "sha256": "86c1f147d75688fe154f9dd402032f0c3b8ce164a70e4d0e350fec6c00d20c66",
+      "rows": 1820,
+      "cols": 4150,
+      "nonzeros": 18200,
+      "integer_cols": 4150
+    },
+    "cvs16r128-89": {
+      "sha256": "13500ea3846f62a738b3c00f504a84f2ccf0a48cc1519183299aeccb36ca4049",
+      "rows": 4633,
+      "cols": 3472,
+      "nonzeros": 12528,
+      "integer_cols": 3472
+    },
+    "milo-v12-6-r2-40-1": {
+      "sha256": "a9fdc6d2cbcc4dcd8596f09e45c5ee729ed29a3d0ed93cce4d1f9d683ac8f1b7",
+      "rows": 5628,
+      "cols": 2688,
+      "nonzeros": 14604,
+      "integer_cols": 840
+    },
+    "reblock115": {
+      "sha256": "cfc1223e622ed133400b5614cd382b6aa9a84fabfcea63510158b6c16e1e951c",
+      "rows": 4735,
+      "cols": 1150,
+      "nonzeros": 13724,
+      "integer_cols": 1150
+    },
+    "fhnw-binpack4-48": {
+      "sha256": "91134a0cb48050ef0a248362d2e3fdff1bfc0dc4011c59e9b5e3991caef0cfd5",
+      "rows": 4480,
+      "cols": 3710,
+      "nonzeros": 17290,
+      "integer_cols": 3605
+    },
+    "rococoB10-011000": {
+      "sha256": "1534d869037020db5ab41c6ea7889ae9bf9d95875b2f4789c03223fa9a8c07d3",
+      "rows": 1667,
+      "cols": 4456,
+      "nonzeros": 16517,
+      "integer_cols": 4456
+    },
+    "roll3000": {
+      "sha256": "47a0a827ac2d697b717fb55401afa5de9e042f026d6a462fb97d968a869d282d",
+      "rows": 2295,
+      "cols": 1166,
+      "nonzeros": 29386,
+      "integer_cols": 738
+    },
+    "cost266-UUE": {
+      "sha256": "a6048c81daa7c992ff5c3f6b954e2fd4d77048c9b9c3e49b76380a3c3e73fa7d",
+      "rows": 1446,
+      "cols": 4161,
+      "nonzeros": 12312,
+      "integer_cols": 171
+    },
+    "icir97_tension": {
+      "sha256": "b900d1eacbb02a57253f4bac839e0c1f3464a18a4686f8a621610d5d735e92ff",
+      "rows": 1203,
+      "cols": 2494,
+      "nonzeros": 22333,
+      "integer_cols": 835
+    },
+    "neos-3024952-loue": {
+      "sha256": "6c5f4b9dcb2bf75ce068fb2eea1a2ce911b028390e0fe6b98bd6ddb8690be5cb",
+      "rows": 3705,
+      "cols": 3255,
+      "nonzeros": 17310,
+      "integer_cols": 3255
+    },
+    "neos-4738912-atrato": {
+      "sha256": "bd85cacd7a28e99106d75d411d09e73005c818cf36b9a53e3ed01f00c09ff422",
+      "rows": 1947,
+      "cols": 6216,
+      "nonzeros": 19521,
+      "integer_cols": 6216
+    },
+    "fastxgemm-n2r6s0t2": {
+      "sha256": "e034ce428ac1bf325a15ae70aeff8c548854635a781a27f8b80cbb9c0af06246",
+      "rows": 5998,
+      "cols": 784,
+      "nonzeros": 19376,
+      "integer_cols": 48
+    }
+  }
+}
