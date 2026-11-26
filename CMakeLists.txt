@@ -587,6 +587,13 @@ add_executable(sankhya-fj-ab EXCLUDE_FROM_ALL bench/tools/fj_ab.cpp)
 target_link_libraries(sankhya-fj-ab PRIVATE sankhya_core sankhya_flags)
 target_include_directories(sankhya-fj-ab PRIVATE "${PROJECT_SOURCE_DIR}/src")
 
+# The scaled CSR PDHG multiplies by, in the micro-benchmark's dump format, for #982 step 1.
+# CPU only, so a dump can be made and checked on a machine without a card. Built only on
+# request (`--target sankhya-dump-scaled-csr`).
+add_executable(sankhya-dump-scaled-csr EXCLUDE_FROM_ALL bench/tools/dump_scaled_csr.cpp)
+target_link_libraries(sankhya-dump-scaled-csr PRIVATE sankhya_core sankhya_flags)
+target_include_directories(sankhya-dump-scaled-csr PRIVATE "${PROJECT_SOURCE_DIR}/src")
+
 # Device product micro-benchmark for #982 step 1 ("measure before building"). Standalone -
 # no sankhya_core, no sankhya:: namespace - so it builds and can be read in isolation from
 # the mixed-precision engine code. Built only on request (`--target sankhya-precision-
