@@ -803,6 +803,18 @@ def test_a_weakened_farkas_certificate_is_rejected() -> None:
           "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
 
 
+def test_a_rounding_size_multiplier_does_not_lend_its_row_to_a_column() -> None:
+    """#1371. r0: 1e12 x0 >= 0, r1: x0 + x1 >= 5, x0 >= 0, 0 <= x1 <= 1, feasible at x0 = 5.
+    With y = (1e-20, 1) the aggregate is (1 + 1e-8) x0 + x1 >= 5 and x0 has no upper bound,
+    so it proves nothing; the 1e-20 on r0 made 1e12 the scale x0's coefficient was read
+    against, and the coefficient read as zero."""
+    feasible = _two_row_lp(cost=[0.0, 0.0], lower=[0.0, 0.0], upper=[vs.INF, 1.0],
+                           rows=[(0.0, vs.INF, [1e12, 0.0]), (5.0, vs.INF, [1.0, 1.0])])
+    report = _run(feasible, _verdict("infeasible", farkas={"r0": 1e-20, "r1": 1.0}))
+    check(report.failures >= 1, "a rounding-size multiplier does not lend its row to a column",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
+
+
 def test_an_infeasible_verdict_without_a_certificate_is_not_a_failure() -> None:
     """THE BUG #191 IS ABOUT. Presolve proves infeasibility by bound arithmetic and keeps no
     Farkas vector. Before this, the checker read the all-zero point such a file used to carry,
@@ -1166,6 +1178,7 @@ def main() -> int:
     test_complementarity_still_rejects_a_real_slack_at_a_huge_bound()
     test_a_valid_farkas_certificate_verifies_at_any_scale()
     test_a_weakened_farkas_certificate_is_rejected()
+    test_a_rounding_size_multiplier_does_not_lend_its_row_to_a_column()
     test_an_infeasible_verdict_without_a_certificate_is_not_a_failure()
     test_a_header_that_promises_a_certificate_must_carry_one()
     test_a_valid_ray_with_a_feasible_point_verifies()
