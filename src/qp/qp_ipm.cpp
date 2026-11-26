@@ -1022,7 +1022,8 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
 
   // #980: the active-set finish, only once the IPM itself claims optimal and only when its
   // own point still has a complementarity product open against the in-process KKT gate - the
-  // case the comment above kIterationsForProducts says more iterations cannot close.
+  // case the comment above kIterationsForProducts says more iterations cannot close - and the
+  // gate itself, judging that product relative to its slack's terms, refuses the point.
   if (status == SolveStatus::kOptimal && options.get_bool("qp_ipm_finish")) {
     residuals();
     const double largest_product_at_exit =
