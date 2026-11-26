@@ -858,6 +858,24 @@ def test_a_ray_pointing_the_wrong_way_is_rejected() -> None:
           "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
 
 
+def test_a_ray_is_judged_against_the_terms_it_is_summed_from() -> None:
+    """#1370. min -x, 5e-8 x <= 1, x >= 0 is bounded (optimum -2e7): along the ray the row
+    rises by all of its one term, 5e-8, which an absolute 1e-7 read as no move. And min
+    x0 - 1e9 x1 with 0 <= x1 <= 1 is bounded: the ray (1, 1e-8) improves only through the
+    1e-8 it moves x1 against its upper bound, a move waived as rounding."""
+    small = _two_row_lp(cost=[-1.0], lower=[0.0], upper=[vs.INF],
+                        rows=[(-vs.INF, 1.0, [5e-8])])
+    report = _run(small, _verdict("unbounded", header={"certificate": "ray", "objective": "0.0"},
+                                  columns={"x0": 0.0}, rows={"r0": 0.0}, ray={"x0": 1.0}))
+    check(report.failures >= 1, "a row that rises by all of its one term blocks the ray",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
+    waived = _two_row_lp(cost=[1.0, -1e9], lower=[0.0, 0.0], upper=[vs.INF, 1.0], rows=[])
+    report = _run(waived, _verdict("unbounded", header={"certificate": "ray", "objective": "0.0"},
+                                   columns={"x0": 0.0, "x1": 0.0}, ray={"x0": 1.0, "x1": 1e-8}))
+    check(report.failures >= 1, "a waived move against a bound does not improve the ray",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
+
+
 def test_a_ray_from_an_infeasible_point_is_rejected() -> None:
     """Unbounded is TWO claims. A ray that starts outside the feasible region proves nothing,
     and the point is checked before the ray is even looked at."""
@@ -1184,6 +1202,7 @@ def main() -> int:
     test_a_valid_ray_with_a_feasible_point_verifies()
     test_a_ray_pointing_the_wrong_way_is_rejected()
     test_a_ray_from_an_infeasible_point_is_rejected()
+    test_a_ray_is_judged_against_the_terms_it_is_summed_from()
     print("verdicts that claim no point, and limits checked on honesty (#200)")
     test_a_verdict_that_claims_no_point_is_not_checked_as_if_it_did()
     test_a_limit_is_checked_on_what_it_claims_not_on_feasibility()
