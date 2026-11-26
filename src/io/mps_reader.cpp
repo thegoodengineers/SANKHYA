@@ -601,6 +601,10 @@ ReadResult MpsParser::parse(const std::string& path) {
           }
           continue;
         }
+        if (next == Section::kQuadratic && to_upper(tok_[0]) == "QSECTION") {
+          const ReadResult header = begin_qsection();  // #1368, mps_quadratic.cpp
+          if (!header.ok) return header;
+        }
         section = next;
         continue;
       }

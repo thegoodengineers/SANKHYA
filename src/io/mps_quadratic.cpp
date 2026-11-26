@@ -2,7 +2,7 @@
 // SANKHYA - the quadratic sections of an MPS/QPS file: QUADOBJ (the objective's Hessian)
 // and QCMATRIX (a quadratic ROW, #514).
 //
-// do_quadratic() moved here unchanged from mps_reader.cpp when QCMATRIX was added, to keep
+// do_quadratic() moved here from mps_reader.cpp when QCMATRIX was added, to keep
 // that file from growing further past the project's ~600 line guideline.
 //
 // QCMATRIX is the CPLEX and Gurobi extension for a quadratic constraint (CPLEX file-format
@@ -52,31 +52,44 @@ bool MpsParser::do_quadratic(std::string* error) {
   // "helpfully" halved the off-diagonals, or mirrored them into both triangles, would produce
   // a model that solves cleanly to the optimum of a different problem.
   //
-  // Files differ on which order the two column names appear in, so the pair is normalised to
-  // (max, min) rather than trusted.
-  if (tok_.size() < 3) {
+  // A record may carry a SECOND entry in fields four and five, as a COLUMNS record does
+  // (#1368). MOSEK's manual ("The MPS file format", QSECTION): a record is "[vname1] [vname2]
+  // [value1] [vname3] [value2]" and "specifies one or two elements in the lower triangular
+  // part of the Q matrix ... An optional second element is specified in the same way by the
+  // fields [vname1], [vname3], and [value2]". Only the first three fields were read, so the
+  // second entry was dropped without a word. Three fields or five; anything else is neither.
+  if (tok_.size() != 3 && tok_.size() != 5) {
     *error = reader_.error_at(fmt::format(
-        "QUADOBJ entry has {} field(s), expected 3 (column, column, value)", tok_.size()));
+        "QUADOBJ entry has {} field(s), expected 3 (column, column, value) or 5 (column, "
+        "column, value, column, value)",
+        tok_.size()));
     return false;
   }
+  if (!quadratic_entry(tok_[0], tok_[1], tok_[2], error)) return false;
+  return tok_.size() == 3 || quadratic_entry(tok_[0], tok_[3], tok_[4], error);
+}
 
-  const Index first = find_column(tok_[0]);
-  const Index second = find_column(tok_[1]);
+bool MpsParser::quadratic_entry(std::string_view name1, std::string_view name2,
+                                std::string_view text, std::string* error) {
+  // Files differ on which order the two column names appear in, so the pair is normalised to
+  // (max, min) rather than trusted.
+  const Index first = find_column(name1);
+  const Index second = find_column(name2);
   if (first < 0 || second < 0) {
     *error = reader_.error_at(
         fmt::format("QUADOBJ names column '{}' which never appeared in COLUMNS",
-                    first < 0 ? std::string(tok_[0]) : std::string(tok_[1])));
+                    first < 0 ? std::string(name1) : std::string(name2)));
     return false;
   }
 
   double value = 0.0;
-  if (!parse_double(tok_[2], &value)) {
-    *error = reader_.error_at(fmt::format("'{}' is not a number", tok_[2]));
+  if (!parse_double(text, &value)) {
+    *error = reader_.error_at(fmt::format("'{}' is not a number", text));
     return false;
   }
   if (!std::isfinite(value)) {
     *error = reader_.error_at(fmt::format(
-        "Hessian entry for ('{}', '{}') is {}; it must be finite", tok_[0], tok_[1], value));
+        "Hessian entry for ('{}', '{}') is {}; it must be finite", name1, name2, value));
     return false;
   }
 
@@ -100,6 +113,29 @@ bool MpsParser::do_quadratic(std::string* error) {
     quad_value_.push_back(value);
   }
   return true;
+}
+
+ReadResult MpsParser::begin_qsection() const {
+  // MOSEK's QSECTION carries the row its terms belong to (#1368): "the label [cname1] must be
+  // a constraint name previously specified in the ROWS section. The label [cname1] denotes
+  // the constraint to which the quadratic terms belong" (MOSEK manual, "The MPS file
+  // format", QSECTION), its own example writing the objective's as `QSECTION obj`. The label
+  // was never read, so `QSECTION c1` became the objective's Hessian and c1 an empty row: a
+  // different model, solved and reported as this one. The objective's is read as QUADOBJ; a
+  // constraint's is refused by name, since this reader takes a quadratic row as QCMATRIX.
+  if (tok_.size() < 2) return ReadResult::success();
+  const Index row = find_row(tok_[1]);
+  if (row == kObjectiveRow) return ReadResult::success();
+  if (row >= 0) {
+    return ReadResult::refusal(reader_.error_at(fmt::format(
+        "QSECTION {} holds the quadratic terms of constraint row '{}'; a quadratic row is read "
+        "only as QCMATRIX (the full symmetric matrix, without the factor 1/2 QSECTION "
+        "carries), so the file is refused rather than read with those terms in the objective",
+        tok_[1], tok_[1])));
+  }
+  return ReadResult::failure(reader_.error_at(fmt::format(
+      "QSECTION names row '{}', which is not the objective row or a constraint row of ROWS",
+      tok_[1])));
 }
 
 bool MpsParser::begin_qcmatrix(std::string* error) {

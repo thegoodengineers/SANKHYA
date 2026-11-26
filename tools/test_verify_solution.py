@@ -488,6 +488,28 @@ def test_qps_convention_is_read_as_qps_means_it() -> None:
         check(qx == [3.0, 3.0], "Qx expands the stored triangle symmetrically", f"got {qx}")
 
 
+def test_a_qsection_record_with_two_entries_and_a_constraint_label() -> None:
+    """#1368. MOSEK's QSECTION: a record "x x 2.0 y -1.0" carries (x, x) and (x, y); the
+    second entry used to be dropped. `QSECTION R1` names a constraint row, whose terms are not
+    the objective's, and used to be read as the objective's Hessian."""
+    two = QPS_WITH_OFF_DIAGONAL.replace("QUADOBJ\n", "QSECTION      COST\n").replace(
+        "    X         X            2.0\n    X         Y            1.0\n",
+        "    X         X            2.0   Y            1.0\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "qsec.qps"
+        path.write_text(two)
+        model = vs.parse_mps(path)
+        check(model.hessian.get((1, 0)) == 1.0 and len(model.hessian) == 3,
+              "a QSECTION record with two entries keeps both", f"hessian={model.hessian}")
+        path.write_text(two.replace("QSECTION      COST", "QSECTION      R1"))
+        try:
+            vs.parse_mps(path)
+            refused = False
+        except ValueError:
+            refused = True
+        check(refused, "QSECTION naming a constraint row is not read as the objective's", "")
+
+
 def test_qp_optimum_verifies_and_a_wrong_one_does_not() -> None:
     """The KKT conditions, on the QP above, at the true optimum and at a near miss.
 
@@ -1151,6 +1173,7 @@ def main() -> int:
     test_a_negative_ui_bound_frees_the_lower_bound_as_the_solver_does()
     print("test_qps_convention_is_read_as_qps_means_it")
     test_qps_convention_is_read_as_qps_means_it()
+    test_a_qsection_record_with_two_entries_and_a_constraint_label()
     print("test_qp_optimum_verifies_and_a_wrong_one_does_not")
     test_qp_optimum_verifies_and_a_wrong_one_does_not()
     print("test_quadratic_maximization_keeps_its_sign")
