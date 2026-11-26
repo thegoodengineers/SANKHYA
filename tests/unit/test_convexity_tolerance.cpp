@@ -15,11 +15,13 @@
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "sankhya/model.hpp"
+#include "sankhya/options.hpp"
 
 #include "qp/convexity.hpp"
 
@@ -239,10 +241,12 @@ TEST(ConvexityTolerance, ASlightlyIndefiniteMatrixIsRefusedWithItsWitness) {
   }
 }
 
-TEST(ConvexityTolerance, TheToleranceIsRelativeToTheLargestDiagonal) {
+TEST(ConvexityTolerance, TheToleranceIsRelativeToTheDiagonal) {
   // The same spectra at three scales. An eigenvalue of -1e-13 relative is accepted at every
   // scale, -1e-13 * 1e6 = -1e-7 included, which an absolute tolerance would refuse; -1e-5
-  // relative is refused at every scale, -1e-5 * 1e-3 = -1e-8 included.
+  // relative is refused at every scale, -1e-5 * 1e-3 = -1e-8 included. A rotated spectrum has
+  // diagonal entries all of one size, so here each column's own entry and the largest one are
+  // the same scale; the tests further down are the ones where they are not.
   std::mt19937 rng(1010);
   constexpr std::size_t n = 12;
   for (const double scale : {1e-3, 1.0, 1e6}) {
@@ -268,6 +272,99 @@ TEST(ConvexityTolerance, ABilinearSaddleIsRefusedWithItsExactEigenvalue) {
   // two-column direction the refusal reports instead is the eigenvector, curvature exactly -1.
   const Model model = hessian_only({{0.0, 1.0}, {1.0, 0.0}});
   expect_refused(model, -1.0, -1.0 + 1e-12, "x0 * x1");
+}
+
+// =========================================================================================
+// Refused: curvature on one column, beside a large diagonal entry on another
+// =========================================================================================
+
+TEST(ConvexityTolerance, NegativeCurvatureDoesNotHideBehindALargeDiagonalElsewhere) {
+  // Q = diag(1e12, -0.5) has the eigenvalue -0.5. One shift for the whole matrix, measured
+  // against its largest diagonal entry, is 1e-12 * 1e12 = 1 here, and -0.5 + 1 is a positive
+  // pivot: the unrelated 1e12 on the first column is what hides the second column's
+  // curvature. Q = [-0.5] alone is refused.
+  expect_refused(hessian_only({{1e12, 0.0}, {0.0, -0.5}}), -0.5, -0.5 * (1.0 - 1e-9),
+                 "diag(1e12, -0.5)");
+  // Milder numbers, the same failure: a shift of 1e-3 over a curvature of -5e-4.
+  expect_refused(hessian_only({{1e9, 0.0}, {0.0, -5e-4}}), -5e-4, -5e-4 * (1.0 - 1e-9),
+                 "diag(1e9, -5e-4)");
+  // Not only a negative diagonal entry: [[1e-3, 1], [1, 1e-3]] has the eigenvalue 1e-3 - 1 and
+  // both of its diagonal entries are positive.
+  expect_refused(hessian_only({{1e12, 0.0, 0.0}, {0.0, 1e-3, 1.0}, {0.0, 1.0, 1e-3}}),
+                 1e-3 - 1.0, -0.99, "a saddle beside 1e12");
+}
+
+TEST(ConvexityTolerance, ASemidefiniteMatrixWithABadlyScaledDiagonalIsStillConvex) {
+  // The other direction: a diagonal spanning twelve orders of magnitude is not by itself a
+  // reason to refuse. v v^T with v = (1e6, 1) is semidefinite of rank one, and its second
+  // pivot is zero before the shift, whichever column is eliminated first.
+  expect_convex(hessian_only({{1e12, 1e6}, {1e6, 1.0}}), "v v^T, v = (1e6, 1)");
+  expect_convex(hessian_only({{1.0, 1e6}, {1e6, 1e12}}), "v v^T, v = (1, 1e6)");
+  expect_convex(hessian_only({{1e12, 0.0}, {0.0, 1e-13}}), "diag(1e12, 1e-13)");
+  expect_convex(hessian_only({{1e12, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 1.0}}),
+                "diag(1e12, 0, 1)");
+}
+
+TEST(ConvexityTolerance, RescalingTheColumnsDoesNotChangeTheVerdict) {
+  // D Q D for a diagonal D of powers of two is Q in other units, and that scaling is exact in
+  // floating point, so the verdict has to be Q's. Q = B^T B with small integer entries is
+  // semidefinite exactly; every other draw has one diagonal entry replaced by -1, an
+  // eigenvalue below zero in any units. D spans 2^-10 to 2^10, so the diagonal of D Q D spans
+  // up to twelve orders of magnitude, where the draws of the tests above are all of one size.
+  std::mt19937 rng(20261125);
+  std::uniform_int_distribution<int> size(2, 8);
+  std::uniform_int_distribution<int> entry(-3, 3);
+  std::uniform_int_distribution<int> exponent(-10, 10);
+  for (int draw = 0; draw < 200; ++draw) {
+    const auto n = static_cast<std::size_t>(size(rng));
+    Dense b(n, std::vector<double>(n, 0.0));
+    for (auto& row : b) {
+      for (double& v : row) v = static_cast<double>(entry(rng));
+    }
+    Dense q(n, std::vector<double>(n, 0.0));
+    for (std::size_t i = 0; i < n; ++i) {
+      for (std::size_t j = 0; j < n; ++j) {
+        for (std::size_t k = 0; k < n; ++k) q[i][j] += b[k][i] * b[k][j];
+      }
+    }
+    const bool planted = (draw % 2) == 1;
+    if (planted) {
+      const std::size_t at = rng() % n;
+      q[at][at] = -1.0;
+    }
+    std::vector<double> d(n);
+    for (double& v : d) v = std::ldexp(1.0, exponent(rng));
+    for (std::size_t i = 0; i < n; ++i) {
+      for (std::size_t j = 0; j < n; ++j) q[i][j] *= d[i] * d[j];
+    }
+    const Model model = hessian_only(q);
+    if (!planted) {
+      expect_convex(model, "D B^T B D");
+      continue;
+    }
+    for (const ConvexityResult& result :
+         {check_convexity(model), check_convexity_dense(model)}) {
+      EXPECT_EQ(result.verdict, Convexity::kIndefinite)
+          << "draw " << draw << ", n = " << n << "\n  " << result.detail;
+    }
+  }
+}
+
+TEST(ConvexityTolerance, ASaddleBesideALargeDiagonalIsNotSolvedAsConvex) {
+  // minimise 0.5 (1e12 x1^2 - 0.5 x2^2), -1 <= x1 <= 1, -100 <= x2 <= 100, no rows. The
+  // objective is separable: 5e11 x1^2 is least at x1 = 0, and -0.25 x2^2 is least at
+  // x2 = +-100, where it is -2500. The origin is a saddle point with objective 0; an engine
+  // that takes the model for convex stops there and calls it optimal.
+  Model model = hessian_only({{1e12, 0.0}, {0.0, -0.5}});
+  model.col_lower = {-1.0, -100.0};
+  model.col_upper = {1.0, 100.0};
+  Options options;
+  options.set_bool("log_to_console", false);
+  const Solution solution = solve(model, options);
+  EXPECT_EQ(solution.status, SolveStatus::kModelError)
+      << "status " << to_string(solution.status) << ", objective " << solution.objective << ": "
+      << solution.message;
+  EXPECT_NE(solution.message.find("not convex"), std::string::npos) << solution.message;
 }
 
 }  // namespace
