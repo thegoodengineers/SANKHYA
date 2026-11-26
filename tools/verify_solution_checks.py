@@ -210,8 +210,15 @@ def verify_farkas(model: Model, solution: Solution, report: Report) -> Report:
     # the zero floor below is absolute (max(1, ...)), so a tiny vector would otherwise
     # aggregate to 0 on every column and "prove" a feasible model infeasible (review of #652).
     largest = max((abs(v) for v in y), default=0.0)
+    # A multiplier at rounding size (at most 1e-11 of the largest) drops its own term and
+    # nothing else (#1371), as in the C++ checker: it is zeroed, in the row bounds and in the
+    # aggregate alike. Any vector with these signs is a Farkas vector, so checking the one with
+    # those entries zero is sound. Kept, its row's entries became the scale a column's
+    # coefficient is read against below: y = (1e-20, 1) on 1e12 x1 >= 0 and x1 + x2 >= 5
+    # read x1's coefficient 1 + 1e-8 as zero and passed a feasible model as infeasible.
     if largest > 0.0 and math.isfinite(largest):
         y = [v / largest for v in y]
+        y = [0.0 if abs(v) <= 1e-11 else v for v in y]
     if not any(y):
         # NOT a failure. Presolve proves infeasibility from bound arithmetic and does not
         # keep the chain of tightenings that would make a Farkas vector, so it says

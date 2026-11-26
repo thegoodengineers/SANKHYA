@@ -340,5 +340,31 @@ TEST(Certificate, ATinyRayOnABoundedModelIsNotAProof) {
   EXPECT_FALSE(ray_proves_unbounded(bounded, {1e-8}, &why));
 }
 
+TEST(Certificate, ARoundingSizeMultiplierDoesNotLendItsRowsCoefficientToTheColumn) {
+  // #1371. r1: 1e12 x1 >= 0, r2: x1 + x2 >= 5, x1 >= 0, 0 <= x2 <= 1: feasible at x1 = 5.
+  // With y = (1e-20, 1) the aggregate is (1 + 1e-8) x1 + x2 >= 5, and x1 has no upper bound,
+  // so it proves nothing; the multiplier 1e-20 on r1 made 1e12 the scale x1's coefficient was
+  // read against, 1 + 1e-8 read as zero, and the vector was accepted.
+  const Model model = make_lp({{1e12, 0.0}, {1.0, 1.0}}, {0.0, 5.0}, {kInfinity, kInfinity},
+                              {0.0, 0.0}, {0.0, 0.0}, {kInfinity, 1.0});
+  std::string why;
+  EXPECT_FALSE(farkas_proves_infeasible(model, {1e-20, 1.0}, &why)) << why;
+  EXPECT_NE(why.find("free upward"), std::string::npos) << why;
+  // The same with the multiplier at 1e-12: its term, 1, is real, and read against 1e12 it
+  // was zero as well.
+  EXPECT_FALSE(farkas_proves_infeasible(model, {1e-12, 1.0}, &why)) << why;
+}
+
+TEST(Certificate, ARoundingSizeMultiplierLeavesARealProofStanding) {
+  // The control: x >= 5 and x <= 2, and beside them 1e12 z >= 0 on a column with no upper
+  // bound, carrying a multiplier of 1e-16 of the largest (the size Netlib ceria3d offers).
+  // The rounding-size term drops out with its multiplier and the two rows still prove it.
+  const Model model =
+      make_lp({{1.0, 0.0}, {1.0, 0.0}, {0.0, 1e12}}, {5.0, -kInfinity, 0.0},
+              {kInfinity, 2.0, kInfinity}, {1.0, 0.0}, {0.0, 0.0}, {kInfinity, kInfinity});
+  std::string why;
+  EXPECT_TRUE(farkas_proves_infeasible(model, {1.0, -1.0, 1e-16}, &why)) << why;
+}
+
 }  // namespace
 }  // namespace sankhya

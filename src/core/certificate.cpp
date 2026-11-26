@@ -46,7 +46,20 @@ std::vector<double> unit_scaled(const std::vector<double>& v) {
 
 bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y_given,
                               std::string* why) {
-  const std::vector<double> y = unit_scaled(y_given);
+  std::vector<double> y = unit_scaled(y_given);
+  // A multiplier at rounding size (at most kZeroDrop of the largest, which is 1 here) drops
+  // its own term and nothing else (#1371): it is set to zero, in the row bounds and in the
+  // aggregate alike, before anything below reads it. That is sound whatever its size,
+  // because any vector with the signs below is a Farkas vector, and the one checked is the
+  // one with these entries zero, in full. Kept, it gave its row's matrix entries to the
+  // scale each column's coefficient is read against (#762): with y = (1e-20, 1) on
+  // 1e12 x1 >= 0 and x1 + x2 >= 5, the scale of x1 was 1e12, its coefficient 1 + 1e-8 read
+  // as zero, the missing upper bound of x1 was never consulted, and a feasible model was
+  // "proved" infeasible. Netlib ceria3d's multiplier of 1e-16 of the largest (the case #762
+  // drops) is dropped here as well, with its term.
+  for (double& v : y) {
+    if (std::fabs(v) <= tol::kZeroDrop) v = 0.0;
+  }
   const Index m = model.num_rows();
   const Index n = model.num_cols();
   if (static_cast<Index>(y.size()) != m) {
@@ -114,7 +127,7 @@ bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y_g
     // under max(1, largest term) that 7.3e-12 read as zero, the missing bound was never
     // consulted, and a feasible model was "proved" infeasible - tools/verify_solution.py,
     // which had the same floor, agreed. A multiplier that is itself rounding (1e-16 of the
-    // largest, as on Netlib ceria3d) still leaves only a rounding-size coefficient.
+    // largest, as on Netlib ceria3d) was zeroed above and is in neither the sum nor the scale.
     const double drop = tol::kZeroDrop * column_scale[u];
     if (d[u] > drop) {
       if (!finite(model.col_upper[u])) {
