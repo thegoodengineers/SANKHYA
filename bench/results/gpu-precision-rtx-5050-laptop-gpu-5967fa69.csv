@@ -1,0 +1,9 @@
+model,rows,nonzeros,precision_arm,iterations,restarts,refinement_rounds,seconds_per_iteration,seconds_end_to_end_median,seconds_end_to_end_min,seconds_end_to_end_max,final_residual_primal_double,final_residual_dual_double,final_residual_gap_double,status,verifier_verdict,peak_device_memory_bytes,git_commit,card,timestamp_utc
+kkt_10000x10000,10000,80000,double-product,,,,8.31039995e-05,,,,,,,product-pair-only,,1240075,5967fa69,RTX 5050 Laptop GPU,2026-11-26T14:29:31.149097+00:00
+kkt_10000x10000,10000,80000,float-product,,,,0.00014137599992,,,,,,,product-pair-only,,800139,5967fa69,RTX 5050 Laptop GPU,2026-11-26T14:29:31.149133+00:00
+brazil3,14646,133184,double-product,,,,7.23200012e-05,,,,,,,product-pair-only,,2157567,5967fa69,RTX 5050 Laptop GPU,2026-11-26T14:29:31.709214+00:00
+brazil3,14646,133184,float-product,,,,5.974399857e-05,,,,,,,product-pair-only,,1374607,5967fa69,RTX 5050 Laptop GPU,2026-11-26T14:29:31.709242+00:00
+refinery_large,3536,28209,double-product,,,,8.223999851e-05,,,,,,,product-pair-only,,448367,5967fa69,RTX 5050 Laptop GPU,2026-11-26T14:29:32.283814+00:00
+refinery_large,3536,28209,float-product,,,,4.1983999319999995e-05,,,,,,,product-pair-only,,287715,5967fa69,RTX 5050 Laptop GPU,2026-11-26T14:29:32.283855+00:00
+refinery_year,779640,9968834,double-product,,,,0.0009818879664,,,,,,,product-pair-only,,148331571,5967fa69,RTX 5050 Laptop GPU,2026-11-26T14:29:34.083421+00:00
+refinery_year,779640,9968834,float-product,,,,0.0005934400261,,,,,,,product-pair-only,,95674423,5967fa69,RTX 5050 Laptop GPU,2026-11-26T14:29:34.083462+00:00
