@@ -9,34 +9,27 @@ products in double. It does NOT run the solver and makes NO claim about end-to-e
 time, iteration counts or convergence - that is bench/runners/gpu_datacenter.py's and a
 follow-up runner's job, once (and only if) this step says the product pair is worth it.
 
-THIS SCRIPT HAS NOT BEEN RUN. There is no GPU in the sandbox this was written in (checked:
-no nvcc, no /dev/nvidia*), and the issue is explicit that the result must come from the
-laptop card first. Running it is the next step for whoever picks this up with hardware; see
-the PR for #982 for the full list of what is and is not done.
-
-What it does, when run on a machine with a CUDA device and sankhya-precision-microbench
-built (`cmake --build build -DSANKHYA_ENABLE_CUDA=ON --target sankhya-precision-microbench`):
-  1. Builds (or locates) the three matrices #982 point 1 names: the generated 10,000 x
-     10,000 LP (bench/runners/gpu_report.py's generator, reused here), brazil3 (Mittelmann,
-     data/mittelmann after fetch_mittelmann.py) and one refinery ladder step
-     (bench/case_studies/refinery/generator.py --size medium).
-  2. Dumps each one's SCALED CSR (the same Ruiz-and-Pock-Chambolle-scaled matrix PDHG runs
-     on - src/la/scaling.cpp's output, not the raw model) to the flat binary format
-     bench/tools/gpu_precision_microbench.cu reads, via a tiny helper built into
-     sankhya-cli... (see NOTE below).
-  3. Runs sankhya-precision-microbench on each dump, parses its two CSV lines (double,
-     float), and writes bench/results/gpu-precision-<card>-<commit>.csv with the columns
-     #982's acceptance item asks for.
-
-NOTE on step 2 - the one piece this script cannot finish without a CUDA build to test
-against: sankhya-cli has no "dump the scaled CSR of this model" flag today. the real run needs either a small addition to
-sankhya-cli (e.g. `--dump-scaled-csr PATH`, printing the same CsrView src/gpu/pdhg_gpu.cu
-uploads) or scaling the matrix independently here in Python before the dump. Flagged rather
-than guessed at, since adding a CLI flag is itself a small code change that deserves its own
-review and is outside what this script can verify without a build.
+What it does, on a machine with a CUDA device and both tools built
+(`--target sankhya-precision-microbench sankhya-dump-scaled-csr`, CUDA on):
+  1. For each --model (the generated 10,000 x 10,000 LP from generate_large_lp.py, brazil3
+     after fetch_mittelmann.py, one refinery ladder step from
+     bench/case_studies/refinery/generator.py), runs sankhya-dump-scaled-csr, which writes the
+     SCALED CSR PDHG multiplies by (build_scaling with the engine's ten Ruiz rounds and one
+     Pock-Chambolle pass, then CsrView, exactly as src/gpu/pdhg_gpu.cu uploads it) in the flat
+     format bench/tools/gpu_precision_microbench.cu reads. A ready dump can be given with
+     --csr-dump instead.
+  2. Runs sankhya-precision-microbench on each dump and parses its two CSV lines (double,
+     float).
+  3. Writes bench/results/gpu-precision-<card>-<commit>.csv in the column order #982 asks for.
+     Only the product-pair columns are filled; the iteration, residual and end-to-end columns
+     belong to the solver A/B that follows only if this step says the pair is worth it.
 
     python bench/runners/gpu_precision_microbench.py --binary build_gpu/sankhya \\
-        --microbench build_gpu/sankhya-precision-microbench --card "RTX 5050 Laptop GPU"
+        --microbench build_gpu/sankhya-precision-microbench \\
+        --dump-tool build_gpu/sankhya-dump-scaled-csr --card "RTX 5050 Laptop GPU" \\
+        --model lp_10000x10000.mps --model-name kkt_10000x10000 \\
+        --model brazil3.mps --model-name brazil3 \\
+        --model refinery_large.mps --model-name refinery_large
 """
 from __future__ import annotations
 
@@ -46,6 +39,7 @@ import csv
 import struct
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -85,17 +79,24 @@ def main() -> int:
                     "format) to measure; repeatable. Without this, the script cannot source "
                     "a real matrix today (see the module docstring's NOTE) and exits "
                     "without writing a CSV.")
+    ap.add_argument("--model", type=Path, action="append", default=[],
+                    help="an MPS/LP model to dump with --dump-tool and measure; repeatable")
+    ap.add_argument("--dump-tool", type=Path,
+                    help="path to the built sankhya-dump-scaled-csr tool (for --model)")
+    ap.add_argument("--dump-dir", type=Path, default=None,
+                    help="where --model dumps are written (default: a temporary directory)")
     ap.add_argument("--model-name", action="append", default=[],
-                    help="label for each --csr-dump, in the same order")
+                    help="label for each --model, then each --csr-dump, in that order")
     ap.add_argument("--warmup", type=int, default=5)
     ap.add_argument("--timed", type=int, default=21)
     args = ap.parse_args()
 
-    if not args.csr_dump:
-        print("No --csr-dump given: this script cannot source the generated-LP / brazil3 / "
-              "refinery-ladder matrices on its own yet (see the module docstring's NOTE on "
-              "sankhya-cli needing a scaled-CSR dump flag). Nothing was measured, no CSV was "
-              "written.", file=sys.stderr)
+    if not args.csr_dump and not args.model:
+        print("Nothing to measure: give --model (with --dump-tool) or --csr-dump.",
+              file=sys.stderr)
+        return 1
+    if args.model and (not args.dump_tool or not args.dump_tool.exists()):
+        print(f"--dump-tool not found: {args.dump_tool}", file=sys.stderr)
         return 1
     if not args.microbench or not args.microbench.exists():
         print(f"--microbench not found: {args.microbench}", file=sys.stderr)
@@ -105,8 +106,19 @@ def main() -> int:
     card_slug = args.card.lower().replace(" ", "-")
     out_path = RESULTS_DIR / f"gpu-precision-{card_slug}-{git_commit}.csv"
 
+    dump_dir = args.dump_dir or Path(tempfile.mkdtemp(prefix="sankhya-csr-"))
+    dump_dir.mkdir(parents=True, exist_ok=True)
+    dumps = []
+    for model in args.model:
+        dump = dump_dir / (model.name.split(".")[0] + ".csr")
+        made = subprocess.run([str(args.dump_tool), str(model), str(dump)],
+                              capture_output=True, text=True, timeout=3600, check=True)
+        print(f"{model.name}: {made.stdout.strip()}")
+        dumps.append(dump)
+    dumps += args.csr_dump
+
     rows_out = []
-    for i, dump in enumerate(args.csr_dump):
+    for i, dump in enumerate(dumps):
         label = args.model_name[i] if i < len(args.model_name) else dump.stem
         parsed = run_microbench(args.microbench, dump, args.warmup, args.timed)
         with open(dump, "rb") as f:
