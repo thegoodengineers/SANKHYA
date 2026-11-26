@@ -555,10 +555,22 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       // Fixed column: the value is known, so fold it into the rows and drop it. Not when the
       // column carries curvature - the fold moves c_j * v into the objective constant and has
       // no way to move 0.5 * Q_jj * v^2 or the cross terms with it (#301).
-      const bool looks_fixed =
-          work.col_upper[u] - work.col_lower[u] <= feasibility && finite(work.col_lower[u]);
-      if (work.quadratic_col[u] && looks_fixed) ++result.report.quadratic_columns_protected;
-      if (!work.quadratic_col[u] && looks_fixed) {
+      //
+      // FIXED MEANS THE BOX HOLDS ONE VALUE (#1362), as Model::is_fixed_column() has it. A
+      // box narrower than the feasibility tolerance is still a box: what it is worth is its
+      // width times the coefficients and the cost the column carries, and folding the column
+      // at its lower bound cuts every point above that out of the model. With y = 2^30 z a
+      // doubleton carries y in [0, 10] onto z as [0, 9.3e-9]; fixed at 0, y = 0 came back
+      // `optimal` 10 below the optimum, and a row left with no entries called a feasible LP
+      // infeasible. No width is safe to weigh against the tolerance here, the column's own
+      // coefficients included: beside a smaller coefficient in the same row (x0 + 2^-27 x1
+      // >= 2^-27) a width of 3e-8 under a coefficient of one decides the other column. A
+      // narrow box simply stays in the reduced model. `<=` rather than `==`: a box crossed by
+      // no more than the tolerance passed the test above and holds no value at all, and is
+      // settled at its lower bound as it always was.
+      const bool fixed = work.col_upper[u] <= work.col_lower[u] && finite(work.col_lower[u]);
+      if (work.quadratic_col[u] && fixed) ++result.report.quadratic_columns_protected;
+      if (!work.quadratic_col[u] && fixed) {
         const double value = work.col_lower[u];
         Record record;
         record.kind = Record::Kind::kFixedColumn;
