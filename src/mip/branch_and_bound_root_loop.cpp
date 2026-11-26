@@ -140,6 +140,17 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
                reported(bounds.back()), first_taken.size(), by_family(first_taken),
                first_iterations);
   const bool timed = time_limit_ > 0.0 && time_limit_ < 1e300;
+  // THE TIME SHARE'S CLOCK (root_cut_time_from_loop, opt-in). Off, it is the search's: the
+  // loop stops once the search has used kRootCutTimeShare of time_limit, and the work before
+  // round 2 spends that too. On beasleyC3 the symmetry search and Feasibility Jump take 3.6
+  // to 4.6 s before the root LP, on mc11 2.2 to 3.0 s and on mod011 3.0 to 3.3 s, against a
+  // share of 3 s at a 60 s limit, so the loop ran one round on eight of those nine runs
+  // (bench.yml runs 45523852605 and 45523859891). On, the clock starts here, at round 2,
+  // and the share bounds the rounds themselves, as the stall and round limits do
+  // (Achterberg 2007, ch. 8: the root loop is limited by its own rounds). Off by default:
+  // its gates gained no proof and lost dano3mip's only point (docs/NEGATIVE-RESULTS.md).
+  const double clock_start =
+      options_.get_bool("root_cut_time_from_loop") ? timer_.elapsed_seconds() : 0.0;
   // With the pool removing the slack rows at the end (below), the budget is the pooled one.
   const auto row_budget = static_cast<Count>(
       root_cut_row_budget(model_rows, cut_removal_ ? cut_max_per_round_ : 0));
@@ -189,7 +200,8 @@ void BranchAndBound::root_cut_loop(Solution* relaxation, Index model_rows,
         break;
       }
     }
-    if (timed && timer_.elapsed_seconds() > tol::kRootCutTimeShare * time_limit_) {
+    if (timed &&
+        root_cut_time_share_spent(timer_.elapsed_seconds(), clock_start, time_limit_)) {
       why = "the time share";
       break;
     }

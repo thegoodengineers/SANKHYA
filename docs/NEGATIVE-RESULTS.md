@@ -730,6 +730,79 @@ The CSVs are not committed because they carry branch stamps. Each is `option-ab-
 
 What would earn the default: a tree that does not pay for the rounds' rows. On enlight8 the search runs 38k-52k nodes in 60 s with the rounds kept, against 412k-509k without, and that is the whole loss.
 
+### The root cut loop's time share on the loop's own clock (`root_cut_time_from_loop`, opt-in)
+
+The root cut loop stops once the search has used 5% of `time_limit` (`kRootCutTimeShare`, 3 s at 60 s). That clock starts with the search, not with the loop, so the work before the first cut round spends the share too. The hypothesis was that this is what keeps exp-1-500-5-5, beasleyC3, mc11, p200x1188c (MIPLIB 2017) and mod011 (MIPLIB 3) at a weak root. `root_cut_time_from_loop=true` starts the clock at the loop's second round instead.
+
+**The diagnosis, on `main` at `23e40b5`, no code change.** Root only (`node_limit=1`), one thread, 3 seeds, `profile=detailed`, every log kept. An arm cannot carry its own `time_limit` (the CLI's `--time-limit` overrides the option), so the 60 s and 300 s legs are separate `bench.yml` jobs: runs 45523852605 and 45523866704 for the four MIPLIB 2017 models (both on a Xeon 6975P-C), 45523859891 (Xeon 6975P-C) and 45523872197 (EPYC 7763) for mod011. Rounds and root bound after cuts are per seed.
+
+| model | rounds at 60 s | stopped on | rounds at 300 s | stopped on | root after cuts, 60 s | root after cuts, 300 s | optimum |
+|---|---|---|---|---|---|---|---|
+| beasleyC3 | 1 / 1 / 1 | the time share | 20 / 15 / 12 | round cap, tailing off, tailing off | 240.4 / 240.5 / 240.5 | 541.9 / 528.3 / 509.7 | 754 |
+| mc11 | 4 / 1 / 1 | the time share | 9 / 9 / 15 | tailing off | 4749.9 / 1243.2 / 1265.8 | 6154.6 / 6268.2 / 7325.5 | 11689 |
+| mod011 | 1 / 1 / 1 | the time share | 1 / 7 / 14 | tailing off | -61.62M / -61.53M / -61.27M | -61.62M / -59.94M / -58.04M | -54.56M |
+| exp-1-500-5-5 | 16 / 19 / 18 | the time share | 20 / 20 / 20 | the round cap | 58098.8 / 63272.2 / 60884.7 | 63242.9 / 64181.0 / 63130.4 | 65887 |
+| p200x1188c | 2 / 2 / 2 | tailing off | 2 / 2 / 2 | tailing off | 7917.1 / 7875.4 / 7885.4 | the same | 15078 |
+
+- **beasleyC3, mc11, mod011: the hypothesis holds.** What spends the share is the symmetry search, which stops at its budget, and Feasibility Jump, both before the root LP: 1.3 s + 2.3 to 3.3 s on beasleyC3, 2.2 to 3.0 s of Feasibility Jump on mc11, 2.5 s + 0.4 to 0.8 s on mod011. The root LP and the first cut round together take under 0.3 s on each.
+- **mod011 seed 0 is not the clock.** Given the time, at 300 s or under the option at 60 s, its second round gains less than a tenth of the first, the loop stops on tailing off, probation fails and the root goes back to round 1.
+- **exp-1-500-5-5: the hypothesis fails as stated.** The work before its loop is 0.03 s. The rounds themselves use the share: 3.07 to 3.35 s of `root cuts` for 16 to 19 rounds, nearly all of it outside the LP re-solves (3.26 of 3.28 s on seed 0 in run 45524128363). Twenty rounds take 3.39 to 5.05 s on this CPU. Its round count follows the runner because a round costs about 0.2 s, not because of where the clock starts.
+- **p200x1188c: the clock is not the limit.** It stops on tailing off after two rounds whatever the limit.
+
+**The option on the same five models,** one binary (`51e39c2`), both arms in one job, 60 s, root only: runs 45524128363 (Xeon 6975P-C) and 45524135299 (EPYC 9V45). beasleyC3 goes from 1 round to 11 on every seed (root 240.4 to 491.2, 507.3, 507.5), mc11 from 4 / 2 / 1 to 8 / 8 / 8 (root 6111.7, 6238.5, 6222.1), mod011 from 1 / 1 / 1 to 1 / 7 / 14, which is its 300 s result exactly. exp-1-500-5-5 and p200x1188c are unchanged on every seed.
+
+**The gates.** `bench.yml` `ab-option`, one binary (`51e39c2`), `off` the defaults and `on` with `root_cut_time_from_loop=true`, both arms in one job per gate, 60 s, one thread, 3 seeds. Counts are matched / proved / verified.
+
+| gate | run | arm | seed 0 | seed 1 | seed 2 | all |
+|---|---|---|---|---|---|---|
+| MIPLIB 3, 65 models | 45524294564 | off | 46/45/64 | 46/45/65 | 45/45/64 | 137/135/193 |
+| | | on | 46/45/64 | 46/45/64 | 45/45/64 | 137/135/192 |
+| tier 1, 30 models | 45524300442 | off | 18/11/30 | 19/11/30 | 17/11/29 | 54/33/89 |
+| | | on | 18/11/30 | 19/11/30 | 17/11/29 | 54/33/89 |
+| 25 MIPLIB 2017 targets | 45524306367 | off | 5/1/19 | 6/2/19 | 5/2/19 | 16/5/57 |
+| | | on | 5/1/19 | 6/2/19 | 5/2/19 | 16/5/57 |
+
+The targets job also ran exp-1-500-5-5 and mc11: 0/0/2 on every seed in both arms.
+
+It fails the rule: no proof is gained on any set, and one verified point is lost.
+
+- **dano3mip seed 1** (MIPLIB 3). The root LP takes 26 s and the first cut round's re-solve, which starts from the slack basis, another 25 s (83,669 iterations). `off` then stops the loop on the time share and the propagation dive finds the run's only point, 768.375, at 59.5 s of 60. `on` gives the loop a fresh 3 s with under 9 s left, runs two more rounds (root 576.302 to 576.347), and the run ends at the limit with no point. Seeds 0 and 2 end at the limit with no cut round finished and no point, in both arms.
+- **Proofs and matches:** none gained, none lost, on any seed of any set.
+
+The option changed the round count in 11 of the 366 solves per arm, and only on models the diagnosis named, plus rentacar and dano3mip:
+
+- **mod011** seeds 1 and 2: 7 and 14 rounds, gap at 60 s 11.1% to 4.0% and 7.1% to 2.6%, at 2,603 and 2,311 nodes against 7,320 and 7,147. Still unproved. Seed 0 is unchanged.
+- **rentacar** seed 1: 1 round to 4, proved in 11.2 s against 13.0 s.
+- **beasleyC3**, every seed: dual bound at 60 s 285 to 289 becomes 506 to 524, the incumbent 845 to 877 becomes 786 to 805 (optimum 754), at 7.8k to 9.6k nodes against 26k to 31k.
+- **mc11**, every seed: dual bound 1396 to 4837 becomes 6213 to 6635, but the incumbent is worse on every seed, 12258 to 13253 against 13617 to 14727 (optimum 11689), at about half the nodes.
+- **exp-1-500-5-5** seed 2: 18 rounds to 19, on 0.03 s of extra clock. Unproved in all six runs, at 16 to 19 rounds.
+
+The gate CSVs are not committed because they carry a branch stamp; each is in its run's artifact. The diagnosis CSVs are on `main`'s stamp: `bench/results/option-ab-miplib2017-root-loop-clock-{60s,300s}-23e40b5.csv` and `option-ab-miplib3-mod011-root-loop-clock-{60s,300s}-23e40b5.csv`.
+
+What would earn the default: a proof. On mod011 that is a tree that closes 2.6% in the time left, and on exp-1-500-5-5 a cheaper separation round or a budget counted in the loop's own work, since its 20 rounds do not fit 3 s on every runner. A clock that also counted the first round, as a share of the time left when it began, would leave dano3mip alone (its first round alone is 25 s); that variant was written and not gated, because it could not gain a proof this one did not.
+
+### drayage-100-23 and drayage-25-23: probing closes the root, and no heuristic closes the gap (diagnosis only)
+
+Run 45523877841, `main` at `23e40b5`, 60 s, one thread, 3 seeds, five arms on one binary in one job (`bench/results/option-ab-miplib2017-drayage-probing-23e40b5.csv`). Every arm scores 0 matched, 0 proved, 2 verified on every seed.
+
+| arm | root, 100-23 | root, 25-23 | incumbents at 60 s, 100-23 | incumbents at 60 s, 25-23 |
+|---|---|---|---|---|
+| defaults | 11714.14 | 11714.14 | 150501 / 367632 / 402059 | 417682 / 345227 / 395451 |
+| `presolve_probing=true` | 103333.874 | 99718.79 | 111437 / 112477 / 132070 | 309096 / 112489 / 110097 |
+| and `presolve_probing_continuous_bounds=true` | 103333.874 | 99718.79 | the same | the same |
+| and `mip_heur_rens=on` | 103333.874 | 99718.79 | the same | the same |
+| and `mip_heuristics=true` | 103333.874 | 99718.79 | 104674 / 110097 / 119252 | 110097 / 103334 / 110097 |
+
+The optima are 103333.874 and 101282.647.
+
+- **Probing puts the root of drayage-100-23 at its optimum** and that of drayage-25-23 at 0.983 of the way, before any cut. It fixes no binary by an infeasible probe (`probing_fixings` 0) and tightens 3,341 and 3,315 bounds, so the default gate, which counts fixings against a fifth of the integer columns, writes nothing.
+- **The integer columns' bounds are enough.** The arm that also writes the continuous columns' bounds is identical on every seed. That had not been measured on these two models since #1244 made integer-only bounds the default.
+- **No arm finds the optimum, so nothing is proved.** With the bound at the optimum the search needs the point, and at 60 s the best incumbent is 1.3% above it on drayage-100-23 and 2.0% on drayage-25-23, both under `mip_heuristics=true`.
+- **RENS proposes nothing.** Under `mip_heuristics=true` it runs once per solve, takes 0.02 to 0.20 s and one sub-MIP node, and proposes no point in 6 of 6 runs.
+- **The `mip_heur_rens=on` arm tested nothing.** Under `mip_heuristics=auto` every optional heuristic stands down once there is an incumbent, whatever its own switch says, and Feasibility Jump has one before the root LP (first point at 2.7 to 3.2 s, most of it the symmetry search). RENS was not called in that arm, and its runs are the probing arm's.
+
+Not measured: how many integer columns end fixed after probing because both probes agree, which is the count a wider gate would read. What would earn a gate: a count that is at or above the share on these two models and below it on the MIPLIB 3 models that lost proofs under probing (10teams, air05, bell5), and a primal heuristic that reaches the optimum once the bound is there, because without one the gate moves a bound and no verdict.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
