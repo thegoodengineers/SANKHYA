@@ -123,6 +123,41 @@ TEST(PresolveParallelRows, AMergeThatMakesAnEqualityPricesTheRowWhoseBoundBinds)
   EXPECT_LE(on.dual_infeasibility, 1e-7);
 }
 
+TEST(PresolveParallelRows, AKeptRowRemovedLaterStillHandsItsPriceBack) {
+  // #1354. 3 x0 - 4 x1 >= -3 (row 0, kept) and 6 x0 - 8 x1 <= -2 (row 1, twice row 0): the
+  // merged row is -3 <= 3 x0 - 4 x1 <= -1, and x1, free and now in one row, is substituted
+  // away with it. min -4 x0 + 2 x1 with x0 <= 3 ends at (3, 5/2), the row at -1: row 1's
+  // bound, so the price is row 1's, -1/2 / 2 = -1/4, and row 0, a >= row, has none. The
+  // replay of the merge ran before the kept row's dual existed and left -1/2 on row 0.
+  // Row 2, x2 + x3 >= 1 at costs 1 and 2, is there so that the reduced model is not empty.
+  //
+  // Postsolve is called directly: through solve() an answer whose duals fail is solved
+  // again without presolve (#783), which returns the right duals whatever postsolve did.
+  const Model model =
+      build({{3, -4, 0, 0}, {6, -8, 0, 0}, {0, 0, 1, 1}}, {-3.0, -kInf, 1.0},
+            {kInf, -2.0, kInf}, {-4, 2, 1, 2}, {-kInf, -kInf, 0, 0}, {3, kInf, 10, 10});
+  const presolve::Result reduced = reduce(model, true);
+  ASSERT_EQ(reduced.report.parallel_rows, 1);
+  ASSERT_GT(reduced.model.num_rows(), 0);
+  Options inner;
+  inner.set_bool("log_to_console", false);
+  inner.set_bool("presolve", false);
+  const Solution solved = solve(reduced.model, inner);
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+  const Solution restored = presolve::postsolve(reduced, model, solved);
+  ASSERT_EQ(restored.col_value.size(), 4u);
+  EXPECT_NEAR(restored.col_value[0], 3.0, 1e-9);
+  EXPECT_NEAR(restored.col_value[1], 2.5, 1e-9);
+  ASSERT_EQ(restored.row_dual.size(), 3u);
+  EXPECT_NEAR(restored.row_dual[0], 0.0, 1e-9) << "a >= row that is slack by 2";
+  EXPECT_NEAR(restored.row_dual[1], -0.25, 1e-9);
+  EXPECT_NEAR(restored.row_dual[2], 1.0, 1e-9);
+  // d = c - A'y: zero on the free x1, and x0 at its upper bound prices negative.
+  ASSERT_EQ(restored.col_dual.size(), 4u);
+  EXPECT_NEAR(restored.col_dual[1], 0.0, 1e-9);
+  EXPECT_NEAR(restored.col_dual[0], -4.0 - 6.0 * -0.25, 1e-9);
+}
+
 TEST(PresolveParallelRows, ANegativeScaleSwapsTheBounds) {
   //   x0 + x1 >= 1   (row 0)        -x0 - x1 >= -3   (row 1, minus row 0)
   // Row 1's LOWER bound is, in row 0's units, an UPPER bound of 3. Minimising -x0 - x1
