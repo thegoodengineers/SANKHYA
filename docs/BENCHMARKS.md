@@ -1120,6 +1120,21 @@ Commit `ad57c03` · machine `e2e-V100` · GPU Tesla V100-PCIE-32GB · 60.0 s per
 | `uct-subprob` | 0.010 | 0.207006 | 0.172 | 0.10828 |
 
 
+By size. Each instance is placed by its nonzeros (`bench/runners/miplib_tier2_sizes.json`, counted by the verifier's reader); the whole tier-2 list stops at 29,386 nonzeros, so none of these is large for a card. "Device first" and "device closer" count only the instances where both engines found a point.
+
+| card | nonzeros | instances | found, CPU | found, device | median first s, CPU | median first s, device | device first | device closer |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| NVIDIA L4 | 0 to 2,999 | 8 | 7 | 7 | 0.002 | 0.368 | 0 of 7 | 7 of 7 |
+| NVIDIA L4 | 3,000 to 9,999 | 6 | 5 | 4 | 0.041 | 1.250 | 0 of 4 | 3 of 4 |
+| NVIDIA L4 | 10,000 and up | 6 | 4 | 3 | 0.006 | 0.300 | 0 of 3 | 3 of 3 |
+| Tesla V100-PCIE-32GB | 0 to 2,999 | 8 | 7 | 7 | 0.001 | 0.172 | 0 of 7 | 7 of 7 |
+| Tesla V100-PCIE-32GB | 3,000 to 9,999 | 6 | 5 | 4 | 0.030 | 0.467 | 0 of 4 | 3 of 4 |
+| Tesla V100-PCIE-32GB | 10,000 and up | 6 | 4 | 4 | 0.005 | 0.156 | 1 of 4 | 4 of 4 |
+
+- NVIDIA L4: found by the CPU and not by the device: `neos-3024952-loue` (17,310 nonzeros), `neos-3627168-kasai` (5,158 nonzeros).
+- Tesla V100-PCIE-32GB: found by the CPU and not by the device: `neos-3627168-kasai` (5,158 nonzeros).
+
+
 #### 1g.9 Deterministic device reductions on the refinery year, per iteration (#478)
 
 Since #478 the device sums its reductions in a fixed order (`deterministic=true`) so a GPU

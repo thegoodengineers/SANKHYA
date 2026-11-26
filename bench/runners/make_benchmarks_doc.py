@@ -3020,6 +3020,8 @@ def main() -> int:
         tier2_legs[leg] = newest_option_run(f"miplib-t2-full-{leg}-{sha7}*.csv", option)
     # #508: gpu-fj-ab-<sha>-<machine>.csv, newest by git order (the machine is in the name).
     fj_csv = newest("gpu-fj-ab-*.csv")
+    # #508 by size: every card's run, oldest first, each read whole (the sizes are by name).
+    fj_csvs = sorted(RESULTS_DIR.glob("gpu-fj-ab-*.csv"))
     # #478 on the refinery year: one CSV per option leg, pdhg-478-refinery-<leg>-<sha>.csv.
     # The option legs set solver options, which latest() skips by design, so each is read by
     # its own name with newest_option_run(); the commit order still picks the newest.
@@ -3254,6 +3256,8 @@ every third instance of the MIPLIB tier-2 list, `bench/runners/gpu_fj_ab.py`. Th
 only whether and when a feasible point appears; neither engine is in the default solve path.
 
 {gpu_ab_doc.fj_section(fj_csv)}
+
+{gpu_ab_doc.fj_size_section(fj_csvs, Path(__file__).resolve().parent / "miplib_tier2_sizes.json")}
 
 #### 1g.9 Deterministic device reductions on the refinery year, per iteration (#478)
 
