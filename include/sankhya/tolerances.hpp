@@ -748,6 +748,12 @@ inline constexpr double kQpIpmFinishRankTolerance = 1e-10;
 /// factor 1.05 of 1. Chosen from that arithmetic, not tuned on a benchmark.
 inline constexpr int kQpIpmFinishEquilibrationPasses = 10;
 
+/// Ruiz rounds on the presolved QP's KKT matrix [Q A'; A 0] before qp_prescale's retry of a
+/// stalled or failed interior point (src/core/solve.cpp). The value of the LP's prescaled
+/// retry (#792): the factors are rounded to powers of two afterwards, so rounds past the
+/// point where they settle cost a pass over Q and A each and change nothing. Not tuned.
+inline constexpr int kQpPrescalePasses = 20;
+
 /// At most this many re-solves of the finish, each after one change to the active set - a
 /// free column moved onto the bound it violates or whose reduced cost it cannot zero, or a
 /// pinned bound whose multiplier came out with the wrong sign released (the primal

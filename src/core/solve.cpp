@@ -574,7 +574,8 @@ constexpr int kPrescalePasses = 20;
 /// instances it stalled on (qpilotno, stadat1) are solved by both rival interior points
 /// that equilibrate first. The answer is mapped back exactly and adopted only when it is
 /// optimal, so the status guard and the KKT gate still judge it in the model's own units;
-/// otherwise `ipm` is untouched and goes on to the stall hand-off as before. A retry rather
+/// otherwise `ipm` is untouched but for its message and goes on to the
+/// stall hand-off or the Condat-Vu fallback as before. A retry rather
 /// than the first attempt: equilibrating every QP first lost three instances whose
 /// scaled-space stop the gate refused in the model's units (docs/NEGATIVE-RESULTS.md).
 /// Returns whether `ipm` was replaced.
@@ -585,7 +586,7 @@ bool retry_qp_ipm_prescaled(Solution* ipm, const Model& model, const Options& op
   if (limits.has_time_limit() && limits.remaining_seconds(timer.elapsed_seconds()) <= 0.0) {
     return false;
   }
-  const PrescaledModel prescaled = prescale_qp_by_powers_of_two(model, kPrescalePasses);
+  const PrescaledModel prescaled = prescale_qp_by_powers_of_two(model, tol::kQpPrescalePasses);
   logger.info(
       "QP interior point: {} after {} iterations; solving again on the model "
       "equilibrated by powers of two (qp_prescale)",

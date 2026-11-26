@@ -2583,12 +2583,14 @@ const std::vector<OptionSpec>& Options::registry() {
                  OptionType::Bool,
                  true,
                  "qp_algorithm=ipm: when the interior point stalls (qp_ipm_stall_handoff's "
-                 "test) or ends in a numerical error, solve the presolved model again, on the "
+                 "test, so only with that option on, its default) or ends in a numerical "
+                 "error, solve the presolved model again, on the "
                  "time left, equilibrated by Ruiz on its KKT matrix [Q A'; A 0] (Ruiz, "
                  "RAL-TR-2001-034, 2001), each row and column factor rounded to a power of two "
                  "so that the change of variables is exact; an optimal answer is mapped back "
                  "and adopted before the status guard and the KKT gate judge it in the model's "
-                 "own units, otherwise the stall hand-off runs as before. No cost scaling. On "
+                 "own units, otherwise the stall hand-off or the Condat-Vu fallback runs as "
+                 "before. No cost scaling; 20 Ruiz rounds (tol::kQpPrescalePasses). On "
                  "by default since the A/B on Maros-Meszaros (bench.yml run 45539497594, one "
                  "binary at 9efca8d2, all 138 at 60 s): 129 to 131 passed and 135 to 137 "
                  "verified, qpilotno and stadat1 from iteration_limit to optimal, no other "
