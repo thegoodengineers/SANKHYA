@@ -618,10 +618,12 @@ inline constexpr int kRowAggregationDepth = 6;
 inline constexpr double kRowAggregationInside = 1e-6;
 
 /// Presolve, parallel rows (#412; Andersen & Andersen 1995, sec. 5). Two rows are
-/// proportional when every coefficient matches its scaled counterpart to this relative
-/// tolerance, measured against max(1, |a|, |scaled|). Tighter than the pivot drop because a
-/// merge that is even slightly wrong changes the feasible set silently; looser than
-/// machine epsilon because the coefficients arrive through a reader and a scaling pass.
+/// proportional when every entry's ratio to its counterpart equals the first entry's ratio,
+/// the scale s, to this relative tolerance: |a / k - s| <= tol * |s|. Relative only, with no
+/// floor of one: an absolute 1e-9 merged any two rows of entries under 5e-10 (#1364).
+/// Tighter than the pivot drop because a merge that is even slightly wrong changes the
+/// feasible set silently; looser than machine epsilon because the coefficients arrive
+/// through a reader and a scaling pass.
 inline constexpr double kPresolveParallelRowTolerance = 1e-9;
 
 /// Presolve, coefficient tightening (#511; Savelsbergh 1994; Achterberg et al. 2020, sec.

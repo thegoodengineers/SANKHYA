@@ -241,9 +241,8 @@ TEST(PresolveParallelRows, RowsWithSmallCoefficientsAreComparedByTheirRatio) {
   // row s r1 + 1.5 s r2 <= 5 cut the optimum r = (2^30, 4 * 2^30), z = 1 down to
   // 5 * 2^30 + 1, feasible on the original model and so accepted as optimal.
   const double s = 0x1p-30;
-  Model model =
-      build({{s, 1.5 * s, 0}, {s, s, 0}}, {-kInf, -kInf}, {7, 5}, {1, 1.25, 1}, {0, 0, 0},
-            {kInf, kInf, 1});
+  Model model = build({{s, 1.5 * s, 0}, {s, s, 0}}, {-kInf, -kInf}, {7, 5}, {1, 1.25, 1},
+                      {0, 0, 0}, {kInf, kInf, 1});
   model.sense = ObjSense::kMaximize;
   model.col_type[2] = VarType::kInteger;
   EXPECT_EQ(reduce(model, true).report.parallel_rows, 0);
