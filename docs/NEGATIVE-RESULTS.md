@@ -840,6 +840,16 @@ The first form put the current iterate to the gate itself (`check_qp_optimality`
 
 What shipped: the extra iterations keep their absolute target, and only the finish is skipped on a point the gate accepts, at the iterate where those iterations already ended. Base `23e40b50`, new `699cfd3a` (run 45539517363): 129 passed / 135 verified both ways, no row's status changed, qscfxm3 7.40 s to 0.114 s, qfffff80 2.25 s to 0.88 s, qpcboei1 0.607 s to 0.037 s, qcapri 0.214 s to 0.035 s, qpcboei2 0.037 s to 0.008 s. The CSVs were not committed (branch stamps).
 
+### More extra iterations past the relative stop for qforplan (#1178, branch `diag/1178-qforplan-trace`, not merged)
+
+Once the three relative measures are met, the QP interior point takes at most five more iterations (`kIterationsForProducts`) to bring the complementarity products under 1e-7. On qforplan the loop stops at iteration 30 with a row whose multiplier is -5.869e7 and whose activity is 1.161e-11 off its bound, a product of 6.8e-4. The KKT gate refuses that point (3.651e-6 relative on row 42), and the answer is labelled `feasible` (verified). A logging build allowed 5, 10, 20 and 50 extra iterations (`bench.yml` `ab-option`, one binary at `cdee9314`, 60 s, run 45914828994; then `959d8141`, run 45915965604).
+
+Two more Mehrotra iterations close the products: alpha 0.995, mu from 3.4e-6 to 8.7e-11, and the largest product 1.7e-8 at iteration 32. Every limit of 10 or more stops there. The gate then accepts the point and labels it `optimal`, but `tools/verify_solution.py` refuses it: complementary slackness 1.141e-6 on column `A   81 1`. That column is basic at x = 2800 above its lower bound of 0. Its derived reduced cost is summed from 58 terms with sum |terms| = 2.592e6. The gate's summation gives -2^-32 (0.41 eps * sum, product 6.5e-7, pass); the verifier's order gives about 4.1e-10 (0.71 eps * sum, product 1.141e-6, fail). The point is otherwise exact: primal 1.3e-16, dual 7.7e-17 and gap 1.3e-16 relative, 5.3e-9 from the reference. qgfrdxpn and qshell do not move under any limit; both stay `feasible` (verified).
+
+Not merged. On its own the change turns a verified `feasible` into an `optimal` that the verifier refuses, which loses a verified point. What stands in the way now is not the interior point. It is the column rule that also decides qgfrdxpn and qshell: a basic column's reduced cost at rounding level, times a large value. The rule that would pass all three, and why it is sound, is written up on #1178 for the owner to decide. The CSVs were not committed (branch stamps).
+
+liswet8, the other instance #1178 lists, needs no change. It is `optimal` and verified at 714.47006 on `main` (run 45857498844), and it fails `passed` only against the published erratum in `data/maros-meszaros/reference_errata.json`.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.
