@@ -327,11 +327,27 @@ def verify_ray(model: Model, solution: Solution, report: Report, primal_tol: flo
     report.check(not blocked_cols, "ray respects the column bounds",
                  "no column bound blocks the ray" if not blocked_cols
                  else f"{len(blocked_cols)} would be crossed: " + ", ".join(blocked_cols[:5]))
+    # A move against a bound waived above as rounding is dropped from the ray, as the C++
+    # checker does (#1370), so that it cannot count towards the rows, the improvement or the
+    # curvature below: the ray (1, 1e-8) on min x1 - 1e9 x2, 0 <= x2 <= 1, improved only by
+    # the waived 1e-8 against the bound of x2.
+    d = [0.0 if (v > 0.0 and math.isfinite(model.col_upper[j]))
+         or (v < 0.0 and math.isfinite(model.col_lower[j])) else v
+         for j, v in enumerate(d)]
 
+    # Each row against its own terms (#1370): an activity counts as no move only below
+    # primal_tol of the largest term it is summed from. An absolute 1e-7 let the row
+    # 5e-8 x <= 1 rise by all of its one term unseen.
     activity = times(model, d)
+    row_scale = [0.0] * model.num_rows
+    for j in range(model.num_cols):
+        for i, value in model.entries[j]:
+            row_scale[i] = max(row_scale[i], abs(value * d[j]))
     blocked_rows = [model.row_names[i] for i in range(model.num_rows)
-                    if (activity[i] > moving and math.isfinite(model.row_upper[i]))
-                    or (activity[i] < -moving and math.isfinite(model.row_lower[i]))]
+                    if (activity[i] > primal_tol * row_scale[i]
+                        and math.isfinite(model.row_upper[i]))
+                    or (activity[i] < -primal_tol * row_scale[i]
+                        and math.isfinite(model.row_lower[i]))]
     report.check(not blocked_rows, "ray respects the row bounds",
                  "no row bound blocks the ray" if not blocked_rows
                  else f"{len(blocked_rows)} would be crossed: " + ", ".join(blocked_rows[:5]))
@@ -344,7 +360,11 @@ def verify_ray(model: Model, solution: Solution, report: Report, primal_tol: flo
     if model.hessian:
         qd = model.hessian_times(d)
         curvature = sum(d[j] * qd[j] for j in range(model.num_cols))
-        report.check(curvature <= 1e-9 * max(1.0, abs(curvature)), "ray does not curve back",
+        # Against the largest term d'Qd is summed from (#1370), not max(1, |d'Qd|): 5e-8 on
+        # min -0.001 x + 0.5 * 5e-8 x^2 is all of its curvature, and that model is bounded.
+        curvature_scale = max((abs(value * d[i] * d[j])
+                               for (i, j), value in model.hessian.items()), default=0.0)
+        report.check(curvature <= 1e-9 * curvature_scale, "ray does not curve back",
                      f"d'Qd = {curvature:.12e}; a positive value means the improvement is "
                      f"only local")
     return report
