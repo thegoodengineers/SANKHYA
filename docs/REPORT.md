@@ -116,7 +116,7 @@ the one stamped in the file's rows, the build that produced it.
 | Hock-Schittkowski NLP: 64 of 70 at the published objective, 70 accepted by the checker | `bench/results/nlp-hs-ad57c03.csv` | `ad57c03` |
 | Convex MINLPLib: 14 of 17 at the published objective, 16 accepted by the checker | `bench/results/nlp-minlplib-ad57c03.csv` | `ad57c03` |
 | Stress set, 126 badly scaled and adversarial LPs: SANKHYA 117 correct / 0 wrong / 9 declined; HiGHS on its defaults 28 / 88 / 10 | `bench/results/stress-1659c8b.csv` | `1659c8b` |
-| `sankhya scenarios`: 3990 of 3990 scenarios verified | `bench/results/scenarios-675a454.csv` | `675a454` |
+| `sankhya scenarios`: 4020 of 4020 scenarios verified | `bench/results/scenarios-5967fa69.csv` | `5967fa69` |
 | A million rows on the CPU: 2 of 9 engine runs optimal and verified (transport 1,000,000 rows by `pdhg` in 119 s; refinery 1,007,400 rows by `pdhg` in 2,336 s) | `bench/results/million-cpu-b561fba.csv` | `b561fba` |
 | HiGHS agreement, medium Netlib tier: objectives agree on 50 of 50 | `bench/results/compare-highs-medium-ad57c03.csv` | `ad57c03` |
 | GPU PDHG on real models, NVIDIA A100-SXM4-40GB: 1.00x to 8.72x against the faster CPU arm over 6 model-tolerance cells, 2 of them ending at the time limit | `bench/results/gpu-real-a100-fdd1f35.csv` | `fdd1f35` |
@@ -443,9 +443,9 @@ A local interior point for NLP and branch and bound for MINLP proved convex. Hoc
 
 **Q20. Can a planner run what-if scenarios?**
 
-Yes: `sankhya scenarios` re-solves a model over a set of changes from a warm start, and each scenario's answer is verified; 3990 of 3990 in the committed run. `tools/report.py` prints binding constraints and shadow prices by the model's own names.
+Yes: `sankhya scenarios` re-solves a model over a set of changes from a warm start, and each scenario's answer is verified; 4020 of 4020 in the committed run. `tools/report.py` prints binding constraints and shadow prices by the model's own names.
 
-*Evidence: `bench/results/scenarios-675a454.csv` at `675a454`; `README.md`, "Use"; `docs/FINALE.md`.*
+*Evidence: `bench/results/scenarios-5967fa69.csv` at `5967fa69`; `README.md`, "Use"; `docs/FINALE.md`.*
 
 **Q21. How are the benchmark numbers kept honest?**
 
