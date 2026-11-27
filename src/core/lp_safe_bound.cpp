@@ -74,6 +74,7 @@
 #include <fmt/format.h>
 
 #include "core/lp_exact_dual.hpp"
+#include "core/lp_primal_refinement.hpp"
 #include "core/safe_bound.hpp"
 #include "exact/exact_repair.hpp"
 #include "exact/rational.hpp"
@@ -454,6 +455,9 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
     // if they are dual infeasible again by a rounding residue, the pivot rounds resume from
     // it. All of it inside the same certified_gap_seconds; any y it reaches gives a valid
     // bound.
+    // It runs on the primal-refined LP (lp_primal_refinement.hpp, which says why: pilot87's
+    // plain dual phase stopped 5.4e-06 short with the infeasibility inside its tolerance).
+    // The costs are unchanged, so its duals are the LP's: the float ones are tried first.
     for (int phase = 0; phase < tol::kSafeBoundDualPhases && !good_enough() &&
                         !exact_timed_out && reported.proved && budget.remaining() > 0.0;
          ++phase) {
@@ -465,11 +469,25 @@ void attach_safe_lower_bound(const Model& model, const Options& options, Solutio
       SolveControl control;
       control.start_col_status = current.col_status;
       control.start_row_status = current.row_status;
-      Solution resolved = solve(model, inner, &control);
-      note(fmt::format("dual simplex from the dual feasible basis: {} after {} iteration(s)",
-                       to_string(resolved.status), resolved.iterations));
+      const PrimalRefinement refinement =
+          refine_primal(model, current.col_value, tol::kSafeBoundRefinementScaleBits);
+      Solution resolved = solve(refinement.model, inner, &control);
+      note(fmt::format(
+          "dual simplex from the dual feasible basis, on the LP refined about its point "
+          "(largest violation {:.3e}, scale 2^{}): {} after {} iteration(s)",
+          refinement.max_violation, refinement.scale_bits, to_string(resolved.status),
+          resolved.iterations));
       if (resolved.status != SolveStatus::kOptimal) break;
-      current = std::move(resolved);
+      current = unrefine_primal(model, refinement, std::move(resolved));
+      std::vector<double> refined_y(current.row_dual.size());
+      for (Sz i = 0; i < refined_y.size(); ++i) refined_y[i] = sense * current.row_dual[i];
+      const double before = best.value;
+      try_duals(refined_y, current);
+      if (best.value > before) {
+        note(fmt::format("float duals of the dual simplex's basis: {:.17g} ({:.3e} relative)",
+                         best.value, relative_gap(best.value)));
+      }
+      if (good_enough()) break;
       reported = try_exact(cost, current, "the dual simplex's basis", budget.remaining());
       pivot_rounds();
     }
