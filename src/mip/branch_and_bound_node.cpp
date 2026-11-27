@@ -139,24 +139,40 @@ bool BranchAndBound::propagate() {
 //      with a coefficient is a finite number, and was summed as one.
 //   2. Every implied bound is moved outward by a bound on its rounding error, before it is
 //      compared with the column's bound and before an integer column is rounded to a whole
-//      number. The n products t_k = fl(a_k b_k), their recursive sum, the subtraction of the
-//      column's share, the subtraction from the row bound and the division each round once.
-//      Higham ("Accuracy and Stability of Numerical Algorithms", 2nd ed., SIAM 2002, sec.
-//      4.2) bounds the sum's error by (n - 1) u sum |t_k| with u = eps / 2; with the other
-//      steps the quotient v is off by at most (n + 2) u (sum |t_k| + |row bound|) / |a_j| +
-//      u |v| to first order. The margin is (n + 3) eps (sum |t_k| + |row bound|) / |a_j| +
-//      eps |v|, more than twice that. It is zero when nothing was rounded: every coefficient
-//      and bound an integer, every sum below 2^40 (products and partial sums are then exact)
-//      and a_j dividing the result. The two activity tests that call the row infeasible give
-//      up the same margin. Presolve's bound propagation has the same rule (presolve.cpp).
+//      number. Two bounds are computed and the smaller is used; both are upper bounds.
+//      - The a-priori one (#1361). The n products t_k = fl(a_k b_k), their recursive sum, the
+//        subtraction of the column's share, the subtraction from the row bound and the
+//        division each round once. Higham ("Accuracy and Stability of Numerical Algorithms",
+//        2nd ed., SIAM 2002, sec. 4.2) bounds the sum's error by (n - 1) u sum |t_k| with
+//        u = eps / 2, so the quotient v is off by at most (n + 2) u (sum |t_k| + |row bound|)
+//        / |a_j| + u |v| to first order. The bound used is (n + 3) eps (...) / |a_j| + eps |v|.
+//      - The error the arithmetic actually made. Each rounding error is computed exactly by
+//        an error-free transformation: a b = t + fma(a, b, -t) for a product, Knuth's TwoSum
+//        for a sum (x + y = s + e exactly), and r = fma(-v, a, n) = n - v a for the division
+//        (Higham sec. 4.3; Ogita, Rump and Oishi, "Accurate sum and dot product", SIAM J.
+//        Sci. Comput. 26, 2005). The true quotient is then within
+//            (E + |e_rest| + |e_numerator| + |r|) / |a_j|
+//        of v, where E is the sum of the activity's absolute errors, scaled up for the
+//        rounding of these few sums of non-negative numbers. The bound is exactly zero when
+//        nothing was rounded, so a row the arithmetic computed exactly propagates exactly as
+//        it did before #1361. The a-priori bound gave up some 1e-11 of such a row's magnitude,
+//        and that alone took gesa2_o's search off the path on which it proved. Exactness needs
+//        no underflow, so a product, numerator or quotient below 2^-968 in magnitude falls back
+//        to the a-priori bound.
+//   The two activity tests that call the row infeasible give up the same margin. Presolve's
+//   bound propagation has the a-priori rule (presolve.cpp).
 // A loosened bound is still an implied bound: this weakens a deduction and touches no
-// tolerance. On a row of magnitude 1e4 the margin is 1e-11.
+// tolerance.
 bool BranchAndBound::propagate_row(Index i, const CsrView& by_row, bool* changed) {
   constexpr double kEps = std::numeric_limits<double>::epsilon();
-  constexpr double kExactInteger = 1099511627776.0;  // 2^40
-  const auto integral = [](double v) {
-    return std::fabs(v) < kExactInteger &&
-           v == static_cast<double>(static_cast<std::int64_t>(v));
+  // Below this magnitude a product or quotient may be subnormal, and its fma remainder is
+  // then not exact: 2^-968 = 2^(emin + p - 1) for IEEE double.
+  constexpr double kExactAbove = 0x1p-968;
+  const auto tiny = [](double v) { return v != 0.0 && std::fabs(v) < kExactAbove; };
+  // Knuth's TwoSum: x + y == s + error exactly, for s = fl(x + y) finite.
+  const auto sum_error = [](double x, double y, double s) {
+    const double yy = s - x;
+    return (x - (s - yy)) + (y - yy);
   };
   const auto ui = static_cast<std::size_t>(i);
   const ColumnView row = by_row.row(i);
@@ -166,15 +182,25 @@ bool BranchAndBound::propagate_row(Index i, const CsrView& by_row, bool* changed
   const bool has_upper = is_finite_bound(row_upper);
 
   // Activity bounds implied by the current column bounds, the magnitude of what went into
-  // each (its row bound included), and whether every number read was an integer.
+  // each (its row bound included), and the sum of the exact rounding errors made in each.
   double min_activity = 0.0;
   double max_activity = 0.0;
   double min_magnitude = has_upper ? std::fabs(row_upper) : 0.0;
   double max_magnitude = has_lower ? std::fabs(row_lower) : 0.0;
+  double min_error = 0.0;
+  double max_error = 0.0;
   bool min_infinite = false;
   bool max_infinite = false;
-  bool exact = (!has_upper || integral(row_upper)) && (!has_lower || integral(row_lower));
+  bool underflow = false;
   double terms = 0.0;
+  const auto add = [&](double a, double b, double* activity, double* magnitude, double* error) {
+    const double t = a * b;
+    const double s = *activity + t;
+    *error += std::fabs(std::fma(a, b, -t)) + std::fabs(sum_error(*activity, t, s));
+    *activity = s;
+    *magnitude += std::fabs(t);
+    underflow = underflow || tiny(t);
+  };
   for (Index k = 0; k < row.size; ++k) {
     const auto j = static_cast<std::size_t>(row.rows[k]);
     const double a = row.values[k];
@@ -182,30 +208,28 @@ bool BranchAndBound::propagate_row(Index i, const CsrView& by_row, bool* changed
     const double low = a > 0.0 ? working_.col_lower[j] : working_.col_upper[j];
     const double high = a > 0.0 ? working_.col_upper[j] : working_.col_lower[j];
     terms += 1.0;
-    exact = exact && integral(a);
     if (is_finite_bound(low)) {
-      const double term = a * low;
-      min_activity += term;
-      min_magnitude += std::fabs(term);
-      exact = exact && integral(low);
+      add(a, low, &min_activity, &min_magnitude, &min_error);
     } else {
       min_infinite = true;
     }
     if (is_finite_bound(high)) {
-      const double term = a * high;
-      max_activity += term;
-      max_magnitude += std::fabs(term);
-      exact = exact && integral(high);
+      add(a, high, &max_activity, &max_magnitude, &max_error);
     } else {
       max_infinite = true;
     }
   }
   // A sum that overflowed proves nothing.
-  min_infinite = min_infinite || !std::isfinite(min_magnitude);
-  max_infinite = max_infinite || !std::isfinite(max_magnitude);
-  exact = exact && min_magnitude < kExactInteger && max_magnitude < kExactInteger;
-  const double min_rounding = exact ? 0.0 : (terms + 3.0) * kEps * min_magnitude;
-  const double max_rounding = exact ? 0.0 : (terms + 3.0) * kEps * max_magnitude;
+  min_infinite = min_infinite || !std::isfinite(min_magnitude) || !std::isfinite(min_error);
+  max_infinite = max_infinite || !std::isfinite(max_magnitude) || !std::isfinite(max_error);
+  // Each error sum adds at most 2n non-negative numbers: (1 + 2 n eps) covers its rounding.
+  const double error_scale = 1.0 + 2.0 * terms * kEps;
+  min_error *= error_scale;
+  max_error *= error_scale;
+  const double min_a_priori = (terms + 3.0) * kEps * min_magnitude;
+  const double max_a_priori = (terms + 3.0) * kEps * max_magnitude;
+  const double min_rounding = underflow ? min_a_priori : std::min(min_a_priori, min_error);
+  const double max_rounding = underflow ? max_a_priori : std::min(max_a_priori, max_error);
 
   // Infeasible by activity alone: no assignment inside the current box can satisfy it.
   if (!min_infinite && has_upper &&
@@ -224,18 +248,31 @@ bool BranchAndBound::propagate_row(Index i, const CsrView& by_row, bool* changed
     if (a == 0.0) continue;
     const double lo = working_.col_lower[j];
     const double hi = working_.col_upper[j];
-    // (row bound - rest of the row) / a, moved outward by the rounding it can carry.
-    const auto implied = [&](double side, double rest, double rounding, bool upward) {
+    // (row bound - (activity - own share)) / a, moved outward by the rounding it can carry.
+    // `own` is the product the activity summed, so its own error is inside `error`.
+    const auto implied = [&](double side, double activity, double own, double a_priori,
+                             double error, bool upward) {
+      const double rest = activity - own;
       const double numerator = side - rest;
       const double v = numerator / a;
-      const double margin =
-          exact && v * a == numerator ? 0.0 : rounding / std::fabs(a) + kEps * std::fabs(v);
+      const double worst = a_priori / std::fabs(a) + kEps * std::fabs(v);
+      double margin = worst;
+      if (!underflow && !tiny(numerator) && !tiny(v)) {
+        const double made = error + std::fabs(sum_error(activity, -own, rest)) +
+                            std::fabs(sum_error(side, -rest, numerator)) +
+                            std::fabs(std::fma(-v, a, numerator));
+        // Three sums and a division round once more (4 eps), and v + margin once (eps |v|).
+        const double exact_margin =
+            made == 0.0 ? 0.0 : made / std::fabs(a) * (1.0 + 4.0 * kEps) + kEps * std::fabs(v);
+        margin = std::min(worst, exact_margin);
+      }
       return upward ? v + margin : v - margin;
     };
 
     if (!min_infinite && has_upper) {
-      const double rest = min_activity - (a > 0.0 ? a * lo : a * hi);
-      const double derived = implied(row_upper, rest, min_rounding, a > 0.0);
+      const double own = a > 0.0 ? a * lo : a * hi;
+      const double derived =
+          implied(row_upper, min_activity, own, min_a_priori, min_error, a > 0.0);
       if (a > 0.0 && derived < hi - tol::kPropagationMinChange) {
         tighten_upper(j, derived);
         *changed = true;
@@ -245,8 +282,9 @@ bool BranchAndBound::propagate_row(Index i, const CsrView& by_row, bool* changed
       }
     }
     if (!max_infinite && has_lower) {
-      const double rest = max_activity - (a > 0.0 ? a * hi : a * lo);
-      const double derived = implied(row_lower, rest, max_rounding, a < 0.0);
+      const double own = a > 0.0 ? a * hi : a * lo;
+      const double derived =
+          implied(row_lower, max_activity, own, max_a_priori, max_error, a < 0.0);
       if (a > 0.0 && derived > lo + tol::kPropagationMinChange) {
         tighten_lower(j, derived);
         *changed = true;
