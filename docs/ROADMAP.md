@@ -1,6 +1,6 @@
 # The finale roadmap, as it stands
 
-The plan from issue #540, restated against `main` at 5967fa69 (25 November 2026). Each
+The plan from issue #540, restated against `main` at 19320a00 (27 November 2026). Each
 line is an issue with the measurement that motivates it, the paper it comes from and its
 acceptance checklist; the estimate is days for one person as planned. A ticked line is
 an issue closed with its acceptance met and its evidence on `main` (a merged PR, and a
@@ -154,7 +154,7 @@ Closed: #411, #412, #413, #415, #417, #419, #221, #358, #446, #447, #448, #456, 
 | issue | what landed | what keeps it open |
 |---|---|---|
 | #508 | Feasibility Jump on the device, off by default (#679), measured on an L4 (#696) and a V100 (#734): a feasible point on 14 of 20 against the CPU's 16 (L4) and 15 against 16 (V100), every point verified (`bench/results/gpu-fj-ab-58a8374-e2e-L4.csv`, `gpu-fj-ab-ad57c03-e2e-V100.csv`) | the other 40 tier-2 instances, and the region where the device loses stated by size in `docs/BENCHMARKS.md` |
-| #514 | spatial branch and bound (#637), its bound certificate (#978), reformulation-linearization rows on by default (#1283, #1291) and root OBBT behind `global_obbt` (#1290); 38 of 39 pooling runs optimal and verified, every one of the 39 certificates checked (`bench/results/pooling-1659c8b.csv`, `pooling-certificate-1659c8b.csv`) | adhya3 (P-formulation) ends `feasible` with the gap open |
+| #514 | spatial branch and bound (#637), its bound certificate (#978), reformulation-linearization rows on by default (#1283, #1291) and root OBBT behind `global_obbt` (#1290); 38 of 39 pooling runs optimal and verified by default, every one of the 39 certificates checked (`bench/results/pooling-1659c8b.csv`, `pooling-certificate-1659c8b.csv`). The P-to-Q pool lift behind `global_pool_lift` (#1388, in review) closes adhya3 P: with it on, 39 of 39 optimal and verified (A/B run 45917416006, none lost) and 39 of 39 certified with the lift rebuilt by the checker (run 45918501903) | #1388 merged, then the owner's close; the default stays off until the A/B is repeated on `main` |
 | #414 | a switch and a counted budget per heuristic (#425); FJ and parity on by default after their A/Bs; every optional heuristic A/B'd alone (#1075) and RINS under a 60 s limit (#1083), none earning a default, recorded in `docs/NEGATIVE-RESULTS.md` | 0 of the 5 named instances at the published optimum |
 | #418 | restarts and objective branching, off, with their A/Bs (#970) | no bound moved on b-ball, opt1217, rlp1 or noswot |
 | #295 | multi-GPU PDHG with a fixed-order exchange (#684, #713) | the measurement on more than one card |
