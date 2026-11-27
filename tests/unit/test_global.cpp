@@ -451,6 +451,9 @@ TEST(Global, ACertifiedSearchProvesTheSameOptimumAndWritesASoundTree) {
   const QcqpModel model = read_or_fail(kHaverly1);
   Options plain;
   plain.set_bool("log_to_console", false);
+  // The model's own columns and rows in the certificate: the lifted certificate is
+  // tests/unit/test_global_pool_lift.cpp's and tools/test_verify_global_certificate.py's.
+  plain.set_bool("global_pool_lift", false);
   const Solution reference = solve_global(model, plain);
   ASSERT_EQ(reference.status, SolveStatus::kOptimal) << reference.message;
 

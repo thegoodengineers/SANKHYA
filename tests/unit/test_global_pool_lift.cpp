@@ -213,7 +213,9 @@ TEST(GlobalPoolLift, EveryAddedRowHoldsAtEveryPointOfThePool) {
 
 TEST(GlobalPoolLift, ProvesTheSameOptimumOnTheModelsOwnColumns) {
   const QcqpModel model = read_or_fail(kHaverly1P);
-  const Solution plain = solve_global(model, quiet());
+  Options without = quiet();
+  without.set_bool("global_pool_lift", false);
+  const Solution plain = solve_global(model, without);
   Options with_lift = quiet();
   with_lift.set_bool("global_pool_lift", true);
   const Solution lifted = solve_global(model, with_lift);
