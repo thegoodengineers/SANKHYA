@@ -234,6 +234,29 @@ TEST(PresolveParallelRows, BoundsThatCrossBeyondTheToleranceInEitherRowsUnitsAre
   EXPECT_EQ(reduce(model, true).report.parallel_rows, 0);
 }
 
+TEST(PresolveParallelRows, RowsWithSmallCoefficientsAreComparedByTheirRatio) {
+  // #1364. max r1 + 1.25 r2 + z:  s r1 + 1.5 s r2 <= 7,  s r1 + s r2 <= 5,  s = 2^-30,
+  // r1, r2 >= 0, z binary. The ratios are 1 and 1.5, so the rows are not parallel; their
+  // coefficients differ by 4.7e-10, which an absolute 1e-9 took for equal, and the merged
+  // row s r1 + 1.5 s r2 <= 5 cut the optimum r = (2^30, 4 * 2^30), z = 1 down to
+  // 5 * 2^30 + 1, feasible on the original model and so accepted as optimal.
+  const double s = 0x1p-30;
+  Model model = build({{s, 1.5 * s, 0}, {s, s, 0}}, {-kInf, -kInf}, {7, 5}, {1, 1.25, 1},
+                      {0, 0, 0}, {kInf, kInf, 1});
+  model.sense = ObjSense::kMaximize;
+  model.col_type[2] = VarType::kInteger;
+  EXPECT_EQ(reduce(model, true).report.parallel_rows, 0);
+  const Solution solved = solve(model, with_parallel_rows(true));
+  ASSERT_EQ(solved.status, SolveStatus::kOptimal) << solved.message;
+  const double exact = 6 * 0x1p30 + 1;
+  EXPECT_NEAR(solved.objective, exact, 1e-9 * exact);
+
+  // The same small entries in a true ratio, 2, still merge.
+  const Model scaled = build({{s, 1.5 * s}, {2 * s, 3 * s}}, {-kInf, -kInf}, {7, 5}, {1, 1},
+                             {0, 0}, {kInf, kInf});
+  EXPECT_EQ(reduce(scaled, true).report.parallel_rows, 1);
+}
+
 /// `lp` with `extra` rows appended, each a scaled copy of an existing row with a bound of
 /// its own: a tighter lower bound for a positive scale, an upper bound for a negative one.
 oracle::GeneratedLp with_duplicates(const oracle::GeneratedLp& lp, std::mt19937_64& rng,

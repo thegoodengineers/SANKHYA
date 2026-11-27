@@ -1527,8 +1527,11 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
     // scale (and swapped when it is negative), tighten the earlier row's, and the later row
     // goes; postsolve hands its dual back to it when the bound that binds was its own. Rows
     // are bucketed by their live column pattern so only rows that could be parallel are
-    // compared, and compared exactly enough: every coefficient must match its scaled
-    // counterpart to a relative 1e-9. Crossed bounds after a merge are not declared
+    // compared, and compared exactly enough: every entry's ratio to its counterpart in the
+    // kept row must equal the scale to a relative 1e-9 (Achterberg et al. 2020, sec. 5.2:
+    // the rows are parallel when one is a multiple of the other). A ratio has no units, so
+    // the test has no absolute floor: one of 1e-9 merged rows whose entries were all under
+    // 5e-10 whatever their ratio (#1364). Crossed bounds after a merge are not declared
     // infeasible here; the two rows are simply left as they are for the engine to refuse.
     if (parallel_rows && !result.proved_infeasible) {
       constexpr double kInf = std::numeric_limits<double>::infinity();
@@ -1578,11 +1581,9 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
               proportional = false;
               break;
             }
-            const double expected = scale * live_kept[q].second;
-            proportional =
-                std::fabs(live_row[q].second - expected) <=
-                tol::kPresolveParallelRowTolerance *
-                    std::max({1.0, std::fabs(live_row[q].second), std::fabs(expected)});
+            const double ratio = live_row[q].second / live_kept[q].second;
+            proportional = std::fabs(ratio - scale) <=
+                           tol::kPresolveParallelRowTolerance * std::fabs(scale);
           }
           if (!proportional) continue;
           // This row's bounds in the kept row's units: divided by the scale, and swapped
