@@ -781,6 +781,31 @@ The gate CSVs are not committed because they carry a branch stamp; each is in it
 
 What would earn the default: a proof. On mod011 that is a tree that closes 2.6% in the time left, and on exp-1-500-5-5 a cheaper separation round or a budget counted in the loop's own work, since its 20 rounds do not fit 3 s on every runner. A clock that also counted the first round, as a share of the time left when it began, would leave dano3mip alone (its first round alone is 25 s); that variant was written and not gated, because it could not gain a proof this one did not.
 
+### The first root cut round's re-solve from the root basis (`mip_root_cut_warm_start`, PR #1385, opt-in)
+
+The re-solve after the first root cut round started from the slack basis, while rounds 2 onward and the tree rounds start from the node's own optimal basis. On dano3mip that cold re-solve is 83,669 iterations and 25 s of the 60 s limit (run 45524294564). `mip_root_cut_warm_start=true` starts round 1 from the root LP's optimal basis, with the cut rows' logicals basic (Koberstein 2005, sec. 4.5).
+
+Gate: `ab-option` on one binary (`e6ab526`), both arms in one job (run 45917309733, Xeon 6975P-C), all 65 MIPLIB 3 models, 3 seeds, 60 s, one thread. Counts are matched / proved / verified.
+
+| arm | seed 0 | seed 1 | seed 2 | all |
+|---|---|---|---|---|
+| off (the default) | 46/45/64 | 44/43/65 | 44/44/64 | 134/132/193 |
+| `mip_root_cut_warm_start=true` | 49/44/65 | 46/45/64 | 44/44/65 | 139/133/194 |
+
+It fails the rule: two proofs and one verified point are lost.
+
+- **Proofs lost:**
+  - air05 seed 2: `off` proves it in 40.3 s. `on` reaches 26448 at the limit, against an optimum of 26374.
+  - qiu seed 0: `off` proves it in 52.4 s. `on` ends at the limit on the optimal point, with bound -153.7.
+- **Point lost:** arki001 seed 1 ends at the limit at node 1 with no point. `off` found 7588993.4 after 22,435 nodes.
+- **Proofs gained:** 10teams seed 1 (55.1 s), air04 seed 2 (52.8 s) and air05 seed 1 (55.6 s).
+- **Points gained:** dano3mip seeds 0 and 2, 768.375 at 45-57 s. `off` finds no point on either.
+- **Matches gained:** pk1 seed 0 (11, the optimum, against 18), rout seed 0 and 10teams seed 0.
+
+A different start gives a different optimal vertex at the root, so the cut rounds, the tree and the proofs that finish within seconds of the limit all change, in both directions. The MIPLIB 2017 tier-1 and 25-target gates were not run, because this gate already fails. The CSV is not committed, because it carries a branch stamp. It is `option-ab-miplib3-root-cut-warm-start-e6ab526.csv` in the run's artifact.
+
+What would earn the default: a gate that warm-starts only where the cold re-solve is a large share of the limit, as on dano3mip. It could be read from the root LP's own iteration count. Then these gates again. arki001 seed 1 also needs a diagnosis of why the run ends at node 1 under the switch.
+
 ### drayage-100-23 and drayage-25-23: probing closes the root, and no heuristic closes the gap (diagnosis only)
 
 Run 45523877841, `main` at `23e40b5`, 60 s, one thread, 3 seeds, five arms on one binary in one job (`bench/results/option-ab-miplib2017-drayage-probing-23e40b5.csv`). Every arm scores 0 matched, 0 proved, 2 verified on every seed.
