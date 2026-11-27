@@ -155,7 +155,7 @@ def _diag(binary, mps, sol, time_limit, blob):
         for line in sol.read_text().splitlines():
             if line.startswith(watch) or not line[:1].isalnum() or line.startswith(("status", "objective", "Status", "Objective")):
                 print("DIAG sol", line[:200])
-    for extra in (["--option", "log_level=verbose"], ["--option", "presolve=false"]):
+    for extra in (["--option", "log_level=verbose"],):
         log = sol.with_suffix(".diag.log")
         s2 = sol.with_suffix(".diag.sol")
         done = subprocess.run([str(binary), "solve", str(mps), "--write-sol", str(s2),
@@ -163,7 +163,9 @@ def _diag(binary, mps, sol, time_limit, blob):
                               capture_output=True, text=True, timeout=time_limit * 3 + 60)
         lines = (done.stdout + done.stderr).splitlines()
         print("DIAG run", extra, "exit", done.returncode, len(lines), "lines", flush=True)
-        keep = lines if len(lines) <= 400 else lines[:200] + ["..."] + lines[-200:]
+        noise = ("refactorized at", "     ")
+        lines = [ln for ln in lines if not ln.startswith(noise) or "DIAG" in ln]
+        keep = lines if len(lines) <= 400 else lines[:300] + ["..."] + lines[-100:]
         for line in keep:
             print("DIAG |", line[:300])
         if s2.exists():

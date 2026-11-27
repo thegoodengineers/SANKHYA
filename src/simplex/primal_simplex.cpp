@@ -1614,6 +1614,27 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
   // refuted claims ends within one or two, a cycle does not end.
   static constexpr int kRefutedOptimalityLimit = 20;
   double least_infeasibility = std::numeric_limits<double>::infinity();
+  // DIAG (not for merge)
+  Index diag_entering = -1, diag_leaving = -1;
+  double diag_step = 0.0, diag_pivot = 0.0;
+  int diag_direction = 0, diag_reports = 0;
+  bool diag_flip = false, diag_phase_one = false;
+  {
+    int narrow = 0;
+    for (Index k = 0; k < total_; ++k) {
+      const auto u = static_cast<std::size_t>(k);
+      const double w = upper_[u] - lower_[u];
+      if (is_finite_bound(lower_[u]) && is_finite_bound(upper_[u]) && w > 0.0 &&
+          w <= primal_tolerance_) {
+        if (narrow < 10) {
+          logger_.info("DIAGP narrow box: variable {} (n={}) [{:.17g}, {:.17g}] width {:.3e}",
+                       k, n_, lower_[u], upper_[u], w);
+        }
+        ++narrow;
+      }
+    }
+    logger_.info("DIAGP {} narrow boxes, primal tolerance {:.3e}", narrow, primal_tolerance_);
+  }
 
   for (;;) {
     // The phase decision is made on the largest single violation, not on their sum. The sum
@@ -1638,6 +1659,33 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       // weights accumulated against the first approximate edge norms for an objective that
       // no longer exists. Carrying them across is not a slow start, it is wrong information.
       reset_devex();
+    }
+    if (!was_phase_one && phase_one && diag_reports < 40) {
+      ++diag_reports;
+      Index worst_slot = -1;
+      double worst = 0.0;
+      for (Index slot = 0; slot < m_; ++slot) {
+        const double v = slot_infeasibility(slot);
+        if (v > worst) {
+          worst = v;
+          worst_slot = slot;
+        }
+      }
+      if (worst_slot >= 0) {
+        const Index k = basis_[static_cast<std::size_t>(worst_slot)];
+        const auto u = static_cast<std::size_t>(k);
+        logger_.info(
+            "DIAGP iteration {}: back to phase 1, worst variable {} (n={}) x={:.17g} "
+            "[{:.17g}, {:.17g}] width {:.3e} violation {:.3e}; last pivot entering {} "
+            "[{:.17g}, {:.17g}] dir {} leaving {} step {:.3e} pivot {:.3e} flip {} phase1 {} "
+            "perturbed {} etas {}",
+            iterations, k, n_, x_basic_[static_cast<std::size_t>(worst_slot)], lower_[u],
+            upper_[u], upper_[u] - lower_[u], worst, diag_entering,
+            diag_entering >= 0 ? lower_[static_cast<std::size_t>(diag_entering)] : 0.0,
+            diag_entering >= 0 ? upper_[static_cast<std::size_t>(diag_entering)] : 0.0,
+            diag_direction, diag_leaving, diag_step, diag_pivot, diag_flip, diag_phase_one,
+            perturbed_, lu_.eta_count());
+      }
     }
     was_phase_one = phase_one;
 
@@ -1987,6 +2035,13 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
 
     const auto e = static_cast<std::size_t>(entering);
     const double entering_value = nonbasic_value_[e] + static_cast<double>(direction) * step;
+    diag_entering = entering;
+    diag_direction = direction;
+    diag_step = step;
+    diag_flip = ratio.leaving_position < 0;
+    diag_leaving = diag_flip ? -1 : basis_[static_cast<std::size_t>(ratio.leaving_position)];
+    diag_pivot = diag_flip ? 0.0 : alpha_[static_cast<std::size_t>(ratio.leaving_position)];
+    diag_phase_one = phase_one;
 
     if (ratio.leaving_position < 0) {
       // Bound flip: the entering variable travels its whole range and the basis is unchanged.
