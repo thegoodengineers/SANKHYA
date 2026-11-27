@@ -2202,8 +2202,8 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          {}});
     s.push_back({"engine_race",
-                 OptionType::Bool,
-                 false,
+                 OptionType::String,
+                 std::string("auto"),
                  "Under algorithm=auto, run the dual simplex, the interior point (with "
                  "crossover) and PDHG at once instead of choosing one by rule (#476). An "
                  "answer wins only after an in-process check against the original model at "
@@ -2212,11 +2212,17 @@ const std::vector<OptionSpec>& Options::registry() {
                  "rejected answer neither wins nor stops the others; the first accepted one "
                  "cancels the rest. With none accepted, the rule table's engine's answer is "
                  "reported. Deterministic mode, or one core, runs them one after another in "
-                 "that fixed order. The answer's message carries every engine's outcome. Off "
-                 "until an A/B on main.",
+                 "that fixed order. The answer's message carries every engine's outcome. "
+                 "true races every LP solve under auto, false none. auto (the default) races "
+                 "the caller's own solve of an LP whose rows x nonzeros reach 3e8 and that "
+                 "is not network shaped (under 4 nonzeros per column, the dual simplex's by "
+                 "the rule table), on a machine with at least three cores and outside "
+                 "deterministic mode; every other solve keeps the rule table. On Netlib's "
+                 "millisecond solves the race is 1.59x slower; maros-r7 and stocfor3 are "
+                 "the two there that large.",
                  0.0,
                  0.0,
-                 {}});
+                 {"auto", "true", "false"}});
     s.push_back({"dual_feasibility_tolerance",
                  OptionType::Double,
                  tol::kDualFeasibility,

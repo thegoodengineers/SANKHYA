@@ -40,7 +40,16 @@
 // SEQUENTIAL ORDER - dual simplex, interior point, PDHG - each to completion, stopping at
 // the first accepted answer, so a run reproduces.
 //
-// Off by default (option engine_race) until an A/B on main.
+// ON BY DEFAULT ONLY WHERE IT PAYS (engine_race=auto). On Netlib's millisecond solves the
+// race was 1.59x slower on the shifted geometric mean at the same count (docs/BENCHMARKS.md
+// 1b.2), so auto races only the caller's own solve of an LP whose rows x nonzeros reach
+// kSimplexWorkCeiling (core/engine_selection.hpp) and that is not network shaped (the dual
+// simplex's, by the rule table's network rule), on a machine with a core for each engine and
+// outside deterministic mode, which would run the engines one after another where the rule
+// table runs one. On Mittelmann's sixteen at 600 s every engine won somewhere: the dual
+// simplex neos-5251015 and supportcase10, the interior point qap15 and s100, PDHG datt256_lp
+// and five more (bench.yml run 45523563473). engine_race=true races every LP solve under
+// auto, false none.
 #pragma once
 
 #include <functional>
@@ -67,9 +76,14 @@ namespace sankhya {
                                        const Timer& timer, const std::string& rule_engine,
                                        std::string* engine_ran, bool* accepted);
 
-/// Whether this solve races: algorithm=auto, engine_race on, an LP, and no starting basis
-/// (a basis is for a simplex, and only a simplex can use it).
-[[nodiscard]] bool engine_race_applies(const Options& options, bool warm_start);
+/// Whether this solve of the LP `model` races: algorithm=auto and no starting basis (a basis
+/// is for a simplex, and only a simplex can use one), and engine_race true, or engine_race
+/// auto with the gate above met: `outermost` (the caller's own solve, not one a solve makes
+/// inside another), not deterministic, at least `kRaceCores` of `cores`, rows x nonzeros at
+/// least kSimplexWorkCeiling, and a shape that is not network_shaped().
+inline constexpr unsigned kRaceCores = 3;
+[[nodiscard]] bool engine_race_applies(const Model& model, const Options& options,
+                                       bool warm_start, bool outermost, unsigned cores);
 
 /// TEST SEAMS (#476), never set outside a test. `before_engine` runs on each engine's thread
 /// before it starts, inside the engine's out-of-memory guard (a test delays the engines it

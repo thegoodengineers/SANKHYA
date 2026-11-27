@@ -58,10 +58,7 @@ EngineSelection rule_table_selection(const Model& model, const Options& options,
     return s;
   }
   // The average can hide a dense column; the pattern bound on A A^T is what one inflates.
-  const bool network = normal_affordable && s.columns >= s.rows &&
-                       s.rows < kNetworkRowCeiling &&
-                       static_cast<double>(s.nonzeros) <
-                           kNetworkNonzerosPerColumn * static_cast<double>(s.columns);
+  const bool network = network_shaped(s.rows, s.columns, s.nonzeros, normal_bound);
   const bool sized_off_the_dual =
       s.rows >= kDualSimplexRowLimit ||
       (s.nonzeros >= kIpmNonzeroFloor && s.rows >= kIpmDensityRowFloor);
