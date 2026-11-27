@@ -764,8 +764,9 @@ const std::vector<OptionSpec>& Options::registry() {
                  "optimal basis, the cut rows' logicals basic, as the later rounds and the "
                  "tree rounds do. Off, it starts from the slack basis: the root holds no "
                  "stored basis, so the root LP is in effect solved twice (dano3mip: 25 s of a "
-                 "60 s limit). OFF until its MIPLIB A/B says what the different root vertex "
-                 "changes.",
+                 "60 s limit). Opt-in: its MIPLIB 3 gate (60 s, 3 seeds) gained three "
+                 "proofs and dano3mip's point on two seeds, and lost the proofs of air05 and "
+                 "qiu on one seed each and arki001's point on one (docs/NEGATIVE-RESULTS.md).",
                  0.0,
                  0.0,
                  {}});
