@@ -26,6 +26,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "sankhya/logging.hpp"
@@ -179,6 +180,22 @@ void log_presolve_report(const Solution::PresolveReport& report, Logger& logger)
 }  // namespace detail
 
 [[nodiscard]] Result presolve(const Model& model, const Options& options, Logger& logger);
+
+/// Which ORIGINAL bounds a restored column sits on, as its basis status reads them. `on_lower`
+/// and `on_upper` are the value tests, each within the feasibility tolerance. A nonbasic
+/// status names one bound, and the column is on that one or on neither: a box narrower than
+/// the tolerance passes both value tests, and since #1362 presolve leaves such a box in the
+/// reduced model. Scaled Netlib finnis: a doubleton equation gives 2E51CAP the box [1.3,
+/// 1.301] / 2^15 (3.1e-8 wide), the engine leaves it at the lower end, and 1.3 / 2^15 is
+/// within the tolerance of the original UPPER bound - so the column was taken to be on a
+/// bound, kept nonbasic at_lower, and reported 4e-5 away from the original lower bound 0.
+/// It is inside its original box, held there by the equation, and basic.
+[[nodiscard]] inline std::pair<bool, bool> on_named_bound(BasisStatus status, bool on_lower,
+                                                          bool on_upper) {
+  if (status == BasisStatus::kAtLower) return {on_lower, false};
+  if (status == BasisStatus::kAtUpper) return {false, on_upper};
+  return {on_lower, on_upper};
+}
 
 /// Rebuild a solution to the ORIGINAL model from one for the reduced model.
 ///

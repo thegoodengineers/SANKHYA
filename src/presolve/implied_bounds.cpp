@@ -74,7 +74,9 @@ void restore_implied_bound_basis(const Result& result, const Model& original,
     if (entered[c]) continue;
     const double x = solution->col_value[c];
     if (!on(x, record.value)) continue;
-    if (on(x, original.col_lower[c]) || on(x, original.col_upper[c])) continue;
+    const auto [on_lower, on_upper] = on_named_bound(
+        col_status[c], on(x, original.col_lower[c]), on(x, original.col_upper[c]));
+    if (on_lower || on_upper) continue;
     // Which columns still need an entry to leave the basis for them. A column in the reduced
     // model the engine left nonbasic; a column fixed at the propagated bound (kFixedColumn)
     // that nothing has made basic yet - a singleton row that priced it made it basic and
