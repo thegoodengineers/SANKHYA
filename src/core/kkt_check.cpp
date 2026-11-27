@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <string>
 #include <utility>
@@ -345,6 +346,61 @@ KktVerdict check_optimality(const Model& model, const Solution& s,
                   fmt::format("|multiplier| * slack = {:.3e} relative to its magnitudes on "
                               "row {}",
                               measure, i));
+    }
+  }
+  if (quadratic) {  // DIAGNOSTIC O\nY (#1178): the worst column product and its terms
+    double worst = -1.0;
+    Index at = -1;
+    for (Index j = 0; j < n; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      if (model.col_lower[u] == model.col_upper[u]) continue;
+      const double r = relative_complementarity(derived_dual[u], x[u], model.col_lower[u],
+                                                model.col_upper[u], std::fabs(x[u]));
+      if (r > worst) {
+        worst = r;
+        at = j;
+      }
+    }
+    if (at >= 0) {
+      const auto u = static_cast<std::size_t>(at);
+      double sum_terms = std::fabs(model.col_cost[u]);
+      long count = 1;
+      double largest_term = sum_terms;
+      for (Index j = 0; j < n; ++j) {
+        const ColumnView c = model.hessian.column(j);
+        for (Index k = 0; k < c.size; ++k) {
+          const auto i = static_cast<std::size_t>(c.rows[k]);
+          const auto uj = static_cast<std::size_t>(j);
+          double term = 0.0;
+          if (i == u) term = c.values[k] * x[uj];
+          else if (uj == u && i != uj) term = c.values[k] * x[i];
+          else continue;
+          sum_terms += std::fabs(term);
+          largest_term = std::max(largest_term, std::fabs(term));
+          ++count;
+        }
+      }
+      const ColumnView column = model.matrix.column(at);
+      for (Index p = 0; p < column.size; ++p) {
+        const double term = column.values[p] * y[static_cast<std::size_t>(column.rows[p])];
+        sum_terms += std::fabs(term);
+        largest_term = std::max(largest_term, std::fabs(term));
+        ++count;
+      }
+      const double slack = nearer_slack(x[u], model.col_lower[u], model.col_upper[u]);
+      if (FILE* f = std::fopen("bench/results/qp-diag.txt", "a")) {
+        std::fputs(fmt::format("GATECOL {} col={} measure={:.4e} d={:.6e} x={:.10e} lo={:.6e} "
+                               "up={:.6e} slack={:.6e} terms={} sum|terms|={:.6e} "
+                               "max|term|={:.6e} d/(eps*sum)={:.3f}\n",
+                               model.name, at, worst, derived_dual[u], x[u],
+                               model.col_lower[u], model.col_upper[u], slack, count, sum_terms,
+                               largest_term,
+                               std::fabs(derived_dual[u]) /
+                                   (std::numeric_limits<double>::epsilon() * sum_terms))
+                       .c_str(),
+                   f);
+        std::fclose(f);
+      }
     }
   }
   for (Index j = 0; j < n; ++j) {
