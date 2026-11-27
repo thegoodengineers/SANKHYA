@@ -8,6 +8,8 @@
 // f_46) = 0. Its Q-formulation (tests/unit/test_global_rlt.cpp) must be left alone.
 
 #include <cmath>
+#include <fstream>
+#include <iterator>
 #include <random>
 #include <string>
 #include <vector>
@@ -81,6 +83,42 @@ const char* const kHaverly1Q =
     "QCMATRIX path_2_4_6\n f_4_6 q_2_4 -0.5\n q_2_4 f_4_6 -0.5\n"
     "ENDATA\n";
 
+// The same pool in the PQ-formulation: the Q-formulation plus sum_i v_i_4_j = f_4_j and the
+// capacity times each q_i_4. Each path row v - q f = 0 with sum_i v_ij = f_j has the shape of a
+// pool with ONE outflow, which the lift must not take.
+const char* const kHaverly1Pq =
+    "NAME haverly1_pq\n"
+    "ROWS\n"
+    " N cost\n L src_1\n L src_2\n L src_3\n L dem_5\n L dem_6\n E sumq_4\n L cap_4\n"
+    " L tq_5_1\n L tq_6_1\n E path_1_4_5\n E path_1_4_6\n E path_2_4_5\n E path_2_4_6\n"
+    " E rlt_4_5\n E rlt_4_6\n L rltc_1_4\n L rltc_2_4\n"
+    "COLUMNS\n"
+    " q_1_4 sumq_4 1\n q_1_4 rltc_1_4 -300\n q_2_4 sumq_4 1\n q_2_4 rltc_2_4 -300\n"
+    " f_3_5 cost 1\n f_3_5 src_3 1\n f_3_5 dem_5 1\n f_3_5 tq_5_1 -0.5\n"
+    " f_3_6 cost -5\n f_3_6 src_3 1\n f_3_6 dem_6 1\n f_3_6 tq_6_1 0.5\n"
+    " f_4_5 cost -9\n f_4_5 dem_5 1\n f_4_5 cap_4 1\n f_4_5 tq_5_1 -2.5\n f_4_5 rlt_4_5 -1\n"
+    " f_4_6 cost -15\n f_4_6 dem_6 1\n f_4_6 cap_4 1\n f_4_6 tq_6_1 -1.5\n f_4_6 rlt_4_6 -1\n"
+    " v_1_4_5 cost 6\n v_1_4_5 src_1 1\n v_1_4_5 tq_5_1 3\n v_1_4_5 path_1_4_5 1\n"
+    " v_1_4_5 rlt_4_5 1\n v_1_4_5 rltc_1_4 1\n"
+    " v_1_4_6 cost 6\n v_1_4_6 src_1 1\n v_1_4_6 tq_6_1 3\n v_1_4_6 path_1_4_6 1\n"
+    " v_1_4_6 rlt_4_6 1\n v_1_4_6 rltc_1_4 1\n"
+    " v_2_4_5 cost 16\n v_2_4_5 src_2 1\n v_2_4_5 tq_5_1 1\n v_2_4_5 path_2_4_5 1\n"
+    " v_2_4_5 rlt_4_5 1\n v_2_4_5 rltc_2_4 1\n"
+    " v_2_4_6 cost 16\n v_2_4_6 src_2 1\n v_2_4_6 tq_6_1 1\n v_2_4_6 path_2_4_6 1\n"
+    " v_2_4_6 rlt_4_6 1\n v_2_4_6 rltc_2_4 1\n"
+    "RHS\n"
+    " rhs src_1 300\n rhs src_2 300\n rhs src_3 300\n rhs dem_5 100\n rhs dem_6 200\n"
+    " rhs sumq_4 1\n rhs cap_4 300\n"
+    "BOUNDS\n"
+    " UP bnd q_1_4 1\n UP bnd q_2_4 1\n UP bnd f_3_5 100\n UP bnd f_3_6 200\n"
+    " UP bnd f_4_5 100\n UP bnd f_4_6 200\n UP bnd v_1_4_5 100\n UP bnd v_1_4_6 200\n"
+    " UP bnd v_2_4_5 100\n UP bnd v_2_4_6 200\n"
+    "QCMATRIX path_1_4_5\n f_4_5 q_1_4 -0.5\n q_1_4 f_4_5 -0.5\n"
+    "QCMATRIX path_1_4_6\n f_4_6 q_1_4 -0.5\n q_1_4 f_4_6 -0.5\n"
+    "QCMATRIX path_2_4_5\n f_4_5 q_2_4 -0.5\n q_2_4 f_4_5 -0.5\n"
+    "QCMATRIX path_2_4_6\n f_4_6 q_2_4 -0.5\n q_2_4 f_4_6 -0.5\n"
+    "ENDATA\n";
+
 QcqpModel read_or_fail(const std::string& text) {
   const TempFile file(text);
   QcqpModel model;
@@ -119,6 +157,12 @@ TEST(GlobalPoolLift, RecognisesThePoolOfThePFormulation) {
 
 TEST(GlobalPoolLift, LeavesTheQFormulationAlone) {
   const QcqpModel model = read_or_fail(kHaverly1Q);
+  QcqpModel lifted;
+  EXPECT_EQ(global::lift_pools(model, &lifted).pools, 0);
+}
+
+TEST(GlobalPoolLift, LeavesThePqFormulationAlone) {
+  const QcqpModel model = read_or_fail(kHaverly1Pq);
   QcqpModel lifted;
   EXPECT_EQ(global::lift_pools(model, &lifted).pools, 0);
 }
@@ -187,7 +231,10 @@ TEST(GlobalPoolLift, ProvesTheSameOptimumOnTheModelsOwnColumns) {
   EXPECT_LE(lifted.root_bound, -400.0 + 1e-6);
 }
 
-TEST(GlobalPoolLift, IsNotUsedUnderACertificate) {
+TEST(GlobalPoolLift, NamesThePoolInTheCertificate) {
+  // The certificate counts the lifted model and names the rows the pool was read from (bal_4,
+  // pq_4_1 and cap_4: rows 5, 7 and 6 of the file, the objective not counted), so its checker
+  // can rebuild the lift; tools/test_verify_global_certificate.py checks one end to end.
   const QcqpModel model = read_or_fail(kHaverly1P);
   Options options = quiet();
   options.set_bool("global_pool_lift", true);
@@ -195,7 +242,15 @@ TEST(GlobalPoolLift, IsNotUsedUnderACertificate) {
   options.set_string("write_certificate", certificate.path());
   const Solution solution = solve_global(model, options);
   ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
-  EXPECT_EQ(solution.message.find("lifted"), std::string::npos) << solution.message;
+  EXPECT_NE(solution.message.find("1 pool(s) lifted"), std::string::npos) << solution.message;
+  std::ifstream in(certificate.path());
+  const std::string text((std::istreambuf_iterator<char>(in)),
+                         std::istreambuf_iterator<char>());
+  EXPECT_NE(text.find("\"lift\": [{\"balance\": 5, \"qualities\": [7], \"capacities\": [6]}]"),
+            std::string::npos)
+      << text.substr(0, 400);
+  EXPECT_NE(text.find("\"columns\": 9,"), std::string::npos);
+  EXPECT_NE(text.find("\"rows\": 16,"), std::string::npos);
 }
 
 }  // namespace

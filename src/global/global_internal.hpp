@@ -154,6 +154,14 @@ struct PoolLift {
   Count pools = 0;
   Index columns = 0;  ///< proportion columns, appended after the model's own
   Index rows = 0;     ///< rows, appended after the model's own
+  /// Each lifted pool by the model rows it was read from, in the order its columns and rows
+  /// were appended; the bound certificate lists them so its checker can rebuild the lift.
+  struct Record {
+    Index balance = -1;
+    std::vector<Index> qualities;   ///< ascending
+    std::vector<Index> capacities;  ///< ascending
+  };
+  std::vector<Record> records;
 };
 
 /// `global_pool_lift`: every pool of a P-formulated pooling model given the Q-formulation's
@@ -234,6 +242,7 @@ struct CertificateInput {
   double absolute_gap = 0.0;
   double relative_gap = 0.0;
   double tolerance = 0.0;
+  const PoolLift* lift = nullptr;  ///< `global_pool_lift`: the pools the problem was lifted by
 };
 
 /// The certificate as JSON text; see the file for what is in it and why that is enough.

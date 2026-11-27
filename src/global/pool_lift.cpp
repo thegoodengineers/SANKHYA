@@ -38,7 +38,8 @@
 // problem at scale with extensible solver GALINI", Comput. Chem. Eng. 159 (2022).
 //
 // WHAT IS RECOGNISED, exactly: a quality row is an equality with right-hand side 0 whose every
-// product is one column p times another, all with one coefficient alpha; its balance row is an
+// product is one column p times another (at least two others), all with one coefficient alpha;
+// its balance row is an
 // equality with right-hand side 0 and no products holding each of those other columns (J) with
 // one coefficient c and every other column (I, at least two, a superset of the quality row's
 // linear columns) with -c; every column of I and J has lower bound >= 0. Coefficients are
@@ -68,6 +69,7 @@ struct Pool {
   std::vector<Index> inflows;   ///< I
   std::vector<Index> outflows;  ///< J, ascending
   std::vector<Quality> qualities;
+  std::vector<Index> quality_rows;
 };
 
 double coefficient(const std::vector<std::pair<Index, double>>& row, Index column) {
@@ -142,7 +144,10 @@ PoolLift lift_pools(const QcqpModel& model, QcqpModel* lifted) {
         ok = value == alpha && !product.square() && (product.a == p || product.b == p);
         outflows.push_back(product.a == p ? product.b : product.a);
       }
-      if (!ok) continue;
+      // One outflow: q_i f_j is then f_i itself and the proportions couple nothing. That shape
+      // is also every path row of a Q- or PQ-formulated file (v_ij - q_i f_j = 0 with the
+      // balance sum_i v_ij = f_j), which must be left as it is.
+      if (!ok || outflows.size() < 2) continue;
       std::sort(outflows.begin(), outflows.end());
       const auto& linear = problem.row_linear[u];
       std::vector<Index> inflows;
@@ -159,6 +164,7 @@ PoolLift lift_pools(const QcqpModel& model, QcqpModel* lifted) {
       pool.inflows = std::move(inflows);
       pool.outflows = std::move(outflows);
       pool.qualities.push_back({p, alpha, linear});
+      pool.quality_rows.push_back(r);
       break;
     }
   }
@@ -186,7 +192,9 @@ PoolLift lift_pools(const QcqpModel& model, QcqpModel* lifted) {
     return QuadraticTerm{0, std::min(a, b), std::max(a, b), value};
   };
   Index next = n0;
+  PoolLift lift;
   for (const auto& [balance, pool] : pools) {
+    lift.records.push_back({balance, pool.quality_rows, {}});
     std::vector<Index> q;
     for (const Index i : pool.inflows) {
       q.push_back(next++);
@@ -233,6 +241,7 @@ PoolLift lift_pools(const QcqpModel& model, QcqpModel* lifted) {
         same = same && a == beta && std::binary_search(sorted_in.begin(), sorted_in.end(), j);
       }
       if (!same) continue;
+      lift.records.back().capacities.push_back(c);
       NewRow capacity{
           problem.row_lower[u], problem.row_upper[u], {}, {}, "pool_lift_cap_" + tag};
       for (const Index j : pool.outflows) capacity.linear.emplace_back(j, beta);
@@ -279,7 +288,10 @@ PoolLift lift_pools(const QcqpModel& model, QcqpModel* lifted) {
     }
     out.hessian.finalize(0.0);
   }
-  return {static_cast<Count>(pools.size()), n1 - n0, m1 - m0};
+  lift.pools = static_cast<Count>(pools.size());
+  lift.columns = n1 - n0;
+  lift.rows = m1 - m0;
+  return lift;
 }
 
 }  // namespace sankhya::global

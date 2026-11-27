@@ -32,8 +32,8 @@
 // proportions (pool_lift.cpp) and the search runs on that lifted model. Other cuts beyond the
 // McCormick envelope and integer columns are not here. A bound certificate is written under
 // `write_certificate` (global_certificate.cpp), checked by tools/verify_global_certificate.py;
-// the search then uses neither FBBT, OBBT nor the lift, since the checker re-derives none of
-// them.
+// the search then uses neither FBBT nor OBBT, since the checker does not re-derive a
+// tightening. It does rebuild the lift, from the rows the certificate names.
 
 #include <algorithm>
 #include <cmath>
@@ -85,10 +85,12 @@ struct BranchChoice {
 
 class Search {
  public:
-  Search(const QcqpModel& model, const Options& options, SolveControl* control)
+  Search(const QcqpModel& model, const Options& options, SolveControl* control,
+         const PoolLift* lift = nullptr)
       : model_(model),
         options_(options),
         control_(control),
+        lift_(lift),
         logger_(options.get_bool("log_to_console") ? stdout : nullptr),
         problem_(build_problem(model)) {
     time_limit_ = options.get_double("time_limit");
@@ -161,6 +163,7 @@ class Search {
   const QcqpModel& model_;
   const Options& options_;
   SolveControl* control_;
+  const PoolLift* lift_;  ///< the pools `model_` was lifted by, for the certificate
   Logger logger_;
   Timer timer_;
   Problem problem_;
@@ -485,7 +488,7 @@ void Search::write_certificate(const Solution& solution) {
   if (!incumbent_.empty()) lower = std::min(lower, upper_);
   const CertificateInput input{
       problem_,      cert_,         incumbent_, lower, to_string(solution.status),
-      absolute_gap_, relative_gap_, tolerance_};
+      absolute_gap_, relative_gap_, tolerance_, lift_};
   const std::string text = certificate_text(input);
   std::FILE* out = std::fopen(certificate_path_.c_str(), "wb");
   if (out == nullptr) {
@@ -613,13 +616,13 @@ Solution solve_global(const QcqpModel& model, const Options& options, SolveContr
   // `global_pool_lift`: search the lifted model, then report on the model's own columns. Every
   // row of the model is in the lifted one and every incumbent was checked against them, so the
   // point cut to the first n columns is one of the model's with the same objective; the bound
-  // holds for both (pool_lift.cpp). Not under write_certificate: the checker rebuilds the
-  // relaxation from the model file and does not re-derive a lift.
-  if (options.get_bool("global_pool_lift") && options.get_string("write_certificate").empty()) {
+  // holds for both (pool_lift.cpp). Under write_certificate the certificate names the rows
+  // each pool was read from, and its checker rebuilds the lift from the model file.
+  if (options.get_bool("global_pool_lift")) {
     QcqpModel lifted;
     const global::PoolLift lift = global::lift_pools(model, &lifted);
     if (lift.pools > 0) {
-      global::Search search(lifted, options, control);
+      global::Search search(lifted, options, control, &lift);
       Solution solution = search.run();
       const auto n = static_cast<std::size_t>(model.linear.num_cols());
       if (solution.col_value.size() > n) {

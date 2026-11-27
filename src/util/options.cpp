@@ -234,9 +234,9 @@ const std::vector<OptionSpec>& Options::registry() {
          "f_j, each quality times each outflow written over q_i f_j, and the capacity "
          "restated over the outflows (Ben-Tal, Eiger and Gershovitz 1994). Every row of the "
          "model is kept; with global_rlt the relaxation is the PQ-formulation's (Quesada and "
-         "Grossmann 1995). The answer is reported on the model's own columns. Not used under "
-         "write_certificate, whose checker does not re-derive a lift. Off until an A/B on "
-         "main.",
+         "Grossmann 1995). The answer is reported on the model's own columns. Under "
+         "write_certificate the certificate names each pool's rows and its checker rebuilds "
+         "the lift. Off until an A/B on main.",
          0.0,
          0.0,
          {}});
