@@ -2632,7 +2632,9 @@ const std::vector<OptionSpec>& Options::registry() {
          true,
          "qp_algorithm=ipm (#980): when the relative measures are met but at least one "
          "complementarity product is still above the in-process KKT gate's share "
-         "(tol::kQpIpmComplementarityShare * tol::kComplementarity), take the active set the "
+         "(tol::kQpIpmComplementarityShare * tol::kComplementarity) and the in-process KKT "
+         "gate (check_qp_optimality on the model the interior point was handed) refuses the "
+         "point as it stands, take the active set the "
          "iterate already identifies - a bound is active when the point already sits on it to "
          "a loose, scale-aware tolerance - hold those columns exactly at their bound values "
          "and solve the equality-constrained KKT system on the rest with the same sparse "
