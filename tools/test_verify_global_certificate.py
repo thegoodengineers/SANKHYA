@@ -255,6 +255,64 @@ def layer_rlt() -> None:
         rejected([1, 0, "lu"], "no such side", "a row side the row does not have is rejected")
 
 
+# haverly1 in the P-formulation (data/pooling/haverly1_p.mps): columns f_1_4 f_2_4 f_3_5 f_3_6
+# f_4_5 f_4_6 p_4_1 (0..6), rows src_1 src_2 src_3 dem_5 dem_6 bal_4 cap_4 pq_4_1 tq_5_1 tq_6_1
+# (0..9). The lift adds q_1 = 7, q_2 = 8 and six rows (10..15).
+HAVERLY1_LIFT = [{"balance": 5, "qualities": [7], "capacities": [6]}]
+HAVERLY1_LIFTED_PRODUCTS = [(4, 6), (5, 6), (4, 7), (5, 7), (4, 8), (5, 8)]
+
+
+def layer_lift() -> None:
+    print("the checker's pool lift (global_pool_lift)")
+    path = HERE.parent / "data" / "pooling" / "haverly1_p.mps"
+    if not path.exists():
+        print("  [skip] data/pooling/haverly1_p.mps not found")
+        return
+    problem = vg.Problem(path, HAVERLY1_LIFTED_PRODUCTS, [], HAVERLY1_LIFT)
+    check(problem.n == 9 and problem.m == 16, "two proportion columns and six rows appended",
+          f"{problem.m} x {problem.n}")
+    check(problem.col_lower[7:] == [0, 0] and problem.col_upper[7:] == [1, 1],
+          "each proportion is in [0, 1]")
+    # Every added row holds, exactly, at random points of the pool's own rows (q_i = f_i / Y),
+    # and at Y = 0 with any q on the simplex.
+    rng = random.Random(514)
+    violated = 0
+    for trial in range(200):
+        empty = trial % 10 == 0
+        f14 = ZERO_ if empty else Fraction(rng.randint(0, 1000), 10)
+        f24 = ZERO_ if empty else Fraction(rng.randint(0, 1000), 10)
+        y = f14 + f24
+        f45 = y * Fraction(rng.randint(0, 100), 100)
+        x = [f14, f24, ZERO_, ZERO_, f45, y - f45,
+             (3 * f14 + f24) / y if y else Fraction(rng.randint(100, 300), 100)]
+        q1 = f14 / y if y else Fraction(rng.randint(0, 100), 100)
+        x += [q1, 1 - q1]
+        for r in range(10, 16):
+            activity = sum(a * x[j] for j, a in problem.linear[r])
+            activity += sum(c * x[problem.products[p][0]] * x[problem.products[p][1]]
+                            for p, c in problem.row_products[r].items())
+            if activity < problem.row_lower[r] or activity > problem.row_upper[r]:
+                violated += 1
+    check(violated == 0, "every lifted row holds at every sampled point of the pool",
+          f"{violated} violations")
+
+    def rejected(pool, phrase: str, name: str) -> None:
+        try:
+            vg.Problem(path, HAVERLY1_LIFTED_PRODUCTS, [], [pool])
+            check(False, name)
+        except vg.Rejected as why:
+            check(phrase in str(why), name, str(why)[:80])
+
+    rejected({"balance": 6, "qualities": [7], "capacities": []}, "not a balance row",
+             "a capacity row named as the balance row is rejected")
+    rejected({"balance": 5, "qualities": [8], "capacities": []}, "not a quality row",
+             "a terminal row named as a quality row is rejected")
+    rejected({"balance": 5, "qualities": [7], "capacities": [0]}, "not a capacity",
+             "a source row named as a capacity row is rejected")
+    rejected({"balance": 5, "qualities": [7], "capacities": [16]}, "does not have",
+             "a row past the model file is rejected")
+
+
 def find_binary() -> Path | None:
     env = os.environ.get("SANKHYA_BIN")
     if env and Path(env).exists():
@@ -342,6 +400,29 @@ def layer_two() -> None:
             else:
                 print("  [skip] no Farkas node in this certificate")
 
+        if model.name == "haverly1_p.mps":
+            # global_pool_lift: the search ran on the lifted model, the certificate names the
+            # pool's rows, and the checker rebuilds the lift from the model file.
+            with tempfile.TemporaryDirectory() as tmp:
+                cert_path = Path(tmp) / "cert.json"
+                subprocess.run([str(binary), "solve", str(model), "--option", "nonconvex=global",
+                                "--option", "global_pool_lift=true",
+                                "--option", f"write_certificate={cert_path}",
+                                "--option", "log_to_console=false"], capture_output=True, text=True)
+                if not cert_path.exists():
+                    check(False, "the solver wrote a certificate under global_pool_lift")
+                    continue
+                code, out = run_checker(model, cert_path)
+                cert = json.loads(cert_path.read_text())
+                check(code == 0 and "VERIFIED" in out and cert.get("lift") == HAVERLY1_LIFT,
+                      "a global_pool_lift certificate is verified with the lift rebuilt",
+                      f"lift {cert.get('lift')}; {out.strip()[-80:]}")
+                cert["lift"][0]["balance"] = 6
+                cert_path.write_text(json.dumps(cert))
+                code, out = run_checker(model, cert_path)
+                check(code == 1, "a lift naming a row of the wrong shape is rejected end to end",
+                      f"exit {code}: {out.strip().splitlines()[0][:90]}")
+
         if model.name == "haverly1_q.mps":
             # global_rlt: the PQ rows the search adds to every relaxation are in the certificate,
             # rebuilt by the checker, and an RLT row it cannot derive is rejected.
@@ -397,6 +478,7 @@ def layer_two() -> None:
 def main() -> int:
     layer_one()
     layer_rlt()
+    layer_lift()
     layer_two()
     print(f"{'ALL PASSED' if FAILURES == 0 else str(FAILURES) + ' FAILED'}")
     return 0 if FAILURES == 0 else 1

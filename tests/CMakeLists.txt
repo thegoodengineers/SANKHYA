@@ -190,6 +190,7 @@ add_executable(sankhya_tests
   unit/test_global.cpp
   unit/test_global_rlt.cpp
   unit/test_global_obbt.cpp
+  unit/test_global_pool_lift.cpp
   unit/test_conic.cpp
   unit/test_miqcp.cpp
   unit/test_fractional_integer_bounds.cpp
