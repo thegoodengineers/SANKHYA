@@ -2218,8 +2218,8 @@ const std::vector<OptionSpec>& Options::registry() {
                  "is not network shaped (under 4 nonzeros per column, the dual simplex's by "
                  "the rule table), on a machine with at least three cores and outside "
                  "deterministic mode; every other solve keeps the rule table. On Netlib's "
-                 "millisecond solves the race is 1.59x slower, and only maros-r7 there is "
-                 "that large.",
+                 "millisecond solves the race is 1.59x slower; maros-r7 and stocfor3 are "
+                 "the two there that large.",
                  0.0,
                  0.0,
                  {"auto", "true", "false"}});
