@@ -28,10 +28,12 @@
 // every column of a product bounded after FBBT at the root. Under `global_rlt` every
 // relaxation also carries the reformulation-linearization rows of relaxation.cpp, and under
 // `global_obbt` the root box is tightened once by OBBT (global_obbt.cpp) after the root's
-// heuristic. Other cuts beyond the McCormick envelope and integer columns are not here. A bound
-// certificate is written under `write_certificate` (global_certificate.cpp), checked by
-// tools/verify_global_certificate.py; the search then uses neither FBBT nor OBBT, since the
-// checker does not re-derive a tightening.
+// heuristic. Under `global_pool_lift` a P-formulated pool is first given the Q-formulation's
+// proportions (pool_lift.cpp) and the search runs on that lifted model. Other cuts beyond the
+// McCormick envelope and integer columns are not here. A bound certificate is written under
+// `write_certificate` (global_certificate.cpp), checked by tools/verify_global_certificate.py;
+// the search then uses neither FBBT, OBBT nor the lift, since the checker re-derives none of
+// them.
 
 #include <algorithm>
 #include <cmath>
@@ -607,6 +609,31 @@ Solution solve_global(const QcqpModel& model, const Options& options, SolveContr
   if (shape.products.empty()) {
     // Nothing non-convex to branch on: the model IS its linear part.
     return solve(model.linear, options, control);
+  }
+  // `global_pool_lift`: search the lifted model, then report on the model's own columns. Every
+  // row of the model is in the lifted one and every incumbent was checked against them, so the
+  // point cut to the first n columns is one of the model's with the same objective; the bound
+  // holds for both (pool_lift.cpp). Not under write_certificate: the checker rebuilds the
+  // relaxation from the model file and does not re-derive a lift.
+  if (options.get_bool("global_pool_lift") && options.get_string("write_certificate").empty()) {
+    QcqpModel lifted;
+    const global::PoolLift lift = global::lift_pools(model, &lifted);
+    if (lift.pools > 0) {
+      global::Search search(lifted, options, control);
+      Solution solution = search.run();
+      const auto n = static_cast<std::size_t>(model.linear.num_cols());
+      if (solution.col_value.size() > n) {
+        solution.col_value.resize(n);
+        solution.row_activity = model.row_activity(solution.col_value);
+        solution.objective = model.objective(solution.col_value);
+        solution.primal_infeasibility_scaled = global::original_violation(
+            global::build_problem(model), solution.col_value, &solution.primal_infeasibility);
+      }
+      solution.message += fmt::format(
+          "; {} pool(s) lifted to the Q-formulation ({} proportion columns, {} rows added)",
+          lift.pools, lift.columns, lift.rows);
+      return solution;
+    }
   }
   global::Search search(model, options, control);
   return search.run();

@@ -375,6 +375,7 @@ set(SANKHYA_CORE_SOURCES
   src/global/global_certificate.cpp
   src/global/global_obbt.cpp
   src/global/local_search.cpp
+  src/global/pool_lift.cpp
   src/global/qcqp_model.cpp
   src/global/relaxation.cpp
   src/global/spatial_bnb.cpp

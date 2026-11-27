@@ -224,6 +224,22 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"global_pool_lift",
+         OptionType::Bool,
+         false,
+         "nonconvex=global (#514): a pool of a P-formulated pooling model (a balance row, "
+         "and quality rows whose products are one quality times each outflow) is given the "
+         "Q-formulation's proportions q_i of each inflow, with sum q_i = 1, f_i = sum_j q_i "
+         "f_j, each quality times each outflow written over q_i f_j, and the capacity "
+         "restated over the outflows (Ben-Tal, Eiger and Gershovitz 1994). Every row of the "
+         "model is kept; with global_rlt the relaxation is the PQ-formulation's (Quesada and "
+         "Grossmann 1995). The answer is reported on the model's own columns. Not used under "
+         "write_certificate, whose checker does not re-derive a lift. Off until an A/B on "
+         "main.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"mip_branching",
                  OptionType::String,
                  std::string("reliability"),
