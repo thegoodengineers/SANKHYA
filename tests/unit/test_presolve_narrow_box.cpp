@@ -11,6 +11,8 @@
 //
 // Every number below is a power of two or a small integer, so the stated optimum is exact.
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -165,6 +167,60 @@ TEST(PresolveNarrowBox, ABoxThatIsAPointOrCrossedByRoundingIsStillFixed) {
       build(ObjSense::kMinimize, {{0.1}}, {-kInf}, {0.3}, {1}, {3}, {10}, {false});
   EXPECT_EQ(fixed_columns(crossed), 1);
   expect_optimum(crossed, 3.0, 1e-9, "a box crossed by rounding");
+}
+
+TEST(PresolveNarrowBox, ANarrowBoxLeftByADoubletonComesBackBasicInsideItsOriginalBox) {
+  // min 2k - y:  k - e = 1,  y - k <= 0,  e >= 0,  k in [0, 1 + 2^-24],  y in [0, 10].
+  // y = k at the optimum, so the objective is k, and k = 1 + e >= 1: k = y = 1, e = 0,
+  // objective 1. The doubleton eliminates e and gives k the box [1, 1 + 2^-24], 6e-8 wide,
+  // which since #1362 stays in the reduced model; the engine leaves k at its lower end, 1.
+  // In the original model 1 is not a bound of k: k is inside [0, 1 + 2^-24], held there by
+  // the equation, and basic, with e on its lower bound. 1 is within the tolerance of k's
+  // UPPER bound, and postsolve took that for "on a bound": k came back at_lower, 1 away
+  // from 0, the shape of scaled Netlib finnis's 4e-5 on 2E51CAP (#1365).
+  const Model model =
+      build(ObjSense::kMinimize, {{-1, 1, 0}, {0, -1, 1}}, {1, -kInf}, {1, 0}, {0, 2, -1},
+            {0, 0, 0}, {kInf, 1 + kNarrow, 10}, {false, false, false});
+  const Solution s = solve(model, quiet());
+  ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+  EXPECT_NEAR(s.objective, 1.0, 1e-9);
+  ASSERT_EQ(s.col_status.size(), 3u);
+  ASSERT_EQ(s.row_status.size(), 2u);
+  // The basis the .sol file carries, held as tools/verify_solution.py holds it: one basic
+  // entry per row, and every nonbasic entry on the bound its status names.
+  int basic = 0;
+  const auto on_named = [&](BasisStatus status, double value, double lower, double upper,
+                            const std::string& what) {
+    std::cout << "  " << what << " = " << value << ", " << to_string(status) << "\n";
+    if (status == BasisStatus::kBasic) ++basic;
+    const double scale = std::max(1.0, std::fabs(value));
+    if (status == BasisStatus::kAtLower) {
+      EXPECT_LE(std::fabs(value - lower), 1e-7 * scale) << what << " is not on its lower bound";
+    }
+    if (status == BasisStatus::kAtUpper) {
+      EXPECT_LE(std::fabs(value - upper), 1e-7 * scale) << what << " is not on its upper bound";
+    }
+  };
+  const char* names[] = {"e", "k", "y"};
+  for (Index j = 0; j < 3; ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    on_named(s.col_status[u], s.col_value[u], model.col_lower[u], model.col_upper[u], names[u]);
+  }
+  for (Index i = 0; i < 2; ++i) {
+    const auto u = static_cast<std::size_t>(i);
+    double activity = 0.0;
+    for (Index j = 0; j < 3; ++j) {
+      const ColumnView column = model.matrix.column(j);
+      for (Index t = 0; t < column.size; ++t) {
+        if (column.rows[t] == i)
+          activity += column.values[t] * s.col_value[static_cast<std::size_t>(j)];
+      }
+    }
+    on_named(s.row_status[u], activity, model.row_lower[u], model.row_upper[u],
+             "row " + std::to_string(i));
+  }
+  EXPECT_EQ(basic, 2);
+  EXPECT_EQ(s.col_status[1], BasisStatus::kBasic) << "k is inside its original box";
 }
 
 }  // namespace
