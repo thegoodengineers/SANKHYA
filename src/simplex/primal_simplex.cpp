@@ -1614,6 +1614,24 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
   // refuted claims ends within one or two, a cycle does not end.
   static constexpr int kRefutedOptimalityLimit = 20;
   double least_infeasibility = std::numeric_limits<double>::infinity();
+  // A PHASE 2 THAT KEEPS LOSING FEASIBILITY TO THE SAME PIVOT IS A CYCLE (#1365). Harris's
+  // ratio test lets a phase-2 pivot put a basic variable at most kHarrisRelaxation outside
+  // its bounds, so a return to phase 1 means alpha, through the factors, said one thing and
+  // the basic values recomputed afterwards say another. On a basis that ill-conditioned
+  // the return is deterministic: scaled Netlib nesm, once #1362 stopped presolve fixing
+  // STKGLP41 (a box 6.3e-8 wide in the file's units, 0.066 in the engine's), entered column
+  // 2604 against row 556 on a pivot of 1.5e-5, found a basic variable 3.6 below its lower
+  // bound on fresh factors, repaired it in phase 1, and took the same pivot again - every 42
+  // iterations, 12,600 times, until the time limit. Before #1362 the same model ended in a
+  // numerical error that the prescaled retry (#792) then solved. A run of returns after the
+  // same pivot is reported as the numerical failure it is, after kRefutedOptimalityLimit of
+  // them, as the refuted optimality claims below are; returns after different pivots are
+  // left alone, so no run that makes progress between them is stopped.
+  Index pivot_entering = -1;
+  Index pivot_leaving = -1;
+  Index return_entering = -1;
+  Index return_leaving = -1;
+  int returns_after_same_pivot = 0;
 
   for (;;) {
     // The phase decision is made on the largest single violation, not on their sum. The sum
@@ -1638,6 +1656,23 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
       // weights accumulated against the first approximate edge norms for an objective that
       // no longer exists. Carrying them across is not a slow start, it is wrong information.
       reset_devex();
+    }
+    if (!was_phase_one && phase_one && pivot_entering >= 0) {
+      const bool same = pivot_entering == return_entering && pivot_leaving == return_leaving;
+      returns_after_same_pivot = same ? returns_after_same_pivot + 1 : 1;
+      return_entering = pivot_entering;
+      return_leaving = pivot_leaving;
+      if (returns_after_same_pivot > kRefutedOptimalityLimit) {
+        compute_reduced_costs(false);
+        return finish(
+            SolveStatus::kNumericalError,
+            fmt::format("phase 2 lost primal feasibility {} times in a row after the "
+                        "same pivot (column {} entering, variable {} leaving), by "
+                        "{:.3e} the last time; the factors and the basic values "
+                        "disagree on this basis",
+                        returns_after_same_pivot, pivot_entering, pivot_leaving, infeasibility),
+            iterations, timer.elapsed_seconds());
+      }
     }
     was_phase_one = phase_one;
 
@@ -1987,6 +2022,10 @@ Solution Simplex::primal_loop(Timer& timer, Count* iterations_io) {
 
     const auto e = static_cast<std::size_t>(entering);
     const double entering_value = nonbasic_value_[e] + static_cast<double>(direction) * step;
+    pivot_entering = entering;
+    pivot_leaving = ratio.leaving_position < 0
+                        ? -1
+                        : basis_[static_cast<std::size_t>(ratio.leaving_position)];
 
     if (ratio.leaving_position < 0) {
       // Bound flip: the entering variable travels its whole range and the basis is unchanged.
