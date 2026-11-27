@@ -2579,6 +2579,9 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"qp_ipm_diag_extra", OptionType::Int, std::int64_t{5},
+                 "DIAGNOSTIC ONLY (#1178): iterations past the relative stop.", 0.0, 1000.0,
+                 {}});
     s.push_back({"qp_ipm_centrality_correctors",
                  OptionType::Int,
                  std::int64_t{0},

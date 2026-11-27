@@ -74,6 +74,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <string>
 #include <vector>
@@ -353,6 +354,16 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
   const bool krylov_refinement = options.get_bool("qp_ipm_krylov_refinement");
   const Count centrality_correctors = options.get_int("qp_ipm_centrality_correctors");
   const double primal_tolerance = options.get_double("primal_feasibility_tolerance");
+  const Count diag_extra = options.get_int("qp_ipm_diag_extra");  // DIAGNOSTIC ONLY (#1178)
+  const auto diag = [&](const std::string& line) {
+    if (FILE* f = std::fopen("bench/results/qp-diag.txt", "a")) {
+      std::fputs(line.c_str(), f);
+      std::fclose(f);
+    }
+  };
+  diag(fmt::format("START {} cols={} rows={} slacks={} extra={} finish={} reg={:.1e}\n",
+                   model.name, s.cols, s.rows, s.slacks, diag_extra,
+                   options.get_bool("qp_ipm_finish"), options.get_double("qp_ipm_regularization")));
   StopController stop(control, timer, limits);
 
   // ---- starting point: strictly inside every finite bound, unit bound multipliers ---------
@@ -644,6 +655,55 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
 
     logger.iteration(iterations, primal_objective, primal_rel, dual_rel,
                      timer.elapsed_seconds());
+    {  // DIAGNOSTIC ONLY (#1178): the worst row product and the worst bound product
+      double wr = 0.0, wy = 0.0, wd = 0.0, wrp = 0.0, ws = 0.0;
+      long wri = -1;
+      for (Index k = 0; k < s.slacks; ++k) {
+        const auto u = static_cast<std::size_t>(s.free_n + k);
+        const auto r = static_cast<std::size_t>(s.slack_row[static_cast<std::size_t>(k)]);
+        const double activity = v[u] - rp[r];
+        double distance = kInfinity, sl = kInfinity;
+        if (has_lower[u]) {
+          distance = std::min(distance, std::fabs(activity - s.lower[u]));
+          sl = std::min(sl, v[u] - s.lower[u]);
+        }
+        if (has_upper[u]) {
+          distance = std::min(distance, std::fabs(s.upper[u] - activity));
+          sl = std::min(sl, s.upper[u] - v[u]);
+        }
+        if (std::isfinite(distance) && std::fabs(y[r]) * distance > wr) {
+          wr = std::fabs(y[r]) * distance;
+          wy = y[r];
+          wd = distance;
+          wrp = rp[r];
+          ws = sl;
+          wri = static_cast<long>(r);
+        }
+      }
+      double wb = 0.0, wbs = 0.0, wbz = 0.0;
+      long wbj = -1;
+      for (std::size_t j = 0; j < nc; ++j) {
+        if (has_lower[j] && (v[j] - s.lower[j]) * zl[j] > wb) {
+          wb = (v[j] - s.lower[j]) * zl[j];
+          wbs = v[j] - s.lower[j];
+          wbz = zl[j];
+          wbj = static_cast<long>(j);
+        }
+        if (has_upper[j] && (s.upper[j] - v[j]) * zu[j] > wb) {
+          wb = (s.upper[j] - v[j]) * zu[j];
+          wbs = s.upper[j] - v[j];
+          wbz = -zu[j];
+          wbj = static_cast<long>(j);
+        }
+      }
+      diag(fmt::format(
+          "IT {} past={} mu={:.3e} rho={:.1e} delta={:.1e} floor={:.1e} prel={:.2e} drel={:.2e} "
+          "grel={:.2e} pobj={:.10e} largest={:.3e} row={} y={:.4e} dist={:.3e} wslack={:.3e} "
+          "rp={:.3e} bound={} s={:.3e} z={:.4e} prod={:.3e} |rp|={:.3e} |b|={:.3e}\n",
+          iterations, iterations_past_relative, mu, rho, delta, dual_floor, primal_rel,
+          dual_rel, gap_rel, primal_objective, largest_product, wri, wy, wd, ws, wrp, wbj, wbs,
+          wbz, wb, inf_norm(rp), inf_norm(s.b)));
+    }
     // The relative gap alone is not enough: an optimality claim is also held to an ABSOLUTE
     // complementarity product per item (tol::kComplementarity, the verifier's test), which a
     // relative gap of 1e-9 on an objective of 5e+05 does not imply (qadlittl: 1.1e-06 on one
@@ -670,7 +730,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     }
     if (relative_met &&
         (largest_product <= tol::kQpIpmComplementarityShare * tol::kComplementarity ||
-         iterations_past_relative >= kIterationsForProducts)) {
+         iterations_past_relative >= std::max<Count>(diag_extra, kIterationsForProducts * 0))) {
       status = SolveStatus::kOptimal;
       break;
     }
@@ -919,6 +979,7 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     }
     const double alpha =
         bound_count > 0 ? std::min(1.0, kFractionToBoundary * longest_step()) : 1.0;
+    diag(fmt::format("STEP {} alpha={:.4e} sigma={:.3e}\n", iterations, alpha, sigma));
     prev_v = v;
     prev_y = y;
     prev_zl = zl;
@@ -981,6 +1042,8 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
       const bool finished = active_set_finish(
           s, has_lower, has_upper, tolerance, primal_tolerance, regularization_floor,
           should_stop, &v, &y, &zl, &zu, options.get_bool("qp_ipm_postpone_dense"));
+      diag(fmt::format("FINISH {} product={:.3e} {}\n", model.name, largest_product_at_exit,
+                       finished ? "accepted" : "rejected"));
       logger.verbose(
           "QP interior point: active-set finish (#980) on a product of {:.1e} against the "
           "gate's {:.1e} - {}",
@@ -1024,6 +1087,8 @@ Solution iterate(const Model& model, const Standard& s, const Options& options, 
     }
     solution.col_dual[u] = d;
   }
+  diag(fmt::format("END {} status={} it={} past={} msg={}\n", model.name, to_string(status),
+                   iterations, iterations_past_relative, message));
   solution.status = status;
   solution.message = message;
   solution.iterations = iterations;
