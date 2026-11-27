@@ -817,6 +817,21 @@ Setup: `bench.yml` `ab-option` on one binary, `ed6e3400`, Maros-Meszaros 138 at 
 
 The supernodal phase did what it was for on the factor-bound models: cvxqp2l 33.8 s to 16.0 s, cvxqp1l 44.5 to 26.5, cvxqp3l 58.9 to 37.5, cont-200 7.6 to 4.3, cont-201 7.2 to 4.2, boyd2 40.3 to 12.5. But the interior point ended in a numerical error and fell back to Condat-Vu on qcapri, qpcboei1, qpcboei2, qscfxm3, qseba, qship12l, qship12s, powell20 and boyd1, each of which passes in the other two arms, and cont-300 came back optimal but no longer matched the reference. Postponement alone changed no status, passed or verified flag (stadat1 failed both ways). It is the default since this PR, in the interior point's factorization and in the active-set finish's, gated against `main` at `23e40b50` with both arms in one job (run 45539507204): 129 / 135 both ways, no row's status changed, boyd1 31.7 s to 3.4 s and boyd2 36.4 s to 10.5 s, SGM 2.830 s to 2.649 s. Why the supernodal factor fails these nine was not traced: the scalar and supernodal paths share the pivot rule, so the next step is to compare the two factors on qpcboei1's first KKT matrix. `qp_ipm_supernodal` stays, off. The CSV was not committed (branch stamp).
 
+### Equilibrating every convex QP before the interior point (`qp_prescale` as the first attempt, not merged in that form)
+
+The QP interior point does no scaling, and the two Maros-Meszaros instances it stalled on (qpilotno, stadat1) are solved by both rival interior points that equilibrate first. The change ran the QP engines on the presolved model equilibrated by 20 Ruiz rounds on the KKT matrix [Q A'; A 0], factors rounded to powers of two, no cost scaling, and mapped the answer back before the status guard and the KKT gate.
+
+Setup: `bench.yml` `ab-option` on one binary, `40caf045`, Maros-Meszaros 138 at 60 s, both arms in one job (run 45524412639). Counts are passed / verified.
+
+| arm | passed | verified | gained | lost |
+|---|---|---|---|---|
+| off | 129 | 135 | | |
+| on, every QP equilibrated first | 128 | 136 | qpilotno (iteration_limit to optimal, 38 iterations), stadat1 (iteration_limit to optimal, 187) | boyd2 (optimal to a stall at 210 iterations, gap 0.11), qbandm (optimal to feasible: dual feasibility 6.5e-3 relative on column 179), qscagr25 (optimal to feasible: one product at 1.05e-6) |
+
+Where it worked it worked well: qfffff80 176 iterations to 38 (3.79 s to 0.20 s), qship12l 28 to 21 (7.2 s to 0.93 s), qscfxm3 13.1 s to 0.17 s. But the interior point stops on the scaled model's relative measures, and on qbandm and qscagr25 a scaled-space optimum is refused by the gate in the model's own units; boyd2 converges unscaled and stalls scaled. cvxqp2l went from 32.5 s to 63.8 s and boyd1 from 31.5 s to 46.2 s, both still optimal.
+
+What shipped instead: the same equilibration as a retry, only after the unscaled interior point stalls or ends in a numerical error, adopted only when optimal (run 45539497594, one binary at `9efca8d2`: 129 / 135 to 131 / 137, qpilotno and stadat1 gained, no other row's status or flags changed). What would make it the first attempt: the three relative stop measures evaluated on unscaled residuals inside the loop, which is the second step this entry leaves undone. The CSVs were not committed (branch stamps).
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.

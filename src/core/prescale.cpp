@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 namespace sankhya {
@@ -23,6 +24,55 @@ constexpr int kGeometricPasses = 8;
 
 double scaled_bound(double bound, double factor) {
   return is_finite_bound(bound) ? bound * factor : bound;
+}
+
+/// Round the factors to powers of two and apply them: A' = R A S, Q' = S Q S, c' = S c,
+/// columns [l, u] / S, rows R [lo, hi]. Exact products of data and powers of two, so nothing
+/// here is rounding and nothing is dropped.
+PrescaledModel apply_factors(const Model& model, std::vector<double> row,
+                             std::vector<double> column) {
+  for (double& r : row) r = nearest_power_of_two(r);
+  for (double& s : column) s = nearest_power_of_two(s);
+  const Index m = model.num_rows();
+  const Index n = model.num_cols();
+  PrescaledModel out;
+  Model& scaled = out.model;
+  scaled = model;
+  scaled.matrix.reset(m, n);
+  scaled.matrix.reserve(static_cast<std::size_t>(model.matrix.num_nonzeros()));
+  for (Index j = 0; j < n; ++j) {
+    const auto u = static_cast<std::size_t>(j);
+    const ColumnView view = model.matrix.column(j);
+    for (Index k = 0; k < view.size; ++k) {
+      scaled.matrix.add_entry(
+          view.rows[k], j,
+          view.values[k] * row[static_cast<std::size_t>(view.rows[k])] * column[u]);
+    }
+    scaled.col_cost[u] = model.col_cost[u] * column[u];
+    scaled.col_lower[u] = scaled_bound(model.col_lower[u], 1.0 / column[u]);
+    scaled.col_upper[u] = scaled_bound(model.col_upper[u], 1.0 / column[u]);
+  }
+  scaled.matrix.finalize(0.0);
+  if (model.hessian.num_nonzeros() > 0) {
+    scaled.hessian.reset(n, n);
+    scaled.hessian.reserve(static_cast<std::size_t>(model.hessian.num_nonzeros()));
+    for (Index j = 0; j < n; ++j) {
+      const ColumnView view = model.hessian.column(j);
+      for (Index k = 0; k < view.size; ++k) {
+        const auto i = static_cast<std::size_t>(view.rows[k]);
+        scaled.hessian.add_entry(
+            view.rows[k], j, view.values[k] * column[i] * column[static_cast<std::size_t>(j)]);
+      }
+    }
+    scaled.hessian.finalize(0.0);
+  }
+  for (std::size_t i = 0; i < row.size(); ++i) {
+    scaled.row_lower[i] = scaled_bound(model.row_lower[i], row[i]);
+    scaled.row_upper[i] = scaled_bound(model.row_upper[i], row[i]);
+  }
+  out.row = std::move(row);
+  out.column = std::move(column);
+  return out;
 }
 
 }  // namespace
@@ -98,35 +148,53 @@ PrescaledModel prescale_by_powers_of_two(const Model& model, int passes) {
       if (column_max[j] > 0.0) column[j] /= std::sqrt(column_max[j]);
     }
   }
-  for (double& r : row) r = nearest_power_of_two(r);
-  for (double& s : column) s = nearest_power_of_two(s);
+  return apply_factors(model, std::move(row), std::move(column));
+}
 
-  PrescaledModel out;
-  out.row = row;
-  out.column = column;
-  Model& scaled = out.model;
-  scaled = model;
-  scaled.matrix.reset(m, n);
-  scaled.matrix.reserve(static_cast<std::size_t>(model.matrix.num_nonzeros()));
-  for (Index j = 0; j < n; ++j) {
-    const auto u = static_cast<std::size_t>(j);
-    const ColumnView view = model.matrix.column(j);
-    for (Index k = 0; k < view.size; ++k) {
-      scaled.matrix.add_entry(
-          view.rows[k], j,
-          view.values[k] * row[static_cast<std::size_t>(view.rows[k])] * column[u]);
+PrescaledModel prescale_qp_by_powers_of_two(const Model& model, int passes) {
+  // RUIZ ON THE KKT MATRIX K = [Q A'; A 0]. K is symmetric, so one factor D = diag(S, R) per
+  // row and column of K: each pass divides D by the square root of the infinity norm of its
+  // row of D K D, which drives every row and column of K to norm one (Ruiz 2001; the
+  // symmetric case, Knight, Ruiz and Ucar, SIAM J. Matrix Anal. Appl. 35(3), 2014). A
+  // column's norm is the larger of its Q column and its A column, a row's that of its A
+  // row. No cost scaling: the complementarity products the interior point tests,
+  // (x - l) z and |y| times a row's distance to its side, are invariant under
+  // x = S x', z = z' / S, y = R y', and a cost factor would not leave them so.
+  const Index m = model.num_rows();
+  const Index n = model.num_cols();
+  std::vector<double> row(static_cast<std::size_t>(m), 1.0);
+  std::vector<double> column(static_cast<std::size_t>(n), 1.0);
+  std::vector<double> row_max(row.size());
+  std::vector<double> column_max(column.size());
+  for (int pass = 0; pass < passes; ++pass) {
+    std::fill(row_max.begin(), row_max.end(), 0.0);
+    std::fill(column_max.begin(), column_max.end(), 0.0);
+    for (Index j = 0; j < n; ++j) {
+      const auto u = static_cast<std::size_t>(j);
+      const ColumnView a = model.matrix.column(j);
+      for (Index k = 0; k < a.size; ++k) {
+        const auto i = static_cast<std::size_t>(a.rows[k]);
+        const double value = std::fabs(a.values[k] * row[i] * column[u]);
+        row_max[i] = std::max(row_max[i], value);
+        column_max[u] = std::max(column_max[u], value);
+      }
+      // The stored lower triangle stands for both (i, j) and (j, i).
+      const ColumnView q = model.hessian.column(j);
+      for (Index k = 0; k < q.size; ++k) {
+        const auto i = static_cast<std::size_t>(q.rows[k]);
+        const double value = std::fabs(q.values[k] * column[i] * column[u]);
+        column_max[u] = std::max(column_max[u], value);
+        column_max[i] = std::max(column_max[i], value);
+      }
     }
-    scaled.col_cost[u] = model.col_cost[u] * column[u];
-    scaled.col_lower[u] = scaled_bound(model.col_lower[u], 1.0 / column[u]);
-    scaled.col_upper[u] = scaled_bound(model.col_upper[u], 1.0 / column[u]);
+    for (std::size_t i = 0; i < row.size(); ++i) {
+      if (row_max[i] > 0.0) row[i] /= std::sqrt(row_max[i]);
+    }
+    for (std::size_t j = 0; j < column.size(); ++j) {
+      if (column_max[j] > 0.0) column[j] /= std::sqrt(column_max[j]);
+    }
   }
-  // Exact products of data and powers of two: nothing here is rounding, nothing is dropped.
-  scaled.matrix.finalize(0.0);
-  for (std::size_t i = 0; i < um; ++i) {
-    scaled.row_lower[i] = scaled_bound(model.row_lower[i], row[i]);
-    scaled.row_upper[i] = scaled_bound(model.row_upper[i], row[i]);
-  }
-  return out;
+  return apply_factors(model, std::move(row), std::move(column));
 }
 
 void unscale_solution(const PrescaledModel& prescaled, Solution* solution) {
