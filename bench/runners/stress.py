@@ -147,6 +147,33 @@ def negate_certificate(sol: Path) -> Path:
 # Solving, verifying, grading
 # =========================================================================================
 
+def _diag(binary, mps, sol, time_limit, blob):
+    print("DIAG ===", mps.name, json.dumps({k: v for k, v in blob.items()
+                                             if k not in ("solution",)})[:6000], flush=True)
+    watch = ("C453", "C50 ", "C79 ", "C451 ", "C899 ")
+    if sol.exists():
+        for line in sol.read_text().splitlines():
+            if line.startswith(watch) or not line[:1].isalnum() or line.startswith(("status", "objective", "Status", "Objective")):
+                print("DIAG sol", line[:200])
+    for extra in (["--option", "log_level=verbose"], ["--option", "presolve=false"]):
+        log = sol.with_suffix(".diag.log")
+        s2 = sol.with_suffix(".diag.sol")
+        done = subprocess.run([str(binary), "solve", str(mps), "--write-sol", str(s2),
+                               "--time-limit", str(time_limit), *extra],
+                              capture_output=True, text=True, timeout=time_limit * 3 + 60)
+        lines = (done.stdout + done.stderr).splitlines()
+        print("DIAG run", extra, "exit", done.returncode, len(lines), "lines", flush=True)
+        keep = lines if len(lines) <= 400 else lines[:200] + ["..."] + lines[-200:]
+        for line in keep:
+            print("DIAG |", line[:300])
+        if s2.exists():
+            ok, failing = verify(mps, s2)
+            print("DIAG verify", extra, ok, failing[:300] if isinstance(failing, str) else failing)
+            for line in s2.read_text().splitlines():
+                if line.startswith(watch):
+                    print("DIAG sol2", line[:200])
+
+
 def run_sankhya(binary: Path, mps: Path, sol: Path, time_limit: float) -> dict:
     stats = sol.with_suffix(".json")
     completed = subprocess.run([str(binary), "solve", str(mps), "--stats", str(stats),
@@ -158,6 +185,7 @@ def run_sankhya(binary: Path, mps: Path, sol: Path, time_limit: float) -> dict:
                 "reason": completed.stderr.strip()[:160]}
     blob = json.loads(stats.read_text())
     result = blob.get("result", {})
+    _diag(binary, mps, sol, time_limit, blob)
     # The objective is graded as reported, objective-row constant included (e226: 7.113).
     # reference.json already adds that constant to Koch's optimum (stress_instances.py,
     # #885), and HiGHS's objective carries it too, so subtracting it here counted the
