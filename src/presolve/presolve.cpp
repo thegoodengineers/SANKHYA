@@ -2425,8 +2425,10 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
         {
           const auto pc = static_cast<std::size_t>(record.partner_column);
           const auto ce = static_cast<std::size_t>(record.column);
-          const bool partner_inside =
-              !at_bound(xk, original.col_lower[pc]) && !at_bound(xk, original.col_upper[pc]);
+          const auto [partner_at_lower, partner_at_upper] =
+              on_named_bound(solution.col_status[pc], at_bound(xk, original.col_lower[pc]),
+                             at_bound(xk, original.col_upper[pc]));
+          const bool partner_inside = !partner_at_lower && !partner_at_upper;
           const bool elim_at_lower = at_bound(xe, original.col_lower[ce]);
           const bool elim_at_upper = at_bound(xe, original.col_upper[ce]);
           if (solution.col_status[pc] != BasisStatus::kBasic && partner_inside &&
@@ -2627,8 +2629,8 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     const double x = solution.col_value[c];
     const double lo = original.col_lower[c];
     const double hi = original.col_upper[c];
-    const bool at_lower = at_bound(x, lo);
-    const bool at_upper = at_bound(x, hi);
+    const auto [at_lower, at_upper] =
+        on_named_bound(solution.col_status[c], at_bound(x, lo), at_bound(x, hi));
 
     const double d = reduced_cost_of(it.column);
     const double signed_d = sense * d;
@@ -2888,9 +2890,7 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
           const double v = solution.col_value[u];
           const double clo = original.col_lower[u];
           const double chi = original.col_upper[u];
-          const bool at_lo = at_bound(v, clo);
-          const bool at_hi = at_bound(v, chi);
-          return std::pair<bool, bool>(at_lo, at_hi);
+          return on_named_bound(solution.col_status[u], at_bound(v, clo), at_bound(v, chi));
         };
         const auto [elim_at_lo, elim_at_hi] = status_of(record.column);
         const auto [keep_at_lo, keep_at_hi] = status_of(record.partner_column);
