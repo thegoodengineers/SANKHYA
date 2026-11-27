@@ -2876,8 +2876,26 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
       // constrains Y's SIGN. Interior beats at-a-bound as the thing that decides Y, because
       // "exactly zero" leaves no freedom to also satisfy a sign constraint from Y = 0 the way
       // an already-admissible at-bound column does.
+      //
+      // A KEEP SUBSTITUTED AWAY LATER IS STILL THIS ROW'S TO PRICE (#1354). When `keep` was
+      // itself removed afterwards as a free or implied-free column singleton, that record,
+      // replayed first, priced its own row and finalised keep - with this row's price left
+      // out, because keep received this row's fold. Skipping the row then left only elim's
+      // test, and an elim admissible at its bound priced it at zero: keep's true reduced
+      // cost came back as the whole fold (32 on a free column; -2 on one interior at -7.5).
+      // The singleton record treats keep as free (Andersen & Andersen 1995, sec. 6), so
+      // here it is interior and pins Y, which leaves its reduced cost at the zero that
+      // record set. A keep finalised by a singleton row is still left to that row.
+      const std::size_t keep_removed_at =
+          record.kind == Record::Kind::kDoubletonEquation
+              ? column_removed_at[static_cast<std::size_t>(record.partner_column)]
+              : result.records.size();
+      const bool keep_substituted =
+          keep_removed_at < result.records.size() &&
+          result.records[keep_removed_at].kind == Record::Kind::kFreeColumnSingleton;
       if (record.kind == Record::Kind::kDoubletonEquation &&
-          !dual_finalized[static_cast<std::size_t>(record.partner_column)]) {
+          (!dual_finalized[static_cast<std::size_t>(record.partner_column)] ||
+           keep_substituted)) {
         const auto pc = static_cast<std::size_t>(record.partner_column);
         const double a = record.coefficient;
         const double b = record.partner_coefficient;
@@ -2894,7 +2912,7 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
         const auto [elim_at_lo, elim_at_hi] = status_of(record.column);
         const auto [keep_at_lo, keep_at_hi] = status_of(record.partner_column);
         const bool elim_interior = !elim_at_lo && !elim_at_hi;
-        const bool keep_interior = !keep_at_lo && !keep_at_hi;
+        const bool keep_interior = (!keep_at_lo && !keep_at_hi) || keep_substituted;
 
         const double rco_elim = reduced_cost_of(record.column);
         const double rco_keep = reduced_cost_of(record.partner_column);

@@ -220,21 +220,22 @@ std::string duals(const Solution& s) {
 }
 
 TEST(PresolveImpliedFree, ARowWhoseColumnIsImpliedFreeKeepsItsPrice) {
-  // #1354, models B and C as the general-form fuzz (#1334) reduced them. Each is optimal,
-  // and with the reduction on postsolve handed back a row at zero that prices the
-  // substituted column: in C, row 0 came back at 0 where it is -2, leaving x3, interior at
-  // -7.5, with a reduced cost of -2. Through solve() an answer whose duals fail is solved
-  // again without presolve (#783), which hides this; the engine race has no such retry and
-  // reported `feasible`. So postsolve is called directly here, and the race is asked too.
+  // #1354, models B and C as the general-form fuzz (#1334) reduced them. In both a
+  // doubleton equation eliminates one column against `keep`, and `keep`, left alone in
+  // another row, is then implied free. Postsolve left the doubleton row at zero: in B,
+  // x2, free, came back with a reduced cost of 32; in C, x3, interior at -7.5, with -2.
+  // Through solve() an answer whose duals fail is solved again without presolve (#783),
+  // which hides this; the engine race has no such retry and reported `feasible`. So
+  // postsolve is called directly here, and the race is asked too.
   // min 3 x1: -3/4 x0 - 3/8 x1 - 4 x2 = -57/4, 2 x0 <= 6, -x0 + 4 x2 = 9;
   // x0 >= 3, x1 >= 0, x2 free. Optimum 0 at (3, 0, 3).
   const Model b = build({{-0.75, -0.375, -4}, {2, 0, 0}, {-1, 0, 4}}, {-14.25, -kInf, 9},
                         {-14.25, 6, 9}, {0, 3, 0}, {3, 0, -kInf}, {kInf, kInf, kInf});
   // min -2 x3: x2 + x3 = -17/2, 2 x0 >= 4, 5/2 x0 - 5 x1 + x2 / 2 = 19/2;
   // x0 <= 2, x1 = -1, x2 <= -1, x3 <= -3. Optimum 15 at (2, -1, -1, -7.5).
-  const Model c = build({{0, 0, 1, 1}, {2, 0, 0, 0}, {2.5, -5, 0.5, 0}}, {-8.5, 4, 9.5},
-                        {-8.5, kInf, 9.5}, {0, 0, 0, -2}, {-kInf, -1, -kInf, -kInf},
-                        {2, -1, -1, -3});
+  const Model c =
+      build({{0, 0, 1, 1}, {2, 0, 0, 0}, {2.5, -5, 0.5, 0}}, {-8.5, 4, 9.5}, {-8.5, kInf, 9.5},
+            {0, 0, 0, -2}, {-kInf, -1, -kInf, -kInf}, {2, -1, -1, -3});
   const std::vector<std::pair<std::string, const Model*>> cases = {{"B", &b}, {"C", &c}};
   const double optimum[2] = {0.0, 15.0};
   for (std::size_t k = 0; k < cases.size(); ++k) {
