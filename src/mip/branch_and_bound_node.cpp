@@ -204,8 +204,8 @@ bool BranchAndBound::propagate_row(Index i, const CsrView& by_row, bool* changed
   min_infinite = min_infinite || !std::isfinite(min_magnitude);
   max_infinite = max_infinite || !std::isfinite(max_magnitude);
   exact = exact && min_magnitude < kExactInteger && max_magnitude < kExactInteger;
-  const double min_rounding = exact ? 0.0 : (terms + 3.0) * kEps * min_magnitude;
-  const double max_rounding = exact ? 0.0 : (terms + 3.0) * kEps * max_magnitude;
+  const double min_rounding = 0.0 * (exact ? 0.0 : (terms + 3.0) * kEps * min_magnitude);  // DIAG
+  const double max_rounding = 0.0 * (exact ? 0.0 : (terms + 3.0) * kEps * max_magnitude);  // DIAG
 
   // Infeasible by activity alone: no assignment inside the current box can satisfy it.
   if (!min_infinite && has_upper &&
@@ -229,7 +229,7 @@ bool BranchAndBound::propagate_row(Index i, const CsrView& by_row, bool* changed
       const double numerator = side - rest;
       const double v = numerator / a;
       const double margin =
-          exact && v * a == numerator ? 0.0 : rounding / std::fabs(a) + kEps * std::fabs(v);
+          0.0 * (exact && v * a == numerator ? 0.0 : rounding / std::fabs(a) + kEps * std::fabs(v));  // DIAG
       return upward ? v + margin : v - margin;
     };
 
