@@ -209,7 +209,12 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                     # SETS; the lines under either are read by verify_solution_sos.py.
                     section = "SOS"
                 elif key in ("QUADOBJ", "QMATRIX", "QSECTION", "QUADS"):
-                    # All four spellings are in circulation and denote the same thing.
+                    # All four spellings are in circulation and denote the same thing, except
+                    # that MOSEK's QSECTION names the row its terms belong to (#1368): the
+                    # objective's is read here, a constraint's is not this section's meaning.
+                    if key == "QSECTION" and len(head) > 1 and head[1] != objective_row:
+                        raise ValueError(f"{path}:{lineno}: QSECTION {head[1]} is not the "
+                                         "objective's; a quadratic row is read as QCMATRIX")
                     section = "QUADOBJ"
                 elif key == "QCMATRIX":
                     # A quadratic row (#514): `QCMATRIX <row>`, then its matrix entries.
@@ -355,18 +360,22 @@ def _parse_mps(path: Path, fixed: bool) -> Model:
                 # "colname1 colname2 value". The pair is normalised to (max, min) because
                 # files disagree about the order, and both orders name the same entry of a
                 # symmetric matrix. A repeat is an error rather than an accumulation.
-                if len(fields) < 3:
-                    raise ValueError(f"{path}:{lineno}: QUADOBJ entry needs 3 fields")
-                if fields[0] not in model.col_index or fields[1] not in model.col_index:
-                    unknown = fields[0] if fields[0] not in model.col_index else fields[1]
-                    raise ValueError(f"{path}:{lineno}: QUADOBJ names unknown column {unknown}")
-                a = model.col_index[fields[0]]
-                b = model.col_index[fields[1]]
-                key2 = (max(a, b), min(a, b))
-                if key2 in model.hessian:
-                    raise ValueError(f"{path}:{lineno}: duplicate Hessian entry "
-                                     f"{fields[0]} {fields[1]}")
-                model.hessian[key2] = parse_number(fields[2])
+                # A record may carry a second entry, (column 1, field 4, field 5), as a COLUMNS
+                # record does (#1368); three fields or five, nothing else.
+                if len(fields) not in (3, 5):
+                    raise ValueError(f"{path}:{lineno}: QUADOBJ entry needs 3 or 5 fields")
+                for other, value in zip(fields[1::2], fields[2::2]):
+                    if fields[0] not in model.col_index or other not in model.col_index:
+                        unknown = fields[0] if fields[0] not in model.col_index else other
+                        raise ValueError(f"{path}:{lineno}: QUADOBJ names unknown column "
+                                         f"{unknown}")
+                    a = model.col_index[fields[0]]
+                    b = model.col_index[other]
+                    key2 = (max(a, b), min(a, b))
+                    if key2 in model.hessian:
+                        raise ValueError(f"{path}:{lineno}: duplicate Hessian entry "
+                                         f"{fields[0]} {other}")
+                    model.hessian[key2] = parse_number(value)
                 continue
 
             if section == "BOUNDS":

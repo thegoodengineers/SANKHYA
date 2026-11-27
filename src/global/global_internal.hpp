@@ -6,6 +6,7 @@
 //   qcqp_model.cpp     QcqpModel's own checks, and the Problem below built from it
 //   relaxation.cpp     the McCormick relaxation of a box, and the bound its LP duals prove
 //   fbbt.cpp           feasibility-based bound tightening over a box
+//   pool_lift.cpp      a P-formulated pool given the Q-formulation's proportions
 //   local_search.cpp   feasibility against the ORIGINAL model, and the alternating LP
 //   spatial_bnb.cpp    the tree
 #pragma once
@@ -146,6 +147,30 @@ struct ObbtOutcome {
 ObbtOutcome obbt(const Problem& problem, double cutoff, const Options& options, double seconds,
                  Box* box);
 
+// ---- pool_lift.cpp ----------------------------------------------------------------------
+
+/// What lift_pools() added; all zero when it recognised no pool.
+struct PoolLift {
+  Count pools = 0;
+  Index columns = 0;  ///< proportion columns, appended after the model's own
+  Index rows = 0;     ///< rows, appended after the model's own
+  /// Each lifted pool by the model rows it was read from, in the order its columns and rows
+  /// were appended; the bound certificate lists them so its checker can rebuild the lift.
+  struct Record {
+    Index balance = -1;
+    std::vector<Index> qualities;   ///< ascending
+    std::vector<Index> capacities;  ///< ascending
+  };
+  std::vector<Record> records;
+};
+
+/// `global_pool_lift`: every pool of a P-formulated pooling model given the Q-formulation's
+/// proportions and the rows that tie them to the model's flows and qualities (see the file).
+/// Every row and column of `model` is kept, in place, so a point of `lifted` cut to the model's
+/// columns is a point of the model with the same objective, and the two have the same optimum.
+/// `lifted` is written only when a pool is recognised.
+PoolLift lift_pools(const QcqpModel& model, QcqpModel* lifted);
+
 // ---- local_search.cpp -------------------------------------------------------------------
 
 /// Worst violation of the ORIGINAL model at x: every row with its products and every
@@ -217,6 +242,7 @@ struct CertificateInput {
   double absolute_gap = 0.0;
   double relative_gap = 0.0;
   double tolerance = 0.0;
+  const PoolLift* lift = nullptr;  ///< `global_pool_lift`: the pools the problem was lifted by
 };
 
 /// The certificate as JSON text; see the file for what is in it and why that is enough.

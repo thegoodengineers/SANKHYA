@@ -452,8 +452,10 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         for (Index i = 0; i < m; ++i) {
           const auto r = static_cast<std::size_t>(i);
           if (work.row_dead[r]) continue;
-          // Must be an equality row.
-          if (std::fabs(work.row_upper[r] - work.row_lower[r]) > feasibility) continue;
+          // Must be an equality row, its bounds equal (#1363): on 0 <= x - y1 - y2 <= 2^-24,
+          // inside the feasibility tolerance, x is 6e-8 off an integer wherever its cost
+          // wants the range, and promoting it cut that range out of the model.
+          if (work.row_lower[r] != work.row_upper[r]) continue;
           if (!finite(work.row_lower[r])) continue;
           const double rhs = work.row_lower[r];
           // RHS must be an integer EXACTLY. Within a tolerance the claim fails: with
@@ -555,10 +557,22 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       // Fixed column: the value is known, so fold it into the rows and drop it. Not when the
       // column carries curvature - the fold moves c_j * v into the objective constant and has
       // no way to move 0.5 * Q_jj * v^2 or the cross terms with it (#301).
-      const bool looks_fixed =
-          work.col_upper[u] - work.col_lower[u] <= feasibility && finite(work.col_lower[u]);
-      if (work.quadratic_col[u] && looks_fixed) ++result.report.quadratic_columns_protected;
-      if (!work.quadratic_col[u] && looks_fixed) {
+      //
+      // FIXED MEANS THE BOX HOLDS ONE VALUE (#1362), as Model::is_fixed_column() has it. A
+      // box narrower than the feasibility tolerance is still a box: what it is worth is its
+      // width times the coefficients and the cost the column carries, and folding the column
+      // at its lower bound cuts every point above that out of the model. With y = 2^30 z a
+      // doubleton carries y in [0, 10] onto z as [0, 9.3e-9]; fixed at 0, y = 0 came back
+      // `optimal` 10 below the optimum, and a row left with no entries called a feasible LP
+      // infeasible. No width is safe to weigh against the tolerance here, the column's own
+      // coefficients included: beside a smaller coefficient in the same row (x0 + 2^-27 x1
+      // >= 2^-27) a width of 3e-8 under a coefficient of one decides the other column. A
+      // narrow box simply stays in the reduced model. `<=` rather than `==`: a box crossed by
+      // no more than the tolerance passed the test above and holds no value at all, and is
+      // settled at its lower bound as it always was.
+      const bool fixed = work.col_upper[u] <= work.col_lower[u] && finite(work.col_lower[u]);
+      if (work.quadratic_col[u] && fixed) ++result.report.quadratic_columns_protected;
+      if (!work.quadratic_col[u] && fixed) {
         const double value = work.col_lower[u];
         Record record;
         record.kind = Record::Kind::kFixedColumn;
@@ -1310,7 +1324,15 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
       // eliminated role would need its own integrality re-derived on the survivor from the
       // coefficient ratio, which is a different reduction (Achterberg et al. cover it
       // separately) and out of scope here.
-      if (work.row_count[r] == 2 && work.row_upper[r] - work.row_lower[r] <= feasibility &&
+      //
+      // AN EQUATION MEANS THE ROW'S BOUNDS ARE EQUAL (#1363), as Model::is_equality_row() and
+      // the substitution stage have it. A range inside the feasibility tolerance is
+      // still a range: on a row scaled by 2^-27, 3.7e-8 is five units of its columns, and
+      // substituting at the lower bound cuts every point above it out of the model. 2 <= x +
+      // z <= 7 at that scale was read as x + z = 2, and z = 2 came back `optimal` 6 below
+      // the optimum; a feasible LP came back infeasible the same way. A ranged row with two
+      // entries simply stays in the reduced model.
+      if (work.row_count[r] == 2 && work.row_lower[r] == work.row_upper[r] &&
           finite(work.row_lower[r])) {
         Index first = -1, second = -1;
         double first_coeff = 0.0, second_coeff = 0.0;
@@ -1369,7 +1391,7 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
         // column jointly.
         if (work.singleton_row_touched[ue] || work.singleton_row_touched[uk]) continue;
 
-        const double rhs = work.row_lower[r];  // == work.row_upper[r], within `feasibility`
+        const double rhs = work.row_lower[r];  // == work.row_upper[r]
 
         // The range of a*x_elim given x_elim in [lo_elim, hi_elim] - same contribution
         // pattern activity_bounds() uses above, specialised to one term.
@@ -1505,8 +1527,11 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
     // scale (and swapped when it is negative), tighten the earlier row's, and the later row
     // goes; postsolve hands its dual back to it when the bound that binds was its own. Rows
     // are bucketed by their live column pattern so only rows that could be parallel are
-    // compared, and compared exactly enough: every coefficient must match its scaled
-    // counterpart to a relative 1e-9. Crossed bounds after a merge are not declared
+    // compared, and compared exactly enough: every entry's ratio to its counterpart in the
+    // kept row must equal the scale to a relative 1e-9 (Achterberg et al. 2020, sec. 5.2:
+    // the rows are parallel when one is a multiple of the other). A ratio has no units, so
+    // the test has no absolute floor: one of 1e-9 merged rows whose entries were all under
+    // 5e-10 whatever their ratio (#1364). Crossed bounds after a merge are not declared
     // infeasible here; the two rows are simply left as they are for the engine to refuse.
     if (parallel_rows && !result.proved_infeasible) {
       constexpr double kInf = std::numeric_limits<double>::infinity();
@@ -1556,11 +1581,9 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
               proportional = false;
               break;
             }
-            const double expected = scale * live_kept[q].second;
-            proportional =
-                std::fabs(live_row[q].second - expected) <=
-                tol::kPresolveParallelRowTolerance *
-                    std::max({1.0, std::fabs(live_row[q].second), std::fabs(expected)});
+            const double ratio = live_row[q].second / live_kept[q].second;
+            proportional = std::fabs(ratio - scale) <=
+                           tol::kPresolveParallelRowTolerance * std::fabs(scale);
           }
           if (!proportional) continue;
           // This row's bounds in the kept row's units: divided by the scale, and swapped
@@ -1576,9 +1599,26 @@ Result presolve(const Model& model, const Options& options, Logger& logger) {
             if (finite(hi)) scaled_lower = hi / scale;
             if (finite(lo)) scaled_upper = lo / scale;
           }
-          const double new_lower = std::max(work.row_lower[kr], scaled_lower);
-          const double new_upper = std::min(work.row_upper[kr], scaled_upper);
-          if (new_lower > new_upper + feasibility) break;  // crossed: the engine's to refuse
+          double new_lower = std::max(work.row_lower[kr], scaled_lower);
+          double new_upper = std::min(work.row_upper[kr], scaled_upper);
+          // CROSSED BOUNDS ARE NEVER WRITTEN (#1350). Two rows that make an equality between
+          // them meet exactly only when the scale divides exactly: with a scale of
+          // -0.3 / 0.1 the bound -14.55 comes over as one ulp above 4.85, and the merged row
+          // had its lower bound above its upper. The search refused that as a malformed
+          // model, and the integral-row rounding read it as a row with no integer in it.
+          // Division by one scale is monotone, so a crossing is always between the kept
+          // row's own bound and one that came over. Within the tolerance, in the kept row's
+          // units and in the removed row's (the crossing times |scale|), the two bounds are
+          // one equality, written at the kept row's own bound: the kept row then holds
+          // exactly and the removed one to its tolerance. Beyond it the rows contradict
+          // each other and are the engine's to refuse, as before.
+          if (new_lower > new_upper) {
+            const double crossing = (new_lower - new_upper) * std::max(1.0, std::fabs(scale));
+            if (crossing > feasibility) break;
+            const double own = scaled_lower > work.row_lower[kr] ? new_upper : new_lower;
+            new_lower = own;
+            new_upper = own;
+          }
           Record record;
           record.kind = Record::Kind::kParallelRow;
           record.index = row;
@@ -2385,8 +2425,10 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
         {
           const auto pc = static_cast<std::size_t>(record.partner_column);
           const auto ce = static_cast<std::size_t>(record.column);
-          const bool partner_inside =
-              !at_bound(xk, original.col_lower[pc]) && !at_bound(xk, original.col_upper[pc]);
+          const auto [partner_at_lower, partner_at_upper] =
+              on_named_bound(solution.col_status[pc], at_bound(xk, original.col_lower[pc]),
+                             at_bound(xk, original.col_upper[pc]));
+          const bool partner_inside = !partner_at_lower && !partner_at_upper;
           const bool elim_at_lower = at_bound(xe, original.col_lower[ce]);
           const bool elim_at_upper = at_bound(xe, original.col_upper[ce]);
           if (solution.col_status[pc] != BasisStatus::kBasic && partner_inside &&
@@ -2587,8 +2629,8 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
     const double x = solution.col_value[c];
     const double lo = original.col_lower[c];
     const double hi = original.col_upper[c];
-    const bool at_lower = at_bound(x, lo);
-    const bool at_upper = at_bound(x, hi);
+    const auto [at_lower, at_upper] =
+        on_named_bound(solution.col_status[c], at_bound(x, lo), at_bound(x, hi));
 
     const double d = reduced_cost_of(it.column);
     const double signed_d = sense * d;
@@ -2837,8 +2879,26 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
       // constrains Y's SIGN. Interior beats at-a-bound as the thing that decides Y, because
       // "exactly zero" leaves no freedom to also satisfy a sign constraint from Y = 0 the way
       // an already-admissible at-bound column does.
+      //
+      // A KEEP SUBSTITUTED AWAY LATER IS STILL THIS ROW'S TO PRICE (#1354). When `keep` was
+      // itself removed afterwards as a free or implied-free column singleton, that record,
+      // replayed first, priced its own row and finalised keep - with this row's price left
+      // out, because keep received this row's fold. Skipping the row then left only elim's
+      // test, and an elim admissible at its bound priced it at zero: keep's true reduced
+      // cost came back as the whole fold (32 on a free column; -2 on one interior at -7.5).
+      // The singleton record treats keep as free (Andersen & Andersen 1995, sec. 6), so
+      // here it is interior and pins Y, which leaves its reduced cost at the zero that
+      // record set. A keep finalised by a singleton row is still left to that row.
+      const std::size_t keep_removed_at =
+          record.kind == Record::Kind::kDoubletonEquation
+              ? column_removed_at[static_cast<std::size_t>(record.partner_column)]
+              : result.records.size();
+      const bool keep_substituted =
+          keep_removed_at < result.records.size() &&
+          result.records[keep_removed_at].kind == Record::Kind::kFreeColumnSingleton;
       if (record.kind == Record::Kind::kDoubletonEquation &&
-          !dual_finalized[static_cast<std::size_t>(record.partner_column)]) {
+          (!dual_finalized[static_cast<std::size_t>(record.partner_column)] ||
+           keep_substituted)) {
         const auto pc = static_cast<std::size_t>(record.partner_column);
         const double a = record.coefficient;
         const double b = record.partner_coefficient;
@@ -2848,14 +2908,12 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
           const double v = solution.col_value[u];
           const double clo = original.col_lower[u];
           const double chi = original.col_upper[u];
-          const bool at_lo = at_bound(v, clo);
-          const bool at_hi = at_bound(v, chi);
-          return std::pair<bool, bool>(at_lo, at_hi);
+          return on_named_bound(solution.col_status[u], at_bound(v, clo), at_bound(v, chi));
         };
         const auto [elim_at_lo, elim_at_hi] = status_of(record.column);
         const auto [keep_at_lo, keep_at_hi] = status_of(record.partner_column);
         const bool elim_interior = !elim_at_lo && !elim_at_hi;
-        const bool keep_interior = !keep_at_lo && !keep_at_hi;
+        const bool keep_interior = (!keep_at_lo && !keep_at_hi) || keep_substituted;
 
         const double rco_elim = reduced_cost_of(record.column);
         const double rco_keep = reduced_cost_of(record.partner_column);
@@ -3041,6 +3099,35 @@ Solution postsolve(const Result& result, const Model& original, const Solution& 
           std::max(largest_change, std::fabs(solution.row_dual[r] - row_dual_before[r]));
     }
     if (largest_change == 0.0) break;
+  }
+
+  // A PARALLEL ROW'S PRICE IS HANDED BACK ONCE THE PRICES ARE FINAL (#1354). The replay
+  // above moves the kept row's dual to the removed row when the bound that binds was the
+  // removed row's, and it reads the kept row's dual as it stood then. When the kept row
+  // was itself removed afterwards (a free column singleton or a doubleton took it), its
+  // dual is only set by the passes just finished, the replay saw zero and moved nothing,
+  // and the whole price stayed on the kept row: 3 x0 - 4 x1 >= -3 kept, 6 x0 - 8 x1 <= -2
+  // merged into it, x1 free and then substituted away with the row, and the price of the
+  // upper bound, -1/2, came back on the >= row. The sign of the final dual says which
+  // bound it prices (in minimise space, positive the lower, negative the upper), so the
+  // same transfer is made here on that. a_removed = scale * a_kept, so A^T y is unchanged.
+  // Newest record first: with several rows merged into one, the last merge owns the bound
+  // if any of them does, and once the price has moved the kept row holds none to move.
+  for (std::size_t idx = result.records.size(); idx-- > 0;) {
+    const Record& record = result.records[idx];
+    if (record.kind != Record::Kind::kParallelRow || record.scale == 0.0) continue;
+    const auto removed = static_cast<std::size_t>(record.index);
+    const auto kept = static_cast<std::size_t>(record.partner_row);
+    const double signed_dual = sense * solution.row_dual[kept];
+    const bool lower_binds = signed_dual > 0.0;
+    const bool moves = (lower_binds && record.lower_from_removed) ||
+                       (signed_dual < 0.0 && record.upper_from_removed);
+    if (!moves) continue;
+    solution.row_dual[removed] = solution.row_dual[kept] / record.scale;
+    solution.row_dual[kept] = 0.0;
+    solution.row_status[removed] =
+        (lower_binds == (record.scale > 0.0)) ? BasisStatus::kAtLower : BasisStatus::kAtUpper;
+    solution.row_status[kept] = BasisStatus::kBasic;
   }
 
   // THE REDUCED COSTS ARE RECOMPUTED FROM THE FINAL ROW DUALS, ALL OF THEM (#157), AND

@@ -105,6 +105,7 @@ class LpParser {
   std::vector<double> col_cost_;
   std::vector<double> col_lower_;
   std::vector<double> col_upper_;
+  std::vector<char> col_upper_given_;  ///< the Bounds section set this column's upper bound
   std::vector<VarType> col_type_;
 
   std::unordered_map<std::string, Index> row_index_;    ///< every row name taken so far

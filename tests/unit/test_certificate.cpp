@@ -340,5 +340,89 @@ TEST(Certificate, ATinyRayOnABoundedModelIsNotAProof) {
   EXPECT_FALSE(ray_proves_unbounded(bounded, {1e-8}, &why));
 }
 
+TEST(Certificate, ARoundingSizeMultiplierDoesNotLendItsRowsCoefficientToTheColumn) {
+  // #1371. r1: 1e12 x1 >= 0, r2: x1 + x2 >= 5, x1 >= 0, 0 <= x2 <= 1: feasible at x1 = 5.
+  // With y = (1e-20, 1) the aggregate is (1 + 1e-8) x1 + x2 >= 5, and x1 has no upper bound,
+  // so it proves nothing; the multiplier 1e-20 on r1 made 1e12 the scale x1's coefficient was
+  // read against, 1 + 1e-8 read as zero, and the vector was accepted.
+  const Model model = make_lp({{1e12, 0.0}, {1.0, 1.0}}, {0.0, 5.0}, {kInfinity, kInfinity},
+                              {0.0, 0.0}, {0.0, 0.0}, {kInfinity, 1.0});
+  std::string why;
+  EXPECT_FALSE(farkas_proves_infeasible(model, {1e-20, 1.0}, &why)) << why;
+  EXPECT_NE(why.find("free upward"), std::string::npos) << why;
+  // The same with the multiplier at 1e-12: its term, 1, is real, and read against 1e12 it
+  // was zero as well.
+  EXPECT_FALSE(farkas_proves_infeasible(model, {1e-12, 1.0}, &why)) << why;
+}
+
+TEST(Certificate, ARoundingSizeMultiplierLeavesARealProofStanding) {
+  // The control: x >= 5 and x <= 2, and beside them 1e12 z >= 0 on a column with no upper
+  // bound, carrying a multiplier of 1e-16 of the largest (the size Netlib ceria3d offers).
+  // The rounding-size term drops out with its multiplier and the two rows still prove it.
+  const Model model =
+      make_lp({{1.0, 0.0}, {1.0, 0.0}, {0.0, 1e12}}, {5.0, -kInfinity, 0.0},
+              {kInfinity, 2.0, kInfinity}, {1.0, 0.0}, {0.0, 0.0}, {kInfinity, kInfinity});
+  std::string why;
+  EXPECT_TRUE(farkas_proves_infeasible(model, {1.0, -1.0, 1e-16}, &why)) << why;
+}
+
+// =========================================================================================
+// A ray is judged against the terms it is summed from, not against a floor (#1370)
+// =========================================================================================
+
+/// min cost * x + 0.5 * curvature * x^2 with x >= 0 and no rows.
+Model one_column_qp(double cost, double curvature) {
+  Model model = make_lp({}, {}, {}, {cost}, {0.0}, {kInfinity});
+  model.hessian.reset(1, 1);
+  model.hessian.add_entry(0, 0, curvature);
+  model.hessian.finalize();
+  return model;
+}
+
+TEST(Certificate, ARayAlongWhichTheObjectiveCurvesUpIsNotAProofHoweverShallowTheCurve) {
+  // min -0.001 x + 0.5 * 5e-8 x^2, x >= 0: strictly convex, optimum -10 at x = 20000. On the
+  // unit ray d'Qd = 5e-8, under an absolute 1e-7, so the ray passed as flat.
+  std::string why;
+  EXPECT_FALSE(ray_proves_unbounded(one_column_qp(-0.001, 5e-8), {1.0}, &why)) << why;
+  // The same optimum, -10 at x = 200000, with a curvature a hundred times smaller.
+  EXPECT_FALSE(ray_proves_unbounded(one_column_qp(-1e-4, 5e-10), {1.0}, &why)) << why;
+  // A direction along which Q really is flat is still a ray: Q = [[1, -1], [-1, 1]] and
+  // d = (1, 1), where the four terms of d'Qd cancel exactly.
+  Model flat = make_lp({}, {}, {}, {-1.0, -1.0}, {0.0, 0.0}, {kInfinity, kInfinity});
+  flat.hessian.reset(2, 2);
+  flat.hessian.add_entry(0, 0, 1.0);
+  flat.hessian.add_entry(1, 0, -1.0);
+  flat.hessian.add_entry(1, 1, 1.0);
+  flat.hessian.finalize();
+  EXPECT_TRUE(ray_proves_unbounded(flat, {1.0, 1.0}, &why)) << why;
+}
+
+TEST(Certificate, ARowIsJudgedAgainstItsOwnTermsNotTheLargestTermInTheModel) {
+  // min -x1 - x2, r1: 1e8 x1 - 1e8 x2 = 0, r2: x1 + x2 <= 10, x >= 0: optimum -10. Along
+  // d = (1, 1) r2 rises by 2 per unit step and has an upper bound; measured against the
+  // largest term anywhere, 1e8 in r1, a rise of 2 was under 1e-7 * 1e8 and read as no move.
+  const Model model = make_lp({{1e8, -1e8}, {1.0, 1.0}}, {0.0, -kInfinity}, {0.0, 10.0},
+                              {-1.0, -1.0}, {0.0, 0.0}, {kInfinity, kInfinity});
+  std::string why;
+  EXPECT_FALSE(ray_proves_unbounded(model, {1.0, 1.0}, &why)) << why;
+  // min -x, 5e-8 x <= 1, x >= 0: optimum -2e7. The row rises by 5e-8 per unit step, which is
+  // all of its one term; under an absolute 1e-7 it read as no move.
+  const Model small = make_lp({{5e-8}}, {-kInfinity}, {1.0}, {-1.0}, {0.0}, {kInfinity});
+  EXPECT_FALSE(ray_proves_unbounded(small, {1.0}, &why)) << why;
+  // A row the ray really does keep still passes: r1 alone, whose two terms cancel exactly.
+  const Model kept =
+      make_lp({{1e8, -1e8}}, {0.0}, {0.0}, {-1.0, -1.0}, {0.0, 0.0}, {kInfinity, kInfinity});
+  EXPECT_TRUE(ray_proves_unbounded(kept, {1.0, 1.0}, &why)) << why;
+}
+
+TEST(Certificate, AMoveABoundWaivesAsRoundingDoesNotCountTowardsTheImprovement) {
+  // min x1 - 1e9 x2, x1 >= 0, 0 <= x2 <= 1: optimum -1e9 at (0, 1). The ray (1, 1e-8) raises
+  // x2, which has an upper bound; that component is small enough to be waived as rounding in
+  // the direction, yet its cost term, -10, is what makes the ray improve at all.
+  const Model model = make_lp({}, {}, {}, {1.0, -1e9}, {0.0, 0.0}, {kInfinity, 1.0});
+  std::string why;
+  EXPECT_FALSE(ray_proves_unbounded(model, {1.0, 1e-8}, &why)) << why;
+}
+
 }  // namespace
 }  // namespace sankhya

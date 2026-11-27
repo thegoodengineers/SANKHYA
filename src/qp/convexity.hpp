@@ -8,18 +8,21 @@
 // provably positive semidefinite is REFUSED rather than solved to whatever the iteration lands
 // on.
 //
-// The test is an LDL^T factorization of Q + shift * I, shift = 1e-12 * max(1, largest |Q_ii|),
+// The test is an LDL^T factorization of Q + S, S diagonal with s_k = 1e-12 * max(1, |Q_kk|),
 // with symmetric pivoting on the DIAGONAL only, and every pivot required to be positive
 // (#835). 1e-12 is the threshold QPLIB counts a negative eigenvalue by; convexity.cpp records
-// the instances on either side of it. A positive semidefinite Q makes Q + shift * I positive
-// definite with its smallest eigenvalue at least shift, which a Cholesky-type factorization
-// completes on without pivoting as long as its rounding stays below that eigenvalue; so a
+// the instances on either side of it. A positive semidefinite Q makes Q + S positive
+// definite with x^T (Q + S) x >= sum s_k x_k^2, which a Cholesky-type factorization
+// completes on without pivoting as long as its rounding stays below that margin; so a
 // semidefinite Q passes whether it is singular, rank deficient or merely ill conditioned. A
-// pivot that is not positive exhibits a direction x with x^T Q x <= -shift * x^T x < 0, which
+// pivot that is not positive exhibits a direction x with x^T Q x <= -x^T S x < 0, which
 // is returned and checked against Q itself, in arithmetic accurate enough for its sign to be
 // trusted, before the model is called non-convex. That is a decision procedure with a stated
-// tolerance - an eigenvalue above -shift is accepted as rounding - rather than a heuristic,
-// which matters: guessing "convex" on a non-convex model is precisely the wrong error to make.
+// tolerance - curvature above -s_k on column k is accepted as rounding - rather than a
+// heuristic, which matters: guessing "convex" on a non-convex model is precisely the wrong
+// error to make. Each column's shift is measured against its own diagonal entry: one shift for
+// the whole matrix, measured against the largest, accepted diag(1e12, -0.5) as convex, and the
+// interior point then returned its saddle point as the optimum.
 //
 // The previous rule factorized Q itself and took a pivot within a slack of zero as exactly
 // zero, requiring the entries beside it to vanish too. In floating point that refused three

@@ -91,11 +91,11 @@ void aggregate(const Model& model, const std::vector<double>& y, std::vector<dou
     const auto u = static_cast<std::size_t>(j);
     for (Index k = 0; k < col.size; ++k) {
       const double multiplier = y[static_cast<std::size_t>(col.rows[k])];
+      // A rounding-size multiplier is zero to the checker, term and scale alike (#1371).
+      if (std::fabs(multiplier) <= tol::kZeroDrop * largest_y) continue;
       (*d)[u] += col.values[k] * multiplier;
-      if (multiplier != 0.0) {
-        (*threshold)[u] =
-            std::max((*threshold)[u], tol::kZeroDrop * largest_y * std::fabs(col.values[k]));
-      }
+      (*threshold)[u] =
+          std::max((*threshold)[u], tol::kZeroDrop * largest_y * std::fabs(col.values[k]));
     }
   }
 }

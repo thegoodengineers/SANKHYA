@@ -730,6 +730,151 @@ The CSVs are not committed because they carry branch stamps. Each is `option-ab-
 
 What would earn the default: a tree that does not pay for the rounds' rows. On enlight8 the search runs 38k-52k nodes in 60 s with the rounds kept, against 412k-509k without, and that is the whole loss.
 
+### The root cut loop's time share on the loop's own clock (`root_cut_time_from_loop`, opt-in)
+
+The root cut loop stops once the search has used 5% of `time_limit` (`kRootCutTimeShare`, 3 s at 60 s). That clock starts with the search, not with the loop, so the work before the first cut round spends the share too. The hypothesis was that this is what keeps exp-1-500-5-5, beasleyC3, mc11, p200x1188c (MIPLIB 2017) and mod011 (MIPLIB 3) at a weak root. `root_cut_time_from_loop=true` starts the clock at the loop's second round instead.
+
+**The diagnosis, on `main` at `23e40b5`, no code change.** Root only (`node_limit=1`), one thread, 3 seeds, `profile=detailed`, every log kept. An arm cannot carry its own `time_limit` (the CLI's `--time-limit` overrides the option), so the 60 s and 300 s legs are separate `bench.yml` jobs: runs 45523852605 and 45523866704 for the four MIPLIB 2017 models (both on a Xeon 6975P-C), 45523859891 (Xeon 6975P-C) and 45523872197 (EPYC 7763) for mod011. Rounds and root bound after cuts are per seed.
+
+| model | rounds at 60 s | stopped on | rounds at 300 s | stopped on | root after cuts, 60 s | root after cuts, 300 s | optimum |
+|---|---|---|---|---|---|---|---|
+| beasleyC3 | 1 / 1 / 1 | the time share | 20 / 15 / 12 | round cap, tailing off, tailing off | 240.4 / 240.5 / 240.5 | 541.9 / 528.3 / 509.7 | 754 |
+| mc11 | 4 / 1 / 1 | the time share | 9 / 9 / 15 | tailing off | 4749.9 / 1243.2 / 1265.8 | 6154.6 / 6268.2 / 7325.5 | 11689 |
+| mod011 | 1 / 1 / 1 | the time share | 1 / 7 / 14 | tailing off | -61.62M / -61.53M / -61.27M | -61.62M / -59.94M / -58.04M | -54.56M |
+| exp-1-500-5-5 | 16 / 19 / 18 | the time share | 20 / 20 / 20 | the round cap | 58098.8 / 63272.2 / 60884.7 | 63242.9 / 64181.0 / 63130.4 | 65887 |
+| p200x1188c | 2 / 2 / 2 | tailing off | 2 / 2 / 2 | tailing off | 7917.1 / 7875.4 / 7885.4 | the same | 15078 |
+
+- **beasleyC3, mc11, mod011: the hypothesis holds.** What spends the share is the symmetry search, which stops at its budget, and Feasibility Jump, both before the root LP: 1.3 s + 2.3 to 3.3 s on beasleyC3, 2.2 to 3.0 s of Feasibility Jump on mc11, 2.5 s + 0.4 to 0.8 s on mod011. The root LP and the first cut round together take under 0.3 s on each.
+- **mod011 seed 0 is not the clock.** Given the time, at 300 s or under the option at 60 s, its second round gains less than a tenth of the first, the loop stops on tailing off, probation fails and the root goes back to round 1.
+- **exp-1-500-5-5: the hypothesis fails as stated.** The work before its loop is 0.03 s. The rounds themselves use the share: 3.07 to 3.35 s of `root cuts` for 16 to 19 rounds, nearly all of it outside the LP re-solves (3.26 of 3.28 s on seed 0 in run 45524128363). Twenty rounds take 3.39 to 5.05 s on this CPU. Its round count follows the runner because a round costs about 0.2 s, not because of where the clock starts.
+- **p200x1188c: the clock is not the limit.** It stops on tailing off after two rounds whatever the limit.
+
+**The option on the same five models,** one binary (`51e39c2`), both arms in one job, 60 s, root only: runs 45524128363 (Xeon 6975P-C) and 45524135299 (EPYC 9V45). beasleyC3 goes from 1 round to 11 on every seed (root 240.4 to 491.2, 507.3, 507.5), mc11 from 4 / 2 / 1 to 8 / 8 / 8 (root 6111.7, 6238.5, 6222.1), mod011 from 1 / 1 / 1 to 1 / 7 / 14, which is its 300 s result exactly. exp-1-500-5-5 and p200x1188c are unchanged on every seed.
+
+**The gates.** `bench.yml` `ab-option`, one binary (`51e39c2`), `off` the defaults and `on` with `root_cut_time_from_loop=true`, both arms in one job per gate, 60 s, one thread, 3 seeds. Counts are matched / proved / verified.
+
+| gate | run | arm | seed 0 | seed 1 | seed 2 | all |
+|---|---|---|---|---|---|---|
+| MIPLIB 3, 65 models | 45524294564 | off | 46/45/64 | 46/45/65 | 45/45/64 | 137/135/193 |
+| | | on | 46/45/64 | 46/45/64 | 45/45/64 | 137/135/192 |
+| tier 1, 30 models | 45524300442 | off | 18/11/30 | 19/11/30 | 17/11/29 | 54/33/89 |
+| | | on | 18/11/30 | 19/11/30 | 17/11/29 | 54/33/89 |
+| 25 MIPLIB 2017 targets | 45524306367 | off | 5/1/19 | 6/2/19 | 5/2/19 | 16/5/57 |
+| | | on | 5/1/19 | 6/2/19 | 5/2/19 | 16/5/57 |
+
+The targets job also ran exp-1-500-5-5 and mc11: 0/0/2 on every seed in both arms.
+
+It fails the rule: no proof is gained on any set, and one verified point is lost.
+
+- **dano3mip seed 1** (MIPLIB 3). The root LP takes 26 s and the first cut round's re-solve, which starts from the slack basis, another 25 s (83,669 iterations). `off` then stops the loop on the time share and the propagation dive finds the run's only point, 768.375, at 59.5 s of 60. `on` gives the loop a fresh 3 s with under 9 s left, runs two more rounds (root 576.302 to 576.347), and the run ends at the limit with no point. Seeds 0 and 2 end at the limit with no cut round finished and no point, in both arms.
+- **Proofs and matches:** none gained, none lost, on any seed of any set.
+
+The option changed the round count in 11 of the 366 solves per arm, and only on models the diagnosis named, plus rentacar and dano3mip:
+
+- **mod011** seeds 1 and 2: 7 and 14 rounds, gap at 60 s 11.1% to 4.0% and 7.1% to 2.6%, at 2,603 and 2,311 nodes against 7,320 and 7,147. Still unproved. Seed 0 is unchanged.
+- **rentacar** seed 1: 1 round to 4, proved in 11.2 s against 13.0 s.
+- **beasleyC3**, every seed: dual bound at 60 s 285 to 289 becomes 506 to 524, the incumbent 845 to 877 becomes 786 to 805 (optimum 754), at 7.8k to 9.6k nodes against 26k to 31k.
+- **mc11**, every seed: dual bound 1396 to 4837 becomes 6213 to 6635, but the incumbent is worse on every seed, 12258 to 13253 against 13617 to 14727 (optimum 11689), at about half the nodes.
+- **exp-1-500-5-5** seed 2: 18 rounds to 19, on 0.03 s of extra clock. Unproved in all six runs, at 16 to 19 rounds.
+
+The gate CSVs are not committed because they carry a branch stamp; each is in its run's artifact. The diagnosis CSVs are on `main`'s stamp: `bench/results/option-ab-miplib2017-root-loop-clock-{60s,300s}-23e40b5.csv` and `option-ab-miplib3-mod011-root-loop-clock-{60s,300s}-23e40b5.csv`.
+
+What would earn the default: a proof. On mod011 that is a tree that closes 2.6% in the time left, and on exp-1-500-5-5 a cheaper separation round or a budget counted in the loop's own work, since its 20 rounds do not fit 3 s on every runner. A clock that also counted the first round, as a share of the time left when it began, would leave dano3mip alone (its first round alone is 25 s); that variant was written and not gated, because it could not gain a proof this one did not.
+
+### The first root cut round's re-solve from the root basis (`mip_root_cut_warm_start`, PR #1385, opt-in)
+
+The re-solve after the first root cut round started from the slack basis, while rounds 2 onward and the tree rounds start from the node's own optimal basis. On dano3mip that cold re-solve is 83,669 iterations and 25 s of the 60 s limit (run 45524294564). `mip_root_cut_warm_start=true` starts round 1 from the root LP's optimal basis, with the cut rows' logicals basic (Koberstein 2005, sec. 4.5).
+
+Gate: `ab-option` on one binary (`e6ab526`), both arms in one job (run 45917309733, Xeon 6975P-C), all 65 MIPLIB 3 models, 3 seeds, 60 s, one thread. Counts are matched / proved / verified.
+
+| arm | seed 0 | seed 1 | seed 2 | all |
+|---|---|---|---|---|
+| off (the default) | 46/45/64 | 44/43/65 | 44/44/64 | 134/132/193 |
+| `mip_root_cut_warm_start=true` | 49/44/65 | 46/45/64 | 44/44/65 | 139/133/194 |
+
+It fails the rule: two proofs and one verified point are lost.
+
+- **Proofs lost:**
+  - air05 seed 2: `off` proves it in 40.3 s. `on` reaches 26448 at the limit, against an optimum of 26374.
+  - qiu seed 0: `off` proves it in 52.4 s. `on` ends at the limit on the optimal point, with bound -153.7.
+- **Point lost:** arki001 seed 1 ends at the limit at node 1 with no point. `off` found 7588993.4 after 22,435 nodes.
+- **Proofs gained:** 10teams seed 1 (55.1 s), air04 seed 2 (52.8 s) and air05 seed 1 (55.6 s).
+- **Points gained:** dano3mip seeds 0 and 2, 768.375 at 45-57 s. `off` finds no point on either.
+- **Matches gained:** pk1 seed 0 (11, the optimum, against 18), rout seed 0 and 10teams seed 0.
+
+A different start gives a different optimal vertex at the root, so the cut rounds, the tree and the proofs that finish within seconds of the limit all change, in both directions. The MIPLIB 2017 tier-1 and 25-target gates were not run, because this gate already fails. The CSV is not committed, because it carries a branch stamp. It is `option-ab-miplib3-root-cut-warm-start-e6ab526.csv` in the run's artifact.
+
+What would earn the default: a gate that warm-starts only where the cold re-solve is a large share of the limit, as on dano3mip. It could be read from the root LP's own iteration count. Then these gates again. arki001 seed 1 also needs a diagnosis of why the run ends at node 1 under the switch.
+
+### drayage-100-23 and drayage-25-23: probing closes the root, and no heuristic closes the gap (diagnosis only)
+
+Run 45523877841, `main` at `23e40b5`, 60 s, one thread, 3 seeds, five arms on one binary in one job (`bench/results/option-ab-miplib2017-drayage-probing-23e40b5.csv`). Every arm scores 0 matched, 0 proved, 2 verified on every seed.
+
+| arm | root, 100-23 | root, 25-23 | incumbents at 60 s, 100-23 | incumbents at 60 s, 25-23 |
+|---|---|---|---|---|
+| defaults | 11714.14 | 11714.14 | 150501 / 367632 / 402059 | 417682 / 345227 / 395451 |
+| `presolve_probing=true` | 103333.874 | 99718.79 | 111437 / 112477 / 132070 | 309096 / 112489 / 110097 |
+| and `presolve_probing_continuous_bounds=true` | 103333.874 | 99718.79 | the same | the same |
+| and `mip_heur_rens=on` | 103333.874 | 99718.79 | the same | the same |
+| and `mip_heuristics=true` | 103333.874 | 99718.79 | 104674 / 110097 / 119252 | 110097 / 103334 / 110097 |
+
+The optima are 103333.874 and 101282.647.
+
+- **Probing puts the root of drayage-100-23 at its optimum** and that of drayage-25-23 at 0.983 of the way, before any cut. It fixes no binary by an infeasible probe (`probing_fixings` 0) and tightens 3,341 and 3,315 bounds, so the default gate, which counts fixings against a fifth of the integer columns, writes nothing.
+- **The integer columns' bounds are enough.** The arm that also writes the continuous columns' bounds is identical on every seed. That had not been measured on these two models since #1244 made integer-only bounds the default.
+- **No arm finds the optimum, so nothing is proved.** With the bound at the optimum the search needs the point, and at 60 s the best incumbent is 1.3% above it on drayage-100-23 and 2.0% on drayage-25-23, both under `mip_heuristics=true`.
+- **RENS proposes nothing.** Under `mip_heuristics=true` it runs once per solve, takes 0.02 to 0.20 s and one sub-MIP node, and proposes no point in 6 of 6 runs.
+- **The `mip_heur_rens=on` arm tested nothing.** Under `mip_heuristics=auto` every optional heuristic stands down once there is an incumbent, whatever its own switch says, and Feasibility Jump has one before the root LP (first point at 2.7 to 3.2 s, most of it the symmetry search). RENS was not called in that arm, and its runs are the probing arm's.
+
+Not measured: how many integer columns end fixed after probing because both probes agree, which is the count a wider gate would read. What would earn a gate: a count that is at or above the share on these two models and below it on the MIPLIB 3 models that lost proofs under probing (10teams, air05, bell5), and a primal heuristic that reaches the optimum once the bound is there, because without one the gate moves a bound and no verdict.
+
+### The supernodal numeric phase for the QP interior point (`qp_ipm_supernodal`, opt-in)
+
+The QP interior point factored its augmented system with the scalar up-looking LDL^T and no dense-node postponement, while `src/la` has both a supernodal numeric phase (#470) and the AMD dense rule (#473) that the LP interior point's proximal path uses. Both were wired to the QP loop behind options and measured together.
+
+Setup: `bench.yml` `ab-option` on one binary, `ed6e3400`, Maros-Meszaros 138 at 60 s, three arms in one job (run 45524023299): `base` (defaults), `postpone` (`qp_ipm_postpone_dense=true`), `both` (that and `qp_ipm_supernodal=true`). Counts are passed / verified.
+
+| arm | passed | verified | SGM time, shift 10 s, failures at 60 s |
+|---|---|---|---|
+| base | 129 | 135 | 2.972 s |
+| postpone | 129 | 135 | 2.849 s |
+| both | 120 | 126 | 4.104 s |
+
+The supernodal phase did what it was for on the factor-bound models: cvxqp2l 33.8 s to 16.0 s, cvxqp1l 44.5 to 26.5, cvxqp3l 58.9 to 37.5, cont-200 7.6 to 4.3, cont-201 7.2 to 4.2, boyd2 40.3 to 12.5. But the interior point ended in a numerical error and fell back to Condat-Vu on qcapri, qpcboei1, qpcboei2, qscfxm3, qseba, qship12l, qship12s, powell20 and boyd1, each of which passes in the other two arms, and cont-300 came back optimal but no longer matched the reference. Postponement alone changed no status, passed or verified flag (stadat1 failed both ways). It is the default since this PR, in the interior point's factorization and in the active-set finish's, gated against `main` at `23e40b50` with both arms in one job (run 45539507204): 129 / 135 both ways, no row's status changed, boyd1 31.7 s to 3.4 s and boyd2 36.4 s to 10.5 s, SGM 2.830 s to 2.649 s. Why the supernodal factor fails these nine was not traced: the scalar and supernodal paths share the pivot rule, so the next step is to compare the two factors on qpcboei1's first KKT matrix. `qp_ipm_supernodal` stays, off. The CSV was not committed (branch stamp).
+
+### Equilibrating every convex QP before the interior point (`qp_prescale` as the first attempt, not merged in that form)
+
+The QP interior point does no scaling, and the two Maros-Meszaros instances it stalled on (qpilotno, stadat1) are solved by both rival interior points that equilibrate first. The change ran the QP engines on the presolved model equilibrated by 20 Ruiz rounds on the KKT matrix [Q A'; A 0], factors rounded to powers of two, no cost scaling, and mapped the answer back before the status guard and the KKT gate.
+
+Setup: `bench.yml` `ab-option` on one binary, `40caf045`, Maros-Meszaros 138 at 60 s, both arms in one job (run 45524412639). Counts are passed / verified.
+
+| arm | passed | verified | gained | lost |
+|---|---|---|---|---|
+| off | 129 | 135 | | |
+| on, every QP equilibrated first | 128 | 136 | qpilotno (iteration_limit to optimal, 38 iterations), stadat1 (iteration_limit to optimal, 187) | boyd2 (optimal to a stall at 210 iterations, gap 0.11), qbandm (optimal to feasible: dual feasibility 6.5e-3 relative on column 179), qscagr25 (optimal to feasible: one product at 1.05e-6) |
+
+Where it worked it worked well: qfffff80 176 iterations to 38 (3.79 s to 0.20 s), qship12l 28 to 21 (7.2 s to 0.93 s), qscfxm3 13.1 s to 0.17 s. But the interior point stops on the scaled model's relative measures, and on qbandm and qscagr25 a scaled-space optimum is refused by the gate in the model's own units; boyd2 converges unscaled and stalls scaled. cvxqp2l went from 32.5 s to 63.8 s and boyd1 from 31.5 s to 46.2 s, both still optimal.
+
+What shipped instead: the same equilibration as a retry, only after the unscaled interior point stalls or ends in a numerical error, adopted only when optimal (run 45539497594, one binary at `9efca8d2`: 129 / 135 to 131 / 137, qpilotno and stadat1 gained, no other row's status or flags changed). What would make it the first attempt: the three relative stop measures evaluated on unscaled residuals inside the loop, which is the second step this entry leaves undone. The CSVs were not committed (branch stamps).
+
+### Ending the QP interior point's extra iterations on the KKT gate's own verdict (first form of the finish trigger, not merged in that form)
+
+Once the three relative measures are met, the QP interior point takes up to five more iterations to bring every complementarity product under an absolute 1e-7, and then runs the active-set finish (#980) if one is still above it. The in-process KKT gate that labels the answer judges each product relative to the size of the numbers its slack is a difference of (#806), so both steps also run on points the gate would accept. The diagnostic, `qp_ipm_finish=false` against the default on `main` at `23e40b50` (run 45523598264, Maros-Meszaros 138 at 60 s): 124 passed without the finish against 129 with it (boyd1, qgrow15, qseba, qship12l and qship12s need it), and on instances optimal both ways the finish is most of the time: qscfxm3 12.3 s against 0.16 s, qfffff80 3.7 s against 1.4 s, qpcboei1 1.0 s against 0.055 s, qcapri 0.37 s against 0.053 s.
+
+The first form put the current iterate to the gate itself (`check_qp_optimality` on the model the interior point was handed) and, when it accepted, both ended the extra iterations and skipped the finish. `--base-binary`, base `23e40b50`, new `a3390ae9`, both arms in one job (run 45525191570): 129 passed to 128. qisrael stopped one iteration earlier (28 against 29), the gate accepted that iterate on the presolved model, and after postsolve one product was 6.7e-5 relative on column 44, so the label was withdrawn to feasible. The model the interior point sees is the presolved one; the gate that counts is on the original.
+
+What shipped: the extra iterations keep their absolute target, and only the finish is skipped on a point the gate accepts, at the iterate where those iterations already ended. Base `23e40b50`, new `699cfd3a` (run 45539517363): 129 passed / 135 verified both ways, no row's status changed, qscfxm3 7.40 s to 0.114 s, qfffff80 2.25 s to 0.88 s, qpcboei1 0.607 s to 0.037 s, qcapri 0.214 s to 0.035 s, qpcboei2 0.037 s to 0.008 s. The CSVs were not committed (branch stamps).
+
+### More extra iterations past the relative stop for qforplan (#1178, branch `diag/1178-qforplan-trace`, not merged)
+
+Once the three relative measures are met, the QP interior point takes at most five more iterations (`kIterationsForProducts`) to bring the complementarity products under 1e-7. On qforplan the loop stops at iteration 30 with a row whose multiplier is -5.869e7 and whose activity is 1.161e-11 off its bound, a product of 6.8e-4. The KKT gate refuses that point (3.651e-6 relative on row 42), and the answer is labelled `feasible` (verified). A logging build allowed 5, 10, 20 and 50 extra iterations (`bench.yml` `ab-option`, one binary at `cdee9314`, 60 s, run 45914828994; then `959d8141`, run 45915965604).
+
+Two more Mehrotra iterations close the products: alpha 0.995, mu from 3.4e-6 to 8.7e-11, and the largest product 1.7e-8 at iteration 32. Every limit of 10 or more stops there. The gate then accepts the point and labels it `optimal`, but `tools/verify_solution.py` refuses it: complementary slackness 1.141e-6 on column `A   81 1`. That column is basic at x = 2800 above its lower bound of 0. Its derived reduced cost is summed from 58 terms with sum |terms| = 2.592e6. The gate's summation gives -2^-32 (0.41 eps * sum, product 6.5e-7, pass); the verifier's order gives about 4.1e-10 (0.71 eps * sum, product 1.141e-6, fail). The point is otherwise exact: primal 1.3e-16, dual 7.7e-17 and gap 1.3e-16 relative, 5.3e-9 from the reference. qgfrdxpn and qshell do not move under any limit; both stay `feasible` (verified).
+
+Not merged. On its own the change turns a verified `feasible` into an `optimal` that the verifier refuses, which loses a verified point. What stands in the way now is not the interior point. It is the column rule that also decides qgfrdxpn and qshell: a basic column's reduced cost at rounding level, times a large value. The rule that would pass all three, and why it is sound, is written up on #1178 for the owner to decide. The CSVs were not committed (branch stamps).
+
+liswet8, the other instance #1178 lists, needs no change. It is `optimal` and verified at 714.47006 on `main` (run 45857498844), and it fails `passed` only against the published erratum in `data/maros-meszaros/reference_errata.json`.
+
 ## 3. Built opt-in, awaiting the measurement
 
 Nothing has demoted these. Each is off by default until its A/B on `main` says what it changes, per the rule that a default is earned by a number.

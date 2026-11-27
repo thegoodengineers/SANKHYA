@@ -124,72 +124,134 @@ bool BranchAndBound::propagate() {
   return true;
 }
 
+// One row of bound propagation (Savelsbergh, "Preprocessing and probing techniques for mixed
+// integer programming problems", ORSA J. Computing 6, 1994; Achterberg, "Constraint Integer
+// Programming", TU Berlin 2007, sec. 7.1): with the row's activity range over the box,
+//     a_j x_j <= row_upper - (min activity - a_j's own share)
+//     a_j x_j >= row_lower - (max activity - a_j's own share).
+//
+// HOW FAR THE SUMS ARE TRUSTED (#1359, #1360). The range is a sum of rounded products and the
+// column's share is subtracted back out of it, so what is left is the rest of the row only up
+// to the rounding of the whole sum: beside a term of 1e17 a term of 10001 is already off by
+// one, and beside 1e20 a term of 8 is gone. Two rules keep a deduction inside what the
+// arithmetic proved.
+//   1. A bound at or past 1e30 is no bound (is_finite_bound), as everywhere else. Its product
+//      with a coefficient is a finite number, and was summed as one.
+//   2. Every implied bound is moved outward by a bound on its rounding error, before it is
+//      compared with the column's bound and before an integer column is rounded to a whole
+//      number. The n products t_k = fl(a_k b_k), their recursive sum, the subtraction of the
+//      column's share, the subtraction from the row bound and the division each round once.
+//      Higham ("Accuracy and Stability of Numerical Algorithms", 2nd ed., SIAM 2002, sec.
+//      4.2) bounds the sum's error by (n - 1) u sum |t_k| with u = eps / 2; with the other
+//      steps the quotient v is off by at most (n + 2) u (sum |t_k| + |row bound|) / |a_j| +
+//      u |v| to first order. The margin is (n + 3) eps (sum |t_k| + |row bound|) / |a_j| +
+//      eps |v|, more than twice that. It is zero when nothing was rounded: every coefficient
+//      and bound an integer, every sum below 2^40 (products and partial sums are then exact)
+//      and a_j dividing the result. The two activity tests that call the row infeasible give
+//      up the same margin. Presolve's bound propagation has the same rule (presolve.cpp).
+// A loosened bound is still an implied bound: this weakens a deduction and touches no
+// tolerance. On a row of magnitude 1e4 the margin is 1e-11.
 bool BranchAndBound::propagate_row(Index i, const CsrView& by_row, bool* changed) {
+  constexpr double kEps = std::numeric_limits<double>::epsilon();
+  constexpr double kExactInteger = 1099511627776.0;  // 2^40
+  const auto integral = [](double v) {
+    return std::fabs(v) < kExactInteger &&
+           v == static_cast<double>(static_cast<std::int64_t>(v));
+  };
   const auto ui = static_cast<std::size_t>(i);
   const ColumnView row = by_row.row(i);
+  const double row_lower = working_.row_lower[ui];
+  const double row_upper = working_.row_upper[ui];
+  const bool has_lower = is_finite_bound(row_lower);
+  const bool has_upper = is_finite_bound(row_upper);
 
-  // Activity bounds implied by the current column bounds.
+  // Activity bounds implied by the current column bounds, the magnitude of what went into
+  // each (its row bound included), and whether every number read was an integer.
   double min_activity = 0.0;
   double max_activity = 0.0;
+  double min_magnitude = has_upper ? std::fabs(row_upper) : 0.0;
+  double max_magnitude = has_lower ? std::fabs(row_lower) : 0.0;
   bool min_infinite = false;
   bool max_infinite = false;
+  bool exact = (!has_upper || integral(row_upper)) && (!has_lower || integral(row_lower));
+  double terms = 0.0;
   for (Index k = 0; k < row.size; ++k) {
     const auto j = static_cast<std::size_t>(row.rows[k]);
     const double a = row.values[k];
-    const double lo = working_.col_lower[j];
-    const double hi = working_.col_upper[j];
-    const double low_term = a > 0.0 ? a * lo : a * hi;
-    const double high_term = a > 0.0 ? a * hi : a * lo;
-    if (std::isinf(low_term))
+    if (a == 0.0) continue;
+    const double low = a > 0.0 ? working_.col_lower[j] : working_.col_upper[j];
+    const double high = a > 0.0 ? working_.col_upper[j] : working_.col_lower[j];
+    terms += 1.0;
+    exact = exact && integral(a);
+    if (is_finite_bound(low)) {
+      const double term = a * low;
+      min_activity += term;
+      min_magnitude += std::fabs(term);
+      exact = exact && integral(low);
+    } else {
       min_infinite = true;
-    else
-      min_activity += low_term;
-    if (std::isinf(high_term))
+    }
+    if (is_finite_bound(high)) {
+      const double term = a * high;
+      max_activity += term;
+      max_magnitude += std::fabs(term);
+      exact = exact && integral(high);
+    } else {
       max_infinite = true;
-    else
-      max_activity += high_term;
+    }
   }
+  // A sum that overflowed proves nothing.
+  min_infinite = min_infinite || !std::isfinite(min_magnitude);
+  max_infinite = max_infinite || !std::isfinite(max_magnitude);
+  exact = exact && min_magnitude < kExactInteger && max_magnitude < kExactInteger;
+  const double min_rounding = exact ? 0.0 : (terms + 3.0) * kEps * min_magnitude;
+  const double max_rounding = exact ? 0.0 : (terms + 3.0) * kEps * max_magnitude;
 
   // Infeasible by activity alone: no assignment inside the current box can satisfy it.
-  if (!min_infinite && is_finite_bound(working_.row_upper[ui]) &&
-      min_activity > working_.row_upper[ui] + tol::kPrimalFeasibility) {
+  if (!min_infinite && has_upper &&
+      min_activity - min_rounding > row_upper + tol::kPrimalFeasibility) {
     return false;
   }
-  if (!max_infinite && is_finite_bound(working_.row_lower[ui]) &&
-      max_activity < working_.row_lower[ui] - tol::kPrimalFeasibility) {
+  if (!max_infinite && has_lower &&
+      max_activity + max_rounding < row_lower - tol::kPrimalFeasibility) {
     return false;
   }
 
-  // Implied column bounds. For a_j > 0 and a row upper bound:
-  //   a_j x_j <= ru - (min activity of the others)
+  // Implied column bounds. A side that is not infinite has every column's share finite.
   for (Index k = 0; k < row.size; ++k) {
     const auto j = static_cast<std::size_t>(row.rows[k]);
     const double a = row.values[k];
     if (a == 0.0) continue;
     const double lo = working_.col_lower[j];
     const double hi = working_.col_upper[j];
-    const double own_low = a > 0.0 ? a * lo : a * hi;
-    const double own_high = a > 0.0 ? a * hi : a * lo;
+    // (row bound - rest of the row) / a, moved outward by the rounding it can carry.
+    const auto implied = [&](double side, double rest, double rounding, bool upward) {
+      const double numerator = side - rest;
+      const double v = numerator / a;
+      const double margin =
+          exact && v * a == numerator ? 0.0 : rounding / std::fabs(a) + kEps * std::fabs(v);
+      return upward ? v + margin : v - margin;
+    };
 
-    if (!min_infinite && is_finite_bound(working_.row_upper[ui]) && !std::isinf(own_low)) {
-      const double slack = working_.row_upper[ui] - (min_activity - own_low);
-      const double implied = slack / a;
-      if (a > 0.0 && implied < hi - tol::kPropagationMinChange) {
-        tighten_upper(j, implied);
+    if (!min_infinite && has_upper) {
+      const double rest = min_activity - (a > 0.0 ? a * lo : a * hi);
+      const double derived = implied(row_upper, rest, min_rounding, a > 0.0);
+      if (a > 0.0 && derived < hi - tol::kPropagationMinChange) {
+        tighten_upper(j, derived);
         *changed = true;
-      } else if (a < 0.0 && implied > lo + tol::kPropagationMinChange) {
-        tighten_lower(j, implied);
+      } else if (a < 0.0 && derived > lo + tol::kPropagationMinChange) {
+        tighten_lower(j, derived);
         *changed = true;
       }
     }
-    if (!max_infinite && is_finite_bound(working_.row_lower[ui]) && !std::isinf(own_high)) {
-      const double slack = working_.row_lower[ui] - (max_activity - own_high);
-      const double implied = slack / a;
-      if (a > 0.0 && implied > lo + tol::kPropagationMinChange) {
-        tighten_lower(j, implied);
+    if (!max_infinite && has_lower) {
+      const double rest = max_activity - (a > 0.0 ? a * hi : a * lo);
+      const double derived = implied(row_lower, rest, max_rounding, a < 0.0);
+      if (a > 0.0 && derived > lo + tol::kPropagationMinChange) {
+        tighten_lower(j, derived);
         *changed = true;
-      } else if (a < 0.0 && implied < hi - tol::kPropagationMinChange) {
-        tighten_upper(j, implied);
+      } else if (a < 0.0 && derived < hi - tol::kPropagationMinChange) {
+        tighten_upper(j, derived);
         *changed = true;
       }
     }

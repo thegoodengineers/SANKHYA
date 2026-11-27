@@ -46,7 +46,20 @@ std::vector<double> unit_scaled(const std::vector<double>& v) {
 
 bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y_given,
                               std::string* why) {
-  const std::vector<double> y = unit_scaled(y_given);
+  std::vector<double> y = unit_scaled(y_given);
+  // A multiplier at rounding size (at most kZeroDrop of the largest, which is 1 here) drops
+  // its own term and nothing else (#1371): it is set to zero, in the row bounds and in the
+  // aggregate alike, before anything below reads it. That is sound whatever its size,
+  // because any vector with the signs below is a Farkas vector, and the one checked is the
+  // one with these entries zero, in full. Kept, it gave its row's matrix entries to the
+  // scale each column's coefficient is read against (#762): with y = (1e-20, 1) on
+  // 1e12 x1 >= 0 and x1 + x2 >= 5, the scale of x1 was 1e12, its coefficient 1 + 1e-8 read
+  // as zero, the missing upper bound of x1 was never consulted, and a feasible model was
+  // "proved" infeasible. Netlib ceria3d's multiplier of 1e-16 of the largest (the case #762
+  // drops) is dropped here as well, with its term.
+  for (double& v : y) {
+    if (std::fabs(v) <= tol::kZeroDrop) v = 0.0;
+  }
   const Index m = model.num_rows();
   const Index n = model.num_cols();
   if (static_cast<Index>(y.size()) != m) {
@@ -114,7 +127,7 @@ bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y_g
     // under max(1, largest term) that 7.3e-12 read as zero, the missing bound was never
     // consulted, and a feasible model was "proved" infeasible - tools/verify_solution.py,
     // which had the same floor, agreed. A multiplier that is itself rounding (1e-16 of the
-    // largest, as on Netlib ceria3d) still leaves only a rounding-size coefficient.
+    // largest, as on Netlib ceria3d) was zeroed above and is in neither the sum nor the scale.
     const double drop = tol::kZeroDrop * column_scale[u];
     if (d[u] > drop) {
       if (!finite(model.col_upper[u])) {
@@ -158,7 +171,7 @@ bool farkas_proves_infeasible(const Model& model, const std::vector<double>& y_g
 
 bool ray_proves_unbounded(const Model& model, const std::vector<double>& d_given,
                           std::string* why) {
-  const std::vector<double> d = unit_scaled(d_given);
+  std::vector<double> d = unit_scaled(d_given);
   const Index m = model.num_rows();
   const Index n = model.num_cols();
   if (static_cast<Index>(d.size()) != n) {
@@ -177,31 +190,46 @@ bool ray_proves_unbounded(const Model& model, const std::vector<double>& d_given
 
   for (Index j = 0; j < n; ++j) {
     const auto u = static_cast<std::size_t>(j);
-    if (d[u] > moving && finite(model.col_upper[u])) {
-      explain(why, fmt::format("the ray raises column {}, which has an upper bound", j));
+    const bool against_upper = d[u] > 0.0 && finite(model.col_upper[u]);
+    const bool against_lower = d[u] < 0.0 && finite(model.col_lower[u]);
+    if (!against_upper && !against_lower) continue;
+    if (std::fabs(d[u]) > moving) {
+      explain(why, fmt::format("the ray {} column {}, which has {} bound",
+                               d[u] > 0.0 ? "raises" : "lowers", j,
+                               d[u] > 0.0 ? "an upper" : "a lower"));
       return false;
     }
-    if (d[u] < -moving && finite(model.col_lower[u])) {
-      explain(why, fmt::format("the ray lowers column {}, which has a lower bound", j));
-      return false;
-    }
+    // A move against a bound waived as rounding is DROPPED from the ray, not kept (#1370):
+    // everything below is judged on the ray without it. Kept, its cost term counted towards
+    // the improvement: min x1 - 1e9 x2 with 0 <= x2 <= 1 and the ray (1, 1e-8) raised x2
+    // against its bound by a waived 1e-8, and that 1e-8 times -1e9 is what made the ray
+    // improve. Dropping it is sound whatever its size, since the ray then checked is the one
+    // with this component zero, in full.
+    d[u] = 0.0;
   }
 
+  // Each row is judged against its OWN terms (#1370): its activity along the ray counts as no
+  // move only below kPrimalFeasibility of the largest term it is summed from, which is where
+  // its rounding lives. The threshold was kPrimalFeasibility * max(1, largest term anywhere
+  // in the model): with 1e8 x1 - 1e8 x2 = 0 beside x1 + x2 <= 10 and d = (1, 1), the second
+  // row rose by 2 against a threshold of 10, and under the floor of 1 the row 5e-8 x <= 1
+  // rose by all of its one term, 5e-8, unseen. Both models are bounded.
   std::vector<double> activity(static_cast<std::size_t>(m), 0.0);
-  double scale = 0.0;
+  std::vector<double> row_scale(static_cast<std::size_t>(m), 0.0);
   for (Index j = 0; j < n; ++j) {
     const double step = d[static_cast<std::size_t>(j)];
     if (step == 0.0) continue;
     const ColumnView column = model.matrix.column(j);
     for (Index k = 0; k < column.size; ++k) {
+      const auto r = static_cast<std::size_t>(column.rows[k]);
       const double term = column.values[k] * step;
-      activity[static_cast<std::size_t>(column.rows[k])] += term;
-      scale = std::max(scale, std::fabs(term));
+      activity[r] += term;
+      row_scale[r] = std::max(row_scale[r], std::fabs(term));
     }
   }
-  const double row_moving = tol::kPrimalFeasibility * std::max(1.0, scale);
   for (Index i = 0; i < m; ++i) {
     const auto u = static_cast<std::size_t>(i);
+    const double row_moving = tol::kPrimalFeasibility * row_scale[u];
     if (activity[u] > row_moving && finite(model.row_upper[u])) {
       explain(why, fmt::format("the ray raises row {}, which has an upper bound", i));
       return false;
@@ -232,18 +260,23 @@ bool ray_proves_unbounded(const Model& model, const std::vector<double>& d_given
   // A quadratic objective curving back up makes the improvement local, not unbounded.
   // The Hessian is stored as its LOWER TRIANGLE, so an off-diagonal entry stands for two
   // entries of Q and contributes to both products - the same expansion src/qp/ uses.
+  // d'Qd is judged against the largest of the terms it is summed from (#1370), not against
+  // max(1, |d'Qd|): min -0.001 x + 0.5 * 5e-8 x^2, x >= 0, has its optimum -10 at x = 20000,
+  // yet on the unit ray d'Qd = 5e-8 was under 1e-7 * 1 and the ray read as flat.
   if (model.hessian.num_nonzeros() > 0) {
     double curvature = 0.0;
+    double curvature_scale = 0.0;
     for (Index j = 0; j < model.hessian.num_cols(); ++j) {
       const ColumnView column = model.hessian.column(j);
       const auto uj = static_cast<std::size_t>(j);
       for (Index k = 0; k < column.size; ++k) {
         const auto ui = static_cast<std::size_t>(column.rows[k]);
-        curvature += column.values[k] * d[uj] * d[ui];
-        if (column.rows[k] != j) curvature += column.values[k] * d[ui] * d[uj];
+        const double term = column.values[k] * d[uj] * d[ui];
+        curvature += column.rows[k] != j ? 2.0 * term : term;
+        curvature_scale = std::max(curvature_scale, std::fabs(term));
       }
     }
-    if (curvature > tol::kPrimalFeasibility * std::max(1.0, std::fabs(curvature))) {
+    if (curvature > tol::kPrimalFeasibility * curvature_scale) {
       explain(why, fmt::format("d'Qd = {:.12g} is positive, so the objective curves back up "
                                "along the ray",
                                curvature));

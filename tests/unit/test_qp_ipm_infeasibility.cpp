@@ -362,5 +362,41 @@ TEST(QpIpmInfeasibility, SolveCarriesTheCertificateThroughToTheCaller) {
   }
 }
 
+/// min cost * x + 0.5 * curvature * x^2 with x >= 0 and no rows: strictly convex for a
+/// positive curvature, optimum -cost^2 / (2 curvature) at x = -cost / curvature.
+Model shallow_bowl(double cost, double curvature) {
+  Model model = empty_model(0, 1);
+  model.col_cost = {cost};
+  model.col_lower = {0.0};
+  model.matrix.finalize();
+  model.hessian.add_entry(0, 0, curvature);
+  model.hessian.finalize();
+  return model;
+}
+
+TEST(QpIpmInfeasibility, AShallowStrictlyConvexObjectiveIsNotUnbounded) {
+  // min -0.001 x + 0.5 * 5e-8 x^2, x >= 0: optimum -10 at x = 20000. The first step is an
+  // improving direction no bound blocks, and its d'Qd, 5e-8 on the unit ray, was under the
+  // checker's absolute 1e-7, so the model ended `unbounded` at iteration 1 with a "proof".
+  // The second model is the first with its cost scaled: optimum -1e-5 at x = 20.
+  for (const bool presolve : {false, true}) {
+    Options options = quiet(true);
+    options.set_bool("presolve", presolve);
+    {
+      const Solution s = solve(shallow_bowl(-0.001, 5e-8), options);
+      ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+      EXPECT_NEAR(s.objective, -10.0, 1e-6);
+      EXPECT_NEAR(s.col_value[0], 20000.0, 1.0);
+      EXPECT_TRUE(s.primal_ray.empty());
+    }
+    {
+      const Solution s = solve(shallow_bowl(-1e-6, 5e-8), options);
+      ASSERT_EQ(s.status, SolveStatus::kOptimal) << s.message;
+      EXPECT_NEAR(s.objective, -1e-5, 1e-8);
+      EXPECT_TRUE(s.primal_ray.empty());
+    }
+  }
+}
+
 }  // namespace
 }  // namespace sankhya

@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <set>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -52,6 +53,11 @@ class MpsParser {
   [[nodiscard]] bool do_ranges(std::string* error);
   [[nodiscard]] bool do_bounds(std::string* error);
   [[nodiscard]] bool do_quadratic(std::string* error);  // mps_quadratic.cpp
+  [[nodiscard]] bool quadratic_entry(std::string_view name1, std::string_view name2,
+                                     std::string_view text, std::string* error);
+  /// A QSECTION header: success when it names the objective row or no row; a refusal when it
+  /// names a constraint row, a failure when it names no row of ROWS (#1368).
+  [[nodiscard]] ReadResult begin_qsection() const;
   [[nodiscard]] bool begin_qcmatrix(std::string* error);
   [[nodiscard]] bool do_qcmatrix(std::string* error);
   [[nodiscard]] bool begin_csection(std::string* error);  // mps_quadratic.cpp

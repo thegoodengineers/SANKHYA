@@ -224,6 +224,23 @@ const std::vector<OptionSpec>& Options::registry() {
          0.0,
          0.0,
          {}});
+    s.push_back(
+        {"global_pool_lift",
+         OptionType::Bool,
+         true,
+         "nonconvex=global (#514): a pool of a P-formulated pooling model (a balance row, "
+         "and quality rows whose products are one quality times each outflow) is given the "
+         "Q-formulation's proportions q_i of each inflow, with sum q_i = 1, f_i = sum_j q_i "
+         "f_j, each quality times each outflow written over q_i f_j, and the capacity "
+         "restated over the outflows (Ben-Tal, Eiger and Gershovitz 1994). Every row of the "
+         "model is kept; with global_rlt the relaxation is the PQ-formulation's (Quesada and "
+         "Grossmann 1995). The answer is reported on the model's own columns. Under "
+         "write_certificate the certificate names each pool's rows and its checker rebuilds "
+         "the lift. On by default since the A/B on main at 3f6528c (#514): 39 of 39 "
+         "pooling runs optimal against 38, none lost, 39 of 39 certified.",
+         0.0,
+         0.0,
+         {}});
     s.push_back({"mip_branching",
                  OptionType::String,
                  std::string("reliability"),
@@ -743,6 +760,33 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back({"root_cut_time_from_loop",
+                 OptionType::Bool,
+                 false,
+                 "The clock of root_cut_loop's time share (5 percent of time_limit). Off: the "
+                 "search's, so the work before the second cut round (symmetry, Feasibility "
+                 "Jump, the root LP and round 1) spends it too, and a model on which that "
+                 "takes the share gets one round. On: the loop's own, started at its second "
+                 "round, so the share bounds the rounds alone. Opt-in: in its gates at 60 s it "
+                 "gained no proof on MIPLIB 3, tier 1 or the 25 MIPLIB 2017 targets, halved "
+                 "the gaps of beasleyC3 and mod011, and lost dano3mip's only point on one "
+                 "seed (docs/NEGATIVE-RESULTS.md).",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"mip_root_cut_warm_start",
+                 OptionType::Bool,
+                 false,
+                 "The re-solve after the first root cut round starts from the root LP's own "
+                 "optimal basis, the cut rows' logicals basic, as the later rounds and the "
+                 "tree rounds do. Off, it starts from the slack basis: the root holds no "
+                 "stored basis, so the root LP is in effect solved twice (dano3mip: 25 s of a "
+                 "60 s limit). Opt-in: its MIPLIB 3 gate (60 s, 3 seeds) gained three "
+                 "proofs and dano3mip's point on two seeds, and lost the proofs of air05 and "
+                 "qiu on one seed each and arki001's point on one (docs/NEGATIVE-RESULTS.md).",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back(
         {"root_cut_loop_when",
          OptionType::String,
@@ -766,8 +810,10 @@ const std::vector<OptionSpec>& Options::registry() {
          "gap-target stops). auto: flow-covers, and also a model with a variable upper "
          "bound on which round 1 took no flow cover, on probation: the rounds after round 1 "
          "are kept only if together they gain at least what round 1 gained, and otherwise "
-         "the root goes back to its state after round 1 and the pool stays off (gesa2 and "
-         "mod011 enter and keep their rounds; bell5 enters and is rolled back). "
+         "the root goes back to its state after round 1 and the pool stays off (gesa2 "
+         "enters and keeps its rounds; bell5 enters and is rolled back; mod011's rounds "
+         "are cut short by the time share at a 60 s limit and rolled back, see "
+         "root_cut_time_from_loop). "
          "probation: as auto, but every model on which round 1 took no flow cover enters "
          "on probation, with or without a variable upper bound. Opt-in: measured against "
          "auto it gains two proofs on SAMADHAN's 50 and loses five elsewhere (#1332, "
@@ -2537,6 +2583,52 @@ const std::vector<OptionSpec>& Options::registry() {
                  0.0,
                  0.0,
                  {}});
+    s.push_back(
+        {"qp_ipm_postpone_dense",
+         OptionType::Bool,
+         true,
+         "qp_algorithm=ipm: order the augmented system's dense nodes (degree above "
+         "max(16, 10 sqrt(n)), a dense row of A) last, in the interior point's "
+         "factorization and in the active-set finish's, as the LP interior point's "
+         "proximal path does (#473; Amestoy, Davis & Duff, ACM TOMS 30(3), 2004). On by "
+         "default since the A/B on Maros-Meszaros against main at 23e40b50 (bench.yml run "
+         "45539507204, all 138 at 60 s, both arms in one job): no status, passed or "
+         "verified flag changed, boyd1 31.7 s to 3.4 s and boyd2 36.4 s to 10.5 s.",
+         0.0,
+         0.0,
+         {}});
+    s.push_back({"qp_ipm_supernodal",
+                 OptionType::Bool,
+                 false,
+                 "qp_algorithm=ipm: factor the quasi-definite augmented system by supernodes "
+                 "(#470, the ipm_supernodal kernels under the same signed pivot rule) instead "
+                 "of the scalar up-looking path. Off: in the A/B on Maros-Meszaros (bench.yml "
+                 "run 45524023299, with qp_ipm_postpone_dense) it halved the factor-bound "
+                 "times (cvxqp2l 33.8 s to 16.0 s) but the interior point ended in a numerical "
+                 "error on nine instances that pass without it (docs/NEGATIVE-RESULTS.md).",
+                 0.0,
+                 0.0,
+                 {}});
+    s.push_back({"qp_prescale",
+                 OptionType::Bool,
+                 true,
+                 "qp_algorithm=ipm: when the interior point stalls (qp_ipm_stall_handoff's "
+                 "test, so only with that option on, its default) or ends in a numerical "
+                 "error, solve the presolved model again, on the "
+                 "time left, equilibrated by Ruiz on its KKT matrix [Q A'; A 0] (Ruiz, "
+                 "RAL-TR-2001-034, 2001), each row and column factor rounded to a power of two "
+                 "so that the change of variables is exact; an optimal answer is mapped back "
+                 "and adopted before the status guard and the KKT gate judge it in the model's "
+                 "own units, otherwise the stall hand-off or the Condat-Vu fallback runs as "
+                 "before. No cost scaling; 20 Ruiz rounds (tol::kQpPrescalePasses). On "
+                 "by default since the A/B on Maros-Meszaros (bench.yml run 45539497594, one "
+                 "binary at 9efca8d2, all 138 at 60 s): 129 to 131 passed and 135 to 137 "
+                 "verified, qpilotno and stadat1 from iteration_limit to optimal, no other "
+                 "instance's status changed. Equilibrating every QP first was measured and "
+                 "rejected (docs/NEGATIVE-RESULTS.md).",
+                 0.0,
+                 0.0,
+                 {}});
     s.push_back({"qp_ipm_centrality_correctors",
                  OptionType::Int,
                  std::int64_t{0},
@@ -2554,7 +2646,9 @@ const std::vector<OptionSpec>& Options::registry() {
          true,
          "qp_algorithm=ipm (#980): when the relative measures are met but at least one "
          "complementarity product is still above the in-process KKT gate's share "
-         "(tol::kQpIpmComplementarityShare * tol::kComplementarity), take the active set the "
+         "(tol::kQpIpmComplementarityShare * tol::kComplementarity) and the in-process KKT "
+         "gate (check_qp_optimality on the model the interior point was handed) refuses the "
+         "point as it stands, take the active set the "
          "iterate already identifies - a bound is active when the point already sits on it to "
          "a loose, scale-aware tolerance - hold those columns exactly at their bound values "
          "and solve the equality-constrained KKT system on the rest with the same sparse "

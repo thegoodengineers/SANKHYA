@@ -14,6 +14,7 @@
 
 #include "sankhya/io.hpp"
 #include "sankhya/model.hpp"
+#include "sankhya/options.hpp"
 
 #include "support/temp_file.hpp"
 
@@ -211,6 +212,69 @@ TEST(LpReader, CoefficientsMayBeGluedToTheVariable) {
   EXPECT_DOUBLE_EQ(model.col_cost[static_cast<std::size_t>(col_of(model, "z"))], -1.0);
 }
 
+// =========================================================================================
+// A zero coefficient written against its variable
+// =========================================================================================
+//
+// What the format says, from its published description (IBM, "CPLEX LP file format", syntax
+// rules, reproduced in the lp_solve reference guide's "CPLEX lp files" page): a coefficient is
+// written against its variable with or without a space, "1x1 + 2x2 +3x3" being the format's
+// own example; "a variable name cannot begin with a number or a period"; and the one notation
+// reserved inside a number is the exponent, E or e. The format has no hexadecimal number, so
+// "0x1" is the coefficient 0 on the variable x1. C's strtod reads "0x1" as the hexadecimal
+// constant 1 (C99 7.20.1.3), which deletes the term and moves a 1 to the right-hand side.
+
+TEST(LpReader, AZeroCoefficientGluedToItsVariableIsNotAHexadecimalNumber) {
+  const Model model = parse_or_fail(
+      "Minimize\n"
+      " obj: x2\n"
+      "Subject To\n"
+      " c1: 0x1 + x2 >= 2\n"
+      "End\n");
+  ASSERT_EQ(model.num_cols(), 2);
+  ASSERT_GE(col_of(model, "x1"), 0);
+  ASSERT_GE(col_of(model, "x2"), 0);
+  EXPECT_DOUBLE_EQ(model.row_lower[0], 2.0);
+  EXPECT_TRUE(is_infinite(model.row_upper[0]));
+  EXPECT_DOUBLE_EQ(model.matrix.at(0, col_of(model, "x1")), 0.0);
+  EXPECT_DOUBLE_EQ(model.matrix.at(0, col_of(model, "x2")), 1.0);
+
+  // And the answer: minimise x2 subject to x2 >= 2 is 2, not the 1 of x2 >= 2 - 1.
+  Options options;
+  options.set_bool("log_to_console", false);
+  const Solution solution = solve(model, options);
+  ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
+  EXPECT_NEAR(solution.objective, 2.0, 1e-9);
+}
+
+TEST(LpReader, EverySpellingStrtodTakesForHexadecimalIsAZeroAndAName) {
+  // 0x1 = 1, 0X1 = 1, 0xA = 10 and 0x1p3 = 8 to strtod. In a row the value would move to the
+  // right-hand side, in the objective into the offset.
+  struct Case {
+    const char* term;
+    const char* name;
+  };
+  for (const Case& c :
+       {Case{"0x1", "x1"}, Case{"0X1", "X1"}, Case{"0xA", "xA"}, Case{"0x1p3", "x1p3"}}) {
+    const Model model = parse_or_fail(std::string("Minimize\n obj: y + ") + c.term +
+                                      "\nSubject To\n c1: 2 y + " + c.term +
+                                      " <= 10\n c2: " + c.term + " + y >= 3\nEnd\n");
+    ASSERT_EQ(model.num_cols(), 2) << c.term;
+    const Index named = col_of(model, c.name);
+    const Index y = col_of(model, "y");
+    ASSERT_GE(named, 0) << c.term;
+    ASSERT_GE(y, 0) << c.term;
+    EXPECT_DOUBLE_EQ(model.objective_offset, 0.0) << c.term;
+    EXPECT_DOUBLE_EQ(model.col_cost[static_cast<std::size_t>(named)], 0.0) << c.term;
+    EXPECT_DOUBLE_EQ(model.col_cost[static_cast<std::size_t>(y)], 1.0) << c.term;
+    EXPECT_DOUBLE_EQ(model.row_upper[0], 10.0) << c.term;
+    EXPECT_DOUBLE_EQ(model.row_lower[1], 3.0) << c.term;
+    EXPECT_DOUBLE_EQ(model.matrix.at(0, named), 0.0) << c.term;
+    EXPECT_DOUBLE_EQ(model.matrix.at(0, y), 2.0) << c.term;
+    EXPECT_DOUBLE_EQ(model.matrix.at(1, y), 1.0) << c.term;
+  }
+}
+
 TEST(LpReader, AConstantInTheObjectiveBecomesTheOffset) {
   const Model model = parse_or_fail(
       "Minimize\n"
@@ -375,6 +439,70 @@ TEST(LpReader, AFileWithNoObjectiveSectionIsRejected) {
       " c: x >= 1\n"
       "End\n");
   EXPECT_NE(error.find("Maximize"), std::string::npos) << error;
+}
+
+// =========================================================================================
+// A binary variable the Bounds section already bounded (#1367)
+// =========================================================================================
+//
+// "Binary variables are automatically given bounds of 0 (zero) and 1 (one), unless alternative
+// bounds are specified in the BOUNDS section" (IBM, "MIP features in LP file format"), and the
+// BINARY section follows the BOUNDS section. So a fixed binary is written "x = 0" under Bounds
+// and x under Binaries, and the Binary section must not put x back to [0, 1]: that reads a
+// relaxation of the model the file states.
+
+TEST(LpReader, ABinaryKeepsTheBoundsTheBoundsSectionGaveIt) {
+  struct Case {
+    const char* bound;
+    double lower;
+    double upper;
+  };
+  // A side the Bounds section did not state keeps the binary default.
+  for (const Case& c :
+       {Case{"x = 0", 0.0, 0.0}, Case{"x = 1", 1.0, 1.0}, Case{"x <= 0", 0.0, 0.0},
+        Case{"x >= 1", 1.0, 1.0}, Case{"0 <= x <= 1", 0.0, 1.0}}) {
+    const Model model = parse_or_fail(std::string("Maximize\n"
+                                                  " obj: 3 x + 2 y\n"
+                                                  "Subject To\n"
+                                                  " c1: x + y <= 1\n"
+                                                  "Bounds\n ") +
+                                      c.bound +
+                                      "\n"
+                                      "Binaries\n"
+                                      " x y\n"
+                                      "End\n");
+    const auto x = static_cast<std::size_t>(col_of(model, "x"));
+    const auto y = static_cast<std::size_t>(col_of(model, "y"));
+    EXPECT_EQ(model.col_type[x], VarType::kInteger) << c.bound;
+    EXPECT_DOUBLE_EQ(model.col_lower[x], c.lower) << c.bound;
+    EXPECT_DOUBLE_EQ(model.col_upper[x], c.upper) << c.bound;
+    EXPECT_EQ(model.col_type[y], VarType::kInteger) << c.bound;
+    EXPECT_DOUBLE_EQ(model.col_lower[y], 0.0) << c.bound;
+    EXPECT_DOUBLE_EQ(model.col_upper[y], 1.0) << c.bound;
+  }
+}
+
+TEST(LpReader, ABinaryFixedAtZeroIsSolvedAtZero) {
+  // maximise 3 x + 2 y, x + y <= 1, x fixed at 0: y = 1, objective 2. With x put back to
+  // [0, 1] the answer is x = 1, objective 3 - a point outside the file's bound, and better
+  // than the true optimum.
+  const Model model = parse_or_fail(
+      "Maximize\n"
+      " obj: 3 x + 2 y\n"
+      "Subject To\n"
+      " c1: x + y <= 1\n"
+      "Bounds\n"
+      " x = 0\n"
+      "Binaries\n"
+      " x y\n"
+      "End\n");
+  Options options;
+  options.set_bool("log_to_console", false);
+  const Solution solution = solve(model, options);
+  ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
+  EXPECT_NEAR(solution.objective, 2.0, 1e-9);
+  EXPECT_NEAR(solution.col_value[static_cast<std::size_t>(col_of(model, "x"))], 0.0, 1e-9);
+  EXPECT_NEAR(solution.col_value[static_cast<std::size_t>(col_of(model, "y"))], 1.0, 1e-9);
 }
 
 }  // namespace

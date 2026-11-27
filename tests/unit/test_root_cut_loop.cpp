@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <random>
 #include <string>
 #include <utility>
@@ -154,6 +155,49 @@ TEST(RootCutLoop, OffIsTheSingleRoundAndOnNeverEndsBelowIt) {
       instances, looped, higher);
 }
 
+/// The cold node LPs a search's log reports ("Node LPs: 45 warm-started dual (931
+/// iterations), 2 cold (..."), -1 when the line is not there.
+int cold_node_lps(const std::string& log) {
+  const std::size_t line = log.find("Node LPs: ");
+  if (line == std::string::npos) return -1;
+  const std::size_t count = log.find("), ", line);
+  if (count == std::string::npos) return -1;
+  return std::atoi(log.c_str() + count + 3);
+}
+
+TEST(RootCutRound, TheFirstRoundsReSolveStartsFromTheRootBasisUnderItsSwitch) {
+  // mip_root_cut_warm_start: off, the re-solve after the first cut round is a second cold
+  // solve of the root LP; on, it starts from the root's optimal basis. The answer is the
+  // same either way, and on some instance the switch saves a cold solve.
+  std::mt19937_64 rng(20261126);
+  int instances = 0;
+  int fewer_cold = 0;
+  for (int trial = 0; trial < 60; ++trial) {
+    const oracle::GeneratedLp lp = binary_instance(rng, 12);
+    const Model model = integer_model(lp);
+    const Options cold_start = root_cuts(false);
+    Options warm_start = cold_start;
+    warm_start.set_bool("mip_root_cut_warm_start", true);
+    Solution off;
+    const std::string off_log = solve_logged(model, cold_start, &off);
+    Solution on;
+    const std::string on_log = solve_logged(model, warm_start, &on);
+    ASSERT_EQ(on.status, off.status);
+    if (off.status != SolveStatus::kOptimal) continue;
+    ++instances;
+    EXPECT_NEAR(on.objective, off.objective, 1e-6 * std::max(1.0, std::fabs(off.objective)));
+    const int off_cold = cold_node_lps(off_log);
+    const int on_cold = cold_node_lps(on_log);
+    if (off_cold < 0 || on_cold < 0) continue;  // a search that ended before its summary
+    EXPECT_GE(on_cold, 1) << "the root LP itself has no basis to start from\n" << on_log;
+    if (on_cold < off_cold) ++fewer_cold;
+  }
+  EXPECT_GE(instances, 30);
+  EXPECT_GT(fewer_cold, 0) << "the switch never saved a cold solve";
+  std::printf("[  INFO    ] root cut warm start: %d instances, %d with fewer cold node LPs\n",
+              instances, fewer_cold);
+}
+
 TEST(RootCutLoop, ProbationGateLetsAModelWithoutAVariableBoundInAndAutoKeepsItOut) {
   // root_cut_loop_when=probation (#1332): pure binary knapsack and cover models have no
   // variable upper bound, and with the flow cover family off round 1 takes no flow cover.
@@ -273,6 +317,51 @@ TEST(RootCutLoop, TheBudgetIsTheFloorOrTheShareOfTheRows) {
   EXPECT_EQ(mip::root_cut_row_budget(136, 30), std::max<Index>(136, pooled));
   EXPECT_EQ(mip::root_cut_row_budget(5000, 30), std::max<Index>(5000, pooled));
   EXPECT_EQ(mip::root_cut_row_budget(136, 0), std::max<Index>(tol::kRootCutRowFloor, 136));
+}
+
+TEST(RootCutLoop, TheTimeShareIsCountedFromTheClockItIsGiven) {
+  const double limit = 60.0;
+  const double share = tol::kRootCutTimeShare * limit;  // 3 s
+  // The search's clock (clock_start 0): work before the loop spends the share. beasleyC3's
+  // symmetry search and Feasibility Jump take 3.6 s, so its second round never starts.
+  EXPECT_FALSE(mip::root_cut_time_share_spent(0.5 * share, 0.0, limit));
+  EXPECT_TRUE(mip::root_cut_time_share_spent(1.2 * share, 0.0, limit));
+  // The loop's own clock (root_cut_time_from_loop): the same moment is inside the share
+  // when the loop began at it, and outside once the rounds themselves have used the share.
+  EXPECT_FALSE(mip::root_cut_time_share_spent(1.2 * share, 1.2 * share, limit));
+  EXPECT_FALSE(mip::root_cut_time_share_spent(2.1 * share, 1.2 * share, limit));
+  EXPECT_TRUE(mip::root_cut_time_share_spent(2.3 * share, 1.2 * share, limit));
+  // Exactly the share is not past it, on either clock.
+  EXPECT_FALSE(mip::root_cut_time_share_spent(share, 0.0, limit));
+}
+
+TEST(RootCutLoop, TheLoopsOwnClockChangesNothingWhereNoClockBinds) {
+  // With an hour's limit the share is 180 s, which neither clock reaches on these models,
+  // so root_cut_time_from_loop must leave the rounds, the root bound and the answer alone.
+  std::mt19937_64 rng(20261125);
+  int looped = 0;
+  for (int trial = 0; trial < 30; ++trial) {
+    const oracle::GeneratedLp lp = binary_instance(rng, 12);
+    const Model model = integer_model(lp);
+    Options search_clock = root_cuts(true);
+    search_clock.set_double("time_limit", 3600.0);
+    Options loop_clock = search_clock;
+    loop_clock.set_bool("root_cut_time_from_loop", true);
+    Solution off;
+    const std::string off_log = solve_logged(model, search_clock, &off);
+    Solution on;
+    const std::string on_log = solve_logged(model, loop_clock, &on);
+    ASSERT_EQ(on.status, off.status);
+    if (off.status != SolveStatus::kOptimal) continue;
+    EXPECT_EQ(on.root_cut_rounds, off.root_cut_rounds);
+    EXPECT_EQ(on.objective, off.objective);
+    if (!std::isnan(off.root_bound_after_cuts)) {
+      EXPECT_EQ(on.root_bound_after_cuts, off.root_bound_after_cuts);
+    }
+    EXPECT_EQ(on_log.find("stopped on the time share"), std::string::npos) << on_log;
+    if (off.root_cut_rounds > 1) ++looped;
+  }
+  EXPECT_GT(looped, 0) << "no instance ran a second round";
 }
 
 TEST(RootCutLoop, ARoundCutShortKeepsItsBestAndTheRestWaitFirst) {

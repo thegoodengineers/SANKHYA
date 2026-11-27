@@ -44,6 +44,14 @@ well formed (r has no products, has the side its kind uses, and every x_k * y is
 product) and rebuilt here from the model and the box, so it holds at every point of the model
 in the box and the relaxation stays a relaxation.
 
+POOL LIFT (`global_pool_lift`). The certificate's "lift" list names, per pool of a P-formulated
+pooling model, its balance row, quality rows and capacity rows in the model file. Each is checked
+to have exactly the shape the lift's validity rests on (Problem.lift_pool), and the columns and
+rows the lift adds are rebuilt here from the model's own coefficients and appended; the search's
+model, and so the certificate's "columns", "rows", products and incumbent, are the lifted ones.
+Every added row holds at every point of the model, so a bound on the lifted model is a bound on
+the model, and the incumbent is checked against every row of both.
+
 The relaxation's row layout is the one stated in the certificate's own "layout" field. That, the
 products' numbering, and nothing else is shared with the solver; the products themselves are
 re-derived from the model, and a product the model has that the certificate does not list is
@@ -89,7 +97,8 @@ def exact(value: float):
 class Problem:
     """The model as the checker reads it, in minimisation form, with its products named."""
 
-    def __init__(self, path: Path, products: list[tuple[int, int]], rlt: list | None = None):
+    def __init__(self, path: Path, products: list[tuple[int, int]], rlt: list | None = None,
+                 lift: list | None = None):
         model = parse_mps(path)
         if any(model.col_integer):
             raise Rejected("the model has integer columns; the global method does not take them")
@@ -104,6 +113,15 @@ class Problem:
         for j, entries in enumerate(model.entries):
             for row, value in entries:
                 self.linear[row].append((j, Fraction(value)))
+        # Each row's products as {(a, b): coefficient}, a <= b, before they are numbered.
+        quadratic: list[dict[tuple[int, int], Fraction]] = [{} for _ in range(self.m)]
+        for (row, a, b), value in model.qc_entries.items():
+            key = (min(a, b), max(a, b))
+            quadratic[row][key] = quadratic[row].get(key, ZERO) + Fraction(value)
+        self.cost = [self.sigma * Fraction(c) for c in model.col_cost]
+        self.file_rows = self.m
+        for pool in lift or []:
+            self.lift_pool(pool, quadratic)
         self.products = [(min(a, b), max(a, b)) for a, b in products]
         self.index = {key: p for p, key in enumerate(self.products)}
         if len(self.index) != len(self.products):
@@ -113,16 +131,15 @@ class Problem:
                 raise Rejected(f"product ({a}, {b}) is outside the model's columns")
         # Quadratic rows: the row is a'x + sum of value * x_i * x_j over the listed entries.
         self.row_products: list[dict[int, Fraction]] = [{} for _ in range(self.m)]
-        for (row, a, b), value in model.qc_entries.items():
-            key = (min(a, b), max(a, b))
-            if key not in self.index:
-                raise Rejected(f"row {row} has the product x{key[0]} * x{key[1]}, which the "
-                               "certificate does not list")
-            p = self.index[key]
-            self.row_products[row][p] = self.row_products[row].get(p, ZERO) + Fraction(value)
+        for row, terms in enumerate(quadratic):
+            for key, value in terms.items():
+                if key not in self.index:
+                    raise Rejected(f"row {row} has the product x{key[0]} * x{key[1]}, which the "
+                                   "certificate does not list")
+                p = self.index[key]
+                self.row_products[row][p] = self.row_products[row].get(p, ZERO) + value
         # Objective: 0.5 x'Qx over the stored lower triangle, so an off-diagonal entry is the
         # product's whole coefficient and a diagonal one keeps its half.
-        self.cost = [self.sigma * Fraction(c) for c in model.col_cost]
         self.offset = self.sigma * Fraction(model.objective_offset)
         self.objective_products: dict[int, Fraction] = {}
         for (r, c), value in model.hessian.items():
@@ -136,6 +153,93 @@ class Problem:
                                           + self.sigma * weight * Fraction(value))
         self.rlt = [self.rlt_entry(entry) for entry in (rlt or [])]
         self.rows_total = self.m + 4 * len(self.products) + len(self.rlt)
+
+    def lift_pool(self, pool, quadratic: list) -> None:
+        """One entry of the certificate's "lift" (`global_pool_lift`): {"balance": b,
+        "qualities": [r, ...], "capacities": [c, ...]}, rows of the MODEL FILE. Each is checked
+        to have the shape the lift's validity rests on, exactly, and the lift is appended as
+        src/global/pool_lift.cpp appends it: one column q_i in [0, 1] per inflow i (ascending),
+        then the rows sum q_i = 1; f_i - sum_j q_i f_j = 0 per inflow; alpha p f_j +
+        sum_i a_i q_i f_j = 0 per quality row and outflow j (ascending); each capacity row's
+        coefficient over the outflows with its bounds. They hold at every point of the model:
+        with Y = sum_j f_j > 0 at q_i = f_i / Y (by the balance and quality rows), with Y = 0 at
+        any q on the simplex, every f being 0 by the balance row and f >= 0. So the lifted
+        model's optimum is the model's and a bound on it is a bound on the model."""
+        try:
+            b = int(pool["balance"])
+            qualities = [int(r) for r in pool["qualities"]]
+            capacities = [int(r) for r in pool["capacities"]]
+        except (TypeError, ValueError, KeyError):
+            raise Rejected(f"a malformed lift entry {pool!r}")
+        if not qualities or not all(0 <= r < self.file_rows for r in [b, *qualities, *capacities]):
+            raise Rejected(f"lift entry {pool!r} names a row the model file does not have")
+
+        def zero_equality(r: int) -> bool:
+            return self.row_lower[r] == 0 and self.row_upper[r] == 0
+
+        outflows = None
+        parsed = []
+        for r in qualities:
+            terms = quadratic[r]
+            alphas = set(terms.values())
+            if not zero_equality(r) or len(terms) < 2 or len(alphas) != 1 or ZERO in alphas:
+                raise Rejected(f"lift entry {pool!r}: row {r} is not a quality row")
+            shared = set.intersection(*(set(key) for key in terms))
+            if len(shared) != 1 or any(a == b_ for a, b_ in terms):
+                raise Rejected(f"lift entry {pool!r}: the products of row {r} share no column")
+            p = shared.pop()
+            partners = sorted(a if a != p else b_ for a, b_ in terms)
+            if outflows is None:
+                outflows = partners
+            elif partners != outflows:
+                raise Rejected(f"lift entry {pool!r}: the quality rows name different outflows")
+            parsed.append((r, p, alphas.pop()))
+        if quadratic[b] or not zero_equality(b):
+            raise Rejected(f"lift entry {pool!r}: row {b} is not a balance row")
+        balance = dict(self.linear[b])
+        c = balance.get(outflows[0], ZERO)
+        inflows = sorted(j for j in balance if j not in outflows)
+        if (c == 0 or any(balance.get(j) != c for j in outflows)
+                or any(balance[j] != -c for j in inflows) or len(inflows) < 2):
+            raise Rejected(f"lift entry {pool!r}: row {b} does not balance the pool's flows")
+        if any(not self.col_lower[j] >= 0 for j in [*inflows, *outflows]):
+            raise Rejected(f"lift entry {pool!r}: a flow of the pool may be negative")
+        for r, p, _ in parsed:
+            if p in inflows or any(j not in inflows for j, _ in self.linear[r]):
+                raise Rejected(f"lift entry {pool!r}: row {r} is not over the pool's inflows")
+        for r in capacities:
+            coefficients = {v for _, v in self.linear[r]}
+            if (quadratic[r] or sorted(j for j, _ in self.linear[r]) != inflows
+                    or len(coefficients) != 1):
+                raise Rejected(f"lift entry {pool!r}: row {r} is not a capacity of the inflows")
+
+        q = list(range(self.n, self.n + len(inflows)))
+        self.n += len(q)
+        self.col_lower += [ZERO] * len(q)
+        self.col_upper += [Fraction(1)] * len(q)
+        self.cost += [ZERO] * len(q)
+
+        def add_row(linear, products, lower, upper):
+            self.linear.append(linear)
+            quadratic.append(products)
+            self.row_lower.append(lower)
+            self.row_upper.append(upper)
+            self.m += 1
+
+        add_row([(k, Fraction(1)) for k in q], {}, Fraction(1), Fraction(1))
+        for i, qi in zip(inflows, q):
+            add_row([(i, Fraction(1))], {(j, qi): Fraction(-1) for j in outflows}, ZERO, ZERO)
+        for r, p, alpha in parsed:
+            a = dict(self.linear[r])
+            for j in outflows:
+                products = {(min(p, j), max(p, j)): alpha}
+                for i, qi in zip(inflows, q):
+                    if a.get(i, ZERO) != 0:
+                        products[(j, qi)] = a[i]
+                add_row([], products, ZERO, ZERO)
+        for r in capacities:
+            beta = self.linear[r][0][1]
+            add_row([(j, beta) for j in outflows], {}, self.row_lower[r], self.row_upper[r])
 
     def rlt_entry(self, entry):
         """An RLT row [model row r, column y, kind] checked to be well formed: r has no products
@@ -282,7 +386,8 @@ def read_certificate(path: Path) -> dict:
 
 
 def verify(problem_path: Path, cert: dict, feas_tol: float) -> dict:
-    problem = Problem(problem_path, [tuple(p) for p in cert["products"]], cert.get("rlt", []))
+    problem = Problem(problem_path, [tuple(p) for p in cert["products"]], cert.get("rlt", []),
+                      cert.get("lift", []))
     if cert["columns"] != problem.n or cert["rows"] != problem.m:
         raise Rejected(f"the certificate is for a {cert['rows']} x {cert['columns']} model; "
                        f"this one is {problem.m} x {problem.n}")

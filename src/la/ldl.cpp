@@ -620,9 +620,9 @@ bool SparseLdl::factorize_signed(const SparseMatrix& lower, double regularizatio
 // Semidefiniteness, as a decision procedure (#303, #835)
 // -----------------------------------------------------------------------------------------
 //
-// Same up-looking pass as factorize(), on A + shift * I instead of A, with no regularization
-// and no special case: every pivot must come out strictly positive, and the first one that does
-// not ends the pass with its column and a witness direction.
+// Same up-looking pass as factorize(), on A + S for a diagonal shift S instead of A, with no
+// regularization and no special case: every pivot must come out strictly positive, and the
+// first one that does not ends the pass with its column and a witness direction.
 //
 // WHY A SHIFT, AND NOT A ZERO-PIVOT RULE (#835). The previous version factorized A itself,
 // declared a pivot within `slack` (1e-10 * max(1, max |a_ii|)) of zero to be exactly zero, and
@@ -642,25 +642,40 @@ bool SparseLdl::factorize_signed(const SparseMatrix& lower, double regularizatio
 //     beside a zero diagonal and a diagonal of 2: an eigenvalue of about -(7.8e-9)^2 / 2 =
 //     -3e-17, rounding by any measure, refused because 7.8e-9 exceeds the slack.
 //
-// The shift replaces all three with one statement. A + shift * I has every eigenvalue
-// `shift` above A's, so for a positive semidefinite A it is positive definite with its
-// smallest eigenvalue >= shift, and Cholesky (here LDL^T) of a positive definite matrix needs
-// no pivoting and cannot break down while the rounding it commits stays below that eigenvalue
-// (Higham, "Accuracy and Stability of Numerical Algorithms", 2nd ed., ch. 10; Demmel 1989).
-// That rounding is a backward error bounded componentwise by about (nonzeros in the row of L)
-// * eps * max |a_ii| (Higham Thm 10.3), and in practice far below the bound: on QPLIB_10056
-// the smallest shifted pivot equals the shift to three digits in every order tried. So a
-// semidefinite A - singular, rank deficient or merely ill conditioned - completes, and a small
-// positive pivot is divided through without harm, because it is never smaller than the shift.
-// In the other direction, completion proves A + shift * I + E positive definite for the
-// backward error E, so A's smallest eigenvalue is above -(shift + |E|): convex up to the
-// stated tolerance. Rump ("Verification of positive definiteness", BIT 46, 2006) makes the
-// same shifted-Cholesky argument rigorous with directed rounding; this test uses it as the
-// decision rule, and leaves the certificate (below) to be checked separately.
+// The shift replaces all three with one statement. It is a diagonal matrix S, one entry per
+// column, s_k = shift_factor * max(1, |a_kk|). For a positive semidefinite A, A + S is
+// positive definite with x^T (A + S) x >= sum_k s_k x_k^2, and Cholesky (here LDL^T) of a
+// positive definite matrix needs no pivoting and cannot break down while the rounding it
+// commits stays below that margin (Higham, "Accuracy and Stability of Numerical Algorithms",
+// 2nd ed., ch. 10; Demmel, "On floating point errors in Cholesky", LAPACK Working Note 14,
+// 1989). So a semidefinite A - singular, rank deficient or merely ill conditioned -
+// completes, and a small positive pivot is divided through without harm, because pivot k is
+// never smaller than s_k. In the other direction, completion proves A + S + E positive
+// definite for the backward error E, so x^T A x > -(sum_k s_k x_k^2 + |x^T E x|) for every
+// x: convex up to the stated tolerance. Rump ("Verification of positive definiteness", BIT
+// 46, 2006) makes the same shifted-Cholesky argument rigorous with directed rounding; this
+// test uses it as the decision rule, and leaves the certificate (below) to be checked
+// separately.
 //
-// A pivot d_k <= 0 is the certificate: with z = P^T L^{-T} e_k, z^T (A + shift I) z = d_k <= 0,
-// so z^T A z <= -shift * z^T z < 0. The witness z is returned, in the caller's own column
-// order, for the caller to check against A independently of this factorization.
+// WHY EACH COLUMN ITS OWN SHIFT. Both sides of that comparison scale with the column. What
+// the factorization rounds in pivot k is rounding of a_kk and of the products l_kj^2 d_j
+// subtracted from it, which for a semidefinite matrix sum to no more than a_kk; so the
+// backward error is bounded componentwise by about (nonzeros in the row of L) * eps *
+// sqrt(a_ii a_jj), not by a multiple of the largest entry, and the criterion for Cholesky to
+// run to completion is on the smallest eigenvalue of D^-1 A D^-1, D = diag(sqrt(a_ii)), not
+// on that of A (Demmel 1989; Higham ch. 10). A + S is D (D^-1 A D^-1 + shift_factor I) D
+// for D = diag(sqrt(max(1, |a_kk|))): the same margin, shift_factor, on every column of the
+// scaled matrix. The rule before this one took a single shift for the whole matrix,
+// shift_factor * max(1, largest |a_ii|). That is this rule on a matrix whose diagonal
+// entries are all of one size, and on any other it lends each smaller column the largest
+// column's shift, which hides curvature: for diag(1e12, -0.5) it was 1, the second pivot
+// came out 0.5, and a matrix with the eigenvalue -0.5 passed as semidefinite. The floor of
+// 1 is for the zero diagonal entry a semidefinite matrix may have (QPLIB_8515's).
+//
+// A pivot d_k <= 0 is the certificate: with z = P^T L^{-T} e_k, z^T (A + S) z = d_k <= 0, so
+// z^T A z <= -z^T S z < 0, S being positive on every column. The witness z is returned, in
+// the caller's own column order, for the caller to check against A independently of this
+// factorization.
 SemidefiniteReport SparseLdl::check_semidefinite(const SparseMatrix& lower, double shift_factor,
                                                  const ShouldStop& should_stop) {
   SemidefiniteReport report;
@@ -690,26 +705,11 @@ SemidefiniteReport SparseLdl::check_semidefinite(const SparseMatrix& lower, doub
     }
   }
 
-  // The shift is measured against the largest diagonal magnitude, not an absolute number: an
-  // indefinite direction in a badly scaled matrix would hide under a fixed tolerance, and a
-  // well scaled one would see rounding reported as curvature.
-  double largest_diagonal = 0.0;
-  for (Index k = 0; k < n; ++k) {
-    for (Index p = a_starts_[static_cast<std::size_t>(k)];
-         p < a_starts_[static_cast<std::size_t>(k) + 1]; ++p) {
-      if (a_rows_[static_cast<std::size_t>(p)] == k) {
-        largest_diagonal =
-            std::max(largest_diagonal, std::fabs(a_values_[static_cast<std::size_t>(p)]));
-      }
-    }
-  }
-  const double shift = shift_factor * std::max(1.0, largest_diagonal);
-  report.shift = shift;
-
   std::vector<double> x(static_cast<std::size_t>(n), 0.0);
   std::vector<Index> mark(static_cast<std::size_t>(n), -1);
   std::vector<Index> reach;
   std::vector<Index> fill(static_cast<std::size_t>(n), 0);
+  double largest_shift = 0.0;
 
   for (Index k = 0; k < n; ++k) {
     if (should_stop && should_stop()) {
@@ -717,7 +717,7 @@ SemidefiniteReport SparseLdl::check_semidefinite(const SparseMatrix& lower, doub
       return report;  // kUndecided
     }
     reach.clear();
-    double diagonal = shift;
+    double diagonal = 0.0;  // a_kk, then a_kk + s_k, then the pivot
     mark[static_cast<std::size_t>(k)] = k;
     for (Index p = a_starts_[static_cast<std::size_t>(k)];
          p < a_starts_[static_cast<std::size_t>(k) + 1]; ++p) {
@@ -736,6 +736,13 @@ SemidefiniteReport SparseLdl::check_semidefinite(const SparseMatrix& lower, doub
       }
     }
     std::sort(reach.begin(), reach.end());
+
+    // The shift of THIS column, measured against its own diagonal entry (see above): one
+    // shift for the whole matrix, measured against the largest diagonal entry anywhere, hid
+    // the -0.5 of diag(1e12, -0.5) under a shift of 1.
+    const double shift = shift_factor * std::max(1.0, std::fabs(diagonal));
+    largest_shift = std::max(largest_shift, shift);
+    diagonal += shift;
 
     // Every earlier pivot is strictly positive - the pass stops at the first that is not - so
     // the division below is always defined.
@@ -760,6 +767,7 @@ SemidefiniteReport SparseLdl::check_semidefinite(const SparseMatrix& lower, doub
       report.verdict = SemidefiniteReport::Verdict::kIndefinite;
       report.column = perm_[static_cast<std::size_t>(k)];
       report.pivot = diagonal;
+      report.shift = shift;
       // z = L^{-T} e_k over the first k + 1 pivots. Column j < k of L holds, at this point,
       // exactly its entries in rows j+1..k (`fill` of them, rows ascending), which is all the
       // back substitution for e_k reads.
@@ -785,8 +793,9 @@ SemidefiniteReport SparseLdl::check_semidefinite(const SparseMatrix& lower, doub
     d_[static_cast<std::size_t>(k)] = diagonal;
   }
 
-  // The factors are of A + shift * I, not A; nothing may solve with them afterwards.
+  // The factors are of A + S, not A; nothing may solve with them afterwards.
   analyzed_ = false;
+  report.shift = largest_shift;
   report.verdict = SemidefiniteReport::Verdict::kPositiveSemidefinite;
   return report;
 }

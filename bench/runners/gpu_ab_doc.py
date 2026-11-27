@@ -12,6 +12,7 @@ counted from a CSV row; nothing is asserted.
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 
@@ -53,6 +54,92 @@ def fj_section(path: Path | None) -> str:
             cells.append(r.get("first_seconds", "-") if found else "none")
             cells.append(r.get("rel_gap", "-") if found else "-")
         out.append(f"| `{name}` | " + " | ".join(cells) + " |")
+    return "\n".join(out) + "\n"
+
+
+# Nonzero bands for fj_size_section, fixed so a rerun on more instances lands in the same rows.
+FJ_SIZE_BANDS = ((0, 3000), (3000, 10000), (10000, None))
+
+
+def _band_label(low: int, high: int | None) -> str:
+    return f"{low:,} and up" if high is None else f"{low:,} to {high - 1:,}"
+
+
+def _median(values: list[float]) -> str:
+    if not values:
+        return "-"
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    value = ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
+    return f"{value:.3f}"
+
+
+def fj_size_section(paths: list[Path], sizes_path: Path) -> str:
+    """#508 acceptance 2: where the device loses, by the instance's nonzeros.
+
+    Every gpu-fj-ab CSV (one per card), each instance placed in a band of
+    bench/runners/miplib_tier2_sizes.json. Per band and card: instances, a feasible point by
+    the limit on each engine, the median seconds to the first point where one was found, and
+    over the instances where both engines found one, on how many the device was first and on
+    how many its best point was closer to the published optimum (smaller relative gap).
+    """
+    if not paths:
+        return ""
+    if not sizes_path.exists():
+        return ("Not stated by size: `bench/runners/miplib_tier2_sizes.json` is missing "
+                "(`python bench/runners/miplib_tier2_sizes.py`).\n")
+    sizes = json.loads(sizes_path.read_text(encoding="utf-8"))["instances"]
+    largest = max(entry["nonzeros"] for entry in sizes.values())
+    out = ["By size. Each instance is placed by its nonzeros (`bench/runners/miplib_tier2_sizes.json`, "
+           f"counted by the verifier's reader); the whole tier-2 list stops at {largest:,} "
+           "nonzeros, so none of these is large for a card. \"Device first\" and \"device "
+           "closer\" count only the instances where both engines found a point.", "",
+           "| card | nonzeros | instances | found, CPU | found, device | median first s, CPU | "
+           "median first s, device | device first | device closer |",
+           "|---|---|---:|---:|---:|---:|---:|---:|---:|"]
+    for path in paths:
+        rows = _rows(path)
+        if not rows:
+            continue
+        card = rows[0].get("gpu", "?")
+        by = {(r["instance"], r["engine"]): r for r in rows}
+        names = sorted({r["instance"] for r in rows})
+        unsized = [name for name in names if name not in sizes]
+        if unsized:
+            out.append(f"| {card} | not in the sizes file: {', '.join(unsized)} | | | | | | | |")
+        for low, high in FJ_SIZE_BANDS:
+            band = [n for n in names if n in sizes and sizes[n]["nonzeros"] >= low
+                    and (high is None or sizes[n]["nonzeros"] < high)]
+            if not band:
+                continue
+            found = {}
+            first = {}
+            for engine in ("cpu", "gpu"):
+                hits = [by[(n, engine)] for n in band
+                        if by.get((n, engine), {}).get("found_at_limit") == "1"]
+                found[engine] = len(hits)
+                first[engine] = _median([float(r["first_seconds"]) for r in hits])
+            both = [n for n in band if all(by.get((n, e), {}).get("found_at_limit") == "1"
+                                           for e in ("cpu", "gpu"))]
+            device_first = sum(float(by[(n, "gpu")]["first_seconds"]) <
+                               float(by[(n, "cpu")]["first_seconds"]) for n in both)
+            device_closer = sum(float(by[(n, "gpu")]["rel_gap"]) <
+                                float(by[(n, "cpu")]["rel_gap"]) for n in both)
+            out.append(f"| {card} | {_band_label(low, high)} | {len(band)} | {found['cpu']} | "
+                       f"{found['gpu']} | {first['cpu']} | {first['gpu']} | "
+                       f"{device_first} of {len(both)} | {device_closer} of {len(both)} |")
+    out.append("")
+    for path in paths:
+        rows = _rows(path)
+        if not rows:
+            continue
+        by = {(r["instance"], r["engine"]): r for r in rows}
+        names = sorted({r["instance"] for r in rows})
+        lost = [n for n in names if by.get((n, "cpu"), {}).get("found_at_limit") == "1"
+                and by.get((n, "gpu"), {}).get("found_at_limit") != "1"]
+        missed = ", ".join(f"`{n}` ({sizes[n]['nonzeros']:,} nonzeros)" if n in sizes else f"`{n}`"
+                           for n in lost) or "none"
+        out.append(f"- {rows[0].get('gpu', '?')}: found by the CPU and not by the device: {missed}.")
     return "\n".join(out) + "\n"
 
 

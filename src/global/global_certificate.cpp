@@ -22,6 +22,12 @@
 // does not take an RLT row on trust either: it confirms the model row has no products and
 // that every product it needs is listed, and rebuilds the row from the model and the box.
 //
+// LIFT (`global_pool_lift`). The search ran on the model with each P-formulated pool given the
+// Q-formulation's proportions (pool_lift.cpp), so "columns" and "rows" count the lifted model.
+// "lift" names, per pool, the balance row, the quality rows and the capacity rows it was read
+// from; the checker confirms each has the shape the lift needs, exactly, and appends the same
+// columns and rows in the same order. No lifted coefficient is in the file.
+//
 // A certificate is written only for a search that used no bound tightening (FBBT removes boxes
 // by an argument the checker does not re-derive), which is what `write_certificate` selects.
 
@@ -78,6 +84,23 @@ std::string certificate_text(const CertificateInput& in) {
     const std::string kind =
         row.side == 'e' ? std::string("eq") : std::string{row.side, row.factor};
     out += fmt::format("{}[{}, {}, \"{}\"]", k == 0 ? "" : ", ", row.row, row.column, kind);
+  }
+  out += "],\n";
+  out += "  \"lift\": [";
+  if (in.lift != nullptr) {
+    const auto list = [](const std::vector<Index>& rows) {
+      std::string text;
+      for (std::size_t k = 0; k < rows.size(); ++k) {
+        text += fmt::format("{}{}", k == 0 ? "" : ", ", rows[k]);
+      }
+      return text;
+    };
+    for (std::size_t k = 0; k < in.lift->records.size(); ++k) {
+      const PoolLift::Record& pool = in.lift->records[k];
+      out += fmt::format("{}{{\"balance\": {}, \"qualities\": [{}], \"capacities\": [{}]}}",
+                         k == 0 ? "" : ", ", pool.balance, list(pool.qualities),
+                         list(pool.capacities));
+    }
   }
   out += "],\n";
   if (in.incumbent.empty()) {

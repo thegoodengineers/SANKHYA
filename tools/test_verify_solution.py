@@ -488,6 +488,28 @@ def test_qps_convention_is_read_as_qps_means_it() -> None:
         check(qx == [3.0, 3.0], "Qx expands the stored triangle symmetrically", f"got {qx}")
 
 
+def test_a_qsection_record_with_two_entries_and_a_constraint_label() -> None:
+    """#1368. MOSEK's QSECTION: a record "x x 2.0 y -1.0" carries (x, x) and (x, y); the
+    second entry used to be dropped. `QSECTION R1` names a constraint row, whose terms are not
+    the objective's, and used to be read as the objective's Hessian."""
+    two = QPS_WITH_OFF_DIAGONAL.replace("QUADOBJ\n", "QSECTION      COST\n").replace(
+        "    X         X            2.0\n    X         Y            1.0\n",
+        "    X         X            2.0   Y            1.0\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "qsec.qps"
+        path.write_text(two)
+        model = vs.parse_mps(path)
+        check(model.hessian.get((1, 0)) == 1.0 and len(model.hessian) == 3,
+              "a QSECTION record with two entries keeps both", f"hessian={model.hessian}")
+        path.write_text(two.replace("QSECTION      COST", "QSECTION      R1"))
+        try:
+            vs.parse_mps(path)
+            refused = False
+        except ValueError:
+            refused = True
+        check(refused, "QSECTION naming a constraint row is not read as the objective's", "")
+
+
 def test_qp_optimum_verifies_and_a_wrong_one_does_not() -> None:
     """The KKT conditions, on the QP above, at the true optimum and at a near miss.
 
@@ -803,6 +825,18 @@ def test_a_weakened_farkas_certificate_is_rejected() -> None:
           "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
 
 
+def test_a_rounding_size_multiplier_does_not_lend_its_row_to_a_column() -> None:
+    """#1371. r0: 1e12 x0 >= 0, r1: x0 + x1 >= 5, x0 >= 0, 0 <= x1 <= 1, feasible at x0 = 5.
+    With y = (1e-20, 1) the aggregate is (1 + 1e-8) x0 + x1 >= 5 and x0 has no upper bound,
+    so it proves nothing; the 1e-20 on r0 made 1e12 the scale x0's coefficient was read
+    against, and the coefficient read as zero."""
+    feasible = _two_row_lp(cost=[0.0, 0.0], lower=[0.0, 0.0], upper=[vs.INF, 1.0],
+                           rows=[(0.0, vs.INF, [1e12, 0.0]), (5.0, vs.INF, [1.0, 1.0])])
+    report = _run(feasible, _verdict("infeasible", farkas={"r0": 1e-20, "r1": 1.0}))
+    check(report.failures >= 1, "a rounding-size multiplier does not lend its row to a column",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
+
+
 def test_an_infeasible_verdict_without_a_certificate_is_not_a_failure() -> None:
     """THE BUG #191 IS ABOUT. Presolve proves infeasibility by bound arithmetic and keeps no
     Farkas vector. Before this, the checker read the all-zero point such a file used to carry,
@@ -843,6 +877,24 @@ def test_a_ray_pointing_the_wrong_way_is_rejected() -> None:
                   _verdict("unbounded", header={"certificate": "ray", "objective": "-1.0"},
                            columns={"x0": 1.0}, rows={"r0": 1.0}, ray={"x0": -1.0}))
     check(report.failures >= 1, "a reversed ray is rejected",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
+
+
+def test_a_ray_is_judged_against_the_terms_it_is_summed_from() -> None:
+    """#1370. min -x, 5e-8 x <= 1, x >= 0 is bounded (optimum -2e7): along the ray the row
+    rises by all of its one term, 5e-8, which an absolute 1e-7 read as no move. And min
+    x0 - 1e9 x1 with 0 <= x1 <= 1 is bounded: the ray (1, 1e-8) improves only through the
+    1e-8 it moves x1 against its upper bound, a move waived as rounding."""
+    small = _two_row_lp(cost=[-1.0], lower=[0.0], upper=[vs.INF],
+                        rows=[(-vs.INF, 1.0, [5e-8])])
+    report = _run(small, _verdict("unbounded", header={"certificate": "ray", "objective": "0.0"},
+                                  columns={"x0": 0.0}, rows={"r0": 0.0}, ray={"x0": 1.0}))
+    check(report.failures >= 1, "a row that rises by all of its one term blocks the ray",
+          "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
+    waived = _two_row_lp(cost=[1.0, -1e9], lower=[0.0, 0.0], upper=[vs.INF, 1.0], rows=[])
+    report = _run(waived, _verdict("unbounded", header={"certificate": "ray", "objective": "0.0"},
+                                   columns={"x0": 0.0, "x1": 0.0}, ray={"x0": 1.0, "x1": 1e-8}))
+    check(report.failures >= 1, "a waived move against a bound does not improve the ray",
           "; ".join(f"{n}: {d}" for ok, n, d in report.lines))
 
 
@@ -1151,6 +1203,7 @@ def main() -> int:
     test_a_negative_ui_bound_frees_the_lower_bound_as_the_solver_does()
     print("test_qps_convention_is_read_as_qps_means_it")
     test_qps_convention_is_read_as_qps_means_it()
+    test_a_qsection_record_with_two_entries_and_a_constraint_label()
     print("test_qp_optimum_verifies_and_a_wrong_one_does_not")
     test_qp_optimum_verifies_and_a_wrong_one_does_not()
     print("test_quadratic_maximization_keeps_its_sign")
@@ -1166,11 +1219,13 @@ def main() -> int:
     test_complementarity_still_rejects_a_real_slack_at_a_huge_bound()
     test_a_valid_farkas_certificate_verifies_at_any_scale()
     test_a_weakened_farkas_certificate_is_rejected()
+    test_a_rounding_size_multiplier_does_not_lend_its_row_to_a_column()
     test_an_infeasible_verdict_without_a_certificate_is_not_a_failure()
     test_a_header_that_promises_a_certificate_must_carry_one()
     test_a_valid_ray_with_a_feasible_point_verifies()
     test_a_ray_pointing_the_wrong_way_is_rejected()
     test_a_ray_from_an_infeasible_point_is_rejected()
+    test_a_ray_is_judged_against_the_terms_it_is_summed_from()
     print("verdicts that claim no point, and limits checked on honesty (#200)")
     test_a_verdict_that_claims_no_point_is_not_checked_as_if_it_did()
     test_a_limit_is_checked_on_what_it_claims_not_on_feasibility()

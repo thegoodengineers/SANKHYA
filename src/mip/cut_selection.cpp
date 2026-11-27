@@ -120,6 +120,10 @@ Index root_cut_row_budget(Index model_rows, Index pooled_per_round) {
   return static_cast<Index>(budget);
 }
 
+bool root_cut_time_share_spent(double now, double clock_start, double time_limit) {
+  return now - clock_start > tol::kRootCutTimeShare * time_limit;
+}
+
 void take_within_budget(std::vector<Cut>* selected, std::vector<Cut>* waiting,
                         std::size_t room) {
   if (selected->size() <= room) return;

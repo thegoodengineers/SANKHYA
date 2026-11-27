@@ -455,6 +455,19 @@ void BranchAndBound::root_cut_round(Solution* relaxation) {
   certify_round_cuts(&accepted);  // #518: certificate mode only
   if (accepted.empty()) return;
 
+  // WARM (mip_root_cut_warm_start, opt-in: its MIPLIB 3 gate gained and lost proofs). The root
+  // arrives here with no stored basis: current_warm_ is what a node was GIVEN, which for the
+  // root is nothing, so resize_warm_starts() has nothing to extend and the re-solve below
+  // starts from the slack basis, a second cold solve of the root LP. On dano3mip that is 83,669
+  // iterations and 25 s after a root LP of 96,621 iterations and 26 s (bench.yml run
+  // 45524294564). With the switch on, the root's own optimal basis is the start, the cut rows'
+  // logicals basic: dual feasible and primal infeasible only in the violated cuts, which is the
+  // state the dual simplex starts from, as in every later round
+  // (branch_and_bound_root_loop.cpp) and every tree round below (Koberstein, "The dual simplex
+  // method, techniques for a fast and stable implementation", thesis, Paderborn 2005, sec. 4.5;
+  // Achterberg 2007, ch. 8). A relaxation that reports no basis leaves the start empty, and the
+  // solve cold as before.
+  if (options_.get_bool("mip_root_cut_warm_start")) current_warm_ = basis_of(*relaxation);
   append_cut_rows(accepted);
   resize_warm_starts(working_.num_rows());
   Solution final_relaxation = solve_node();

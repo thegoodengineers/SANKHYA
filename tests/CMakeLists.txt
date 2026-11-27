@@ -153,6 +153,7 @@ add_executable(sankhya_tests
   unit/test_cut_filter_policy.cpp
   unit/test_presolve_parallel_rows.cpp
   unit/test_presolve_scaled.cpp
+  unit/test_presolve_narrow_box.cpp
   unit/test_prescale.cpp
   unit/test_scaled_resolve.cpp
   unit/test_presolve_probing.cpp
@@ -160,6 +161,7 @@ add_executable(sankhya_tests
   unit/test_presolve_implied_integer.cpp
   unit/test_presolve_propagation.cpp
   unit/test_presolve_fill_in_pricing.cpp
+  unit/test_presolve_near_equation.cpp
   unit/test_dual_steepest_edge.cpp
   unit/test_node_factor_cache.cpp
   unit/test_simplex_quality_once.cpp
@@ -188,10 +190,12 @@ add_executable(sankhya_tests
   unit/test_global.cpp
   unit/test_global_rlt.cpp
   unit/test_global_obbt.cpp
+  unit/test_global_pool_lift.cpp
   unit/test_conic.cpp
   unit/test_miqcp.cpp
   unit/test_fractional_integer_bounds.cpp
   unit/test_integral_row_coefficients.cpp
+  unit/test_propagation_rounding.cpp
   unit/test_empty_integral_row.cpp
   unit/test_milp_unbounded_relaxation.cpp
   unit/test_deterministic.cpp
@@ -212,6 +216,9 @@ add_executable(sankhya_tests
   oracles/test_fuzz_against_oracle.cpp
   oracles/test_fuzz_substitution.cpp
   oracles/test_fuzz_dual_reduce.cpp
+  oracles/rich_model.cpp
+  oracles/rich_generator.cpp
+  oracles/test_fuzz_general_form.cpp
   oracles/test_safe_bound.cpp
   oracles/test_batch_pdhg.cpp
   oracles/test_batch_bounds.cpp

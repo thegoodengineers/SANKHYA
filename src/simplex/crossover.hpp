@@ -25,6 +25,7 @@
 #include <functional>
 #include <vector>
 
+#include "core/kkt_check.hpp"
 #include "primal_simplex.hpp"
 #include "sankhya/logging.hpp"
 #include "sankhya/model.hpp"
@@ -88,6 +89,14 @@ struct CrossoverGuess {
                                                  WarmStart warm, const Options& options,
                                                  Logger& logger, SolveControl* control,
                                                  const Timer& timer);
+
+/// Whether a crossover `vertex` reached from an OPTIMAL `interior` gives way to it: the vertex
+/// fails the in-process copy of the verifier's checks (core/kkt_check.hpp) at `tolerances`
+/// where the interior point's answer passes them. crossover_push_from_basis() then returns
+/// the interior point's answer. `at_vertex` receives the vertex's verdict.
+[[nodiscard]] bool vertex_gives_way(const Model& model, const Solution& interior,
+                                    const Solution& vertex, const KktTolerances& tolerances,
+                                    KktVerdict* at_vertex);
 
 /// Whether a NON-optimal interior-point answer is a usable crossover start (#474): its status
 /// is feasible, time_limit, iteration_limit or numerical_error (the last with the best
