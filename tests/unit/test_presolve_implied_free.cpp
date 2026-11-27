@@ -13,6 +13,7 @@
 #include <limits>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -196,6 +197,70 @@ void add_a_singleton_column(oracle::GeneratedLp* lp, std::mt19937_64& rng) {
   if (!lp->integral.empty()) lp->integral.push_back(0);
   if (!lp->lower.empty()) lp->lower.push_back(0);
   ++lp->num_cols;
+}
+
+/// The records presolve applied, one line each, for a failure message.
+std::string trail(const presolve::Result& reduced) {
+  std::string out;
+  for (const presolve::Record& r : reduced.records) {
+    out += "  kind " + std::to_string(static_cast<int>(r.kind)) + " index " +
+           std::to_string(r.index) + " column " + std::to_string(r.column) + " partner " +
+           std::to_string(r.partner_column) + " coefficient " + std::to_string(r.coefficient) +
+           " value " + std::to_string(r.value) + (r.implied_free ? " implied free" : "") + "\n";
+  }
+  return out;
+}
+
+std::string duals(const Solution& s) {
+  std::string out = "y:";
+  for (const double y : s.row_dual) out += " " + std::to_string(y);
+  out += "  d:";
+  for (const double d : s.col_dual) out += " " + std::to_string(d);
+  return out;
+}
+
+TEST(PresolveImpliedFree, ARowWhoseColumnIsImpliedFreeKeepsItsPrice) {
+  // #1354, models B and C as the general-form fuzz (#1334) reduced them. Each is optimal,
+  // and with the reduction on postsolve handed back a row at zero that prices the
+  // substituted column: in C, row 0 came back at 0 where it is -2, leaving x3, interior at
+  // -7.5, with a reduced cost of -2. Through solve() an answer whose duals fail is solved
+  // again without presolve (#783), which hides this; the engine race has no such retry and
+  // reported `feasible`. So postsolve is called directly here, and the race is asked too.
+  // min 3 x1: -3/4 x0 - 3/8 x1 - 4 x2 = -57/4, 2 x0 <= 6, -x0 + 4 x2 = 9;
+  // x0 >= 3, x1 >= 0, x2 free. Optimum 0 at (3, 0, 3).
+  const Model b = build({{-0.75, -0.375, -4}, {2, 0, 0}, {-1, 0, 4}}, {-14.25, -kInf, 9},
+                        {-14.25, 6, 9}, {0, 3, 0}, {3, 0, -kInf}, {kInf, kInf, kInf});
+  // min -2 x3: x2 + x3 = -17/2, 2 x0 >= 4, 5/2 x0 - 5 x1 + x2 / 2 = 19/2;
+  // x0 <= 2, x1 = -1, x2 <= -1, x3 <= -3. Optimum 15 at (2, -1, -1, -7.5).
+  const Model c = build({{0, 0, 1, 1}, {2, 0, 0, 0}, {2.5, -5, 0.5, 0}}, {-8.5, 4, 9.5},
+                        {-8.5, kInf, 9.5}, {0, 0, 0, -2}, {-kInf, -1, -kInf, -kInf},
+                        {2, -1, -1, -3});
+  const std::vector<std::pair<std::string, const Model*>> cases = {{"B", &b}, {"C", &c}};
+  const double optimum[2] = {0.0, 15.0};
+  for (std::size_t k = 0; k < cases.size(); ++k) {
+    const std::string& name = cases[k].first;
+    const Model& model = *cases[k].second;
+    Logger logger(nullptr);
+    const presolve::Result reduced = presolve::presolve(model, with_implied_free(true), logger);
+    EXPECT_GT(reduced.report.implied_free_column_singletons, 0) << name;
+    Options inner;
+    inner.set_bool("log_to_console", false);
+    inner.set_bool("presolve", false);
+    const Solution solved = solve(reduced.model, inner);
+    const Solution restored = presolve::postsolve(reduced, model, solved);
+    const std::string context = name + "\n" + trail(reduced) + duals(restored);
+    EXPECT_NEAR(restored.objective, optimum[k], 1e-9) << context;
+    EXPECT_LE(restored.primal_infeasibility, 1e-9) << context;
+    EXPECT_LE(restored.dual_infeasibility, 1e-9) << context;
+    EXPECT_LE(restored.complementarity_violation, 1e-9) << context;
+
+    Options race = with_implied_free(true);
+    race.set_bool("engine_race", true);
+    race.set_bool("deterministic", true);
+    const Solution raced = solve(model, race);
+    EXPECT_EQ(raced.status, SolveStatus::kOptimal) << context << "\n" << raced.message;
+    EXPECT_NEAR(raced.objective, optimum[k], 1e-9) << name;
+  }
 }
 
 TEST(PresolveImpliedFree, RandomLpsAgreeWithTheExactOracle) {
