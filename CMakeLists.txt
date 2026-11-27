@@ -247,6 +247,7 @@ set(SANKHYA_CORE_SOURCES
   src/exact/exact_verify.cpp
   src/core/safe_bound.cpp
   src/core/lp_safe_bound.cpp
+  src/core/lp_primal_refinement.cpp
   src/core/lp_exact_dual.cpp
   src/core/scenarios.cpp
   src/core/iis.cpp

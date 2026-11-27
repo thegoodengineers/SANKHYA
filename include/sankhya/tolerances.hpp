@@ -1022,6 +1022,15 @@ inline constexpr int kSafeBoundPivotRounds = 8;
 /// duals are dual feasible but whose bound is above the target, each followed by its exact
 /// duals and more pivot rounds. An effort cap, like the rounds.
 inline constexpr int kSafeBoundDualPhases = 2;
+/// The dual phase runs on the primal-refined LP (#1082, src/core/lp_primal_refinement.hpp;
+/// Gleixner, Steffy & Wolter, INFORMS J. Computing 28(3), 2016, sec. 3): every bound measured
+/// from the current point and multiplied by Delta = 2^k, with Delta times the point's largest
+/// violation in [1, 2). This caps k. At 2^40 a violation of 1e-19 is still seen at the
+/// simplex's 1e-7, and a bound within 1e17 of the point stays under the 1e30 that reads as
+/// infinite (a bound further out may be read as absent: the refined LP is then a relaxation,
+/// which only changes the candidate basis). Not a tolerance: it picks which basis the dual
+/// simplex visits, and the bound of that basis is evaluated with outward rounding or exactly.
+inline constexpr int kSafeBoundRefinementScaleBits = 40;
 /// Bits the exact-dual refinement must have gained before its running approximation is
 /// handed back as a polished floating-point y (ExactDualBound::refined, #1082): a double
 /// carries 53, and the margin covers the error estimate's slack.
