@@ -227,7 +227,7 @@ const std::vector<OptionSpec>& Options::registry() {
     s.push_back(
         {"global_pool_lift",
          OptionType::Bool,
-         false,
+         true,
          "nonconvex=global (#514): a pool of a P-formulated pooling model (a balance row, "
          "and quality rows whose products are one quality times each outflow) is given the "
          "Q-formulation's proportions q_i of each inflow, with sum q_i = 1, f_i = sum_j q_i "
@@ -236,7 +236,8 @@ const std::vector<OptionSpec>& Options::registry() {
          "model is kept; with global_rlt the relaxation is the PQ-formulation's (Quesada and "
          "Grossmann 1995). The answer is reported on the model's own columns. Under "
          "write_certificate the certificate names each pool's rows and its checker rebuilds "
-         "the lift. Off until an A/B on main.",
+         "the lift. On by default since the A/B on main at 3f6528c (#514): 39 of 39 "
+         "pooling runs optimal against 38, none lost, 39 of 39 certified.",
          0.0,
          0.0,
          {}});
