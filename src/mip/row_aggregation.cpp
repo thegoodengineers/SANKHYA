@@ -8,6 +8,7 @@
 #include <limits>
 #include <unordered_map>
 
+#include "mir_cmir.hpp"
 #include "sankhya/sparse.hpp"
 #include "sankhya/tolerances.hpp"
 
@@ -29,7 +30,8 @@ std::vector<RowEntries> rows_of(const Model& model) {
 Index column_to_eliminate(const Model& model, const Solution& solution,
                           const std::vector<double>& col_lower,
                           const std::vector<double>& col_upper, const BaseRow& base,
-                          const std::vector<char>* skip) {
+                          const std::vector<char>* skip,
+                          const VariableBounds* variable_bounds) {
   Index chosen = -1;
   double deepest = tol::kRowAggregationInside;
   for (std::size_t k = 0; k < base.columns.size(); ++k) {
@@ -42,6 +44,18 @@ Index column_to_eliminate(const Model& model, const Solution& solution,
     double slack = std::numeric_limits<double>::infinity();
     if (is_finite_bound(col_lower[uj])) slack = std::min(slack, x - col_lower[uj]);
     if (is_finite_bound(col_upper[uj])) slack = std::min(slack, col_upper[uj] - x);
+    if (variable_bounds != nullptr) {
+      const auto at = [&](const VariableBound& vb) {
+        return vb.slope * solution.col_value[static_cast<std::size_t>(vb.indicator)] +
+               vb.constant;
+      };
+      for (const VariableBound& vb : variable_bounds->upper[uj]) {
+        slack = std::min(slack, at(vb) - x);
+      }
+      for (const VariableBound& vb : variable_bounds->lower[uj]) {
+        slack = std::min(slack, x - at(vb));
+      }
+    }
     if (std::isinf(slack)) continue;  // a free continuous column: the base is unusable anyway
     if (slack > deepest) {
       deepest = slack;

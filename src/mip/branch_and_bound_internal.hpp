@@ -951,6 +951,7 @@ class BranchAndBound {
     mir.stop = [this] { return solve_must_stop(); };
     // c-MIR states no derivation (#518), so a certificate's search uses the plain MIR.
     mir.cmir = options_.get_bool("mir_cmir") && certificate_path_.empty();
+    mir.variable_bound_aggregation = options_.get_bool("mir_variable_bound_aggregation");
     mir.derive = !certificate_path_.empty();
     return mir;
   }

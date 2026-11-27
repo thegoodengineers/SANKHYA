@@ -252,11 +252,27 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
                                              options.derive);
   };
 
+  const bool by_variable_bounds = options.cmir && options.variable_bound_aggregation;
+  const VariableBounds* walk_bounds = by_variable_bounds ? &variable_bounds : nullptr;
   // Which rows contain a fractional integer column: only those can start an aggregation.
+  // With variable-bound aggregation, also the rows of a continuous column one of whose
+  // variable bounds has a fractional switch: c-MIR substitutes the bound, so the switch is
+  // in the base inequality.
+  const auto fractional_switch = [&](std::size_t j) {
+    if (!by_variable_bounds || model.col_type[j] == VarType::kInteger) return false;
+    for (const auto* list : {&variable_bounds.upper[j], &variable_bounds.lower[j]}) {
+      for (const VariableBound& vb : *list) {
+        if (!integral(solution.col_value[static_cast<std::size_t>(vb.indicator)])) return true;
+      }
+    }
+    return false;
+  };
   std::vector<char> row_has_fractional(static_cast<std::size_t>(model.num_rows()), 0);
   for (Index j = 0; j < n; ++j) {
     const auto uj = static_cast<std::size_t>(j);
-    if (model.col_type[uj] != VarType::kInteger || integral(solution.col_value[uj])) continue;
+    const bool fractional_integer =
+        model.col_type[uj] == VarType::kInteger && !integral(solution.col_value[uj]);
+    if (!fractional_integer && !fractional_switch(uj)) continue;
     const ColumnView column = model.matrix.column(j);
     for (Index k = 0; k < column.size; ++k) {
       row_has_fractional[static_cast<std::size_t>(column.rows[k])] = 1;
@@ -311,8 +327,8 @@ std::vector<Cut> generate_mir_cuts(const Model& model, const Solution& solution,
         if (depth == tol::kRowAggregationDepth) break;
         // Eliminate the continuous column furthest inside its bounds with an unused row that
         // contains it and has a finite bound on the side the multiplier needs.
-        const Index eliminate =
-            column_to_eliminate(model, solution, col_lower, col_upper, base);
+        const Index eliminate = column_to_eliminate(model, solution, col_lower, col_upper, base,
+                                                    nullptr, walk_bounds);
         if (eliminate < 0) break;
         const ColumnView column = model.matrix.column(eliminate);
         bool extended = false;
