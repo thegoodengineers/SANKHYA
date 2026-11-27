@@ -9,8 +9,8 @@
 
 #include <cmath>
 #include <fstream>
-#include <iterator>
 #include <random>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -244,8 +244,9 @@ TEST(GlobalPoolLift, NamesThePoolInTheCertificate) {
   ASSERT_EQ(solution.status, SolveStatus::kOptimal) << solution.message;
   EXPECT_NE(solution.message.find("1 pool(s) lifted"), std::string::npos) << solution.message;
   std::ifstream in(certificate.path());
-  const std::string text((std::istreambuf_iterator<char>(in)),
-                         std::istreambuf_iterator<char>());
+  std::stringstream buffer;
+  buffer << in.rdbuf();
+  const std::string text = buffer.str();
   EXPECT_NE(text.find("\"lift\": [{\"balance\": 5, \"qualities\": [7], \"capacities\": [6]}]"),
             std::string::npos)
       << text.substr(0, 400);
